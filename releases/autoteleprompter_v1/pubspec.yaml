@@ -1,0 +1,32 @@
+name: autoteleprompt
+description: Auto-scrolling teleprompter with speech recognition for Hebrew and English.
+publish_to: 'none'
+version: 0.2.0+2
+
+environment:
+  sdk: '>=3.4.4 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  flutter_riverpod: ^2.5.1
+  speech_to_text: ^7.0.0
+  scrollable_positioned_list: ^0.3.8
+  shared_preferences: ^2.3.2
+  permission_handler: ^11.3.1
+  wakelock_plus: ^1.2.8
+  file_picker: ^8.1.2
+  intl: ^0.19.0
+  flutter_animate: ^4.5.0
+  flutter_colorpicker: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,4 +1,4 @@
-# autoteleprompter
+# AutoTeleprompter
 
 A new Flutter project.
 

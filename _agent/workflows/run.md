@@ -1,22 +1,26 @@
 ---
 description: Master autonomous loop. Executes the full development cycle sequentially.
 ---
-1. **Initialize**: Run [/sync](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/sync.md).
-2. **Session Setup**: Ask the user: **"Loop by time OR by amount?"**
-    - **If TIME**: 
-        a. Ask "How long we want the loop to work?"
-        b. Ask "Fix by urgency OR by the list order (1-by-1)?"
-    - **If AMOUNT**: 
-        a. Present [MASTER_TODO.md](file:///Users/proapple/Desktop/AutoTeleprompter/MASTER_TODO.md) by urgency.
-        b. Ask for selection and task quota.
-3. **Plan Phase**: Execute `./_agent/scripts/task_timer.sh start` then run [/plan](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/plan.md).
-4. **Fix Phase**: Run [/fix](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/fix.md).
-5. **Verify Phase (GUARD)**: Run [/test](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/test.md).
-    - **RULE**: If `/test` does not return a "Success" verification, STOP the loop. Do not proceed to the next task.
-6. **Safety Phase**: After a successful test, run the backup utility:
-    - **ACTION**: Execute `./scripts/backup.sh`.
-    - **RULE**: If the backup fails, STOP the loop. 
-7. **Cycle**: Repeat only if the previous task was successfully verified, committed, and backed up.
+# /run Workflow
 
----
-*Command: /run*
+1. **Safety Phase**:
+// turbo
+   1.1. Start [Persistence Guard](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/persistence_guard.sh): `./_agent/scripts/persistence_guard.sh start`
+// turbo
+   1.2. Archive State: Run [/backup](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/backup.md)
+   1.3. Run [Safety Guard (Timer)](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/task_timer.sh) check.
+
+2. **Planning Phase**: Run [/plan](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/plan.md).
+
+3. **Execution Phase**: Run [/fix](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/fix.md).
+
+4. **Verification Phase**: Run [/test](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/test.md).
+
+5. **Synchronization Phase**:
+// turbo
+   5.1. Run [/logit](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/logit.md) to sync all documentation.
+
+6. **Teardown**:
+// turbo
+   6.1. Stop [Persistence Guard](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/persistence_guard.sh): `./_agent/scripts/persistence_guard.sh stop`
+   6.2. Clear timers.

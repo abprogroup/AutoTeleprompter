@@ -1,29 +1,19 @@
-# AI Protocol: AutoTeleprompter v3.0.0
+# AI Protocol: AutoTeleprompter v3.5.2 [TERMINAL_SYNC]
 
-This protocol is **MANDATORY** for all AI agents (Claude, Antigravity, or others) interacting with this repository. Read this FIRST in every new conversation.
+## 🛡️ CORE DIRECTIVES
+1. **Zero-Bypass Policy**: No code changes without a preceding surgical backup.
+2. **Terminal Sync Mandate**: `README.md`, `MASTER_TODO.md`, and `DAILY_LOG.md` MUST be updated via terminal `cat` to bypass UI/Sync bugs.
+3. **Audit Closure**: Every `/run` session MUST terminate with a successful `[/logit](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/logit.md)` execution.
 
-### 1. Mandatory Context Sync
-Before making any changes, you MUST read the following:
-- **`development/PROJECT_RECORDS.md`**: For the changelog and backlog of needed fixes.
-- **`releases/README.md`**: For the folder organization rules.
-- **`README.md` (Root)**: For the overall project overview.
+## 🚀 AUTONOMOUS ENGINE (v3.5.2)
+- **Persistence**: `persistence_guard.sh status` must be verified before long cycles.
+- **Surgical Backups**: Run `[/backup](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/backup.md)` specifically targeting the files you are about to change.
+- **Safety Timer**: Atomic tasks are limited to 30 minutes; triggers a fail-state for manual review if exceeded.
 
-### 2. Core Repository Rules
-- **COMPILED ONLY**: Strictly no source code (lib, android, ios, etc.) allowed inside the `/releases/` subfolders. Only binaries (APK, IPA) permitted.
-- **FULL NAMES**: Always refer to the project as "AutoTeleprompter".
-- **BACKUPS**: The `/backups/` folder must never be tracked in Git.
-
-### 3. Change Tracking
-- **LOGGING**: Every session MUST conclude with an update to `development/PROJECT_RECORDS.md` (this replaces the old `DAILY_LOG.md` and `MASTER_TODO.md`).
-- **COMMIT MESSAGE**: Use clear prefixes like `[V3-UI]`, `[V3-FIX]`, or `[V3-DOCS]`.
-
-### 4. Code Principles
-- **No Side-Files**: Fix bugs in the active `AutoTeleprompter/` folder. Do not create experimental branches or folders unless specifically requested.
-
-### 5. Verification Sovereignty (Zero-Bypass)
-- **Automated Verification**: A task is ONLY complete if the `/test` workflow executes a verification command (e.g., `flutter analyze`) to completion.
-- **Fail = Incomplete**: If a tool is missing, a path is broken, or a command fails, the task **MUST NOT** be marked as `[x]` in `MASTER_TODO.md`.
-- **Environment Failure**: If a tool cannot be found, document the failure in `AI_PROPOSAL.md` and stop automated operations immediately. Do not "manual check" and mark success.
+## 📄 DOCUMENTATION GOVERNANCE
+- **MASTER_TODO.md**: Synchronized at the start (/plan) and end (/logit) of every loop.
+- **DAILY_LOG.md**: Real-time session history; must include all bugs discovered even if not fixed.
+- **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
 
 ---
-*Authorized by: PROJECT_PROTOCOL v1.2*
+*Failure to follow this protocol will result in a hard session reset.*

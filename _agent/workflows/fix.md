@@ -1,11 +1,12 @@
 ---
 description: Executes the currently approved implementation plan.
 ---
-1. **Safety Guard**: Execute `./_agent/scripts/task_timer.sh check`. **STOP** if failure.
-2. **Reference Plan**: Open and follow the approved [implementation_plan.md] in your brain directory.
-3. **Execute Changes**: Apply the planned edits to the source code in the `AutoTeleprompter/` directory.
-4. **Task Tracking**: Update the [task.md] artifact for every successful file modification.
-5. **Protocol Check**: Ensure all changes follow the strict "Source Only" and "No Releases Duplication" rules.
+# /fix Workflow
 
----
-*Command: /fix*
+1. **Surgical Precision Phase**: For every file listed in the approved plan, run the following:
+// turbo
+   1.1. Create Architectural Mirror: Run [/backup](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/backup.md) with the target file path.
+
+2. **Modification Phase**: Apply the approved edits to the project source code.
+
+3. **Check Phase**: Ensure the changes were applied correctly (e.g., check for syntax errors).

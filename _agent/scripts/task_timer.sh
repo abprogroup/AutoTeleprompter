@@ -31,6 +31,17 @@ case "$1" in
             exit 0
         fi
         ;;
+    remaining)
+        if [ ! -f "$TIMER_FILE" ]; then
+            echo "0"
+            exit 0
+        fi
+        START_TIME=$(cat "$TIMER_FILE")
+        CURRENT_TIME=$(date +%s)
+        ELAPSED=$((CURRENT_TIME - START_TIME))
+        REMAINING=$((MAX_SECONDS - ELAPSED))
+        if [ "$REMAINING" -lt 0 ]; then echo "0"; else echo "$REMAINING"; fi
+        ;;
     clear)
         rm -f "$TIMER_FILE"
         echo "Timer cleared."

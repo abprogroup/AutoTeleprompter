@@ -1,15 +1,28 @@
-# Exclude large SDK and backup artifacts
-**/development/
-**/backups/
-**/*.apk
-**/*.aab
-**/*.jar
-**/.git/
+# Project: AutoTeleprompter
+# NEVER TRACK BACKUPS - THEY CAUSE LOOPS
+backups/
+AutoTeleprompter_BACKUP_*
 
-# Flutter specific ignores
+# Development SDKs and Tools
+development/
+
+# User Folders
+AutoTeleprompter/
+TeleSmart/
+releases/v*/
+
+# General Code Ignores
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
 **/build/
 **/.dart_tool/
 **/.idea/
 **/.DS_Store
+*.apk
+*.aab
+*.jar
+
+# Protocol Files
+CHANGELOG.md
+PROTOCOL.md
+README.md

@@ -1,10 +1,10 @@
-# Master TODO List: AutoTeleprompter v3.5.2 Hardened
+# Master TODO List: AutoTeleprompter v3.5.3 Hardened
 
 ## 🛠️ UI & UX Fixes
 - [x] **v3.5.x Hardening**: Implement Persistence Guard, Surgical Mirrors, Task Timer, and /logit Protocol.
 - [x] **Recent Activity Bug**: Script appears twice after opening. (STILL REPRODUCING - REQUIRES DEEP FIX)
 - [x] **URGENT: Live State Sync**: "Complete History" list must update immediately after delete/save. (FIXED in v3.5.1)
-- [ ] **BUG: Recent Activity Timer**: 500ms timer only works if file is *changed*; should activate 500ms after *open*.
+- [x] **BUG: Recent Activity Timer**: 500ms timer only works if file is *changed*; should activate 500ms after *open*. (FIXED in v3.5.3)
 - [ ] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the script prompting screen.
 - [ ] **URGENT: Emulator Hardware Bridge**: Restore Mac Keyboard/Camera/Mic access for testing.
 - [ ] **Recent Scripts Delete**: Delete button only works after toggle "Show More".
@@ -27,4 +27,4 @@
 - [ ] **DOCX Logic**: Verify and restore genuine .docx file loading.
 
 ---
-*Last Updated: 2026-04-06 (v3.5.2 Deployment)*
+*Last Updated: 2026-04-07 (v3.5.3 Deployment)*

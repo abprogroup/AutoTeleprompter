@@ -261,6 +261,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
       _currentTitle = initialTitle;
       _isInit = true;
       _saveHistory(description: 'Initial Load');
+      _scheduleRecentUpdate();
     }
   }
 
@@ -305,12 +306,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     });
   }
 
-  void _onBlockChanged() {
-    _saveHistory(description: 'Edit Text', debounce: true);
+  void _scheduleRecentUpdate() {
     _recentTimer?.cancel();
     _recentTimer = Timer(const Duration(milliseconds: 500), () {
-      _triggerRecentUpdate(_currentTitle, _getRefinedFullText());
+      if (mounted) {
+        _triggerRecentUpdate(_currentTitle, _getRefinedFullText());
+      }
     });
+  }
+
+  void _onBlockChanged() {
+    _saveHistory(description: 'Edit Text', debounce: true);
+    _scheduleRecentUpdate();
   }
 
   @override
@@ -601,6 +608,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
       _currentTitle = script.title;
       _sourceType = script.sourceType;
       _saveHistory(description: 'Import File');
+      _scheduleRecentUpdate();
       if (mounted) setState(() {});
     }
   }

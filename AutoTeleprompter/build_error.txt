@@ -1,0 +1,3 @@
+
+Running Gradle task 'assembleRelease'...                           113ms
+Gradle task assembleRelease failed with exit code 130

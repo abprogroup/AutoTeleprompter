@@ -1,0 +1,15 @@
+# Exclude large SDK and backup artifacts
+**/development/
+**/backups/
+**/*.apk
+**/*.aab
+**/*.jar
+**/.git/
+
+# Flutter specific ignores
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/
+**/.dart_tool/
+**/.idea/
+**/.DS_Store

@@ -211,7 +211,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                       context: context,
                       backgroundColor: const Color(0xFF0A0A0A),
                       isScrollControlled: true,
-                      builder: (_) => _FullHistorySheet(scripts: settings.recentScripts),
+                      builder: (_) => const _FullHistorySheet(),
                     );
                   },
                   child: const Text('show more', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13, fontWeight: FontWeight.bold)),
@@ -573,11 +573,11 @@ class _RemoteActionBtn extends StatelessWidget {
   }
 }
 
-class _FullHistorySheet extends StatelessWidget {
-  final List<String> scripts;
-  const _FullHistorySheet({required this.scripts});
+class _FullHistorySheet extends ConsumerWidget {
+  const _FullHistorySheet();
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scripts = ref.watch(settingsProvider).recentScripts;
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       padding: const EdgeInsets.all(24),
@@ -588,18 +588,25 @@ class _FullHistorySheet extends StatelessWidget {
           const Text('Complete History', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           Expanded(
-            child: ListView.builder(
-              itemCount: scripts.length,
-              itemBuilder: (ctx, idx) {
-                final meta = jsonDecode(scripts[idx]);
-                return _ScriptListItem(
-                  title: meta['title'],
-                  date: meta['date'],
-                  type: meta['type'],
-                  fullText: meta['fullText'],
-                  sessionId: meta['sessionId'],
+            child: Consumer(
+              builder: (context, ref, _) {
+                final scripts = ref.watch(settingsProvider).recentScripts;
+                return ListView.builder(
+                  cacheExtent: 1000,
+                  itemCount: scripts.length,
+                  itemBuilder: (ctx, idx) {
+                    final meta = jsonDecode(scripts[idx]);
+                    return _ScriptListItem(
+                      key: ValueKey(meta['sessionId'] ?? idx.toString()),
+                      title: meta['title'],
+                      date: meta['date'],
+                      type: meta['type'],
+                      fullText: meta['fullText'],
+                      sessionId: meta['sessionId'],
+                    );
+                  },
                 );
-              },
+              }
             ),
           ),
         ],
@@ -659,6 +666,7 @@ class _ScriptListItem extends ConsumerWidget {
   final String? sessionId;
 
   const _ScriptListItem({
+    super.key,
     required this.title,
     required this.date,
     required this.type,
@@ -720,6 +728,9 @@ class _ScriptListItem extends ConsumerWidget {
 
     return GestureDetector(
       onTap: () async {
+        final settingsNotifier = ref.read(settingsProvider.notifier);
+        final scriptNotifier = ref.read(scriptProvider.notifier);
+        
         try {
           // 1. Recover the full metadata via sessionId (primary) or title/text (fallback)
           final List<String> recentScripts = ref.read(settingsProvider).recentScripts;
@@ -740,7 +751,7 @@ class _ScriptListItem extends ConsumerWidget {
             final meta = jsonDecode(targetMeta);
             // 2. Deep Session Recovery: Apply saved styles
             if (meta['style'] != null) {
-              await ref.read(settingsProvider.notifier).applySessionStyles(meta['style']);
+              await settingsNotifier.applySessionStyles(meta['style']);
             }
           }
         } catch (e) {
@@ -748,8 +759,10 @@ class _ScriptListItem extends ConsumerWidget {
         }
 
         // 3. Load text with stored sessionId to prevent new session generation
-        ref.read(scriptProvider.notifier).loadText(fullText, title: title, sourceType: type, sessionId: sessionId);
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
+        scriptNotifier.loadText(fullText, title: title, sourceType: type, sessionId: sessionId);
+        if (context.mounted) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
+        }
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -793,7 +806,9 @@ class _ScriptListItem extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 20),
               onPressed: () {
-                ref.read(settingsProvider.notifier).removeFromRecent(title);
+                if (sessionId != null) {
+                  ref.read(settingsProvider.notifier).removeFromRecent(sessionId!);
+                }
               },
             ),
             const Icon(Icons.chevron_right_rounded, color: Colors.white24),

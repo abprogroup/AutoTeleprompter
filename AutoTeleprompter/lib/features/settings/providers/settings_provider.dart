@@ -299,22 +299,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final list = List<String>.from(state.recentScripts);
     final Map<String, dynamic> newData = jsonDecode(metadataJson);
     final String? newSessionId = newData['sessionId'] as String?;
-    final String newTitle = newData['title'] ?? 'Untitled';
 
-    // Smart Upsert: Use sessionId as the primary key if available, fallback to title match
-    list.removeWhere((item) {
-      try {
-        final decoded = jsonDecode(item);
-        if (newSessionId != null && decoded['sessionId'] == newSessionId) return true;
-        if (newSessionId == null) {
-           final existingTitle = decoded['title'] as String?;
-           return existingTitle?.toLowerCase() == newTitle.toLowerCase();
+    // Smart Upsert: Strictly manage by sessionId to avoid affecting separate duplicates
+    if (newSessionId != null) {
+      list.removeWhere((item) {
+        try {
+          final decoded = jsonDecode(item);
+          return decoded['sessionId'] == newSessionId;
+        } catch (e) {
+          return false;
         }
-        return false;
-      } catch (e) {
-        return false;
-      }
-    });
+      });
+    }
 
     // Insert the latest version at the top
     list.insert(0, metadataJson);
@@ -325,13 +321,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setStringList(_recentScriptsKey, list);
   }
 
-  Future<void> removeFromRecent(String title) async {
+  Future<void> removeFromRecent(String sessionId) async {
     final list = List<String>.from(state.recentScripts);
     list.removeWhere((item) {
       try {
         final decoded = jsonDecode(item);
-        final existingTitle = decoded['title'] as String?;
-        return existingTitle?.toLowerCase() == title.toLowerCase();
+        return decoded['sessionId'] == sessionId;
       } catch (e) {
         return false;
       }

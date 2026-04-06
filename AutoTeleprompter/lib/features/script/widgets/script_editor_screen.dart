@@ -261,14 +261,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
       _currentTitle = initialTitle;
       _isInit = true;
       _saveHistory(description: 'Initial Load');
-      
-      // We perform the first update on the NEXT frame to ensure any 
-      // gallery-applied styles have flushed into the setting state.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && initialText.isNotEmpty) {
-           _triggerRecentUpdate(initialTitle, initialText);
-        }
-      });
     }
   }
 

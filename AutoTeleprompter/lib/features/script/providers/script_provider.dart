@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 import '../models/script.dart';
+import '../models/script_word.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../../features/teleprompter/services/word_aligner.dart';
@@ -19,23 +20,32 @@ class ScriptNotifier extends Notifier<Script?> {
     // We try to find the sourceType and sessionId from the most recent script metadata if possible
     String sourceType = 'TEMP';
     String? sessionId;
+    int? historyIndex;
     if (settings.recentScripts.isNotEmpty) {
       try {
         final meta = jsonDecode(settings.recentScripts.first);
         if (meta['fullText'] == lastText) {
           sourceType = meta['type'] ?? 'TEMP';
           sessionId = meta['sessionId'];
+          // v4.0: Restore history index from specific script metadata
+          final metaIdx = meta['historyIndex'];
+          if (metaIdx != null) historyIndex = metaIdx;
         }
       } catch (_) {}
     }
 
     if (lastText.isNotEmpty) {
-      return _buildScript(lastText, title: lastTitle.isNotEmpty ? lastTitle : null, sourceType: sourceType, sessionId: sessionId);
+      return _buildScript(lastText, 
+        title: lastTitle.isNotEmpty ? lastTitle : null, 
+        sourceType: sourceType, 
+        sessionId: sessionId,
+        historyIndex: historyIndex ?? settings.lastHistoryIndex,
+      );
     }
     return null;
   }
 
-  Script _buildScript(String text, {String? title, String? sourceType, String? sessionId}) {
+  Script _buildScript(String text, {String? title, String? sourceType, String? sessionId, String? historyJson, int? historyIndex}) {
     final words = WordAligner.tokenize(text);
     final isRtl = text.isHebrew;
     return Script(
@@ -48,15 +58,17 @@ class ScriptNotifier extends Notifier<Script?> {
       isRtl: isRtl,
       sourceType: sourceType ?? 'TEMP',
       sessionId: sessionId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      historyJson: historyJson,
+      historyIndex: historyIndex ?? -1,
     );
   }
 
-  void loadText(String text, {String? title, String? sourceType, String? sessionId}) {
-    state = _buildScript(text, title: title, sourceType: sourceType, sessionId: sessionId);
-    ref.read(settingsProvider.notifier).saveScript(text, title: title);
+  void loadText(String text, {String? title, String? sourceType, String? sessionId, String? historyJson, int? historyIndex}) {
+    state = _buildScript(text, title: title, sourceType: sourceType, sessionId: sessionId, historyJson: historyJson, historyIndex: historyIndex);
+    ref.read(settingsProvider.notifier).saveScript(text, title: title, historyIndex: historyIndex);
   }
 
-  Future<void> importFile(File file) async {
+  Future<String> parseFile(File file) async {
     final lower = file.path.toLowerCase();
     final rawBytes = await file.readAsBytes();
     String content = '';
@@ -69,7 +81,6 @@ class ScriptNotifier extends Notifier<Script?> {
         if (raw.trimLeft().startsWith('{\\rtf')) {
           content = _parseRtf(raw);
         } else {
-          // True binary .doc — extract printable text as best effort
           content = String.fromCharCodes(
             rawBytes.where((b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
           ).replaceAll(RegExp(r'[ \t]{3,}'), '  ')
@@ -77,22 +88,25 @@ class ScriptNotifier extends Notifier<Script?> {
            .trim();
         }
       } else {
-        // TXT, MD, LOG, PDF, ODT — raw UTF-8 decode
         content = utf8.decode(rawBytes, allowMalformed: true);
       }
     } catch (e) {
       final errStr = e.toString();
       if (errStr.contains('Central Directory') || errStr.contains('Format')) {
-        content = 'This file appears to be corrupted or is not a valid ${file.path.split('.').last.toUpperCase()} file. Try re-saving it from the original application.';
+        content = 'This file appears to be corrupted or is not a valid ${file.path.split('.').last.toUpperCase()} file.';
       } else {
         content = 'Error loading file: $errStr';
       }
     }
+    return content.trim();
+  }
 
-    if (content.trim().isNotEmpty) {
+  Future<void> importFile(File file) async {
+    final content = await parseFile(file);
+    if (content.isNotEmpty) {
       final title = file.path.split('/').last;
       final extension = title.contains('.') ? title.split('.').last.toUpperCase() : 'FILE';
-      loadText(content.trim(), title: title, sourceType: extension);
+      loadText(content, title: title, sourceType: extension);
     }
   }
 
@@ -415,6 +429,29 @@ class ScriptNotifier extends Notifier<Script?> {
 }
 
 final scriptProvider = NotifierProvider<ScriptNotifier, Script?>(ScriptNotifier.new);
+
+extension ScriptUtils on Script {
+  Script copyWith({
+    String? title, 
+    String? rawText, 
+    List<ScriptWord>? words, 
+    bool? isRtl, 
+    String? sourceType, 
+    String? sessionId,
+    String? historyJson,
+  }) {
+    return Script(
+      id: id,
+      title: title ?? this.title,
+      rawText: rawText ?? this.rawText,
+      words: words ?? this.words,
+      isRtl: isRtl ?? this.isRtl,
+      sourceType: sourceType ?? this.sourceType,
+      sessionId: sessionId ?? this.sessionId,
+      historyJson: historyJson ?? this.historyJson,
+    );
+  }
+}
 
 class _RtfRun {
   final String text;

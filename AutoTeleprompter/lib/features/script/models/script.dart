@@ -8,6 +8,8 @@ class Script {
   final bool isRtl;
   final String sourceType; // 'TEMP', 'RTF', 'PDF', 'TXT', etc.
   final String sessionId;   // Unique session key for Deep Memory style recovery
+  final String? historyJson; // Persisted Undo/Redo stack for v3.5.4
+  final int historyIndex;     // v3.8 persistence
 
   const Script({
     required this.id,
@@ -17,9 +19,20 @@ class Script {
     required this.isRtl,
     this.sourceType = 'TEMP',
     required this.sessionId,
+    this.historyJson,
+    this.historyIndex = -1,
   });
 
-  Script copyWith({String? title, String? rawText, List<ScriptWord>? words, bool? isRtl, String? sourceType, String? sessionId}) {
+  Script copyWith({
+    String? title, 
+    String? rawText, 
+    List<ScriptWord>? words, 
+    bool? isRtl, 
+    String? sourceType, 
+    String? sessionId,
+    String? historyJson,
+    int? historyIndex,
+  }) {
     return Script(
       id: id,
       title: title ?? this.title,
@@ -28,6 +41,8 @@ class Script {
       isRtl: isRtl ?? this.isRtl,
       sourceType: sourceType ?? this.sourceType,
       sessionId: sessionId ?? this.sessionId,
+      historyJson: historyJson ?? this.historyJson,
+      historyIndex: historyIndex ?? this.historyIndex,
     );
   }
 

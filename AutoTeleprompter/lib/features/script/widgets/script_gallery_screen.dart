@@ -190,7 +190,90 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
 
                 if (!context.mounted) return;
                 await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
-                await ref.read(scriptProvider.notifier).importFile(file);
+                final String content = await ref.read(scriptProvider.notifier).parseFile(file);
+                final String title = file.path.split('/').last;
+
+                // Conflict Detection: Search Recents for matching title (filename)
+                String? existingMeta;
+                final List<String> recentScripts = ref.read(settingsProvider).recentScripts;
+                
+                // Helper to normalize content for comparison (Fuzzy match)
+                String normalize(String? t) => (t ?? '').replaceAll('\r', '').trim();
+                final String normalizedNew = normalize(content);
+
+                for (final meta in recentScripts) {
+                  try {
+                    final decoded = jsonDecode(meta);
+                    if (decoded['title'] == title) {
+                      existingMeta = meta;
+                      break;
+                    }
+                  } catch (_) {}
+                }
+
+                if (existingMeta != null) {
+                   final decoded = jsonDecode(existingMeta);
+                   final String existingContent = decoded['fullText'] ?? '';
+                   final String sessionId = decoded['sessionId'];
+                   final String type = decoded['type'] ?? 'TXT';
+
+                   if (normalize(existingContent) == normalizedNew) {
+                      // Perfect Match: Don't import a duplicate. Just Open it.
+                      ref.read(scriptProvider.notifier).loadText(existingContent, 
+                        title: title, sourceType: type, sessionId: sessionId,
+                        historyJson: decoded['historyJson']);
+                   } else {
+                      // Content Mismatch: Ask the user.
+                      if (!context.mounted) return;
+                      final String? choice = await showDialog<String>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: const Color(0xFF1E1E1E),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Row(children: [
+                            Icon(Icons.warning_amber_rounded, color: Color(0xFFFFBF00), size: 22),
+                            SizedBox(width: 10),
+                            Text("Conflict Detected", style: TextStyle(color: Colors.white, fontSize: 17)),
+                          ]),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('"$title" is already in your Recents.', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              const Text('The version on your disk is different from the version in your history. What do you want to do?', style: TextStyle(color: Colors.white70)),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, 'cancel'),
+                              child: const Text("KEEP HISTORY", style: TextStyle(color: Colors.white54)),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(ctx, 'reload'),
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFBF00), foregroundColor: Colors.black),
+                              child: const Text("RELOAD & DISCARD EDITS", style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        )
+                      );
+                      
+                      if (choice == 'reload') {
+                        ref.read(scriptProvider.notifier).loadText(content, title: title, sourceType: type, sessionId: sessionId);
+                      } else if (choice == 'cancel') {
+                        ref.read(scriptProvider.notifier).loadText(existingContent, 
+                          title: title, sourceType: type, sessionId: sessionId,
+                          historyJson: decoded['historyJson']);
+                      } else {
+                        return; // User dismissed
+                      }
+                   }
+                } else {
+                   // Normal Import: No Title found in recents
+                   await ref.read(scriptProvider.notifier).importFile(file);
+                }
+
                 if (context.mounted) {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
                 }
@@ -726,92 +809,110 @@ class _ScriptListItem extends ConsumerWidget {
 
     final previewText = _stripMarkup(fullText.split('\n').first.trim().isNotEmpty ? fullText.split('\n').first : 'No content preview');
 
-    return GestureDetector(
-      onTap: () async {
-        final settingsNotifier = ref.read(settingsProvider.notifier);
-        final scriptNotifier = ref.read(scriptProvider.notifier);
-        
-        try {
-          // 1. Recover the full metadata via sessionId (primary) or title/text (fallback)
-          final List<String> recentScripts = ref.read(settingsProvider).recentScripts;
-          String? targetMeta;
-          for (var s in recentScripts) {
-            final decoded = jsonDecode(s);
-            if (sessionId != null && decoded['sessionId'] == sessionId) {
-              targetMeta = s;
-              break;
-            }
-            if (sessionId == null && decoded['title'] == title && decoded['fullText'] == fullText) {
-              targetMeta = s;
-              break;
-            }
-          }
-
-          if (targetMeta != null) {
-            final meta = jsonDecode(targetMeta);
-            // 2. Deep Session Recovery: Apply saved styles
-            if (meta['style'] != null) {
-              await settingsNotifier.applySessionStyles(meta['style']);
-            }
-          }
-        } catch (e) {
-          debugPrint('Session Recovery Error: $e');
-        }
-
-        // 3. Load text with stored sessionId to prevent new session generation
-        scriptNotifier.loadText(fullText, title: title, sourceType: type, sessionId: sessionId);
-        if (context.mounted) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
-        }
-      },
+    return Material(
+      color: Colors.transparent,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Row(
           children: [
-            Container(
-              width: 50, // Fixed width for alignment
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              decoration: BoxDecoration(
-                color: labelBgColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: labelBorderColor),
-              ),
-              child: Text(type.toUpperCase(), style: TextStyle(
-                color: labelColor,
-                fontSize: 9, 
-                fontWeight: FontWeight.bold
-              )),
-            ),
-            const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            Expanded(
+              child: InkWell(
+                onTap: () async {
+                  final settingsNotifier = ref.read(settingsProvider.notifier);
+                  final scriptNotifier = ref.read(scriptProvider.notifier);
+                  
+                  try {
+                    final List<String> recentScripts = ref.read(settingsProvider).recentScripts;
+                    String? targetMeta;
+                    for (var s in recentScripts) {
+                      final decodedJson = jsonDecode(s);
+                      if (sessionId != null && decodedJson['sessionId'] == sessionId) {
+                        targetMeta = s;
+                        break;
+                      }
+                      if (sessionId == null && decodedJson['title'] == title && decodedJson['fullText'] == fullText) {
+                        targetMeta = s;
+                        break;
+                      }
+                    }
+                    
+                    Map<String, dynamic>? decodedMeta;
+                    if (targetMeta != null) {
+                      decodedMeta = jsonDecode(targetMeta);
+                      if (decodedMeta!['style'] != null) {
+                        await settingsNotifier.applySessionStyles(decodedMeta['style']);
+                      }
+                    }
+
+                    scriptNotifier.loadText(fullText, 
+                      title: title, sourceType: type, sessionId: sessionId,
+                      historyJson: decodedMeta?['historyJson']);
+                  } catch (e) {
+                    debugPrint('Session Recovery Error: $e');
+                    scriptNotifier.loadText(fullText, title: title, sourceType: type, sessionId: sessionId);
+                  }
+                  if (context.mounted) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
                     children: [
-                      Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                      const SizedBox(height: 2),
-                      Text(previewText, 
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white38, fontSize: 13)),
-                      Text(date, style: const TextStyle(color: Colors.white24, fontSize: 11)),
+                      Container(
+                        width: 50,
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: labelBgColor,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: labelBorderColor),
+                        ),
+                        child: Text(type.toUpperCase(), style: TextStyle(
+                          color: labelColor,
+                          fontSize: 9, 
+                          fontWeight: FontWeight.bold
+                        )),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                            const SizedBox(height: 2),
+                            Text(previewText, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white38, fontSize: 13)),
+                            Text(date, style: const TextStyle(color: Colors.white24, fontSize: 11)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 20),
-              onPressed: () {
-                if (sessionId != null) {
-                  ref.read(settingsProvider.notifier).removeFromRecent(sessionId!);
-                }
-              },
+              ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 20),
+                onPressed: () {
+                  if (sessionId != null) {
+                    ref.read(settingsProvider.notifier).removeFromRecent(sessionId!);
+                  }
+                },
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: Icon(Icons.chevron_right_rounded, color: Colors.white24),
+            ),
           ],
         ),
       ),

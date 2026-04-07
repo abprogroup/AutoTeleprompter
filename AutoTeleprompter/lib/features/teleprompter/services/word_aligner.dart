@@ -204,6 +204,7 @@ class WordAligner {
     if (last < text.length) {
       spans.add(_Span(text.substring(last),
           isBold: base.isBold, isUnderline: base.isUnderline, fontSize: base.fontSize, 
+          alignment: base.alignment, isParagraphRtl: base.isParagraphRtl,
           isItalic: base.isItalic, highlight: base.highlight, textColor: base.textColor));
     }
     return spans;
@@ -433,7 +434,7 @@ class _Span {
   final bool isBold;
   final bool isUnderline;
   final double? fontSize;
-  final TextAlign alignment;
+  final TextAlign? alignment;
   final bool isItalic;
   final bool? isParagraphRtl;
   final Color? highlight;
@@ -444,7 +445,7 @@ class _Span {
     this.isBold = false,
     this.isUnderline = false,
     this.fontSize,
-    this.alignment = TextAlign.center,
+    this.alignment,
     this.isItalic = false,
     this.isParagraphRtl,
     this.highlight,

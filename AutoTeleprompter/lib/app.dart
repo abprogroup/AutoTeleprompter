@@ -10,7 +10,7 @@ class AutoTeleprompterApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ProviderScope(
       child: MaterialApp(
-        title: 'V3 PROFESSIONAL',
+        title: 'AUTOTELEPROMPTER',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           brightness: Brightness.dark,

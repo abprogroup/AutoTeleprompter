@@ -1,4 +1,4 @@
-# AI Protocol: AutoTeleprompter v3.6.1 [LOOP_HARDEN]
+# AI Protocol: AutoTeleprompter v3.7 [DEEP_FIX]
 
 ## 🛡️ CORE DIRECTIVES
 1. **Zero-Bypass Policy**: No code changes WITHOUT a preceding surgical backup.
@@ -9,14 +9,18 @@
 4. **[WAV] Mandate**: Workspace Access Verification is REQUIRED after loop mode selection. The AI must verify R/W/X permissions for `/lib`, `/_agent`, and `/backups`.
 5. **[ATOMIC_TIMING]**: The 30-minute safety limit applies ONLY to a single task. In Mega-Loops, the timer MUST be reset (`start`) for each new TODO.
 
-## 🚀 AUTONOMOUS ENGINE (v3.6.1)
-- **Strict Consultation**: `/run` MUST stop and ask: 
-  - (A) How many TODOs to fix? 
-  - (B) How much time should the loop run?
-- **Persistence**: `persistence_guard.sh start` must cover the entire multi-task session.
+## 🚀 AUTONOMOUS ENGINE (v3.7) [DEEP_FIX]
+- **Strict Consultation**: `/deep_run` MUST stop and ask: 
+  - (A) Which bug to focus on for this session?
+  - (B) Clarify documentation if not complete:
+    - **1. -> 2. -> 3.** (Test actions)
+    - ***Wanted Result***: (The positive outcome)
+    - ***Meaning***: (The core logic failure)
+- **Focused Execution**: The loop now focuses on ONE bug at a time using the `/deep_fix` and `/deep_test` workflows.
+- **Persistence**: `persistence_guard.sh start` must cover the entire deep-dive session.
 
 ## 📄 DOCUMENTATION GOVERNANCE
-- **MASTER_TODO.md**: Synchronized at the start (/plan) and end (/logit) of every loop.
+- **MASTER_TODO.md**: Synchronized at the start (/plan) and end (/logit) of every loop. Must include documented test steps for `[X]` items.
 - **DAILY_LOG.md**: Real-time session history; must explicitly record the chosen Loop Mode and [WAV] status.
 - **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
 - **Root Directory Cleanup**: The root directory must remain clean of `.dart` scripts or `.png` schemes. All such artifacts must reside in `/test`.
@@ -32,11 +36,11 @@ For external agents (Claude Code, etc.) to align with this protocol, they MUST u
 
 ### **1. HOT COMMANDS (Workflows)**
 Path: `_agent/workflows/`
-- **`/run`**: Master autonomous loop (Planning → Execution → Verification).
-- **`/fix`**: Surgical code injection of approved plans.
+- **`/deep_run`**: MASTER Focused autonomous loop (Selection → Planning → Execution → Visual Verification).
+- **`/deep_fix`**: THREE-PHASE surgical fix (Research 30m, Plan 15m, Exec 15m).
+- **`/deep_test`**: Visual verification via emulator screenshots and visual analysis.
 - **`/logit`**: Universal terminal-based documentation sync.
 - **`/plan`**: Priority-based planning from MASTER_TODO.md.
-- **`/test`**: Stability and regression verification.
 - **`/backup`**: Surgical mirrors and full snapshots.
 
 ### **2. SAFETY & HARDWARE BRIDGE (Scripts)**
@@ -44,12 +48,12 @@ Path: `_agent/scripts/`
 - **`backup.sh`**: Full project state snapshot.
 - **`pre_change_backup.sh`**: Surgical per-file mirrors.
 - **`persistence_guard.sh`**: Caffeinate-based session lock.
-- **`task_timer.sh`**: 30-minute safety governance.
+- **`task_timer.sh`**: Timing governance for research/planning/exec.
 - **`emulator_bridge.sh`**: Hardware passthrough for Mac (Keyboard/Mic).
 
 ### **3. VERIFICATION**
 Path: `test/`
-- Centralized test artifacts and loop schemes.
+- Centralized test artifacts and visual deep analysis reports.
 
 ### **4. GIT GOVERNANCE**
 - **Commit Mandate**: All agents MUST perform a `git commit` after every successful task completion.
@@ -57,4 +61,4 @@ Path: `test/`
 - **Naming Standard**: Use the prefix `[V3-SYNC]` followed by a concise description of the fix (e.g., `git commit -m "[V3-SYNC] fixed history index sync"`).
 
 ---
-*Failure to follow this consultative WAV-protected protocol will result in a hard session reset.*
+*Failure to follow this consultative WAV-protected deep-fix protocol will result in a hard session reset.*

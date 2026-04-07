@@ -1,0 +1,1 @@
+Read and execute the workflow defined in `_agent/workflows/logit.md`. Follow every step exactly as written. Also read `AI_PROTOCOL.md` for the governing directives that apply to all workflows.

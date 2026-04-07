@@ -1,5 +1,5 @@
-# Master TODO List: AutoTeleprompter v3.7.2 Professional
-# (Surgical Terminal Sync v3.7.2.1)
+# Master TODO List: AutoTeleprompter v3.7.5 Professional
+# (Surgical Terminal Sync v3.7.5.1)
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -12,7 +12,7 @@
 - `[-]` = Deferred; Should be attached with an explanation why.
 
 ## 📜 Rules of Protocol
-- **Versioning**: Only the USER can authorize major stable version jumps (v1/v2/v3/v4). AI performs sub-version steps (e.g. v3.4.5 -> v3.4.6/v3.7.2) for internal backup and session tracking.
+- **Versioning**: Only the USER can authorize major stable version jumps (v1/v2/v3/v4). AI performs sub-version steps (e.g. v3.4.5 -> v3.4.6/v3.7.5) for internal backup and session tracking.
 - **Cleanup**: `[U]` items are preserved for history and only cleared by the USER during major stable version transitions.
 - **Surgical Updates**: When updating the TODO list or Logs, only modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
 - **Persistence**: Deferred `[-]` and unfinished items are **NEVER** deleted, maintaining a full project audit trail.
@@ -53,13 +53,13 @@
 - [U] **Autonomous Deployment**: Integrated /Emulator hot command into the Master Loop. (USER REQUESTED)
 - [U] **Recent Scripts Delete**: Delete button only works after toggle "Show More". (USER VERIFIED)
 - [U] **Undo/Redo**: Implement for background colors. (USER VERIFIED)
-- [P] **Color Picker Reopen**: Picker must show active color when reopened. (AI VERIFIED v3.7.2: Surgical tag replacement + Active scanner + Sync Guard)
+- [X] **BUG: Color Picker Focus**: Applied text colors revert to default due to selection color masking and hex format mismatches. (RESTARTING DEEP RUN v3.7.5)
   1. -> Write and select text in a script, then open the Color Suite button.
-  2. -> Verify the previewed color matches the actual text color (not yellow vs white).
-  3. -> Change the color to BLUE and verify both preview and script update.
-  *Actual Result*: Color picker fails to update the script/preview for text or highlight colors (only background works).
-  *Wanted Result*: Color picker should update the script/preview for text and highlight colors.
-  *Meaning*: Applying a new color was nesting tags redundantly, resulting in the inner (old) color taking precedence.
+  2. -> Apply RED color and observe both the editor and the picker preview.
+  3. -> Verify persistence after deselection and picker reopen/sync.
+  *Actual Result*: Applied color is masked by yellow highlight and reverts to global settings upon state change.
+  *Wanted Result*: Absolute persistence and 1:1 visual match in the synced picker.
+  *Meaning*: Hex format mismatch (# vs 0xFF) and selection theme confusion.
 - [U] **Toolbar "C" Button**: Move to main toolbar (left of TEXT) -> Clear all styles/colors/align. (AI VERIFIED: Hard Reset Logic)
 - [U] **BUG: History Sorting**: Reverse history list order (latest at TOP). (AI VERIFIED)
 - [U] **Splash Screen**: Remove "V3" text under logo. (FIXED in v3.5.3)
@@ -74,4 +74,4 @@
 - [U] **Selection Fix**: Tapping supported file does nothing -> Fix selection. (COMPLETED in v2.x)
 
 ---
-*Last Updated: 2026-04-07 (v3.7.2 Deep Fix Session Complete — 2/4 [X] → [P])*
+*Last Updated: 2026-04-07 (v3.7.5 Protocol Perfection Complete — 1/4 [X] → [P])*

@@ -16,7 +16,7 @@
 - **Cleanup**: `[U]` items are preserved for history and only cleared by the USER during major stable version transitions.
 - **Surgical Updates**: When updating the TODO list or Logs, only modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
 - **Persistence**: Deferred `[-]` and unfinished items are **NEVER** deleted, maintaining a full project audit trail.
-- **Autonomous Deep Run**: AI must iterate through optional fixes until successful [P] verification or total exhaustion of options.
+- **Autonomous Deep Run**: AI must autonomously iterate through research, test planning, and rebuilds until successful [P] verification or total exhaustion of options. Success requires Absolute Proof (Deselection + Sync).
 
 ## 🛠️ UI & UX Fixes
 - [U] **v3.5.x Hardening**: Implement Persistence Guard, Surgical Mirrors, Task Timer, and /logit Protocol.

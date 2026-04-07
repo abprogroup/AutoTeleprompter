@@ -9,18 +9,25 @@
 4. **[WAV] Mandate**: Workspace Access Verification is REQUIRED after loop mode selection. The AI must verify R/W/X permissions for `/lib`, `/_agent`, and `/backups`.
 5. **[ATOMIC_TIMING]**: The 30-minute safety limit applies ONLY to a single task. In Mega-Loops, the timer MUST be reset (`start`) for each new TODO.
 
-## 🚀 AUTONOMOUS ENGINE (v3.7) [DEEP_FIX]
+## 🚀 AUTONOMOUS ENGINE (v3.6.1) [/run]
+- **Dual-Mode Loop**: Use this for broad, multi-task bug fixing.
+- **Strict Consultation**: `/run` MUST stop and ask: 
+  - (A) How many TODOs to fix?
+  - (B) How much time should the loop run?
+- **Persistence**: `persistence_guard.sh start` must cover the entire multi-task session.
+
+## 🚀 AUTONOMOUS ENGINE (v3.7) [/deep_run]
+- **Surgical Focus**: Use this for critical or previously-failed bugs.
 - **Strict Consultation**: `/deep_run` MUST stop and ask: 
   - (A) Which bug to focus on for this session?
-  - (B) Clarify documentation if not complete:
-    - **1. -> 2. -> 3.** (Test actions)
-    - ***Wanted Result***: (The positive outcome)
-    - ***Meaning***: (The core logic failure)
-- **Focused Execution**: The loop now focuses on ONE bug at a time using an **Autonomous Iterative Process**:
-  - (1) Research & collect all optional fix paths.
-  - (2) Execute the best fix.
-  - (3) Test via [/deep_test].
-  - (4) Revert and iterate if failed.
+  - (B) Clarify documentation if not complete (Test actions, Wanted Result, Meaning).
+- **Hardened Execution [ABSOLUTE_VERIFICATION]**:
+  - (1) **Research**: Identify root cause + collect all optional fix paths.
+  - (2) **Test Route Planning**: Plan exact visual/logical steps to PROVE success in `test/deep_analysis/[ID]_route.md`.
+  - (3) **Execute**: Apply best fix.
+  - (4) **[MANDATORY] Rebuild**: Full APK rebuild and redeploy (`/emulator`).
+  - (5) **[MANDATORY] Absolute Test**: Execute `/deep_test` with **Deselection Proof** (no selection handles) and **Picker Sync** proof (color checkmark matches).
+  - (6) **Iterate**: Revert and try next fix if failed.
 - **Persistence**: `persistence_guard.sh start` must cover the entire deep-dive session.
 
 ## 📄 DOCUMENTATION GOVERNANCE
@@ -28,10 +35,11 @@
 - **DAILY_LOG.md**: Real-time session history; must explicitly record the chosen Loop Mode and [WAV] status.
 - **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
 - **Surgical Updates**: When updating documentation (MASTER_TODO.md, DAILY_LOG.md, README.md), the AI must ONLY modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
-- **Root Directory Cleanup**: The root directory must remain clean of `.dart` scripts or `.png` schemes. All such artifacts must reside in `/test`.
+- **Root Directory Cleanup**: All artifacts must reside in `/test/deep_analysis/`.
+- **Visual Proof Mandate**: Every fix MUST have a `final_proof.png` in `/test` showing the fix in a stable, non-selected state.
 
 ## ⚖️ VERSIONING & GOVERNANCE
-1. **Stable Versioning Control**: Only the **USER** is authorized to decide when to advance to a major stable version (e.g., v3.0 to v4.0).
+1. **Stable Versioning Control**: Only the **USER** is authorized to decide when to advance to a major stable version (e.g., v3.0 to v3.7.2).
 2. **AI Iteration Limit**: The AI is permitted to advance sub-versions (e.g., v3.4.5 to v3.4.6) to track incremental progress and surgical backups.
 3. **TODO Cleanup Policy**: `[U]` (User Verified) items can ONLY be cleared during a major stable version transition, and ONLY upon explicit USER authorization.
 4. **Permanent Record**: Deferred `[-]` and unresolved items (`[ ]`, `[X]`, `[F]`) must **NEVER** be deleted from the TODO list, ensuring a permanent historical record of project debt.
@@ -41,13 +49,15 @@ For external agents (Claude Code, etc.) to align with this protocol, they MUST u
 
 ### **1. HOT COMMANDS (Workflows)**
 Path: `_agent/workflows/`
-- **`/deep_run`**: MASTER Focused autonomous loop (Selection → Planning → Deployment → Execution → Visual Verification).
-- **`/deep_fix`**: THREE-PHASE surgical fix (Research 30m, Plan 15m, Exec 15m).
-- **`/deep_test`**: Visual verification via emulator screenshots and visual analysis.
-- **`/emulator`**: APK Rebuild and Deployment to Android Emulator.
-- **`/logit`**: Universal terminal-based documentation sync.
+- **`/run`**: Master Broad loop for multi-task fix sessions (Planning → Fast-Execution → Verification).
+- **`/deep_run`**: Focused surgical loop for critical bugs (Documentation → Test Planning → Implementation → Absolute Verification).
+- **`/deep_fix`**: THREE-PHASE manual surgical fix (Research 30m, Plan 15m, Exec 15m).
+- **`/deep_test`**: Hardened visual verification via Test Route execution and screenshot analysis.
+- **`/emulator`**: Absolute Rebuild Mandate: Clean APK rebuild and redeployment.
+- **`/logit`**: Universal terminal-based documentation sync for all project files.
 - **`/plan`**: Priority-based planning from MASTER_TODO.md.
-- **`/backup`**: Surgical mirrors and full snapshots.
+- **`/test`**: Basic stability and regression verification.
+- **`/backup`**: Surgical mirrors and full session snapshots.
 
 ### **2. SAFETY & HARDWARE BRIDGE (Scripts)**
 Path: `_agent/scripts/`

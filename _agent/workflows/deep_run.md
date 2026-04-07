@@ -18,17 +18,18 @@ description: Redefined autonomous loop for focused, one-at-a-time bug fixing wit
      - Update [MASTER_TODO.md](file:///Users/proapple/Desktop/AutoTeleprompter/MASTER_TODO.md) with the provided documentation.
 
 3. **Session Preparation**
-   - Run [/backup](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/backup.md) (Full Snapshot + Surgical Mirror).
-   - Run [/sync](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/sync.md) to align with all project rules.
-   - Run [/emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md) to ensure a fresh session.
+   - Run [/backup](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/backup.md) (Full Snapshot).
+   - Run [/sync](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/sync.md) to align rules.
+   - Run [/emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md) for a fresh clean session.
 
-4. **Deep Fix & Test Execution [AUTONOMOUS_LOOP]**
-   - The AI must autonomously:
-     - (1) **Research**: Identify the root cause and collect all optional fixes.
-     - (2) **Execute**: Apply the most promising fix first.
-     - (3) **Test**: Execute [/deep_test](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/deep_test.md).
-     - (4) **Iterate**: If the test fails, revert the change and try the next best fix from the list.
-   - Continue until the bug is verified or all options are exhausted.
+4. **Deep Fix & Test Execution [ABSOLUTE_VERIFICATION]**
+   - The AI must autonomously iterate through:
+     - (1) **Research**: Identify root cause + collect all optional fix paths.
+     - (2) **Test Route Planning**: Document the exact visual/logical steps to verify success for this SPECIFIC bug in `test/deep_analysis/[TASK_ID]_route.md`.
+     - (3) **Execute**: Apply best fix.
+     - (4) **[MANDATORY] Rebuild**: Run [/emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md) to full-rebuild APK.
+     - (5) **Absolute Test**: Execute [/deep_test](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/deep_test.md).
+     - (6) **Iterate**: Revert and try next fix if failed.
    - Present the fix for review ONLY after a successful [/deep_test].
 
 5. **Cycle Closure**

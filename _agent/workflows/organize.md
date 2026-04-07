@@ -1,10 +1,15 @@
----
-description: Cleans the workspace of temporary files, build logs, and test artifacts.
----
-1. **Identify Junk**: Find temporary files in `/tmp`, build logs/caches, or one-off test scripts created during the session.
-2. **Cleanup**: Remove these files using `run_command` or project-specific tools.
-3. **Verify Integrity**: Ensure no essential source files were accidentally targeted.
-4. **Conclusion**: Signal a "Fresh Start" state to the user.
+# /organize Protocol [SMART_GOVERNANCE]
+
+1. **Root Audit**: Identify all non-core files in the project root. Only `AI_PROTOCOL.md`, `README.md`, `MASTER_TODO.md`, and `DAILY_LOG.md` are authorized root residents.
+2. **Dynamic Artifact Routing**: 
+   - **Visual Proofs (PNG/MP4)**: Move to `test/deep_analysis/[TASK_ID]/`.
+   - **Loop Blueprints (PNG/MD)**: Move to `schemes/`.
+   - **Test Summaries (.md)**: Move to `test/`.
+   - **Snapshots/Files**: Move to `backups/`.
+3. **Environmental Cleanup**: 
+   - Delete temporary `/tmp` artifacts.
+   - Delete one-off build/cache files created during the session.
+4. **Conclusion**: Report the cleanup success and confirm the workspace is architectural and pristine.
 
 ---
-*Command: /organize*
+*Command: /organize v3.7.5*

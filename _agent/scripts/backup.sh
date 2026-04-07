@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# AutoTeleprompter v3.4.0 Backup Utility
-# Purpose: Creates a timestamped archive of the source code.
+# AutoTeleprompter v3.7.5 Backup Utility
+# Purpose: Creates a timestamped archive of the source code and all test/scheme artifacts.
 
 BACKUP_DIR="/Users/proapple/Desktop/AutoTeleprompter/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)

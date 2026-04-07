@@ -13,12 +13,12 @@ mkdir -p "$BACKUP_DIR"
 echo "Creating backup: ${ARCHIVE_NAME}..."
 
 # Exclude large/binary directories to keep backups slim
-tar --exclude='*/build/*' \
-    --exclude='*/.dart_tool/*' \
-    --exclude='*/.android/*' \
-    --exclude='*/.gradle/*' \
-    --exclude='*/backups/*' \
-    --exclude='*/.git/*' \
+tar --exclude='build' \
+    --exclude='.dart_tool' \
+    --exclude='.android' \
+    --exclude='.gradle' \
+    --exclude='backups' \
+    --exclude='.git' \
     -czf "${BACKUP_DIR}/${ARCHIVE_NAME}" -C /Users/proapple/Desktop/AutoTeleprompter .
 
 if [ $? -eq 0 ]; then

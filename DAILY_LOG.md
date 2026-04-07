@@ -1,24 +1,29 @@
-# Daily Log: AutoTeleprompter v3.5.3
+# Daily Log: AutoTeleprompter v3.7.1 [DEEP_FIX]
 
-### ✅ 2026-04-07 (Today)
-- **BUG Fix**: Recent Activity Duplication (Final). Implemented title-based Conflict Detection in the `Import Script` workflow. The system now checks if a file is already in "Recent Activity" before loading, prevents duplicate session IDs for identical content, and presents a "Conflict Detected" dialog for content mismatches (Fixed in v3.5.3).
-- **BUG Fix**: Recent Activity Normalization. Standardized line endings (LF) and trimmed whitespace in the deduplication layer (Fixed in v3.5.3).
-- **BUG Fix**: Auto-Save Error (Disposal race condition). Hardened `ScriptEditorScreen` with multiple `mounted` guards (Fixed in v3.5.3).
-- **FEATURE Addition**: Conflict Resolution Dialog for script imports (Fixed in v3.5.3).
-- **BUG Fix**: Style Regression in Teleprompter Screen (Alignment/Spacing) (Fixed in v3.5.3).
-- **INFRA Fix**: Restored Emulator Hardware Bridge for Mac ADB (Fixed in v3.5.3).
-- **BUG Fix**: Recent Scripts Delete button gesture decoupling (Fixed in v3.5.3).
-- **FEATURE Addition**: Undo/Redo for background colors (Fixed in v3.5.3).
-- **BUG Fix**: Color Picker state persistence (Fixed in v3.5.3).
-- **UI Improvement**: Relocated "Clear All Formatting" (C) button (Fixed in v3.5.3).
-- **Branding Fix**: Removed "V3" versioning from Splash (Fixed in v3.5.3).
-- **BUG Fix**: Style Exposure during selection (Fixed in v3.5.3).
+### ✅ 2026-04-07 — v3.7.1 [DEEP_FIX] Session
+- **[/deep_run] executed**: Focused on **Emulator Hardware Bridge** bug.
+- **INFRA: Hardware Bridge v4.1**: 
+    - Rewrote \`emulator_bridge.sh\` to use robust regex for AVD \`config.ini\` patching.
+    - Forced \`fastboot.forceColdBoot = yes\` and \`hw.keyboard = yes\` for all detected AVDs.
+    - Modernized ADB audio routing via \`media.audio_policy set-force-use FOR_RECORD\`.
+- **Verification**: 
+    - Screenshots captured in \`test/deep_analysis/emulator_hardware_bridge/\`.
+    - Confirmed Hebrew IME (Subtype 18) active in the app and recorder.
+    - Confirmed \`show_ime_with_hard_keyboard = 1\` and \`qemu.hw.mainkeys = 0\`.
 
-### 🚀 v3.5.3 Sprint Summary
-1.  Complete overhaul of the History & Persistence reliability.
-2.  Eliminated "Double Entries" in the Recent Activity list.
-3.  Hardened async safety across the editor lifecycle.
-4.  Standardized visual parity for the pro prompter experience.
+### ✅ 2026-04-07 — v3.6.2 Second Chance Sprint
+- **[/second_chance] executed**: All 4 [X] items surgically fixed and promoted to [P].
+- **BUG Fix: Style Regression (v3.6.2)**: \`_onAlign\` rewritten as paragraph-level operation. Strips existing alignment tags, wraps full block. Prevents silent no-op on collapsed selection.
+- **INFRA Fix: Emulator Hardware Bridge (v3.6.2)**: Initial patch for AVD \`config.ini\`. 
+- **BUG Fix: History Persistence (v3.6.2)**: \`dispose()\` now calls \`saveScript()\` to sync \`lastScript\` + \`lastHistoryIndex\`.
+- **UI Fix: Color Picker (v3.6.2)**: Removed external color bars, moved presets inside dialog.
+
+### Previous Session (v3.5.3)
+- BUG Fix: Recent Activity Duplication (Final).
+- BUG Fix: Recent Activity Normalization.
+- BUG Fix: Auto-Save Error (Disposal race condition).
+- FEATURE: Conflict Resolution Dialog.
+... (Archived)
 
 ---
-*Autonomous Development Loop Successfully Executed. v3.5.3 is Verified.*
+*v3.7.1 [DEEP_FIX] Session Complete. 1/4 [X] → [P]. Awaiting USER Cold Boot verification.*

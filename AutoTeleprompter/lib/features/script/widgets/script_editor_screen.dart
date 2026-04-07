@@ -386,7 +386,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
 
   @override
   void dispose() {
-    _triggerRecentUpdate(_currentTitle, _getRefinedFullText());
+    final text = _getRefinedFullText();
+    _triggerRecentUpdate(_currentTitle, text);
+    // v4.0: Sync lastScript + lastHistoryIndex so script_provider.build()
+    // finds matching text and restores the correct history position on re-entry.
+    ref.read(settingsProvider.notifier).saveScript(text, title: _currentTitle, historyIndex: _historyIndex);
     _historyTimer?.cancel();
     _recentTimer?.cancel();
     _autoSaveTimer?.cancel();
@@ -589,7 +593,28 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
   void _onUnderline() => _wrapSelection('[u]', '[/u]');
   void _onItalic() => _wrapSelection('[i]', '[/i]');
   void _onDirection(String dir) => _wrapSelection('[$dir]', '[/$dir]');
-  void _onAlign(String align) => _wrapSelection('[$align]', '[/$align]');
+  void _onAlign(String align) {
+    final controller = _activeController;
+    if (controller == null) return;
+
+    // v4.0: Alignment is a PARAGRAPH-level property — apply to the entire block,
+    // not just the selection. First strip any existing alignment tags.
+    String text = controller.text;
+    text = text.replaceAll(RegExp(r'\[(center|left|right)\]'), '');
+    text = text.replaceAll(RegExp(r'\[\/(center|left|right)\]'), '');
+    text = text.trim();
+
+    // Suppress duplicate history from controller listener
+    _isCleaning = true;
+    if (text.isNotEmpty) {
+      controller.value = TextEditingValue(
+        text: '[$align]$text[/$align]',
+        selection: TextSelection.collapsed(offset: '[$align]$text[/$align]'.length),
+      );
+    }
+    _isCleaning = false;
+    _saveHistory(description: 'Align $align');
+  }
   void _onFontSize(int size) => _wrapSelection('[size=$size]', '[/size]');
   void _onFontFamily(String family) => _wrapSelection('[font=$family]', '[/font]');
 
@@ -1431,18 +1456,7 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
           ],
         ),
         const SizedBox(height: 16),
-        
-        // TEXT COLOR BAR
-        const SizedBox(height: 8),
-        _HorizontalColorBar(
-          selectedColor: _currentTextColor,
-          onSelected: (hex) {
-            setState(() => _currentTextColor = Color(int.parse(hex.replaceFirst('#', '0xFF'))));
-            widget.onTextColor(hex);
-          }
-        ),
-        const SizedBox(height: 16),
-        
+
         // HIGHLIGHT COLOR
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1459,15 +1473,6 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
             ),
           ],
         ),
-        // HIGHLIGHT COLOR BAR
-        const SizedBox(height: 8),
-        _HorizontalColorBar(
-          selectedColor: _currentHighlightColor,
-          onSelected: (hex) {
-            setState(() => _currentHighlightColor = Color(int.parse(hex.replaceFirst('#', '0xFF'))));
-            widget.onBgColor(hex);
-          }
-        ),
         const SizedBox(height: 16),
 
         // BACKGROUND COLOR
@@ -1483,47 +1488,6 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _HorizontalColorBar extends StatelessWidget {
-  final ValueChanged<String> onSelected;
-  final Color? selectedColor;
-  const _HorizontalColorBar({required this.onSelected, this.selectedColor});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = [
-      0xFF000000, 0xFFFFFFFF, 0xFFFFBF00, 0xFFFF9800, 
-      0xFFF44336, 0xFFE91E63, 0xFF9C27B0, 0xFF2196F3, 
-      0xFF00BCD4, 0xFF4CAF50, 0xFF303030, 0xFF757575
-    ];
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: colors.map((c) => GestureDetector(
-          onTap: () => onSelected('#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()),
-          child: Container(
-            width: 32, height: 32,
-            margin: const EdgeInsets.only(right: 12),
-            decoration: BoxDecoration(
-              color: Color(c),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: (selectedColor?.value == c) ? Colors.white : Colors.white24, 
-                width: (selectedColor?.value == c) ? 3.0 : 1.5
-              ),
-              boxShadow: [
-                if (selectedColor?.value == c)
-                  BoxShadow(color: Color(c).withOpacity(0.5), blurRadius: 8, spreadRadius: 2),
-                BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 2))
-              ],
-            ),
-          ),
-        )).toList(),
-      ),
     );
   }
 }

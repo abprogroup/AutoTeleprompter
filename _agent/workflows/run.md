@@ -1,7 +1,7 @@
-# /run Protocol [v3.7.5 MEGA_LOOP]
+# /run Protocol [v3.9.5.1 MEGA_LOOP]
 
 1. **Initialization Phase**:
-   - **1.1. Mode Selection**: The AI must stop and ask the user:
+   - **1.1. Mode Selection**: Prompt the USER:
      - "A) How many TODOs should I fix in this session?"
      - "B) How much time (duration) should I run the loop for?"
 // turbo
@@ -12,7 +12,7 @@
 
 2. **Safety Phase (Session Start)**:
 // turbo
-   2.1. Start [Persistence Guard](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/persistence_guard.sh) if not yet active.
+   2.1. Start [Persistence Guard](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/persistence_guard.sh) if not yet active (`caffeinate`).
 // turbo
    2.2. Start/Reset [Task Timer](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/task_timer.sh): `./_agent/scripts/task_timer.sh start`
 // turbo
@@ -29,19 +29,19 @@
 
 6. **Synchronization & Cleanup Phase**:
 // turbo
-   6.1. Run [/organize](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/organize.md) (Workspace Cleanup).
+   6.1. Run [/organize](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/organize.md).
 // turbo
-   6.2. Run [/logit](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/logit.md) (Terminal Sync).
-   6.3. Commit to Git.
+   6.2. Run [/logit](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/logit.md).
+   6.3. Final Git Commit: Commit results to the repository.
 
 7. **Next Task Polling**:
    - If User Mode (Count or Duration) has not been reached:
-     - Clear the [Task Timer](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/task_timer.sh): `./_agent/scripts/task_timer.sh clear`
+     - Clear the [Task Timer](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/task_timer.sh).
      - **Recurse to Step 3** (Planning Phase for the next task).
    - If Session Limit Reached:
      - **Teardown**: Stop [Persistence Guard](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/persistence_guard.sh) & Clear all timers.
-     - **Deployment Phase**: Run [/Emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md).
+     - **Deployment Phase**: Run [/emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md).
 
 ---
 > [!IMPORTANT]
-> **[WAV] Mandate**: Workspace verification is required at every session start to prevent permission-related stalls during fresh conversations.
+> **[Persistence Guard]**: Ensures the Mac stays awake during 7-hour autonomous sessions (v3.9.5.1 Hardened).

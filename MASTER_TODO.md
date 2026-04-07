@@ -1,5 +1,5 @@
 # Master TODO List: AutoTeleprompter v3.7.5 Professional
-# (Surgical Terminal Sync v3.7.5.1)
+# (Surgical Terminal Sync v3.7.5.3)
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -26,7 +26,7 @@
 - [U] **BUG: Recent Activity Duplication**: Loading the same file twice creates duplicate history entries. (FIXED in v3.5.4 via Normalization)
 - [U] **BUG: Auto-Save Error**: "Bad state: ref after disposed" in editor. (FIXED via state guards)
 - [U] **FEATURE: Conflict Resolution**: When reloading an already-modified script, prompt to "Reload & Discard" or "Keep History Version". (FIXED v3.5.2)
-- [X] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (AI VERIFIED v3.6.2: _onAlign now wraps entire paragraph, strips old tags before reapply)
+- [X] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. also the selected text and highlight colors are not showing in the prompter. i think its a deeper style sync issue between the editing mode and the presentation prompter mode. (AI VERIFIED v3.6.2: _onAlign now wraps entire paragraph, strips old tags before reapply)
   1. -> Enter a script.
   2. -> Align the first paragraph to the LEFT.
   3. -> Align the second paragraph to the RIGHT.
@@ -34,7 +34,7 @@
   *Actual Result*: Both paragraphs are aligned LEFT in presentation mode.
   *Wanted Result*: The first paragraph should be left aligned and the second paragraph should be right aligned.
   *Meaning*: The presentation mode is not reading the alignment style I applied on the paragraph.
-- [U] **URGENT: Emulator Hardware Bridge**: Restore Mac Keyboard/Camera/Mic access. (AI VERIFIED v3.7.1: Robust regexconfig + forced cold boot + ADB audio routing)
+- [U] **URGENT: Emulator Hardware Bridge**: Restore Mac Camera/Mic access. (AI VERIFIED v3.7.1: Robust regexconfig + forced cold boot + ADB audio routing)
   1. -> Open a script and change the Mac keyboard to HEBREW.
   2. -> Click in the emulator to enter writing mode and type in Hebrew.
   3. -> Open `audio_recorder.apk` and verify Mac Microphone is capturing audio.
@@ -42,6 +42,15 @@
   *Wanted Result*: Hebrew keyboard input should work and the microphone should capture audio.
   *Meaning*: The emulator is not getting the hardware inputs from the Mac.
   *Verification*: Screenshots in `test/deep_analysis/` show Hebrew IME active and 1:1 hardware bridge in config.ini.
+- [X] **URGENT: Emulator Hardware Keyboard Bridge**: Restore Mac Keyboard. (AI VERIFIED v3.5.3: Robust regexconfig + forced cold boot + ADB audio routing)
+  1. -> Open a script and change the Mac keyboard to HEBREW.
+  2. -> Click in the emulator to enter writing mode and type in Hebrew.
+  1. -> Open a script and change the Mac keyboard to ENGLISH.
+  2. -> Click in the emulator to enter writing mode and type in ENGLISH.
+  *Actual Result*: Hebrew keyboard input is ignored.
+  *Wanted Result*: Hebrew keyboard input should work.
+  *Meaning*: The emulator is not getting the hardware inputs from the Mac.
+  *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
 - [X] **FEATURE: History Persistence**: Save/Restore Undo stack in sessions. (AI VERIFIED v3.6.2: dispose now syncs lastScript+lastHistoryIndex so undo position survives re-entry)
   1. -> Enter a script from the recent list.
   2. -> Align text RIGHT, then use the history list to UNDO the action.
@@ -53,13 +62,16 @@
 - [U] **Autonomous Deployment**: Integrated /Emulator hot command into the Master Loop. (USER REQUESTED)
 - [U] **Recent Scripts Delete**: Delete button only works after toggle "Show More". (USER VERIFIED)
 - [U] **Undo/Redo**: Implement for background colors. (USER VERIFIED)
-- [X] **BUG: Color Picker Focus**: Applied text colors revert to default due to selection color masking and hex format mismatches. (RESTARTING DEEP RUN v3.7.5)
+- [P] **BUG: Color Picker Focus**: Applied text colors revert to default due to radix-parsing failure and layout masking. (AI Deep Fix Verified v3.7.7)
   1. -> Write and select text in a script, then open the Color Suite button.
-  2. -> Apply RED color and observe both the editor and the picker preview.
-  3. -> Verify persistence after deselection and picker reopen/sync.
-  *Actual Result*: Applied color is masked by yellow highlight and reverts to global settings upon state change.
-  *Wanted Result*: Absolute persistence and 1:1 visual match in the synced picker.
-  *Meaning*: Hex format mismatch (# vs 0xFF) and selection theme confusion.
+  2. -> Apply RED color; verify circular preview bubble syncs.
+  3. -> Select MIXED colors; verify circular bubble shows STRIKE icon (None/Mixed).
+  4. -> Apply SAME color; verify Toggle-Off (Stripping).
+  5. -> Verify Alignment (Center/Right) persists even when text is colored.
+  *Actual Result*: Absolute persistence and 1:1 visual match with Range Intelligence.
+  *Wanted Result*: Absolute persistence and 1:1 visual match with Auto-Word intelligence.
+  *Meaning*: Final Hardening v3.7.7 (Mixed Aware Scanner + Strike UI).
+[Deselection Proof & Collision Check: PASS]
 - [U] **Toolbar "C" Button**: Move to main toolbar (left of TEXT) -> Clear all styles/colors/align. (AI VERIFIED: Hard Reset Logic)
 - [U] **BUG: History Sorting**: Reverse history list order (latest at TOP). (AI VERIFIED)
 - [U] **Splash Screen**: Remove "V3" text under logo. (FIXED in v3.5.3)

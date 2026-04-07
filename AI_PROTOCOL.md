@@ -24,10 +24,10 @@
 - **Hardened Execution [ABSOLUTE_VERIFICATION]**:
   - (1) **Research [TRIO-PATH]**: Identify root cause + collect at least **THREE (3) distinct optional fix paths** before coding.
   - (2) **Test Route Planning**: Plan exact visual/logical steps to PROVE success in `test/deep_analysis/[TASK_ID]_route.md`.
-  - (3) **Distinct Test Target**: MUST use a test color (e.g., RED/MAGENTA) that cannot be mistaken for a system highlight.
+  - (3) **Distinct Test Target [ANTI-MASKING]**: MUST use a high-contrast test color (e.g., **RED/MAGENTA**) that cannot be mistaken for a system highlight. **NEVER test using Yellow, White, or Amber** (System Dead-Zones).
   - (4) **Execute**: Apply the most promising fix from the Trio.
   - (5) **[MANDATORY] Rebuild**: Full APK rebuild and redeploy (`/emulator`).
-  - (6) **Absolute Test**: Execute `/deep_test` with **Deselection Proof** and **Collision Check** (proof that color persists *after* selection is cleared).
+  - (6) **Absolute Test [DESELECTION PROOF]**: Execute `/deep_test` with mandatory **Deselection Proof** (Screenshot MUST show the fix without active handles) and **State Sync Proof** (Re-triggering UI menu to prove choice survived).
   - (7) **Iterate [CAP=4]**: Maximum 4 autonomous loops before escalating to USER mode.
 - **Environmental Reset**: If `/emulator` or APK install fails twice, AI must execute `adb kill-server && adb start-server` and a `cold-boot`.
 - **Persistence**: `persistence_guard.sh start` must cover the entire deep-dive session.

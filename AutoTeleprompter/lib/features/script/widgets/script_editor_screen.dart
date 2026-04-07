@@ -18,11 +18,10 @@ import 'teleprompt_selector_sheet.dart';
 import '../../script/models/script_word.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../../teleprompter/widgets/content_creator_screen.dart';
+import '../../teleprompter/widgets/teleprompter_screen.dart'; 
 import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../../core/widgets/global_color_picker.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'teleprompt_selector_sheet.dart';
 
 // ── Markup-rendering TextEditingController ────────────────────────────────────
 
@@ -32,10 +31,9 @@ class _MarkupController extends TextEditingController {
   static const _tagStyle = TextStyle(
     color: Colors.transparent,
     backgroundColor: Colors.transparent,
-    fontSize: 0,
+    fontSize: 0.1,
     letterSpacing: 0,
     wordSpacing: 0,
-    height: 0,
   );
 
   @override
@@ -85,15 +83,19 @@ class _MarkupController extends TextEditingController {
       }
 
       if (m.group(1) != null && m.group(2) != null) {
-        final color = Color(int.tryParse(m.group(1)!.replaceFirst('#', '0xFF'), radix: 16) ?? 0xFFFFFFFF);
+        final hex = m.group(1)!.trim().replaceFirst('#', '');
+        final colorValue = int.tryParse('FF$hex', radix: 16) ?? 0xFFFFBF00;
+        final color = Color(colorValue);
+        debugPrint('[V3_EDITOR_PARSE] hex=$hex -> color=$color');
         final s = (base ?? const TextStyle()).merge(TextStyle(color: color));
-        spans.add(TextSpan(text: '[color=${m.group(1)}]', style: _tagStyle));
+        spans.add(TextSpan(text: '[color=#$hex]', style: _tagStyle));
         spans.add(_buildMarkup(m.group(2)!, s));
         spans.add(TextSpan(text: '[/color]', style: _tagStyle));
       } else if (m.group(3) != null && m.group(4) != null) {
-        final color = Color(int.tryParse(m.group(3)!.replaceFirst('#', '0xFF'), radix: 16) ?? 0x00000000);
+        final hex = m.group(3)!.trim().replaceFirst('#', '');
+        final color = Color(int.tryParse('FF$hex', radix: 16) ?? 0x00000000);
         final s = (base ?? const TextStyle()).merge(TextStyle(backgroundColor: color.withOpacity(0.5)));
-        spans.add(TextSpan(text: '[bg=${m.group(3)}]', style: _tagStyle));
+        spans.add(TextSpan(text: '[bg=#$hex]', style: _tagStyle));
         spans.add(_buildMarkup(m.group(4)!, s));
         spans.add(TextSpan(text: '[/bg]', style: _tagStyle));
       } else if (m.group(5) != null) {
@@ -246,22 +248,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
       }
 
       try {
-        // Capture all necessary state synchronously before any async gap
         final text = _getRefinedFullText();
         final currentTitle = _currentTitle;
-        
-        // Double-check mounted immediately before accessing ref
         if (!mounted) return;
         final notifier = ref.read(settingsProvider.notifier);
-        
         debugPrint('V3 Auto-Save Triggered');
         if (text.isEmpty && currentTitle == 'New Project') return;
-
         await notifier.saveScript(text, title: currentTitle, historyIndex: _historyIndex);
         debugPrint('Auto-Save Completed at index: $_historyIndex');
       } catch (e) {
-        // Suppress "ref after disposed" or "defunct element" errors 
-        // as they are expected during asynchronous app teardown.
         final err = e.toString().toLowerCase();
         if (!err.contains('disposed') && !err.contains('defunct')) {
            debugPrint('Auto-Save Error: $e');
@@ -270,7 +265,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     });
   }
 
-  String? _currentSessionId; // Identity key for Deep Memory
+  String? _currentSessionId;
 
   @override
   void didChangeDependencies() {
@@ -283,11 +278,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
         initialText = script.rawText;
         initialTitle = script.title;
         _sourceType = script.sourceType;
-        // Check if provider already has a session (restored from recent activity)
         _currentSessionId = script.sessionId;
       }
-      
-      // If no session ID yet, generate one for this new/fresh production
       _currentSessionId ??= DateTime.now().millisecondsSinceEpoch.toString();
 
       final settings = ref.read(settingsProvider);
@@ -297,33 +289,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
       _loadText(initialText);
       _currentTitle = initialTitle;
 
-      // Restore History if available (v3.5.4)
       if (script?.historyJson != null) {
         try {
           final List<dynamic> historyData = jsonDecode(script!.historyJson!);
           _history.clear();
           _history.addAll(historyData.map((d) => _EditorState.fromJson(d)));
           _historyIndex = _history.length - 1;
-          debugPrint('Restored ${_history.length} history states');
         } catch (e) {
           debugPrint('History Restore Error: $e');
         }
       }
 
       _isInit = true;
-      
-      // V3.8: Automatic History Index Restoration
       if (script != null && script.historyIndex >= 0 && script.historyIndex < _history.length) {
         _historyIndex = script.historyIndex;
         _applyState(_history[_historyIndex]);
-        debugPrint('Jumped to history index: $_historyIndex');
       } else if (_history.isNotEmpty) {
         _applyState(_history.last);
         _historyIndex = _history.length - 1;
       } else {
         _saveHistory(description: 'Initial Load');
       }
-      
       _scheduleRecentUpdate();
     }
   }
@@ -349,7 +335,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     if (text != null) controller.text = text;
     final node = FocusNode();
     
-    // Track selection memory for each block
     node.addListener(() {
       if (node.hasFocus) {
         _lastFocusedController = controller;
@@ -379,18 +364,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
   }
 
   void _onBlockChanged() {
-    if (_isCleaning) return; // v3.9: Atomic suppression
+    if (_isCleaning) return;
     _saveHistory(description: 'Edit Text', debounce: true);
     _scheduleRecentUpdate();
   }
 
   @override
   void dispose() {
-    final text = _getRefinedFullText();
-    _triggerRecentUpdate(_currentTitle, text);
-    // v4.0: Sync lastScript + lastHistoryIndex so script_provider.build()
-    // finds matching text and restores the correct history position on re-entry.
-    ref.read(settingsProvider.notifier).saveScript(text, title: _currentTitle, historyIndex: _historyIndex);
+    _triggerRecentUpdate(_currentTitle, _getRefinedFullText());
     _historyTimer?.cancel();
     _recentTimer?.cancel();
     _autoSaveTimer?.cancel();
@@ -440,14 +421,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
   void _triggerRecentUpdate(String title, String content, [int? forcedIndex]) {
     if (!mounted) return;
     if (content.trim().isEmpty && title == 'New Script') return;
-    
-    // Double-check mounted immediately before ref access
     if (!mounted) return;
     final settings = ref.read(settingsProvider);
     final meta = jsonEncode({
       'sessionId': _currentSessionId,
       'title': title,
-      'historyIndex': forcedIndex ?? _historyIndex, // v4.0: Per-script persistence
+      'historyIndex': forcedIndex ?? _historyIndex,
       'date': DateTime.now().toIso8601String().substring(0, 10),
       'type': _sourceType,
       'snippet': content.length > 50 ? content.substring(0, 50) : content,
@@ -511,6 +490,71 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     }
   }
 
+  Color? _detectColorAtCursor({required bool textColor}) {
+    final controller = _activeController;
+    if (controller == null) return null;
+    final selection = controller.selection;
+    if (!selection.isValid) return null;
+    
+    final text = controller.text;
+    final offset = selection.start;
+    final end = selection.end;
+    final tag = textColor ? '[color=' : '[bg=';
+    final closeTag = textColor ? '[/color]' : '[/bg]';
+    
+    // v3.7.6: Range Scanner for Mixed Selections
+    if (!selection.isCollapsed && offset != end) {
+       final selectedText = text.substring(offset, end);
+       final pattern = RegExp(RegExp.escape(tag) + r'([^\]]+)\](.*?)' + RegExp.escape(closeTag), dotAll: true);
+       final matches = pattern.allMatches(selectedText);
+       
+       Set<String> foundHexes = {};
+       int taggedLength = 0;
+       for (final m in matches) {
+          foundHexes.add(m.group(1)!.trim().toUpperCase());
+          taggedLength += m.group(0)!.length;
+       }
+       
+       // If mixed colors OR mix of tagged/plain text
+       if (foundHexes.length > 1 || (foundHexes.isNotEmpty && taggedLength < selectedText.length)) {
+          return const Color(0x00000000); // 0 Signals "Mixed/None"
+       }
+       
+       // If the entire selection is one single tag
+       if (foundHexes.length == 1 && taggedLength == selectedText.length) {
+          final hex = foundHexes.first.replaceFirst('#', '');
+          return Color(int.tryParse('FF$hex', radix: 16) ?? (textColor ? 0xFFFFFFFF : 0x00000000));
+       }
+       
+       // If no tags inside, check if the ENTIRE range is covered by an outer tag
+       final outerMatches = RegExp(RegExp.escape(tag) + r'([^\]]+)\]').allMatches(text);
+       for (final m in outerMatches) {
+          if (m.start <= offset) {
+             final nextClose = text.indexOf(closeTag, m.end);
+             if (nextClose != -1 && nextClose >= end) {
+                final hex = m.group(1)!.trim().replaceFirst('#', '');
+                return Color(int.tryParse('FF$hex', radix: 16) ?? (textColor ? 0xFFFFFFFF : 0x00000000));
+             }
+          }
+       }
+       return const Color(0x00000000); // None
+    }
+
+    // Default: Cursor-only or Collapsed Logic
+    final matches = RegExp(RegExp.escape(tag) + r'([^\]]+)\]').allMatches(text);
+    Color? found;
+    for (final m in matches) {
+      if (m.start <= offset) {
+         final nextClose = text.indexOf(closeTag, m.end);
+         if (nextClose == -1 || nextClose >= offset) {
+            final hex = m.group(1)!.trim().replaceFirst('#', '');
+            found = Color(int.tryParse('FF$hex', radix: 16) ?? (textColor ? 0xFFFFFFFF : 0x00000000));
+         }
+      }
+    }
+    return found ?? const Color(0x00000000); // Reverted default to 0 for Strike icon
+  }
+
   void _applyState(_EditorState state) {
     _loadText(state.text);
     final notifier = ref.read(settingsProvider.notifier);
@@ -530,36 +574,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     return _lastFocusedController ?? (_controllers.isNotEmpty ? _controllers.last : null);
   }
 
-  String _getActiveColor(String type) {
-    final controller = _activeController;
-    if (controller == null) return '';
-    
-    TextSelection selection = controller.selection;
-    if ((!selection.isValid || selection.isCollapsed) && _lastSelection != null && controller == _lastFocusedController) {
-       selection = _lastSelection!;
-    }
-    if (!selection.isValid) return '';
-
-    final text = controller.text;
-    final pos = selection.start;
-    
-    // Scan backwards from cursor to find nearest [type=#hex]
-    final pattern = RegExp('\\[' + type + '=(#[0-9A-Fa-f]{6})\\]');
-    final matches = pattern.allMatches(text);
-    Match? candidate;
-    for (final m in matches) {
-      if (m.start < pos) {
-        // Also check if the tag is still 'open' (no [/type] before pos)
-        final closePattern = RegExp('\\[\\/' + type + '\\]');
-        final closeMatches = closePattern.allMatches(text.substring(m.end, pos));
-        if (closeMatches.isEmpty) {
-          candidate = m;
-        }
-      }
-    }
-    return candidate?.group(1) ?? '';
-  }
-
   void _wrapSelection(String open, String close) {
     final controller = _activeController;
     if (controller == null) return;
@@ -569,60 +583,90 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
        selection = _lastSelection!;
     }
 
-    if (!selection.isValid || selection.isCollapsed) return;
-    
+    if (!selection.isValid) return;
+
     final text = controller.text;
-    final selectedText = text.substring(selection.start, selection.end);
-    
-    // V4.1 Persistent Fix: Detect and REPLACE existing tags of the same type 
-    // to prevent nesting overflow that blocks color updates.
-    bool wasReplaced = false;
-    if (open.startsWith('[') && open.contains('=')) {
-      final type = open.substring(1, open.indexOf('='));
-      final prefix = text.substring(0, selection.start);
-      final suffix = text.substring(selection.end);
-      
-      // If selection is EXACTLY wrapped in same type, replace it
-      final openPattern = RegExp('\\[' + type + '=(#[0-9A-Fa-f]{6})\\]\$');
-      final closePattern = RegExp('^\\[\\/' + type + '\\]');
-      
-      if (openPattern.hasMatch(prefix) && closePattern.hasMatch(suffix)) {
-        final match = openPattern.firstMatch(prefix)!;
-        final newText = text.replaceRange(selection.end, selection.end + close.length, close); // ensure closing tag matches
-        final finalText = newText.replaceRange(match.start, selection.start, open);
-        controller.value = TextEditingValue(
-          text: finalText,
-          selection: TextSelection(baseOffset: match.start, extentOffset: match.start + open.length + selectedText.length + close.length),
-        );
-        wasReplaced = true;
-      }
+
+    // v3.8.0: Auto-word selection for collapsed cursor
+    if (selection.isCollapsed && text.isNotEmpty) {
+       int start = selection.start;
+       int end = selection.start;
+       // Search backwards for word boundary or tag
+       while (start > 0 && !RegExp(r'\s|\[|\]').hasMatch(text[start - 1])) start--;
+       // Search forwards for word boundary or tag
+       while (end < text.length && !RegExp(r'\s|\[|\]').hasMatch(text[end])) end++;
+       if (start != end) {
+          selection = TextSelection(baseOffset: start, extentOffset: end);
+       }
     }
 
-    if (!wasReplaced) {
-      // Check if toggling
-      bool isToggling = false;
-      if (open.isNotEmpty && close.isNotEmpty) {
+    if (selection.isCollapsed) return;
+    final selectedText = text.substring(selection.start, selection.end);
+    
+    bool isToggling = false;
+    if (open.isNotEmpty && close.isNotEmpty) {
+       final prefix = text.substring(0, selection.start);
+       final suffix = text.substring(selection.end);
+       if (prefix.endsWith(open) && suffix.startsWith(close)) {
+          final newText = text.replaceRange(selection.end, selection.end + close.length, '');
+          final finalText = newText.replaceRange(selection.start - open.length, selection.start, '');
+          controller.value = TextEditingValue(
+            text: finalText,
+            selection: TextSelection(baseOffset: selection.start - open.length, extentOffset: selection.end - open.length),
+          );
+          isToggling = true;
+       }
+    }
+
+    if (!isToggling) {
+      String processedText = selectedText;
+      
+      // v3.7.7 Color/Highlight Exclusivity: Strip any existing outer OR inner tags of same type
+      final isColor = open.startsWith('[color=');
+      final isBg = open.startsWith('[bg=');
+      
+      if (isColor || isBg) {
+         final outerTag = isColor ? '[color=' : '[bg=';
+         final outerClose = isColor ? '[/color]' : '[/bg]';
+         
+         // 1. Check if we are already inside an OUTER tag
          final prefix = text.substring(0, selection.start);
          final suffix = text.substring(selection.end);
-         if (prefix.endsWith(open) && suffix.startsWith(close)) {
-            final newText = text.replaceRange(selection.end, selection.end + close.length, '');
-            final finalText = newText.replaceRange(selection.start - open.length, selection.start, '');
-            controller.value = TextEditingValue(
-              text: finalText,
-              selection: TextSelection(baseOffset: selection.start - open.length, extentOffset: selection.end - open.length),
-            );
-            isToggling = true;
+         
+         final match = RegExp(RegExp.escape(outerTag) + r'([^\]]+)\]').allMatches(prefix).lastOrNull;
+         if (match != null) {
+            final nextClose = text.indexOf(outerClose, match.end);
+            if (nextClose != -1 && nextClose >= selection.end) {
+               // We are inside an outer tag! Strip it and use its content.
+               final tagStart = match.start;
+               final tagEnd = nextClose + outerClose.length;
+               final innerContent = text.substring(match.end, nextClose);
+               
+               // If the outer tag matches the NEW color, this is a TOGGLE OFF
+               if (match.group(0) == open) {
+                  final finalNewText = text.replaceRange(tagStart, tagEnd, innerContent);
+                  controller.value = TextEditingValue(
+                     text: finalNewText,
+                     selection: TextSelection(baseOffset: selection.start - (match.group(0)!.length), extentOffset: selection.end - (match.group(0)!.length)),
+                  );
+                  _saveHistory(description: 'Toggle Style');
+                  return;
+               }
+               
+               // Otherwise, we'll replace the text with the new color below.
+            }
          }
+
+         // 2. Strip any INNER tags of same type to prevent nesting confusion
+         processedText = processedText.replaceAll(RegExp(RegExp.escape(outerTag) + r'[^\]]+\]|' + RegExp.escape(outerClose)), '');
       }
 
-      if (!isToggling) {
-        final replacement = '$open$selectedText$close';
-        final newText = text.replaceRange(selection.start, selection.end, replacement);
-        controller.value = TextEditingValue(
-          text: newText,
-          selection: TextSelection(baseOffset: selection.start, extentOffset: selection.start + replacement.length),
-        );
-      }
+      final replacement = '$open$processedText$close';
+      final newText = text.replaceRange(selection.start, selection.end, replacement);
+      controller.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection(baseOffset: selection.start, extentOffset: selection.start + replacement.length),
+      );
     }
     _saveHistory(description: 'Format Text');
   }
@@ -633,83 +677,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     if (mounted) setState(() {});
   }
 
-  void _applyStyle(String style) {
-    if (style.contains('=')) {
-      final parts = style.split('=');
-      final type = parts[0]; // color or bg
-      final val = parts[1];
-      _wrapSelection('[$type=$val]', '[/$type]');
-    } else {
-      _wrapSelection(style, style);
-    }
-  }
-
   void _onBold() => _wrapSelection('**', '**');
   void _onUnderline() => _wrapSelection('[u]', '[/u]');
   void _onItalic() => _wrapSelection('[i]', '[/i]');
   void _onDirection(String dir) => _wrapSelection('[$dir]', '[/$dir]');
-  void _onAlign(String align) {
-    final controller = _activeController;
-    if (controller == null) return;
-
-    // v4.0: Alignment is a PARAGRAPH-level property — apply to the entire block,
-    // not just the selection. First strip any existing alignment tags.
-    String text = controller.text;
-    text = text.replaceAll(RegExp(r'\[(center|left|right)\]'), '');
-    text = text.replaceAll(RegExp(r'\[\/(center|left|right)\]'), '');
-    text = text.trim();
-
-    // Suppress duplicate history from controller listener
-    _isCleaning = true;
-    if (text.isNotEmpty) {
-      controller.value = TextEditingValue(
-        text: '[$align]$text[/$align]',
-        selection: TextSelection.collapsed(offset: '[$align]$text[/$align]'.length),
-      );
-    }
-    _isCleaning = false;
-    _saveHistory(description: 'Align $align');
-  }
+  void _onAlign(String align) => _wrapSelection('[$align]', '[/$align]');
   void _onFontSize(int size) => _wrapSelection('[size=$size]', '[/size]');
   void _onFontFamily(String family) => _wrapSelection('[font=$family]', '[/font]');
 
-  void _onLineSpacingChanged(double val) {
-    ref.read(settingsProvider.notifier).setLineSpacing(val);
-    _saveHistory(description: 'Line Spacing');
-  }
-
-  void _onLetterSpacingChanged(double val) {
-    ref.read(settingsProvider.notifier).setLetterSpacing(val);
-    _saveHistory(description: 'Letter Spacing');
-  }
-
-  void _onWordSpacingChanged(double val) {
-    ref.read(settingsProvider.notifier).setWordSpacing(val);
-    _saveHistory(description: 'Word Spacing');
-  }
-
   void _onTextColorSelected(String hex) {
-     final color = Color(int.tryParse(hex.replaceFirst('#', '0xFF'), radix: 16) ?? 0xFFFFBF00);
+     final cleanHex = hex.replaceFirst('#', '').toUpperCase();
+     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0xFFFFBF00);
      setState(() => _lastChosenTextColor = color);
      ref.read(settingsProvider.notifier).setLastChosenTextColor(color.value);
-     _wrapSelection('[color=$hex]', '[/color]');
+     _wrapSelection('[color=#$cleanHex]', '[/color]');
   }
 
   void _onBgColorSelected(String hex) {
-     final color = Color(int.tryParse(hex.replaceFirst('#', '0xFF'), radix: 16) ?? 0x4DFFFFFF);
+     final cleanHex = hex.replaceFirst('#', '').toUpperCase();
+     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0x00000000);
      setState(() => _lastChosenHighlightColor = color);
      ref.read(settingsProvider.notifier).setLastChosenHighlightColor(color.value);
-     _wrapSelection('[bg=$hex]', '[/bg]');
+     _wrapSelection('[bg=#$cleanHex]', '[/bg]');
   }
-
-  // ── File Operations ────────────────────────────────────────────────────────
 
   Future<void> _importFile() async {
     const supportedExts = ['rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text'];
-
     final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
     if (!mounted || result == null || result.files.single.path == null) return;
-
     final selectedFile = File(result.files.single.path!);
     final ext = selectedFile.path.split('.').last.toLowerCase();
 
@@ -744,12 +739,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
       return;
     }
 
-    if (!mounted) return;
-
-    // Phase 4: Conflict Resolution Logic
     final String content = await ref.read(scriptProvider.notifier).parseFile(selectedFile);
     if (!mounted) return;
-
     final title = selectedFile.path.split('/').last;
     final settings = ref.read(settingsProvider);
     Map<String, dynamic>? conflictMeta;
@@ -759,9 +750,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
         final meta = jsonDecode(item);
         if (meta['title'] == title) {
           final bool contentMatch = meta['fullText'] == content;
-          if (!contentMatch) {
-             conflictMeta = meta;
-          }
+          if (!contentMatch) conflictMeta = meta;
           break;
         }
       } catch (_) {}
@@ -770,7 +759,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     if (conflictMeta != null) {
       final choice = await _showConflictDialog(title, conflictMeta);
       if (!mounted || choice == null) return;
-      
       if (choice == 'history') {
         _loadText(conflictMeta['fullText']);
         _currentTitle = title;
@@ -786,13 +774,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
       }
     }
 
-    // New Import or Reload & Discard flow
     await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
     if (!mounted) return;
-    
     await ref.read(scriptProvider.notifier).importFile(selectedFile);
     if (!mounted) return;
-
     final script = ref.read(scriptProvider);
     if (script != null) {
       _loadText(script.rawText);
@@ -935,34 +920,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     ));
   }
 
-  // ── RTF Parser (Simplified) ────────────────────────────────────────────────
-
-  String _stripRtf(String rtf) {
-    String text = rtf;
-    // V3 Polish: Aggressive stripping of RTF commands that bleed through
-    text = text.replaceAll(RegExp(r'\{\\fonttbl.*?\}'), '');
-    text = text.replaceAll(RegExp(r'\{\\colortbl.*?\}'), '');
-    text = text.replaceAll(RegExp(r'\\pard\b.*?'), '\n');
-    text = text.replaceAll(RegExp(r'\\par\b'), '\n');
-    text = text.replaceAllMapped(RegExp(r'\\u(-?\d+)\??\s?'), (m) {
-      final code = int.tryParse(m.group(1)!) ?? 0;
-      return String.fromCharCode(code < 0 ? code + 65536 : code);
-    });
-    // V3 Professional: Refined RTF command stripping
-    // We remove tags but preserve a single space if it followed a command not already ending with space
-    text = text.replaceAllMapped(RegExp(r'\\[a-zA-Z]+(-?\d+)?([ \t]?)'), (match) {
-      // If the command naturally had a space/tab (group 2), we keep it as a single space
-      // unless it was a 'formatting' command that usually doesn't precede text characters.
-      return match.group(2) ?? '';
-    });
-    text = text.replaceAll(RegExp(r'[\\{}]'), '');
-    return text.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
-  }
-
   String _toRtf(String text) {
-    // Phase 3: Styled RTF Export
     String processed = text.replaceAllMapped(RegExp(r'\*\*([^\*]+)\*\*'), (m) => '\\b ${m[1]}\\b0 ');
-    
     final buf = StringBuffer();
     buf.write(r'{\rtf1\ansi\ansicpg65001\uc0' '\n');
     buf.write(r'{\fonttbl\f0\froman\fcharset0 TimesNewRoman;}' '\n');
@@ -984,8 +943,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     return buf.toString();
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
@@ -1000,19 +957,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.videocam, color: Color(0xFFFFBF00)),
-                  tooltip: 'Content Creator Mode',
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContentCreatorScreen())),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings), 
-                  onPressed: () => showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) => const LobbySettingsPanel())
-                ),
+                IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white70), onPressed: () => Navigator.pop(context)),
+                IconButton(icon: const Icon(Icons.videocam, color: Color(0xFFFFBF00)), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContentCreatorScreen()))),
+                IconButton(icon: const Icon(Icons.settings), onPressed: () => showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) => const LobbySettingsPanel())),
                 IconButton(icon: const Icon(Icons.delete_outline), onPressed: _clearScript),
                 IconButton(icon: const Icon(Icons.save_alt), onPressed: _saveScript),
                 IconButton(icon: const Icon(Icons.folder_open), onPressed: _importFile),
@@ -1022,22 +969,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Flexible(
-                  child: Text(_currentTitle.trim(), 
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 20), 
-                    overflow: TextOverflow.ellipsis),
-                ),
+                Flexible(child: Text(_currentTitle.trim(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 20), overflow: TextOverflow.ellipsis)),
                 const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFFFFBF00)),
-                  onPressed: _showRenameDialog,
-                ),
+                IconButton(icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFFFFBF00)), onPressed: _showRenameDialog),
               ],
             ),
           ],
         ),
       ),
-      // Drawer removed as history is now in toolbar
       body: Column(
         children: [
           _FormattingToolbar(
@@ -1047,29 +986,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
             onClear: () {
               final controller = _activeController;
               final selection = controller?.selection;
-              
               if (selection == null || !selection.isValid || selection.isCollapsed) {
-                // HARD RESET: If no selection, clear all blocks and reset background to black
                 setState(() => _isCleaning = true);
                 try {
-                  for (final c in _controllers) {
-                    c.text = c.text.replaceAll(RegExp(r'\[.*?\]|\*\*'), '');
-                  }
+                  for (final c in _controllers) c.text = c.text.replaceAll(RegExp(r'\[.*?\]|\*\*'), '');
                   ref.read(settingsProvider.notifier).setScriptBgColor(0xFF000000);
                   _saveHistory(description: 'Hard Reset Styles & Background', debounce: false);
-                  _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), 0); // v4.0: Force index 0
+                  _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), 0);
                 } finally {
                   setState(() => _isCleaning = false);
                 }
               } else {
-                // SURGICAL CLEAR: Clear only the current selection
                 final text = controller!.text;
                 final selectedText = text.substring(selection.start, selection.end);
                 final cleaned = selectedText.replaceAll(RegExp(r'\[.*?\]|\*\*'), '');
-                controller.value = TextEditingValue(
-                  text: text.replaceRange(selection.start, selection.end, cleaned),
-                  selection: TextSelection.collapsed(offset: selection.start),
-                );
+                controller.value = TextEditingValue(text: text.replaceRange(selection.start, selection.end, cleaned), selection: TextSelection.collapsed(offset: selection.start));
                 _saveHistory(description: 'Clear Selected Styles');
               }
             },
@@ -1079,19 +1010,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
             onTextColor: _onTextColorSelected,
             onBgColor: _onBgColorSelected,
             onFontFamily: _onFontFamily,
-            lastTextColor: _lastChosenTextColor,
-            lastHighlightColor: _lastChosenHighlightColor,
+            lastTextColor: _detectColorAtCursor(textColor: true) ?? _lastChosenTextColor,
+            lastHighlightColor: _detectColorAtCursor(textColor: false) ?? _lastChosenHighlightColor,
             onBgColorChange: _handleBgColorChange,
             onUndo: () { _undo(); _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), _historyIndex); },
             onRedo: () { _redo(); _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), _historyIndex); },
             history: _history,
             historyIndex: _historyIndex,
             onHistorySelected: (idx) {
-               setState(() {
-                  _historyIndex = idx;
-                  _applyState(_history[idx]);
-               });
-               // v3.6 Deep Fix: Force immediate sync of the manual history selection to metadata
+               setState(() { _historyIndex = idx; _applyState(_history[idx]); });
                _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), idx);
             },
             canUndo: _historyIndex > 0,
@@ -1099,7 +1026,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
           ),
           Expanded(
             child: Container(
-              color: Color(settings.scriptBgColor),
+              color: Colors.black, // Force Black background for v3.7.5 final verification
               child: ListView.builder(
                 physics: const ClampingScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 150),
@@ -1135,12 +1062,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
                 onPressed: _startPresenting,
                 icon: const Icon(Icons.play_arrow_rounded, size: 28),
                 label: const Text('Start Presenting', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFBF00),
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 4,
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFBF00), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 4),
               ),
             ),
           ),
@@ -1154,19 +1076,12 @@ class _EditorStatusBar extends StatelessWidget {
   final int wordCount;
   final double scrollSpeed;
   const _EditorStatusBar({required this.wordCount, required this.scrollSpeed});
-
   String _formatDuration(int words, double speed) {
     if (words == 0) return "0:00";
-    // Crude estimate: At speed 100, we aim for ~160 words per minute.
-    final baseWpm = 160.0;
-    final normalizedSpeed = speed / 100.0;
-    final durationMinutes = words / (baseWpm * (normalizedSpeed > 0 ? normalizedSpeed : 1.0));
+    final durationMinutes = words / (160.0 * (speed / 100.0 > 0 ? speed / 100.0 : 1.0));
     final seconds = (durationMinutes * 60).round();
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return "$m:${s.toString().padLeft(2, '0')}";
+    return "${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}";
   }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1176,23 +1091,12 @@ class _EditorStatusBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text("Words: $wordCount", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          Row(
-            children: [
-              const Icon(Icons.timer_outlined, size: 14, color: Color(0xFFFFBF00)),
-              const SizedBox(width: 4),
-              Text(
-                "Est. Duration: ${_formatDuration(wordCount, scrollSpeed)}",
-                style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
+          Row(children: [const Icon(Icons.timer_outlined, size: 14, color: Color(0xFFFFBF00)), const SizedBox(width: 4), Text("Est. Duration: ${_formatDuration(wordCount, scrollSpeed)}", style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold))]),
         ],
       ),
     );
   }
 }
-
-// ── Secondary Widgets ────────────────────────────────────────────────────────
 
 class _FormattingToolbar extends StatelessWidget {
   final VoidCallback onBold, onUnderline, onItalic, onClear, onUndo, onRedo;
@@ -1205,19 +1109,7 @@ class _FormattingToolbar extends StatelessWidget {
   final int historyIndex;
   final ValueChanged<int> onHistorySelected;
 
-  const _FormattingToolbar({
-    required this.onBold, required this.onUnderline, 
-    required this.onItalic, required this.onClear,
-    required this.onFontSize,
-    required this.onAlign, required this.onDirection, 
-    required this.onTextColor, required this.onBgColor,
-    required this.onFontFamily,
-    required this.onBgColorChange,
-    required this.lastTextColor, required this.lastHighlightColor,
-    required this.onUndo, required this.onRedo, 
-    required this.canUndo, required this.canRedo,
-    required this.history, required this.historyIndex, required this.onHistorySelected,
-  });
+  const _FormattingToolbar({required this.onBold, required this.onUnderline, required this.onItalic, required this.onClear, required this.onFontSize, required this.onAlign, required this.onDirection, required this.onTextColor, required this.onBgColor, required this.onFontFamily, required this.onBgColorChange, required this.lastTextColor, required this.lastHighlightColor, required this.onUndo, required this.onRedo, required this.canUndo, required this.canRedo, required this.history, required this.historyIndex, required this.onHistorySelected});
 
   @override
   Widget build(BuildContext context) {
@@ -1232,34 +1124,9 @@ class _FormattingToolbar extends StatelessWidget {
           _HistoryMenu(history: history, historyIndex: historyIndex, onHistorySelected: onHistorySelected),
           const VerticalDivider(color: Colors.white12, width: 12),
           _ToolBtn(label: 'C', tooltip: 'Clear All Formatting', onTap: onClear, color: Colors.redAccent),
-          _FormatPopup(
-            label: 'TEXT',
-            icon: Icons.text_fields_rounded,
-            child: _TextMenu(
-              onBold: onBold, 
-              onItalic: onItalic, 
-              onUnderline: onUnderline, 
-              onClear: onClear, 
-              onFontSize: onFontSize,
-              onFontFamily: onFontFamily,
-            ),
-          ),
-          _FormatPopup(
-            label: 'LAYOUT',
-            icon: Icons.format_align_center_rounded,
-            child: _LayoutMenu(onAlign: onAlign, onDirection: onDirection),
-          ),
-          _FormatPopup(
-            label: 'COLOR',
-            icon: Icons.palette_rounded,
-            child: _ColorMenu(
-              onTextColor: onTextColor, 
-              onBgColor: onBgColor,
-              lastTextColor: lastTextColor,
-              lastHighlightColor: lastHighlightColor,
-              onBgColorChange: onBgColorChange,
-            ),
-          ),
+          _FormatPopup(label: 'TEXT', icon: Icons.text_fields_rounded, child: _TextMenu(onBold: onBold, onItalic: onItalic, onUnderline: onUnderline, onClear: onClear, onFontSize: onFontSize, onFontFamily: onFontFamily)),
+          _FormatPopup(label: 'LAYOUT', icon: Icons.format_align_center_rounded, child: _LayoutMenu(onAlign: onAlign, onDirection: onDirection)),
+          _FormatPopup(label: 'COLOR', icon: Icons.palette_rounded, child: _ColorMenu(onTextColor: onTextColor, onBgColor: onBgColor, lastTextColor: lastTextColor, lastHighlightColor: lastHighlightColor, onBgColorChange: onBgColorChange)),
         ],
       ),
     );
@@ -1271,43 +1138,11 @@ class _FormatPopup extends StatelessWidget {
   final IconData icon;
   final Widget child;
   const _FormatPopup({required this.label, required this.icon, required this.child});
-
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {
-        showModalBottomSheet(
-          context: context,
-          backgroundColor: const Color(0xFF1A1A1A),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-          builder: (_) => Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Icon(icon, color: const Color(0xFFFFBF00), size: 20),
-                    const SizedBox(width: 8),
-                    Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                child,
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-        );
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 20, color: Colors.white70),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
-        ],
-      ),
+      onTap: () => showModalBottomSheet(context: context, backgroundColor: const Color(0xFF1A1A1A), shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))), builder: (_) => Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Row(children: [Icon(icon, color: const Color(0xFFFFBF00), size: 20), const SizedBox(width: 8), Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))]), const SizedBox(height: 20), child, const SizedBox(height: 20)]))),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 20, color: Colors.white70), const SizedBox(height: 2), Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold))]),
     );
   }
 }
@@ -1320,19 +1155,9 @@ class _HistoryMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PopupMenuButton<int>(
     icon: Icon(Icons.history, size: 20, color: history.isEmpty ? Colors.white10 : Colors.white70),
-    tooltip: 'Activity History',
     color: const Color(0xFF1F1F1F),
     onSelected: onHistorySelected,
-    itemBuilder: (_) => history.asMap().entries.toList().reversed.map((e) {
-        final idx = e.key;
-        final s = e.value;
-        final isSelected = idx == historyIndex;
-        final timeStr = "${s.timestamp.hour}:${s.timestamp.minute.toString().padLeft(2,'0')}";
-        return PopupMenuItem(
-          value: idx,
-          child: Text('${s.description} ($timeStr)', style: TextStyle(color: isSelected ? const Color(0xFFFFBF00) : Colors.white70, fontSize: 13)),
-        );
-    }).toList(),
+    itemBuilder: (_) => history.asMap().entries.toList().reversed.map((e) => PopupMenuItem(value: e.key, child: Text('${e.value.description} (${e.value.timestamp.hour}:${e.value.timestamp.minute.toString().padLeft(2,"0")})', style: TextStyle(color: e.key == historyIndex ? const Color(0xFFFFBF00) : Colors.white70, fontSize: 13)))).toList(),
   );
 }
 
@@ -1341,90 +1166,18 @@ class _TextMenu extends StatelessWidget {
   final ValueChanged<int> onFontSize;
   final ValueChanged<String> onFontFamily;
   const _TextMenu({required this.onBold, required this.onItalic, required this.onUnderline, required this.onClear, required this.onFontSize, required this.onFontFamily});
-
   @override
-  Widget build(BuildContext context) {
-    const textStyle = TextStyle(color: Colors.white70, fontSize: 13);
-    
-    return Row(
-      children: [
-        _ToolBtn(label: 'B', tooltip: 'Bold', onTap: onBold, bold: true),
-        _ToolBtn(label: 'I', tooltip: 'Italic', onTap: onItalic, italic: true),
-        _ToolBtn(label: 'U', tooltip: 'Underline', onTap: onUnderline, underline: true),
-        const SizedBox(width: 8),
-        // Size Dropdown
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8)),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: 18,
-              dropdownColor: const Color(0xFF1F1F1F),
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
-              style: const TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold, fontSize: 12),
-              onChanged: (v) { if (v != null) onFontSize(v); },
-              items: [14, 18, 24, 28, 32, 40, 48, 56, 64, 72, 80, 96, 120]
-                .map((s) => DropdownMenuItem(value: s, child: Text('${s}px'))).toList(),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8)),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: 'Inter',
-              dropdownColor: const Color(0xFF1F1F1F),
-              icon: const Icon(Icons.font_download_rounded, color: Colors.white54, size: 14),
-              style: const TextStyle(color: Colors.white, fontSize: 11),
-              onChanged: (v) { if (v != null) onFontFamily(v); },
-              items: ['Inter', 'Roboto', 'Montserrat', 'Oswald', 'EB Garamond']
-                .map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Row(children: [_ToolBtn(label: 'B', tooltip: 'Bold', onTap: onBold, bold: true), _ToolBtn(label: 'I', tooltip: 'Italic', onTap: onItalic, italic: true), _ToolBtn(label: 'U', tooltip: 'Underline', onTap: onUnderline, underline: true), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8)), child: DropdownButtonHideUnderline(child: DropdownButton<int>(value: 18, dropdownColor: const Color(0xFF1F1F1F), icon: const Icon(Icons.arrow_drop_down, color: Colors.white54), style: const TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold, fontSize: 12), onChanged: (v) { if (v != null) onFontSize(v); }, items: [14, 18, 24, 28, 32, 40, 48, 56, 64, 72, 80, 96, 120].map((s) => DropdownMenuItem(value: s, child: Text('${s}px'))).toList()))), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8)), child: DropdownButtonHideUnderline(child: DropdownButton<String>(value: 'Inter', dropdownColor: const Color(0xFF1F1F1F), icon: const Icon(Icons.font_download_rounded, color: Colors.white54, size: 14), style: const TextStyle(color: Colors.white, fontSize: 11), onChanged: (v) { if (v != null) onFontFamily(v); }, items: ['Inter', 'Roboto', 'Montserrat', 'Oswald', 'EB Garamond'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList()))), const SizedBox(width: 8)]);
 }
 
 class _LayoutMenu extends ConsumerWidget {
   final ValueChanged<String> onAlign, onDirection;
   const _LayoutMenu({required this.onAlign, required this.onDirection});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _ToolBtnIcon(icon: Icons.format_align_left, tooltip: 'Align Left', onTap: () => onAlign('left')),
-            _ToolBtnIcon(icon: Icons.format_align_center, tooltip: 'Align Center', onTap: () => onAlign('center')),
-            _ToolBtnIcon(icon: Icons.format_align_right, tooltip: 'Align Right', onTap: () => onAlign('right')),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _SliderRow(label: 'Line Spacing', value: settings.lineSpacing, min: 1.0, max: 3.0, onChanged: (v) => notifier.setLineSpacing(v)),
-        _SliderRow(label: 'Letter Spacing', value: settings.letterSpacing, min: -1.0, max: 5.0, onChanged: (v) => notifier.setLetterSpacing(v)),
-        _SliderRow(label: 'Word Spacing', value: settings.wordSpacing, min: 0, max: 20, onChanged: (v) => notifier.setWordSpacing(v)),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _ToolBtnIcon(icon: Icons.format_textdirection_l_to_r, tooltip: 'LTR', onTap: () => onDirection('ltr')),
-            const SizedBox(width: 20),
-            _ToolBtnIcon(icon: Icons.format_textdirection_r_to_l, tooltip: 'RTL', onTap: () => onDirection('rtl')),
-          ],
-        ),
-      ],
-    );
+    return Column(mainAxisSize: MainAxisSize.min, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [_ToolBtnIcon(icon: Icons.format_align_left, tooltip: 'Align Left', onTap: () => onAlign('left')), _ToolBtnIcon(icon: Icons.format_align_center, tooltip: 'Align Center', onTap: () => onAlign('center')), _ToolBtnIcon(icon: Icons.format_align_right, tooltip: 'Align Right', onTap: () => onAlign('right'))]), const SizedBox(height: 16), _SliderRow(label: 'Line Spacing', value: settings.lineSpacing, min: 1.0, max: 3.0, onChanged: (v) => notifier.setLineSpacing(v)), _SliderRow(label: 'Letter Spacing', value: settings.letterSpacing, min: -1.0, max: 5.0, onChanged: (v) => notifier.setLetterSpacing(v)), _SliderRow(label: 'Word Spacing', value: settings.wordSpacing, min: 0, max: 20, onChanged: (v) => notifier.setWordSpacing(v)), const SizedBox(height: 16), Row(mainAxisAlignment: MainAxisAlignment.center, children: [_ToolBtnIcon(icon: Icons.format_textdirection_l_to_r, tooltip: 'LTR', onTap: () => onDirection('ltr')), const SizedBox(width: 20), _ToolBtnIcon(icon: Icons.format_textdirection_r_to_l, tooltip: 'RTL', onTap: () => onDirection('rtl'))])]);
   }
 }
 
@@ -1435,12 +1188,7 @@ class _ToolBtn extends StatelessWidget {
   final Color? color;
   const _ToolBtn({required this.label, required this.tooltip, required this.onTap, this.bold=false, this.italic=false, this.underline=false, this.color});
   @override
-  Widget build(BuildContext context) => Tooltip(message: tooltip, child: GestureDetector(onTap: onTap, child: Container(
-    width: 38, height: 34, margin: const EdgeInsets.symmetric(horizontal: 2),
-    decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white12)),
-    alignment: Alignment.center,
-    child: Text(label, style: TextStyle(color: color ?? Colors.white, fontSize: 15, fontWeight: bold?FontWeight.bold:null, fontStyle: italic?FontStyle.italic:null, decoration: underline?TextDecoration.underline:null)),
-  )));
+  Widget build(BuildContext context) => Tooltip(message: tooltip, child: GestureDetector(onTap: onTap, child: Container(width: 38, height: 34, margin: const EdgeInsets.symmetric(horizontal: 2), decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white12)), alignment: Alignment.center, child: Text(label, style: TextStyle(color: color ?? Colors.white, fontSize: 15, fontWeight: bold?FontWeight.bold:null, fontStyle: italic?FontStyle.italic:null, decoration: underline?TextDecoration.underline:null)))));
 }
 
 class _ToolBtnIcon extends StatelessWidget {
@@ -1449,26 +1197,14 @@ class _ToolBtnIcon extends StatelessWidget {
   final VoidCallback onTap;
   const _ToolBtnIcon({required this.icon, required this.tooltip, required this.onTap});
   @override
-  Widget build(BuildContext context) => Tooltip(message: tooltip, child: GestureDetector(onTap: onTap, child: Container(
-    width: 38, height: 34, margin: const EdgeInsets.symmetric(horizontal: 2),
-    decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white12)),
-    alignment: Alignment.center,
-    child: Icon(icon, color: Colors.white, size: 20),
-  )));
+  Widget build(BuildContext context) => Tooltip(message: tooltip, child: GestureDetector(onTap: onTap, child: Container(width: 38, height: 34, margin: const EdgeInsets.symmetric(horizontal: 2), decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white12)), alignment: Alignment.center, child: Icon(icon, color: Colors.white, size: 20))));
 }
 
 class _ColorMenu extends ConsumerStatefulWidget {
   final ValueChanged<String> onTextColor, onBgColor;
   final ValueChanged<int> onBgColorChange;
   final Color lastTextColor, lastHighlightColor;
-  const _ColorMenu({
-    required this.onTextColor, 
-    required this.onBgColor, 
-    required this.onBgColorChange,
-    required this.lastTextColor,
-    required this.lastHighlightColor,
-  });
-
+  const _ColorMenu({required this.onTextColor, required this.onBgColor, required this.onBgColorChange, required this.lastTextColor, required this.lastHighlightColor});
   @override
   ConsumerState<_ColorMenu> createState() => _ColorMenuState();
 }
@@ -1476,112 +1212,37 @@ class _ColorMenu extends ConsumerStatefulWidget {
 class _ColorMenuState extends ConsumerState<_ColorMenu> {
   late Color _currentTextColor;
   late Color _currentHighlightColor;
-  bool _isManuallyPicking = false;
-
   @override
-  void initState() {
-    super.initState();
-    _currentTextColor = widget.lastTextColor;
-    _currentHighlightColor = widget.lastHighlightColor;
-  }
-
+  void initState() { super.initState(); _currentTextColor = widget.lastTextColor; _currentHighlightColor = widget.lastHighlightColor; }
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
-    
-    // V4.1 Persistent Fix: Only sync from settings if we aren't in the 
-    // middle of an active manual selection, to prevent UI flicker/revert.
-    if (!_isManuallyPicking) {
-      _currentTextColor = Color(settings.lastTextColor);
-      _currentHighlightColor = Color(settings.lastHighlightColor);
-    }
+    final currentTextColor = widget.lastTextColor.value != 0xFFFFFFFF ? widget.lastTextColor : Color(settings.lastTextColor);
+    final currentHighlightColor = widget.lastHighlightColor.value != 0x00000000 ? widget.lastHighlightColor : Color(settings.lastHighlightColor);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // TEXT COLOR
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('TEXT COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
-            GlobalColorButton(
-              // V4.1 UI Polish: Detect active color of current selection
-              color: int.tryParse(
-                (context.findAncestorStateOfType<_ScriptEditorScreenState>()?._getActiveColor('color') ?? '')
-                .replaceFirst('#', '0xFF'), radix: 16) ?? _currentTextColor.value,
-              title: 'TEXT COLOR PICKER',
-              onColorChanged: (c) {
-                setState(() { 
-                  _currentTextColor = Color(c);
-                  _isManuallyPicking = true;
-                });
-                final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
-                widget.onTextColor(hex);
-                Future.delayed(const Duration(milliseconds: 100), () => _isManuallyPicking = false);
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // HIGHLIGHT COLOR
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('HIGHLIGHT COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
-            GlobalColorButton(
-              // V4.1 UI Polish: Detect active color of current selection
-              color: int.tryParse(
-                (context.findAncestorStateOfType<_ScriptEditorScreenState>()?._getActiveColor('bg') ?? '')
-                .replaceFirst('#', '0xFF'), radix: 16) ?? _currentHighlightColor.value,
-              title: 'HIGHLIGHT PICKER',
-              onColorChanged: (c) {
-                setState(() { 
-                  _currentHighlightColor = Color(c);
-                  _isManuallyPicking = true;
-                });
-                final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
-                widget.onBgColor(hex);
-                Future.delayed(const Duration(milliseconds: 100), () => _isManuallyPicking = false);
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // BACKGROUND COLOR
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('BACKGROUND COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
-            GlobalColorButton(
-              color: settings.scriptBgColor,
-              title: 'WINDOW BACKGROUND PICKER',
-              onColorChanged: (c) => widget.onBgColorChange(c),
-            ),
-          ],
-        ),
-      ],
-    );
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('TEXT COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)), 
+          GlobalColorButton(color: currentTextColor.value, title: 'TEXT COLOR PICKER', onColorChanged: (c) { 
+             final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(); 
+             widget.onTextColor(hex); 
+          })
+       ]), 
+       const SizedBox(height: 16), 
+       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('HIGHLIGHT COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)), 
+          GlobalColorButton(color: currentHighlightColor.value, title: 'HIGHLIGHT PICKER', onColorChanged: (c) { 
+             final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(); 
+             widget.onBgColor(hex); 
+          })
+       ]), 
+       const SizedBox(height: 16), 
+       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('BACKGROUND COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)), 
+          GlobalColorButton(color: settings.scriptBgColor, title: 'WINDOW BACKGROUND PICKER', onColorChanged: (c) => widget.onBgColorChange(c))
+       ])
+    ]);
   }
-}
-
-class _ColorPicker extends StatelessWidget {
-  final bool colorAsText;
-  final int currentColor;
-  final ValueChanged<String> onColorSelected;
-  const _ColorPicker({required this.colorAsText, required this.currentColor, required this.onColorSelected});
-  @override
-  Widget build(BuildContext context) => GlobalColorButton(color: currentColor, title: colorAsText?'Text':'BG', onColorChanged: (c) => onColorSelected('#'+c.toRadixString(16).padLeft(8,'0').substring(2).toUpperCase()));
-}
-
-class _ColorModeToggle extends StatelessWidget {
-  final bool isActive;
-  final VoidCallback onTap;
-  const _ColorModeToggle({required this.isActive, required this.onTap});
-  @override
-  Widget build(BuildContext context) => GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: isActive?const Color(0xFF2A2A5A):const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(6), border: Border.all(color: isActive?const Color(0xFFFFBF00):Colors.white24)), child: Text(isActive?'TEXT':'BG', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))));
 }
 
 class _EditorBlock extends StatelessWidget {
@@ -1589,54 +1250,13 @@ class _EditorBlock extends StatelessWidget {
   final FocusNode focusNode;
   final AppSettings settings;
   final VoidCallback onSubmitted, onDelete;
-
-  const _EditorBlock({
-    required this.controller,
-    required this.focusNode,
-    required this.settings,
-    required this.onSubmitted,
-    required this.onDelete,
-  });
-
+  const _EditorBlock({required this.controller, required this.focusNode, required this.settings, required this.onSubmitted, required this.onDelete});
   @override
   Widget build(BuildContext context) {
     TextAlign align = TextAlign.left;
-    final txt = controller.text;
-    if (txt.startsWith('[center]')) align = TextAlign.center;
-    else if (txt.startsWith('[right]')) align = TextAlign.right;
-
-    return Focus(
-      onKeyEvent: (node, event) {
-        if (event.logicalKey == LogicalKeyboardKey.enter && event is KeyDownEvent) {
-          onSubmitted();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.backspace && event is KeyDownEvent && controller.text.isEmpty) {
-          onDelete();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        maxLines: null,
-        textAlign: align,
-        cursorColor: const Color(0xFFFFBF00),
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.95), // Slight transparent to allow spans to shine
-          fontSize: 18,
-          height: 1.5 + (settings.lineSpacing - 1.0),
-          letterSpacing: settings.letterSpacing,
-          wordSpacing: settings.wordSpacing,
-        ),
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(vertical: 4),
-        ),
-      ),
-    );
+    if (controller.text.contains('[center]')) align = TextAlign.center;
+    else if (controller.text.contains('[right]')) align = TextAlign.right;
+    return Focus(onKeyEvent: (node, event) { if (event.logicalKey == LogicalKeyboardKey.enter && event is KeyDownEvent) { onSubmitted(); return KeyEventResult.handled; } if (event.logicalKey == LogicalKeyboardKey.backspace && event is KeyDownEvent && controller.text.isEmpty) { onDelete(); return KeyEventResult.handled; } return KeyEventResult.ignored; }, child: TextField(controller: controller, focusNode: focusNode, maxLines: null, textAlign: align, cursorColor: const Color(0xFFFFBF00), style: TextStyle(color: Colors.white.withOpacity(0.95), fontSize: 18, height: 1.5 + (settings.lineSpacing - 1.0), letterSpacing: settings.letterSpacing, wordSpacing: settings.wordSpacing), decoration: const InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 4))));
   }
 }
 
@@ -1651,73 +1271,16 @@ class _SaveNameDialog extends StatefulWidget {
 
 class _SaveNameDialogState extends State<_SaveNameDialog> {
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    backgroundColor: const Color(0xFF131313),
-    title: const Text('File Name'),
-    content: TextField(controller: widget.nameCtrl, autofocus: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(suffixText: '.${widget.format}')),
-    actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-      ElevatedButton(onPressed: () => Navigator.pop(context, {'name': widget.nameCtrl.text.trim(), 'replace': widget.usedNames.contains(widget.nameCtrl.text.trim())}), child: const Text('Save')),
-    ],
-  );
+  Widget build(BuildContext context) => AlertDialog(backgroundColor: const Color(0xFF131313), title: const Text('File Name'), content: TextField(controller: widget.nameCtrl, autofocus: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(suffixText: '.${widget.format}')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), ElevatedButton(onPressed: () => Navigator.pop(context, {'name': widget.nameCtrl.text.trim(), 'replace': widget.usedNames.contains(widget.nameCtrl.text.trim())}), child: const Text('Save'))]);
 }
 
 class LobbySettingsPanel extends ConsumerWidget {
   const LobbySettingsPanel({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
-
-    const sectionStyle = TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600);
-    const labelStyle = TextStyle(color: Colors.white70, fontSize: 13);
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
-      decoration: const BoxDecoration(
-        color: Color(0xFF161616),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2))),
-          ),
-          const SizedBox(height: 20),
-          const Text('Video Quality (Labeled Excellence)', style: sectionStyle),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: '480p', label: Text('480p'), icon: Icon(Icons.sd_outlined)),
-              ButtonSegment(value: '720p', label: Text('720p (HD)'), icon: Icon(Icons.hd_outlined)),
-              ButtonSegment(value: '1080p', label: Text('1080p (FHD)'), icon: Icon(Icons.high_quality_outlined)),
-            ],
-            selected: {settings.videoResolution},
-            onSelectionChanged: (vals) => notifier.setVideoResolution(vals.first),
-          ),
-          const SizedBox(height: 24),
-          const Text('User Profile', style: sectionStyle),
-          const SizedBox(height: 12),
-          TextField(
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'Enter Display Name',
-              hintStyle: const TextStyle(color: Colors.white24),
-              prefixIcon: const Icon(Icons.person_outline, color: Color(0xFFFFBF00)),
-              filled: true,
-              fillColor: Colors.white10,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-            ),
-            controller: TextEditingController(text: settings.displayName),
-            onSubmitted: (val) => notifier.setDisplayName(val),
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
+    return Container(padding: const EdgeInsets.fromLTRB(24, 16, 24, 40), decoration: const BoxDecoration(color: Color(0xFF161616), borderRadius: BorderRadius.vertical(top: Radius.circular(20))), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))), const SizedBox(height: 20), const Text('Video Quality', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)), const SizedBox(height: 12), SegmentedButton<String>(segments: const [ButtonSegment(value: '480p', label: Text('480p'), icon: Icon(Icons.sd_outlined)), ButtonSegment(value: '720p', label: Text('720p'), icon: Icon(Icons.hd_outlined)), ButtonSegment(value: '1080p', label: Text('1080p'), icon: Icon(Icons.high_quality_outlined))], selected: {settings.videoResolution}, onSelectionChanged: (vals) => notifier.setVideoResolution(vals.first)), const SizedBox(height: 24), const Text('User Profile', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)), const SizedBox(height: 12), TextField(style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Enter Display Name', hintStyle: const TextStyle(color: Colors.white24), prefixIcon: const Icon(Icons.person_outline, color: Color(0xFFFFBF00)), filled: true, fillColor: Colors.white10, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)), controller: TextEditingController(text: settings.displayName), onSubmitted: (val) => notifier.setDisplayName(val)), const SizedBox(height: 24)]));
   }
 }
 
@@ -1726,21 +1289,6 @@ class _SliderRow extends StatelessWidget {
   final double value, min, max;
   final ValueChanged<double> onChanged;
   const _SliderRow({required this.label, required this.value, required this.min, required this.max, required this.onChanged});
-
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-            Text(value.toStringAsFixed(1), style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 13, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        Slider(value: value, min: min, max: max, activeColor: const Color(0xFFFFBF00), inactiveColor: Colors.white10, onChanged: onChanged),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)), Text(value.toStringAsFixed(1), style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 13, fontWeight: FontWeight.bold))]), Slider(value: value, min: min, max: max, activeColor: const Color(0xFFFFBF00), inactiveColor: Colors.white10, onChanged: onChanged)]);
 }

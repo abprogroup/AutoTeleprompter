@@ -380,14 +380,16 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                     
                     final colorMatch = RegExp(r'\[color=([^\]]+)\]').firstMatch(word.raw);
                     if (colorMatch != null) {
-                      final hex = colorMatch.group(1)!;
-                      customTextColor = Color(int.tryParse(hex.replaceFirst('#', '0xFF')) ?? settings.futureWordColor);
+                      final hex = colorMatch.group(1)!.trim().replaceFirst('#', '');
+                      final colorValue = int.tryParse('FF$hex', radix: 16) ?? settings.futureWordColor;
+                      customTextColor = Color(colorValue);
+                      debugPrint('[V3_PROMPTER_PARSE] hex=$hex -> color=$customTextColor');
                     }
                     
                     final bgMatch = RegExp(r'\[bg=([^\]]+)\]').firstMatch(word.raw);
                     if (bgMatch != null) {
-                      final hex = bgMatch.group(1)!;
-                      customBgColor = Color(int.tryParse(hex.replaceFirst('#', '0xFF')) ?? 0x00000000);
+                      final hex = bgMatch.group(1)!.trim().replaceFirst('#', '');
+                      customBgColor = Color(int.tryParse('FF$hex', radix: 16) ?? 0x00000000);
                     }
 
                     return Directionality(
@@ -402,7 +404,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                             fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
                             fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
                             letterSpacing: settings.letterSpacing,
-                            color: isCurrent ? Color(settings.currentWordColor) : 
+                            color: isCurrent ? (customTextColor ?? Color(settings.currentWordColor)) : 
                                    (isPast ? (customTextColor ?? word.textColor ?? Color(settings.futureWordColor)).withOpacity(settings.pastWordOpacity) : 
                                    (customTextColor ?? word.textColor ?? Color(settings.futureWordColor))),
                             backgroundColor: isCurrent ? null : (isPast ? (customBgColor ?? word.highlight)?.withOpacity(0.15) : (customBgColor ?? word.highlight)),

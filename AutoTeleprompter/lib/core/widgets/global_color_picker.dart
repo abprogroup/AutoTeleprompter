@@ -96,20 +96,25 @@ class GlobalColorButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isNone = color == 0 || color == 0x00000000;
+    
     return GestureDetector(
       onTap: () => showGlobalColorPicker(
         context: context,
         title: title,
-        currentColor: color,
+        currentColor: color == 0 ? 0xFFFFFFFF : color, // Default to white if none
         onColorSelected: onColorChanged,
       ),
       child: Container(
         width: 36, height: 36,
         decoration: BoxDecoration(
-          color: Color(color),
+          color: isNone ? Colors.white10 : Color(color),
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white54, width: 2),
         ),
+        child: isNone ? const Center(
+          child: Icon(Icons.block, color: Colors.redAccent, size: 20),
+        ) : null,
       ),
     );
   }

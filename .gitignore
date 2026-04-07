@@ -3,6 +3,16 @@
 backups/
 AutoTeleprompter_BACKUP_*
 
+# NEVER TRACK TESTS - THEY ARE NOT NEEDED
+test/
+schemes/
+AutoTeleprompter_TEST_*
+
+# NEVER TRACK AGENTS - THEY ARE PRIVATE
+_agent/
+.claude/
+AutoTeleprompter_AGENT_*
+
 # Development SDKs and Tools
 development/
 

@@ -29,6 +29,8 @@ class AppSettings {
   final int lastHighlightColor;  // Persisted selection highlight
   final String lastImportPath;  // Persisted folder path for importer
   final int lastHistoryIndex;    // v3.8 persistence
+  final bool showCurrentWordHighlight; // v3.9.5 toggle
+  final bool showUpcomingWordColor;    // v3.9.5 toggle (default off)
 
   const AppSettings({
     this.fontSize = 40.0,
@@ -57,6 +59,8 @@ class AppSettings {
     this.lastHighlightColor = 0x4DFFFFFF,
     this.lastImportPath = '',
     this.lastHistoryIndex = -1,
+    this.showCurrentWordHighlight = true,
+    this.showUpcomingWordColor = false,
   });
 
   AppSettings copyWith({
@@ -86,6 +90,8 @@ class AppSettings {
     int? lastHighlightColor,
     String? lastImportPath,
     int? lastHistoryIndex,
+    bool? showCurrentWordHighlight,
+    bool? showUpcomingWordColor,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -114,6 +120,8 @@ class AppSettings {
       lastHighlightColor: lastHighlightColor ?? this.lastHighlightColor,
       lastImportPath: lastImportPath ?? this.lastImportPath,
       lastHistoryIndex: lastHistoryIndex ?? this.lastHistoryIndex,
+      showCurrentWordHighlight: showCurrentWordHighlight ?? this.showCurrentWordHighlight,
+      showUpcomingWordColor: showUpcomingWordColor ?? this.showUpcomingWordColor,
     );
   }
 }
@@ -143,6 +151,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _lastTextColorKey = 'lastTextColor';
   static const _lastHighlightColorKey = 'lastHighlightColor';
   static const _lastImportPathKey = 'lastImportPath';
+  static const _lastHistoryIndexKey = 'lastHistoryIndex';
+  static const _showCurrentWordHighlightKey = 'showCurrentWordHighlight';
+  static const _showUpcomingWordColorKey = 'showUpcomingWordColor';
 
   @override
   AppSettings build() {
@@ -178,7 +189,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
       lastTextColor: prefs.getInt(_lastTextColorKey) ?? 0xFFFFBF00,
       lastHighlightColor: prefs.getInt(_lastHighlightColorKey) ?? 0x4DFFFFFF,
       lastImportPath: prefs.getString(_lastImportPathKey) ?? '',
-      lastHistoryIndex: prefs.getInt('last_history_index') ?? -1,
+      lastHistoryIndex: prefs.getInt(_lastHistoryIndexKey) ?? -1,
+      showCurrentWordHighlight: prefs.getBool(_showCurrentWordHighlightKey) ?? true,
+      showUpcomingWordColor: prefs.getBool(_showUpcomingWordColorKey) ?? false,
     );
   }
 
@@ -453,6 +466,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
         );
         break;
     }
+  }
+
+  Future<void> setShowCurrentWordHighlight(bool val) async {
+    state = state.copyWith(showCurrentWordHighlight: val);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showCurrentWordHighlightKey, val);
+  }
+
+  Future<void> setShowUpcomingWordColor(bool val) async {
+    state = state.copyWith(showUpcomingWordColor: val);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showUpcomingWordColorKey, val);
   }
 }
 

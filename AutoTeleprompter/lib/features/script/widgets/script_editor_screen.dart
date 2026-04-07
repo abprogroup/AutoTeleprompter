@@ -31,10 +31,11 @@ class _MarkupController extends TextEditingController {
 
   static const _tagStyle = TextStyle(
     color: Colors.transparent,
-    fontSize: 0.001,
+    backgroundColor: Colors.transparent,
+    fontSize: 0,
     letterSpacing: 0,
     wordSpacing: 0,
-    height: 0.001,
+    height: 0,
   );
 
   @override
@@ -167,6 +168,30 @@ class _EditorState {
     required this.currentWordColor,
     required this.futureWordColor,
   });
+
+  Map<String, dynamic> toJson() => {
+    'text': text,
+    'timestamp': timestamp.toIso8601String(),
+    'description': description,
+    'lineSpacing': lineSpacing,
+    'letterSpacing': letterSpacing,
+    'wordSpacing': wordSpacing,
+    'scriptBgColor': scriptBgColor,
+    'currentWordColor': currentWordColor,
+    'futureWordColor': futureWordColor,
+  };
+
+  factory _EditorState.fromJson(Map<String, dynamic> json) => _EditorState(
+    text: json['text'] as String,
+    timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+    description: json['description'] as String? ?? 'Edit',
+    lineSpacing: (json['lineSpacing'] as num?)?.toDouble() ?? 1.0,
+    letterSpacing: (json['letterSpacing'] as num?)?.toDouble() ?? 0.0,
+    wordSpacing: (json['wordSpacing'] as num?)?.toDouble() ?? 0.0,
+    scriptBgColor: json['scriptBgColor'] as int? ?? 0xFF000000,
+    currentWordColor: json['currentWordColor'] as int? ?? 0xFFFFBF00,
+    futureWordColor: json['futureWordColor'] as int? ?? 0xFFFFFFFF,
+  );
 }
 
 // ── Main Screen ──────────────────────────────────────────────────────────────
@@ -199,6 +224,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
 
   bool _colorAsText = true;
   bool _isInit = false;
+  bool _isCleaning = false; // v3.9: Atomic suppression
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
   DateTime? _lastTap;
   int _titleTaps = 0;
@@ -218,16 +244,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
         timer.cancel();
         return;
       }
-      debugPrint('V3 Auto-Save Triggered');
-      final text = _getRefinedFullText();
-      final currentTitle = _currentTitle;
-      
-      if (mounted) {
-        try {
-          final notifier = ref.read(settingsProvider.notifier);
-          await notifier.saveScript(text, title: currentTitle);
-        } catch (e) {
-          debugPrint('Auto-Save Error: $e');
+
+      try {
+        // Capture all necessary state synchronously before any async gap
+        final text = _getRefinedFullText();
+        final currentTitle = _currentTitle;
+        
+        // Double-check mounted immediately before accessing ref
+        if (!mounted) return;
+        final notifier = ref.read(settingsProvider.notifier);
+        
+        debugPrint('V3 Auto-Save Triggered');
+        if (text.isEmpty && currentTitle == 'New Project') return;
+
+        await notifier.saveScript(text, title: currentTitle, historyIndex: _historyIndex);
+        debugPrint('Auto-Save Completed at index: $_historyIndex');
+      } catch (e) {
+        // Suppress "ref after disposed" or "defunct element" errors 
+        // as they are expected during asynchronous app teardown.
+        final err = e.toString().toLowerCase();
+        if (!err.contains('disposed') && !err.contains('defunct')) {
+           debugPrint('Auto-Save Error: $e');
         }
       }
     });
@@ -259,8 +296,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
 
       _loadText(initialText);
       _currentTitle = initialTitle;
+
+      // Restore History if available (v3.5.4)
+      if (script?.historyJson != null) {
+        try {
+          final List<dynamic> historyData = jsonDecode(script!.historyJson!);
+          _history.clear();
+          _history.addAll(historyData.map((d) => _EditorState.fromJson(d)));
+          _historyIndex = _history.length - 1;
+          debugPrint('Restored ${_history.length} history states');
+        } catch (e) {
+          debugPrint('History Restore Error: $e');
+        }
+      }
+
       _isInit = true;
-      _saveHistory(description: 'Initial Load');
+      
+      // V3.8: Automatic History Index Restoration
+      if (script != null && script.historyIndex >= 0 && script.historyIndex < _history.length) {
+        _historyIndex = script.historyIndex;
+        _applyState(_history[_historyIndex]);
+        debugPrint('Jumped to history index: $_historyIndex');
+      } else if (_history.isNotEmpty) {
+        _applyState(_history.last);
+        _historyIndex = _history.length - 1;
+      } else {
+        _saveHistory(description: 'Initial Load');
+      }
+      
       _scheduleRecentUpdate();
     }
   }
@@ -316,6 +379,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
   }
 
   void _onBlockChanged() {
+    if (_isCleaning) return; // v3.9: Atomic suppression
     _saveHistory(description: 'Edit Text', debounce: true);
     _scheduleRecentUpdate();
   }
@@ -366,20 +430,25 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
   }
 
   String _getRefinedFullText() {
-    return _controllers.map((c) => c.text).join('\n');
+    return _controllers.map((c) => c.text.trim()).join('\n').trim();
   }
 
-  void _triggerRecentUpdate(String title, String content) {
+  void _triggerRecentUpdate(String title, String content, [int? forcedIndex]) {
+    if (!mounted) return;
     if (content.trim().isEmpty && title == 'New Script') return;
     
+    // Double-check mounted immediately before ref access
+    if (!mounted) return;
     final settings = ref.read(settingsProvider);
     final meta = jsonEncode({
       'sessionId': _currentSessionId,
       'title': title,
+      'historyIndex': forcedIndex ?? _historyIndex, // v4.0: Per-script persistence
       'date': DateTime.now().toIso8601String().substring(0, 10),
       'type': _sourceType,
       'snippet': content.length > 50 ? content.substring(0, 50) : content,
       'fullText': content,
+      'historyJson': jsonEncode(_history.length > 20 ? _history.sublist(_history.length - 20) : _history),
       'style': {
         'scriptBgColor': settings.scriptBgColor,
         'currentWordColor': settings.currentWordColor,
@@ -501,7 +570,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
 
   void _handleBgColorChange(int color) {
     ref.read(settingsProvider.notifier).setScriptBgColor(color);
-    _saveHistory(description: 'Change Background');
+    _saveHistory(description: 'Change Background', debounce: true);
     if (mounted) setState(() {});
   }
 
@@ -597,11 +666,53 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
 
     if (!mounted) return;
 
-    // Use the New Standard Importer logic in the Provider (Phase 1)
+    // Phase 4: Conflict Resolution Logic
+    final String content = await ref.read(scriptProvider.notifier).parseFile(selectedFile);
+    if (!mounted) return;
+
+    final title = selectedFile.path.split('/').last;
+    final settings = ref.read(settingsProvider);
+    Map<String, dynamic>? conflictMeta;
+
+    for (final item in settings.recentScripts) {
+      try {
+        final meta = jsonDecode(item);
+        if (meta['title'] == title) {
+          final bool contentMatch = meta['fullText'] == content;
+          if (!contentMatch) {
+             conflictMeta = meta;
+          }
+          break;
+        }
+      } catch (_) {}
+    }
+
+    if (conflictMeta != null) {
+      final choice = await _showConflictDialog(title, conflictMeta);
+      if (!mounted || choice == null) return;
+      
+      if (choice == 'history') {
+        _loadText(conflictMeta['fullText']);
+        _currentTitle = title;
+        _sourceType = conflictMeta['type'] ?? 'FILE';
+        _currentSessionId = conflictMeta['sessionId'];
+        if (conflictMeta.containsKey('style')) {
+           ref.read(settingsProvider.notifier).applySessionStyles(conflictMeta['style']);
+        }
+        _saveHistory(description: 'Restore History');
+        _scheduleRecentUpdate();
+        setState(() {});
+        return;
+      }
+    }
+
+    // New Import or Reload & Discard flow
     await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
-    await ref.read(scriptProvider.notifier).importFile(selectedFile);
+    if (!mounted) return;
     
-    // Recovery / Sync check (Phase 2 will be more detailed)
+    await ref.read(scriptProvider.notifier).importFile(selectedFile);
+    if (!mounted) return;
+
     final script = ref.read(scriptProvider);
     if (script != null) {
       _loadText(script.rawText);
@@ -609,8 +720,37 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
       _sourceType = script.sourceType;
       _saveHistory(description: 'Import File');
       _scheduleRecentUpdate();
-      if (mounted) setState(() {});
+      setState(() {});
     }
+  }
+
+  Future<String?> _showConflictDialog(String title, Map<String, dynamic> history) async {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Row(children: [
+          Icon(Icons.history_edu_rounded, color: Color(0xFFFFBF00)),
+          SizedBox(width: 10),
+          Text("Conflict Detected", style: TextStyle(color: Colors.white)),
+        ]),
+        content: Text(
+          "The script '$title' has been modified outside the app or has an existing history version.\n\n"
+          "Would you like to discard your previous in-app edits or keep the history version?",
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'reload'),
+            child: const Text("RELOAD & DISCARD", style: TextStyle(color: Colors.redAccent)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'history'),
+            child: const Text("KEEP HISTORY", style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _saveScript() async {
@@ -669,6 +809,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
            await prefs.setStringList('used_script_names', usedNames);
         }
         await ref.read(settingsProvider.notifier).saveScript(text);
+        if (!mounted) return;
         _currentTitle = chosenName;
         _triggerRecentUpdate(chosenName, text);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved!'), backgroundColor: Color(0xFF2A6B2A)));
@@ -824,10 +965,33 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
             onUnderline: _onUnderline,
             onItalic: _onItalic,
             onClear: () {
-              for (final c in _controllers) {
-                c.text = c.text.replaceAll(RegExp(r'\[.*?\]|\*\*'), '');
+              final controller = _activeController;
+              final selection = controller?.selection;
+              
+              if (selection == null || !selection.isValid || selection.isCollapsed) {
+                // HARD RESET: If no selection, clear all blocks and reset background to black
+                setState(() => _isCleaning = true);
+                try {
+                  for (final c in _controllers) {
+                    c.text = c.text.replaceAll(RegExp(r'\[.*?\]|\*\*'), '');
+                  }
+                  ref.read(settingsProvider.notifier).setScriptBgColor(0xFF000000);
+                  _saveHistory(description: 'Hard Reset Styles & Background', debounce: false);
+                  _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), 0); // v4.0: Force index 0
+                } finally {
+                  setState(() => _isCleaning = false);
+                }
+              } else {
+                // SURGICAL CLEAR: Clear only the current selection
+                final text = controller!.text;
+                final selectedText = text.substring(selection.start, selection.end);
+                final cleaned = selectedText.replaceAll(RegExp(r'\[.*?\]|\*\*'), '');
+                controller.value = TextEditingValue(
+                  text: text.replaceRange(selection.start, selection.end, cleaned),
+                  selection: TextSelection.collapsed(offset: selection.start),
+                );
+                _saveHistory(description: 'Clear Selected Styles');
               }
-              _saveHistory(description: 'Clear Styles');
             },
             onFontSize: _onFontSize,
             onAlign: _onAlign,
@@ -838,8 +1002,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
             lastTextColor: _lastChosenTextColor,
             lastHighlightColor: _lastChosenHighlightColor,
             onBgColorChange: _handleBgColorChange,
-            onUndo: _undo,
-            onRedo: _redo,
+            onUndo: () { _undo(); _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), _historyIndex); },
+            onRedo: () { _redo(); _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), _historyIndex); },
             history: _history,
             historyIndex: _historyIndex,
             onHistorySelected: (idx) {
@@ -847,6 +1011,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
                   _historyIndex = idx;
                   _applyState(_history[idx]);
                });
+               // v3.6 Deep Fix: Force immediate sync of the manual history selection to metadata
+               _triggerRecentUpdate(_currentTitle, _getRefinedFullText(), idx);
             },
             canUndo: _historyIndex > 0,
             canRedo: _historyIndex < _history.length - 1,
@@ -985,7 +1151,7 @@ class _FormattingToolbar extends StatelessWidget {
           _ToolBtn(label: '↻', tooltip: 'Redo', onTap: onRedo, color: canRedo ? Colors.white : Colors.white10),
           _HistoryMenu(history: history, historyIndex: historyIndex, onHistorySelected: onHistorySelected),
           const VerticalDivider(color: Colors.white12, width: 12),
-          
+          _ToolBtn(label: 'C', tooltip: 'Clear All Formatting', onTap: onClear, color: Colors.redAccent),
           _FormatPopup(
             label: 'TEXT',
             icon: Icons.text_fields_rounded,
@@ -1077,7 +1243,7 @@ class _HistoryMenu extends StatelessWidget {
     tooltip: 'Activity History',
     color: const Color(0xFF1F1F1F),
     onSelected: onHistorySelected,
-    itemBuilder: (_) => history.asMap().entries.map((e) {
+    itemBuilder: (_) => history.asMap().entries.toList().reversed.map((e) {
         final idx = e.key;
         final s = e.value;
         final isSelected = idx == historyIndex;
@@ -1139,7 +1305,6 @@ class _TextMenu extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        _ToolBtn(label: 'C', tooltip: 'Clear All Formatting', onTap: onClear, color: Colors.redAccent),
       ],
     );
   }
@@ -1212,7 +1377,7 @@ class _ToolBtnIcon extends StatelessWidget {
   )));
 }
 
-class _ColorMenu extends StatefulWidget {
+class _ColorMenu extends ConsumerStatefulWidget {
   final ValueChanged<String> onTextColor, onBgColor;
   final ValueChanged<int> onBgColorChange;
   final Color lastTextColor, lastHighlightColor;
@@ -1225,10 +1390,10 @@ class _ColorMenu extends StatefulWidget {
   });
 
   @override
-  State<_ColorMenu> createState() => _ColorMenuState();
+  ConsumerState<_ColorMenu> createState() => _ColorMenuState();
 }
 
-class _ColorMenuState extends State<_ColorMenu> {
+class _ColorMenuState extends ConsumerState<_ColorMenu> {
   late Color _currentTextColor;
   late Color _currentHighlightColor;
 
@@ -1241,6 +1406,10 @@ class _ColorMenuState extends State<_ColorMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = ref.watch(settingsProvider);
+    _currentTextColor = Color(settings.lastTextColor);
+    _currentHighlightColor = Color(settings.lastHighlightColor);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1263,6 +1432,17 @@ class _ColorMenuState extends State<_ColorMenu> {
         ),
         const SizedBox(height: 16),
         
+        // TEXT COLOR BAR
+        const SizedBox(height: 8),
+        _HorizontalColorBar(
+          selectedColor: _currentTextColor,
+          onSelected: (hex) {
+            setState(() => _currentTextColor = Color(int.parse(hex.replaceFirst('#', '0xFF'))));
+            widget.onTextColor(hex);
+          }
+        ),
+        const SizedBox(height: 16),
+        
         // HIGHLIGHT COLOR
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1279,6 +1459,15 @@ class _ColorMenuState extends State<_ColorMenu> {
             ),
           ],
         ),
+        // HIGHLIGHT COLOR BAR
+        const SizedBox(height: 8),
+        _HorizontalColorBar(
+          selectedColor: _currentHighlightColor,
+          onSelected: (hex) {
+            setState(() => _currentHighlightColor = Color(int.parse(hex.replaceFirst('#', '0xFF'))));
+            widget.onBgColor(hex);
+          }
+        ),
         const SizedBox(height: 16),
 
         // BACKGROUND COLOR
@@ -1287,7 +1476,7 @@ class _ColorMenuState extends State<_ColorMenu> {
           children: [
             const Text('BACKGROUND COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
             GlobalColorButton(
-              color: ProviderScope.containerOf(context).read(settingsProvider).scriptBgColor,
+              color: settings.scriptBgColor,
               title: 'WINDOW BACKGROUND PICKER',
               onColorChanged: (c) => widget.onBgColorChange(c),
             ),
@@ -1300,14 +1489,15 @@ class _ColorMenuState extends State<_ColorMenu> {
 
 class _HorizontalColorBar extends StatelessWidget {
   final ValueChanged<String> onSelected;
-  const _HorizontalColorBar({required this.onSelected});
+  final Color? selectedColor;
+  const _HorizontalColorBar({required this.onSelected, this.selectedColor});
 
   @override
   Widget build(BuildContext context) {
     final colors = [
-      0xFFFFBF00, 0xFFFFFFFF, 0xFFF44336, 0xFF4CAF50, 
-      0xFF2196F3, 0xFFFF9800, 0xFF9C27B0, 0xFF00BCD4, 
-      0xFFE91E63, 0xFF000000, 0xFF303030, 0xFF757575
+      0xFF000000, 0xFFFFFFFF, 0xFFFFBF00, 0xFFFF9800, 
+      0xFFF44336, 0xFFE91E63, 0xFF9C27B0, 0xFF2196F3, 
+      0xFF00BCD4, 0xFF4CAF50, 0xFF303030, 0xFF757575
     ];
 
     return SingleChildScrollView(
@@ -1321,8 +1511,15 @@ class _HorizontalColorBar extends StatelessWidget {
             decoration: BoxDecoration(
               color: Color(c),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white24, width: 1.5),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 2))],
+              border: Border.all(
+                color: (selectedColor?.value == c) ? Colors.white : Colors.white24, 
+                width: (selectedColor?.value == c) ? 3.0 : 1.5
+              ),
+              boxShadow: [
+                if (selectedColor?.value == c)
+                  BoxShadow(color: Color(c).withOpacity(0.5), blurRadius: 8, spreadRadius: 2),
+                BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 2))
+              ],
             ),
           ),
         )).toList(),
@@ -1333,10 +1530,11 @@ class _HorizontalColorBar extends StatelessWidget {
 
 class _ColorPicker extends StatelessWidget {
   final bool colorAsText;
+  final int currentColor;
   final ValueChanged<String> onColorSelected;
-  const _ColorPicker({required this.colorAsText, required this.onColorSelected});
+  const _ColorPicker({required this.colorAsText, required this.currentColor, required this.onColorSelected});
   @override
-  Widget build(BuildContext context) => GlobalColorButton(color: 0xFFFFBF00, title: colorAsText?'Text':'BG', onColorChanged: (c) => onColorSelected('#'+c.toRadixString(16).padLeft(8,'0').substring(2).toUpperCase()));
+  Widget build(BuildContext context) => GlobalColorButton(color: currentColor, title: colorAsText?'Text':'BG', onColorChanged: (c) => onColorSelected('#'+c.toRadixString(16).padLeft(8,'0').substring(2).toUpperCase()));
 }
 
 class _ColorModeToggle extends StatelessWidget {

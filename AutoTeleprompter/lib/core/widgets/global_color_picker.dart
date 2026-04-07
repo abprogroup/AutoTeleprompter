@@ -33,25 +33,33 @@ void showGlobalColorPicker({
             Wrap(
               spacing: 8, runSpacing: 8,
               children: [
-                0xFFFFFFFF, 0xFFE0E0E0, 0xFFBDBDBD, 0xFF9E9E9E,
+                0xFF000000, 0xFFFFFFFF, 0xFFE0E0E0, 0xFFBDBDBD, 0xFF9E9E9E,
                 0xFFFFBF00, 0xFFFFCA28, 0xFFFFD54F, 0xFFFFE082,
                 0xFF03A9F4, 0xFF29B6F6, 0xFF4FC3F7, 0xFF81D4FA,
                 0xFFCDDC39, 0xFFD4E157, 0xFFDCE775, 0xFFE6EE9C,
                 0xFF00BCD4, 0xFF26C6DA, 0xFF4DD0E1, 0xFF80DEEA,
-              ].map((c) => GestureDetector(
-                onTap: () {
-                  onColorSelected(c);
-                  Navigator.pop(ctx);
-                },
-                child: Container(
-                  width: 30, height: 30,
-                  decoration: BoxDecoration(
-                    color: Color(c), 
-                    shape: BoxShape.circle, 
-                    border: Border.all(color: Colors.white38)
+              ].map((c) {
+                final isSelected = c == tempColor;
+                return GestureDetector(
+                  onTap: () {
+                    onColorSelected(c);
+                    Navigator.pop(ctx);
+                  },
+                  child: Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: Color(c), 
+                      shape: BoxShape.circle, 
+                      border: Border.all(
+                        color: isSelected ? Colors.amber : Colors.white38,
+                        width: isSelected ? 3 : 1,
+                      ),
+                      boxShadow: isSelected ? [BoxShadow(color: Colors.amber.withOpacity(0.5), blurRadius: 8)] : null,
+                    ),
+                    child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.white) : null,
                   ),
-                ),
-              )).toList(),
+                );
+              }).toList(),
             ),
           ],
         ),

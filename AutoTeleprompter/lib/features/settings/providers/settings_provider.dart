@@ -28,6 +28,7 @@ class AppSettings {
   final int lastTextColor;       // Persisted selection color
   final int lastHighlightColor;  // Persisted selection highlight
   final String lastImportPath;  // Persisted folder path for importer
+  final int lastHistoryIndex;    // v3.8 persistence
 
   const AppSettings({
     this.fontSize = 40.0,
@@ -55,6 +56,7 @@ class AppSettings {
     this.lastTextColor = 0xFFFFBF00,
     this.lastHighlightColor = 0x4DFFFFFF,
     this.lastImportPath = '',
+    this.lastHistoryIndex = -1,
   });
 
   AppSettings copyWith({
@@ -83,6 +85,7 @@ class AppSettings {
     int? lastTextColor,
     int? lastHighlightColor,
     String? lastImportPath,
+    int? lastHistoryIndex,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -110,6 +113,7 @@ class AppSettings {
       lastTextColor: lastTextColor ?? this.lastTextColor,
       lastHighlightColor: lastHighlightColor ?? this.lastHighlightColor,
       lastImportPath: lastImportPath ?? this.lastImportPath,
+      lastHistoryIndex: lastHistoryIndex ?? this.lastHistoryIndex,
     );
   }
 }
@@ -174,6 +178,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       lastTextColor: prefs.getInt(_lastTextColorKey) ?? 0xFFFFBF00,
       lastHighlightColor: prefs.getInt(_lastHighlightColorKey) ?? 0x4DFFFFFF,
       lastImportPath: prefs.getString(_lastImportPathKey) ?? '',
+      lastHistoryIndex: prefs.getInt('last_history_index') ?? -1,
     );
   }
 
@@ -195,12 +200,19 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setDouble(_scrollLeadKey, lead);
   }
 
-  Future<void> saveScript(String text, {String? title}) async {
-    state = state.copyWith(lastScript: text, lastScriptTitle: title ?? state.lastScriptTitle);
+  Future<void> saveScript(String text, {String? title, int? historyIndex}) async {
+    state = state.copyWith(
+      lastScript: text, 
+      lastScriptTitle: title ?? state.lastScriptTitle,
+      lastHistoryIndex: historyIndex ?? state.lastHistoryIndex,
+    );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastScriptKey, text);
     if (title != null) {
       await prefs.setString('last_script_title', title);
+    }
+    if (historyIndex != null) {
+      await prefs.setInt('last_history_index', historyIndex);
     }
   }
 
@@ -299,18 +311,26 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final list = List<String>.from(state.recentScripts);
     final Map<String, dynamic> newData = jsonDecode(metadataJson);
     final String? newSessionId = newData['sessionId'] as String?;
+    final String? newFullText = newData['fullText'] as String?;
+    final String? newTitle = newData['title'] as String?;
 
-    // Smart Upsert: Strictly manage by sessionId to avoid affecting separate duplicates
-    if (newSessionId != null) {
-      list.removeWhere((item) {
-        try {
-          final decoded = jsonDecode(item);
-          return decoded['sessionId'] == newSessionId;
-        } catch (e) {
-          return false;
-        }
-      });
-    }
+    // Text Normalization Helper
+    String normalize(String? t) => (t ?? '').replaceAll('\r', '').trim();
+    final String normalizedNewText = normalize(newFullText);
+
+    // Smart Upsert: Deduplicate by sessionId OR (fullText + title)
+    list.removeWhere((item) {
+      try {
+        final decoded = jsonDecode(item);
+        final bool idMatch = newSessionId != null && decoded['sessionId'] == newSessionId;
+        final bool contentMatch = newFullText != null && newTitle != null && 
+                                 normalize(decoded['fullText'] as String?) == normalizedNewText && 
+                                 decoded['title'] == newTitle;
+        return idMatch || contentMatch;
+      } catch (e) {
+        return false;
+      }
+    });
 
     // Insert the latest version at the top
     list.insert(0, metadataJson);

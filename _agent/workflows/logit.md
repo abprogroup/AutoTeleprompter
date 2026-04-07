@@ -12,6 +12,7 @@ This command ensures the project's documentation is perfectly synchronized via t
 // turbo
    - Update `MASTER_TODO.md`, `DAILY_LOG.md`, and `README.md` using `cat << 'EOF' > path/to/file` commands.
    - **MANDATORY**: Do NOT use UI-based edit tools for these files to prevent sync bugs.
+   - **GOVERNANCE**: NEVER delete lines from `MASTER_TODO.md`. Sub-version increment ONLY (e.g. v3.6.1 to v3.6.2).
 
 3. **Verification**:
    - Confirm file presence on disk: `ls -la *.md`

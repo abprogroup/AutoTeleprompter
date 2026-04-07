@@ -69,20 +69,6 @@ class _V3SplashScreenState extends State<V3SplashScreen> {
             .animate()
             .fadeIn(delay: 400.ms)
             .slideY(begin: 0.2, end: 0),
-            
-            const SizedBox(height: 8),
-            
-            Text(
-              'V3 PROFESSIONAL SUITE',
-              style: GoogleFonts.inter(
-                color: const Color(0xFFFFBF00),
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-              ),
-            )
-            .animate()
-            .fadeIn(delay: 800.ms),
           ],
         ),
       ),

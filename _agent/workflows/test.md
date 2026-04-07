@@ -3,7 +3,11 @@ description: Verifies that the recent fix works correctly and hasn't introduced 
 ---
 # /test Workflow
 
-1. **Safety Phase**:
+1. **Self-Cleaning Phase**:
+   - Check the project root for any `.dart` or `.png` files that should be in `/test`.
+   - Relocate identified files to `/test` or `/test/schemes` immediately.
+
+2. **Safety Phase**:
 // turbo
    1.1. Run [Safety Guard (Timer)](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/scripts/task_timer.sh) check.
 

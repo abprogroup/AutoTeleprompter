@@ -331,19 +331,24 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
           final firstWord = para.first;
           final paraDir = firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
-          final paraAlign = firstWord.alignment;
+          // v4.0: Look for alignment tag in any word of the paragraph to handle leading spaces/tags
+          TextAlign? paraAlign;
+          try {
+            paraAlign = para.firstWhere((w) => w.alignment != null).alignment;
+          } catch (_) {
+            paraAlign = firstWord.alignment;
+          }
 
           return Padding(
-            padding: EdgeInsetsDirectional.only(
-              bottom: settings.lineSpacing * 6,
+            padding: EdgeInsets.only(
+              bottom: settings.lineSpacing * 60, // Doubled from 25 to 60 for absolute paragraph distinction
             ),
-            child: Align(
-              alignment: _toAlignment(paraAlign, settings),
-              child: Directionality(
+            child: Directionality(
                 textDirection: paraDir,
                 child: Wrap(
                   textDirection: paraDir,
-                  alignment: _toWrapAlignment(paraAlign, settings),
+                  alignment: _toWrapAlignment(paraAlign, settings, firstWord.effectiveRtl),
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: para.map<Widget>((wordObj) {
                     final ScriptWord word = wordObj as ScriptWord;
                     final i = word.index;
@@ -411,7 +416,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                     );
                   }).toList(),
                 ),
-              ),
             ),
           ).animate(key: ValueKey('para_${para.first.index}'))
            .fadeIn(duration: 300.ms);
@@ -670,23 +674,38 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     );
   }
 
-  TextAlign _toTextAlign(TextAlign? paraAlign, AppSettings settings) {
+  TextAlign _toTextAlign(TextAlign? paraAlign, AppSettings settings, bool isRtl) {
     if (paraAlign != null) return paraAlign;
-    if (settings.textAlign == 'center') return TextAlign.center;
-    if (settings.textAlign == 'right') return TextAlign.right;
-    return TextAlign.left;
+    // v3.8: Source of Truth - If no tag, Hebrew defaults to Right, English to Left
+    return isRtl ? TextAlign.right : TextAlign.left;
   }
 
-  Alignment _toAlignment(TextAlign? paraAlign, AppSettings settings) {
-    if (paraAlign == TextAlign.center || (paraAlign == null && settings.textAlign == 'center')) return Alignment.center;
-    if (paraAlign == TextAlign.right || (paraAlign == null && settings.textAlign == 'right')) return Alignment.centerRight;
-    return Alignment.centerLeft;
+  Alignment _toAlignment(TextAlign? paraAlign, AppSettings settings, bool isRtl) {
+    final textAlign = _toTextAlign(paraAlign, settings, isRtl);
+    if (textAlign == TextAlign.center) return Alignment.center;
+    
+    if (textAlign == TextAlign.right) return Alignment.centerRight;
+    if (textAlign == TextAlign.left) return Alignment.centerLeft;
+    
+    // Default fallback
+    return Alignment.center;
   }
 
-  WrapAlignment _toWrapAlignment(TextAlign? paraAlign, AppSettings settings) {
-    if (paraAlign == TextAlign.center || (paraAlign == null && settings.textAlign == 'center')) return WrapAlignment.center;
-    if (paraAlign == TextAlign.right || (paraAlign == null && settings.textAlign == 'right')) return WrapAlignment.end;
-    return WrapAlignment.start;
+  WrapAlignment _toWrapAlignment(TextAlign? paraAlign, AppSettings settings, bool isRtl) {
+    final textAlign = _toTextAlign(paraAlign, settings, isRtl);
+    if (textAlign == TextAlign.center) return WrapAlignment.center;
+
+    if (isRtl) {
+      // In RTL, Start is Right, End is Left.
+      if (textAlign == TextAlign.left) return WrapAlignment.end;
+      if (textAlign == TextAlign.right) return WrapAlignment.start;
+    } else {
+      // In LTR, Start is Left, End is Right.
+      if (textAlign == TextAlign.left) return WrapAlignment.start;
+      if (textAlign == TextAlign.right) return WrapAlignment.end;
+    }
+
+    return WrapAlignment.center;
   }
 
   WrapAlignment _parseWrapAlignment(String align, bool isRtl) {

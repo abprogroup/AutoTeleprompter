@@ -97,6 +97,10 @@ void showGlobalColorPicker({
   );
 }
 
+class GlobalColorButton extends StatelessWidget {
+  final int color;
+  final ValueChanged<int> onColorChanged;
+  final String title;
   final bool showNoneAsWhite;
 
   const GlobalColorButton({

@@ -16,6 +16,7 @@ description: Surgical autonomous fixing for [X] items with Deep Verification.
      c. **Vision Analysis**: Verify the state matches the "Wanted Result".
      d. **Universal Mandates**:
         - **Deselection Proof**: Screenshot MUST show the fix without active handles.
+        - **Collision Check**: Proof that the fix color/style persists even after selection highlight is cleared.
         - **State Sync Proof**: Re-trigger the UI (e.g., reopen menu) to prove choice survived.
 
 3. **Autonomous Verification Verdict**

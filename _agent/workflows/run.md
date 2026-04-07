@@ -1,7 +1,4 @@
----
-description: Master autonomous loop. Executes the full development cycle sequentially with strict User Mode Selection, Optimized Dual-Backups, and Access Verification.
----
-# /run Workflow [v3.6.1 MEGA_LOOP]
+# /run Protocol [v3.7.5 MEGA_LOOP]
 
 1. **Initialization Phase**:
    - **1.1. Mode Selection**: The AI must stop and ask the user:
@@ -9,7 +6,7 @@ description: Master autonomous loop. Executes the full development cycle sequent
      - "B) How much time (duration) should I run the loop for?"
 // turbo
    - **1.2. Workspace Access Verification [WAV]**: 
-     - Run `ls -R lib _agent backups` and diagnostic `touch` to verify full R/W/X permissions.
+     - Run `ls -la AutoTeleprompter/lib _agent backups` and diagnostic `touch` in `AutoTeleprompter/lib/` to verify full R/W/X permissions.
      - **MANDATORY**: Report "Workspace Verified" or list missing permissions before proceeding.
    - **Gating**: Do NOT proceed to Step 2 until Mode is selected AND Workspace is verified.
 

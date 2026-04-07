@@ -16,7 +16,11 @@
     - **1. -> 2. -> 3.** (Test actions)
     - ***Wanted Result***: (The positive outcome)
     - ***Meaning***: (The core logic failure)
-- **Focused Execution**: The loop now focuses on ONE bug at a time using the `/deep_fix` and `/deep_test` workflows.
+- **Focused Execution**: The loop now focuses on ONE bug at a time using an **Autonomous Iterative Process**:
+  - (1) Research & collect all optional fix paths.
+  - (2) Execute the best fix.
+  - (3) Test via [/deep_test].
+  - (4) Revert and iterate if failed.
 - **Persistence**: `persistence_guard.sh start` must cover the entire deep-dive session.
 
 ## 📄 DOCUMENTATION GOVERNANCE

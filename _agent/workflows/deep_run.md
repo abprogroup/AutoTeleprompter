@@ -22,9 +22,14 @@ description: Redefined autonomous loop for focused, one-at-a-time bug fixing wit
    - Run [/sync](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/sync.md) to align with all project rules.
    - Run [/emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md) to ensure a fresh session.
 
-4. **Deep Fix & Test Execution**
-   - Execute [/deep_fix](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/deep_fix.md) for the selected bug.
-   - Execute [/deep_test](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/deep_test.md) for the selected bug.
+4. **Deep Fix & Test Execution [AUTONOMOUS_LOOP]**
+   - The AI must autonomously:
+     - (1) **Research**: Identify the root cause and collect all optional fixes.
+     - (2) **Execute**: Apply the most promising fix first.
+     - (3) **Test**: Execute [/deep_test](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/deep_test.md).
+     - (4) **Iterate**: If the test fails, revert the change and try the next best fix from the list.
+   - Continue until the bug is verified or all options are exhausted.
+   - Present the fix for review ONLY after a successful [/deep_test].
 
 5. **Cycle Closure**
    - Run [/organize](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/organize.md).

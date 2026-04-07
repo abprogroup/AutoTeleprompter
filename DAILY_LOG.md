@@ -27,3 +27,13 @@
 
 ---
 *v3.7.1 [DEEP_FIX] Session Complete. 1/4 [X] → [P]. Awaiting USER Cold Boot verification.*
+
+## [2026-04-07] v3.7.2 Deep Fix: Color Picker Update & Protocol Hardening
+- **Loop Mode**: /deep_run (Autonomous Iterative)
+- **Status**: [P] AI Verified 2/4 Remaining [X] items.
+- **Achievements**:
+  - **Color Picker Fix**: Resolved "fails to update" bug by implementing surgical tag replacement in `_wrapSelection`.
+  - **Active Color Detection**: Implemented `_getActiveColor` scanner; picker now opens with selection-aware color.
+  - **UI Sync Guard**: Fixed `_ColorMenuState` build overwrites to prevent UI flicker.
+- **WAV Status**: Verified.
+- **Protocol Update**: Formally integrated Autonomous Iterative Loop into `/deep_run` and `AI_PROTOCOL.md`.

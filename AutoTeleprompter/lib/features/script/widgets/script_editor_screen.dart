@@ -530,11 +530,40 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     return _lastFocusedController ?? (_controllers.isNotEmpty ? _controllers.last : null);
   }
 
+  String _getActiveColor(String type) {
+    final controller = _activeController;
+    if (controller == null) return '';
+    
+    TextSelection selection = controller.selection;
+    if ((!selection.isValid || selection.isCollapsed) && _lastSelection != null && controller == _lastFocusedController) {
+       selection = _lastSelection!;
+    }
+    if (!selection.isValid) return '';
+
+    final text = controller.text;
+    final pos = selection.start;
+    
+    // Scan backwards from cursor to find nearest [type=#hex]
+    final pattern = RegExp('\\[' + type + '=(#[0-9A-Fa-f]{6})\\]');
+    final matches = pattern.allMatches(text);
+    Match? candidate;
+    for (final m in matches) {
+      if (m.start < pos) {
+        // Also check if the tag is still 'open' (no [/type] before pos)
+        final closePattern = RegExp('\\[\\/' + type + '\\]');
+        final closeMatches = closePattern.allMatches(text.substring(m.end, pos));
+        if (closeMatches.isEmpty) {
+          candidate = m;
+        }
+      }
+    }
+    return candidate?.group(1) ?? '';
+  }
+
   void _wrapSelection(String open, String close) {
     final controller = _activeController;
     if (controller == null) return;
     
-    // Use last selection memory if current is lost due to menu interaction
     TextSelection selection = controller.selection;
     if ((!selection.isValid || selection.isCollapsed) && _lastSelection != null && controller == _lastFocusedController) {
        selection = _lastSelection!;
@@ -545,29 +574,55 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     final text = controller.text;
     final selectedText = text.substring(selection.start, selection.end);
     
-    // Check if toggling
-    bool isToggling = false;
-    if (open.isNotEmpty && close.isNotEmpty) {
-       final prefix = text.substring(0, selection.start);
-       final suffix = text.substring(selection.end);
-       if (prefix.endsWith(open) && suffix.startsWith(close)) {
-          final newText = text.replaceRange(selection.end, selection.end + close.length, '');
-          final finalText = newText.replaceRange(selection.start - open.length, selection.start, '');
-          controller.value = TextEditingValue(
-            text: finalText,
-            selection: TextSelection(baseOffset: selection.start - open.length, extentOffset: selection.end - open.length),
-          );
-          isToggling = true;
-       }
+    // V4.1 Persistent Fix: Detect and REPLACE existing tags of the same type 
+    // to prevent nesting overflow that blocks color updates.
+    bool wasReplaced = false;
+    if (open.startsWith('[') && open.contains('=')) {
+      final type = open.substring(1, open.indexOf('='));
+      final prefix = text.substring(0, selection.start);
+      final suffix = text.substring(selection.end);
+      
+      // If selection is EXACTLY wrapped in same type, replace it
+      final openPattern = RegExp('\\[' + type + '=(#[0-9A-Fa-f]{6})\\]\$');
+      final closePattern = RegExp('^\\[\\/' + type + '\\]');
+      
+      if (openPattern.hasMatch(prefix) && closePattern.hasMatch(suffix)) {
+        final match = openPattern.firstMatch(prefix)!;
+        final newText = text.replaceRange(selection.end, selection.end + close.length, close); // ensure closing tag matches
+        final finalText = newText.replaceRange(match.start, selection.start, open);
+        controller.value = TextEditingValue(
+          text: finalText,
+          selection: TextSelection(baseOffset: match.start, extentOffset: match.start + open.length + selectedText.length + close.length),
+        );
+        wasReplaced = true;
+      }
     }
 
-    if (!isToggling) {
-      final replacement = '$open$selectedText$close';
-      final newText = text.replaceRange(selection.start, selection.end, replacement);
-      controller.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection(baseOffset: selection.start, extentOffset: selection.start + replacement.length),
-      );
+    if (!wasReplaced) {
+      // Check if toggling
+      bool isToggling = false;
+      if (open.isNotEmpty && close.isNotEmpty) {
+         final prefix = text.substring(0, selection.start);
+         final suffix = text.substring(selection.end);
+         if (prefix.endsWith(open) && suffix.startsWith(close)) {
+            final newText = text.replaceRange(selection.end, selection.end + close.length, '');
+            final finalText = newText.replaceRange(selection.start - open.length, selection.start, '');
+            controller.value = TextEditingValue(
+              text: finalText,
+              selection: TextSelection(baseOffset: selection.start - open.length, extentOffset: selection.end - open.length),
+            );
+            isToggling = true;
+         }
+      }
+
+      if (!isToggling) {
+        final replacement = '$open$selectedText$close';
+        final newText = text.replaceRange(selection.start, selection.end, replacement);
+        controller.value = TextEditingValue(
+          text: newText,
+          selection: TextSelection(baseOffset: selection.start, extentOffset: selection.start + replacement.length),
+        );
+      }
     }
     _saveHistory(description: 'Format Text');
   }
@@ -1421,6 +1476,7 @@ class _ColorMenu extends ConsumerStatefulWidget {
 class _ColorMenuState extends ConsumerState<_ColorMenu> {
   late Color _currentTextColor;
   late Color _currentHighlightColor;
+  bool _isManuallyPicking = false;
 
   @override
   void initState() {
@@ -1432,8 +1488,13 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
-    _currentTextColor = Color(settings.lastTextColor);
-    _currentHighlightColor = Color(settings.lastHighlightColor);
+    
+    // V4.1 Persistent Fix: Only sync from settings if we aren't in the 
+    // middle of an active manual selection, to prevent UI flicker/revert.
+    if (!_isManuallyPicking) {
+      _currentTextColor = Color(settings.lastTextColor);
+      _currentHighlightColor = Color(settings.lastHighlightColor);
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1445,12 +1506,19 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
           children: [
             const Text('TEXT COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
             GlobalColorButton(
-              color: _currentTextColor.value,
+              // V4.1 UI Polish: Detect active color of current selection
+              color: int.tryParse(
+                (context.findAncestorStateOfType<_ScriptEditorScreenState>()?._getActiveColor('color') ?? '')
+                .replaceFirst('#', '0xFF'), radix: 16) ?? _currentTextColor.value,
               title: 'TEXT COLOR PICKER',
               onColorChanged: (c) {
-                setState(() => _currentTextColor = Color(c));
+                setState(() { 
+                  _currentTextColor = Color(c);
+                  _isManuallyPicking = true;
+                });
                 final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
                 widget.onTextColor(hex);
+                Future.delayed(const Duration(milliseconds: 100), () => _isManuallyPicking = false);
               },
             ),
           ],
@@ -1463,12 +1531,19 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
           children: [
             const Text('HIGHLIGHT COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
             GlobalColorButton(
-              color: _currentHighlightColor.value,
+              // V4.1 UI Polish: Detect active color of current selection
+              color: int.tryParse(
+                (context.findAncestorStateOfType<_ScriptEditorScreenState>()?._getActiveColor('bg') ?? '')
+                .replaceFirst('#', '0xFF'), radix: 16) ?? _currentHighlightColor.value,
               title: 'HIGHLIGHT PICKER',
               onColorChanged: (c) {
-                setState(() => _currentHighlightColor = Color(c));
+                setState(() { 
+                  _currentHighlightColor = Color(c);
+                  _isManuallyPicking = true;
+                });
                 final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
                 widget.onBgColor(hex);
+                Future.delayed(const Duration(milliseconds: 100), () => _isManuallyPicking = false);
               },
             ),
           ],

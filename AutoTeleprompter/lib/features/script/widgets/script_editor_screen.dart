@@ -1223,7 +1223,7 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Text('TEXT COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)), 
-          GlobalColorButton(color: currentTextColor.value, title: 'TEXT COLOR PICKER', onColorChanged: (c) { 
+          GlobalColorButton(color: currentTextColor.value, title: 'TEXT COLOR PICKER', showNoneAsWhite: true, onColorChanged: (c) { 
              final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(); 
              widget.onTextColor(hex); 
              if (mounted) setState(() { _currentTextColor = Color(c); }); // Fix Sync Lag

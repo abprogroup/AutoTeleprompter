@@ -1,4 +1,4 @@
-# AI Protocol: AutoTeleprompter v3.7 [DEEP_FIX]
+# AI Protocol: AutoTeleprompter v3.7.5 [ABSOLUTE_VERIFICATION]
 
 ## 🛡️ CORE DIRECTIVES
 1. **Zero-Bypass Policy**: No code changes WITHOUT a preceding surgical backup.
@@ -16,18 +16,20 @@
   - (B) How much time should the loop run?
 - **Persistence**: `persistence_guard.sh start` must cover the entire multi-task session.
 
-## 🚀 AUTONOMOUS ENGINE (v3.7) [/deep_run]
+## 🚀 AUTONOMOUS ENGINE (v3.7.5) [/deep_run]
 - **Surgical Focus**: Use this for critical or previously-failed bugs.
 - **Strict Consultation**: `/deep_run` MUST stop and ask: 
   - (A) Which bug to focus on for this session?
   - (B) Clarify documentation if not complete (Test actions, Wanted Result, Meaning).
 - **Hardened Execution [ABSOLUTE_VERIFICATION]**:
-  - (1) **Research**: Identify root cause + collect all optional fix paths.
-  - (2) **Test Route Planning**: Plan exact visual/logical steps to PROVE success in `test/deep_analysis/[ID]_route.md`.
-  - (3) **Execute**: Apply best fix.
-  - (4) **[MANDATORY] Rebuild**: Full APK rebuild and redeploy (`/emulator`).
-  - (5) **[MANDATORY] Absolute Test**: Execute `/deep_test` with **Deselection Proof** (no selection handles) and **Picker Sync** proof (color checkmark matches).
-  - (6) **Iterate**: Revert and try next fix if failed.
+  - (1) **Research [TRIO-PATH]**: Identify root cause + collect at least **THREE (3) distinct optional fix paths** before coding.
+  - (2) **Test Route Planning**: Plan exact visual/logical steps to PROVE success in `test/deep_analysis/[TASK_ID]_route.md`.
+  - (3) **Distinct Test Target**: MUST use a test color (e.g., RED/MAGENTA) that cannot be mistaken for a system highlight.
+  - (4) **Execute**: Apply the most promising fix from the Trio.
+  - (5) **[MANDATORY] Rebuild**: Full APK rebuild and redeploy (`/emulator`).
+  - (6) **Absolute Test**: Execute `/deep_test` with **Deselection Proof** and **Collision Check** (proof that color persists *after* selection is cleared).
+  - (7) **Iterate [CAP=4]**: Maximum 4 autonomous loops before escalating to USER mode.
+- **Environmental Reset**: If `/emulator` or APK install fails twice, AI must execute `adb kill-server && adb start-server` and a `cold-boot`.
 - **Persistence**: `persistence_guard.sh start` must cover the entire deep-dive session.
 
 ## 📄 DOCUMENTATION GOVERNANCE
@@ -35,11 +37,18 @@
 - **DAILY_LOG.md**: Real-time session history; must explicitly record the chosen Loop Mode and [WAV] status.
 - **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
 - **Surgical Updates**: When updating documentation (MASTER_TODO.md, DAILY_LOG.md, README.md), the AI must ONLY modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
-- **Root Directory Cleanup**: All artifacts must reside in `/test/deep_analysis/`.
+- **Root Directory Governance**: The AI MUST maintain a pristine project root. Only mandatory core files (`AI_PROTOCOL.md`, `README.md`, `MASTER_TODO.md`, `DAILY_LOG.md`) are authorized to reside in the root. 
+- **Dynamic Artifact Routing**: All other stray artifacts must be dynamically routed via 'Smart Understanding' to their specialized home based on type and intent:
+    - **Test Proofs (PNG/MP4)**: `/test/deep_analysis/[TASK_ID]/`.
+    - **Architectural Blueprints (Loop Schemes)**: `/schemes/`.
+    - **Surgical Snapshots/Archives**: `/backups/`.
+    - **Released Build Artifacts**: `/releases/`.
+    - **Test Summary/Reports (.md)**: `/test/`.
+    - **Temporary Tools/Scripts**: Must be deleted or moved to `/_agent/scripts/` after the task.
 - **Visual Proof Mandate**: Every fix MUST have a `final_proof.png` in `/test` showing the fix in a stable, non-selected state.
 
 ## ⚖️ VERSIONING & GOVERNANCE
-1. **Stable Versioning Control**: Only the **USER** is authorized to decide when to advance to a major stable version (e.g., v3.0 to v3.7.2).
+1. **Stable Versioning Control**: Only the **USER** is authorized to decide when to advance to a major stable version (e.g., v3.7.2 to v4.0.0).
 2. **AI Iteration Limit**: The AI is permitted to advance sub-versions (e.g., v3.4.5 to v3.4.6) to track incremental progress and surgical backups.
 3. **TODO Cleanup Policy**: `[U]` (User Verified) items can ONLY be cleared during a major stable version transition, and ONLY upon explicit USER authorization.
 4. **Permanent Record**: Deferred `[-]` and unresolved items (`[ ]`, `[X]`, `[F]`) must **NEVER** be deleted from the TODO list, ensuring a permanent historical record of project debt.
@@ -50,13 +59,17 @@ For external agents (Claude Code, etc.) to align with this protocol, they MUST u
 ### **1. HOT COMMANDS (Workflows)**
 Path: `_agent/workflows/`
 - **`/run`**: Master Broad loop for multi-task fix sessions (Planning → Fast-Execution → Verification).
+- **`/fix`**: Surgical code injection of approved plans.
 - **`/deep_run`**: Focused surgical loop for critical bugs (Documentation → Test Planning → Implementation → Absolute Verification).
 - **`/deep_fix`**: THREE-PHASE manual surgical fix (Research 30m, Plan 15m, Exec 15m).
 - **`/deep_test`**: Hardened visual verification via Test Route execution and screenshot analysis.
 - **`/emulator`**: Absolute Rebuild Mandate: Clean APK rebuild and redeployment.
 - **`/logit`**: Universal terminal-based documentation sync for all project files.
 - **`/plan`**: Priority-based planning from MASTER_TODO.md.
+- **`/sync`**: Automatically syncs the AI agent with the AutoTeleprompter project protocols, history, and master TODO list.
 - **`/test`**: Basic stability and regression verification.
+- **`/test_pending`**: Autonomous verified state tracking for pending v3.6 AI tests.
+- **`/organize`**: Cleans the workspace of temporary files, build logs, and test artifacts.
 - **`/backup`**: Surgical mirrors and full session snapshots.
 
 ### **2. SAFETY & HARDWARE BRIDGE (Scripts)**
@@ -69,7 +82,7 @@ Path: `_agent/scripts/`
 
 ### **3. VERIFICATION**
 Path: `test/`
-- Centralized test artifacts and visual deep analysis reports.
+- Centralized test artifacts, loop schemes and visual deep analysis reports.
 
 ### **4. GIT GOVERNANCE**
 - **Commit Mandate**: All agents MUST perform a `git commit` after every successful task completion.
@@ -77,4 +90,4 @@ Path: `test/`
 - **Naming Standard**: Use the prefix `[V3-SYNC]` followed by a concise description of the fix (e.g., `git commit -m "[V3-SYNC] fixed history index sync"`).
 
 ---
-*Failure to follow this consultative WAV-protected deep-fix protocol will result in a hard session reset.*
+*Failure to follow this consultative WAV-protected protocol will result in a hard session reset.*

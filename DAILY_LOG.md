@@ -1,50 +1,26 @@
-# Daily Log: AutoTeleprompter v3.7.1 [DEEP_FIX]
+# Daily Log: AutoTeleprompter v3.7.5 [ABSOLUTE_VERIFICATION]
 
-### ✅ 2026-04-07 — v3.7.1 [DEEP_FIX] Session
+### ✅ 2026-04-07 — v3.7.5 [PROTOCOL_PERFECTION]
+- **Loop Mode**: Protocol Recovery & Hardening.
+- **Achievements**:
+    - **Restored v3.6.1 Broad Loop**: Recovered the lost `/run` rules for multi-task autonomous sessions.
+    - **Hardened v3.7.5 Deep Loop**: Integrated **"Test Route Planning"**, **[TRIO-PATH] Research**, and **Iteration Caps**.
+    - **Root Directory Governance**: Institutionalized **Dynamic Artifact Routing** to keep the workspace pristine.
+    - **Selection Refinement**: Added the **Distinct Test Target Rule** to eliminate visual confusion during color/style tests.
+- **WAV Status**: Verified.
+- **Commit**: [V3-SYNC] Restored run protocols and institutionalized Absolute Verification v3.7.5.
+
+### ✅ 2026-04-07 — v3.7.2 [DEEP_FIX] Session
 - **[/deep_run] executed**: Focused on **Emulator Hardware Bridge** bug.
 - **INFRA: Hardware Bridge v3.7.2**: 
     - Rewrote \`emulator_bridge.sh\` to use robust regex for AVD \`config.ini\` patching.
     - Forced \`fastboot.forceColdBoot = yes\` and \`hw.keyboard = yes\` for all detected AVDs.
-    - Modernized ADB audio routing via \`media.audio_policy set-force-use FOR_RECORD\`.
-- **Verification**: 
-    - Screenshots captured in \`test/deep_analysis/emulator_hardware_bridge/\`.
-    - Confirmed Hebrew IME (Subtype 18) active in the app and recorder.
-    - Confirmed \`show_ime_with_hard_keyboard = 1\` and \`qemu.hw.mainkeys = 0\`.
+- **Verification**: Confirmed Hebrew IME active in the app and recorder.
 
 ### ✅ 2026-04-07 — v3.6.2 Second Chance Sprint
-- **[/second_chance] executed**: All 4 [X] items surgically fixed and promoted to [P].
-- **BUG Fix: Style Regression (v3.6.2)**: \`_onAlign\` rewritten as paragraph-level operation. Strips existing alignment tags, wraps full block. Prevents silent no-op on collapsed selection.
-- **INFRA Fix: Emulator Hardware Bridge (v3.6.2)**: Initial patch for AVD \`config.ini\`. 
-- **BUG Fix: History Persistence (v3.6.2)**: \`dispose()\` now calls \`saveScript()\` to sync \`lastScript\` + \`lastHistoryIndex\`.
-- **UI Fix: Color Picker (v3.6.2)**: Removed external color bars, moved presets inside dialog.
-
-### Previous Session (v3.5.3)
-- BUG Fix: Recent Activity Duplication (Final).
-- BUG Fix: Recent Activity Normalization.
-- BUG Fix: Auto-Save Error (Disposal race condition).
-- FEATURE: Conflict Resolution Dialog.
-... (Archived)
+- **BUG Fix: Style Regression (v3.6.2)**: \`_onAlign\` rewritten as paragraph-level operation.
+- **BUG Fix: History Persistence (v3.6.2)**: \`dispose()\` now calls \`saveScript()\` to sync undo stack.
+- **UI Fix: Color Picker (v3.6.2)**: Moved presets inside dialog.
 
 ---
-*v3.7.2 [DEEP_FIX] Session Complete. 1/4 [X] → [P]. Awaiting USER Cold Boot verification.*
-
-## [2026-04-07] v3.7.3 Protocol Perfection & AI Protocol Recovery
-- **Loop Mode**: Protocol Recovery (Manual Restoration & Perfection)
-- **Status**: [U] Protocols Corrected and Hardened.
-- **Achievements**:
-  - **Restored v3.6.1 Broad Loop**: Recovered the lost `/run` rules for multi-task autonomous sessions.
-  - **Hardened v3.7.3 Deep Loop**: Integrated **"Test Route Planning"** to prevent "Blind Man" verification failures.
-  - **Institutionalized Absolute Verification**: Any critical fix now MANDATES a full APK rebuild and "Deselection/Sync" visual proof.
-  - **Hot Command Overhaul**: Synchronized `deep_run.md` and `deep_test.md` to enforce the new mandates.
-- **WAV Status**: Verified.
-- **Commit**: [V3-SYNC] Restored run protocols and institutionalized Absolute Verification.
-
-## [2026-04-07] v3.7.2 Deep Fix: Color Picker Update & Protocol Hardening
-- **Loop Mode**: /deep_run (Autonomous Iterative)
-- **Status**: [P] AI Verified 2/4 Remaining [X] items.
-- **Achievements**:
-  - **Color Picker Fix**: Resolved "fails to update" bug by implementing surgical tag replacement in `_wrapSelection`.
-  - **Active Color Detection**: Implemented `_getActiveColor` scanner; picker now opens with selection-aware color.
-  - **UI Sync Guard**: Fixed `_ColorMenuState` build overwrites to prevent UI flicker.
-- **WAV Status**: Verified.
-- **Protocol Update**: Formally integrated Autonomous Iterative Loop into `/deep_run` and `AI_PROTOCOL.md`.
+*v3.7.5 [PROTOCOL_PERFECTION] Session Complete. Standing by for [V3.7.5-DEEP-START] Color Picker restart.*

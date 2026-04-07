@@ -23,6 +23,7 @@
 - **MASTER_TODO.md**: Synchronized at the start (/plan) and end (/logit) of every loop. Must include documented test steps for `[X]` items.
 - **DAILY_LOG.md**: Real-time session history; must explicitly record the chosen Loop Mode and [WAV] status.
 - **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
+- **Surgical Updates**: When updating documentation (MASTER_TODO.md, DAILY_LOG.md, README.md), the AI must ONLY modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
 - **Root Directory Cleanup**: The root directory must remain clean of `.dart` scripts or `.png` schemes. All such artifacts must reside in `/test`.
 
 ## ⚖️ VERSIONING & GOVERNANCE
@@ -36,9 +37,10 @@ For external agents (Claude Code, etc.) to align with this protocol, they MUST u
 
 ### **1. HOT COMMANDS (Workflows)**
 Path: `_agent/workflows/`
-- **`/deep_run`**: MASTER Focused autonomous loop (Selection → Planning → Execution → Visual Verification).
+- **`/deep_run`**: MASTER Focused autonomous loop (Selection → Planning → Deployment → Execution → Visual Verification).
 - **`/deep_fix`**: THREE-PHASE surgical fix (Research 30m, Plan 15m, Exec 15m).
 - **`/deep_test`**: Visual verification via emulator screenshots and visual analysis.
+- **`/emulator`**: APK Rebuild and Deployment to Android Emulator.
 - **`/logit`**: Universal terminal-based documentation sync.
 - **`/plan`**: Priority-based planning from MASTER_TODO.md.
 - **`/backup`**: Surgical mirrors and full snapshots.

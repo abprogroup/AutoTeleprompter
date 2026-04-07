@@ -20,6 +20,7 @@ description: Redefined autonomous loop for focused, one-at-a-time bug fixing wit
 3. **Session Preparation**
    - Run [/backup](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/backup.md) (Full Snapshot + Surgical Mirror).
    - Run [/sync](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/sync.md) to align with all project rules.
+   - Run [/emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md) to ensure a fresh session.
 
 4. **Deep Fix & Test Execution**
    - Execute [/deep_fix](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/deep_fix.md) for the selected bug.

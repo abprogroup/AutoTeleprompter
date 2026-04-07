@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# AutoTeleprompter v3.4.0 Safety Timer
+# AutoTeleprompter v3.7.5 Task Timer
 # Purpose: Prevents autonomous thashing by enforcing a 30-minute limit per task.
 
 TIMER_FILE="/Users/proapple/.agent_task_start"

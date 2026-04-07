@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# AutoTeleprompter v3.5.0 Persistence Guard (macOS)
-# Purpose: Manages the caffeinate process with a PID-based start/stop system.
+# AutoTeleprompter v3.7.5 Persistence Guard
+# Purpose: Maintains session active state via caffeinate (Mac).
 
-PID_FILE="/tmp/agent_caffeinate.pid"
+PID_FILE="/tmp/.agent_persistence_guard.pid"
 
 case "$1" in
     start)

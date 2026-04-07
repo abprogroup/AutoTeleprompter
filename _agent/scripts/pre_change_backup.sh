@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# AutoTeleprompter v3.5.0 Surgical Precision Backup
+# AutoTeleprompter v3.7.5 Surgical Precision Backup
 # Purpose: Mirrors the original file path in the backups directory before editing.
 
 PROJECT_ROOT="/Users/proapple/Desktop/AutoTeleprompter"

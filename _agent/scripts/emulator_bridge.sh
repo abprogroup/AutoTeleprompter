@@ -1,10 +1,9 @@
 #!/bin/bash
 
-# AutoTeleprompter v4.1 Emulator Hardware Bridge (macOS)
-# Purpose: Deep Force Mac hardware connectivity (Keyboard/Mic/Camera).
-# v4.1: Improved AVD config patching with regex, robust ADB path, and modernized audio triggers.
+# AutoTeleprompter v3.7.5 Emulator Hardware Bridge
+# Purpose: Patching and maintaining AVD hardware passthrough for macOS.
 
-echo "🚀 Starting AutoTeleprompter 'Deep Stability' Hardware Bridge v4.1..."
+echo "AutoTeleprompter Emulator Bridge (v3.7.5)"
 
 # 1. Locate ADB
 ADB_PATH=$(which adb)

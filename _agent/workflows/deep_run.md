@@ -24,12 +24,13 @@ description: Redefined autonomous loop for focused, one-at-a-time bug fixing wit
 
 4. **Deep Fix & Test Execution [ABSOLUTE_VERIFICATION]**
    - The AI must autonomously iterate through:
-     - (1) **Research**: Identify root cause + collect all optional fix paths.
+     - (1) **Research [TRIO-PATH]**: Identify root cause + collect at least **THREE (3) distinct optional fix paths** before coding.
      - (2) **Test Route Planning**: Document the exact visual/logical steps to verify success for this SPECIFIC bug in `test/deep_analysis/[TASK_ID]_route.md`.
-     - (3) **Execute**: Apply best fix.
+     - (3) **Execute**: Apply best fix from the Trio.
      - (4) **[MANDATORY] Rebuild**: Run [/emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md) to full-rebuild APK.
      - (5) **Absolute Test**: Execute [/deep_test](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/deep_test.md).
-     - (6) **Iterate**: Revert and try next fix if failed.
+     - (6) **Iterate [CAP=4]**: Maximum 4 autonomous loops before escalating to USER.
+   - **Environmental Reset**: If `/emulator` or APK install fails twice, AI must execute `adb kill-server` and a fresh `cold-boot`.
    - Present the fix for review ONLY after a successful [/deep_test].
 
 5. **Cycle Closure**

@@ -325,13 +325,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           if (para.length == 1 && para[0].isNewline) {
             return SizedBox(
               key: _wordKeys[para[0].index],
-              height: settings.fontSize * 1.5 + (settings.lineSpacing * 4), // Full line height
+              height: settings.fontSize * 1.5 + (settings.lineSpacing * 4),
             );
           }
 
           final firstWord = para.first;
           final paraDir = firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
-          // v4.0: Look for alignment tag in any word of the paragraph to handle leading spaces/tags
           TextAlign? paraAlign;
           try {
             paraAlign = para.firstWhere((w) => w.alignment != null).alignment;
@@ -339,9 +338,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             paraAlign = firstWord.alignment;
           }
 
+          // v3.8.1: Stateful Markup Propagation per Paragraph
+          Color? activeCustomTextColor;
+          Color? activeCustomBgColor;
+
           return Padding(
             padding: EdgeInsets.only(
-              bottom: settings.lineSpacing * 60, // Doubled from 25 to 60 for absolute paragraph distinction
+              bottom: settings.lineSpacing * 60, 
             ),
             child: Directionality(
                 textDirection: paraDir,
@@ -356,43 +359,25 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                     final isPast = i < tState.confirmedWordIndex;
                     final displayText = word.raw.replaceAll(_tagStripRe, '');
 
-                    Color wordColor;
-                    if (isCurrent) {
-                      wordColor = Color(settings.currentWordColor);
-                    } else if (isPast) {
-                      wordColor = (word.textColor ?? Color(settings.futureWordColor)).withOpacity(settings.pastWordOpacity);
-                    } else {
-                      wordColor = word.textColor ?? Color(settings.futureWordColor);
+                    // 1. Detect Opening Tags (Apply to current word)
+                    final colorMatch = RegExp(r'\[color=([^\]]+)\]').firstMatch(word.raw);
+                    if (colorMatch != null) {
+                       final hex = colorMatch.group(1)!.trim().replaceFirst('#', '');
+                       activeCustomTextColor = Color(int.tryParse('FF$hex', radix: 16) ?? settings.futureWordColor);
                     }
 
-                    Color? bgColor;
-                    if (word.highlight != null) {
-                      bgColor = isCurrent ? null : (isPast ? word.highlight!.withOpacity(0.15) : word.highlight);
+                    final bgMatch = RegExp(r'\[bg=([^\]]+)\]').firstMatch(word.raw);
+                    if (bgMatch != null) {
+                       final hex = bgMatch.group(1)!.trim().replaceFirst('#', '');
+                       activeCustomBgColor = Color(int.tryParse('FF$hex', radix: 16) ?? 0x00000000);
                     }
 
                     final effectiveFontSize = word.fontSize != null
                         ? settings.fontSize * (word.fontSize! / 17.0)
                         : settings.fontSize;
 
-                    // Handle custom color tags in word.raw
-                    Color? customTextColor;
-                    Color? customBgColor;
-                    
-                    final colorMatch = RegExp(r'\[color=([^\]]+)\]').firstMatch(word.raw);
-                    if (colorMatch != null) {
-                      final hex = colorMatch.group(1)!.trim().replaceFirst('#', '');
-                      final colorValue = int.tryParse('FF$hex', radix: 16) ?? settings.futureWordColor;
-                      customTextColor = Color(colorValue);
-                      debugPrint('[V3_PROMPTER_PARSE] hex=$hex -> color=$customTextColor');
-                    }
-                    
-                    final bgMatch = RegExp(r'\[bg=([^\]]+)\]').firstMatch(word.raw);
-                    if (bgMatch != null) {
-                      final hex = bgMatch.group(1)!.trim().replaceFirst('#', '');
-                      customBgColor = Color(int.tryParse('FF$hex', radix: 16) ?? 0x00000000);
-                    }
-
-                    return Directionality(
+                    // 2. Map to Widget with Current State
+                    final wordWidget = Directionality(
                       textDirection: word.effectiveRtl ? TextDirection.rtl : TextDirection.ltr,
                       child: Container(
                         key: _wordKeys[i],
@@ -404,18 +389,23 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                             fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
                             fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
                             letterSpacing: settings.letterSpacing,
-                            color: isCurrent ? (customTextColor ?? Color(settings.currentWordColor)) : 
-                                   (isPast ? (customTextColor ?? word.textColor ?? Color(settings.futureWordColor)).withOpacity(settings.pastWordOpacity) : 
-                                   (customTextColor ?? word.textColor ?? Color(settings.futureWordColor))),
-                            backgroundColor: isCurrent ? null : (isPast ? (customBgColor ?? word.highlight)?.withOpacity(0.15) : (customBgColor ?? word.highlight)),
+                            color: isCurrent ? (settings.showCurrentWordHighlight ? Color(settings.currentWordColor) : (activeCustomTextColor ?? Color(settings.futureWordColor))) : 
+                                   (isPast ? (activeCustomTextColor ?? word.textColor ?? Color(settings.futureWordColor)).withOpacity(settings.pastWordOpacity) : 
+                                   (activeCustomTextColor ?? word.textColor ?? (settings.showUpcomingWordColor ? Color(settings.futureWordColor) : Color(0xFFFFFFFF)))),
+                            backgroundColor: isCurrent ? (settings.showCurrentWordHighlight ? Color(settings.currentWordColor).withOpacity(0.3) : (activeCustomBgColor ?? word.highlight)) : (isPast ? (activeCustomBgColor ?? word.highlight)?.withOpacity(0.15) : (activeCustomBgColor ?? word.highlight)),
                             height: 1.3,
                             decoration: word.isUnderline ? TextDecoration.underline : null,
-                            decorationColor: isCurrent ? Color(settings.currentWordColor) : (customTextColor ?? word.textColor ?? Color(settings.futureWordColor)),
                           ),
                           child: Text(displayText),
                         ),
                       ),
                     );
+
+                    // 3. Detect Closing Tags (Clear state for NEXT word)
+                    if (word.raw.contains('[/color]')) activeCustomTextColor = null;
+                    if (word.raw.contains('[/bg]')) activeCustomBgColor = null;
+
+                    return wordWidget;
                   }).toList(),
                 ),
             ),
@@ -999,7 +989,15 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          const Text('Current Word (reading highlight)', style: labelStyle),
+          Row(children: [
+            const Text('Current Word (reading focus)', style: labelStyle),
+            const Spacer(),
+            Switch.adaptive(
+              value: settings.showCurrentWordHighlight,
+              activeColor: Color(settings.currentWordColor),
+              onChanged: (v) => notifier.setShowCurrentWordHighlight(v),
+            ),
+          ]),
           const SizedBox(height: 8),
           _ColorGrid(
             selected: settings.currentWordColor,
@@ -1007,7 +1005,15 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          const Text('Upcoming Text Color', style: labelStyle),
+          Row(children: [
+            const Text('Upcoming Text Color', style: labelStyle),
+            const Spacer(),
+            Switch.adaptive(
+              value: settings.showUpcomingWordColor,
+              activeColor: Color(settings.currentWordColor),
+              onChanged: (v) => notifier.setShowUpcomingWordColor(v),
+            ),
+          ]),
           const SizedBox(height: 8),
           _ColorGrid(
             selected: settings.futureWordColor,

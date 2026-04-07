@@ -1,5 +1,5 @@
-# Master TODO List: AutoTeleprompter v3.7.5 Professional
-# (Surgical Terminal Sync v3.7.5.3)
+# Master TODO List: AutoTeleprompter v3.9.5 Professional
+# (Surgical Terminal Sync v3.9.5.1)
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -12,13 +12,20 @@
 - `[-]` = Deferred; Should be attached with an explanation why.
 
 ## 📜 Rules of Protocol
-- **Versioning**: Only the USER can authorize major stable version jumps (v1/v2/v3/v4). AI performs sub-version steps (e.g. v3.4.5 -> v3.4.6/v3.7.5) for internal backup and session tracking.
+- **Versioning**: Only the USER can authorize major stable version jumps (v1/v2/v3/v4). AI performs sub-version steps (e.g. v3.4.5 -> v3.4.6/v3.5.1) for internal backup and session tracking.
 - **Cleanup**: `[U]` items are preserved for history and only cleared by the USER during major stable version transitions.
 - **Surgical Updates**: When updating the TODO list or Logs, only modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
 - **Persistence**: Deferred `[-]` and unfinished items are **NEVER** deleted, maintaining a full project audit trail.
 - **Autonomous Deep Run**: AI must autonomously iterate through research, test planning, and rebuilds until successful [P] verification or total exhaustion of options. Success requires Absolute Proof (Deselection + Sync).
 
 ## 🛠️ UI & UX Fixes
+- [U] **v3.9.5.1 Color & Sync Hardening**: Absolute success in Teleprompter precision.
+  - **Real-Time Editor Sync**: Picking a color in the modal now updates the preview bubble instantly (Zero-Lag).
+  - **Hardened Prompter Toggles**: Added On/Off switches for "Current Word Focus" and "Upcoming Text Color".
+  - **Focus Visibility**: "Current Word Focus" now correctly forces the Amber highlight + background box when ON.
+  - **Authority Persistence**: Editor tags ([color]/[bg]) are now prioritized in the prompter rendering loop.
+  - **Contextual "None" Logic**: Text color now defaults to White bubble (instead of "None" icon) for unstyled words.
+  - **Preset Grid Polish**: Added the "None" (Block) icon to the transparent preset in the color grid.
 - [U] **v3.5.x Hardening**: Implement Persistence Guard, Surgical Mirrors, Task Timer, and /logit Protocol.
 - [U] **Recent Activity Bug**: Script appears twice after opening. (FIXED in v3.5.3 via Normalization & Conflict Dialog)
 - [U] **URGENT: Live State Sync**: "Complete History" list must update immediately after delete/save. (FIXED in v3.5.1)
@@ -62,7 +69,7 @@
 - [U] **Autonomous Deployment**: Integrated /Emulator hot command into the Master Loop. (USER REQUESTED)
 - [U] **Recent Scripts Delete**: Delete button only works after toggle "Show More". (USER VERIFIED)
 - [U] **Undo/Redo**: Implement for background colors. (USER VERIFIED)
-- [P] **BUG: Color Picker Focus**: Applied text colors revert to default due to radix-parsing failure and layout masking. (AI Deep Fix Verified v3.7.7)
+- [U] **BUG: Color Picker Focus**: Applied text colors revert to default due to radix-parsing failure and layout masking. (AI Deep Fix Verified v3.9.5)
   1. -> Write and select text in a script, then open the Color Suite button.
   2. -> Apply RED color; verify circular preview bubble syncs.
   3. -> Select MIXED colors; verify circular bubble shows STRIKE icon (None/Mixed).
@@ -86,4 +93,4 @@
 - [U] **Selection Fix**: Tapping supported file does nothing -> Fix selection. (COMPLETED in v2.x)
 
 ---
-*Last Updated: 2026-04-07 (v3.7.5 Protocol Perfection Complete — 1/4 [X] → [P])*
+*Last Updated: 2026-04-08 (v3.9.5.1 Precision Hardening Complete — Mission SUCCESS)*

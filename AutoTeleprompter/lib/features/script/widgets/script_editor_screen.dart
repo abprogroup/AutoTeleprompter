@@ -1026,7 +1026,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
           ),
           Expanded(
             child: Container(
-              color: Colors.black, // Force Black background for v3.7.5 final verification
+              color: Color(settings.scriptBgColor),
               child: ListView.builder(
                 physics: const ClampingScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 150),
@@ -1217,8 +1217,8 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
-    final currentTextColor = widget.lastTextColor.value != 0xFFFFFFFF ? widget.lastTextColor : Color(settings.lastTextColor);
-    final currentHighlightColor = widget.lastHighlightColor.value != 0x00000000 ? widget.lastHighlightColor : Color(settings.lastHighlightColor);
+    final currentTextColor = _currentTextColor;
+    final currentHighlightColor = _currentHighlightColor;
 
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -1226,6 +1226,7 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
           GlobalColorButton(color: currentTextColor.value, title: 'TEXT COLOR PICKER', onColorChanged: (c) { 
              final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(); 
              widget.onTextColor(hex); 
+             if (mounted) setState(() { _currentTextColor = Color(c); }); // Fix Sync Lag
           })
        ]), 
        const SizedBox(height: 16), 
@@ -1234,12 +1235,16 @@ class _ColorMenuState extends ConsumerState<_ColorMenu> {
           GlobalColorButton(color: currentHighlightColor.value, title: 'HIGHLIGHT PICKER', onColorChanged: (c) { 
              final hex = '#' + c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase(); 
              widget.onBgColor(hex); 
+             if (mounted) setState(() { _currentHighlightColor = Color(c); }); // Fix Sync Lag
           })
        ]), 
        const SizedBox(height: 16), 
        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Text('BACKGROUND COLOR', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)), 
-          GlobalColorButton(color: settings.scriptBgColor, title: 'WINDOW BACKGROUND PICKER', onColorChanged: (c) => widget.onBgColorChange(c))
+          GlobalColorButton(color: settings.scriptBgColor, title: 'WINDOW BACKGROUND PICKER', onColorChanged: (c) {
+             widget.onBgColorChange(c);
+             if (mounted) setState(() {}); // Fix Sync Lag
+          })
        ])
     ]);
   }
@@ -1256,7 +1261,32 @@ class _EditorBlock extends StatelessWidget {
     TextAlign align = TextAlign.left;
     if (controller.text.contains('[center]')) align = TextAlign.center;
     else if (controller.text.contains('[right]')) align = TextAlign.right;
-    return Focus(onKeyEvent: (node, event) { if (event.logicalKey == LogicalKeyboardKey.enter && event is KeyDownEvent) { onSubmitted(); return KeyEventResult.handled; } if (event.logicalKey == LogicalKeyboardKey.backspace && event is KeyDownEvent && controller.text.isEmpty) { onDelete(); return KeyEventResult.handled; } return KeyEventResult.ignored; }, child: TextField(controller: controller, focusNode: focusNode, maxLines: null, textAlign: align, cursorColor: const Color(0xFFFFBF00), style: TextStyle(color: Colors.white.withOpacity(0.95), fontSize: 18, height: 1.5 + (settings.lineSpacing - 1.0), letterSpacing: settings.letterSpacing, wordSpacing: settings.wordSpacing), decoration: const InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 4))));
+    return Focus(
+      onKeyEvent: (node, event) { 
+        if (event.logicalKey == LogicalKeyboardKey.enter && event is KeyDownEvent) { onSubmitted(); return KeyEventResult.handled; } 
+        if (event.logicalKey == LogicalKeyboardKey.backspace && event is KeyDownEvent && controller.text.isEmpty) { onDelete(); return KeyEventResult.handled; } 
+        return KeyEventResult.ignored; 
+      }, 
+      child: TextField(
+        controller: controller, 
+        focusNode: focusNode, 
+        maxLines: null, 
+        textAlign: align, 
+        cursorColor: const Color(0xFFFFBF00), 
+        enableInteractiveSelection: true,
+        enableSuggestions: false, // Fix: Disable white underline click effect
+        autocorrect: false,      // Fix: Disable white underline click effect
+        selectionControls: EmptyTextSelectionControls(), // Harden: Remove handles/glow
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.95), 
+          fontSize: 18, 
+          height: 1.5 + (settings.lineSpacing - 1.0), 
+          letterSpacing: settings.letterSpacing, 
+          wordSpacing: settings.wordSpacing
+        ), 
+        decoration: const InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 4))
+      )
+    );
   }
 }
 

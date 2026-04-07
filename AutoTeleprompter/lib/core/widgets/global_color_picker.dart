@@ -33,11 +33,26 @@ void showGlobalColorPicker({
             Wrap(
               spacing: 8, runSpacing: 8,
               children: [
-                0xFF000000, 0xFFFFFFFF, 0xFFE0E0E0, 0xFFBDBDBD, 0xFF9E9E9E,
-                0xFFFFBF00, 0xFFFFCA28, 0xFFFFD54F, 0xFFFFE082,
-                0xFF03A9F4, 0xFF29B6F6, 0xFF4FC3F7, 0xFF81D4FA,
-                0xFFCDDC39, 0xFFD4E157, 0xFFDCE775, 0xFFE6EE9C,
-                0xFF00BCD4, 0xFF26C6DA, 0xFF4DD0E1, 0xFF80DEEA,
+                // None Color
+                0x00000000,
+                // Grey & Monochrome
+                0xFFFFFFFF, 0xFFBDBDBD, 0xFF757575, 0xFF000000, 
+                // Warm Rainbow
+                0xFFF44336, 0xFFFF5722, 0xFFFF9800, 0xFFFFEB3B, 
+                // Nature & Cool
+                0xFFCDDC39, 0xFF4CAF50, 0xFF009688, 0xFF00BCD4, 
+                // Deep & Royal
+                0xFF2196F3, 0xFF3F51B5, 0xFF9C27B0, 0xFFE91E63,
+                // Mint Green (Vibrant)
+                // 0xFFB2FF59,
+                //Lavender (Soft)
+                0xFFE1BEE7,
+                //Gold (Amber)
+                0xFFFFD600,
+                //Sky Blue (Vivid)
+                0xFF00E5FF,
+                //Coffee (Earthy)
+                0xFF795548,
               ].map((c) {
                 final isSelected = c == tempColor;
                 return GestureDetector(
@@ -56,7 +71,7 @@ void showGlobalColorPicker({
                       ),
                       boxShadow: isSelected ? [BoxShadow(color: Colors.amber.withOpacity(0.5), blurRadius: 8)] : null,
                     ),
-                    child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.white) : null,
+                    child: c == 0 ? const Center(child: Icon(Icons.block, size: 16, color: Colors.redAccent)) : (isSelected ? const Icon(Icons.check, size: 16, color: Colors.white) : null),
                   ),
                 );
               }).toList(),
@@ -82,16 +97,14 @@ void showGlobalColorPicker({
   );
 }
 
-class GlobalColorButton extends StatelessWidget {
-  final int color;
-  final ValueChanged<int> onColorChanged;
-  final String title;
+  final bool showNoneAsWhite;
 
   const GlobalColorButton({
     super.key,
     required this.color,
     required this.onColorChanged,
     required this.title,
+    this.showNoneAsWhite = false,
   });
 
   @override
@@ -108,11 +121,11 @@ class GlobalColorButton extends StatelessWidget {
       child: Container(
         width: 36, height: 36,
         decoration: BoxDecoration(
-          color: isNone ? Colors.white10 : Color(color),
+        color: isNone ? (showNoneAsWhite ? Colors.white : Colors.white10) : Color(color),
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white54, width: 2),
         ),
-        child: isNone ? const Center(
+        child: (isNone && !showNoneAsWhite) ? const Center(
           child: Icon(Icons.block, color: Colors.redAccent, size: 20),
         ) : null,
       ),

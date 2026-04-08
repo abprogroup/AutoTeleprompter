@@ -225,7 +225,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       await prefs.setString('last_script_title', title);
     }
     if (historyIndex != null) {
-      await prefs.setInt('last_history_index', historyIndex);
+      await prefs.setInt(_lastHistoryIndexKey, historyIndex);
     }
   }
 

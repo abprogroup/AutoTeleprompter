@@ -63,7 +63,7 @@ void showGlobalColorPicker({
                   child: Container(
                     width: 32, height: 32,
                     decoration: BoxDecoration(
-                      color: Color(c), 
+                      color: c == 0 ? Colors.white24 : Color(c), 
                       shape: BoxShape.circle, 
                       border: Border.all(
                         color: isSelected ? Colors.amber : Colors.white38,
@@ -71,7 +71,7 @@ void showGlobalColorPicker({
                       ),
                       boxShadow: isSelected ? [BoxShadow(color: Colors.amber.withOpacity(0.5), blurRadius: 8)] : null,
                     ),
-                    child: c == 0 ? const Center(child: Icon(Icons.block, size: 16, color: Colors.redAccent)) : (isSelected ? const Icon(Icons.check, size: 16, color: Colors.white) : null),
+                    child: c == 0 ? const Center(child: Icon(Icons.block, size: 18, color: Colors.red)) : (isSelected ? const Icon(Icons.check, size: 16, color: Colors.white) : null),
                   ),
                 );
               }).toList(),
@@ -119,18 +119,18 @@ class GlobalColorButton extends StatelessWidget {
       onTap: () => showGlobalColorPicker(
         context: context,
         title: title,
-        currentColor: color == 0 ? 0xFFFFFFFF : color, // Default to white if none
+        currentColor: isNone ? (showNoneAsWhite ? 0xFFFFFFFF : 0) : color, 
         onColorSelected: onColorChanged,
       ),
       child: Container(
         width: 36, height: 36,
         decoration: BoxDecoration(
-        color: isNone ? (showNoneAsWhite ? Colors.white : Colors.white10) : Color(color),
+        color: isNone ? (showNoneAsWhite ? Colors.white : Colors.white12) : Color(color),
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white54, width: 2),
         ),
         child: (isNone && !showNoneAsWhite) ? const Center(
-          child: Icon(Icons.block, color: Colors.redAccent, size: 20),
+          child: Icon(Icons.block, color: Colors.red, size: 22),
         ) : null,
       ),
     );

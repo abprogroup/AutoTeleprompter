@@ -21,15 +21,17 @@ class ScriptNotifier extends Notifier<Script?> {
     String sourceType = 'TEMP';
     String? sessionId;
     int? historyIndex;
-    if (settings.recentScripts.isNotEmpty) {
+    for (final json in settings.recentScripts) {
       try {
-        final meta = jsonDecode(settings.recentScripts.first);
-        if (meta['fullText'] == lastText) {
+        final meta = jsonDecode(json);
+        if (meta['fullText'] == lastText || meta['sessionId'] == sessionId || meta['title'] == lastTitle) {
           sourceType = meta['type'] ?? 'TEMP';
           sessionId = meta['sessionId'];
-          // v4.0: Restore history index from specific script metadata
           final metaIdx = meta['historyIndex'];
-          if (metaIdx != null) historyIndex = metaIdx;
+          if (metaIdx != null) {
+            historyIndex = metaIdx;
+            break;
+          }
         }
       } catch (_) {}
     }

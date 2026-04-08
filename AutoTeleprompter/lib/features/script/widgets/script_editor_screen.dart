@@ -715,15 +715,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
         setState(() => _isCleaning = true);
         try {
            for (final c in _controllers) {
-              final clean = c.text.replaceAll(RegExp(r'\[(?:center|left|right)\]|\[\/(?:center|left|right)\]'), '');
-              c.text = '[$align]$clean[/$align]';
+              final clean = c.text.replaceAll(RegExp(r'\[(?:align=)?(?:center|left|right)\]|\[\/(?:align=)?(?:center|left|right)\]'), '');
+              c.text = '[align=$align]$clean[/align=$align]';
            }
         } finally {
            setState(() { _isCleaning = false; _isGlobalSelection = false; });
         }
         _saveHistory(description: 'Global Align');
      } else {
-        _wrapSelection('[$align]', '[/$align]');
+        _wrapSelection('[align=$align]', '[/align=$align]');
      }
   }
   void _onFontSize(int size) => _wrapSelection('[size=$size]', '[/size]');

@@ -365,9 +365,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                     final isPast = i < tState.confirmedWordIndex;
                     final displayText = word.raw
                       .replaceAll(_tagStripRe, '')
-                      .replaceAll('[align=center]', '')
-                      .replaceAll('[align=right]', '')
-                      .replaceAll('[align=left]', '');
+                      .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
 
                     // 1. Detect Opening Tags (Apply to current word)
                     final colorMatch = RegExp(r'\[color=([^\]]+)\]').firstMatch(word.raw);

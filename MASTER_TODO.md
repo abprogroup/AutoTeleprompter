@@ -33,7 +33,7 @@
 - [U] **BUG: Recent Activity Duplication**: Loading the same file twice creates duplicate history entries. (FIXED in v3.5.4 via Normalization)
 - [U] **BUG: Auto-Save Error**: "Bad state: ref after disposed" in editor. (FIXED via state guards)
 - [U] **FEATURE: Conflict Resolution**: When reloading an already-modified script, prompt to "Reload & Discard" or "Keep History Version". (FIXED v3.5.2)
-- [X] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (AI VERIFIED v3.6.2: _onAlign now wraps entire paragraph, strips old tags before reapply)
+- [P] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (AI VERIFIED v3.9.5.1: Manual tag authority + proportional 0.4x gaps)
   1. -> Enter a script.
   2. -> Align the first paragraph to the LEFT.
   3. -> Align the second paragraph to the RIGHT.
@@ -64,7 +64,7 @@
   *Wanted Result*: Hebrew keyboard input should work.
   *Meaning*: The emulator is not getting the hardware inputs from the Mac.
   *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
-- [X] **FEATURE: History Persistence**: Save/Restore Undo stack in sessions. (AI VERIFIED v3.6.2: dispose now syncs lastScript+lastHistoryIndex so undo position survives re-entry)
+- [P] **FEATURE: History Persistence**: Save/Restore Undo stack in sessions. (AI VERIFIED v3.9.5.1: Synchronized lastHistoryIndex keys; pointer survives re-entry)
   1. -> Enter a script from the recent list.
   2. -> Align text RIGHT, then use the history list to UNDO the action.
   3. -> EXIT the script, then REOPEN it.
@@ -90,8 +90,8 @@
 - [U] **Splash Screen**: Remove "V3" text under logo. (FIXED in v3.5.3)
 - [U] **Style Exposure Bug**: Selecting text exposes raw RTF/style codes. (AI VERIFIED: Transparent Tag Masking)
 - [U] **BUG: Clear Styles History**: Clicking "C" created 3 history points instead of 1 (hard reset + 2 redundant edits). (USER VERIFIED)
-- [ ] **BUG: Paragraph Spacing**: Empty lines between paragraphs show disproportionately large gaps.
-- [ ] **BUG: Select All Failure**: "Select All" only selects the active paragraph, not the entire script.
+- [P] **BUG: Paragraph Spacing**: Empty lines between paragraphs show disproportionately large gaps. (FIXED v3.9.5.1: Proportional 0.4x font padding)
+- [P] **BUG: Select All Failure**: "Select All" only selects the active paragraph, not the entire script. (FIXED v3.9.5.1: Global Broadcast Mode)
 
 ## 📂 File Picker (picker_test)
 - [-] **Faded Files**: Grey out/disable unsupported files: Could not apply with current resources - Need a dedicated file picker - Maybe in future updates we can do it. (DEFERRED)

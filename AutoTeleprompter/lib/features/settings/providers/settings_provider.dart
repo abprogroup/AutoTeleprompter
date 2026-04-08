@@ -226,6 +226,21 @@ class SettingsNotifier extends Notifier<AppSettings> {
     }
     if (historyIndex != null) {
       await prefs.setInt(_lastHistoryIndexKey, historyIndex);
+      
+      // v3.9.5.1: Critical Metadata Sync - Update historyIndex in recent list
+      final recentList = List<String>.from(state.recentScripts);
+      for (int i = 0; i < recentList.length; i++) {
+        try {
+          final decoded = jsonDecode(recentList[i]);
+          if (decoded['fullText'] == text || decoded['title'] == title) {
+            decoded['historyIndex'] = historyIndex;
+            recentList[i] = jsonEncode(decoded);
+            break; 
+          }
+        } catch (_) {}
+      }
+      state = state.copyWith(recentScripts: recentList);
+      await prefs.setStringList(_recentScriptsKey, recentList);
     }
   }
 

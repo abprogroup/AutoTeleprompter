@@ -33,7 +33,7 @@
 - [U] **BUG: Recent Activity Duplication**: Loading the same file twice creates duplicate history entries. (FIXED in v3.5.4 via Normalization)
 - [U] **BUG: Auto-Save Error**: "Bad state: ref after disposed" in editor. (FIXED via state guards)
 - [U] **FEATURE: Conflict Resolution**: When reloading an already-modified script, prompt to "Reload & Discard" or "Keep History Version". (FIXED v3.5.2)
-- [X] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. also the selected text and highlight colors are not showing in the prompter. i think its a deeper style sync issue between the editing mode and the presentation prompter mode. (AI VERIFIED v3.6.2: _onAlign now wraps entire paragraph, strips old tags before reapply)
+- [X] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (AI VERIFIED v3.6.2: _onAlign now wraps entire paragraph, strips old tags before reapply)
   1. -> Enter a script.
   2. -> Align the first paragraph to the LEFT.
   3. -> Align the second paragraph to the RIGHT.
@@ -49,11 +49,17 @@
   *Wanted Result*: Hebrew keyboard input should work and the microphone should capture audio.
   *Meaning*: The emulator is not getting the hardware inputs from the Mac.
   *Verification*: Screenshots in `test/deep_analysis/` show Hebrew IME active and 1:1 hardware bridge in config.ini.
-- [X] **URGENT: Emulator Hardware Keyboard Bridge**: Restore Mac Keyboard. (AI VERIFIED v3.5.3: Robust regexconfig + forced cold boot + ADB audio routing)
-  1. -> Open a script and change the Mac keyboard to HEBREW.
-  2. -> Click in the emulator to enter writing mode and type in Hebrew.
+- [U] **URGENT: Emulator Hardware ENG Keyboard Bridge**: Restore Mac Keyboard. (AI VERIFIED v3.5.3: Robust regexconfig + forced cold boot + ADB audio routing)
   1. -> Open a script and change the Mac keyboard to ENGLISH.
   2. -> Click in the emulator to enter writing mode and type in ENGLISH.
+  *Actual Result*: English keyboard input is ignored.
+  *Wanted Result*: English keyboard input should work.
+  *Meaning*: The emulator is not getting the hardware inputs from the Mac.
+  *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
+  - [-] **URGENT: Emulator Hardware HEB Keyboard Bridge**: Restore Mac Keyboard. (AI VERIFIED v3.5.3: Robust regexconfig + forced cold boot + ADB audio routing).
+  *Status*: Deferred. (User requested to defer this task because it is not critical for the current version and its hard to implement).
+  1. -> Open a script and change the Mac keyboard to HEBREW.
+  2. -> Click in the emulator to enter writing mode and type in Hebrew.
   *Actual Result*: Hebrew keyboard input is ignored.
   *Wanted Result*: Hebrew keyboard input should work.
   *Meaning*: The emulator is not getting the hardware inputs from the Mac.
@@ -63,8 +69,8 @@
   2. -> Align text RIGHT, then use the history list to UNDO the action.
   3. -> EXIT the script, then REOPEN it.
   *Actual Result*: The script returns to RIGHT alignment, ignoring the undo action upon re-entry.
-  *Wanted Result*: The script should return to the state it was in before the undo action.
-  *Meaning*: The undo action is not being saved to the history. 
+  *Wanted Result*: The script should return to the state it was in after the undo action.
+  *Meaning*: The undo action is being ignored. 
 - [U] **RTF Parsing Cleanup**: Optimized script import to remove stray '0' and 'none' artifacts. (USER VERIFIED)
 - [U] **Autonomous Deployment**: Integrated /Emulator hot command into the Master Loop. (USER REQUESTED)
 - [U] **Recent Scripts Delete**: Delete button only works after toggle "Show More". (USER VERIFIED)

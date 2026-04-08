@@ -333,7 +333,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           final paraDir = firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
           TextAlign? paraAlign;
           try {
-            paraAlign = para.firstWhere((w) => w.alignment != null).alignment;
+            // v3.9.5: Hardened Alignment Extraction - scan words for [align] tags
+            for (final w in para) {
+              if (w.raw.contains('[align=center]')) { paraAlign = TextAlign.center; break; }
+              if (w.raw.contains('[align=right]')) { paraAlign = TextAlign.right; break; }
+              if (w.raw.contains('[align=left]')) { paraAlign = TextAlign.left; break; }
+            }
+            paraAlign ??= para.firstWhere((w) => w.alignment != null).alignment;
           } catch (_) {
             paraAlign = firstWord.alignment;
           }
@@ -344,7 +350,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
           return Padding(
             padding: EdgeInsets.only(
-              bottom: settings.lineSpacing * 60, 
+              bottom: settings.fontSize * 0.4, 
             ),
             child: Directionality(
                 textDirection: paraDir,
@@ -357,7 +363,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                     final i = word.index;
                     final isCurrent = i == tState.confirmedWordIndex;
                     final isPast = i < tState.confirmedWordIndex;
-                    final displayText = word.raw.replaceAll(_tagStripRe, '');
+                    final displayText = word.raw
+                      .replaceAll(_tagStripRe, '')
+                      .replaceAll('[align=center]', '')
+                      .replaceAll('[align=right]', '')
+                      .replaceAll('[align=left]', '');
 
                     // 1. Detect Opening Tags (Apply to current word)
                     final colorMatch = RegExp(r'\[color=([^\]]+)\]').firstMatch(word.raw);

@@ -18,7 +18,6 @@ import 'teleprompt_selector_sheet.dart';
 import '../../script/models/script_word.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../../teleprompter/widgets/content_creator_screen.dart';
-import '../../teleprompter/widgets/teleprompter_screen.dart'; 
 import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../../core/widgets/global_color_picker.dart';
@@ -198,6 +197,10 @@ class _EditorState {
 
 // ── Main Screen ──────────────────────────────────────────────────────────────
 
+class _SelectAllIntent extends Intent {
+  const _SelectAllIntent();
+}
+
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   const ScriptEditorScreen({super.key, this.shouldAutoLoad = false});
@@ -227,6 +230,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
   bool _colorAsText = true;
   bool _isInit = false;
   bool _isCleaning = false; // v3.9: Atomic suppression
+  bool _isGlobalSelection = false; // v3.9.5: Multi-block broadcast mode
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
   DateTime? _lastTap;
   int _titleTaps = 0;
@@ -344,6 +348,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     controller.addListener(() {
       if (node.hasFocus) {
         _lastSelection = controller.selection;
+        // v3.9.5: Reset Global Selection if manual select occurs
+        if (_isGlobalSelection && !controller.selection.isCollapsed) {
+           final textLen = controller.text.length;
+           if (controller.selection.start != 0 || controller.selection.end != textLen) {
+              _isGlobalSelection = false;
+           }
+        }
       }
       _onBlockChanged();
     });
@@ -588,7 +599,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
     final text = controller.text;
 
     // v3.8.0: Auto-word selection for collapsed cursor
-    if (selection.isCollapsed && text.isNotEmpty) {
+    if (selection.isCollapsed && text.isNotEmpty && !_isGlobalSelection) {
        int start = selection.start;
        int end = selection.start;
        // Search backwards for word boundary or tag
@@ -600,7 +611,25 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
        }
     }
 
-    if (selection.isCollapsed) return;
+    // v3.9.5: Global Selection Broadcast Logic
+    if (_isGlobalSelection) {
+       setState(() => _isCleaning = true); // Use cleaning flag to suppress multiple history entries
+       try {
+          for (final c in _controllers) {
+             if (c.text.isEmpty) continue;
+             c.text = '$open${c.text.replaceAll(RegExp(r'\[.*?\]|\*\*'), '')}$close';
+          }
+       } finally {
+          setState(() { 
+             _isCleaning = false; 
+             _isGlobalSelection = false; 
+          });
+       }
+       _saveHistory(description: 'Global Format');
+       return;
+    }
+
+     if (selection.isCollapsed) return;
     final selectedText = text.substring(selection.start, selection.end);
     
     bool isToggling = false;
@@ -681,7 +710,22 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
   void _onUnderline() => _wrapSelection('[u]', '[/u]');
   void _onItalic() => _wrapSelection('[i]', '[/i]');
   void _onDirection(String dir) => _wrapSelection('[$dir]', '[/$dir]');
-  void _onAlign(String align) => _wrapSelection('[$align]', '[/$align]');
+  void _onAlign(String align) {
+     if (_isGlobalSelection) {
+        setState(() => _isCleaning = true);
+        try {
+           for (final c in _controllers) {
+              final clean = c.text.replaceAll(RegExp(r'\[(?:center|left|right)\]|\[\/(?:center|left|right)\]'), '');
+              c.text = '[$align]$clean[/$align]';
+           }
+        } finally {
+           setState(() { _isCleaning = false; _isGlobalSelection = false; });
+        }
+        _saveHistory(description: 'Global Align');
+     } else {
+        _wrapSelection('[$align]', '[/$align]');
+     }
+  }
   void _onFontSize(int size) => _wrapSelection('[size=$size]', '[/size]');
   void _onFontFamily(String family) => _wrapSelection('[font=$family]', '[/font]');
 
@@ -977,8 +1021,26 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
           ],
         ),
       ),
-      body: Column(
-        children: [
+      body: Shortcuts(
+        shortcuts: <ShortcutActivator, Intent>{
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+        },
+        child: Actions(
+          actions: <Type, Action<Intent>>{
+            _SelectAllIntent: CallbackAction<_SelectAllIntent>(
+              onInvoke: (intent) {
+                final controller = _activeController;
+                if (controller != null) {
+                  controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+                  setState(() => _isGlobalSelection = true);
+                }
+                return null;
+              },
+            ),
+          },
+          child: Column(
+            children: [
           _FormattingToolbar(
             onBold: _onBold,
             onUnderline: _onUnderline,
@@ -1068,7 +1130,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 }
 

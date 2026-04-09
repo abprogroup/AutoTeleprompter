@@ -6,6 +6,7 @@ AutoTeleprompter_BACKUP_*
 # NEVER TRACK TESTS - THEY ARE NOT NEEDED
 test/
 schemes/
+guidelines_and_planning/
 AutoTeleprompter_TEST_*
 
 # NEVER TRACK AGENTS - THEY ARE PRIVATE

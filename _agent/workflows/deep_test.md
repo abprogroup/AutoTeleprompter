@@ -4,7 +4,8 @@ description: Surgical autonomous fixing for [X] items with Deep Verification.
 // turbo-all
 
 1. **Absolute Test Setup**
-   - Create folder: `test/deep_analysis/[TASK_ID]/`.
+   - Create folder: `test/QA Deep Testing/[TASK_ID]/`.
+   - Create **Phase Partitions**: Within the Task directory, create sub-folders for each logical test phase (e.g., `Phase_1_Text`, `Phase_2_Layout`) to prevent flat-land artifact dumping.
    - Read the **Test Route**: `test/deep_analysis/[TASK_ID]_route.md`.
    - Run [/emulator](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/emulator.md) to ensure a full fresh rebuild is active.
 

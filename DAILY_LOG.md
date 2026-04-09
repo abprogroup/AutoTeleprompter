@@ -28,7 +28,7 @@
 ### ✅ 2026-04-08 — v3.9.5.1 [SENTRY_UPGRADE]
 - **Session Goals**: Evolve /deep_run into a 7-hour autonomous sentry mode.
 - **Achievements**:
-    - **Sentry Mode Injection**: Hardened /deep_run with Session Clock and Persistence Guard logic.
-    - **Autonomous Recursion**: Implemented Success-to-Next logic for multi-bug sessions.
-    - **Protocol Alignment**: Synchronized /run and /deep_run persistence bridges.
-- **Status**: Mission SUCCESS. Protocol v3.9.5.1 Hardened.
+    - **Hot Command Formalization**: Successfully registered `/clearance` in the AI Protocol and updated all internal workflow references.
+    - **Indexing Fix**: Repaired YAML frontmatter across all core workflows (`/run`, `/plan`, `/sync`, etc.) to ensure visibility in the Hot Command list.
+    - **Workspace Cleanup**: Deleted redundant `grant.sh` and stylized `/clearance` as the primary authority ritual.
+- **Status**: Mission SUCCESS. Protocol v3.9.5.2 Authority Refined.

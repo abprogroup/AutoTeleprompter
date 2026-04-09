@@ -1,3 +1,6 @@
+---
+description: "Cleans the workspace of temporary files, build logs, and test artifacts."
+---
 # /organize Protocol [SMART_GOVERNANCE]
 
 1. **Root Audit**: Identify all non-core files in the project root. Only `AI_PROTOCOL.md`, `README.md`, `MASTER_TODO.md`, and `DAILY_LOG.md` are authorized root residents.

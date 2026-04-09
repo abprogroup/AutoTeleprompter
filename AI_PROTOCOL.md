@@ -6,7 +6,7 @@
 3. **[DUAL_BACKUP]**: 
    - **Full Snapshot**: Mandatory once at session start (`backup.sh`).
    - **Surgical Mirror**: Mandatory per-file before any edit (`pre_change_backup.sh`).
-4. **[WAV] Mandate**: Workspace Access Verification is REQUIRED after loop mode selection. The AI must verify R/W/X permissions for `/lib`, `/_agent`, and `/backups` by executing the `/grant` authority ritual before any 7-hour autonomous session.
+4. **[WAV] Mandate**: Workspace Access Verification is REQUIRED after loop mode selection. The AI must verify R/W/X permissions for `/lib`, `/_agent`, and `/backups` by executing the `/clearance` authority ritual before any 7-hour autonomous session.
 5. **[ATOMIC_TIMING]**: The 30-minute safety limit applies ONLY to a single task. In Mega-Loops, the timer MUST be reset (`start`) for each new TODO.
 
 ## 🚀 AUTONOMOUS ENGINE (v3.6.1) [/run]
@@ -58,7 +58,7 @@ For external agents (Claude Code, etc.) to align with this protocol, they MUST u
 
 ### **1. HOT COMMANDS (Workflows)**
 Path: `_agent/workflows/`
-- **`/grant`**: Absolute Authority Ritual: Recursive directory sweep and SDK/Hardware handshake to trigger OS/IDE permissions upfront.
+- **`/clearance`**: Absolute Authority Ritual: Recursive directory sweep and SDK/Hardware handshake to trigger OS/IDE permissions upfront.
 - **`/run`**: Master Broad loop for multi-task fix sessions (Planning → Fast-Execution → Verification).
 - **`/fix`**: Surgical code injection of approved plans.
 - **`/deep_run`**: Focused surgical loop for critical bugs (Documentation → Test Planning → Implementation → Absolute Verification).

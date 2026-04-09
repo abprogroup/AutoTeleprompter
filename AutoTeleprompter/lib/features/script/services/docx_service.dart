@@ -30,25 +30,45 @@ class DocxService {
       if (p.trim().isEmpty) {
          buf.write('<w:p/>');
          continue;
+       }
+
+      // v3.9.5.7: Standardized Alignment Handling
+      String align = 'left';
+      String cleanP = p;
+      if (p.contains('[center]')) {
+        align = 'center';
+        cleanP = p.replaceAll(RegExp(r'\[\/?center\]'), '');
+      } else if (p.contains('[right]')) {
+        align = 'right';
+        cleanP = p.replaceAll(RegExp(r'\[\/?right\]'), '');
       }
+
       buf.write('<w:p>');
+      buf.write('<w:pPr><w:jc w:val="$align"/></w:pPr>');
       
       // Parse segments for bold, color, size
-      final segments = _parseSegments(p);
+      final segments = _parseSegments(cleanP);
       for (final s in segments) {
         buf.write('<w:r>');
         buf.write('<w:rPr>');
         if (s.isBold) buf.write('<w:b/>');
         if (s.color != null) {
-          final hex = s.color!.replaceAll('#', '');
-          buf.write('<w:color w:val="$hex"/>');
+          final hex = s.color!.replaceAll('#', '').trim();
+          if (hex.length == 6) buf.write('<w:color w:val="$hex"/>');
         }
         if (s.size != null) {
           final halfPts = (s.size! * 2).toInt();
           buf.write('<w:sz w:val="$halfPts"/>');
         }
+        if (s.font != null) {
+          buf.write('<w:rFonts w:ascii="${s.font}" w:hAnsi="${s.font}"/>');
+        }
         buf.write('</w:rPr>');
-        buf.write('<w:t xml:space="preserve">${SecurityContext.defaultContext != null ? s.text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") : s.text}</w:t>');
+        
+        // v3.9.5.7: Absolute Guard - Strip residual tags from text run
+        final finalContent = s.text.replaceAll(RegExp(r'\[\/?(?:u|i|color|size|font|bg|align|center|left|right)(?:=[^\]]+)?\]|\*\*'), '');
+        final escaped = finalContent.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+        buf.write('<w:t xml:space="preserve">$escaped</w:t>');
         buf.write('</w:r>');
       }
       
@@ -63,15 +83,9 @@ class DocxService {
   }
 
   static List<_TextSegment> _parseSegments(String text) {
-    // Basic greedy regex segmentation for Phase 3
     final List<_TextSegment> results = [];
-    
-    // Simplification: We look for BOLD, COLOR, SIZE tags
-    // For now, let's treat the entire paragraph as a series of runs
-    // In a future update, we can use a proper recursive parser.
-    // For now, we look for simple tags.
-    
-    final reg = RegExp(r'(\[color=([^\]]+)\])?(\[size=([^\]]+)\])?(\*\*)?([^\*\[]+)(\*\*)?(\[/size\])?(\[/color\])?');
+    // v3.9.5.7 Hardened Regex for Fragment Isolation
+    final reg = RegExp(r'(?:\[color=([^\]]+)\])?(?:\[size=([^\]]+)\])?(?:\[font=([^\]]+)\])?(\*\*)?([^\*\[]+)(?:\*\*)?(?:\[\/(?:color|size|font)\])*');
     final matches = reg.allMatches(text);
     
     if (matches.isEmpty) {
@@ -80,10 +94,11 @@ class DocxService {
     }
 
     for (final m in matches) {
-      String? color = m.group(2);
-      String? sizeStr = m.group(4);
-      bool bold = m.group(5) != null || m.group(7) != null;
-      String content = m.group(6) ?? '';
+      String? color = m.group(1);
+      String? sizeStr = m.group(2);
+      String? font = m.group(3);
+      bool bold = m.group(4) != null;
+      String content = m.group(5) ?? '';
       
       double? size;
       if (sizeStr != null) size = double.tryParse(sizeStr);
@@ -93,6 +108,7 @@ class DocxService {
         isBold: bold,
         color: color,
         size: size,
+        font: font,
       ));
     }
     
@@ -103,7 +119,7 @@ class DocxService {
 class _TextSegment {
   final String text;
   final bool isBold;
-  final String? color;
+  final String? color, font;
   final double? size;
-  _TextSegment({required this.text, this.isBold = false, this.color, this.size});
+  _TextSegment({required this.text, this.isBold = false, this.color, this.size, this.font});
 }

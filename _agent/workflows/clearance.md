@@ -1,9 +1,9 @@
 ---
-description: Absolute Authority Ritual v3.9.5.2: Exhaustive Resource Sweep (Network, Read, Write, Command) to trigger all OS/IDE permissions upfront.
+description: "Absolute Authority Ritual v3.9.5.2: Exhaustive Resource Sweep to trigger OS/IDE permissions upfront."
 ---
 // turbo-all
 
-# /clearance Ritual [AUTHORITY_GRANT] (v3.9.5.2)
+# /clearance Ritual [AUTHORITY_CLEARANCE] (v3.9.5.2)
 
 This ritual is designed to "warm up" all project resources and permission categories while the USER is looking, triggering every IDE/OS prompt to ensure zero-lag execution during long-duration autonomous missions.
 
@@ -14,14 +14,14 @@ This ritual is designed to "warm up" all project resources and permission catego
    - Goal: Trigger the "Allow Network Access" IDE prompt.
 
 2. **Read Sweep [READ]**
-   - Execute: `ls -laR lib android _agent backups test`
+   - Execute: `ls -laR AutoTeleprompter/lib AutoTeleprompter/android AutoTeleprompter/test _agent backups`
    - Execute: `view_file('/Users/proapple/Desktop/AutoTeleprompter/AutoTeleprompter/pubspec.yaml')`
-   - Execute: `view_file('/Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/grant.md')`
+   - Execute: `view_file('/Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/clearance.md')`
    - Goal: Trigger "Allow Read" prompts for all core directories.
 
 3. **Write Sweep [WRITE]**
-   - Execute: `write_to_file('grant_authority_ping.tmp', 'SENTRY_V3.9.5.2_READ_WRITE_TEST_SUCCESS', false)`
-   - Execute: `run_command('mv grant_authority_ping.tmp _agent/grant_authority_ping.txt')`
+   - Execute: `write_to_file('clearance_authority_ping.tmp', 'SENTRY_V3.9.5.2_READ_WRITE_TEST_SUCCESS', false)`
+   - Execute: `run_command('mv clearance_authority_ping.tmp _agent/clearance_authority_ping.txt')`
    - Goal: Trigger "Allow Write" and "Allow File Modification" prompts.
 
 4. **SDK & Hardware Sweep [SDK/HW]**

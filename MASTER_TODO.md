@@ -1,5 +1,5 @@
-# Master TODO List: AutoTeleprompter v3.9.5 Professional
-# (Surgical Terminal Sync v3.9.5.1)
+# Master TODO List: AutoTeleprompter v3.9.5.8 Professional
+# (Golden Sentry - Mission SUCCESS)
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -18,22 +18,20 @@
 - **Persistence**: Deferred `[-]` and unfinished items are **NEVER** deleted, maintaining a full project audit trail.
 - **Autonomous Deep Run**: AI must autonomously iterate through research, test planning, and rebuilds until successful [P] verification or total exhaustion of options. Success requires Absolute Proof (Deselection + Sync).
 
+## 🔄 Restoration Protocol (v3.35.9)
+- [X] High Priority: Color Suite Crash (App exits on color selection) -> Fixed v3.35.9 (Nav removal)
+- [X] Medium Priority: Layout Alignment Toggling -> Fixed v3.35.9 (Strict Selection)
+- [X] Medium Priority: Layout History Stack (Spacing/Word Spacing persistence) -> Fixed v3.35.9 (Slider Registry)
+- [X] Low Priority: Selection Purity (Tag-free copy/paste) -> Fixed v3.35.9 (Material Interceptor)
+- [P] **Styling Engine Hardening**: MS Office Parity + Leak-Proof Logic. (STYLING CALIBRATION v3.9.5.8 — GOLDEN SENTRY SUCCESS).
+  - Implementation of `StylingService` for centralized tag management and **Unified Layout Engine**.
+  - Sectioned history bulking (Typing + Suite Sessions).
+  - Hardened tag-stripping for Clipboard, Recent activity snippets, and DOCX export.
+  - Hardened Absolute Mutex for Alignment and Direction (RTL/LTR).
+  - Fix for Auto-Save flickering and Text Overflow regressions.
+
 ## 🛠️ UI & UX Fixes
-- [U] **v3.9.5.1 Color & Sync Hardening**: Absolute success in Teleprompter precision.
-  - **Real-Time Editor Sync**: Picking a color in the modal now updates the preview bubble instantly (Zero-Lag).
-  - **Hardened Prompter Toggles**: Added On/Off switches for "Current Word Focus" and "Upcoming Text Color".
-  - **Focus Visibility**: "Current Word Focus" now correctly forces the Amber highlight + background box when ON.
-  - **Authority Persistence**: Editor tags ([color]/[bg]) are now prioritized in the prompter rendering loop.
-  - **Contextual "None" Logic**: Text color now defaults to White bubble (instead of "None" icon) for unstyled words.
-  - **Preset Grid Polish**: Added the "None" (Block) icon to the transparent preset in the color grid.
-- [U] **v3.5.x Hardening**: Implement Persistence Guard, Surgical Mirrors, Task Timer, and /logit Protocol.
-- [U] **Recent Activity Bug**: Script appears twice after opening. (FIXED in v3.5.3 via Normalization & Conflict Dialog)
-- [U] **URGENT: Live State Sync**: "Complete History" list must update immediately after delete/save. (FIXED in v3.5.1)
-- [U] **BUG: Recent Activity Timer**: 500ms timer only works if file is *changed*; should activate 500ms after *open*. (FIXED in v3.5.3)
-- [U] **BUG: Recent Activity Duplication**: Loading the same file twice creates duplicate history entries. (FIXED in v3.5.4 via Normalization)
-- [U] **BUG: Auto-Save Error**: "Bad state: ref after disposed" in editor. (FIXED via state guards)
-- [U] **FEATURE: Conflict Resolution**: When reloading an already-modified script, prompt to "Reload & Discard" or "Keep History Version". (FIXED v3.5.2)
-- [P] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (AI VERIFIED v3.9.5.1: Manual tag authority + proportional 0.4x gaps)
+- [U] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (USER VERIFIED v3.9.5.6: Hardened Alignment extraction + 1.5x intentional row gaps)
   1. -> Enter a script.
   2. -> Align the first paragraph to the LEFT.
   3. -> Align the second paragraph to the RIGHT.
@@ -41,36 +39,29 @@
   *Actual Result*: Both paragraphs are aligned LEFT in presentation mode.
   *Wanted Result*: The first paragraph should be left aligned and the second paragraph should be right aligned.
   *Meaning*: The presentation mode is not reading the alignment style I applied on the paragraph.
-- [U] **URGENT: Emulator Hardware Bridge**: Restore Mac Camera/Mic access. (AI VERIFIED v3.7.1: Robust regexconfig + forced cold boot + ADB audio routing)
-  1. -> Open a script and change the Mac keyboard to HEBREW.
-  2. -> Click in the emulator to enter writing mode and type in Hebrew.
-  3. -> Open `audio_recorder.apk` and verify Mac Microphone is capturing audio.
-  *Actual Result*: Hebrew keyboard input is ignored and the microphone captures no audio.
-  *Wanted Result*: Hebrew keyboard input should work and the microphone should capture audio.
-  *Meaning*: The emulator is not getting the hardware inputs from the Mac.
-  *Verification*: Screenshots in `test/deep_analysis/` show Hebrew IME active and 1:1 hardware bridge in config.ini.
-- [U] **URGENT: Emulator Hardware ENG Keyboard Bridge**: Restore Mac Keyboard. (AI VERIFIED v3.5.3: Robust regexconfig + forced cold boot + ADB audio routing)
-  1. -> Open a script and change the Mac keyboard to ENGLISH.
-  2. -> Click in the emulator to enter writing mode and type in ENGLISH.
-  *Actual Result*: English keyboard input is ignored.
-  *Wanted Result*: English keyboard input should work.
-  *Meaning*: The emulator is not getting the hardware inputs from the Mac.
-  *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
-  - [-] **URGENT: Emulator Hardware HEB Keyboard Bridge**: Restore Mac Keyboard. (AI VERIFIED v3.5.3: Robust regexconfig + forced cold boot + ADB audio routing).
-  *Status*: Deferred. (User requested to defer this task because it is not critical for the current version and its hard to implement).
-  1. -> Open a script and change the Mac keyboard to HEBREW.
-  2. -> Click in the emulator to enter writing mode and type in Hebrew.
-  *Actual Result*: Hebrew keyboard input is ignored.
-  *Wanted Result*: Hebrew keyboard input should work.
-  *Meaning*: The emulator is not getting the hardware inputs from the Mac.
-  *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
-- [P] **FEATURE: History Persistence**: Save/Restore Undo stack in sessions. (AI VERIFIED v3.9.5.1: Synchronized lastHistoryIndex keys; pointer survives re-entry)
+- [U] **BUG: Paragraph Spacing**: Empty lines between paragraphs show disproportionately large gaps. (FIXED v3.9.5.1: Proportional 0.4x font padding)
+- [U] **FEATURE: History Persistence**: Save/Restore Undo stack in sessions. (AI VERIFIED v3.9.5.1: Synchronized lastHistoryIndex keys; pointer survives re-entry)
   1. -> Enter a script from the recent list.
   2. -> Align text RIGHT, then use the history list to UNDO the action.
   3. -> EXIT the script, then REOPEN it.
   *Actual Result*: The script returns to RIGHT alignment, ignoring the undo action upon re-entry.
   *Wanted Result*: The script should return to the state it was in after the undo action.
   *Meaning*: The undo action is being ignored. 
+- [U] **BUG: Select All Failure**: "Select All" only selects the active paragraph, not the entire script. (FIXED v3.9.5.1: Global Broadcast Mode)
+- [U] **v3.9.5.1 Color & Sync Hardening**: Absolute success in Teleprompter precision.
+- [U] **Real-Time Editor Sync**: Picking a color in the modal now updates the preview bubble instantly (Zero-Lag).
+- [U] **Hardened Prompter Toggles**: Added On/Off switches for "Current Word Focus" and "Upcoming Text Color".
+- [U] **Focus Visibility**: "Current Word Focus" now correctly forces the Amber highlight + background box when ON.
+- [U] **Authority Persistence**: Editor tags ([color]/[bg]) are now prioritized in the prompter rendering loop.
+- [U] **Contextual "None" Logic**: Text color now defaults to White bubble (instead of "None" icon) for unstyled words.
+- [U] **Preset Grid Polish**: Added the "None" (Block) icon to the transparent preset in the color grid.
+- [U] **v3.5.x Hardening**: Implement Persistence Guard, Surgical Mirrors, Task Timer, and /logit Protocol.
+- [U] **Recent Activity Bug**: Script appears twice after opening. (FIXED in v3.5.3 via Normalization & Conflict Dialog)
+- [U] **URGENT: Live State Sync**: "Complete History" list must update immediately after delete/save. (FIXED in v3.5.1)
+- [U] **BUG: Recent Activity Timer**: 500ms timer only works if file is *changed*; should activate 500ms after *open*. (FIXED in v3.5.3)
+- [U] **BUG: Recent Activity Duplication**: Loading the same file twice creates duplicate history entries. (FIXED in v3.5.4 via Normalization)
+- [U] **BUG: Auto-Save Error**: "Bad state: ref after disposed" in editor. (FIXED via state guards)
+- [U] **FEATURE: Conflict Resolution**: When reloading an already-modified script, prompt to "Reload & Discard" or "Keep History Version". (FIXED v3.5.2)
 - [U] **RTF Parsing Cleanup**: Optimized script import to remove stray '0' and 'none' artifacts. (USER VERIFIED)
 - [U] **Autonomous Deployment**: Integrated /Emulator hot command into the Master Loop. (USER REQUESTED)
 - [U] **Recent Scripts Delete**: Delete button only works after toggle "Show More". (USER VERIFIED)
@@ -90,13 +81,35 @@
 - [U] **Splash Screen**: Remove "V3" text under logo. (FIXED in v3.5.3)
 - [U] **Style Exposure Bug**: Selecting text exposes raw RTF/style codes. (AI VERIFIED: Transparent Tag Masking)
 - [U] **BUG: Clear Styles History**: Clicking "C" created 3 history points instead of 1 (hard reset + 2 redundant edits). (USER VERIFIED)
-- [P] **BUG: Paragraph Spacing**: Empty lines between paragraphs show disproportionately large gaps. (FIXED v3.9.5.1: Proportional 0.4x font padding)
-- [P] **BUG: Select All Failure**: "Select All" only selects the active paragraph, not the entire script. (FIXED v3.9.5.1: Global Broadcast Mode)
+- [U] **URGENT: Emulator Hardware Bridge**: Restore Mac Camera/Mic access. (AI VERIFIED v3.7.1: Robust regexconfig + forced cold boot + ADB audio routing)
+  1. -> Open a script and change the Mac keyboard to HEBREW.
+  2. -> Click in the emulator to enter writing mode and type in Hebrew.
+  3. -> Open `audio_recorder.apk` and verify Mac Microphone is capturing audio.
+  *Actual Result*: Hebrew keyboard input is ignored and the microphone captures no audio.
+  *Wanted Result*: Hebrew keyboard input should work and the microphone should capture audio.
+  *Meaning*: The emulator is not getting the hardware inputs from the Mac.
+  *Verification*: Screenshots in `test/deep_analysis/` show Hebrew IME active and 1:1 hardware bridge in config.ini.
+- [U] **URGENT: Emulator Hardware ENG Keyboard Bridge**: Restore Mac Keyboard. (AI VERIFIED v3.5.3: Robust regexconfig + forced cold boot + ADB audio routing)
+  1. -> Open a script and change the Mac keyboard to ENGLISH.
+  2. -> Click in the emulator to enter writing mode and type in ENGLISH.
+  *Actual Result*: English keyboard input is ignored.
+  *Wanted Result*: English keyboard input should work.
+  *Meaning*: The emulator is not getting the hardware inputs from the Mac.
+  *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
+- [-] **URGENT: Emulator Hardware HEB Keyboard Bridge**: Restore Mac Keyboard. (AI VERIFIED v3.5.3: Robust regexconfig + forced cold boot + ADB audio routing).
+  *Status*: Deferred. (User requested to defer this task because it is not critical for the current version and its hard to implement).
+  1. -> Open a script and change the Mac keyboard to HEBREW.
+  2. -> Click in the emulator to enter writing mode and type in Hebrew.
+  *Actual Result*: Hebrew keyboard input is ignored.
+  *Wanted Result*: Hebrew keyboard input should work.
+  *Meaning*: The emulator is not getting the hardware inputs from the Mac.
+  *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
+- [-] **FEATURE: RTL/LTR Suite Hardening**: Re-add Direction buttons with Locked logic. (Deferred in v3.35.9: Layout Stabilization).
 
 ## 📂 File Picker (picker_test)
-- [-] **Faded Files**: Grey out/disable unsupported files: Could not apply with current resources - Need a dedicated file picker - Maybe in future updates we can do it. (DEFERRED)
 - [U] **Security Fix**: Remove "last used folder" memory (Android requirement). (COMPLETED in v2.x)
 - [U] **Selection Fix**: Tapping supported file does nothing -> Fix selection. (COMPLETED in v2.x)
+- [-] **Faded Files**: Grey out/disable unsupported files: Could not apply with current resources - Need a dedicated file picker - Maybe in future updates we can do it. (DEFERRED)
 
 ---
-*Last Updated: 2026-04-08 (v3.9.5.1 Precision Hardening Complete — Mission SUCCESS)*
+*Last Updated: 2026-04-09 (v3.9.5.7 Styling Sentry — Mission SUCCESS)*

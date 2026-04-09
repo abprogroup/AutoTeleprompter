@@ -40,40 +40,50 @@ class WordAligner {
 
       if (line.trim().isEmpty) {
         words.add(ScriptWord(
-          raw: '\n',
+          raw: '\n\n', // v3.9.5.5: Hard break marker
           normalized: '',
           index: index++,
           isRtl: false,
           isNewline: true,
         ));
-        continue;
-      }
+      } else {
+        final parsed = _parseMarkup(line);
 
-      final parsed = _parseMarkup(line);
+        for (final token in parsed) {
+          final clean = token.text.trim();
+          if (clean.isEmpty) continue;
 
-      for (final token in parsed) {
-        final clean = token.text.trim();
-        if (clean.isEmpty) continue;
-
-        final parts = clean.split(RegExp(r'\s+'));
-        for (final part in parts) {
-          if (part.isEmpty) continue;
-          final isRtl = part.isHebrew;
-          final normalized = part.normalizeForMatching();
-          if (normalized.isEmpty) continue;
+          final parts = clean.split(RegExp(r'\s+'));
+          for (final part in parts) {
+            if (part.isEmpty) continue;
+            final isRtl = part.isHebrew;
+            final normalized = part.normalizeForMatching();
+            if (normalized.isEmpty) continue;
+            words.add(ScriptWord(
+              raw: part,
+              normalized: normalized,
+              index: index++,
+              isRtl: isRtl,
+              isBold: token.isBold,
+              isUnderline: token.isUnderline,
+              fontSize: token.fontSize,
+              alignment: token.alignment,
+              isItalic: token.isItalic,
+              isParagraphRtl: token.isParagraphRtl,
+              highlight: token.highlight,
+              textColor: token.textColor,
+            ));
+          }
+        }
+        
+        // v3.9.5.3: Preserve single newlines as paragraph breaks
+        if (li < lines.length - 1) {
           words.add(ScriptWord(
-            raw: part,
-            normalized: normalized,
+            raw: '\n', // v3.9.5.5: Soft break marker
+            normalized: '',
             index: index++,
-            isRtl: isRtl,
-            isBold: token.isBold,
-            isUnderline: token.isUnderline,
-            fontSize: token.fontSize,
-            alignment: token.alignment,
-            isItalic: token.isItalic,
-            isParagraphRtl: token.isParagraphRtl,
-            highlight: token.highlight,
-            textColor: token.textColor,
+            isRtl: false,
+            isNewline: true,
           ));
         }
       }
@@ -110,9 +120,10 @@ class WordAligner {
       r'|\[pkc\](.*?)\[\/pkc\]'
       r'|\[u\](.*?)\[\/u\]'
       r'|\[size=(\d+)\](.*?)\[\/size\]'
-      r'|\[(center|left|right)\](.*?)\[\/\1\]'
+      r'|\[(center|left|right)\](.*?)\[\/\21\]'
+      r'|\[align=(center|left|right)\](.*?)\[\/align=\23\]'
       r'|\[i\](.*?)\[\/i\]'
-      r'|\[(rtl|ltr)\](.*?)\[\/\1\]',
+      r'|\[(rtl|ltr)\](.*?)\[\/\26\]',
       dotAll: true,
     );
     int last = 0;
@@ -182,21 +193,29 @@ class WordAligner {
         spans.addAll(_parseMarkupRecursive(m.group(20)!,
             base.copyWith(text: '', fontSize: sz)));
       } else if (m.group(21) != null && m.group(22) != null) {
-        // [center|left|right]
+        // [center|left|right] legacy format
         final alignStr = m.group(21)!;
         TextAlign align = TextAlign.center;
         if (alignStr == 'left') align = TextAlign.left;
         if (alignStr == 'right') align = TextAlign.right;
         spans.addAll(_parseMarkupRecursive(m.group(22)!,
             base.copyWith(text: '', alignment: align)));
-      } else if (m.group(23) != null) {
+      } else if (m.group(23) != null && m.group(24) != null) {
+        // [align=center|left|right] current editor format
+        final alignStr = m.group(23)!;
+        TextAlign align = TextAlign.center;
+        if (alignStr == 'left') align = TextAlign.left;
+        if (alignStr == 'right') align = TextAlign.right;
+        spans.addAll(_parseMarkupRecursive(m.group(24)!,
+            base.copyWith(text: '', alignment: align)));
+      } else if (m.group(25) != null) {
         // [i] italics
-        spans.addAll(_parseMarkupRecursive(m.group(23)!,
-            base.copyWith(text: '', isItalic: true)));
-      } else if (m.group(24) != null && m.group(25) != null) {
-        // [rtl|ltr]
-        final dir = m.group(24)!;
         spans.addAll(_parseMarkupRecursive(m.group(25)!,
+            base.copyWith(text: '', isItalic: true)));
+      } else if (m.group(26) != null && m.group(27) != null) {
+        // [rtl|ltr]
+        final dir = m.group(26)!;
+        spans.addAll(_parseMarkupRecursive(m.group(27)!,
             base.copyWith(text: '', isParagraphRtl: dir == 'rtl')));
       }
       last = m.end;

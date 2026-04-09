@@ -1,14 +1,17 @@
+---
+description: "Master Broad loop for multi-task fix sessions (Planning → Fast-Execution → Verification)."
+---
 # /run Protocol [v3.9.5.1 MEGA_LOOP]
+
+0. **Authority Ritual Phase (v3.9.5.2)**:
+   - **0.0. Authority Clearance**: Run [/clearance](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/clearance.md) to trigger all OS/IDE permissions upfront. **USER MUST CLICK "ALWAYS ALLOW" ON POPUPS.**
+   - **MANDATORY**: AI does NOT proceed to Step 1 until Authority level 1:1 is achieved.
 
 1. **Initialization Phase**:
    - **1.1. Mode Selection**: Prompt the USER:
      - "A) How many TODOs should I fix in this session?"
      - "B) How much time (duration) should I run the loop for?"
-// turbo
-   - **1.2. Workspace Access Verification [WAV]**: 
-     - Run `ls -la AutoTeleprompter/lib _agent backups` and diagnostic `touch` in `AutoTeleprompter/lib/` to verify full R/W/X permissions.
-     - **MANDATORY**: Report "Workspace Verified" or list missing permissions before proceeding.
-   - **Gating**: Do NOT proceed to Step 2 until Mode is selected AND Workspace is verified.
+   - **1.2. Protocol Lock**: Confirm that the Task Timer and Persistence Guard (caffeinate) are ready for the selected duration.
 
 2. **Safety Phase (Session Start)**:
 // turbo

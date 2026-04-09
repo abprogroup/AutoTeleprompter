@@ -1,3 +1,6 @@
+---
+description: "Priority-based planning from MASTER_TODO.md."
+---
 # /plan Protocol [v3.7.5 HARDENED]
 
 1. **Safety Guard**: Execute `./_agent/scripts/task_timer.sh check`. **STOP** if failure.

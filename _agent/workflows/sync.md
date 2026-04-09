@@ -1,3 +1,6 @@
+---
+description: "Automatically syncs the AI agent with the AutoTeleprompter project protocols, history, and master TODO list."
+---
 # /sync Protocol [v3.7.5 SYSTEM_ALIGN]
 
 To ensure full synchronization with the **Version 3.7.5** project structure, the AI must:

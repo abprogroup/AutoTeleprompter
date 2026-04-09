@@ -14,6 +14,7 @@ import '../../settings/providers/settings_provider.dart';
 import '../providers/script_provider.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
+import '../../../core/services/styling_service.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {
   const ScriptGalleryScreen({super.key});
@@ -313,6 +314,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                       date: meta['date'] ?? '',
                       type: meta['type'] ?? 'TXT',
                       fullText: meta['fullText'] ?? '',
+                      snippet: meta['snippet'],
                       sessionId: meta['sessionId'],
                     );
                   }).toList(),
@@ -685,6 +687,7 @@ class _FullHistorySheet extends ConsumerWidget {
                       date: meta['date'],
                       type: meta['type'],
                       fullText: meta['fullText'],
+                      snippet: meta['snippet'],
                       sessionId: meta['sessionId'],
                     );
                   },
@@ -746,6 +749,7 @@ class _GalleryActionCard extends StatelessWidget {
 
 class _ScriptListItem extends ConsumerWidget {
   final String title, date, type, fullText;
+  final String? snippet;
   final String? sessionId;
 
   const _ScriptListItem({
@@ -754,14 +758,9 @@ class _ScriptListItem extends ConsumerWidget {
     required this.date,
     required this.type,
     required this.fullText,
+    this.snippet,
     this.sessionId,
   });
-
-  String _stripMarkup(String text) {
-    return text
-      .replaceAll(RegExp(r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|size)(?:=[^\]]+)?\]'), '')
-      .replaceAll('**', '');
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -807,7 +806,7 @@ class _ScriptListItem extends ConsumerWidget {
         labelBorderColor = labelColor.withOpacity(0.3);
     }
 
-    final previewText = _stripMarkup(fullText.split('\n').first.trim().isNotEmpty ? fullText.split('\n').first : 'No content preview');
+    final previewText = snippet ?? StylingService.stripTags(fullText.split('\n').first.trim().isNotEmpty ? fullText.split('\n').first : 'No content preview');
 
     return Material(
       color: Colors.transparent,

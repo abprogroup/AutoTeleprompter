@@ -323,9 +323,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: paragraphs.map<Widget>((para) {
           if (para.length == 1 && para[0].isNewline) {
+            final isHard = para[0].raw == '\n\n';
             return SizedBox(
               key: _wordKeys[para[0].index],
-              height: settings.fontSize * 1.5 + (settings.lineSpacing * 4),
+              height: isHard ? settings.fontSize * 1.5 : 0.0, 
             );
           }
 
@@ -333,13 +334,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           final paraDir = firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
           TextAlign? paraAlign;
           try {
-            // v3.9.5: Hardened Alignment Extraction - scan words for [align] tags
-            for (final w in para) {
-              if (w.raw.contains('[align=center]')) { paraAlign = TextAlign.center; break; }
-              if (w.raw.contains('[align=right]')) { paraAlign = TextAlign.right; break; }
-              if (w.raw.contains('[align=left]')) { paraAlign = TextAlign.left; break; }
-            }
-            paraAlign ??= para.firstWhere((w) => w.alignment != null).alignment;
+            // v3.9.5.3: Hardened Alignment Extraction - use direct word.alignment property
+            // The tokenizer already parses [align=...] tags into this field.
+            paraAlign = para.firstWhere((w) => w.alignment != null).alignment;
           } catch (_) {
             paraAlign = firstWord.alignment;
           }
@@ -350,7 +347,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
           return Padding(
             padding: EdgeInsets.only(
-              bottom: settings.fontSize * 0.4, 
+              bottom: settings.fontSize * 0.2, // v3.9.5.3: Proportional paragraph margin
             ),
             child: Directionality(
                 textDirection: paraDir,
@@ -389,7 +386,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                       textDirection: word.effectiveRtl ? TextDirection.rtl : TextDirection.ltr,
                       child: Container(
                         key: _wordKeys[i],
-                        padding: EdgeInsets.only(right: settings.wordSpacing),
+                        padding: EdgeInsets.only(
+                          right: (word == para.last) ? 0 : settings.wordSpacing,
+                        ),
                         child: AnimatedDefaultTextStyle(
                           duration: const Duration(milliseconds: 120),
                           style: TextStyle(

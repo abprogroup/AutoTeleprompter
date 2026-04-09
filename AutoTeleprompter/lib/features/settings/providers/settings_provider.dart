@@ -213,34 +213,50 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setDouble(_scrollLeadKey, lead);
   }
 
-  Future<void> saveScript(String text, {String? title, int? historyIndex}) async {
-    state = state.copyWith(
-      lastScript: text, 
-      lastScriptTitle: title ?? state.lastScriptTitle,
-      lastHistoryIndex: historyIndex ?? state.lastHistoryIndex,
-    );
+  Future<void> saveScript(String text, {String? title, int? historyIndex, bool isSilent = false}) async {
+    final currentTitle = title ?? state.lastScriptTitle;
+    
+    // v3.36.7: Silent Persistence Guard
+    if (!isSilent) {
+      state = state.copyWith(
+        lastScript: text, 
+        lastScriptTitle: currentTitle,
+        lastHistoryIndex: historyIndex ?? state.lastHistoryIndex,
+      );
+    }
+    
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastScriptKey, text);
     if (title != null) {
       await prefs.setString('last_script_title', title);
     }
-    if (historyIndex != null) {
-      await prefs.setInt(_lastHistoryIndexKey, historyIndex);
-      
-      // v3.9.5.1: Critical Metadata Sync - Update historyIndex in recent list
-      final recentList = List<String>.from(state.recentScripts);
-      for (int i = 0; i < recentList.length; i++) {
+    
+    // v3.9.8.1: Mandatory recentList sync to preserve Undo state
+    final recentList = List<String>.from(state.recentScripts);
+    bool updated = false;
+    for (int i = 0; i < recentList.length; i++) {
         try {
           final decoded = jsonDecode(recentList[i]);
-          if (decoded['fullText'] == text || decoded['title'] == title) {
-            decoded['historyIndex'] = historyIndex;
+          // Match by title or ID to ensure we update the CORRECT script
+          if (decoded['title'] == currentTitle) {
+            decoded['fullText'] = text;
+            if (historyIndex != null) decoded['historyIndex'] = historyIndex;
             recentList[i] = jsonEncode(decoded);
+            updated = true;
             break; 
           }
         } catch (_) {}
-      }
-      state = state.copyWith(recentScripts: recentList);
-      await prefs.setStringList(_recentScriptsKey, recentList);
+    }
+    
+    if (updated) {
+       if (!isSilent) {
+         state = state.copyWith(recentScripts: recentList);
+       }
+       await prefs.setStringList(_recentScriptsKey, recentList);
+    }
+
+    if (historyIndex != null) {
+      await prefs.setInt(_lastHistoryIndexKey, historyIndex);
     }
   }
 
@@ -347,14 +363,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final String normalizedNewText = normalize(newFullText);
 
     // Smart Upsert: Deduplicate by sessionId OR (fullText + title)
+    // Smart Upsert: Deduplicate by title (Primary) or sessionId
     list.removeWhere((item) {
       try {
         final decoded = jsonDecode(item);
         final bool idMatch = newSessionId != null && decoded['sessionId'] == newSessionId;
-        final bool contentMatch = newFullText != null && newTitle != null && 
-                                 normalize(decoded['fullText'] as String?) == normalizedNewText && 
-                                 decoded['title'] == newTitle;
-        return idMatch || contentMatch;
+        final bool titleMatch = newTitle != null && decoded['title'] == newTitle;
+        return idMatch || titleMatch;
       } catch (e) {
         return false;
       }

@@ -9,7 +9,7 @@ ping -c 1 google.com > /dev/null 2>&1
 
 # 2. Read Sweep
 echo "Checking Read Authority..."
-ls -laR lib android _agent backups test > /dev/null 2>&1
+ls -laR AutoTeleprompter/lib AutoTeleprompter/android AutoTeleprompter/test _agent backups > /dev/null 2>&1
 
 # 3. SDK & Hardware Sweep
 echo "Checking SDK & Hardware Bridge..."

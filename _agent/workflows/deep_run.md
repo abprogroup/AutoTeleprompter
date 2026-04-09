@@ -4,7 +4,7 @@ description: Redefined autonomous loop for focused, one-at-a-time bug fixing wit
 // turbo-all
 
 0. **Sentry Initialization Phase (v3.9.5.1)**:
-   - **0.0. Authority Grant**: Run [/grant](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/grant.md) to trigger all OS/IDE permissions upfront. **USER MUST CLICK "ALWAYS ALLOW" ON POPUPS.**
+   - **0.0. Authority Clearance**: Run [/clearance](file:///Users/proapple/Desktop/AutoTeleprompter/_agent/workflows/clearance.md) to trigger all OS/IDE permissions upfront. **USER MUST CLICK "ALWAYS ALLOW" ON POPUPS.**
    - **0.1. Mode Selection**: Prompt the USER:
      - "A) Standard Deep Run (Single target)?"
      - "B) Sentry Mode (Multi-bug; autonomous loop)?"

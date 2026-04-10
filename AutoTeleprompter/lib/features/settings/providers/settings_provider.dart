@@ -31,9 +31,10 @@ class AppSettings {
   final int lastHistoryIndex;    // v3.8 persistence
   final bool showCurrentWordHighlight; // v3.9.5 toggle
   final bool showUpcomingWordColor;    // v3.9.5 toggle (default off)
+  final String fontFamily;             // v3.9.5.46
 
   const AppSettings({
-    this.fontSize = 40.0,
+    this.fontSize = 18.0,
     this.languageMode = 'auto',
     this.scrollLead = 0.32,
     this.lastScript = '',
@@ -61,6 +62,7 @@ class AppSettings {
     this.lastHistoryIndex = -1,
     this.showCurrentWordHighlight = true,
     this.showUpcomingWordColor = false,
+    this.fontFamily = 'Inter',
   });
 
   AppSettings copyWith({
@@ -92,6 +94,7 @@ class AppSettings {
     int? lastHistoryIndex,
     bool? showCurrentWordHighlight,
     bool? showUpcomingWordColor,
+    String? fontFamily,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -122,6 +125,7 @@ class AppSettings {
       lastHistoryIndex: lastHistoryIndex ?? this.lastHistoryIndex,
       showCurrentWordHighlight: showCurrentWordHighlight ?? this.showCurrentWordHighlight,
       showUpcomingWordColor: showUpcomingWordColor ?? this.showUpcomingWordColor,
+      fontFamily: fontFamily ?? this.fontFamily,
     );
   }
 }
@@ -154,6 +158,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _lastHistoryIndexKey = 'lastHistoryIndex';
   static const _showCurrentWordHighlightKey = 'showCurrentWordHighlight';
   static const _showUpcomingWordColorKey = 'showUpcomingWordColor';
+  static const _fontFamilyKey = 'fontFamily';
 
   @override
   AppSettings build() {
@@ -163,8 +168,58 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    List<String> rawRecents = prefs.getStringList(_recentScriptsKey) ?? [];
+    
+    // v3.9.5.55: Institutional Heuristic Healer (Data Reconstruction)
+    final List<String> sanitizedRecents = [];
+    bool needsResave = false;
+    
+    for (final json in rawRecents) {
+      try {
+        final decoded = Map<String, dynamic>.from(jsonDecode(json));
+        bool itemModified = false;
+        
+        // 1. Repair Type Integrity (PDF/DOCX/RTF guessing)
+        if (decoded['type'] == null || decoded['type'] == 'FILE') {
+          final String title = (decoded['title'] ?? '').toLowerCase();
+          String guessedType = 'FILE';
+          if (title.endsWith('.pdf')) guessedType = 'PDF';
+          else if (title.endsWith('.docx') || title.endsWith('.doc')) guessedType = 'DOCX';
+          else if (title.endsWith('.rtf')) guessedType = 'RTF';
+          else if (title.endsWith('.txt')) guessedType = 'TXT';
+          
+          decoded['type'] = guessedType;
+          itemModified = true;
+        }
+        
+        // 2. Repair Date/Session IDs
+        if (decoded['lastModified'] == null) {
+          decoded['lastModified'] = DateTime.now().toIso8601String();
+          itemModified = true;
+        }
+        if (decoded['date'] == null) {
+          // Format date for UI compatibility (e.g. Apr 10, 2026)
+          decoded['date'] = 'Imported Script';
+          itemModified = true;
+        }
+        if (decoded['sessionId'] == null) {
+          decoded['sessionId'] = 'rec_${DateTime.now().millisecondsSinceEpoch}_${rawRecents.indexOf(json)}';
+          itemModified = true;
+        }
+
+        if (itemModified) needsResave = true;
+        sanitizedRecents.add(jsonEncode(decoded));
+      } catch (_) {
+        sanitizedRecents.add(json); // Preservation
+      }
+    }
+
+    if (needsResave) {
+      await prefs.setStringList(_recentScriptsKey, sanitizedRecents);
+    }
+
     state = AppSettings(
-      fontSize: prefs.getDouble(_fontSizeKey) ?? 40.0,
+      fontSize: prefs.getDouble(_fontSizeKey) ?? 18.0,
       languageMode: prefs.getString(_languageKey) ?? 'auto',
       scrollLead: prefs.getDouble(_scrollLeadKey) ?? 0.32,
       lastScript: prefs.getString(_lastScriptKey) ?? '',
@@ -184,7 +239,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       pastWordOpacity: prefs.getDouble(_pastWordOpacityKey) ?? 0.3,
       debugMode: prefs.getBool(_debugModeKey) ?? false,
       videoResolution: prefs.getString(_videoResolutionKey) ?? '720p',
-      recentScripts: prefs.getStringList(_recentScriptsKey) ?? [],
+      recentScripts: sanitizedRecents,
       displayName: prefs.getString(_displayNameKey) ?? 'Guest',
       lastTextColor: prefs.getInt(_lastTextColorKey) ?? 0xFFFFBF00,
       lastHighlightColor: prefs.getInt(_lastHighlightColorKey) ?? 0x4DFFFFFF,
@@ -192,6 +247,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       lastHistoryIndex: prefs.getInt(_lastHistoryIndexKey) ?? -1,
       showCurrentWordHighlight: prefs.getBool(_showCurrentWordHighlightKey) ?? true,
       showUpcomingWordColor: prefs.getBool(_showUpcomingWordColorKey) ?? false,
+      fontFamily: prefs.getString(_fontFamilyKey) ?? 'Inter',
     );
   }
 
@@ -213,7 +269,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setDouble(_scrollLeadKey, lead);
   }
 
-  Future<void> saveScript(String text, {String? title, int? historyIndex, bool isSilent = false}) async {
+  Future<void> saveScript(String text, {String? title, String? type, int? historyIndex, String? sessionId, bool isSilent = false}) async {
     final currentTitle = title ?? state.lastScriptTitle;
     
     // v3.36.7: Silent Persistence Guard
@@ -234,14 +290,32 @@ class SettingsNotifier extends Notifier<AppSettings> {
     // v3.9.8.1: Mandatory recentList sync to preserve Undo state
     final recentList = List<String>.from(state.recentScripts);
     bool updated = false;
+    final matchKey = sessionId ?? (historyIndex != null ? null : currentTitle);
+
     for (int i = 0; i < recentList.length; i++) {
         try {
           final decoded = jsonDecode(recentList[i]);
-          // Match by title or ID to ensure we update the CORRECT script
-          if (decoded['title'] == currentTitle) {
+          final itemSessionId = decoded['sessionId'];
+          final itemTitle = decoded['title'];
+          
+          bool isMatch = false;
+          if (sessionId != null && itemSessionId == sessionId) {
+              isMatch = true;
+          } else if (sessionId == null && itemTitle == currentTitle) {
+              isMatch = true;
+          }
+
+          if (isMatch) {
             decoded['fullText'] = text;
             if (historyIndex != null) decoded['historyIndex'] = historyIndex;
-            recentList[i] = jsonEncode(decoded);
+            if (type != null) decoded['type'] = type;
+            // v3.9.5.54: Safety Patch for missing types in old entries
+            if (decoded['type'] == null) decoded['type'] = 'FILE';
+            
+            // v3.9.5.56: Positional Sovereignty (Lift-and-Prepend)
+            recentList.removeAt(i);
+            recentList.insert(0, jsonEncode(decoded));
+            
             updated = true;
             break; 
           }
@@ -249,6 +323,21 @@ class SettingsNotifier extends Notifier<AppSettings> {
     }
     
     if (updated) {
+       if (!isSilent) {
+         state = state.copyWith(recentScripts: recentList);
+       }
+       await prefs.setStringList(_recentScriptsKey, recentList);
+    } else if (sessionId != null) {
+       // v3.9.5.52: Automatic Prepention for new sessions
+       final newEntry = {
+         'title': currentTitle,
+         'fullText': text,
+         'type': type ?? 'FILE', // v3.9.5.54: Restore Label Integrity
+         'sessionId': sessionId,
+         'historyIndex': historyIndex ?? 0,
+         'lastModified': DateTime.now().toIso8601String(),
+       };
+       recentList.insert(0, jsonEncode(newEntry));
        if (!isSilent) {
          state = state.copyWith(recentScripts: recentList);
        }
@@ -427,7 +516,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
       lineSpacing: 1.65,
       wordSpacing: 6.0,
       letterSpacing: 0.5,
-      fontSize: 40.0,
+      fontSize: 18.0,
+      fontFamily: 'Inter',
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_scriptBgColorKey, 0xFF000000);
@@ -436,7 +526,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setDouble(_lineSpacingKey, 1.65);
     await prefs.setDouble(_wordSpacingKey, 6.0);
     await prefs.setDouble(_letterSpacingKey, 0.5);
-    await prefs.setDouble(_fontSizeKey, 40.0);
+    await prefs.setDouble(_fontSizeKey, 18.0);
+    await prefs.setString(_fontFamilyKey, 'Inter');
   }
 
   Future<void> applySessionStyles(Map<String, dynamic> styles) async {
@@ -449,6 +540,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       wordSpacing: styles['wordSpacing'] ?? state.wordSpacing,
       letterSpacing: styles['letterSpacing'] ?? state.letterSpacing,
       fontSize: styles['fontSize'] ?? state.fontSize,
+      fontFamily: styles['fontFamily'] ?? state.fontFamily,
     );
     final prefs = await SharedPreferences.getInstance();
     if (styles.containsKey('scriptBgColor')) await prefs.setInt(_scriptBgColorKey, styles['scriptBgColor']);
@@ -458,6 +550,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
     if (styles.containsKey('wordSpacing')) await prefs.setDouble(_wordSpacingKey, styles['wordSpacing']);
     if (styles.containsKey('letterSpacing')) await prefs.setDouble(_letterSpacingKey, styles['letterSpacing']);
     if (styles.containsKey('fontSize')) await prefs.setDouble(_fontSizeKey, styles['fontSize']);
+    if (styles.containsKey('fontFamily')) await prefs.setString(_fontFamilyKey, styles['fontFamily']);
+  }
+
+  Future<void> setFontFamily(String family) async {
+    state = state.copyWith(fontFamily: family);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_fontFamilyKey, family);
   }
 
   Future<void> setLastImportPath(String path) async {

@@ -47,9 +47,28 @@ class ScriptNotifier extends Notifier<Script?> {
     return null;
   }
 
-  Script _buildScript(String text, {String? title, String? sourceType, String? sessionId, String? historyJson, int? historyIndex}) {
+  Script _buildScript(String text, {
+    String? title, 
+    String? sourceType, 
+    String? sessionId, 
+    String? historyJson, 
+    int? historyIndex,
+    double? fontSize,
+    String? fontFamily,
+    double? lineSpacing,
+    double? letterSpacing,
+    double? wordSpacing,
+    String? textAlign,
+    int? scriptBgColor,
+    int? currentWordColor,
+    int? futureWordColor,
+  }) {
     final words = WordAligner.tokenize(text);
     final isRtl = text.isHebrew;
+    
+    // v3.9.5.46: Pull baseline from settings if not provided by import
+    final settings = ref.read(settingsProvider);
+
     return Script(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: title ?? (text.split('\n').first.trim().isNotEmpty
@@ -62,11 +81,50 @@ class ScriptNotifier extends Notifier<Script?> {
       sessionId: sessionId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       historyJson: historyJson,
       historyIndex: historyIndex ?? -1,
+      fontSize: fontSize ?? settings.fontSize,
+      fontFamily: fontFamily ?? 'Inter',
+      lineSpacing: lineSpacing ?? settings.lineSpacing,
+      letterSpacing: letterSpacing ?? settings.letterSpacing,
+      wordSpacing: wordSpacing ?? settings.wordSpacing,
+      textAlign: textAlign ?? settings.textAlign,
+      scriptBgColor: scriptBgColor ?? settings.scriptBgColor,
+      currentWordColor: currentWordColor ?? settings.currentWordColor,
+      futureWordColor: futureWordColor ?? settings.futureWordColor,
     );
   }
 
-  void loadText(String text, {String? title, String? sourceType, String? sessionId, String? historyJson, int? historyIndex}) {
-    state = _buildScript(text, title: title, sourceType: sourceType, sessionId: sessionId, historyJson: historyJson, historyIndex: historyIndex);
+  void loadText(String text, {
+    String? title, 
+    String? sourceType, 
+    String? sessionId, 
+    String? historyJson, 
+    int? historyIndex,
+    double? fontSize,
+    String? fontFamily,
+    double? lineSpacing,
+    double? letterSpacing,
+    double? wordSpacing,
+    String? textAlign,
+    int? scriptBgColor,
+    int? currentWordColor,
+    int? futureWordColor,
+  }) {
+    state = _buildScript(text, 
+      title: title, 
+      sourceType: sourceType, 
+      sessionId: sessionId, 
+      historyJson: historyJson, 
+      historyIndex: historyIndex,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      lineSpacing: lineSpacing,
+      letterSpacing: letterSpacing,
+      wordSpacing: wordSpacing,
+      textAlign: textAlign,
+      scriptBgColor: scriptBgColor,
+      currentWordColor: currentWordColor,
+      futureWordColor: futureWordColor,
+    );
     ref.read(settingsProvider.notifier).saveScript(text, title: title, historyIndex: historyIndex);
   }
 

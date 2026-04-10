@@ -310,9 +310,9 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 : settings.recentScripts.take(3).map((metaJson) {
                     final meta = jsonDecode(metaJson);
                     return _ScriptListItem(
-                      title: meta['title'] ?? 'Untitled',
-                      date: meta['date'] ?? '',
-                      type: meta['type'] ?? 'TXT',
+                      title: meta['title'] ?? 'Untitled Script',
+                      date: meta['date'] ?? 'Imported',
+                      type: meta['type'] ?? 'FILE',
                       fullText: meta['fullText'] ?? '',
                       snippet: meta['snippet'],
                       sessionId: meta['sessionId'],
@@ -683,10 +683,10 @@ class _FullHistorySheet extends ConsumerWidget {
                     final meta = jsonDecode(scripts[idx]);
                     return _ScriptListItem(
                       key: ValueKey(meta['sessionId'] ?? idx.toString()),
-                      title: meta['title'],
-                      date: meta['date'],
-                      type: meta['type'],
-                      fullText: meta['fullText'],
+                      title: meta['title'] ?? 'Untitled Document',
+                      date: meta['date'] ?? 'Imported',
+                      type: meta['type'] ?? 'FILE',
+                      fullText: meta['fullText'] ?? '',
                       snippet: meta['snippet'],
                       sessionId: meta['sessionId'],
                     );

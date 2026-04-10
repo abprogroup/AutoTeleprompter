@@ -1,5 +1,5 @@
-# Master TODO List: AutoTeleprompter v3.9.5.8 Professional
-# (Golden Sentry - Mission SUCCESS)
+# Master TODO List: AutoTeleprompter v3.9.5.31 Professional
+# (Hardened Guard - Mission PENDING Verification)
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -23,7 +23,7 @@
 - [X] Medium Priority: Layout Alignment Toggling -> Fixed v3.35.9 (Strict Selection)
 - [X] Medium Priority: Layout History Stack (Spacing/Word Spacing persistence) -> Fixed v3.35.9 (Slider Registry)
 - [X] Low Priority: Selection Purity (Tag-free copy/paste) -> Fixed v3.35.9 (Material Interceptor)
-- [P] **Styling Engine Hardening**: MS Office Parity + Leak-Proof Logic. (STYLING CALIBRATION v3.9.5.8 — GOLDEN SENTRY SUCCESS).
+- [P] **Styling Engine Hardening**: MS Office Parity + Leak-Proof Logic. (STYLING CALIBRATION v3.9.5.31 — MISSION PENDING).
   - Implementation of `StylingService` for centralized tag management and **Unified Layout Engine**.
   - Sectioned history bulking (Typing + Suite Sessions).
   - Hardened tag-stripping for Clipboard, Recent activity snippets, and DOCX export.
@@ -104,7 +104,7 @@
   *Wanted Result*: Hebrew keyboard input should work.
   *Meaning*: The emulator is not getting the hardware inputs from the Mac.
   *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
-- [-] **FEATURE: RTL/LTR Suite Hardening**: Re-add Direction buttons with Locked logic. (Deferred in v3.35.9: Layout Stabilization).
+- [-] **FEATURE: RTL/LTR Suite Hardening**: Re-add Direction buttons with Locked logic. (STATUS: DEFERRED PER USER INSTRUCTION).
 
 ## 📂 File Picker (picker_test)
 - [U] **Security Fix**: Remove "last used folder" memory (Android requirement). (COMPLETED in v2.x)
@@ -112,4 +112,4 @@
 - [-] **Faded Files**: Grey out/disable unsupported files: Could not apply with current resources - Need a dedicated file picker - Maybe in future updates we can do it. (DEFERRED)
 
 ---
-*Last Updated: 2026-04-09 (v3.9.5.7 Styling Sentry — Mission SUCCESS)*
+*Last Updated: 2026-04-09 (v3.9.5.31 Hardened Guard — MISSION PENDING)*

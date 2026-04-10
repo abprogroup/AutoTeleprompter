@@ -19,6 +19,7 @@ import './editor/components/editor_primitives.dart';
 import './editor/styling_logic_mixin.dart';
 import './editor/markup_controller.dart';
 import '../providers/script_provider.dart';
+import '../../../core/extensions/string_extensions.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
@@ -38,7 +39,8 @@ class _CopyIntent extends Intent {
 
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
-  const ScriptEditorScreen({super.key, this.shouldAutoLoad = false});
+  final File? pendingFile;
+  const ScriptEditorScreen({super.key, this.shouldAutoLoad = false, this.pendingFile});
 
   @override
   ConsumerState<ScriptEditorScreen> createState() => _ScriptEditorScreenState();
@@ -69,12 +71,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   Color _lastChosenHighlightColor = const Color(0x4DFFFFFF);
 
   bool _isCleaning = false;
-  bool _isInit = false; 
+  bool _isInit = false;
   bool _isSuiteDirty = false;
-  bool _isCommandExecuting = false; 
-  bool _isGlobalSelection = false; 
-  bool _isDirty = false; 
-  bool _isLoading = false; 
+  bool _isCommandExecuting = false;
+  bool _isGlobalSelection = false;
+  bool _isDirty = false;
+  bool _isLoading = false;
+  bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
 
@@ -82,8 +85,135 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   void initState() {
     super.initState();
     _startAutoSave();
-    if (widget.shouldAutoLoad) {
+    if (widget.pendingFile != null) {
+      _isInit = true;
+      _isPendingLoad = true;
+      _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _runPendingFileLoad(widget.pendingFile!);
+      });
+    } else if (widget.shouldAutoLoad) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _importFile());
+    }
+  }
+
+  Future<void> _runPendingFileLoad(File file) async {
+    try {
+      // Mirror the per-load setup didChangeDependencies normally performs.
+      final settings = ref.read(settingsProvider);
+      _lastChosenTextColor = Color(settings.lastTextColor);
+      _lastChosenHighlightColor = Color(settings.lastHighlightColor);
+
+      await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
+      final String content = await ref.read(scriptProvider.notifier).parseFile(file);
+      if (!mounted) return;
+      final String title = file.path.split('/').last;
+
+      // Conflict Detection: Search Recents for matching title (filename)
+      String? existingMeta;
+      final List<String> recentScripts = ref.read(settingsProvider).recentScripts;
+      String normalize(String? t) => (t ?? '').replaceAll('\r', '').trim();
+      final String normalizedNew = normalize(content);
+
+      for (final meta in recentScripts) {
+        try {
+          final decoded = jsonDecode(meta);
+          if (decoded['title'] == title) {
+            existingMeta = meta;
+            break;
+          }
+        } catch (_) {}
+      }
+
+      String finalContent = content;
+      String finalType = title.split('.').last.toUpperCase();
+      String? finalSessionId;
+      String? finalHistoryJson;
+
+      if (existingMeta != null) {
+        final decoded = jsonDecode(existingMeta);
+        final String existingContent = decoded['fullText'] ?? '';
+        final String sessionId = decoded['sessionId'];
+        final String type = decoded['type'] ?? 'TXT';
+
+        if (normalize(existingContent) == normalizedNew) {
+          // Perfect Match: Don't import a duplicate. Just Open it.
+          finalContent = existingContent;
+          finalType = type;
+          finalSessionId = sessionId;
+          finalHistoryJson = decoded['historyJson'];
+        } else {
+          // Content Mismatch: Ask the user.
+          if (!mounted) return;
+          final String? choice = await showDialog<String>(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF1E1E1E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(children: [
+                Icon(Icons.warning_amber_rounded, color: Color(0xFFFFBF00), size: 22),
+                SizedBox(width: 10),
+                Text("Conflict Detected", style: TextStyle(color: Colors.white, fontSize: 17)),
+              ]),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('"$title" is already in your Recents.', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('The version on your disk is different from the version in your history. What do you want to do?', style: TextStyle(color: Colors.white70)),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'cancel'),
+                  child: const Text("KEEP HISTORY", style: TextStyle(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, 'reload'),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFBF00), foregroundColor: Colors.black),
+                  child: const Text("RELOAD & DISCARD EDITS", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          );
+
+          if (choice == 'reload') {
+            finalType = type;
+            finalSessionId = sessionId;
+          } else if (choice == 'cancel') {
+            finalContent = existingContent;
+            finalType = type;
+            finalSessionId = sessionId;
+            finalHistoryJson = decoded['historyJson'];
+          } else {
+            if (mounted) Navigator.pop(context); // Dismissed: back out to home
+            return;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      _currentTitle = title;
+      _sourceType = finalType;
+      _currentSessionId = finalSessionId ?? _currentSessionId;
+      _loadText(finalContent);
+
+      if (finalHistoryJson != null) {
+        try {
+          final List<dynamic> historyData = jsonDecode(finalHistoryJson);
+          _history.clear();
+          _history.addAll(historyData.map((d) => EditorState.fromJson(d)));
+          _historyIndex = _history.length - 1;
+          if (_history.isNotEmpty) _applyState(_history.last);
+        } catch (_) {}
+      } else {
+        _saveHistory(description: 'Import');
+      }
+      _scheduleRecentUpdate();
+    } finally {
+      if (mounted) setState(() => _isPendingLoad = false);
     }
   }
 
@@ -376,9 +506,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         final exitIdx = text.indexOf(close, tagIdx + open.length);
         return exitIdx != -1 && exitIdx >= p;
       }
-      final atBoundary = check(off);
-      final nudgedBack = (selection.isCollapsed && off > 0 && text[off-1] != ' ' && text[off-1] != '\n') ? check(off - 1) : false;
-      return atBoundary || nudgedBack;
+      // Check at cursor, one back, and several nearby positions to handle
+      // landing on invisible tag characters (fontSize: 0.1 in MarkupController)
+      if (check(off)) return true;
+      for (int delta = 1; delta <= open.length + 2; delta++) {
+        if (off - delta >= 0 && check(off - delta)) return true;
+        if (off + delta <= text.length && check(off + delta)) return true;
+      }
+      return false;
   }
 
   int _detectIntAtPoint(String text, TextSelection selection, int off, String prefix, int defaultValue) {
@@ -398,7 +533,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       }
       final atBoundary = check(off);
       if (atBoundary != defaultValue) return atBoundary;
-      if (selection.isCollapsed && off > 0 && text[off-1] != ' ' && text[off-1] != '\n') return check(off - 1);
+      // Search nearby positions to handle cursor landing on tag characters
+      for (int delta = 1; delta <= openTag.length + 2; delta++) {
+        if (off - delta >= 0) { final v = check(off - delta); if (v != defaultValue) return v; }
+        if (off + delta <= text.length) { final v = check(off + delta); if (v != defaultValue) return v; }
+      }
       return defaultValue;
   }
 
@@ -419,7 +558,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       }
       final atBoundary = check(off);
       if (atBoundary != defaultValue) return atBoundary;
-      if (selection.isCollapsed && off > 0 && text[off-1] != ' ' && text[off-1] != '\n') return check(off - 1);
+      // Search nearby positions to handle cursor landing on tag characters
+      for (int delta = 1; delta <= openTag.length + 2; delta++) {
+        if (off - delta >= 0) { final v = check(off - delta); if (v != defaultValue) return v; }
+        if (off + delta <= text.length) { final v = check(off + delta); if (v != defaultValue) return v; }
+      }
       return defaultValue;
   }
 
@@ -494,6 +637,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     notifier.setFontFamily(state.fontFamily);
     notifier.setLineSpacing(state.lineSpacing);
     notifier.setLetterSpacing(state.letterSpacing);
+    notifier.setWordSpacing(state.wordSpacing);
   }
 
   MarkupController? get _activeController {
@@ -507,22 +651,48 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (mounted) setState(() {});
   }
 
-  void _onBold() => setState(() => _isCommandExecuting = true); 
-  void _onUnderline() => setState(() => _isCommandExecuting = true); 
-  void _onItalic() => setState(() => _isCommandExecuting = true); 
+  void _onBold() {
+    setState(() => _isCommandExecuting = true);
+    wrapSelection('**', '**');
+    setState(() => _isCommandExecuting = false);
+    _onSelectionChanged();
+  }
+  void _onUnderline() {
+    setState(() => _isCommandExecuting = true);
+    wrapSelection('[u]', '[/u]');
+    setState(() => _isCommandExecuting = false);
+    _onSelectionChanged();
+  }
+  void _onItalic() {
+    setState(() => _isCommandExecuting = true);
+    wrapSelection('[i]', '[/i]');
+    setState(() => _isCommandExecuting = false);
+    _onSelectionChanged();
+  }
 
   void onDirection(String dir) {
     final controller = _activeController;
     if (controller == null) return;
-    controller.value = TextEditingValue(text: StylingService.applyLayout(controller.text, controller.selection, dir), selection: controller.selection);
+    controller.value = TextEditingValue(
+      text: StylingService.applyLayout(controller.text, controller.selection, dir),
+      selection: controller.selection,
+    );
+    setState(() {});
     _saveHistory(description: 'Direction Change');
+    _onSelectionChanged();
   }
 
   void onAlign(String align) {
     final controller = _activeController;
     if (controller == null) return;
-    controller.value = TextEditingValue(text: StylingService.applyLayout(controller.text, controller.selection, align), selection: controller.selection);
+    controller.value = TextEditingValue(
+      text: StylingService.applyLayout(controller.text, controller.selection, align),
+      selection: controller.selection,
+    );
+    // Force rebuild so _EditorBlock picks up new textAlign from markup
+    setState(() {});
     _saveHistory(description: 'Align Paragraph');
+    _onSelectionChanged(); // refresh active-button state
   }
 
   void onFontSize(int size) { wrapSelection('[size=$size]', '[/size]'); }
@@ -545,13 +715,54 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   Future<void> _importFile() async {
+    const supportedExts = ['rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text'];
     final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
-    if (result == null || !mounted) return;
+    if (!mounted || result == null || result.files.single.path == null) return;
     final selectedFile = File(result.files.single.path!);
-    final String content = await ref.read(scriptProvider.notifier).parseFile(selectedFile);
-    _loadText(content); _currentTitle = selectedFile.path.split('/').last;
-    _sourceType = _currentTitle.split('.').last.toUpperCase();
-    _saveHistory(description: 'Import'); _forceRecentUpdate();
+    final ext = selectedFile.path.split('.').last.toLowerCase();
+
+    if (!supportedExts.contains(ext)) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(children: [
+            Icon(Icons.block_rounded, color: Colors.redAccent, size: 22),
+            SizedBox(width: 10),
+            Text("Not Supported", style: TextStyle(color: Colors.white, fontSize: 17)),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('"${selectedFile.path.split('/').last}"', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text('.${ext.toUpperCase()} files cannot be used as scripts.', style: const TextStyle(color: Colors.white70)),
+              const SizedBox(height: 12),
+              const Text('Supported formats:', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const Text('DOCX · DOC · RTF · PDF · TXT · ODT · MD', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))],
+        ),
+      );
+      return;
+    }
+
+    // Persist the current script's session before swapping editors so its
+    // history index / recent entry are not lost.
+    await _forceRecentUpdate();
+    if (!mounted) return;
+
+    // Replace this editor with a fresh instance that runs the standard
+    // pending-file load flow (conflict detection focuses an existing
+    // recent if the file is already known, otherwise it loads as new).
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => ScriptEditorScreen(pendingFile: selectedFile)),
+    );
   }
 
   Future<void> _saveScript() async {
@@ -588,7 +799,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           onRename: _showRenameDialog,
         ),
       ),
-      body: Shortcuts(
+      body: Stack(
+        children: [
+          Shortcuts(
         shortcuts: {
           LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
           LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
@@ -598,7 +811,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         child: Actions(
           actions: {
             _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-              setState(() => _isGlobalSelection = true); return null;
+              _selectAllBlocks(); return null;
             }),
             _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
               _onCopyClean(); return null;
@@ -639,7 +852,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                       isGlobalSelected: _isGlobalSelection,
                       onSubmitted: () => _addBlock(index + 1),
                       onTap: () => setState(() => _isGlobalSelection = false),
-                      onSelectAll: () => setState(() => _isGlobalSelection = true),
+                      onSelectAll: _selectAllBlocks,
+                      onCopy: _onCopyClean,
                     ),
                   ),
                 ),
@@ -648,12 +862,87 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           ),
         ),
       ),
+          if (_isPendingLoad)
+            Positioned.fill(
+              child: Container(
+                color: const Color(0xFF0A0A0A),
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 56,
+                        height: 56,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 4,
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFBF00)),
+                        ),
+                      ),
+                      SizedBox(height: 18),
+                      Text('Loading script…',
+                          style: TextStyle(color: Color(0xFFFFBF00), fontSize: 14, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+             ),
+          if (settings.debugMode)
+            Positioned(
+              bottom: 24, left: 24,
+              child: IgnorePointer(child: _buildDebugSentry()),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDebugSentry() {
+    final activeIdx = _focusNodes.indexWhere((n) => n.hasFocus);
+    final sel = _activeController?.selection;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black87,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.withOpacity(0.5)),
+        boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 4, spreadRadius: 1)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('⚙️ EDITOR SENTRY', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1.5)),
+          const SizedBox(height: 8),
+          Text('Blocks: ${_controllers.length}', style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Active Block: ${activeIdx != -1 ? activeIdx : "None"}', style: const TextStyle(color: Colors.white, fontSize: 10)),
+          if (sel != null)
+             Text('Cursor: [${sel.baseOffset}, ${sel.extentOffset}]', style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Global Selection: $_isGlobalSelection', style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('History States: ${_history.length}', style: const TextStyle(color: Colors.white, fontSize: 10)),
+        ],
+      ),
     );
   }
 
   void _onCopyClean() {
+    if (_isGlobalSelection) {
+      final all = _controllers.map((c) => StylingService.stripTags(c.text)).join('\n');
+      Clipboard.setData(ClipboardData(text: all));
+      return;
+    }
     final controller = _activeController; if (controller == null) return;
     Clipboard.setData(ClipboardData(text: StylingService.stripTags(controller.selection.textInside(controller.text))));
+  }
+
+  void _selectAllBlocks() {
+    setState(() {
+      _isGlobalSelection = true;
+      for (final c in _controllers) {
+        if (c.text.isNotEmpty) {
+          c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+        }
+      }
+    });
   }
 }
 
@@ -665,35 +954,84 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
+  final VoidCallback onCopy;
 
   const _EditorBlock({
     required this.controller, required this.focusNode, required this.settings,
     required this.isGlobalSelected, required this.onSubmitted, required this.onTap,
-    required this.onSelectAll,
+    required this.onSelectAll, required this.onCopy,
   });
+
+  TextAlign? _markupAlign(String text) {
+    if (RegExp(r'\[(?:align=)?center\]').hasMatch(text)) return TextAlign.center;
+    if (RegExp(r'\[(?:align=)?right\]').hasMatch(text)) return TextAlign.right;
+    if (RegExp(r'\[(?:align=)?left\]').hasMatch(text)) return TextAlign.left;
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isRtl = controller.text.isHebrew;
+    final markupAlign = _markupAlign(controller.text);
+    final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     return Container(
-      decoration: BoxDecoration(color: isGlobalSelected ? const Color(0x33FFBF00) : Colors.transparent, borderRadius: BorderRadius.circular(4)),
+      decoration: BoxDecoration(
+        color: isGlobalSelected ? const Color(0x33FFBF00) : Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+      ),
       child: TextField(
-        controller: controller, focusNode: focusNode,
-        selectionControls: _CleanSelectionControls(() {
-          Clipboard.setData(ClipboardData(text: StylingService.stripTags(controller.selection.textInside(controller.text))));
-        }),
+        controller: controller,
+        focusNode: focusNode,
         maxLines: null,
         onSubmitted: (_) => onSubmitted(),
         onTap: onTap,
-        style: TextStyle(color: Colors.white, fontSize: settings.fontSize),
-        decoration: const InputDecoration(border: InputBorder.none),
+        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+        textAlign: textAlign,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: settings.fontSize,
+          height: settings.lineSpacing,
+          letterSpacing: settings.letterSpacing,
+          wordSpacing: settings.wordSpacing,
+        ),
+        // v3.9.5.60: Minimal padding — prevents overflow between blocks with different font sizes
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(vertical: 2),
+        ),
+        // v3.9.5.60: Override the Android context menu to intercept Select All / Copy
+        contextMenuBuilder: (context, editableTextState) {
+          final List<ContextMenuButtonItem> items = editableTextState.contextMenuButtonItems;
+          final List<ContextMenuButtonItem> customItems = [];
+          for (final item in items) {
+            if (item.type == ContextMenuButtonType.selectAll) {
+              customItems.add(ContextMenuButtonItem(
+                onPressed: () {
+                  ContextMenuController.removeAny();
+                  onSelectAll();
+                },
+                type: ContextMenuButtonType.selectAll,
+              ));
+            } else if (item.type == ContextMenuButtonType.copy) {
+              customItems.add(ContextMenuButtonItem(
+                onPressed: () {
+                  ContextMenuController.removeAny();
+                  onCopy();
+                },
+                type: ContextMenuButtonType.copy,
+              ));
+            } else {
+              customItems.add(item);
+            }
+          }
+          return AdaptiveTextSelectionToolbar.buttonItems(
+            anchors: editableTextState.contextMenuAnchors,
+            buttonItems: customItems,
+          );
+        },
       ),
     );
   }
 }
 
-class _CleanSelectionControls extends MaterialTextSelectionControls {
-  final VoidCallback onCopy;
-  _CleanSelectionControls(this.onCopy);
-  @override
-  void handleCopy(TextSelectionDelegate delegate) { onCopy(); delegate.hideToolbar(); }
-}

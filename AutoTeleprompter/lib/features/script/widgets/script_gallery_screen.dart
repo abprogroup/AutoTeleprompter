@@ -190,94 +190,13 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 }
 
                 if (!context.mounted) return;
-                await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
-                final String content = await ref.read(scriptProvider.notifier).parseFile(file);
-                final String title = file.path.split('/').last;
-
-                // Conflict Detection: Search Recents for matching title (filename)
-                String? existingMeta;
-                final List<String> recentScripts = ref.read(settingsProvider).recentScripts;
-                
-                // Helper to normalize content for comparison (Fuzzy match)
-                String normalize(String? t) => (t ?? '').replaceAll('\r', '').trim();
-                final String normalizedNew = normalize(content);
-
-                for (final meta in recentScripts) {
-                  try {
-                    final decoded = jsonDecode(meta);
-                    if (decoded['title'] == title) {
-                      existingMeta = meta;
-                      break;
-                    }
-                  } catch (_) {}
-                }
-
-                if (existingMeta != null) {
-                   final decoded = jsonDecode(existingMeta);
-                   final String existingContent = decoded['fullText'] ?? '';
-                   final String sessionId = decoded['sessionId'];
-                   final String type = decoded['type'] ?? 'TXT';
-
-                   if (normalize(existingContent) == normalizedNew) {
-                      // Perfect Match: Don't import a duplicate. Just Open it.
-                      ref.read(scriptProvider.notifier).loadText(existingContent, 
-                        title: title, sourceType: type, sessionId: sessionId,
-                        historyJson: decoded['historyJson']);
-                   } else {
-                      // Content Mismatch: Ask the user.
-                      if (!context.mounted) return;
-                      final String? choice = await showDialog<String>(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: const Color(0xFF1E1E1E),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          title: const Row(children: [
-                            Icon(Icons.warning_amber_rounded, color: Color(0xFFFFBF00), size: 22),
-                            SizedBox(width: 10),
-                            Text("Conflict Detected", style: TextStyle(color: Colors.white, fontSize: 17)),
-                          ]),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('"$title" is already in your Recents.', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              const Text('The version on your disk is different from the version in your history. What do you want to do?', style: TextStyle(color: Colors.white70)),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, 'cancel'),
-                              child: const Text("KEEP HISTORY", style: TextStyle(color: Colors.white54)),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(ctx, 'reload'),
-                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFBF00), foregroundColor: Colors.black),
-                              child: const Text("RELOAD & DISCARD EDITS", style: TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        )
-                      );
-                      
-                      if (choice == 'reload') {
-                        ref.read(scriptProvider.notifier).loadText(content, title: title, sourceType: type, sessionId: sessionId);
-                      } else if (choice == 'cancel') {
-                        ref.read(scriptProvider.notifier).loadText(existingContent, 
-                          title: title, sourceType: type, sessionId: sessionId,
-                          historyJson: decoded['historyJson']);
-                      } else {
-                        return; // User dismissed
-                      }
-                   }
-                } else {
-                   // Normal Import: No Title found in recents
-                   await ref.read(scriptProvider.notifier).importFile(file);
-                }
-
-                if (context.mounted) {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
-                }
+                // Fluid handoff: jump straight into the editor with an amber loading
+                // wheel; the editor runs the parse / conflict-detection / import flow
+                // internally so the home page is never re-shown mid-transition.
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ScriptEditorScreen(pendingFile: file)),
+                );
               },
             ),
             const SizedBox(height: 24),

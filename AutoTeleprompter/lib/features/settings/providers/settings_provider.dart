@@ -45,9 +45,9 @@ class AppSettings {
     this.mirrorHorizontal = false,
     this.mirrorVertical = false,
     this.flipRotation = 0,
-    this.lineSpacing = 1.65,
-    this.wordSpacing = 6.0,      // default: slightly wider than zero
-    this.letterSpacing = 0.5,    // default: subtle extra letter spacing
+    this.lineSpacing = 1.2,
+    this.wordSpacing = 0.0,      // default: no extra word spacing
+    this.letterSpacing = 0.0,    // default: no extra letter spacing
     this.scriptBgColor = 0xFF000000,
     this.currentWordColor = 0xFFFFBF00,
     this.futureWordColor = 0xFFFFFFFF,
@@ -230,9 +230,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
       mirrorHorizontal: prefs.getBool(_mirrorHorizontalKey) ?? false,
       mirrorVertical: prefs.getBool(_mirrorVerticalKey) ?? false,
       flipRotation: prefs.getInt(_flipRotationKey) ?? 0,
-      lineSpacing: prefs.getDouble(_lineSpacingKey) ?? 1.65,
-      wordSpacing: prefs.getDouble(_wordSpacingKey) ?? 6.0,
-      letterSpacing: prefs.getDouble(_letterSpacingKey) ?? 0.5,
+      lineSpacing: (prefs.getDouble(_lineSpacingKey) ?? 1.2).clamp(1.0, 2.0),
+      wordSpacing: prefs.getDouble(_wordSpacingKey) ?? 0.0,
+      letterSpacing: prefs.getDouble(_letterSpacingKey) ?? 0.0,
       scriptBgColor: prefs.getInt(_scriptBgColorKey) ?? 0xFF000000,
       currentWordColor: prefs.getInt(_currentWordColorKey) ?? 0xFFFFBF00,
       futureWordColor: prefs.getInt(_futureWordColorKey) ?? 0xFFFFFFFF,
@@ -508,14 +508,14 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> resetToDefaultAppearance() async {
-    // Factory defaults for a clean Teleprompt experience
+    // v3.9.5.60: Calibrated defaults — line spacing 1.2 matches AppSettings baseline
     state = state.copyWith(
       scriptBgColor: 0xFF000000,
       currentWordColor: 0xFFFFBF00,
       futureWordColor: 0xFFFFFFFF,
-      lineSpacing: 1.65,
-      wordSpacing: 6.0,
-      letterSpacing: 0.5,
+      lineSpacing: 1.2,
+      wordSpacing: 0.0,
+      letterSpacing: 0.0,
       fontSize: 18.0,
       fontFamily: 'Inter',
     );
@@ -523,9 +523,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setInt(_scriptBgColorKey, 0xFF000000);
     await prefs.setInt(_currentWordColorKey, 0xFFFFBF00);
     await prefs.setInt(_futureWordColorKey, 0xFFFFFFFF);
-    await prefs.setDouble(_lineSpacingKey, 1.65);
-    await prefs.setDouble(_wordSpacingKey, 6.0);
-    await prefs.setDouble(_letterSpacingKey, 0.5);
+    await prefs.setDouble(_lineSpacingKey, 1.2);
+    await prefs.setDouble(_wordSpacingKey, 0.0);
+    await prefs.setDouble(_letterSpacingKey, 0.0);
     await prefs.setDouble(_fontSizeKey, 18.0);
     await prefs.setString(_fontFamilyKey, 'Inter');
   }

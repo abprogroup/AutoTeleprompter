@@ -17,10 +17,13 @@ class ScriptNotifier extends Notifier<Script?> {
     final lastText = settings.lastScript;
     final lastTitle = settings.lastScriptTitle;
     
-    // We try to find the sourceType and sessionId from the most recent script metadata if possible
     String sourceType = 'TEMP';
     String? sessionId;
     int? historyIndex;
+    double? fontSize, lineSpacing, letterSpacing, wordSpacing;
+    String? fontFamily, textAlign;
+    int? scriptBgColor, currentWordColor, futureWordColor;
+
     for (final json in settings.recentScripts) {
       try {
         final meta = jsonDecode(json);
@@ -28,10 +31,23 @@ class ScriptNotifier extends Notifier<Script?> {
           sourceType = meta['type'] ?? 'TEMP';
           sessionId = meta['sessionId'];
           final metaIdx = meta['historyIndex'];
-          if (metaIdx != null) {
-            historyIndex = metaIdx;
-            break;
+          if (metaIdx != null) historyIndex = metaIdx;
+
+          // v3.9.5.70: Extract styling metadata (Nested for Gallery Compatibility)
+          final style = meta['style'] as Map<String, dynamic>?;
+          if (style != null) {
+            if (style['fontSize'] != null) fontSize = (style['fontSize'] as num).toDouble();
+            if (style['fontFamily'] != null) fontFamily = style['fontFamily'];
+            if (style['lineSpacing'] != null) lineSpacing = (style['lineSpacing'] as num).toDouble();
+            if (style['letterSpacing'] != null) letterSpacing = (style['letterSpacing'] as num).toDouble();
+            if (style['wordSpacing'] != null) wordSpacing = (style['wordSpacing'] as num).toDouble();
+            if (style['textAlign'] != null) textAlign = style['textAlign'];
+            if (style['scriptBgColor'] != null) scriptBgColor = style['scriptBgColor'];
+            if (style['currentWordColor'] != null) currentWordColor = style['currentWordColor'];
+            if (style['futureWordColor'] != null) futureWordColor = style['futureWordColor'];
           }
+          
+          break;
         }
       } catch (_) {}
     }
@@ -42,6 +58,15 @@ class ScriptNotifier extends Notifier<Script?> {
         sourceType: sourceType, 
         sessionId: sessionId,
         historyIndex: historyIndex ?? settings.lastHistoryIndex,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        lineSpacing: lineSpacing,
+        letterSpacing: letterSpacing,
+        wordSpacing: wordSpacing,
+        textAlign: textAlign,
+        scriptBgColor: scriptBgColor,
+        currentWordColor: currentWordColor,
+        futureWordColor: futureWordColor,
       );
     }
     return null;
@@ -81,7 +106,7 @@ class ScriptNotifier extends Notifier<Script?> {
       sessionId: sessionId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       historyJson: historyJson,
       historyIndex: historyIndex ?? -1,
-      fontSize: fontSize ?? settings.fontSize,
+      fontSize: fontSize ?? 18.0,
       fontFamily: fontFamily ?? 'Inter',
       lineSpacing: lineSpacing ?? settings.lineSpacing,
       letterSpacing: letterSpacing ?? settings.letterSpacing,
@@ -125,53 +150,71 @@ class ScriptNotifier extends Notifier<Script?> {
       currentWordColor: currentWordColor,
       futureWordColor: futureWordColor,
     );
-    ref.read(settingsProvider.notifier).saveScript(text, title: title, historyIndex: historyIndex);
+    ref.read(settingsProvider.notifier).saveScript(
+      text, 
+      title: title, 
+      historyIndex: historyIndex,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      lineSpacing: lineSpacing,
+      letterSpacing: letterSpacing,
+      wordSpacing: wordSpacing,
+      textAlign: textAlign,
+      scriptBgColor: scriptBgColor,
+      currentWordColor: currentWordColor,
+      futureWordColor: futureWordColor,
+      historyJson: historyJson,
+    );
   }
 
-  Future<String> parseFile(File file) async {
+  Future<_ParsedFile> parseFile(File file) async {
     final lower = file.path.toLowerCase();
     final rawBytes = await file.readAsBytes();
-    String content = '';
+    _ParsedFile result = _ParsedFile('');
 
     try {
       if (lower.endsWith('.docx')) {
-        content = _parseDocx(rawBytes);
+        result = _parseDocx(rawBytes);
       } else if (lower.endsWith('.rtf') || lower.endsWith('.doc')) {
         final raw = utf8.decode(rawBytes, allowMalformed: true);
         if (raw.trimLeft().startsWith('{\\rtf')) {
-          content = _parseRtf(raw);
+          result = _parseRtf(raw);
         } else {
-          content = String.fromCharCodes(
+          final content = String.fromCharCodes(
             rawBytes.where((b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
           ).replaceAll(RegExp(r'[ \t]{3,}'), '  ')
            .replaceAll(RegExp(r'\n{3,}'), '\n\n')
            .trim();
+          result = _ParsedFile(content);
         }
       } else {
-        content = utf8.decode(rawBytes, allowMalformed: true);
+        result = _ParsedFile(utf8.decode(rawBytes, allowMalformed: true));
       }
     } catch (e) {
       final errStr = e.toString();
+      String errContent = '';
       if (errStr.contains('Central Directory') || errStr.contains('Format')) {
-        content = 'This file appears to be corrupted or is not a valid ${file.path.split('.').last.toUpperCase()} file.';
+        errContent = 'This file appears to be corrupted or is not a valid ${file.path.split('.').last.toUpperCase()} file.';
       } else {
-        content = 'Error loading file: $errStr';
+        errContent = 'Error loading file: $errStr';
       }
+      result = _ParsedFile(errContent);
     }
-    return content.trim();
+    return result;
   }
 
   Future<void> importFile(File file) async {
-    final content = await parseFile(file);
-    if (content.isNotEmpty) {
+    final result = await parseFile(file);
+    if (result.text.isNotEmpty) {
       final title = file.path.split('/').last;
       final extension = title.contains('.') ? title.split('.').last.toUpperCase() : 'FILE';
-      loadText(content, title: title, sourceType: extension);
+      loadText(result.text, title: title, sourceType: extension, fontSize: result.fontSize);
     }
   }
 
-  String _parseDocx(List<int> rawBytes) {
+  _ParsedFile _parseDocx(List<int> rawBytes) {
     final archive = ZipDecoder().decodeBytes(rawBytes);
+    double? detectedFontSize;
 
     // Find document.xml — try common paths
     ArchiveFile? docEntry;
@@ -215,6 +258,15 @@ class ScriptNotifier extends Notifier<Script?> {
         if (rPr != null) {
           final isBold = rPr.getElement('w:b') != null;
           final color = rPr.getElement('w:color')?.getAttribute('w:val');
+          
+          if (detectedFontSize == null) {
+            final sz = rPr.getElement('w:sz')?.getAttribute('w:val') ?? 
+                       rPr.getElement('w:szCs')?.getAttribute('w:val');
+            if (sz != null) {
+              final halfPoints = double.tryParse(sz);
+              if (halfPoints != null) detectedFontSize = halfPoints / 2.0;
+            }
+          }
 
           if (color != null && color != 'auto') {
             text = '[color=#$color]$text[/color]';
@@ -244,11 +296,12 @@ class ScriptNotifier extends Notifier<Script?> {
       }
     } catch (_) {}
 
-    return buf.toString();
+    return _ParsedFile(buf.toString().trim(), fontSize: detectedFontSize);
   }
 
   /// Parses RTF, extracts text with style markup (bold, color, size).
-  String _parseRtf(String raw) {
+  _ParsedFile _parseRtf(String raw) {
+    double? detectedFontSize;
     // ── Step 1: Extract color table ──
     final colorTable = <String>['000000']; // index 0 = auto/default
     final ctMatch = RegExp(r'\{\\colortbl\s*;?([^}]*)\}').firstMatch(raw);
@@ -412,6 +465,12 @@ class ScriptNotifier extends Notifier<Script?> {
               final newBold = param != '0';
               if (newBold != bold) { flushRun(); bold = newBold; }
               break;
+            case 'fs':
+              if (detectedFontSize == null) {
+                final halfPoints = double.tryParse(param);
+                if (halfPoints != null && halfPoints > 0) detectedFontSize = halfPoints / 2.0;
+              }
+              break;
             case 'cf':
               final newCf = int.tryParse(param) ?? 0;
               if (newCf != cfIndex) { flushRun(); cfIndex = newCf; }
@@ -462,7 +521,7 @@ class ScriptNotifier extends Notifier<Script?> {
 
     String result = buf.toString();
     result = result.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-    return result.trim();
+    return _ParsedFile(result.trim(), fontSize: detectedFontSize);
   }
 
   static bool _isAlpha(int codeUnit) =>
@@ -511,6 +570,12 @@ extension ScriptUtils on Script {
       historyJson: historyJson ?? this.historyJson,
     );
   }
+}
+
+class _ParsedFile {
+  final String text;
+  final double? fontSize;
+  _ParsedFile(this.text, {this.fontSize});
 }
 
 class _RtfRun {

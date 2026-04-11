@@ -365,7 +365,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                       key: i < _wordKeys.length ? _wordKeys[i] : null,
                       padding: EdgeInsets.only(right: settings.wordSpacing),
                       child: Text(
-                        displayText,
+                        '$displayText ',
                         style: TextStyle(
                           fontSize: effectiveFontSize,
                           fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,

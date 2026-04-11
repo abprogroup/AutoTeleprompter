@@ -230,7 +230,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       mirrorHorizontal: prefs.getBool(_mirrorHorizontalKey) ?? false,
       mirrorVertical: prefs.getBool(_mirrorVerticalKey) ?? false,
       flipRotation: prefs.getInt(_flipRotationKey) ?? 0,
-      lineSpacing: (prefs.getDouble(_lineSpacingKey) ?? 1.2).clamp(1.0, 2.0),
+      lineSpacing: prefs.getDouble(_lineSpacingKey) ?? 1.2,
       wordSpacing: prefs.getDouble(_wordSpacingKey) ?? 0.0,
       letterSpacing: prefs.getDouble(_letterSpacingKey) ?? 0.0,
       scriptBgColor: prefs.getInt(_scriptBgColorKey) ?? 0xFF000000,
@@ -269,7 +269,23 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setDouble(_scrollLeadKey, lead);
   }
 
-  Future<void> saveScript(String text, {String? title, String? type, int? historyIndex, String? sessionId, bool isSilent = false}) async {
+  Future<void> saveScript(String text, {
+    String? title, 
+    String? type, 
+    int? historyIndex, 
+    String? sessionId, 
+    bool isSilent = false,
+    double? fontSize,
+    String? fontFamily,
+    double? lineSpacing,
+    double? letterSpacing,
+    double? wordSpacing,
+    String? textAlign,
+    int? scriptBgColor,
+    int? currentWordColor,
+    int? futureWordColor,
+    String? historyJson,
+  }) async {
     final currentTitle = title ?? state.lastScriptTitle;
     
     // v3.36.7: Silent Persistence Guard
@@ -309,8 +325,22 @@ class SettingsNotifier extends Notifier<AppSettings> {
             decoded['fullText'] = text;
             if (historyIndex != null) decoded['historyIndex'] = historyIndex;
             if (type != null) decoded['type'] = type;
-            // v3.9.5.54: Safety Patch for missing types in old entries
             if (decoded['type'] == null) decoded['type'] = 'FILE';
+            if (historyJson != null) decoded['historyJson'] = historyJson;
+            
+            // v3.9.5.70: Persist detected/applied metadata (Nested for Gallery Compatibility)
+            final styleMap = decoded['style'] as Map<String, dynamic>? ?? {};
+            if (fontSize != null) styleMap['fontSize'] = fontSize;
+            if (fontFamily != null) styleMap['fontFamily'] = fontFamily;
+            if (lineSpacing != null) styleMap['lineSpacing'] = lineSpacing;
+            if (letterSpacing != null) styleMap['letterSpacing'] = letterSpacing;
+            if (wordSpacing != null) styleMap['wordSpacing'] = wordSpacing;
+            if (textAlign != null) styleMap['textAlign'] = textAlign;
+            if (scriptBgColor != null) styleMap['scriptBgColor'] = scriptBgColor;
+            if (currentWordColor != null) styleMap['currentWordColor'] = currentWordColor;
+            if (futureWordColor != null) styleMap['futureWordColor'] = futureWordColor;
+            
+            if (styleMap.isNotEmpty) decoded['style'] = styleMap;
             
             // v3.9.5.56: Positional Sovereignty (Lift-and-Prepend)
             recentList.removeAt(i);
@@ -336,6 +366,19 @@ class SettingsNotifier extends Notifier<AppSettings> {
          'sessionId': sessionId,
          'historyIndex': historyIndex ?? 0,
          'lastModified': DateTime.now().toIso8601String(),
+         // v3.9.5.70: Initial metadata baseline (Nested for Gallery Compatibility)
+         'style': {
+           if (fontSize != null) 'fontSize': fontSize,
+           if (fontFamily != null) 'fontFamily': fontFamily,
+           if (lineSpacing != null) 'lineSpacing': lineSpacing,
+           if (letterSpacing != null) 'letterSpacing': letterSpacing,
+           if (wordSpacing != null) 'wordSpacing': wordSpacing,
+           if (textAlign != null) 'textAlign': textAlign,
+           if (scriptBgColor != null) 'scriptBgColor': scriptBgColor,
+           if (currentWordColor != null) 'currentWordColor': currentWordColor,
+           if (futureWordColor != null) 'futureWordColor': futureWordColor,
+         },
+         'historyJson': historyJson,
        };
        recentList.insert(0, jsonEncode(newEntry));
        if (!isSilent) {
@@ -386,9 +429,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setLineSpacing(double spacing) async {
-    state = state.copyWith(lineSpacing: spacing);
+    // v3.9.5.69: Allow ultra-tight spacing but clamp at 0.1 to avoid layout crashes
+    final clamped = spacing < 0.1 ? 0.1 : spacing;
+    state = state.copyWith(lineSpacing: clamped);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_lineSpacingKey, spacing);
+    await prefs.setDouble(_lineSpacingKey, clamped);
   }
 
   Future<void> setWordSpacing(double spacing) async {
@@ -536,20 +581,20 @@ class SettingsNotifier extends Notifier<AppSettings> {
       scriptBgColor: styles['scriptBgColor'] ?? state.scriptBgColor,
       currentWordColor: styles['currentWordColor'] ?? state.currentWordColor,
       futureWordColor: styles['futureWordColor'] ?? state.futureWordColor,
-      lineSpacing: styles['lineSpacing'] ?? state.lineSpacing,
-      wordSpacing: styles['wordSpacing'] ?? state.wordSpacing,
-      letterSpacing: styles['letterSpacing'] ?? state.letterSpacing,
-      fontSize: styles['fontSize'] ?? state.fontSize,
+      lineSpacing: (styles['lineSpacing'] as num?)?.toDouble() ?? state.lineSpacing,
+      wordSpacing: (styles['wordSpacing'] as num?)?.toDouble() ?? state.wordSpacing,
+      letterSpacing: (styles['letterSpacing'] as num?)?.toDouble() ?? state.letterSpacing,
+      fontSize: (styles['fontSize'] as num?)?.toDouble() ?? state.fontSize,
       fontFamily: styles['fontFamily'] ?? state.fontFamily,
     );
     final prefs = await SharedPreferences.getInstance();
     if (styles.containsKey('scriptBgColor')) await prefs.setInt(_scriptBgColorKey, styles['scriptBgColor']);
     if (styles.containsKey('currentWordColor')) await prefs.setInt(_currentWordColorKey, styles['currentWordColor']);
     if (styles.containsKey('futureWordColor')) await prefs.setInt(_futureWordColorKey, styles['futureWordColor']);
-    if (styles.containsKey('lineSpacing')) await prefs.setDouble(_lineSpacingKey, styles['lineSpacing']);
-    if (styles.containsKey('wordSpacing')) await prefs.setDouble(_wordSpacingKey, styles['wordSpacing']);
-    if (styles.containsKey('letterSpacing')) await prefs.setDouble(_letterSpacingKey, styles['letterSpacing']);
-    if (styles.containsKey('fontSize')) await prefs.setDouble(_fontSizeKey, styles['fontSize']);
+    if (styles.containsKey('lineSpacing')) await prefs.setDouble(_lineSpacingKey, (styles['lineSpacing'] as num).toDouble());
+    if (styles.containsKey('wordSpacing')) await prefs.setDouble(_wordSpacingKey, (styles['wordSpacing'] as num).toDouble());
+    if (styles.containsKey('letterSpacing')) await prefs.setDouble(_letterSpacingKey, (styles['letterSpacing'] as num).toDouble());
+    if (styles.containsKey('fontSize')) await prefs.setDouble(_fontSizeKey, (styles['fontSize'] as num).toDouble());
     if (styles.containsKey('fontFamily')) await prefs.setString(_fontFamilyKey, styles['fontFamily']);
   }
 

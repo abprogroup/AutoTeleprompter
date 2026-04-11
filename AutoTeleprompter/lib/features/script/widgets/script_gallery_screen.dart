@@ -149,53 +149,14 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               subtitle: 'Import from DOCX, TXT, or PDF',
               icon: Icons.file_open_outlined,
               color: Colors.white,
-              onTap: () async {
-                const supportedExts = ['rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text'];
-
-                final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
-                if (!context.mounted || result == null || result.files.single.path == null) return;
-
-                final file = File(result.files.single.path!);
-                final ext = file.path.split('.').last.toLowerCase();
-
-                if (!supportedExts.contains(ext)) {
-                  if (!context.mounted) return;
-                  await showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (ctx) => AlertDialog(
-                      backgroundColor: const Color(0xFF1E1E1E),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      title: const Row(children: [
-                        Icon(Icons.block_rounded, color: Colors.redAccent, size: 22),
-                        SizedBox(width: 10),
-                        Text("Not Supported", style: TextStyle(color: Colors.white, fontSize: 17)),
-                      ]),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('"${file.path.split('/').last}"', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
-                          Text('.${ext.toUpperCase()} files cannot be used as scripts.', style: const TextStyle(color: Colors.white70)),
-                          const SizedBox(height: 12),
-                          const Text('Supported formats:', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                          const Text('DOCX · DOC · RTF · PDF · TXT · ODT · MD', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))],
-                    ),
-                  );
-                  return;
-                }
-
-                if (!context.mounted) return;
-                // Fluid handoff: jump straight into the editor with an amber loading
-                // wheel; the editor runs the parse / conflict-detection / import flow
-                // internally so the home page is never re-shown mid-transition.
+              onTap: () {
+                // v3.9.5.59: Sovereign Fluid Transition
+                // Immediately navigate to the editor shell; the editor will handle
+                // triggering the file picker over its amber loading screen,
+                // eliminating home-to-home flicker.
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => ScriptEditorScreen(pendingFile: file)),
+                  MaterialPageRoute(builder: (_) => const ScriptEditorScreen(shouldAutoLoad: true)),
                 );
               },
             ),
@@ -769,8 +730,20 @@ class _ScriptListItem extends ConsumerWidget {
                     }
 
                     scriptNotifier.loadText(fullText, 
-                      title: title, sourceType: type, sessionId: sessionId,
-                      historyJson: decodedMeta?['historyJson']);
+                      title: title, 
+                      sourceType: type, 
+                      sessionId: sessionId,
+                      historyJson: decodedMeta?['historyJson'],
+                      fontSize: (decodedMeta?['style']?['fontSize'] as num?)?.toDouble(),
+                      fontFamily: decodedMeta?['style']?['fontFamily'],
+                      lineSpacing: (decodedMeta?['style']?['lineSpacing'] as num?)?.toDouble(),
+                      letterSpacing: (decodedMeta?['style']?['letterSpacing'] as num?)?.toDouble(),
+                      wordSpacing: (decodedMeta?['style']?['wordSpacing'] as num?)?.toDouble(),
+                      textAlign: decodedMeta?['style']?['textAlign'],
+                      scriptBgColor: decodedMeta?['style']?['scriptBgColor'],
+                      currentWordColor: decodedMeta?['style']?['currentWordColor'],
+                      futureWordColor: decodedMeta?['style']?['futureWordColor'],
+                    );
                   } catch (e) {
                     debugPrint('Session Recovery Error: $e');
                     scriptNotifier.loadText(fullText, title: title, sourceType: type, sessionId: sessionId);

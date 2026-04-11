@@ -18,10 +18,13 @@ import './editor/suites/formatting_toolbar_mvp.dart';
 import './editor/components/editor_primitives.dart';
 import './editor/styling_logic_mixin.dart';
 import './editor/markup_controller.dart';
+import './editor/components/global_selection_overlay.dart';
+import './editor/components/ghost_selection_controls.dart';
 import '../providers/script_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
+import '../../teleprompter/widgets/content_creator_screen.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
 import '../services/docx_service.dart';
@@ -56,6 +59,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   final List<MarkupController> _controllers = [];
   final List<FocusNode> _focusNodes = [];
+  final List<GlobalKey> _blockKeys = []; // v3.9.5.66: Managed Coordinate Registry
   String _currentTitle = 'New Project';
   
   TextSelection? _lastSelection;
@@ -80,6 +84,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
+  final GlobalKey<GlobalSelectionOverlayState> _overlayKey = GlobalKey<GlobalSelectionOverlayState>();
 
   @override
   void initState() {
@@ -93,6 +98,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         if (mounted) _runPendingFileLoad(widget.pendingFile!);
       });
     } else if (widget.shouldAutoLoad) {
+      _isInit = true; // NEW (v3.9.5.59): Prevent double init on auto-load
+      _isPendingLoad = true; // NEW (v3.9.5.59): Show amber wheel immediately
       WidgetsBinding.instance.addPostFrameCallback((_) => _importFile());
     }
   }
@@ -105,7 +112,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _lastChosenHighlightColor = Color(settings.lastHighlightColor);
 
       await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
-      final String content = await ref.read(scriptProvider.notifier).parseFile(file);
+      final result = await ref.read(scriptProvider.notifier).parseFile(file);
+      final String content = result.text;
+      if (result.fontSize != null) {
+        ref.read(settingsProvider.notifier).setFontSize(result.fontSize!);
+      }
       if (!mounted) return;
       final String title = file.path.split('/').last;
 
@@ -223,7 +234,22 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final text = _getRefinedFullText();
       if (text.isEmpty && _currentTitle == 'New Project') return;
       try {
-        await ref.read(settingsProvider.notifier).saveScript(text, title: _currentTitle, historyIndex: _historyIndex);
+        final settings = ref.read(settingsProvider);
+        await ref.read(settingsProvider.notifier).saveScript(
+          text, 
+          title: _currentTitle, 
+          historyIndex: _historyIndex,
+          fontSize: settings.fontSize,
+          fontFamily: settings.fontFamily,
+          lineSpacing: settings.lineSpacing,
+          letterSpacing: settings.letterSpacing,
+          wordSpacing: settings.wordSpacing,
+          textAlign: settings.textAlign,
+          scriptBgColor: settings.scriptBgColor,
+          currentWordColor: settings.currentWordColor,
+          futureWordColor: settings.futureWordColor,
+          historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+        );
       } catch (_) {}
     });
   }
@@ -281,6 +307,97 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     }
   }
 
+  void _clearControllers() {
+    for (final c in _controllers) c.dispose();
+    for (final f in _focusNodes) f.dispose();
+    _controllers.clear();
+    _focusNodes.clear();
+    _blockKeys.clear();
+  }
+
+  void _addBlock(int index, {String text = ''}) {
+    setState(() {
+      final controller = MarkupController(text: text);
+      final blockKey = GlobalKey(); // v3.9.5.66
+      
+      final node = FocusNode(onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
+          final currentText = controller.text;
+          final sel = controller.selection;
+          String p1 = currentText, p2 = '';
+          if (sel.isValid) {
+            final splits = StylingService.splitBlock(currentText, sel.start);
+            p1 = splits[0];
+            p2 = splits[1];
+            controller.text = p1;
+          }
+          setState(() {
+            final idx = _controllers.indexOf(controller);
+            _addBlock(idx + 1, text: p2);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && idx + 1 < _focusNodes.length) {
+                _focusNodes[idx + 1].requestFocus();
+                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+              }
+            });
+          });
+          _saveHistory(description: 'Split Paragraph');
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
+          final idx = _controllers.indexOf(controller);
+          if (_controllers.length > 1 && idx != -1) {
+            setState(() {
+              _controllers.removeAt(idx).dispose();
+              _focusNodes.removeAt(idx).dispose();
+              _blockKeys.removeAt(idx);
+              if (idx > 0) _focusNodes[idx - 1].requestFocus();
+            });
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      });
+      
+      node.addListener(() {
+        if (node.hasFocus) { _lastFocusedController = controller; _onSelectionChanged(); }
+        else if (_isDirty) _saveHistory(description: 'Edit Text', debounce: false);
+      });
+
+      String lastText = text;
+      controller.addListener(() {
+        if (_isLoading) return;
+        if (controller.text == lastText) {
+          if (node.hasFocus) { _lastSelection = controller.selection; _onSelectionChanged(); }
+          return; 
+        }
+        lastText = controller.text;
+        _isDirty = true;
+        _onBlockChanged();
+      });
+
+      _controllers.insert(index, controller);
+      _focusNodes.insert(index, node);
+      _blockKeys.insert(index, blockKey);
+    });
+    
+    if (text.isEmpty) {
+      Future.delayed(Duration.zero, () => _focusNodes[index].requestFocus());
+    }
+  }
+
+  void _removeBlock(int index) {
+    if (_controllers.length <= 1) return;
+    setState(() {
+      _controllers[index].dispose();
+      _focusNodes[index].dispose();
+      _controllers.removeAt(index);
+      _focusNodes.removeAt(index);
+      _blockKeys.removeAt(index);
+    });
+  }
+
   void _loadText(String text) {
     _isLoading = true;
     try {
@@ -293,77 +410,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         if (mounted) _isLoading = false;
       });
     }
-  }
-
-  void _clearControllers() {
-    for (final c in _controllers) c.dispose();
-    for (final f in _focusNodes) f.dispose();
-    _controllers.clear();
-    _focusNodes.clear();
-  }
-
-  void _addBlock(int index, {String? text}) {
-    final controller = MarkupController();
-    if (text != null) controller.text = text;
-    final node = FocusNode(onKeyEvent: (node, event) {
-      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-      if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
-        final currentText = controller.text;
-        final sel = controller.selection;
-        String p1 = currentText, p2 = '';
-        if (sel.isValid) {
-          p1 = currentText.substring(0, sel.start);
-          p2 = currentText.substring(sel.start);
-          controller.text = p1;
-        }
-        setState(() {
-          final idx = _controllers.indexOf(controller);
-          _addBlock(idx + 1, text: p2);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && idx + 1 < _focusNodes.length) {
-              _focusNodes[idx + 1].requestFocus();
-              _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
-            }
-          });
-        });
-        _saveHistory(description: 'Split Paragraph');
-        return KeyEventResult.handled;
-      }
-      if (event.logicalKey == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
-        final idx = _controllers.indexOf(controller);
-        if (_controllers.length > 1 && idx != -1) {
-          setState(() {
-            _controllers.removeAt(idx).dispose();
-            _focusNodes.removeAt(idx).dispose();
-            if (idx > 0) _focusNodes[idx - 1].requestFocus();
-          });
-        }
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    });
-    
-    node.addListener(() {
-      if (node.hasFocus) { _lastFocusedController = controller; _onSelectionChanged(); }
-      else if (_isDirty) _saveHistory(description: 'Edit Text', debounce: false);
-    });
-
-    String lastText = text ?? '';
-    controller.addListener(() {
-      if (_isLoading) return;
-      if (controller.text == lastText) {
-        if (node.hasFocus) { _lastSelection = controller.selection; _onSelectionChanged(); }
-        return; 
-      }
-      lastText = controller.text;
-      _isDirty = true;
-      _onBlockChanged();
-    });
-
-    setState(() {
-      _controllers.insert(index, controller);
-      _focusNodes.insert(index, node);
-    });
   }
 
   void _onSelectionChanged() {
@@ -396,7 +442,24 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     _recentTimer?.cancel();
     final text = _getRefinedFullText();
     if (text.trim().isEmpty) return;
-    await ref.read(settingsProvider.notifier).saveScript(text, title: _currentTitle, type: _sourceType, historyIndex: _historyIndex, sessionId: _currentSessionId);
+    final settings = ref.read(settingsProvider);
+    await ref.read(settingsProvider.notifier).saveScript(
+      text, 
+      title: _currentTitle, 
+      type: _sourceType, 
+      historyIndex: _historyIndex, 
+      sessionId: _currentSessionId,
+      fontSize: settings.fontSize,
+      fontFamily: settings.fontFamily,
+      lineSpacing: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+      textAlign: settings.textAlign,
+      scriptBgColor: settings.scriptBgColor,
+      currentWordColor: settings.currentWordColor,
+      futureWordColor: settings.futureWordColor,
+      historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+    );
   }
 
   void _onBlockChanged() {
@@ -614,18 +677,23 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _history.add(state); if (_history.length > _maxHistory) _history.removeAt(0);
       _historyIndex = _history.length - 1;
     });
+    _scheduleRecentUpdate(); // v3.9.5.71: Immediate Sentry Sync
   }
 
   void _undo() {
     if (_historyIndex > 0) {
+      _isCommandExecuting = true;
       setState(() { _historyIndex--; _applyState(_history[_historyIndex]); });
+      _isCommandExecuting = false;
       _forceRecentUpdate();
     }
   }
 
   void _redo() {
     if (_historyIndex < _history.length - 1) {
+      _isCommandExecuting = true;
       setState(() { _historyIndex++; _applyState(_history[_historyIndex]); });
+      _isCommandExecuting = false;
       _forceRecentUpdate();
     }
   }
@@ -646,78 +714,177 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void handleBgColorChange(int color) {
+    _isSuiteDirty = true; // Always treat as session change if color picker is involved
     ref.read(settingsProvider.notifier).setScriptBgColor(color);
-    _saveHistory(description: 'Change Background', debounce: true);
+    if (_activeSuite == EditorSuite.none) {
+      _saveHistory(description: 'Change Background', debounce: true);
+    }
     if (mounted) setState(() {});
   }
 
   void _onBold() {
     setState(() => _isCommandExecuting = true);
-    wrapSelection('**', '**');
+    final skipH = _activeSuite != EditorSuite.none;
+    if (_isGlobalSelection) {
+      for (final c in _controllers) {
+        wrapSelection('**', '**', controllerOverride: c, skipHistory: true);
+      }
+      if (!skipH) _saveHistory(description: 'Global Bold');
+    } else {
+      wrapSelection('**', '**', skipHistory: skipH);
+    }
+    if (skipH) _isSuiteDirty = true;
     setState(() => _isCommandExecuting = false);
     _onSelectionChanged();
   }
   void _onUnderline() {
     setState(() => _isCommandExecuting = true);
-    wrapSelection('[u]', '[/u]');
+    if (_isGlobalSelection) {
+      for (final c in _controllers) {
+        wrapSelection('[u]', '[/u]', controllerOverride: c, skipHistory: true);
+      }
+      _saveHistory(description: 'Global Underline');
+    } else {
+      wrapSelection('[u]', '[/u]');
+    }
     setState(() => _isCommandExecuting = false);
     _onSelectionChanged();
   }
   void _onItalic() {
     setState(() => _isCommandExecuting = true);
-    wrapSelection('[i]', '[/i]');
+    if (_isGlobalSelection) {
+      for (final c in _controllers) {
+        wrapSelection('[i]', '[/i]', controllerOverride: c, skipHistory: true);
+      }
+      _saveHistory(description: 'Global Italic');
+    } else {
+      wrapSelection('[i]', '[/i]');
+    }
     setState(() => _isCommandExecuting = false);
     _onSelectionChanged();
   }
 
   void onDirection(String dir) {
-    final controller = _activeController;
-    if (controller == null) return;
-    controller.value = TextEditingValue(
-      text: StylingService.applyLayout(controller.text, controller.selection, dir),
-      selection: controller.selection,
-    );
-    setState(() {});
-    _saveHistory(description: 'Direction Change');
+    setState(() => _isCommandExecuting = true);
+    final skipH = _activeSuite != EditorSuite.none;
+    final targetControllers = _isGlobalSelection ? _controllers : [_activeController].whereType<MarkupController>();
+    for (final controller in targetControllers) {
+      controller.value = TextEditingValue(
+        text: StylingService.applyLayout(controller.text, controller.selection, dir),
+        selection: controller.selection,
+      );
+    }
+    if (skipH) {
+      _isSuiteDirty = true;
+    } else {
+      _saveHistory(description: _isGlobalSelection ? 'Global Direction' : 'Direction Change');
+    }
+    setState(() => _isCommandExecuting = false);
     _onSelectionChanged();
   }
 
   void onAlign(String align) {
-    final controller = _activeController;
-    if (controller == null) return;
-    controller.value = TextEditingValue(
-      text: StylingService.applyLayout(controller.text, controller.selection, align),
-      selection: controller.selection,
-    );
-    // Force rebuild so _EditorBlock picks up new textAlign from markup
-    setState(() {});
-    _saveHistory(description: 'Align Paragraph');
+    setState(() => _isCommandExecuting = true);
+    final skipH = _activeSuite != EditorSuite.none;
+    final targetControllers = _isGlobalSelection ? _controllers : [_activeController].whereType<MarkupController>();
+    for (final controller in targetControllers) {
+      controller.value = TextEditingValue(
+        text: StylingService.applyLayout(controller.text, controller.selection, align),
+        selection: controller.selection,
+      );
+    }
+    if (skipH) {
+      _isSuiteDirty = true;
+    } else {
+      _saveHistory(description: _isGlobalSelection ? 'Global Align' : 'Align Paragraph');
+    }
+    setState(() => _isCommandExecuting = false);
     _onSelectionChanged(); // refresh active-button state
   }
 
-  void onFontSize(int size) { wrapSelection('[size=$size]', '[/size]'); }
-  void onFontFamily(String family) { wrapSelection('[font=$family]', '[/font]'); }
+  void onFontSize(int size) {
+    setState(() => _isCommandExecuting = true);
+    final skipH = _activeSuite != EditorSuite.none;
+    if (_isGlobalSelection) {
+      for (final c in _controllers) {
+        applyInlineProperty('size', '[size=$size]', '[/size]', controllerOverride: c, skipHistory: true);
+      }
+      if (!skipH) _saveHistory(description: 'Global Font Size');
+    } else {
+      applyInlineProperty('size', '[size=$size]', '[/size]', skipHistory: skipH);
+    }
+    if (skipH) _isSuiteDirty = true;
+    setState(() => _isCommandExecuting = false);
+    _onSelectionChanged();
+  }
+  void onFontFamily(String family) {
+    setState(() => _isCommandExecuting = true);
+    final skipH = _activeSuite != EditorSuite.none;
+    if (_isGlobalSelection) {
+      for (final c in _controllers) {
+        applyInlineProperty('font', '[font=$family]', '[/font]', controllerOverride: c, skipHistory: true);
+      }
+      if (!skipH) _saveHistory(description: 'Global Font Family');
+    } else {
+      applyInlineProperty('font', '[font=$family]', '[/font]', skipHistory: skipH);
+    }
+    if (skipH) _isSuiteDirty = true;
+    setState(() => _isCommandExecuting = false);
+    _onSelectionChanged();
+  }
 
   void onTextColorSelected(String hex) {
+    setState(() => _isCommandExecuting = true);
+    final skipH = _activeSuite != EditorSuite.none;
     final cleanHex = hex.replaceFirst('#', '').toUpperCase();
     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0xFFFFBF00);
     setState(() => _lastChosenTextColor = color);
     ref.read(settingsProvider.notifier).setLastChosenTextColor(color.value);
-    wrapSelection('[color=#$cleanHex]', '[/color]');
+    
+    if (_isGlobalSelection) {
+      for (final c in _controllers) {
+        applyInlineProperty('color', '[color=#$cleanHex]', '[/color]', controllerOverride: c, skipHistory: true);
+      }
+      if (!skipH) _saveHistory(description: 'Global Text Color');
+    } else {
+      applyInlineProperty('color', '[color=#$cleanHex]', '[/color]', skipHistory: skipH);
+    }
+    if (skipH) _isSuiteDirty = true;
+    setState(() => _isCommandExecuting = false);
+    _onSelectionChanged();
   }
 
   void onBgColorSelected(String hex) {
+    setState(() => _isCommandExecuting = true);
+    final skipH = _activeSuite != EditorSuite.none;
     final cleanHex = hex.replaceFirst('#', '').toUpperCase();
     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0x00FFFFFF);
     setState(() => _lastChosenHighlightColor = color);
     ref.read(settingsProvider.notifier).setLastChosenHighlightColor(color.value);
-    wrapSelection('[bg=#$cleanHex]', '[/bg]');
+    
+    if (_isGlobalSelection) {
+      for (final c in _controllers) {
+        applyInlineProperty('bg', '[bg=#$cleanHex]', '[/bg]', controllerOverride: c, skipHistory: true);
+      }
+      if (!skipH) _saveHistory(description: 'Global Highlight Color');
+    } else {
+      applyInlineProperty('bg', '[bg=#$cleanHex]', '[/bg]', skipHistory: skipH);
+    }
+    if (skipH) _isSuiteDirty = true;
+    setState(() => _isCommandExecuting = false);
+    _onSelectionChanged();
   }
 
   Future<void> _importFile() async {
     const supportedExts = ['rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text'];
     final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
-    if (!mounted || result == null || result.files.single.path == null) return;
+    if (!mounted) return;
+    if (result == null || result.files.single.path == null) {
+      // v3.9.5.59: Fluid navigation fallback
+      if (widget.shouldAutoLoad) Navigator.pop(context);
+      setState(() => _isPendingLoad = false);
+      return;
+    }
     final selectedFile = File(result.files.single.path!);
     final ext = selectedFile.path.split('.').last.toLowerCase();
 
@@ -780,8 +947,79 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
   }
 
+  void _startRecording() {
+    ref.read(scriptProvider.notifier).loadText(_getRefinedFullText());
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ContentCreatorScreen()));
+  }
+
+  Widget _buildBottomActions() {
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.only(bottom: 12, top: 8),
+      child: Row(
+        children: [
+          const SizedBox(width: 8), // ~1% aprox (assuming ~800px width)
+          Expanded(
+            flex: 485,
+            child: ElevatedButton.icon(
+              onPressed: _startRecording,
+              icon: const Icon(Icons.videocam_rounded, size: 24),
+              label: const Text('RECORD', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFBF00),
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 12,
+                shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12), // ~1% aprox
+          Expanded(
+            flex: 485,
+            child: ElevatedButton.icon(
+              onPressed: _startPresenting,
+              icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
+              label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 12,
+                shadowColor: Colors.white.withOpacity(0.3),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8), // ~1% aprox
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // v3.9.5.71: Style History Sentry
+    // Detects when the user changes global formatting and triggers an Undo point + Auto-save
+    ref.listen(settingsProvider, (previous, next) {
+      if (_isCommandExecuting || previous == null) return;
+      
+      final hasStyleChange = previous.fontSize != next.fontSize ||
+          previous.fontFamily != next.fontFamily ||
+          previous.lineSpacing != next.lineSpacing ||
+          previous.letterSpacing != next.letterSpacing ||
+          previous.wordSpacing != next.wordSpacing ||
+          previous.textAlign != next.textAlign ||
+          previous.scriptBgColor != next.scriptBgColor ||
+          previous.currentWordColor != next.currentWordColor ||
+          previous.futureWordColor != next.futureWordColor;
+          
+      if (hasStyleChange) {
+        _saveHistory(description: 'Update Styling', debounce: true);
+      }
+    });
+
     final settings = ref.watch(settingsProvider);
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
@@ -792,13 +1030,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         title: ProjectActionsSuite(
           title: _currentTitle,
           onBack: () => Navigator.pop(context),
-          onVideo: _startPresenting,
+          onRecord: _startRecording,
+          onPresent: _startPresenting,
           onClear: _clearScript,
           onSave: _saveScript,
           onImport: _importFile,
           onRename: _showRenameDialog,
         ),
       ),
+      bottomNavigationBar: _buildBottomActions(),
       body: Stack(
         children: [
           Shortcuts(
@@ -822,8 +1062,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               FormattingToolbarMVP(
                 onBold: _onBold, onUnderline: _onUnderline, onItalic: _onItalic,
                 onClear: () {
-                  final controller = _activeController; if (controller == null) return;
-                  controller.text = controller.text.replaceAll(RegExp(r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*'), '');
+                  setState(() => _isCommandExecuting = true);
+                  final targetControllers = (_isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false)) 
+                      ? _controllers 
+                      : [_activeController].whereType<MarkupController>();
+                  for (final c in targetControllers) {
+                    c.text = c.text.replaceAll(RegExp(r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*'), '');
+                  }
+                  setState(() => _isCommandExecuting = false);
                   _saveHistory(description: 'Clear Format');
                 },
                 onFontSize: onFontSize, onAlign: onAlign, onDirection: onDirection,
@@ -842,18 +1088,31 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               Expanded(
                 child: Container(
                   color: Color(settings.scriptBgColor),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 150),
-                    itemCount: _controllers.length,
-                    itemBuilder: (context, index) => _EditorBlock(
-                      controller: _controllers[index],
-                      focusNode: _focusNodes[index],
-                      settings: settings,
-                      isGlobalSelected: _isGlobalSelection,
-                      onSubmitted: () => _addBlock(index + 1),
-                      onTap: () => setState(() => _isGlobalSelection = false),
-                      onSelectAll: _selectAllBlocks,
-                      onCopy: _onCopyClean,
+                  child: GlobalSelectionOverlay(
+                    key: _overlayKey,
+                    controllers: _controllers,
+                    blockKeys: _blockKeys,
+                    onSelectionChanged: () => setState(() {}),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
+                      itemCount: _controllers.length,
+                      itemBuilder: (context, index) => _EditorBlock(
+                        key: _blockKeys[index],
+                        controller: _controllers[index],
+                        focusNode: _focusNodes[index],
+                        settings: settings,
+                        isGlobalSelected: _isGlobalSelection,
+                        onSubmitted: () => _addBlock(index + 1),
+                        onTap: () {
+                          setState(() => _isGlobalSelection = false);
+                          _overlayKey.currentState?.clearSelection();
+                        },
+                        onSelectAll: () {
+                          _overlayKey.currentState?.selectAll();
+                          setState(() => _isGlobalSelection = true);
+                        },
+                        onCopy: _onCopyClean,
+                      ),
                     ),
                   ),
                 ),
@@ -935,14 +1194,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _selectAllBlocks() {
-    setState(() {
-      _isGlobalSelection = true;
-      for (final c in _controllers) {
-        if (c.text.isNotEmpty) {
-          c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
-        }
-      }
-    });
+    _overlayKey.currentState?.selectAll();
+    setState(() => _isGlobalSelection = true);
   }
 }
 
@@ -957,6 +1210,7 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onCopy;
 
   const _EditorBlock({
+    super.key,
     required this.controller, required this.focusNode, required this.settings,
     required this.isGlobalSelected, required this.onSubmitted, required this.onTap,
     required this.onSelectAll, required this.onCopy,
@@ -969,67 +1223,100 @@ class _EditorBlock extends StatelessWidget {
     return null;
   }
 
+  double _getMaxFontSize(String text, double defaultSize) {
+    if (text.isEmpty) return defaultSize;
+    final matches = RegExp(r'\[size=(\d+)\]').allMatches(text);
+    if (matches.isEmpty) return defaultSize;
+    double maxMatch = defaultSize;
+    for (final m in matches) {
+      final size = double.tryParse(m.group(1)!) ?? defaultSize;
+      if (size > maxMatch) maxMatch = size;
+    }
+    return maxMatch;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isRtl = controller.text.isHebrew;
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
+    final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+
     return Container(
       decoration: BoxDecoration(
         color: isGlobalSelected ? const Color(0x33FFBF00) : Colors.transparent,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        maxLines: null,
-        onSubmitted: (_) => onSubmitted(),
-        onTap: onTap,
-        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-        textAlign: textAlign,
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: settings.fontSize,
-          height: settings.lineSpacing,
-          letterSpacing: settings.letterSpacing,
-          wordSpacing: settings.wordSpacing,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          textSelectionTheme: TextSelectionThemeData(
+            selectionColor: isGlobalSelected ? Colors.transparent : null,
+          ),
         ),
-        // v3.9.5.60: Minimal padding — prevents overflow between blocks with different font sizes
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(vertical: 2),
+        child: Shortcuts(
+          shortcuts: {
+            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+          },
+          child: TextField(
+            selectionControls: GhostSelectionControls(),
+            controller: controller,
+            focusNode: focusNode,
+            maxLines: null,
+            onSubmitted: (_) => onSubmitted(),
+            onTap: onTap,
+            textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+            textAlign: textAlign,
+            cursorColor: Colors.amber, 
+            cursorHeight: maxFontSize,
+            strutStyle: StrutStyle(
+              fontSize: maxFontSize,
+              height: settings.lineSpacing,
+              forceStrutHeight: true,
+            ),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: settings.fontSize,
+              height: settings.lineSpacing,
+              letterSpacing: settings.letterSpacing,
+              wordSpacing: settings.wordSpacing,
+            ),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 2),
+            ),
+            contextMenuBuilder: (context, editableTextState) {
+              final List<ContextMenuButtonItem> items = editableTextState.contextMenuButtonItems;
+              final List<ContextMenuButtonItem> customItems = [];
+              for (final item in items) {
+                if (item.type == ContextMenuButtonType.selectAll) {
+                  customItems.add(ContextMenuButtonItem(
+                    onPressed: () {
+                      ContextMenuController.removeAny();
+                      onSelectAll();
+                    },
+                    type: ContextMenuButtonType.selectAll,
+                  ));
+                } else if (item.type == ContextMenuButtonType.copy) {
+                  customItems.add(ContextMenuButtonItem(
+                    onPressed: () {
+                      ContextMenuController.removeAny();
+                      onCopy();
+                    },
+                    type: ContextMenuButtonType.copy,
+                  ));
+                } else {
+                  customItems.add(item);
+                }
+              }
+              return AdaptiveTextSelectionToolbar.buttonItems(
+                anchors: editableTextState.contextMenuAnchors,
+                buttonItems: customItems,
+              );
+            },
+          ),
         ),
-        // v3.9.5.60: Override the Android context menu to intercept Select All / Copy
-        contextMenuBuilder: (context, editableTextState) {
-          final List<ContextMenuButtonItem> items = editableTextState.contextMenuButtonItems;
-          final List<ContextMenuButtonItem> customItems = [];
-          for (final item in items) {
-            if (item.type == ContextMenuButtonType.selectAll) {
-              customItems.add(ContextMenuButtonItem(
-                onPressed: () {
-                  ContextMenuController.removeAny();
-                  onSelectAll();
-                },
-                type: ContextMenuButtonType.selectAll,
-              ));
-            } else if (item.type == ContextMenuButtonType.copy) {
-              customItems.add(ContextMenuButtonItem(
-                onPressed: () {
-                  ContextMenuController.removeAny();
-                  onCopy();
-                },
-                type: ContextMenuButtonType.copy,
-              ));
-            } else {
-              customItems.add(item);
-            }
-          }
-          return AdaptiveTextSelectionToolbar.buttonItems(
-            anchors: editableTextState.contextMenuAnchors,
-            buttonItems: customItems,
-          );
-        },
       ),
     );
   }

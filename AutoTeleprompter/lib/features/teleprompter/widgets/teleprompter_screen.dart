@@ -326,7 +326,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             final isHard = para[0].raw == '\n\n';
             return SizedBox(
               key: _wordKeys[para[0].index],
-              height: isHard ? settings.fontSize * 1.5 : 0.0, 
+              height: isHard ? settings.fontSize * 0.5 : 0.0,
             );
           }
 
@@ -347,7 +347,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
           return Padding(
             padding: EdgeInsets.only(
-              bottom: settings.fontSize * 0.2, // v3.9.5.3: Proportional paragraph margin
+              bottom: settings.fontSize * (settings.lineSpacing - 1.0).clamp(0.0, 1.0),
             ),
             child: Directionality(
                 textDirection: paraDir,
@@ -386,9 +386,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                       textDirection: word.effectiveRtl ? TextDirection.rtl : TextDirection.ltr,
                       child: Container(
                         key: _wordKeys[i],
-                        padding: EdgeInsets.only(
-                          right: (word == para.last) ? 0 : settings.wordSpacing,
-                        ),
                         child: AnimatedDefaultTextStyle(
                           duration: const Duration(milliseconds: 120),
                           style: TextStyle(
@@ -396,14 +393,15 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                             fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
                             fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
                             letterSpacing: settings.letterSpacing,
-                            color: isCurrent ? (settings.showCurrentWordHighlight ? Color(settings.currentWordColor) : (activeCustomTextColor ?? Color(settings.futureWordColor))) : 
-                                   (isPast ? (activeCustomTextColor ?? word.textColor ?? Color(settings.futureWordColor)).withOpacity(settings.pastWordOpacity) : 
+                            wordSpacing: settings.wordSpacing,
+                            color: isCurrent ? (settings.showCurrentWordHighlight ? Color(settings.currentWordColor) : (activeCustomTextColor ?? Color(settings.futureWordColor))) :
+                                   (isPast ? (activeCustomTextColor ?? word.textColor ?? Color(settings.futureWordColor)).withOpacity(settings.pastWordOpacity) :
                                    (activeCustomTextColor ?? word.textColor ?? (settings.showUpcomingWordColor ? Color(settings.futureWordColor) : Color(0xFFFFFFFF)))),
                             backgroundColor: isCurrent ? (settings.showCurrentWordHighlight ? Color(settings.currentWordColor).withOpacity(0.3) : (activeCustomBgColor ?? word.highlight)) : (isPast ? (activeCustomBgColor ?? word.highlight)?.withOpacity(0.15) : (activeCustomBgColor ?? word.highlight)),
-                            height: 1.3,
+                            height: settings.lineSpacing,
                             decoration: word.isUnderline ? TextDecoration.underline : null,
                           ),
-                          child: Text(displayText),
+                          child: Text('$displayText '),
                         ),
                       ),
                     );

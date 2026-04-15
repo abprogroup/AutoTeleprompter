@@ -1997,7 +1997,7 @@ class _EditorBlock extends StatelessWidget {
         ),
       ),
       ),
-    ); // Scaffold
+      ), // Scaffold
     ); // GestureDetector
   }
 }

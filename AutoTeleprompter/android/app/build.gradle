@@ -26,7 +26,7 @@ if (flutterVersionName == null) {
 android {
     namespace = "com.autoteleprompter.autoteleprompter"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.11902837"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -42,7 +42,7 @@ android {
         applicationId = "com.autoteleprompter.autoteleprompter"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
-        minSdk = 21
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName

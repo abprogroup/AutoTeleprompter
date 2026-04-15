@@ -34,9 +34,9 @@
 
 ## 📄 DOCUMENTATION GOVERNANCE
 - **MASTER_TODO.md**: Synchronized at the start (/plan) and end (/logit) of every loop. Must include documented test steps for `[X]` items.
-- **DAILY_LOG.md**: Real-time session history; must explicitly record the chosen Loop Mode and [WAV] status.
+- **DAILY_LOG.md**: Real-time session history; must explicitly record the chosen Loop Mode and [WAV] status. **[APPEND-ONLY]**: The daily log is a cumulative historical record. When adding new entries, ALWAYS append to the existing log. NEVER remove, overwrite, or truncate entries from previous dates. All prior dates and their content must be preserved exactly as written.
 - **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
-- **Surgical Updates**: When updating documentation (MASTER_TODO.md, DAILY_LOG.md, README.md), the AI must ONLY modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
+- **Surgical Updates**: When updating documentation (MASTER_TODO.md, DAILY_LOG.md, README.md), the AI must ONLY modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items. Previous entries from earlier dates are PERMANENT and must never be removed.
 - **Root Directory Governance**: The AI MUST maintain a pristine project root. Only mandatory core files (`AI_PROTOCOL.md`, `README.md`, `MASTER_TODO.md`, `DAILY_LOG.md`) are authorized to reside in the root. 
 - **Dynamic Artifact Routing**: All other stray artifacts must be dynamically routed via 'Smart Understanding' to their specialized home based on type and intent:
     - **Test Proofs (PNG/MP4)**: `/test/deep_analysis/[TASK_ID]/`.

@@ -39,7 +39,8 @@ jobs:
         
       - name: Build iOS (No Signing)
         # We add 'v' for verbose logging so we can see the exact error if it fails
-        run: flutter build ios --release --no-codesign -v
+        run: |
+          flutter build ios --release --no-codesign -v
         working-directory: AutoTeleprompter
 
       - name: Zip .app to .ipa
@@ -54,4 +55,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AutoTeleprompter-iOS
-          path: AutoTeleprompter/AutoTeleprompter/build/ios/iphoneos/AutoTeleprompter.ipa
+          path: AutoTeleprompter/build/ios/iphoneos/AutoTeleprompter.ipa

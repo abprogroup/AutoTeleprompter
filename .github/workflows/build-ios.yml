@@ -28,6 +28,10 @@ jobs:
         run: flutter doctor
         working-directory: AutoTeleprompter
 
+      - name: Clean Environment
+        run: flutter clean
+        working-directory: AutoTeleprompter
+
       - name: Install Dependencies
         run: flutter pub get
         working-directory: AutoTeleprompter

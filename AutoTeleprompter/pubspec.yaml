@@ -19,7 +19,7 @@ dependencies:
   scrollable_positioned_list: ^0.3.8
   shared_preferences: ^2.3.2
   permission_handler: ^11.3.1
-  wakelock_plus: ^1.2.8
+  wakelock_plus: 1.2.8
   file_picker: ^8.1.2
   intl: ^0.20.2
   flutter_animate: ^4.5.0

@@ -33,7 +33,7 @@ jobs:
         working-directory: AutoTeleprompter
 
       - name: Install Dependencies
-        run: flutter pub get
+        run: flutter pub upgrade
         working-directory: AutoTeleprompter
 
       - name: Install Cocoapods (iOS only)

@@ -1443,31 +1443,51 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
 
-  Widget _buildBottomActions() {
-    return Container(
-      color: Colors.black,
-      padding: const EdgeInsets.only(bottom: 12, top: 8),
-      child: Row(
-        children: [
-          const SizedBox(width: 16),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _startPresenting,
-              icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
-              label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFBF00),
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 12,
-                shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
-              ),
+  Widget _buildBottomActions({bool keyboardVisible = false}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (keyboardVisible && Platform.isIOS)
+          Container(
+            color: const Color(0xFF1C1C1E),
+            height: 44,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => FocusScope.of(context).unfocus(),
+                  child: const Text('Done', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 17, fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(width: 8),
+              ],
             ),
           ),
-          const SizedBox(width: 16),
-        ],
-      ),
+        Container(
+          color: Colors.black,
+          padding: const EdgeInsets.only(bottom: 12, top: 8),
+          child: Row(
+            children: [
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _startPresenting,
+                  icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
+                  label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFBF00),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 12,
+                    shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1494,7 +1514,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     });
 
     final settings = ref.watch(settingsProvider);
-    return Scaffold(
+    final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         toolbarHeight: 110,
@@ -1510,7 +1533,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           onRename: _showRenameDialog,
         ),
       ),
-      bottomNavigationBar: _buildBottomActions(),
+      bottomNavigationBar: _buildBottomActions(keyboardVisible: keyboardVisible),
       body: Stack(
         children: [
           Shortcuts(
@@ -1974,7 +1997,8 @@ class _EditorBlock extends StatelessWidget {
         ),
       ),
       ),
-    );
+    ); // Scaffold
+    ); // GestureDetector
   }
 }
 

@@ -14,6 +14,8 @@ dependencies:
   cupertino_icons: ^1.0.6
   flutter_riverpod: ^2.5.1
   speech_to_text: ^7.0.0
+  whisper_flutter_new: ^1.0.1
+  record: ^5.0.0
   scrollable_positioned_list: ^0.3.8
   shared_preferences: ^2.3.2
   permission_handler: ^11.3.1
@@ -33,6 +35,9 @@ dependencies:
   shelf: ^1.4.1
   shelf_router: ^1.1.4
   shelf_web_socket: ^2.0.1
+
+dependency_overrides:
+  record_platform_interface: 1.2.0
 
 dev_dependencies:
   flutter_test:

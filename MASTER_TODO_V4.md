@@ -1,5 +1,8 @@
-# Master TODO List: AutoTeleprompter v3.9.5.31 Professional
-# (Hardened Guard - Mission PENDING Verification)
+# Master TODO List: AutoTeleprompter v4.0 — SEALED
+# (Core Teleprompter Engine — Production Ready)
+# ⚠️ THIS FILE IS SEALED. v4.0 Android is complete. Do not modify.
+# For v5.0 Android premium features, see MASTER_TODO_V5.md
+# For iOS development, a separate TODO will be created.
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -23,12 +26,14 @@
 - [X] Medium Priority: Layout Alignment Toggling -> Fixed v3.35.9 (Strict Selection)
 - [X] Medium Priority: Layout History Stack (Spacing/Word Spacing persistence) -> Fixed v3.35.9 (Slider Registry)
 - [X] Low Priority: Selection Purity (Tag-free copy/paste) -> Fixed v3.35.9 (Material Interceptor)
-- [P] **Styling Engine Hardening**: MS Office Parity + Leak-Proof Logic. (STYLING CALIBRATION v3.9.5.31 — MISSION PENDING).
+- [U] **Styling Engine Hardening**: MS Office Parity + Leak-Proof Logic. (COMPLETED v3.9.6 — Almost Stable).
   - Implementation of `StylingService` for centralized tag management and **Unified Layout Engine**.
-  - Sectioned history bulking (Typing + Suite Sessions).
+  - Sectioned history bulking (Typing 10-char/10s + Suite Sectioned Sessions).
   - Hardened tag-stripping for Clipboard, Recent activity snippets, and DOCX export.
   - Hardened Absolute Mutex for Alignment and Direction (RTL/LTR).
   - Fix for Auto-Save flickering and Text Overflow regressions.
+  - Global selection with drag handles, surgical partial style removal, 3-mode clear style.
+  - Nested style toggle-off, Riverpod safety, undo/redo stabilization.
 
 ## 🛠️ UI & UX Fixes
 - [U] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (USER VERIFIED v3.9.5.6: Hardened Alignment extraction + 1.5x intentional row gaps)
@@ -111,5 +116,28 @@
 - [U] **Selection Fix**: Tapping supported file does nothing -> Fix selection. (COMPLETED in v2.x)
 - [-] **Faded Files**: Grey out/disable unsupported files: Could not apply with current resources - Need a dedicated file picker - Maybe in future updates we can do it. (DEFERRED)
 
+## 🎯 v4.0 Stable Release Tasks
+- [P] **Hide Record Button**: Removed RECORD button from bottom bar and ProjectActionsSuite. PRESENT button now full-width. (2026-04-12)
+- [P] **Hide Settings Button**: Removed settings IconButton from editor top bar ProjectActionsSuite. (2026-04-12)
+- [P] **Hide Login/Auth**: Removed login button, account menu, and all auth UI from gallery app bar. (2026-04-12)
+- [P] **Hide Cloud Sync**: Removed _ProDashboard (CLOUD SYNC card) from gallery screen. (2026-04-12)
+- [P] **Hide Controller Features**: Removed Remote Hub button, _RemoteDashboard, and disabled remote auto-start in teleprompter provider. (2026-04-12)
+- [ ] **Verify Core Features**: Ensure script editor, formatting, recent activity, auto-save, and prompter mode all work correctly without premium dependencies.
+- [ ] **Final QA Pass**: Full regression test of stable release feature set.
+
+## 🔮 Next Version (Premium Features — Deferred)
+- [-] **Content Creator Mode**: Recording, live streaming, and video export. (DEFERRED: v4.1+ premium feature)
+- [-] **Cloud Sync**: Cross-device script synchronization via cloud backend. (DEFERRED: v4.1+ premium feature)
+- [-] **Login & Authentication**: User accounts and premium subscription management. (DEFERRED: v4.1+ premium feature)
+- [-] **Controller/Remote**: External device control for teleprompter playback. (DEFERRED: v4.1+ premium feature)
+- [-] **Advanced Settings Page**: Full editor configuration panel in editor view. (DEFERRED: v4.1+ premium feature)
+- [-] **Whisper Offline STT**: On-device speech recognition via Whisper models (Tiny/Base/Small/Medium). UI for model download/delete and engine selector built but hidden. (DEFERRED: v4.1+ premium feature)
+  - *Code location*: `app_settings_screen.dart` — STT engine dropdown and model cards removed from build(), kept in git history.
+  - *Provider*: `settings_provider.dart` — `sttEngine` field and `setSttEngine()` method still functional, defaults to `'google'`.
+  - *Services*: `whisper_speech_service.dart` — full Whisper streaming service with sequential chunk design, model download/delete with `.complete` markers.
+  - *Auto-fallback*: `teleprompter_provider.dart` — `_autoFallbackToWhisper()` tries Whisper when all Google STT stages fail (e.g., ColorOS devices).
+  - *Native STT*: `MainActivity.kt` — 4-stage fallback chain (on-device+locale → on-device+default → TTS service → regular recognizer).
+  - *Why deferred*: Whisper inference too slow on older phones (7-8s for 3-4s audio on Oppo A53). Google STT works on Samsung/Pixel. ColorOS mic restriction blocks all Google STT variants. Needs faster phone or cloud speech API alternative.
+
 ---
-*Last Updated: 2026-04-09 (v3.9.5.31 Hardened Guard — MISSION PENDING)*
+*SEALED: 2026-04-13 — v4.0 Android Stable Release Complete. See MASTER_TODO_V5.md for next version.*

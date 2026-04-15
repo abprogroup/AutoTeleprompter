@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/speech_service.dart';
 import '../services/native_speech_service.dart';
-import '../services/whisper_speech_service.dart';
+import '../services/whisper_speech_service_native.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
 import '../../settings/providers/settings_provider.dart';

@@ -1515,9 +1515,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
     final settings = ref.watch(settingsProvider);
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         toolbarHeight: 110,
@@ -1534,7 +1532,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         ),
       ),
       bottomNavigationBar: _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: Stack(
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
         children: [
           Shortcuts(
         shortcuts: {
@@ -1996,9 +1997,9 @@ class _EditorBlock extends StatelessWidget {
           ),
         ),
       ),
-      ),
-      ), // Scaffold
-    ); // GestureDetector
+      ), // Stack
+      ), // GestureDetector
+    );
   }
 }
 

@@ -52,6 +52,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   void _setupRemoteCallbacks() {}
 
   bool _sessionStopped = false;
+  // Guard against the race where iOS fires an async 'notListening' status
+  // from the previous stop() call after the new session has already started.
+  bool _startingSession = false;
 
   void _safeSetState(TeleprompterState Function(TeleprompterState) updater) {
     if (_disposed || _sessionStopped) return;
@@ -168,6 +171,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _sttService.onStatusChange = (status) {
       if (_useWhisper || _disposed || _sessionStopped) return;
+      // Ignore non-listening statuses during the start-up guard window.
+      // This prevents stale async 'notListening' from the previous stop()
+      // from resetting isListening=false right after the new session starts.
+      if (_startingSession && status != SpeechStatus.listening) return;
+      _startingSession = false;
       _addDebugLog('🎤 [$platform] STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
@@ -383,7 +391,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       // so we set isListening=true immediately here to avoid the mic button
       // staying yellow while waiting for the callback.
       if (_sttService.requiresImmediateListeningFlag) {
+        _startingSession = true;
         _safeSetState((s) => s.copyWith(isListening: true));
+        // Auto-clear the guard after 1.5 s in case listening status never fires
+        Future.delayed(const Duration(milliseconds: 1500), () => _startingSession = false);
       }
 
       if (result.languageMissing && result.missingLanguageName != null) {
@@ -397,6 +408,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
   Future<void> stopSession() async {
     _sessionStopped = true;
+    _startingSession = false;
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
 

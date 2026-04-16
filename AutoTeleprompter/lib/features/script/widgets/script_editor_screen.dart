@@ -28,6 +28,7 @@ import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
+import '../services/rtf_service.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
@@ -1407,10 +1408,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // Generate bytes in the correct format for the chosen file type
     final List<int> bytes;
     if (format == 'docx') {
-      // DocxService builds a proper ZIP-based DOCX archive with markup preserved
       bytes = DocxService.generate(text);
+    } else if (format == 'rtf') {
+      bytes = RtfService.generate(text);
     } else {
-      // txt, rtf, md — plain UTF-8 text is correct
+      // txt, md, pages (plain-text fallback) — UTF-8
       bytes = utf8.encode(text);
     }
 

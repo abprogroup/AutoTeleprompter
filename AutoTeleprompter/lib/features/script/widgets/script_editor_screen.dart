@@ -1340,7 +1340,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   Future<void> _importFile() async {
-    const supportedExts = ['rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text'];
+    const supportedExts = ['rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text', 'pages'];
     final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
     if (!mounted) return;
     if (result == null || result.files.single.path == null) {
@@ -1374,7 +1374,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               Text('.${ext.toUpperCase()} files cannot be used as scripts.', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 12),
               const Text('Supported formats:', style: TextStyle(color: Colors.white54, fontSize: 12)),
-              const Text('DOCX · DOC · RTF · PDF · TXT · ODT · MD', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
+              const Text('DOCX · DOC · RTF · PDF · TXT · ODT · MD · PAGES', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
             ],
           ),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))],

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'features/splash/widgets/v3_splash_screen.dart';
+import 'features/splash/widgets/splash_screen.dart';
 
 class AutoTeleprompterApp extends StatelessWidget {
   const AutoTeleprompterApp({super.key});

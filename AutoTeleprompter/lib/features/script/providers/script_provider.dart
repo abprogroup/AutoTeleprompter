@@ -175,6 +175,8 @@ class ScriptNotifier extends Notifier<Script?> {
     try {
       if (lower.endsWith('.docx')) {
         result = _parseDocx(rawBytes);
+      } else if (lower.endsWith('.pages')) {
+        result = _parsePages(rawBytes);
       } else if (lower.endsWith('.rtf') || lower.endsWith('.doc')) {
         final raw = utf8.decode(rawBytes, allowMalformed: true);
         if (raw.trimLeft().startsWith('{\\rtf')) {
@@ -297,6 +299,52 @@ class ScriptNotifier extends Notifier<Script?> {
     } catch (_) {}
 
     return _ParsedFile(buf.toString().trim(), fontSize: detectedFontSize);
+  }
+
+  /// Parses Apple Pages files (.pages) — a ZIP archive.
+  /// Handles both the old XML-based format (index.xml) and the newer
+  /// iWork format by extracting readable text from all XML entries.
+  _ParsedFile _parsePages(List<int> rawBytes) {
+    final archive = ZipDecoder().decodeBytes(rawBytes);
+    final buf = StringBuffer();
+
+    // Old Pages format: index.xml contains <sf:p> paragraph elements
+    final indexFile = archive.findFile('index.xml');
+    if (indexFile != null) {
+      final xml = utf8.decode(indexFile.content as List<int>, allowMalformed: true);
+      // Extract text from <sf:p> and <sf:s> (span) elements
+      final paraMatches = RegExp(r'<sf:p\b[^>]*>(.*?)</sf:p>', dotAll: true).allMatches(xml);
+      for (final m in paraMatches) {
+        final inner = m.group(1) ?? '';
+        // Strip any nested XML tags to get raw text
+        final text = inner.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+        if (text.isNotEmpty) buf.writeln(text);
+      }
+      if (buf.isNotEmpty) return _ParsedFile(buf.toString().trim());
+    }
+
+    // Newer Pages format: scan all XML files in the archive for text content
+    for (final file in archive.files) {
+      if (!file.isFile) continue;
+      final name = file.name.toLowerCase();
+      if (!name.endsWith('.xml') && !name.endsWith('.iwa')) continue;
+      try {
+        final content = utf8.decode(file.content as List<int>, allowMalformed: true);
+        // Extract anything that looks like readable paragraph text
+        final matches = RegExp(r'<[^>]*p[^>]*>(.*?)</[^>]*p[^>]*>', dotAll: true).allMatches(content);
+        for (final m in matches) {
+          final text = (m.group(1) ?? '').replaceAll(RegExp(r'<[^>]+>'), '').trim();
+          if (text.length > 2) buf.writeln(text);
+        }
+      } catch (_) {}
+    }
+
+    final result = buf.toString().trim();
+    if (result.isEmpty) {
+      return _ParsedFile('Could not extract text from this Pages file. '
+          'Please open it in Pages and export as DOCX or TXT first.');
+    }
+    return _ParsedFile(result);
   }
 
   /// Parses RTF, extracts text with style markup (bold, color, size).

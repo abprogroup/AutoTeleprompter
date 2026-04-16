@@ -426,6 +426,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         return;
       }
 
+      // Set isListening immediately — iOS status callbacks fire asynchronously
+      // and the button would stay yellow otherwise
+      _safeSetState((s) => s.copyWith(isListening: true));
+
       if (result.languageMissing && result.missingLanguageName != null) {
         _addDebugLog('⚠️ LANG MISSING: ${result.missingLanguageName} not available, using ${result.actualLocale}');
         _safeSetState((s) => s.copyWith(

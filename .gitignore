@@ -3,6 +3,12 @@
 backups/
 AutoTeleprompter_BACKUP_*
 
+# Platform baseline folders (separate standalone repos — not submodules)
+android/
+ios-baseline/
+macos-baseline/
+windows-baseline/
+
 # NEVER TRACK TESTS - THEY ARE NOT NEEDED
 test/
 schemes/
@@ -27,7 +33,13 @@ releases/v*/
 **/build/
 **/.dart_tool/
 **/.idea/
+
+# macOS metadata (never commit these)
+.DS_Store
 **/.DS_Store
+._*
+**/._.DS_Store
+
 *.apk
 *.aab
 *.jar

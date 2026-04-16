@@ -1403,7 +1403,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (format == null || !mounted) return;
 
     final text = _getRefinedFullText();
-    final bytes = utf8.encode(text);
+
+    // Generate bytes in the correct format for the chosen file type
+    final List<int> bytes;
+    if (format == 'docx') {
+      // DocxService builds a proper ZIP-based DOCX archive with markup preserved
+      bytes = DocxService.generate(text);
+    } else {
+      // txt, rtf, md — plain UTF-8 text is correct
+      bytes = utf8.encode(text);
+    }
 
     // Build filename with guaranteed extension — strip any prior extension first
     final safeName = _currentTitle

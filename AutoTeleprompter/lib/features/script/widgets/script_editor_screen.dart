@@ -1701,6 +1701,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             ),
         ],
       ),
+      ),
     );
   }
 
@@ -1997,8 +1998,7 @@ class _EditorBlock extends StatelessWidget {
           ),
         ),
       ),
-      ), // Stack
-      ), // GestureDetector
+      ),
     );
   }
 }

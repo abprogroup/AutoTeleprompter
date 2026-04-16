@@ -13,6 +13,7 @@ import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../remote/services/remote_control_service.dart';
+import '../../../platform/permissions/platform_permissions.dart';
 
 const _systemChannel = MethodChannel('autoteleprompter/system');
 
@@ -251,8 +252,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       micStatus = await Permission.microphone.request();
     }
 
-    // On iOS, also need speech permission
-    if (!Platform.isAndroid) {
+    // On Apple platforms (iOS/macOS), also need speech recognition permission
+    if (PlatformPermissions.requiresSpeechPermissionCheck) {
       final speechStatus = await Permission.speech.request();
       if (!speechStatus.isGranted) {
         if (mounted) {

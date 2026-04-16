@@ -1,19 +1,17 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/speech_service.dart';
-import '../services/native_speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
 import '../../settings/providers/settings_provider.dart';
-
 import '../../remote/services/remote_control_service.dart';
+import '../../../platform/stt/abstract_stt_service.dart';
+import '../../../platform/stt/stt_service_factory.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
-  late final NativeSpeechService _nativeSttService;
-  late final SpeechService _iosSttService;
+  late final AbstractSttService _sttService;
   late final WhisperSpeechService _whisperService;
   late final RemoteControlService _remoteControlService;
   bool _useWhisper = false;
@@ -34,19 +32,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   @override
   TeleprompterState build() {
     _disposed = false;
-    _nativeSttService = NativeSpeechService();
-    _iosSttService = SpeechService();
+    _sttService = SttServiceFactory.create();
     _whisperService = WhisperSpeechService();
     _remoteControlService = ref.read(remoteControlProvider);
     _setupRemoteCallbacks();
-    _setupNativeSttCallbacks();
-    _setupIosSttCallbacks();
+    _setupSttCallbacks();
     _setupWhisperCallbacks();
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
-      _nativeSttService.stop();
-      _iosSttService.stop();
+      _sttService.stop();
       _whisperService.stop();
       _remoteControlService.stop();
     });
@@ -163,15 +158,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
   }
 
-  void _setupNativeSttCallbacks() {
-    _nativeSttService.onResult = (result) {
+  void _setupSttCallbacks() {
+    final platform = _sttService.platformName;
+
+    _sttService.onResult = (result) {
       if (_disposed || _sessionStopped) return;
       _handleSttResult(result);
     };
 
-    _nativeSttService.onStatusChange = (status) {
+    _sttService.onStatusChange = (status) {
       if (_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('🎤 STATUS: $status');
+      _addDebugLog('🎤 [$platform] STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
         statusMessage: '',
@@ -179,9 +176,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       ));
     };
 
-    _nativeSttService.onError = (error) {
+    _sttService.onError = (error) {
       if (_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('🎤 STT ERROR: $error');
+      _addDebugLog('🎤 [$platform] STT ERROR: $error');
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
           error.contains('error_permission') ||
@@ -193,75 +190,32 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       ));
     };
 
-    _nativeSttService.onLanguageUnavailable = (requestedLocale) {
+    _sttService.onLanguageUnavailable = (requestedLocale) {
       if (_useWhisper || _disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(
         _scriptLanguageLocale ?? requestedLocale,
       );
-      _addDebugLog('🎤 LANGUAGE UNAVAILABLE: $langName — speech data not installed');
+      _addDebugLog('🎤 [$platform] LANGUAGE UNAVAILABLE: $langName');
       _safeSetState((s) => s.copyWith(
         missingLanguage: langName,
         hasError: true,
         isListening: false,
-        statusMessage: 'Speech recognition language not installed',
+        statusMessage: 'Speech recognition language not installed on this device',
       ));
     };
 
-    _nativeSttService.onNeedLanguagePack = (locale) {
+    // Android-only: fires when offline + cloud STT both fail for a language.
+    // On Apple/Windows this callback is never invoked.
+    _sttService.onNeedLanguagePack = (locale) {
       if (_useWhisper || _disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(locale);
-      _addDebugLog('🎤 ALL GOOGLE STT FAILED for $langName — internet required for cloud recognition');
+      _addDebugLog('🎤 [$platform] ALL STT FAILED for $langName — internet required');
       _safeSetState((s) => s.copyWith(
         hasError: true,
         isListening: false,
         statusMessage: '$langName speech recognition requires an internet connection. '
             'This language is not available offline on your device. '
             'Please connect to WiFi or mobile data and try again.',
-      ));
-    };
-  }
-
-  void _setupIosSttCallbacks() {
-    _iosSttService.onResult = (result) {
-      if (_disposed || _sessionStopped) return;
-      _handleSttResult(result);
-    };
-
-    _iosSttService.onStatusChange = (status) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('🍎 iOS STT STATUS: $status');
-      _safeSetState((s) => s.copyWith(
-        isListening: status == SpeechStatus.listening,
-        statusMessage: '',
-        hasError: false,
-      ));
-    };
-
-    _iosSttService.onError = (error) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('🍎 iOS STT ERROR: $error');
-      if (error.contains('error_language')) return;
-      final isFatal = error.contains('error_audio') ||
-          error.contains('error_permission') ||
-          error.contains('not available');
-      _safeSetState((s) => s.copyWith(
-        statusMessage: isFatal ? error : '',
-        hasError: isFatal,
-        isListening: isFatal ? false : s.isListening,
-      ));
-    };
-
-    _iosSttService.onLanguageUnavailable = (requestedLocale) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      final langName = SpeechStartResult.languageNameFromLocale(
-        _scriptLanguageLocale ?? requestedLocale,
-      );
-      _addDebugLog('🍎 iOS STT LANGUAGE UNAVAILABLE: $langName');
-      _safeSetState((s) => s.copyWith(
-        missingLanguage: langName,
-        hasError: true,
-        isListening: false,
-        statusMessage: 'Speech recognition language not available on this device',
       ));
     };
   }
@@ -398,10 +352,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (settings.debugMode) {
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (_disposed) return;
-        final engineName = _useWhisper ? 'WHISPER' : (Platform.isIOS ? 'IOS_STT' : 'NATIVE_STT');
-        final listening = _useWhisper
-            ? _whisperService.isListening
-            : (Platform.isIOS ? _iosSttService.isListening : _nativeSttService.isListening);
+        final engineName = _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
+        final listening = _useWhisper ? _whisperService.isListening : _sttService.isListening;
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
         _addDebugLog('💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
@@ -410,40 +362,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     if (_useWhisper) {
       final model = whisperModelFromEngine(sttEngine);
-      _addDebugLog('🤖 Starting Whisper STT (${sttEngine}) offline...');
+      _addDebugLog('🤖 Starting Whisper STT ($sttEngine) offline...');
       await _whisperService.start(localeId: localeId, model: model);
-    } else if (Platform.isIOS) {
-      _addDebugLog('🍎 Starting iOS Apple Speech STT locale=$localeId...');
-      final result = await _iosSttService.start(localeId: localeId);
-
-      if (!result.success) {
-        _addDebugLog('🍎 iOS STT FAILED: ${result.message}');
-        _safeSetState((s) => s.copyWith(
-          statusMessage: result.message ?? 'Speech recognition failed',
-          hasError: true,
-          isListening: false,
-        ));
-        return;
-      }
-
-      // Set isListening immediately — iOS status callbacks fire asynchronously
-      // and the button would stay yellow otherwise
-      _safeSetState((s) => s.copyWith(isListening: true));
-
-      if (result.languageMissing && result.missingLanguageName != null) {
-        _addDebugLog('⚠️ LANG MISSING: ${result.missingLanguageName} not available, using ${result.actualLocale}');
-        _safeSetState((s) => s.copyWith(
-          missingLanguage: result.missingLanguageName,
-        ));
-      } else {
-        _addDebugLog('🍎 iOS STT using locale: ${result.actualLocale}');
-      }
     } else {
-      _addDebugLog('🎤 Starting Native STT locale=$localeId...');
-      final result = await _nativeSttService.start(localeId: localeId);
+      final platform = _sttService.platformName;
+      _addDebugLog('🎤 [$platform] Starting STT locale=$localeId...');
+      final result = await _sttService.start(localeId: localeId);
 
       if (!result.success) {
-        _addDebugLog('🎤 STT FAILED: ${result.message}');
+        _addDebugLog('🎤 [$platform] STT FAILED: ${result.message}');
         _safeSetState((s) => s.copyWith(
           statusMessage: result.message ?? 'Speech recognition failed',
           hasError: true,
@@ -452,13 +379,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         return;
       }
 
+      // Apple platforms (iOS/macOS) fire onStatusChange asynchronously,
+      // so we set isListening=true immediately here to avoid the mic button
+      // staying yellow while waiting for the callback.
+      if (_sttService.requiresImmediateListeningFlag) {
+        _safeSetState((s) => s.copyWith(isListening: true));
+      }
+
       if (result.languageMissing && result.missingLanguageName != null) {
-        _addDebugLog('⚠️ LANG MISSING: ${result.missingLanguageName} not available, using ${result.actualLocale}');
-        _safeSetState((s) => s.copyWith(
-          missingLanguage: result.missingLanguageName,
-        ));
+        _addDebugLog('⚠️ [$platform] LANG MISSING: ${result.missingLanguageName} — using ${result.actualLocale}');
+        _safeSetState((s) => s.copyWith(missingLanguage: result.missingLanguageName));
       } else {
-        _addDebugLog('🎤 Using locale: ${result.actualLocale}');
+        _addDebugLog('🎤 [$platform] STT using locale: ${result.actualLocale}');
       }
     }
   }
@@ -469,8 +401,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _fluidAdvanceTimer?.cancel();
 
     // Stop all engines — Whisper may have been auto-started via fallback
-    await _nativeSttService.stop();
-    await _iosSttService.stop();
+    await _sttService.stop();
     await _whisperService.stop();
 
     if (!_disposed) {

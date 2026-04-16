@@ -28,6 +28,8 @@ import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
+import '../../../platform/file_import/platform_file_import.dart';
+import '../../../platform/keyboard/platform_keyboard.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // ── Switchboard Orchestrator ──────────────────────────────────────────────────
@@ -1340,7 +1342,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   Future<void> _importFile() async {
-    final supportedExts = ['rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text', if (Platform.isIOS) 'pages'];
+    final supportedExts = PlatformFileImport.supportedExtensions;
     final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
     if (!mounted) return;
     if (result == null || result.files.single.path == null) {
@@ -1374,7 +1376,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               Text('.${ext.toUpperCase()} files cannot be used as scripts.', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 12),
               const Text('Supported formats:', style: TextStyle(color: Colors.white54, fontSize: 12)),
-              Text('DOCX · DOC · RTF · PDF · TXT · ODT · MD${Platform.isIOS ? ' · PAGES' : ''}', style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
+              Text(PlatformFileImport.formatsLabel, style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
             ],
           ),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))],
@@ -1447,7 +1449,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (keyboardVisible && Platform.isIOS)
+        if (keyboardVisible && PlatformKeyboard.showDoneBar)
           Container(
             color: const Color(0xFF1C1C1E),
             height: 44,

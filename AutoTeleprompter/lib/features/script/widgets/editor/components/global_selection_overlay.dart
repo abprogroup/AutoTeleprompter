@@ -89,6 +89,17 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get hasSelection => _isSelecting && _startBlock != null && _endBlock != null;
 
+  /// Recalculates handle positions after an external layout change (e.g. alignment
+  /// applied to selected text). Must be called after the next frame so the
+  /// RenderEditable has been laid out with the new textAlign/textDirection.
+  void refreshPositions() {
+    if (!hasSelection) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _calculateHandlePositions());
+    });
+  }
+
   void _updateBlockHighlights() {
     if (_startBlock == null || _endBlock == null || _startOffset == null || _endOffset == null) return;
 

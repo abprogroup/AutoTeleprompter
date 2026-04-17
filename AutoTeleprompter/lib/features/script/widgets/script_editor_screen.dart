@@ -1117,26 +1117,23 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
         // Refined overlay selection spanning multiple blocks: apply per-controller,
-        // then shift externalSelection by open.length (arithmetic, not c.selection read).
-        // v4.1.0: Reading c.selection after wrapSelection is unreliable on iOS because
-        // the platform text input can asynchronously reset it. Use pure arithmetic instead.
+        // then restore externalSelection using visual-offset conversion.
+        // v4.1.1: Convert raw positions → visual char counts BEFORE the style
+        // command, then convert back → raw AFTER.  Visual char counts are
+        // invariant to tag insertion/removal, so this survives any sequence of
+        // B/I/U/size/color/font operations regardless of tag lengths.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
           final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-          final oldStart = hadSelection ? c.externalSelection!.start : 0;
-          final oldEnd   = hadSelection ? c.externalSelection!.end   : 0;
-          final oldLen   = c.text.length;
+          final visStart = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.start) : 0;
+          final visEnd   = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.end)   : 0;
           wrapSelection(open, close, controllerOverride: c, skipHistory: true);
           if (hadSelection) {
-            final newLen = c.text.length;
-            final shift = newLen > oldLen ? open.length : newLen < oldLen ? -open.length : 0;
-            if (shift != 0) {
-              final newStart = (oldStart + shift).clamp(0, newLen);
-              final newEnd   = (oldEnd   + shift).clamp(0, newLen);
-              if (newEnd > newStart) {
-                c.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
-                c.refresh();
-              }
+            final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
+            final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
+            if (newRawEnd > newRawStart) {
+              c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
+              c.refresh();
             }
           }
         }
@@ -1150,25 +1147,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       } else if (targets.length == 1) {
         final c = targets.first;
         final hadOverlaySelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-        final oldStart = hadOverlaySelection ? c.externalSelection!.start : 0;
-        final oldEnd   = hadOverlaySelection ? c.externalSelection!.end   : 0;
-        final oldLen   = c.text.length;
+        // v4.1.1: Snapshot visual positions BEFORE the style command.
+        final visStart = hadOverlaySelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.start) : 0;
+        final visEnd   = hadOverlaySelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.end)   : 0;
         wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
-        // v4.1.0: Shift externalSelection arithmetically — never read c.selection.
-        // On iOS the platform input can reset c.selection asynchronously, making
-        // the read unreliable. open.length is always the correct shift amount:
-        // toggle-on inserts open tag before the selection (shift right),
-        // toggle-off removes open tag before the selection (shift left).
+        // Restore externalSelection from visual offsets — invariant to tag
+        // insertion/removal, so Bold → Italic → Underline never shrinks the amber.
         if (hadOverlaySelection) {
-          final newLen = c.text.length;
-          final shift = newLen > oldLen ? open.length : newLen < oldLen ? -open.length : 0;
-          if (shift != 0) {
-            final newStart = (oldStart + shift).clamp(0, newLen);
-            final newEnd   = (oldEnd   + shift).clamp(0, newLen);
-            if (newEnd > newStart) {
-              c.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
-              c.refresh();
-            }
+          final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
+          final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
+          if (newRawEnd > newRawStart) {
+            c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
+            c.refresh();
           }
           _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
         }
@@ -1209,46 +1199,36 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
-        // v4.1.0: Arithmetic shift — never read c.selection after apply.
+        // v4.1.1: Visual-offset conversion — invariant to tag insertion/removal.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
           final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-          final oldStart = hadSelection ? c.externalSelection!.start : 0;
-          final oldEnd   = hadSelection ? c.externalSelection!.end   : 0;
-          final oldLen   = c.text.length;
+          final visStart = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.start) : 0;
+          final visEnd   = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.end)   : 0;
           applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
           if (hadSelection) {
-            final newLen = c.text.length;
-            final shift = newLen > oldLen ? open.length : newLen < oldLen ? -open.length : 0;
-            if (shift != 0) {
-              final newStart = (oldStart + shift).clamp(0, newLen);
-              final newEnd   = (oldEnd   + shift).clamp(0, newLen);
-              if (newEnd > newStart) {
-                c.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
-                c.refresh();
-              }
+            final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
+            final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
+            if (newRawEnd > newRawStart) {
+              c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
+              c.refresh();
             }
           }
         }
         _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
       } else if (hasOverlay && targets.length == 1) {
-        // v4.1.0: Single-block overlay — arithmetic shift.
+        // v4.1.1: Single-block overlay — visual-offset conversion.
         final c = targets.first;
         final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-        final oldStart = hadSelection ? c.externalSelection!.start : 0;
-        final oldEnd   = hadSelection ? c.externalSelection!.end   : 0;
-        final oldLen   = c.text.length;
+        final visStart = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.start) : 0;
+        final visEnd   = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.end)   : 0;
         applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
         if (hadSelection) {
-          final newLen = c.text.length;
-          final shift = newLen > oldLen ? open.length : newLen < oldLen ? -open.length : 0;
-          if (shift != 0) {
-            final newStart = (oldStart + shift).clamp(0, newLen);
-            final newEnd   = (oldEnd   + shift).clamp(0, newLen);
-            if (newEnd > newStart) {
-              c.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
-              c.refresh();
-            }
+          final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
+          final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
+          if (newRawEnd > newRawStart) {
+            c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
+            c.refresh();
           }
           _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
         }

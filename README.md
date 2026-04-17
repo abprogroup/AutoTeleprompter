@@ -1,7 +1,11 @@
-# AutoTeleprompter v4.1.0
+# AutoTeleprompter v4.1.1
 # (Core Teleprompter Engine - iOS - Android - macOS - Windows)
 
 A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.7.
+
+## Key Improvements (v4.1.1 - 2026-04-17)
+- Multi-Line Handle Drag Fixed (Global Coordinates): Handles now correctly drag to line 2+ text. Root cause: `_handleUpdate` was calling `editable.globalToLocal(globalPos)` and then passing the result to `editable.getPositionForPoint()`, which itself calls `globalToLocal()` internally — double-converting the coordinate and always shifting the touch point above line 1, so `getPositionForPoint` returned a line-1 position for any touch. Fixed by passing `globalPos` directly to `getPositionForPoint` without pre-converting.
+- Style Selection Locked (Visual Offsets): Applying Bold → Italic → Underline in sequence no longer progressively shrinks the amber highlight. Root cause: the arithmetic shift (`oldStart + open.length`) is numerically correct but fragile against any tag-boundary edge case in the selection position. Fixed by converting `externalSelection.start/end` to visual character counts BEFORE the style command (using new `MarkupController.rawToVisualOffset`), then converting back to raw positions AFTER (using `visualToRawOffset`). Visual character counts are invariant to tag insertion/removal, so the amber highlight stays locked to the same visible characters regardless of how many style layers accumulate.
 
 ## Key Improvements (v4.1.0 - 2026-04-17)
 - Multi-Line Handle Drag Fixed (Affinity): Handles now correctly track line 2+ positions after dragging. Root cause: `getLocalRectForCaret` was called with default `TextAffinity.upstream`, which places a wrap-boundary caret at the END of line 1 instead of the START of line 2. Even after `_endOffset` was correctly set to a line-2 position by `getPositionForPoint`, `_calculateHandlePositions` re-rendered the handle at line 1 on every frame update. Fixed by passing `affinity: TextAffinity.downstream` to every `getLocalRectForCaret` call in `_getOffsetForPosition`.
@@ -120,4 +124,4 @@ Since this project is managed on Windows, we use GitHub Actions to build the iOS
 4. Download: Scroll down to Artifacts and download the AutoTeleprompter-iOS zip.
 5. Install: On your Windows laptop, use Sideloadly (https://sideloadly.io/) to install the .ipa onto your iPhone.
 
-*Last Hardened: 2026-04-17 (v4.0.9 Global-at-Start Drag + refresh() Selection Lock)*
+*Last Hardened: 2026-04-17 (v4.1.1 Global-Coordinate Drag + Visual-Offset Selection Lock)*

@@ -152,6 +152,51 @@ class MarkupController extends TextEditingController {
     super.value = newValue.copyWith(text: newText, selection: newSelection);
   }
 
+  // ── Visual-offset conversion helpers ─────────────────────────────────────
+  // Tags occupy raw character positions but render at zero visible width.
+  // These helpers let callers track selections by VISIBLE character count so
+  // that inserting or removing tags (B/I/U/size/color/font) never shifts the
+  // logical selection.
+
+  /// Number of visible (non-tag) characters from the start of [text] up to
+  /// (but not including) [rawOffset].
+  static int rawToVisualOffset(String text, int rawOffset) {
+    int visual = 0;
+    int cursor = 0;
+    for (final m in _tagRegex.allMatches(text)) {
+      if (m.start >= rawOffset) break;
+      final segEnd = m.start < rawOffset ? m.start : rawOffset;
+      visual += segEnd - cursor;
+      cursor = m.end;
+    }
+    if (cursor < rawOffset) visual += rawOffset - cursor;
+    return visual;
+  }
+
+  /// Raw offset of the [visualOffset]-th visible character in [text].
+  /// Returns [text.length] when [visualOffset] exceeds the visible char count.
+  static int visualToRawOffset(String text, int visualOffset) {
+    int visual = 0;
+    int cursor = 0;
+    for (final m in _tagRegex.allMatches(text)) {
+      if (m.start > cursor) {
+        final segLen = m.start - cursor;
+        if (visual + segLen >= visualOffset) {
+          return cursor + (visualOffset - visual);
+        }
+        visual += segLen;
+      }
+      cursor = m.end;
+    }
+    if (cursor < text.length) {
+      final segLen = text.length - cursor;
+      if (visual + segLen >= visualOffset) {
+        return cursor + (visualOffset - visual);
+      }
+    }
+    return text.length;
+  }
+
   static Color? _parseHex(String raw) {
     var hex = raw.trim().replaceFirst('#', '');
     if (hex.length == 6) hex = 'FF$hex';

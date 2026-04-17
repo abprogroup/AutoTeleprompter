@@ -166,7 +166,7 @@
 
 ## 🔧 Selection Handles Hardening (v4.0.5)
 - [P] **BUG: Selection Handles Both on Same Row After Select All**: `selectAll()` called `_calculateHandlePositions()` synchronously inside `setState` before the frame rendered. Fix: `addPostFrameCallback` in `selectAll()` to recalculate after the frame. (AI VERIFIED 2026-04-17)
-- [P] **BUG: Stale Highlight After Drag (Deselected Blocks Stay Highlighted)**: `_enterRefineMode()` set `isGlobalSelected=false` but never called `c.refresh()`. TextFields didn't repaint until `_handleUpdate` fired, which didn't fire if drag was over a gap. Fix: call `c.refresh()` inside `_enterRefineMode()`. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Stale Highlight After Drag (Deselected Blocks Stay Highlighted)**: Root cause: `_updateBlockHighlights` set `externalSelection=null` for out-of-range blocks, causing `buildTextSpan` to fall through to the native `controller.selection`. If the user previously dragged text in a block, the native selection held a range and kept showing the amber highlight. Fix: use `TextSelection.collapsed(offset:0)` instead of `null` for out-of-range blocks; update `buildTextSpan` to treat any non-null `externalSelection` as authoritative (collapsed=no highlight, range=highlight), never leaking native selection. Also: `c.refresh()` added to `_enterRefineMode()` for immediate repaint. (AI VERIFIED 2026-04-17)
 - [P] **BUG: Handle Position Lag During Drag**: `_calculateHandlePositions()` ran synchronously before new layout settled. Fix: `addPostFrameCallback` in `_handleUpdate` to recalculate after the frame. (AI VERIFIED 2026-04-17)
 
 ## 🛠️ UI & UX Fixes (iOS — Historical)

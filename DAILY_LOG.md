@@ -132,6 +132,6 @@
     - **Handle Position Lag During Drag**: `_calculateHandlePositions()` ran synchronously inside `_handleUpdate`'s setState, before the new selection layout was rendered. Added `addPostFrameCallback` in `_handleUpdate` to recalculate after the frame settles.
     - **Unified Platform TODO**: Merged `MASTER_TODO.md` (iOS) and `MASTER_TODO_V4.md` (Android/Sealed) into a single `MASTER_TODO_V4.md` with four sections — APK Sealed · iOS Testing · macOS Pending · Windows Pending. Deleted old `MASTER_TODO.md`.
     - **Logit Workflow Update**: Updated `_agent/workflows/logit.md` to reference the unified `MASTER_TODO_V4.md` and instruct the AI to append new items to the correct platform section based on the active build target.
-- **Commits**: `c89254e` (unified TODO) → `75e7aea` (selection handles fix)
-- **iOS Build**: Pending — triggered via push `75e7aea`.
-- **Status**: Selection system hardened. Awaiting IPA download.
+- **Commits**: `c89254e` (unified TODO) → `75e7aea` (selection handles fix) → `8278f6b` (stale highlight fix)
+- **iOS Build**: Run `24562460617`. IPA downloaded to `releases/iOS/v1.0/AutoTeleprompter.ipa`.
+- **Status**: Selection system hardened. IPA ready for Sideloadly.

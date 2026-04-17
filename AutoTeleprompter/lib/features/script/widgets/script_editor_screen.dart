@@ -29,6 +29,7 @@ import '../services/styling_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
 import '../services/rtf_service.dart';
+import '../services/pages_service.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
@@ -1411,8 +1412,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       bytes = DocxService.generate(text);
     } else if (format == 'rtf') {
       bytes = RtfService.generate(text);
+    } else if (format == 'pages') {
+      bytes = PagesService.generate(text);
     } else {
-      // txt, md, pages (plain-text fallback) — UTF-8
+      // txt, md — plain UTF-8
       bytes = utf8.encode(text);
     }
 

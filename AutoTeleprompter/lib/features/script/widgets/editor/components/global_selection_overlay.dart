@@ -175,7 +175,20 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       c.isGlobalSelected = false;
       c.refresh(); // repaint TextFields immediately so isGlobalSelected=false takes effect
     }
+    // This synchronously sets _isGlobalSelection=false on the screen.
+    // Must happen BEFORE we collapse native selections so the resulting
+    // listener notification fires with _isGlobalSelection=false and
+    // does NOT trigger _clearGlobalSelection().
     widget.onSelectionChanged();
+    // Collapse any full-range native selection that Select All left behind.
+    // Without this, RenderEditable paints the entire block amber via
+    // selectionColor once _isGlobalSelection flips to false and selectionColor
+    // becomes non-transparent.
+    for (final c in widget.controllers) {
+      if (!c.selection.isCollapsed) {
+        c.selection = const TextSelection.collapsed(offset: 0);
+      }
+    }
   }
 
   void _handleUpdate(Offset globalPos, bool isStart) {

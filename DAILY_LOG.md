@@ -123,3 +123,15 @@
 - **Commits**: `06a1a11` (clamp offset) → `da1ee46` (direct stamp on apply) → `f5135fe` (sync on load)
 - **iOS Build**: Run `24545992796`, artifact `6488161402`. IPA downloaded to `releases/iOS/v1.0/AutoTeleprompter.ipa` (timestamp 06:27).
 - **Status**: All three alignment toolbar display scenarios fixed. IPA ready for Sideloadly.
+
+### ✅ 2026-04-17 — v4.0.5 [SELECTION_HANDLES_HARDENING]
+- **Session Goals**: Fix selection handle positions and stale highlight bugs introduced during v4.0.4 alignment work; unify platform TODO files.
+- **Achievements**:
+    - **Selection Handles Both on Same Row After Select All**: `selectAll()` called `_calculateHandlePositions()` synchronously inside `setState`, before the frame had rendered the selection highlights. RenderEditable caret coords were stale. Fix: added `addPostFrameCallback` in `selectAll()` to recalculate positions after the first rendered frame.
+    - **Stale Highlight After Drag**: `_enterRefineMode()` set `isGlobalSelected = false` on all controllers but never called `c.refresh()`, so TextFields did not repaint until `_handleUpdate`'s setState fired. If the drag was over a gap between blocks, no setState fired at all, leaving the full-selection highlight frozen. Fix: call `c.refresh()` inside `_enterRefineMode()` immediately after clearing `isGlobalSelected`.
+    - **Handle Position Lag During Drag**: `_calculateHandlePositions()` ran synchronously inside `_handleUpdate`'s setState, before the new selection layout was rendered. Added `addPostFrameCallback` in `_handleUpdate` to recalculate after the frame settles.
+    - **Unified Platform TODO**: Merged `MASTER_TODO.md` (iOS) and `MASTER_TODO_V4.md` (Android/Sealed) into a single `MASTER_TODO_V4.md` with four sections — APK Sealed · iOS Testing · macOS Pending · Windows Pending. Deleted old `MASTER_TODO.md`.
+    - **Logit Workflow Update**: Updated `_agent/workflows/logit.md` to reference the unified `MASTER_TODO_V4.md` and instruct the AI to append new items to the correct platform section based on the active build target.
+- **Commits**: `c89254e` (unified TODO) → `75e7aea` (selection handles fix)
+- **iOS Build**: Pending — triggered via push `75e7aea`.
+- **Status**: Selection system hardened. Awaiting IPA download.

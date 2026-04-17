@@ -239,8 +239,12 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             final editable = _findRenderEditable(renderObj);
             TextPosition pos;
             if (editable != null) {
-              final editableLocal = editable.globalToLocal(globalPos);
-              pos = editable.getPositionForPoint(editableLocal);
+              // v4.1.1: Pass globalPos directly — getPositionForPoint expects a
+              // GLOBAL coordinate and converts internally with globalToLocal().
+              // The previous code converted to local first, causing a second
+              // globalToLocal() call inside getPositionForPoint that shifted y
+              // by the widget's screen offset, always returning a line-1 result.
+              pos = editable.getPositionForPoint(globalPos);
             } else {
               // Fallback: beginning or end of block
               pos = TextPosition(offset: boxLocal.dx < box.size.width / 2 ? 0 : widget.controllers[i].text.length);

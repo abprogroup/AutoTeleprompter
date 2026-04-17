@@ -1,5 +1,5 @@
-# Master TODO List: AutoTeleprompter v4.0.3
-# (Surgical Terminal Sync v4.0.3)
+# Master TODO List: AutoTeleprompter v4.0.4
+# (Surgical Terminal Sync v4.0.4)
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -28,7 +28,11 @@
 ## 🖊️ Editor Hardening (v4.0.3)
 - [P] **BUG: B/I/U Needs Two Clicks on Multi-Styled Text**: Forward scan `start+d` in `_isStyleActiveAt` caused false-positive "active" detection near opening tag of next styled block. First click was a no-op; second click applied correctly. Fixed: backward scan only. (AI VERIFIED 2026-04-17)
 - [P] **BUG: Hebrew Alignment Shows Wrong State**: `_detectAlignAtCursor` searched for `[/right]` but editor writes `[/align=right]`. indexOf returned -1 always → alignment detection was sticky. Fixed: detect format and use correct close tag. (AI VERIFIED 2026-04-17)
-- [P] **BUG: Layout Suite Alignment Highlight Not Updating**: Consequence of alignment detection bug above — now resolved. (AI VERIFIED 2026-04-17)
+
+## 🔧 Alignment Toolbar Hardening (v4.0.4)
+- [P] **BUG: Layout Suite Alignment Button Not Updating After Apply**: Tapping center/right/left button applied alignment to text correctly but the button highlight stayed on left. Root cause: `_detectAlignAtCursor` unreliable when focus is on the suite. Fixed: second `addPostFrameCallback` in `onAlign` directly stamps the applied alignment into `cursorStyleProvider`. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Layout Suite Always Shows Left When Suite Opens**: `controller.selection.baseOffset` becomes -1 when focus moves to suite; old guard returned 'left' immediately. Fixed: clamp offset to 0 in `_detectAlignAtCursor`. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Layout Suite Shows Wrong Alignment After Script Load**: `_loadText` never triggers `_onSelectionChanged` for non-empty blocks (no auto-focus). Hebrew scripts with `[right]`/`[rtl]` tags showed left in toolbar. Fixed: `addPostFrameCallback` at end of `_loadText` sets `_lastFocusedController` and calls `_onSelectionChanged`. (AI VERIFIED 2026-04-17)
 
 ## 🛠️ UI & UX Fixes (Historical)
 - [U] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (USER VERIFIED v3.9.5.6)
@@ -63,4 +67,4 @@
 - [-] **Faded Files**: Grey out unsupported files. Deferred — needs dedicated file picker.
 
 ---
-*Last Updated: 2026-04-17 (v4.0.3 Editor Hardening + Presenter Fixes)*
+*Last Updated: 2026-04-17 (v4.0.4 Alignment Toolbar Hardening)*

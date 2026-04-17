@@ -46,6 +46,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   bool _draggingEnd = false;
   Size _stackSize = Size.zero;
 
+  // Delta-drag state: track finger start and handle logical start to avoid snap-to-touch.
+  Offset? _panStartGlobal;
+  Offset? _panStartHandleLogical;
+  final GlobalKey _stackKey = GlobalKey();
+
   /// True when every block is wholly selected (post Select All, pre refine).
   bool get _isWholeScriptSelected =>
       widget.controllers.isNotEmpty &&
@@ -100,6 +105,30 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   /// RenderEditable has been laid out with the new textAlign/textDirection.
   void refreshPositions() {
     if (!hasSelection) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _calculateHandlePositions());
+    });
+  }
+
+  /// v4.0.8: Called after a style command mutates text so that _startOffset /
+  /// _endOffset stay in sync with the new externalSelection positions set by
+  /// wrapSelection.  Each affected controller already has its externalSelection
+  /// updated to the post-insert range before this method is called.
+  void syncOffsetsFromExternalSelection(List<MarkupController> controllers) {
+    if (_startBlock == null || _endBlock == null) return;
+    if (_startBlock! < controllers.length) {
+      final c = controllers[_startBlock!];
+      if (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) {
+        _startOffset = c.externalSelection!.start;
+      }
+    }
+    if (_endBlock! < controllers.length) {
+      final c = controllers[_endBlock!];
+      if (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) {
+        _endOffset = c.externalSelection!.end;
+      }
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() => _calculateHandlePositions());
@@ -245,6 +274,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             ? (_handleEndPos ?? Offset(12, constraints.maxHeight - 48))
             : null;
         return Stack(
+          key: _stackKey,
           children: [
             widget.child,
             if (start != null) _buildHandle(start, true),
@@ -261,12 +291,38 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       top: (pos.dy - 18).clamp(0.0, _stackSize.height > 56 ? _stackSize.height - 56 : 0.0),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onPanStart: (_) {
+        onPanStart: (details) {
           _enterRefineMode();
-          setState(() => isStart ? _draggingStart = true : _draggingEnd = true);
+          setState(() {
+            if (isStart) _draggingStart = true; else _draggingEnd = true;
+            // v4.0.8: Record where the finger first touched (global) and where
+            // the handle's logical caret point is (Stack-local).  Subsequent
+            // updates apply the delta to the caret point so the caret — not
+            // the touch point — drives _handleUpdate, eliminating the line-1
+            // snap when the finger lands at the top of the 56-px hit area.
+            _panStartGlobal = details.globalPosition;
+            _panStartHandleLogical = isStart ? _handleStartPos : _handleEndPos;
+          });
         },
-        onPanUpdate: (d) => _handleUpdate(d.globalPosition, isStart),
-        onPanEnd: (_) => setState(() => isStart ? _draggingStart = false : _draggingEnd = false),
+        onPanUpdate: (details) {
+          final logicalStart = _panStartHandleLogical;
+          final panStart = _panStartGlobal;
+          if (logicalStart != null && panStart != null) {
+            final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+            if (stackBox != null) {
+              final delta = details.globalPosition - panStart;
+              final adjustedGlobal = stackBox.localToGlobal(logicalStart) + delta;
+              _handleUpdate(adjustedGlobal, isStart);
+              return;
+            }
+          }
+          _handleUpdate(details.globalPosition, isStart);
+        },
+        onPanEnd: (_) => setState(() {
+          if (isStart) _draggingStart = false; else _draggingEnd = false;
+          _panStartGlobal = null;
+          _panStartHandleLogical = null;
+        }),
         child: Container(
           width: 40,
           height: 56,

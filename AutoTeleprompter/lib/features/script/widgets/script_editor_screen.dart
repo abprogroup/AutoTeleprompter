@@ -398,6 +398,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
         lastText = controller.text;
         _isDirty = true;
+        // v4.1.2: When the user edits text (not inside a style command), clear
+        // any pinned externalSelection so stale amber doesn't linger after typing.
+        if (!_isCommandExecuting && controller.externalSelection != null) {
+          controller.externalSelection = null;
+          controller.refresh();
+        }
         _onBlockChanged();
       });
 
@@ -1146,21 +1152,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length == 1) {
         final c = targets.first;
-        final hadOverlaySelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-        // v4.1.1: Snapshot visual positions BEFORE the style command.
-        final visStart = hadOverlaySelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.start) : 0;
-        final visEnd   = hadOverlaySelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.end)   : 0;
+        // v4.1.2: Capture selection from overlay externalSelection OR native
+        // c.selection — whichever is non-collapsed.  After wrap, pin amber via
+        // externalSelection so iOS async platform resets to c.selection (which
+        // can happen between user gestures) cannot corrupt subsequent B/I/U ops.
+        final selBeforeWrap =
+            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed)
+                ? c.externalSelection!
+                : (!c.selection.isCollapsed ? c.selection : null);
+        final visStart = selBeforeWrap != null ? MarkupController.rawToVisualOffset(c.text, selBeforeWrap.start) : 0;
+        final visEnd   = selBeforeWrap != null ? MarkupController.rawToVisualOffset(c.text, selBeforeWrap.end)   : 0;
         wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
-        // Restore externalSelection from visual offsets — invariant to tag
-        // insertion/removal, so Bold → Italic → Underline never shrinks the amber.
-        if (hadOverlaySelection) {
+        if (selBeforeWrap != null) {
           final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
           final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
           if (newRawEnd > newRawStart) {
             c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
             c.refresh();
           }
-          _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+          if (_overlayKey.currentState?.hasSelection ?? false) {
+            _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+          }
         }
       }
     }
@@ -1216,21 +1228,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           }
         }
         _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
-      } else if (hasOverlay && targets.length == 1) {
-        // v4.1.1: Single-block overlay — visual-offset conversion.
+      } else if (targets.length == 1) {
+        // v4.1.2: Single-block style — handles both overlay and native iOS
+        // selection, same pattern as _applyStyleCmd.
         final c = targets.first;
-        final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-        final visStart = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.start) : 0;
-        final visEnd   = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.end)   : 0;
+        final selBeforeWrap =
+            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed)
+                ? c.externalSelection!
+                : (!c.selection.isCollapsed ? c.selection : null);
+        final visStart = selBeforeWrap != null ? MarkupController.rawToVisualOffset(c.text, selBeforeWrap.start) : 0;
+        final visEnd   = selBeforeWrap != null ? MarkupController.rawToVisualOffset(c.text, selBeforeWrap.end)   : 0;
         applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
-        if (hadSelection) {
+        if (selBeforeWrap != null) {
           final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
           final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
           if (newRawEnd > newRawStart) {
             c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
             c.refresh();
           }
-          _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+          if (_overlayKey.currentState?.hasSelection ?? false) {
+            _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+          }
         }
       } else {
         for (final c in targets) {

@@ -35,7 +35,12 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
 
     if (controller == null) return;
     final text = controller.text;
-    final selection = (controller.externalSelection != null && controller.externalSelection!.isValid)
+    // v4.1.2: Require !isCollapsed so collapsed externalSelection (used to
+    // suppress highlight on out-of-range blocks) is never treated as a style
+    // range.  Falls back to native c.selection.
+    final selection = (controller.externalSelection != null &&
+            controller.externalSelection!.isValid &&
+            !controller.externalSelection!.isCollapsed)
         ? controller.externalSelection!
         : controller.selection;
     if (selection == null || !selection.isValid) return;
@@ -107,7 +112,10 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
 
     if (controller == null) return;
     final text = controller.text;
-    final selection = (controller.externalSelection != null && controller.externalSelection!.isValid)
+    // v4.1.2: Require !isCollapsed (same guard as wrapSelection).
+    final selection = (controller.externalSelection != null &&
+            controller.externalSelection!.isValid &&
+            !controller.externalSelection!.isCollapsed)
         ? controller.externalSelection!
         : controller.selection;
     if (selection == null || !selection.isValid) return;

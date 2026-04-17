@@ -1,7 +1,10 @@
-# AutoTeleprompter v4.1.1
+# AutoTeleprompter v4.1.2
 # (Core Teleprompter Engine - iOS - Android - macOS - Windows)
 
 A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.7.
+
+## Key Improvements (v4.1.2 - 2026-04-17)
+- Style Selection Locked (Native + Overlay): Applying Bold → Italic → Underline in sequence on any selection (native long-press or overlay drag handles) no longer shrinks the amber highlight. Root cause: the v4.1.1 fix was gated on `hadOverlaySelection` — when the user selected text with a native iOS long-press (no overlay handles), `externalSelection = null`, the gate evaluated to `false`, the fix was skipped, and iOS's async platform reset of `c.selection` (which occurs between gesture events) caused each subsequent style to use a stale, pre-tag offset, shrinking the visible range by `open.length` chars per application. Fixed by: (1) expanding the selection snapshot to fall back to `c.selection` when `externalSelection` is null, so the fix now covers native selection too; (2) always pinning `c.externalSelection` after wrap (so future styles read it instead of the platform-reset `c.selection`); (3) adding `!isCollapsed` guard in `StylingLogicMixin.wrapSelection` and `applyInlineProperty` to prevent collapsed sentinel externalSelections (used for out-of-range block suppression) from being mistaken for style targets.
 
 ## Key Improvements (v4.1.1 - 2026-04-17)
 - Multi-Line Handle Drag Fixed (Global Coordinates): Handles now correctly drag to line 2+ text. Root cause: `_handleUpdate` was calling `editable.globalToLocal(globalPos)` and then passing the result to `editable.getPositionForPoint()`, which itself calls `globalToLocal()` internally — double-converting the coordinate and always shifting the touch point above line 1, so `getPositionForPoint` returned a line-1 position for any touch. Fixed by passing `globalPos` directly to `getPositionForPoint` without pre-converting.
@@ -124,4 +127,4 @@ Since this project is managed on Windows, we use GitHub Actions to build the iOS
 4. Download: Scroll down to Artifacts and download the AutoTeleprompter-iOS zip.
 5. Install: On your Windows laptop, use Sideloadly (https://sideloadly.io/) to install the .ipa onto your iPhone.
 
-*Last Hardened: 2026-04-17 (v4.1.1 Global-Coordinate Drag + Visual-Offset Selection Lock)*
+*Last Hardened: 2026-04-17 (v4.1.2 Native + Overlay Selection Lock — all selection paths pinned)*

@@ -86,3 +86,30 @@
     - **v4.0 Stable Publish**: Updated governance docs, created backup, removed premium features (Record, Settings, Login/Auth, Cloud Sync, Controller/Remote).
 - **Backup**: Pre-stable-publish backup created.
 - **Status**: v4.0 Stable Release — core teleprompter features only.
+
+### ✅ 2026-04-17 — v4.0.2 [iOS_HARDENING + MULTI_PLATFORM_SEPARATION]
+- **Session Goals**: Fix all iOS bugs found during testing; implement clean multi-platform architecture.
+- **Achievements**:
+    - **Multi-Platform Architecture**: Created `lib/platform/` layer with abstract interfaces and factory pattern. Separates iOS, Android, macOS, and Windows for STT, file import, permissions, and keyboard logic. Zero `Platform.isXxx` checks in feature code.
+    - **STT Factory**: `SttServiceFactory.create()` returns `SttAppleAdapter` (iOS/macOS), `SttAndroidAdapter` (Android), or `SttDesktopAdapter` (Windows). All share `AbstractSttService` interface with `requiresImmediateListeningFlag` for Apple async quirk.
+    - **DOCX Save Fix**: `_saveScript()` now routes `.docx` through `DocxService.generate()` instead of plain `utf8.encode()`. Old corrupted DOCX files can be recovered by renaming to `.txt`.
+    - **RTF Round-Trip**: `RtfService.generate()` writes valid RTF with Unicode escapes (`\uNNNN?`) for Hebrew/Arabic, full color table, bold groups. `_saveScript()` routes `.rtf` through it. Non-RTF `.rtf` files (saved before the fix) now load via UTF-8 instead of the ASCII byte-filter that stripped all Hebrew characters.
+    - **Pages Export (iOS/macOS only)**: `PagesService.generate()` writes a minimal ZIP with `index.xml` in old Apple Pages XML format. Save dialog shows `.pages` option on iOS/macOS only (`Platform.isIOS || Platform.isMacOS`). Round-trip import verified.
+    - **Mic Button Race Fix**: Added `_startingSession` guard in `TeleprompterNotifier`. Root cause: iOS fires async `notListening` status from the previous `stop()` call after the new session already set `isListening=true`. Guard blocks non-listening status for 1.5 s after start, or until first confirmed `listening` fires.
+    - **Hebrew Colors Fix**: `word.textColor` (from `[color=...]` markup) now takes priority over `showUpcomingWordColor` setting for both past and future words. Explicit markup colors now survive presentation mode for all languages including Hebrew.
+    - **Project Root Cleanup**: Removed `.DS_Store`, `._*` metadata files, versioned dead files (`v3.9.5.1_script_editor_screen.dart`). Renamed `v3_splash_screen.dart` → `splash_screen.dart` via `git mv`. Updated `.gitignore` to block Mac junk permanently.
+    - **Platform Structure Doc**: Added `Project platforms structure.md` documenting `lib/platform/` architecture, folder structure, platform→feature matrix, and development rules.
+- **Commits**: `01818f1` (DOCX fix) → `81f54a4` (RTF + mic + Hebrew) → `9ea778d` (Pages export) → `5ec8a0b` (double-extension fix)
+- **iOS Build**: Triggered via GitHub Actions on push `5ec8a0b`. IPA available in Actions artifacts → download → Sideloadly.
+- **Status**: All 6 reported iOS bugs fixed. Multi-platform architecture fully in place.
+
+### ✅ 2026-04-17 — v4.0.3 [EDITOR_HARDENING + PRESENTER_FIXES]
+- **Session Goals**: Fix three bugs reported after iOS testing — presenter color override, B/I/U double-click, Hebrew alignment display.
+- **Achievements**:
+    - **Presenter Color Override (Reverted Wrong Fix)**: Previous session incorrectly made `word.textColor` always win over `showUpcomingWordColor`. Restored correct behavior: toggle ON → uniform `futureWordColor` override for all words; toggle OFF → per-word markup colors shown.
+    - **B/I/U Double-Click Root Cause Found & Fixed**: `_isStyleActiveAt` in `styling_logic_mixin.dart` scanned positions `start+d` (forward) around the cursor. This caused a false-positive "already active" detection when the cursor was just before the opening tag of the next styled block (`[u]`, `[i]`, `**`). First click tried to remove a non-existent enclosing style → `_removeEnclosingStyle` returned null → no change. Second click correctly applied. Fix: backward scan only (`start-d`); forward scan removed with explanation comment.
+    - **Hebrew Alignment Detection Fixed**: `_detectAlignAtCursor` searched for `[/right]` as the close tag, but the editor writes `[/align=right]`. `indexOf('[/right]')` always returned -1, so `nextClose == -1` was always true, making alignment "sticky" — once `[align=right]` appeared, all subsequent cursor positions were reported as right-aligned. Fix: detect opening tag format (`[align=val]` vs `[val]`) and search for the matching close tag.
+    - **Layout Suite State Sync**: The alignment fix also restores the layout suite's highlighted button to correctly reflect the active alignment when cursor moves in and out of alignment blocks.
+- **Commit**: `3074460`
+- **iOS Build**: Triggered and completed. IPA downloaded to `releases/iOS/v1.0/AutoTeleprompter.ipa`.
+- **Status**: All three reported bugs fixed. IPA ready for Sideloadly install.

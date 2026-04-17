@@ -1422,7 +1422,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // Build filename with guaranteed extension — strip any prior extension first
     final safeName = _currentTitle
         .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
-        .replaceAll(RegExp(r'\.(txt|pdf|docx|rtf)$', caseSensitive: false), '');
+        .replaceAll(RegExp(r'\.(txt|pdf|docx|rtf|pages|md)$', caseSensitive: false), '');
     final fileName = '$safeName.$format';
 
     final savedPath = await FilePicker.platform.saveFile(

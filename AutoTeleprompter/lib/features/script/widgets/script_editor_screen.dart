@@ -434,6 +434,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         if (mounted) _isLoading = false;
       });
     }
+    // Sync toolbar state after load. Non-empty blocks don't auto-request focus,
+    // so _onSelectionChanged never fires — cursorStyleProvider stays at its
+    // default 'left'. Point lastFocusedController at the first block so
+    // _detectAlignAtCursor reads the right text, then run detection.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_controllers.isNotEmpty) _lastFocusedController = _controllers.first;
+      _onSelectionChanged();
+    });
   }
 
   void _onSelectionChanged() {

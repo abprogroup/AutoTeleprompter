@@ -1116,21 +1116,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
-        // Refined overlay selection: apply per-controller with their externalSelection,
-        // then update externalSelection to account for tag offset changes.
+        // Refined overlay selection: apply per-controller, then sync externalSelection
+        // from the new native selection set by wrapSelection so handles don't drift.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
-          final oldLen = c.text.length;
+          final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
           wrapSelection(open, close, controllerOverride: c, skipHistory: true);
-          final newLen = c.text.length;
-          // Update externalSelection to match new text length
-          if (c.externalSelection != null && newLen != oldLen) {
-            c.externalSelection = TextSelection(
-              baseOffset: 0,
-              extentOffset: newLen,
-            );
+          // v4.0.8: wrapSelection already puts the correct post-insert range into
+          // controller.value.selection — mirror it to externalSelection.
+          if (hadSelection) {
+            final ns = c.selection;
+            if (ns.isValid && !ns.isCollapsed) c.externalSelection = ns;
           }
         }
+        // Update overlay _startOffset/_endOffset so handles track the new positions.
+        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length > 1) {
         for (final c in targets) {
@@ -1138,7 +1138,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length == 1) {
-        wrapSelection(open, close, controllerOverride: targets.first, skipHistory: skipH);
+        final c = targets.first;
+        final hadOverlaySelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+        wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
+        // v4.0.8: Sync externalSelection so the visible highlight matches the
+        // post-insert text positions and handles don't drift after style apply.
+        if (hadOverlaySelection) {
+          final ns = c.selection;
+          if (ns.isValid && !ns.isCollapsed) c.externalSelection = ns;
+          _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+        }
       }
     }
 
@@ -1176,14 +1185,26 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
+        // v4.0.8: Sync externalSelection from post-insert native selection.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
-          final oldLen = c.text.length;
+          final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
           applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
-          final newLen = c.text.length;
-          if (c.externalSelection != null && newLen != oldLen) {
-            c.externalSelection = TextSelection(baseOffset: 0, extentOffset: newLen);
+          if (hadSelection) {
+            final ns = c.selection;
+            if (ns.isValid && !ns.isCollapsed) c.externalSelection = ns;
           }
+        }
+        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+      } else if (hasOverlay && targets.length == 1) {
+        // v4.0.8: Single-block overlay selection — sync after apply.
+        final c = targets.first;
+        final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+        applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
+        if (hadSelection) {
+          final ns = c.selection;
+          if (ns.isValid && !ns.isCollapsed) c.externalSelection = ns;
+          _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
         }
       } else {
         for (final c in targets) {

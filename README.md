@@ -1,7 +1,11 @@
-# AutoTeleprompter v4.0.7
+# AutoTeleprompter v4.0.8
 # (Core Teleprompter Engine - iOS - Android - macOS - Windows)
 
 A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.7.
+
+## Key Improvements (v4.0.8 - 2026-04-17)
+- Multi-Line Handle Drag Fixed (Delta Compensation): Handles no longer snap to line 1 when the finger lands at the top of the 56-px hit area. Root cause: `_handleUpdate` was passed `d.globalPosition` (finger touch) directly instead of the handle's logical caret position. Fixed by recording `_panStartGlobal` and `_panStartHandleLogical` on pan start, then deriving `adjustedGlobal = stackBox.localToGlobal(caretStart) + delta` and passing that to `_handleUpdate`.
+- Style Selection Preserved After B/I/U: Applying bold/italic/underline/color/size no longer shrinks the amber highlight. Root cause: after `wrapSelection` inserted tags, `externalSelection` still held pre-insert offsets. Fixed by copying `controller.selection` (set correctly by `wrapSelection`) back to `externalSelection`, then calling `syncOffsetsFromExternalSelection` on the overlay to update `_startOffset`/`_endOffset` and recalculate handle positions.
 
 ## Key Improvements (v4.0.7 - 2026-04-17)
 - Multi-Line Handle Drag Fixed: Handles can now be dragged to the second (and further) visual lines of wrapped text within a single block. Root cause: collapsing native controller.selection in _enterRefineMode() was corrupting RenderEditable's internal state used by getPositionForPoint(). Fixed by making selectionColor always transparent and removing the collapse — all amber rendering is now exclusively in MarkupController.buildTextSpan.
@@ -108,4 +112,4 @@ Since this project is managed on Windows, we use GitHub Actions to build the iOS
 4. Download: Scroll down to Artifacts and download the AutoTeleprompter-iOS zip.
 5. Install: On your Windows laptop, use Sideloadly (https://sideloadly.io/) to install the .ipa onto your iPhone.
 
-*Last Hardened: 2026-04-17 (v4.0.7 Multi-Line Handle Drag Hardening)*
+*Last Hardened: 2026-04-17 (v4.0.8 Delta-Drag + Style Selection Lock)*

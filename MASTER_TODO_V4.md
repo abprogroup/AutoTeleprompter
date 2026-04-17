@@ -24,10 +24,10 @@
 > ⚠️ v4.0 Android is complete. Do not modify this section. For v5.0 Android premium features, see MASTER_TODO_V5.md.
 
 ## 🔄 Restoration Protocol (v3.35.9)
-- [X] High Priority: Color Suite Crash (App exits on color selection) -> Fixed v3.35.9 (Nav removal)
-- [X] Medium Priority: Layout Alignment Toggling -> Fixed v3.35.9 (Strict Selection)
-- [X] Medium Priority: Layout History Stack (Spacing/Word Spacing persistence) -> Fixed v3.35.9 (Slider Registry)
-- [X] Low Priority: Selection Purity (Tag-free copy/paste) -> Fixed v3.35.9 (Material Interceptor)
+- [U] High Priority: Color Suite Crash (App exits on color selection) -> Fixed v3.35.9 (Nav removal)
+- [U] Medium Priority: Layout Alignment Toggling -> Fixed v3.35.9 (Strict Selection)
+- [U] Medium Priority: Layout History Stack (Spacing/Word Spacing persistence) -> Fixed v3.35.9 (Slider Registry)
+- [U] Low Priority: Selection Purity (Tag-free copy/paste) -> Fixed v3.35.9 (Material Interceptor)
 - [U] **Styling Engine Hardening**: MS Office Parity + Leak-Proof Logic. (COMPLETED v3.9.6 — Almost Stable).
   - Implementation of `StylingService` for centralized tag management and **Unified Layout Engine**.
   - Sectioned history bulking (Typing 10-char/10s + Suite Sectioned Sessions).
@@ -119,13 +119,13 @@
 - [-] **Faded Files**: Grey out/disable unsupported files: Could not apply with current resources - Need a dedicated file picker - Maybe in future updates we can do it. (DEFERRED)
 
 ## 🎯 v4.0 Stable Release Tasks (Android)
-- [P] **Hide Record Button**: Removed RECORD button from bottom bar and ProjectActionsSuite. PRESENT button now full-width. (2026-04-12)
-- [P] **Hide Settings Button**: Removed settings IconButton from editor top bar ProjectActionsSuite. (2026-04-12)
-- [P] **Hide Login/Auth**: Removed login button, account menu, and all auth UI from gallery app bar. (2026-04-12)
-- [P] **Hide Cloud Sync**: Removed _ProDashboard (CLOUD SYNC card) from gallery screen. (2026-04-12)
-- [P] **Hide Controller Features**: Removed Remote Hub button, _RemoteDashboard, and disabled remote auto-start in teleprompter provider. (2026-04-12)
-- [ ] **Verify Core Features**: Ensure script editor, formatting, recent activity, auto-save, and prompter mode all work correctly without premium dependencies.
-- [ ] **Final QA Pass**: Full regression test of stable release feature set.
+- [U] **Hide Record Button**: Removed RECORD button from bottom bar and ProjectActionsSuite. PRESENT button now full-width. (2026-04-12)
+- [U] **Hide Settings Button**: Removed settings IconButton from editor top bar ProjectActionsSuite. (2026-04-12)
+- [U] **Hide Login/Auth**: Removed login button, account menu, and all auth UI from gallery app bar. (2026-04-12)
+- [U] **Hide Cloud Sync**: Removed _ProDashboard (CLOUD SYNC card) from gallery screen. (2026-04-12)
+- [U] **Hide Controller Features**: Removed Remote Hub button, _RemoteDashboard, and disabled remote auto-start in teleprompter provider. (2026-04-12)
+- [U] **Verify Core Features**: Ensure script editor, formatting, recent activity, auto-save, and prompter mode all work correctly without premium dependencies.
+- [U] **Final QA Pass**: Full regression test of stable release feature set.
 
 ## 🔮 Next Version — Android (Premium Features — Deferred)
 - [-] **Content Creator Mode**: Recording, live streaming, and video export. (DEFERRED: v4.1+ premium feature)
@@ -170,36 +170,6 @@
 - [P] **BUG: Handle Position Lag During Drag**: `_calculateHandlePositions()` ran synchronously before new layout settled. Fix: `addPostFrameCallback` in `_handleUpdate` to recalculate after the frame. (AI VERIFIED 2026-04-17)
 
 ## 🛠️ UI & UX Fixes (iOS — Historical)
-- [U] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (USER VERIFIED v3.9.5.6)
-- [U] **BUG: Paragraph Spacing**: Empty lines between paragraphs show disproportionately large gaps. (FIXED v3.9.5.1)
-- [X] **FEATURE: History Persistence**: Save/Restore Undo stack in sessions. (AI VERIFIED v3.9.5.1; pending user re-test)
-- [U] **BUG: Select All Failure**: "Select All" only selects the active paragraph. (FIXED v3.9.5.1)
-- [U] **v3.9.5.1 Color & Sync Hardening**: Real-Time Editor Sync, Hardened Prompter Toggles, Authority Persistence. (USER VERIFIED)
-- [U] **v3.5.x Hardening**: Persistence Guard, Surgical Mirrors, Task Timer, /logit Protocol. (USER VERIFIED)
-- [U] **Recent Activity Bug**: Script appears twice after opening. (FIXED v3.5.3)
-- [U] **URGENT: Live State Sync**: History list updates immediately after delete/save. (FIXED v3.5.1)
-- [U] **BUG: Recent Activity Timer**: Activates 500ms after open. (FIXED v3.5.3)
-- [U] **BUG: Recent Activity Duplication**: Loading same file twice creates duplicates. (FIXED v3.5.4)
-- [U] **BUG: Auto-Save Error**: "Bad state: ref after disposed" in editor. (FIXED via state guards)
-- [U] **FEATURE: Conflict Resolution**: Prompt to "Reload & Discard" or "Keep History". (FIXED v3.5.2)
-- [U] **RTF Parsing Cleanup**: Removed stray '0' and 'none' artifacts. (USER VERIFIED)
-- [U] **Autonomous Deployment**: Integrated /Emulator into Master Loop. (USER VERIFIED)
-- [U] **Recent Scripts Delete**: Delete button works after "Show More". (USER VERIFIED)
-- [U] **Undo/Redo**: Background colors. (USER VERIFIED)
-- [U] **BUG: Color Picker Focus**: Applied colors revert due to radix-parsing failure. (AI Deep Fix Verified v3.9.5)
-- [U] **Toolbar "C" Button**: Clear all styles/colors/align. (AI VERIFIED)
-- [U] **BUG: History Sorting**: Latest at top. (AI VERIFIED)
-- [U] **Splash Screen**: Removed "V3" text. (FIXED v3.5.3)
-- [U] **Style Exposure Bug**: Raw codes exposed on selection. (AI VERIFIED: Transparent Tag Masking)
-- [U] **BUG: Clear Styles History**: 3 history points instead of 1. (USER VERIFIED)
-- [U] **URGENT: Emulator Hardware Bridge**: Mac Camera/Mic access. (AI VERIFIED v3.7.1)
-- [U] **URGENT: Emulator Hardware ENG Keyboard Bridge**: Mac Keyboard. (AI VERIFIED v3.5.3)
-- [-] **URGENT: Emulator Hardware HEB Keyboard Bridge**: Deferred — not critical; hard to implement.
-
-## 📂 File Picker (iOS)
-- [U] **Security Fix**: Remove "last used folder" memory. (COMPLETED v2.x)
-- [U] **Selection Fix**: Tapping supported file does nothing. (COMPLETED v2.x)
-- [-] **Faded Files**: Grey out unsupported files. Deferred — needs dedicated file picker.
 
 ---
 

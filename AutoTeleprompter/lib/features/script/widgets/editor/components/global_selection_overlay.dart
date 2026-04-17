@@ -186,8 +186,14 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     // Use the actual RenderEditable so caret positions match rendered text
     // (where markup tags are hidden via zero-size style).
     final editable = _findRenderEditable(renderObj);
-    final overlay = context.findAncestorRenderObjectOfType<RenderStack>() as RenderBox?;
-    if (overlay == null) return null;
+
+    // v4.1.0: Use _stackKey directly instead of findAncestorRenderObjectOfType<RenderStack>().
+    // The ancestor search walks up the render tree and could find an intermediate
+    // RenderStack (e.g. inside Scaffold internals) before reaching our Stack,
+    // which would put coordinates in the wrong space. _stackKey always refers to
+    // OUR Stack, guaranteed.
+    final ourStack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (ourStack == null) return null;
 
     if (editable != null) {
       // v4.1.0: Use downstream affinity so a position at a line-wrap boundary
@@ -196,12 +202,12 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       final caretOffset = editable.getLocalRectForCaret(
         TextPosition(offset: offset, affinity: TextAffinity.downstream),
       );
-      return editable.localToGlobal(caretOffset.topLeft, ancestor: overlay);
+      return editable.localToGlobal(caretOffset.topLeft, ancestor: ourStack);
     }
 
     // Fallback: use the block's top-left corner
     final box = renderObj as RenderBox;
-    return box.localToGlobal(Offset.zero, ancestor: overlay);
+    return box.localToGlobal(Offset.zero, ancestor: ourStack);
   }
 
   void _enterRefineMode() {

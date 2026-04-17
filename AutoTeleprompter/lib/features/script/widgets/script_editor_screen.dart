@@ -541,8 +541,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final controller = _activeController;
     if (controller == null) return 'left';
     final text = controller.text;
-    final off = offset ?? controller.selection.baseOffset;
-    if (off < 0) return 'left';
+    // Clamp to 0 when selection is invalid (e.g. focus moved to layout suite).
+    // Alignment tags always wrap from position 0 so scanning at 0 is correct.
+    final rawOff = offset ?? controller.selection.baseOffset;
+    final off = rawOff.clamp(0, text.isEmpty ? 0 : text.length);
     final alignMatches = RegExp(r'\[(?:align=)?(center|left|right)\]').allMatches(text);
     final dirMatches = RegExp(r'\[(rtl|ltr)\]').allMatches(text);
     String found = 'left';

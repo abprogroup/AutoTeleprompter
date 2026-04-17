@@ -78,11 +78,17 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         c.isGlobalSelected = true;
       }
       _updateBlockHighlights();
-      // v3.9.5.73: Trust parent setState for initial draw, 
+      // v3.9.5.73: Trust parent setState for initial draw,
       // only refresh controllers to ensure individual TextFields repaint.
       for (final c in widget.controllers) {
         c.refresh();
       }
+    });
+    // Recalculate handle positions after the frame so RenderEditables are
+    // laid out with their selection highlights before we read caret coords.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _calculateHandlePositions());
     });
     widget.onSelectionChanged();
   }
@@ -163,6 +169,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (!_isWholeScriptSelected) return;
     for (final c in widget.controllers) {
       c.isGlobalSelected = false;
+      c.refresh(); // repaint TextFields immediately so isGlobalSelected=false takes effect
     }
     widget.onSelectionChanged();
   }
@@ -203,6 +210,12 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
               for (final c in widget.controllers) {
                 c.refresh();
               }
+            });
+            // Recalculate handle positions after the frame so caret coords
+            // reflect the new selection highlight layout.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() => _calculateHandlePositions());
             });
             return;
         }

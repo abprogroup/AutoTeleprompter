@@ -164,6 +164,11 @@
 - [P] **BUG: Pages Round-Trip Loses Colors**: `PagesService._stripMarkup()` stripped all `[color=...]` and `**` markup before saving. Fixed: store raw markup text — bracket tags are not XML special characters and survive `_parsePages` intact. (AI VERIFIED 2026-04-17)
 - [P] **BUG: Selection Handles Stuck After Alignment Change**: `_calculateHandlePositions()` was never called after alignment changes moved the text visually. Fixed: `refreshPositions()` public method on `GlobalSelectionOverlayState`, called from `onAlign()` and `onDirection()` via `addPostFrameCallback`. (AI VERIFIED 2026-04-17)
 
+## 🔧 Selection Handles Hardening (v4.0.5)
+- [P] **BUG: Selection Handles Both on Same Row After Select All**: `selectAll()` called `_calculateHandlePositions()` synchronously inside `setState` before the frame rendered. Fix: `addPostFrameCallback` in `selectAll()` to recalculate after the frame. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Stale Highlight After Drag (Deselected Blocks Stay Highlighted)**: `_enterRefineMode()` set `isGlobalSelected=false` but never called `c.refresh()`. TextFields didn't repaint until `_handleUpdate` fired, which didn't fire if drag was over a gap. Fix: call `c.refresh()` inside `_enterRefineMode()`. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Handle Position Lag During Drag**: `_calculateHandlePositions()` ran synchronously before new layout settled. Fix: `addPostFrameCallback` in `_handleUpdate` to recalculate after the frame. (AI VERIFIED 2026-04-17)
+
 ## 🛠️ UI & UX Fixes (iOS — Historical)
 - [U] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (USER VERIFIED v3.9.5.6)
 - [U] **BUG: Paragraph Spacing**: Empty lines between paragraphs show disproportionately large gaps. (FIXED v3.9.5.1)

@@ -1,7 +1,12 @@
-# AutoTeleprompter v4.0.4
+# AutoTeleprompter v4.0.5
 # (Core Teleprompter Engine - iOS - Android - macOS - Windows)
 
-A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.4.
+A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.5.
+
+## Key Improvements (v4.0.5 - 2026-04-17)
+- Selection Handles Correct After Select All: Handles now appear at the true caret positions after Select All (deferred to post-frame).
+- Highlight Clears Immediately on Drag: Deselected blocks no longer retain the amber highlight when a drag handle is moved.
+- Handle Position Lag Fixed: Handle positions recalculate after each drag frame settles, not before.
 
 ## Key Improvements (v4.0.4 - 2026-04-17)
 - Alignment Button Highlights After Apply: Tapping left/center/right in the layout suite now immediately lights up the correct button.

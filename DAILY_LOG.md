@@ -135,3 +135,13 @@
 - **Commits**: `c89254e` (unified TODO) → `75e7aea` (selection handles fix) → `8278f6b` (stale highlight fix)
 - **iOS Build**: Run `24562460617`. IPA downloaded to `releases/iOS/v1.0/AutoTeleprompter.ipa`.
 - **Status**: Selection system hardened. IPA ready for Sideloadly.
+
+### ✅ 2026-04-17 — v4.0.6 [SELECTION_HIGHLIGHT_FINAL_HARDENING]
+- **Session Goals**: Fix two remaining selection highlight bugs: (1) applying alignment clears amber highlight, (2) full block highlighted when only partial selection via drag.
+- **Achievements**:
+    - **Highlight Preserved After Alignment**: `_onSelectionChanged()` fires on focus events before `_isCommandExecuting` is set. With `_isGlobalSelection=true` and native `controller.selection` collapsed (text was programmatically set), `isFullBlock=false` → `_clearGlobalSelection()` was called, destroying the visual highlight. Fix: added `if (_overlayKey.currentState?.hasSelection ?? false) return;` guard in `_onSelectionChanged()` before the `_clearGlobalSelection()` path. When the overlay has active handles, focus events never clear the selection.
+    - **Full-Block Highlight Fixed on Drag**: When `_enterRefineMode()` set all `c.isGlobalSelected=false` and then `widget.onSelectionChanged()` set `_isGlobalSelection=false`, all `_EditorBlock` widgets rebuilt with `selectionColor=amber (non-transparent)`. Native `controller.selection` still held the full Select All range → RenderEditable painted the entire block amber. Fix: in `_enterRefineMode()`, after `widget.onSelectionChanged()` (so `_isGlobalSelection=false` is already set), collapse native selection for any non-collapsed controller. The collapse notification fires with `_isGlobalSelection=false` so the `_clearGlobalSelection()` guard is inactive.
+- **Root Cause Summary**: Two-layer selection system (native RenderEditable + custom buildTextSpan) — `selectionColor` toggle between transparent and amber on `_isGlobalSelection` change was the common thread; native selection state was leaking through when selectionColor became non-transparent.
+- **Commits**: `2a2ec85`
+- **iOS Build**: Triggered. IPA pending download to `releases/iOS/v1.0/AutoTeleprompter.ipa`.
+- **Status**: Selection highlight system fully hardened across all scenarios.

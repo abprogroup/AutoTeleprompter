@@ -169,13 +169,18 @@ class MarkupController extends TextEditingController {
     TextSelection renderSelection;
     if (isGlobalSelected) {
       renderSelection = TextSelection(baseOffset: 0, extentOffset: src.length);
-    } else if (externalSelection != null && !externalSelection!.isCollapsed) {
-      // Normalize RTL selection where base > extent
+    } else if (externalSelection != null) {
+      // externalSelection is authoritative whenever it is set:
+      //   - range  → show amber highlight for that range
+      //   - collapsed (offset: 0) → suppress all highlight (block is outside
+      //     the global selection range). Do NOT fall through to the native
+      //     controller.selection, which may hold a stale range from a prior
+      //     user gesture and would leak an amber highlight.
       final s = externalSelection!.start;
       final e = externalSelection!.end;
       renderSelection = TextSelection(baseOffset: s, extentOffset: e);
     } else {
-      // Use native selection, normalized
+      // null → not in global-selection mode; show native cursor/selection.
       final s = selection.start.clamp(0, src.length);
       final e = selection.end.clamp(0, src.length);
       renderSelection = TextSelection(baseOffset: s, extentOffset: e);

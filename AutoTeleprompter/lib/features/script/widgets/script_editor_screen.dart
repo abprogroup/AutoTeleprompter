@@ -1222,6 +1222,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _commitHistory('Direction: $dir');
     }
     _onSelectionChanged();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _overlayKey.currentState?.refreshPositions();
+    });
     setState(() => _isCommandExecuting = false);
   }
 
@@ -1252,10 +1256,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // Directly stamp the chosen alignment into cursorStyleProvider after the
     // detection callback runs — detection is unreliable immediately after an
     // apply because the focus/selection state is in flux.
+    // Also refresh overlay handle positions — text moved visually but handles
+    // are still at the old coordinates from before the alignment change.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(cursorStyleProvider.notifier).state =
           ref.read(cursorStyleProvider).copyWith(textAlign: align);
+      _overlayKey.currentState?.refreshPositions();
     });
     setState(() => _isCommandExecuting = false);
   }

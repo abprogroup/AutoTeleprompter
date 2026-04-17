@@ -1,7 +1,11 @@
-# AutoTeleprompter v4.0.9
+# AutoTeleprompter v4.1.0
 # (Core Teleprompter Engine - iOS - Android - macOS - Windows)
 
 A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.7.
+
+## Key Improvements (v4.1.0 - 2026-04-17)
+- Multi-Line Handle Drag Fixed (Affinity): Handles now correctly track line 2+ positions after dragging. Root cause: `getLocalRectForCaret` was called with default `TextAffinity.upstream`, which places a wrap-boundary caret at the END of line 1 instead of the START of line 2. Even after `_endOffset` was correctly set to a line-2 position by `getPositionForPoint`, `_calculateHandlePositions` re-rendered the handle at line 1 on every frame update. Fixed by passing `affinity: TextAffinity.downstream` to every `getLocalRectForCaret` call in `_getOffsetForPosition`.
+- Style Selection Locked (Arithmetic Shift): Applying Bold → Italic → Underline in sequence no longer progressively shrinks the amber highlight. Root cause: the previous fix read `c.selection` after `wrapSelection` to determine the new selection range, but on iOS the platform text input system can asynchronously reset `c.selection`, making the read unreliable. Fixed by computing the shift arithmetically: `open.length` is added (toggle-on) or subtracted (toggle-off) directly from the stored `oldStart`/`oldEnd` — `c.selection` is never read.
 
 ## Key Improvements (v4.0.9 - 2026-04-17)
 - Multi-Line Handle Drag Fixed (Global-at-Start): `_stackKey.currentContext` can be temporarily null inside `onPanUpdate` during a setState rebuild. Fixed by converting the handle's Stack-local caret position to global coords ONCE in `onPanStart` (where layout is guaranteed valid from the previous frame) and storing it as `_panStartHandleGlobal`. `onPanUpdate` simply adds the finger delta to that stored global origin — no lookup needed.

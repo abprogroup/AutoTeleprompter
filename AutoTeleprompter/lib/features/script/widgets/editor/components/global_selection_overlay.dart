@@ -190,7 +190,12 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (overlay == null) return null;
 
     if (editable != null) {
-      final caretOffset = editable.getLocalRectForCaret(TextPosition(offset: offset));
+      // v4.1.0: Use downstream affinity so a position at a line-wrap boundary
+      // resolves to the START of the next line, not the end of the previous line.
+      // Without this, handles at wrap boundaries always snapped back to line 1.
+      final caretOffset = editable.getLocalRectForCaret(
+        TextPosition(offset: offset, affinity: TextAffinity.downstream),
+      );
       return editable.localToGlobal(caretOffset.topLeft, ancestor: overlay);
     }
 

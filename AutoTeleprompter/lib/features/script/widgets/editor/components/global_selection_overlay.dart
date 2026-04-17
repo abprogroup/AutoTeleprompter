@@ -120,7 +120,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     for (int i = 0; i < widget.controllers.length; i++) {
       final c = widget.controllers[i];
       if (i < sB || i > eB) {
-        c.externalSelection = null;
+        // Use a collapsed (non-null) selection to explicitly suppress any
+        // highlight. Setting null would fall through to the native
+        // controller.selection, which may still hold a range from a prior
+        // user gesture and would show a stale amber highlight.
+        c.externalSelection = const TextSelection.collapsed(offset: 0);
       } else if (i == sB && i == eB) {
         c.externalSelection = TextSelection(baseOffset: sO, extentOffset: eO);
       } else if (i == sB) {

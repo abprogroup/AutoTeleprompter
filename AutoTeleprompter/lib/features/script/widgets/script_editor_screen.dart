@@ -456,8 +456,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         // Keep global selection only if the active block is still fully selected
         // (i.e. the notification came from our own _selectAllBlocks).
         // Any other selection state (collapsed tap, partial drag) clears it.
-        // Note: overlay/refined selection is cleared via onTap, not here,
-        // to avoid fighting with the overlay's drag handle updates.
+        // Guard: if the overlay has active handles (e.g. alignment was just applied
+        // or drag is in progress), do NOT clear — focus events fire before
+        // _isCommandExecuting is set and would prematurely destroy the selection.
+        if (_overlayKey.currentState?.hasSelection ?? false) return;
         final textLen = controller.text.length;
         final isFullBlock = !controller.selection.isCollapsed &&
             controller.selection.start == 0 &&

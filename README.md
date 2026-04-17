@@ -1,7 +1,10 @@
-# AutoTeleprompter v4.0.6
+# AutoTeleprompter v4.0.7
 # (Core Teleprompter Engine - iOS - Android - macOS - Windows)
 
-A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.6.
+A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.7.
+
+## Key Improvements (v4.0.7 - 2026-04-17)
+- Multi-Line Handle Drag Fixed: Handles can now be dragged to the second (and further) visual lines of wrapped text within a single block. Root cause: collapsing native controller.selection in _enterRefineMode() was corrupting RenderEditable's internal state used by getPositionForPoint(). Fixed by making selectionColor always transparent and removing the collapse — all amber rendering is now exclusively in MarkupController.buildTextSpan.
 
 ## Key Improvements (v4.0.6 - 2026-04-17)
 - Highlight Preserved After Alignment: Applying alignment to a Select All selection no longer clears the amber highlight (overlay hasSelection guard added to _onSelectionChanged).
@@ -105,4 +108,4 @@ Since this project is managed on Windows, we use GitHub Actions to build the iOS
 4. Download: Scroll down to Artifacts and download the AutoTeleprompter-iOS zip.
 5. Install: On your Windows laptop, use Sideloadly (https://sideloadly.io/) to install the .ipa onto your iPhone.
 
-*Last Hardened: 2026-04-17 (v4.0.6 Selection Highlight Final Hardening)*
+*Last Hardened: 2026-04-17 (v4.0.7 Multi-Line Handle Drag Hardening)*

@@ -169,6 +169,9 @@
 - [P] **BUG: Stale Highlight After Drag (Deselected Blocks Stay Highlighted)**: Root cause: `_updateBlockHighlights` set `externalSelection=null` for out-of-range blocks, causing `buildTextSpan` to fall through to the native `controller.selection`. If the user previously dragged text in a block, the native selection held a range and kept showing the amber highlight. Fix: use `TextSelection.collapsed(offset:0)` instead of `null` for out-of-range blocks; update `buildTextSpan` to treat any non-null `externalSelection` as authoritative (collapsed=no highlight, range=highlight), never leaking native selection. Also: `c.refresh()` added to `_enterRefineMode()` for immediate repaint. (AI VERIFIED 2026-04-17)
 - [P] **BUG: Handle Position Lag During Drag**: `_calculateHandlePositions()` ran synchronously before new layout settled. Fix: `addPostFrameCallback` in `_handleUpdate` to recalculate after the frame. (AI VERIFIED 2026-04-17)
 
+## 🔧 Multi-Line Handle Drag Hardening (v4.0.7)
+- [P] **BUG: Handles Cannot Drag to Second Visual Line of Wrapped Text**: Collapsing native `controller.selection` in `_enterRefineMode()` (v4.0.6 Bug 2 fix) corrupted RenderEditable's internal state, preventing `getPositionForPoint()` from correctly mapping y-coordinates on the second+ visual line. Fix: `selectionColor` always transparent; removed native selection collapse from `_enterRefineMode()`. All amber rendering exclusively via `MarkupController.buildTextSpan`. (AI VERIFIED 2026-04-17)
+
 ## 🔧 Selection Highlight Final Hardening (v4.0.6)
 - [P] **BUG: Applying Alignment Clears Amber Highlight**: `_onSelectionChanged()` fired on focus events before `_isCommandExecuting=true` was set. With `_isGlobalSelection=true` and native `controller.selection` collapsed (programmatic text set), `isFullBlock=false` → `_clearGlobalSelection()` destroyed the highlight. Fix: guard `if (_overlayKey.currentState?.hasSelection ?? false) return;` added before the `_clearGlobalSelection()` path. (AI VERIFIED 2026-04-17)
 - [P] **BUG: Entire Block Highlighted During Drag From Select All**: `selectionColor` flipped to amber once `_isGlobalSelection=false`, and native `controller.selection` still held the full Select All range → RenderEditable painted entire block amber. Fix: collapse native `controller.selection` in `_enterRefineMode()` AFTER `widget.onSelectionChanged()` sets `_isGlobalSelection=false`, so the collapse notification fires with the guard inactive. (AI VERIFIED 2026-04-17)
@@ -188,4 +191,4 @@
 *No tasks yet. Append new Windows items here as development begins.*
 
 ---
-*Last Updated: 2026-04-17 (v4.0.6 iOS Selection Highlight Final Hardening)*
+*Last Updated: 2026-04-17 (v4.0.7 iOS Multi-Line Handle Drag Hardening)*

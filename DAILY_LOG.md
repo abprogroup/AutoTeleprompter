@@ -151,5 +151,5 @@
 - **Root Cause**: The Bug 2 fix in v4.0.6 collapsed native `controller.selection` to offset 0 in `_enterRefineMode()`. This was done to prevent RenderEditable painting full-block amber after `selectionColor` flipped from transparent to amber when `_isGlobalSelection` became false. However, the collapse interfered with `getPositionForPoint()` — after the RenderEditable's internal state was reset, it could no longer correctly map y-coordinates on the second visual line of wrapped text to the corresponding text positions.
 - **Fix**: Changed `selectionColor` to always `Colors.transparent` in `_EditorBlock`. All amber selection rendering is now exclusively handled by `MarkupController.buildTextSpan` via `externalSelection`/`isGlobalSelected`. Since RenderEditable never paints its own amber, the native selection collapse in `_enterRefineMode()` is no longer needed and was removed. This is a cleaner two-layer architecture: native = transparent cursor/input only; custom buildTextSpan = all visual selection.
 - **Commits**: `9d821ea`
-- **iOS Build**: Triggered. IPA pending.
+- **iOS Build**: Run `24566209797`, artifact `6496212142`. IPA downloaded to `releases/iOS/v1.0/AutoTeleprompter.ipa`.
 - **Status**: Multi-line drag expected to work. Awaiting user verification.

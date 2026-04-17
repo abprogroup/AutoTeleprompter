@@ -576,6 +576,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           }
        }
     }
+    // Mirror the editor's own auto-RTL rule: if no explicit tag was found but
+    // the text is predominantly Hebrew, treat it as right-aligned.
+    if (found == 'left' && text.isHebrew) found = 'right';
     return found;
   }
 

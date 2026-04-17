@@ -38,11 +38,13 @@ class PagesService {
     buf.write('        <sf:layout>\n');
 
     for (final line in text.split('\n')) {
-      final plain = _stripMarkup(line);
+      // Store raw markup text — bracket tags ([color=...], **) are not XML
+      // special characters, so they survive _escapeXml intact and are read
+      // back verbatim by _parsePages, preserving all editor formatting.
       buf.write('          <sf:p>');
-      if (plain.isNotEmpty) {
+      if (line.isNotEmpty) {
         buf.write('<sf:s><sf:t>');
-        buf.write(_escapeXml(plain));
+        buf.write(_escapeXml(line));
         buf.write('</sf:t></sf:s>');
       }
       buf.write('</sf:p>\n');

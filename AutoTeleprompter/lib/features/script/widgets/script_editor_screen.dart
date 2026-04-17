@@ -1973,7 +1973,12 @@ class _EditorBlock extends StatelessWidget {
           child: Theme(
             data: Theme.of(context).copyWith(
               textSelectionTheme: TextSelectionThemeData(
-                selectionColor: isGlobalSelected ? Colors.transparent : const Color(0x66FFBF00),
+                // Always transparent: all amber selection rendering is handled
+                // by MarkupController.buildTextSpan via externalSelection /
+                // isGlobalSelected. Native RenderEditable must never paint its
+                // own amber highlight or it leaks through when _isGlobalSelection
+                // flips to false during a handle drag (Bug 2 fix v4.0.6).
+                selectionColor: Colors.transparent,
               ),
             ),
           child: TextField(

@@ -46,9 +46,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   bool _draggingEnd = false;
   Size _stackSize = Size.zero;
 
-  // Delta-drag state: track finger start and handle logical start to avoid snap-to-touch.
+  // Delta-drag state: track finger start (global) and the handle's caret start
+  // position (also global, converted at pan-start while layout is valid).
   Offset? _panStartGlobal;
-  Offset? _panStartHandleLogical;
+  Offset? _panStartHandleGlobal; // caret global position at the moment of pan start
   final GlobalKey _stackKey = GlobalKey();
 
   /// True when every block is wholly selected (post Select All, pre refine).
@@ -293,35 +294,38 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         behavior: HitTestBehavior.opaque,
         onPanStart: (details) {
           _enterRefineMode();
+          // v4.0.9: Convert the handle's Stack-local caret position to GLOBAL
+          // coordinates HERE (layout is guaranteed valid from the previous frame).
+          // Subsequent onPanUpdate calls just add the finger delta to this global
+          // caret origin, so the caret — not the touch-point — drives
+          // _handleUpdate.  This eliminates the line-1 snap that occurred when
+          // the user's finger landed at the top of the 56-px hit area (18 px
+          // above the caret) and the raw touch y was mapped to line 1 instead.
+          final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+          final logicalStackLocal = isStart ? _handleStartPos : _handleEndPos;
+          final caretGlobal = (stackBox != null && logicalStackLocal != null)
+              ? stackBox.localToGlobal(logicalStackLocal)
+              : null;
           setState(() {
             if (isStart) _draggingStart = true; else _draggingEnd = true;
-            // v4.0.8: Record where the finger first touched (global) and where
-            // the handle's logical caret point is (Stack-local).  Subsequent
-            // updates apply the delta to the caret point so the caret — not
-            // the touch point — drives _handleUpdate, eliminating the line-1
-            // snap when the finger lands at the top of the 56-px hit area.
             _panStartGlobal = details.globalPosition;
-            _panStartHandleLogical = isStart ? _handleStartPos : _handleEndPos;
+            _panStartHandleGlobal = caretGlobal;
           });
         },
         onPanUpdate: (details) {
-          final logicalStart = _panStartHandleLogical;
+          final caretStart = _panStartHandleGlobal;
           final panStart = _panStartGlobal;
-          if (logicalStart != null && panStart != null) {
-            final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
-            if (stackBox != null) {
-              final delta = details.globalPosition - panStart;
-              final adjustedGlobal = stackBox.localToGlobal(logicalStart) + delta;
-              _handleUpdate(adjustedGlobal, isStart);
-              return;
-            }
+          if (caretStart != null && panStart != null) {
+            final delta = details.globalPosition - panStart;
+            _handleUpdate(caretStart + delta, isStart);
+          } else {
+            _handleUpdate(details.globalPosition, isStart);
           }
-          _handleUpdate(details.globalPosition, isStart);
         },
         onPanEnd: (_) => setState(() {
           if (isStart) _draggingStart = false; else _draggingEnd = false;
           _panStartGlobal = null;
-          _panStartHandleLogical = null;
+          _panStartHandleGlobal = null;
         }),
         child: Container(
           width: 40,

@@ -1,7 +1,11 @@
-# AutoTeleprompter v4.0.8
+# AutoTeleprompter v4.0.9
 # (Core Teleprompter Engine - iOS - Android - macOS - Windows)
 
 A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.7.
+
+## Key Improvements (v4.0.9 - 2026-04-17)
+- Multi-Line Handle Drag Fixed (Global-at-Start): `_stackKey.currentContext` can be temporarily null inside `onPanUpdate` during a setState rebuild. Fixed by converting the handle's Stack-local caret position to global coords ONCE in `onPanStart` (where layout is guaranteed valid from the previous frame) and storing it as `_panStartHandleGlobal`. `onPanUpdate` simply adds the finger delta to that stored global origin — no lookup needed.
+- Style Selection Locked (Missing refresh()): `externalSelection` is a plain Dart field with no setter — assigning it never calls `notifyListeners()`. So after `wrapSelection` updated `externalSelection` to the post-insert positions, `buildTextSpan` was never re-invoked and continued rendering the old (pre-insert) offset range, causing the visible highlight to shrink by the tag length with each successive style. Fixed by calling `c.refresh()` immediately after every `c.externalSelection = ns` assignment.
 
 ## Key Improvements (v4.0.8 - 2026-04-17)
 - Multi-Line Handle Drag Fixed (Delta Compensation): Handles no longer snap to line 1 when the finger lands at the top of the 56-px hit area. Root cause: `_handleUpdate` was passed `d.globalPosition` (finger touch) directly instead of the handle's logical caret position. Fixed by recording `_panStartGlobal` and `_panStartHandleLogical` on pan start, then deriving `adjustedGlobal = stackBox.localToGlobal(caretStart) + delta` and passing that to `_handleUpdate`.
@@ -112,4 +116,4 @@ Since this project is managed on Windows, we use GitHub Actions to build the iOS
 4. Download: Scroll down to Artifacts and download the AutoTeleprompter-iOS zip.
 5. Install: On your Windows laptop, use Sideloadly (https://sideloadly.io/) to install the .ipa onto your iPhone.
 
-*Last Hardened: 2026-04-17 (v4.0.8 Delta-Drag + Style Selection Lock)*
+*Last Hardened: 2026-04-17 (v4.0.9 Global-at-Start Drag + refresh() Selection Lock)*

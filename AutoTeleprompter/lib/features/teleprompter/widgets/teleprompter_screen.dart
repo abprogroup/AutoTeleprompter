@@ -586,8 +586,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                               ? Color(settings.futureWordColor)
                               : (word.textColor ?? Color(settings.futureWordColor)));
                     } else if (isPast) {
-                      // Explicit word color always wins over the upcoming-color setting
-                      final base = word.textColor ?? Color(settings.futureWordColor);
+                      final base = settings.showUpcomingWordColor
+                          ? Color(settings.futureWordColor)
+                          : (word.textColor ?? Color(settings.futureWordColor));
                       // Graduated fade: words just behind current are brighter
                       final pastDist = dist.abs(); // 1 = just passed, 2 = two back, etc.
                       final gradOpacity = pastDist <= 3
@@ -595,10 +596,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                           : settings.pastWordOpacity;
                       textColor = base.withOpacity(gradOpacity.clamp(0.0, 1.0));
                     } else {
-                      // Future words: explicit color always wins; fall back to setting
-                      textColor = word.textColor ?? (settings.showUpcomingWordColor
+                      // Toggle ON: uniform override color. Toggle OFF: use per-word markup color.
+                      textColor = settings.showUpcomingWordColor
                           ? Color(settings.futureWordColor)
-                          : Color(0xFFFFFFFF));
+                          : (word.textColor ?? Color(0xFFFFFFFF));
                     }
 
                     // Use Container padding instead of trailing space for word gaps.

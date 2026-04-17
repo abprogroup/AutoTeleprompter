@@ -548,9 +548,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     String found = 'left';
     for (final m in alignMatches) {
       if (m.start <= off) {
-         final val = m.group(1)!;
-         final nextClose = text.indexOf('[/$val]', m.end);
-         if (nextClose == -1 || nextClose == text.indexOf('[/align=$val]', m.end) || nextClose >= off) found = val;
+        final val = m.group(1)!;
+        // Use the correct close tag depending on whether the opening was
+        // old-format [right] or new-format [align=right].
+        final isNewFormat = m.group(0)!.startsWith('[align=');
+        final closeTag = isNewFormat ? '[/align=$val]' : '[/$val]';
+        final nextClose = text.indexOf(closeTag, m.end);
+        if (nextClose == -1 || nextClose >= off) found = val;
       }
     }
     if (found == 'left') {

@@ -1237,6 +1237,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _commitHistory('Align: $align');
     }
     _onSelectionChanged();
+    // Directly stamp the chosen alignment into cursorStyleProvider after the
+    // detection callback runs — detection is unreliable immediately after an
+    // apply because the focus/selection state is in flux.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(cursorStyleProvider.notifier).state =
+          ref.read(cursorStyleProvider).copyWith(textAlign: align);
+    });
     setState(() => _isCommandExecuting = false);
   }
 

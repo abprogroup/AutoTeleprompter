@@ -1116,25 +1116,30 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
-        // Refined overlay selection: apply per-controller, then sync externalSelection
-        // from the new native selection set by wrapSelection so handles don't drift.
+        // Refined overlay selection spanning multiple blocks: apply per-controller,
+        // then shift externalSelection by open.length (arithmetic, not c.selection read).
+        // v4.1.0: Reading c.selection after wrapSelection is unreliable on iOS because
+        // the platform text input can asynchronously reset it. Use pure arithmetic instead.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
           final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+          final oldStart = hadSelection ? c.externalSelection!.start : 0;
+          final oldEnd   = hadSelection ? c.externalSelection!.end   : 0;
+          final oldLen   = c.text.length;
           wrapSelection(open, close, controllerOverride: c, skipHistory: true);
-          // v4.0.9: wrapSelection puts the correct post-insert range into
-          // controller.value.selection — mirror it to externalSelection and
-          // call refresh() so buildTextSpan re-renders with the new positions
-          // (externalSelection has no setter so it won't self-notify).
           if (hadSelection) {
-            final ns = c.selection;
-            if (ns.isValid && !ns.isCollapsed) {
-              c.externalSelection = ns;
-              c.refresh();
+            final newLen = c.text.length;
+            final shift = newLen > oldLen ? open.length : newLen < oldLen ? -open.length : 0;
+            if (shift != 0) {
+              final newStart = (oldStart + shift).clamp(0, newLen);
+              final newEnd   = (oldEnd   + shift).clamp(0, newLen);
+              if (newEnd > newStart) {
+                c.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
+                c.refresh();
+              }
             }
           }
         }
-        // Update overlay _startOffset/_endOffset so handles track the new positions.
         _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length > 1) {
@@ -1145,16 +1150,25 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       } else if (targets.length == 1) {
         final c = targets.first;
         final hadOverlaySelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+        final oldStart = hadOverlaySelection ? c.externalSelection!.start : 0;
+        final oldEnd   = hadOverlaySelection ? c.externalSelection!.end   : 0;
+        final oldLen   = c.text.length;
         wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
-        // v4.0.9: Sync externalSelection so the visible highlight matches the
-        // post-insert text positions and handles don't drift after style apply.
-        // Must call c.refresh() because externalSelection has no setter and
-        // won't trigger notifyListeners by itself.
+        // v4.1.0: Shift externalSelection arithmetically — never read c.selection.
+        // On iOS the platform input can reset c.selection asynchronously, making
+        // the read unreliable. open.length is always the correct shift amount:
+        // toggle-on inserts open tag before the selection (shift right),
+        // toggle-off removes open tag before the selection (shift left).
         if (hadOverlaySelection) {
-          final ns = c.selection;
-          if (ns.isValid && !ns.isCollapsed) {
-            c.externalSelection = ns;
-            c.refresh();
+          final newLen = c.text.length;
+          final shift = newLen > oldLen ? open.length : newLen < oldLen ? -open.length : 0;
+          if (shift != 0) {
+            final newStart = (oldStart + shift).clamp(0, newLen);
+            final newEnd   = (oldEnd   + shift).clamp(0, newLen);
+            if (newEnd > newStart) {
+              c.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
+              c.refresh();
+            }
           }
           _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
         }
@@ -1195,30 +1209,46 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
-        // v4.0.9: Sync externalSelection + refresh after each apply.
+        // v4.1.0: Arithmetic shift — never read c.selection after apply.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
           final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+          final oldStart = hadSelection ? c.externalSelection!.start : 0;
+          final oldEnd   = hadSelection ? c.externalSelection!.end   : 0;
+          final oldLen   = c.text.length;
           applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
           if (hadSelection) {
-            final ns = c.selection;
-            if (ns.isValid && !ns.isCollapsed) {
-              c.externalSelection = ns;
-              c.refresh();
+            final newLen = c.text.length;
+            final shift = newLen > oldLen ? open.length : newLen < oldLen ? -open.length : 0;
+            if (shift != 0) {
+              final newStart = (oldStart + shift).clamp(0, newLen);
+              final newEnd   = (oldEnd   + shift).clamp(0, newLen);
+              if (newEnd > newStart) {
+                c.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
+                c.refresh();
+              }
             }
           }
         }
         _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
       } else if (hasOverlay && targets.length == 1) {
-        // v4.0.9: Single-block overlay selection — sync + refresh after apply.
+        // v4.1.0: Single-block overlay — arithmetic shift.
         final c = targets.first;
         final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+        final oldStart = hadSelection ? c.externalSelection!.start : 0;
+        final oldEnd   = hadSelection ? c.externalSelection!.end   : 0;
+        final oldLen   = c.text.length;
         applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
         if (hadSelection) {
-          final ns = c.selection;
-          if (ns.isValid && !ns.isCollapsed) {
-            c.externalSelection = ns;
-            c.refresh();
+          final newLen = c.text.length;
+          final shift = newLen > oldLen ? open.length : newLen < oldLen ? -open.length : 0;
+          if (shift != 0) {
+            final newStart = (oldStart + shift).clamp(0, newLen);
+            final newEnd   = (oldEnd   + shift).clamp(0, newLen);
+            if (newEnd > newStart) {
+              c.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
+              c.refresh();
+            }
           }
           _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
         }

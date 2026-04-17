@@ -1,8 +1,5 @@
-# Master TODO List: AutoTeleprompter v4.0 — SEALED
-# (Core Teleprompter Engine — Production Ready)
-# ⚠️ THIS FILE IS SEALED. v4.0 Android is complete. Do not modify.
-# For v5.0 Android premium features, see MASTER_TODO_V5.md
-# For iOS development, a separate TODO will be created.
+# Master TODO List: AutoTeleprompter v4.0
+# (Core Teleprompter Engine — iOS · Android · macOS · Windows)
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -15,11 +12,16 @@
 - `[-]` = Deferred; Should be attached with an explanation why.
 
 ## 📜 Rules of Protocol
-- **Versioning**: Only the USER can authorize major stable version jumps (v1/v2/v3/v4). AI performs sub-version steps (e.g. v3.4.5 -> v3.4.6/v3.5.1) for internal backup and session tracking.
+- **Versioning**: Only the USER can authorize major stable version jumps. AI performs sub-version steps for internal tracking.
 - **Cleanup**: `[U]` items are preserved for history and only cleared by the USER during major stable version transitions.
-- **Surgical Updates**: When updating the TODO list or Logs, only modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
-- **Persistence**: Deferred `[-]` and unfinished items are **NEVER** deleted, maintaining a full project audit trail.
-- **Autonomous Deep Run**: AI must autonomously iterate through research, test planning, and rebuilds until successful [P] verification or total exhaustion of options. Success requires Absolute Proof (Deselection + Sync).
+- **Surgical Updates**: Only modify specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items.
+- **Persistence**: Deferred `[-]` and unfinished items are **NEVER** deleted.
+- **Autonomous Deep Run**: AI must autonomously iterate through research, test planning, and rebuilds until successful [P] verification or total exhaustion of options.
+
+---
+
+## 🤖 APK — Sealed
+> ⚠️ v4.0 Android is complete. Do not modify this section. For v5.0 Android premium features, see MASTER_TODO_V5.md.
 
 ## 🔄 Restoration Protocol (v3.35.9)
 - [X] High Priority: Color Suite Crash (App exits on color selection) -> Fixed v3.35.9 (Nav removal)
@@ -35,7 +37,7 @@
   - Global selection with drag handles, surgical partial style removal, 3-mode clear style.
   - Nested style toggle-off, Riverpod safety, undo/redo stabilization.
 
-## 🛠️ UI & UX Fixes
+## 🛠️ UI & UX Fixes (Android)
 - [U] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (USER VERIFIED v3.9.5.6: Hardened Alignment extraction + 1.5x intentional row gaps)
   1. -> Enter a script.
   2. -> Align the first paragraph to the LEFT.
@@ -51,7 +53,7 @@
   3. -> EXIT the script, then REOPEN it.
   *Actual Result*: The script returns to RIGHT alignment, ignoring the undo action upon re-entry.
   *Wanted Result*: The script should return to the state it was in after the undo action.
-  *Meaning*: The undo action is being ignored. 
+  *Meaning*: The undo action is being ignored.
 - [U] **BUG: Select All Failure**: "Select All" only selects the active paragraph, not the entire script. (FIXED v3.9.5.1: Global Broadcast Mode)
 - [U] **v3.9.5.1 Color & Sync Hardening**: Absolute success in Teleprompter precision.
 - [U] **Real-Time Editor Sync**: Picking a color in the modal now updates the preview bubble instantly (Zero-Lag).
@@ -111,12 +113,12 @@
   *Verification*: Screenshots in `test/deep_analysis/` show Hebrew and English IME active and 1:1 hardware bridge in config.ini.
 - [-] **FEATURE: RTL/LTR Suite Hardening**: Re-add Direction buttons with Locked logic. (STATUS: DEFERRED PER USER INSTRUCTION).
 
-## 📂 File Picker (picker_test)
+## 📂 File Picker (Android)
 - [U] **Security Fix**: Remove "last used folder" memory (Android requirement). (COMPLETED in v2.x)
 - [U] **Selection Fix**: Tapping supported file does nothing -> Fix selection. (COMPLETED in v2.x)
 - [-] **Faded Files**: Grey out/disable unsupported files: Could not apply with current resources - Need a dedicated file picker - Maybe in future updates we can do it. (DEFERRED)
 
-## 🎯 v4.0 Stable Release Tasks
+## 🎯 v4.0 Stable Release Tasks (Android)
 - [P] **Hide Record Button**: Removed RECORD button from bottom bar and ProjectActionsSuite. PRESENT button now full-width. (2026-04-12)
 - [P] **Hide Settings Button**: Removed settings IconButton from editor top bar ProjectActionsSuite. (2026-04-12)
 - [P] **Hide Login/Auth**: Removed login button, account menu, and all auth UI from gallery app bar. (2026-04-12)
@@ -125,7 +127,7 @@
 - [ ] **Verify Core Features**: Ensure script editor, formatting, recent activity, auto-save, and prompter mode all work correctly without premium dependencies.
 - [ ] **Final QA Pass**: Full regression test of stable release feature set.
 
-## 🔮 Next Version (Premium Features — Deferred)
+## 🔮 Next Version — Android (Premium Features — Deferred)
 - [-] **Content Creator Mode**: Recording, live streaming, and video export. (DEFERRED: v4.1+ premium feature)
 - [-] **Cloud Sync**: Cross-device script synchronization via cloud backend. (DEFERRED: v4.1+ premium feature)
 - [-] **Login & Authentication**: User accounts and premium subscription management. (DEFERRED: v4.1+ premium feature)
@@ -140,4 +142,71 @@
   - *Why deferred*: Whisper inference too slow on older phones (7-8s for 3-4s audio on Oppo A53). Google STT works on Samsung/Pixel. ColorOS mic restriction blocks all Google STT variants. Needs faster phone or cloud speech API alternative.
 
 ---
-*SEALED: 2026-04-13 — v4.0 Android Stable Release Complete. See MASTER_TODO_V5.md for next version.*
+
+## 🍎 iOS — Testing
+
+## 🍎 iOS / Multi-Platform (v4.0.2–4.0.3)
+- [P] **ARCH: Multi-Platform Separation**: `lib/platform/` layer with abstract interfaces + factory pattern. Zero `Platform.isXxx` in feature code. (AI VERIFIED 2026-04-17)
+- [P] **BUG: DOCX Corrupted on Reload**: `_saveScript()` was writing plain UTF-8 bytes for `.docx`. Fixed: routes through `DocxService.generate()`. (AI VERIFIED 2026-04-17)
+- [P] **BUG: RTF Loads Empty**: Save wrote plain UTF-8; load stripped bytes > 0x7F killing Hebrew. Fixed: `RtfService.generate()` + UTF-8 fallback on load. (AI VERIFIED 2026-04-17)
+- [P] **FEATURE: Pages Export**: `PagesService.generate()` — valid ZIP with `index.xml`. Save dialog shows `.pages` on iOS/macOS only. Round-trip import works. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Mic Button Stuck on Mic Icon**: Race condition — iOS async `notListening` from previous stop() overrode new session's `isListening=true`. Fixed: `_startingSession` guard in `TeleprompterNotifier`. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Hebrew Colors Show White in Presenter (Toggle OFF)**: `showUpcomingWordColor` toggle ON correctly overrides all markup colors; toggle OFF shows per-word colors. Reverted incorrect "always win" fix. (AI VERIFIED 2026-04-17)
+
+## 🖊️ Editor Hardening (v4.0.3)
+- [P] **BUG: B/I/U Needs Two Clicks on Multi-Styled Text**: Forward scan `start+d` in `_isStyleActiveAt` caused false-positive "active" detection near opening tag of next styled block. First click was a no-op; second click applied correctly. Fixed: backward scan only. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Hebrew Alignment Shows Wrong State**: `_detectAlignAtCursor` searched for `[/right]` but editor writes `[/align=right]`. indexOf returned -1 always → alignment detection was sticky. Fixed: detect format and use correct close tag. (AI VERIFIED 2026-04-17)
+
+## 🔧 Alignment Toolbar Hardening (v4.0.4)
+- [P] **BUG: Layout Suite Alignment Button Not Updating After Apply**: Tapping center/right/left button applied alignment to text correctly but the button highlight stayed on left. Root cause: `_detectAlignAtCursor` unreliable when focus is on the suite. Fixed: second `addPostFrameCallback` in `onAlign` directly stamps the applied alignment into `cursorStyleProvider`. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Layout Suite Always Shows Left When Suite Opens**: `controller.selection.baseOffset` becomes -1 when focus moves to suite; old guard returned 'left' immediately. Fixed: clamp offset to 0 in `_detectAlignAtCursor`. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Layout Suite Shows Wrong Alignment After Script Load**: `_loadText` never triggers `_onSelectionChanged` for non-empty blocks (no auto-focus). Hebrew scripts with `[right]`/`[rtl]` tags showed left in toolbar. Fixed: `addPostFrameCallback` at end of `_loadText` sets `_lastFocusedController` and calls `_onSelectionChanged`. Also: `isHebrew` check added to `_detectAlignAtCursor` to default right-align for Hebrew blocks with no explicit tag. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Pages Round-Trip Loses Colors**: `PagesService._stripMarkup()` stripped all `[color=...]` and `**` markup before saving. Fixed: store raw markup text — bracket tags are not XML special characters and survive `_parsePages` intact. (AI VERIFIED 2026-04-17)
+- [P] **BUG: Selection Handles Stuck After Alignment Change**: `_calculateHandlePositions()` was never called after alignment changes moved the text visually. Fixed: `refreshPositions()` public method on `GlobalSelectionOverlayState`, called from `onAlign()` and `onDirection()` via `addPostFrameCallback`. (AI VERIFIED 2026-04-17)
+
+## 🛠️ UI & UX Fixes (iOS — Historical)
+- [U] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (USER VERIFIED v3.9.5.6)
+- [U] **BUG: Paragraph Spacing**: Empty lines between paragraphs show disproportionately large gaps. (FIXED v3.9.5.1)
+- [X] **FEATURE: History Persistence**: Save/Restore Undo stack in sessions. (AI VERIFIED v3.9.5.1; pending user re-test)
+- [U] **BUG: Select All Failure**: "Select All" only selects the active paragraph. (FIXED v3.9.5.1)
+- [U] **v3.9.5.1 Color & Sync Hardening**: Real-Time Editor Sync, Hardened Prompter Toggles, Authority Persistence. (USER VERIFIED)
+- [U] **v3.5.x Hardening**: Persistence Guard, Surgical Mirrors, Task Timer, /logit Protocol. (USER VERIFIED)
+- [U] **Recent Activity Bug**: Script appears twice after opening. (FIXED v3.5.3)
+- [U] **URGENT: Live State Sync**: History list updates immediately after delete/save. (FIXED v3.5.1)
+- [U] **BUG: Recent Activity Timer**: Activates 500ms after open. (FIXED v3.5.3)
+- [U] **BUG: Recent Activity Duplication**: Loading same file twice creates duplicates. (FIXED v3.5.4)
+- [U] **BUG: Auto-Save Error**: "Bad state: ref after disposed" in editor. (FIXED via state guards)
+- [U] **FEATURE: Conflict Resolution**: Prompt to "Reload & Discard" or "Keep History". (FIXED v3.5.2)
+- [U] **RTF Parsing Cleanup**: Removed stray '0' and 'none' artifacts. (USER VERIFIED)
+- [U] **Autonomous Deployment**: Integrated /Emulator into Master Loop. (USER VERIFIED)
+- [U] **Recent Scripts Delete**: Delete button works after "Show More". (USER VERIFIED)
+- [U] **Undo/Redo**: Background colors. (USER VERIFIED)
+- [U] **BUG: Color Picker Focus**: Applied colors revert due to radix-parsing failure. (AI Deep Fix Verified v3.9.5)
+- [U] **Toolbar "C" Button**: Clear all styles/colors/align. (AI VERIFIED)
+- [U] **BUG: History Sorting**: Latest at top. (AI VERIFIED)
+- [U] **Splash Screen**: Removed "V3" text. (FIXED v3.5.3)
+- [U] **Style Exposure Bug**: Raw codes exposed on selection. (AI VERIFIED: Transparent Tag Masking)
+- [U] **BUG: Clear Styles History**: 3 history points instead of 1. (USER VERIFIED)
+- [U] **URGENT: Emulator Hardware Bridge**: Mac Camera/Mic access. (AI VERIFIED v3.7.1)
+- [U] **URGENT: Emulator Hardware ENG Keyboard Bridge**: Mac Keyboard. (AI VERIFIED v3.5.3)
+- [-] **URGENT: Emulator Hardware HEB Keyboard Bridge**: Deferred — not critical; hard to implement.
+
+## 📂 File Picker (iOS)
+- [U] **Security Fix**: Remove "last used folder" memory. (COMPLETED v2.x)
+- [U] **Selection Fix**: Tapping supported file does nothing. (COMPLETED v2.x)
+- [-] **Faded Files**: Grey out unsupported files. Deferred — needs dedicated file picker.
+
+---
+
+## 🖥️ macOS — Pending Development
+
+*No tasks yet. Append new macOS items here as development begins.*
+
+---
+
+## 🪟 Windows — Pending Development
+
+*No tasks yet. Append new Windows items here as development begins.*
+
+---
+*Last Updated: 2026-04-17 (v4.0.4 iOS Alignment Toolbar Hardening + Unified Platform TODO)*

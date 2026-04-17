@@ -113,3 +113,13 @@
 - **Commit**: `3074460`
 - **iOS Build**: Triggered and completed. IPA downloaded to `releases/iOS/v1.0/AutoTeleprompter.ipa`.
 - **Status**: All three reported bugs fixed. IPA ready for Sideloadly install.
+
+### ✅ 2026-04-17 — v4.0.4 [ALIGNMENT_TOOLBAR_HARDENING]
+- **Session Goals**: Fix layout suite alignment buttons not correctly reflecting the active alignment in all scenarios.
+- **Achievements**:
+    - **Alignment Button Highlight on Apply**: After tapping left/center/right in the layout suite, the correct button now lights up immediately. Root cause: `_detectAlignAtCursor` is unreliable the moment after applying alignment because focus is on the suite (not the text field) and the selection/focus state is in flux. Fix: added a second `addPostFrameCallback` after `_onSelectionChanged()` in `onAlign` that directly stamps the just-applied alignment value into `cursorStyleProvider.textAlign`. Fires FIFO after the detection callback, guaranteeing the correct button highlights.
+    - **Alignment Button Sync When Suite Opens**: When focus moves to the layout suite from the text field, `controller.selection.baseOffset` becomes -1 (invalid). The old guard `if (off < 0) return 'left'` bailed immediately, so detection always returned 'left' regardless of the text. Fix: clamp offset to 0 — alignment tags always wrap from position 0, so scanning at 0 correctly reads the block's alignment even with invalid selection.
+    - **Alignment Button Sync on Script Load**: `_loadText` calls `_addBlock` for each paragraph, but focus is only auto-requested for empty blocks. For a loaded script with content (including Hebrew scripts with `[right]`/`[rtl]` tags), no focus event ever fired, so `_onSelectionChanged` was never called and `cursorStyleProvider` stayed at its default `textAlign:'left'`. Fix: `addPostFrameCallback` at the end of `_loadText` sets `_lastFocusedController` to the first block and calls `_onSelectionChanged`, causing the toolbar to read and reflect the actual alignment of the loaded text.
+- **Commits**: `06a1a11` (clamp offset) → `da1ee46` (direct stamp on apply) → `f5135fe` (sync on load)
+- **iOS Build**: Run `24545992796`, artifact `6488161402`. IPA downloaded to `releases/iOS/v1.0/AutoTeleprompter.ipa` (timestamp 06:27).
+- **Status**: All three alignment toolbar display scenarios fixed. IPA ready for Sideloadly.

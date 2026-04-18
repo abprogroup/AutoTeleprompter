@@ -168,4 +168,31 @@
 - **Bug B Root Cause Found**: `externalSelection` is a plain Dart field — no setter, no `notifyListeners()`. So `c.externalSelection = ns` never triggered `buildTextSpan` to re-render. The TextField painted the OLD positions on the new (longer) text for the rest of the frame, making the highlight appear to shrink by the tag length with each successive style. Fix: added `c.refresh()` immediately after every `c.externalSelection = ns` assignment in `_applyStyleCmd` and `_applyInlineCmd`.
 - **Bug A Hardening**: The v4.0.8 delta approach used `_stackKey.currentContext?.findRenderObject()` inside `onPanUpdate`, which can be null during a mid-rebuild setState. Fixed by converting the handle's Stack-local caret position to global coords ONCE in `onPanStart` (layout is always valid from the prior frame at that point) and storing as `_panStartHandleGlobal`. `onPanUpdate` just adds the finger delta to that stored origin — no lookup needed.
 - **Files Modified**: `global_selection_overlay.dart` (renamed `_panStartHandleLogical` → `_panStartHandleGlobal`, moved `localToGlobal` to `onPanStart`), `script_editor_screen.dart` (added `c.refresh()` after all `externalSelection` assignments in style commands).
-- **Commits**: pending
+- **Commits**: `dd8e567`
+- **iOS Build**: Triggered. IPA released to `releases/iOS/v4/`.
+
+### ✅ 2026-04-17 — v4.1.0 [MULTI-LINE_DRAG_AFFINITY + ARITHMETIC_STYLE_LOCK]
+- **Bug A Fix (Affinity)**: `_getOffsetForPosition` called `editable.getLocalRectForCaret` with default `TextAffinity.upstream`. At a line-wrap boundary this places the caret at the END of line 1, not the START of line 2. Even when `_endOffset` was correctly set to a line-2 position by `getPositionForPoint`, the handle position was rendered at line 1. Fix: pass `affinity: TextAffinity.downstream` to every `getLocalRectForCaret` call.
+- **Bug B Fix (Arithmetic shift)**: Reading `c.selection` after `wrapSelection` was unreliable because iOS can async-reset it between Dart events. Fix: compute shift arithmetically — add `open.length` (toggle-on) or subtract (toggle-off) directly from stored `oldStart`/`oldEnd`. Never read `c.selection` at all.
+- **Commits**: `6bb4714`
+
+### ✅ 2026-04-17 — v4.1.1 [GLOBAL_COORDINATES + VISUAL_OFFSET_LOCK]
+- **Bug A Fix (Double globalToLocal)**: `_handleUpdate` called `editable.globalToLocal(globalPos)` then passed the result to `editable.getPositionForPoint()`, which also calls `globalToLocal()` internally. The double-conversion shifted y by the widget's screen offset, always returning a line-1 position. Fix: pass `globalPos` directly to `getPositionForPoint` without pre-converting.
+- **Bug B Fix (Visual offsets)**: Arithmetic shift was fragile at tag-boundary edge cases. Fix: convert `externalSelection.start/end` to VISUAL char counts BEFORE the style command using `MarkupController.rawToVisualOffset`, then convert back after using `visualToRawOffset`. Visual char counts are invariant to tag insertion/removal.
+- **Files Modified**: `global_selection_overlay.dart` (`_handleUpdate`), `markup_controller.dart` (new `rawToVisualOffset`/`visualToRawOffset` static methods), `script_editor_screen.dart` (visual-offset round-trip in `_applyStyleCmd` and `_applyInlineCmd`).
+- **Commits**: `3f650e4`
+
+### ✅ 2026-04-17 — v4.1.2 [NATIVE_SELECTION_LOCK]
+- **Bug B (Native long-press path)**: v4.1.1 fix was gated on `hadOverlaySelection`. When user selected via native iOS long-press, `externalSelection = null`, gate = false, fix skipped. iOS async platform reset of `c.selection` then shifted offsets by `open.length` per application. Fixes: (1) expanded snapshot to fall back to `c.selection` when `externalSelection` is null; (2) always pin `c.externalSelection` after wrap; (3) `!isCollapsed` guard in `StylingLogicMixin.wrapSelection` and `applyInlineProperty` to prevent collapsed sentinel `externalSelection` from being mistaken for a style target.
+- **User Test**: Still broken. Visual-offset conversion had edge cases not caught analytically.
+- **Commits**: `2928168`
+
+### ✅ 2026-04-18 — v4.1.3 [SYNCHRONOUS_READ + ALIGNMENT_PRESERVATION]
+- **Session Goals**: (1) Definitively fix B/I/U selection shrink (Bug B). (2) Fix amber highlight corruption when alignment is applied to a partial selection.
+- **Bug B Final Fix (Synchronous c.selection read)**: Abandoned visual-offset-conversion entirely. Root insight: `wrapSelection`/`applyInlineProperty` set `controller.value` synchronously via the Dart call stack. `c.selection` is the post-wrap selection at that exact instant. iOS platform resets of `c.selection` only arrive at event-loop boundaries (platform messages), never mid-function. Reading `c.selection` immediately after the wrap call is therefore guaranteed correct. Fix: removed all `rawToVisualOffset`/`visualToRawOffset` round-trips; read `c.selection` directly after wrap and pin to `c.externalSelection`. Applied to all four paths (single-block + multi-block overlay in both `_applyStyleCmd` and `_applyInlineCmd`).
+- **Alignment Selection Corruption Fix**: `applyLayout` strips old alignment tag and wraps with new one. Different tag lengths (e.g. `[center]`=8 vs `[left]`=6) shift all raw offsets in `externalSelection`, which was never updated after alignment was applied. Visual-offset conversion IS correct here (alignment tags render at zero visible width so visual offsets are invariant to alignment tag changes). Fix: capture visual offsets before `controller.value = ...`, convert back after, re-pin `externalSelection`. Also call `syncOffsetsFromExternalSelection` to keep overlay `_startOffset/_endOffset` in sync. Applied to both `onDirection` and `onAlign`.
+- **User Test**: Both fixes confirmed working by user (2026-04-18).
+- **Files Modified**: `script_editor_screen.dart` (all four style paths + `onDirection` + `onAlign`), `README.md`, `MASTER_TODO_V4.md`.
+- **Commits**: `ff1d1ed` (v4.1.3 synchronous read) → `89c4507` (v4.1.3b alignment preservation)
+- **iOS Build**: Triggered on push `89c4507`. IPA in `releases/iOS/v4/`.
+- **Status**: Bug A (multi-line drag) FIXED since v4.1.1. Bug B (style selection shrink) FIXED v4.1.3. Alignment selection corruption FIXED v4.1.3b. All iOS pending items USER VERIFIED 2026-04-18.

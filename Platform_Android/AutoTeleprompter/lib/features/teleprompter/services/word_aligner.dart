@@ -12,20 +12,21 @@ class AlignmentResult {
 class WordAligner {
   // ── Tuning constants ───────────────────────────────────────────────────────
   // Window size to search ahead (in non-newline words).
-  // Increased from 8 to 30 to allow matching anything visible on current screen.
-  static const int _searchWindowSize = 30;
-  // Max words to advance in a single update.
-  // Increased from 3 to 10 to allow reading ahead over numbers/dates/punctuation.
-  static const int _maxJumpWords = 10;
+  static const int _searchWindowSize = 50;
+  // Max words for a SINGLE-word match (prevents false jumps on common words).
+  static const int _maxSingleJump = 5;
+  // Max words for a MULTI-WORD sequence match (reliable — multiple words confirmed).
+  static const int _maxSeqJump = 30;
   // Minimum similarity for a word to be considered a match
-  static const double _matchThreshold = 0.65;
+  static const double _matchThreshold = 0.55;
   // Stricter threshold for the fast single-word path
-  static const double _fastMatchThreshold = 0.75;
+  static const double _fastMatchThreshold = 0.65;
   // Penalty applied per word of distance from the current position.
-  // Reduced to allow jumping to the next sentence more easily.
-  static const double _distancePenaltyPerWord = 0.03;
+  static const double _distancePenaltyPerWord = 0.025;
   // Cross-language (e.g. Latin word in Hebrew script) — more lenient
-  static const double _crossLangThreshold = 0.55;
+  static const double _crossLangThreshold = 0.45;
+  // Hebrew-specific: even more lenient because STT often returns approximate matches
+  static const double _hebrewMatchThreshold = 0.50;
 
   /// Parse raw script text into a list of ScriptWords.
   /// Preserves paragraph breaks as isNewline=true entries.
@@ -56,8 +57,12 @@ class WordAligner {
           final parts = clean.split(RegExp(r'\s+'));
           for (final part in parts) {
             if (part.isEmpty) continue;
-            final isRtl = part.isHebrew;
-            final normalized = part.normalizeForMatching();
+            // v3.9.7: Strip residual markup tags before RTL detection AND normalization
+            // so [color=#HEX] etc. don't dilute the Hebrew character ratio
+            final cleanPart = part.replaceAll(
+              RegExp(r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr)(?:=[^\]]+)?\]|\*\*'), '');
+            final isRtl = cleanPart.isHebrew;
+            final normalized = cleanPart.normalizeForMatching();
             if (normalized.isEmpty) continue;
             words.add(ScriptWord(
               raw: part,
@@ -123,7 +128,9 @@ class WordAligner {
       r'|\[(center|left|right)\](.*?)\[\/\21\]'
       r'|\[align=(center|left|right)\](.*?)\[\/align=\23\]'
       r'|\[i\](.*?)\[\/i\]'
-      r'|\[(rtl|ltr)\](.*?)\[\/\26\]',
+      r'|\[(rtl|ltr)\](.*?)\[\/\26\]'
+      r'|\[color=([^\]]+)\](.*?)\[\/color\]'
+      r'|\[bg=([^\]]+)\](.*?)\[\/bg\]',
       dotAll: true,
     );
     int last = 0;
@@ -217,6 +224,24 @@ class WordAligner {
         final dir = m.group(26)!;
         spans.addAll(_parseMarkupRecursive(m.group(27)!,
             base.copyWith(text: '', isParagraphRtl: dir == 'rtl')));
+      } else if (m.group(28) != null && m.group(29) != null) {
+        // [color=#HEX] custom text color
+        final c = _parseHexColor(m.group(28)!);
+        if (c != null) {
+          spans.addAll(_parseMarkupRecursive(m.group(29)!,
+              base.copyWith(text: '', textColor: c)));
+        } else {
+          spans.addAll(_parseMarkupRecursive(m.group(29)!, base));
+        }
+      } else if (m.group(30) != null && m.group(31) != null) {
+        // [bg=#HEX] custom highlight/background color
+        final c = _parseHexColor(m.group(30)!);
+        if (c != null) {
+          spans.addAll(_parseMarkupRecursive(m.group(31)!,
+              base.copyWith(text: '', highlight: c)));
+        } else {
+          spans.addAll(_parseMarkupRecursive(m.group(31)!, base));
+        }
       }
       last = m.end;
     }
@@ -227,6 +252,14 @@ class WordAligner {
           isItalic: base.isItalic, highlight: base.highlight, textColor: base.textColor));
     }
     return spans;
+  }
+
+  /// Parse a hex color string like "#FF0000" or "FF0000" into a Color.
+  static Color? _parseHexColor(String raw) {
+    var hex = raw.trim().replaceFirst('#', '');
+    if (hex.length == 6) hex = 'FF$hex';
+    final v = int.tryParse(hex, radix: 16);
+    return v == null ? null : Color(v);
   }
 
   // ── Aligner ─────────────────────────────────────────────────────────────────
@@ -279,8 +312,8 @@ class WordAligner {
       return AlignmentResult(lastConfirmedIndex, 0.0, 'AT_END');
     }
 
-    // Use a wider window to look past clusters of numbers/dates
-    final windowEnd = (searchStart + 15).clamp(0, script.length);
+    // Use a wider window to look past clusters of numbers/dates and allow jumping
+    final windowEnd = (searchStart + _searchWindowSize).clamp(0, script.length);
 
     // ── STEP 1: NEXT-WORD PRIORITY ──────────────────────────────────────────
     // The most common case: user said the very next word. Check it first with
@@ -288,8 +321,11 @@ class WordAligner {
     if (searchStart < script.length && !script[searchStart].isNewline) {
       final nextWord = script[searchStart].normalized;
       if (nextWord.isNotEmpty) {
-        final sim = _wordSimilarity(lastSpoken, nextWord, script[searchStart].isRtl);
-        if (sim >= 0.60) {
+        final isHebrew = script[searchStart].isRtl;
+        final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
+        // Hebrew STT is less precise — use a lower threshold for the next word
+        final nextThreshold = isHebrew ? 0.45 : 0.55;
+        if (sim >= nextThreshold) {
           return AlignmentResult(searchStart, sim,
               'NEXT_WORD: "${lastSpoken}" ~ "${nextWord}" = ${sim.toStringAsFixed(2)}');
         }
@@ -320,11 +356,17 @@ class WordAligner {
       }
     }
 
-    if (bestSingleIdx >= 0 && bestSingleSim >= _fastMatchThreshold) {
-      final jumpDist = bestSingleIdx - lastConfirmedIndex;
-      if (jumpDist <= _maxJumpWords) {
-        return AlignmentResult(bestSingleIdx, bestSingleSim,
-            'SINGLE: "${lastSpoken}" → [${bestSingleIdx}]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
+    if (bestSingleIdx >= 0) {
+      // Use lower threshold for Hebrew words since STT is less precise
+      final bestIsHebrew = bestSingleIdx < script.length && script[bestSingleIdx].isRtl;
+      final singleThreshold = bestIsHebrew ? _hebrewMatchThreshold : _fastMatchThreshold;
+      if (bestSingleSim >= singleThreshold) {
+        final jumpDist = bestSingleIdx - lastConfirmedIndex;
+        // Single-word matches only allow small jumps to prevent false skips
+        if (jumpDist <= _maxSingleJump) {
+          return AlignmentResult(bestSingleIdx, bestSingleSim,
+              'SINGLE: "${lastSpoken}" → [${bestSingleIdx}]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
+        }
       }
     }
 
@@ -366,21 +408,20 @@ class WordAligner {
       final normalizedScore = available > 0 ? (seqScore / available) - distPenalty : 0.0;
 
       if (normalizedScore > bestSeqScore && matchCount >= 1) {
-        bestSeqScore = normalizedScore;
-        // Return the position of the LAST matched word in the sequence
-        // (i.e. the furthest confirmed position), but cap the jump
-        bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
-        bestSeqDebug = 'SEQ@$i: matched=$matchCount/$available score=${normalizedScore.toStringAsFixed(2)} end=$bestSeqEndIdx';
+        final seqJump = (si - 1) - lastConfirmedIndex;
+        // For large jumps, require at least 2 matching words for confidence
+        final minMatches = seqJump > _maxSingleJump ? 2 : 1;
+        if (matchCount >= minMatches && seqJump <= _maxSeqJump) {
+          bestSeqScore = normalizedScore;
+          bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
+          bestSeqDebug = 'SEQ@$i: matched=$matchCount/$available score=${normalizedScore.toStringAsFixed(2)} end=$bestSeqEndIdx jump=$seqJump';
+        }
       }
     }
 
     if (bestSeqScore >= _matchThreshold && bestSeqEndIdx > lastConfirmedIndex) {
-      final jumpDist = bestSeqEndIdx - lastConfirmedIndex;
-      // Only allow sequence jumps within the max jump limit, or with very high confidence
-      if (jumpDist <= _maxJumpWords || (bestSeqScore >= 0.90 && jumpDist <= _maxJumpWords + 2)) {
-        return AlignmentResult(bestSeqEndIdx, bestSeqScore,
-            '$bestSeqDebug\n$debugScans');
-      }
+      return AlignmentResult(bestSeqEndIdx, bestSeqScore,
+          '$bestSeqDebug\n$debugScans');
     }
 
     // ── NO MATCH ────────────────────────────────────────────────────────────
@@ -400,7 +441,7 @@ class WordAligner {
 
     double sim = spoken.similarity(scriptWord);
 
-    // For Hebrew words, also try with stripped prefixes
+    // For Hebrew words, try multiple matching strategies
     if (isRtl && sim < 0.75) {
       final ss = scriptWord.stripHebrewPrefixes();
       final ls = spoken.stripHebrewPrefixes();
@@ -408,11 +449,49 @@ class WordAligner {
         sim = 0.88; // Strong match via prefix stripping
       } else {
         final prefixSim = ls.similarity(ss);
-        if (prefixSim > sim) sim = prefixSim * 0.92; // Slight penalty for prefix match
+        if (prefixSim > sim) sim = prefixSim * 0.92;
+      }
+
+      // Also try phonetic normalization for Hebrew
+      // (כ/ק, ת/ט, ב/ו, ח/כ, ס/שׂ are commonly confused by STT)
+      if (sim < 0.65) {
+        final phoneticSpoken = _hebrewPhonetic(spoken);
+        final phoneticScript = _hebrewPhonetic(scriptWord);
+        final phoneticSim = phoneticSpoken.similarity(phoneticScript);
+        if (phoneticSim > sim) sim = phoneticSim * 0.90;
+
+        // Also try phonetic + prefix strip
+        final phoneticSS = _hebrewPhonetic(ss);
+        final phoneticLS = _hebrewPhonetic(ls);
+        final phoneticPrefixSim = phoneticLS.similarity(phoneticSS);
+        if (phoneticPrefixSim > sim) sim = phoneticPrefixSim * 0.88;
+      }
+
+      // Substring match: if spoken word contains the script word or vice versa
+      // (STT sometimes concatenates or splits Hebrew words)
+      if (sim < 0.60) {
+        if (ls.length >= 3 && ss.length >= 3) {
+          if (ls.contains(ss) || ss.contains(ls)) {
+            final overlapRatio = (ls.length < ss.length ? ls.length : ss.length) /
+                (ls.length > ss.length ? ls.length : ss.length);
+            final subSim = 0.70 * overlapRatio + 0.20;
+            if (subSim > sim) sim = subSim;
+          }
+        }
       }
     }
 
     return sim;
+  }
+
+  /// Normalize Hebrew letters that sound the same for phonetic comparison.
+  static String _hebrewPhonetic(String s) {
+    return s
+        .replaceAll('\u05E7', '\u05DB') // ק → כ
+        .replaceAll('\u05D8', '\u05EA') // ט → ת
+        .replaceAll('\u05E1', '\u05E9') // ס → ש
+        .replaceAll('\u05E2', '\u05D0') // ע → א
+        .replaceAll('\u05D5', '\u05D1'); // ו → ב (when confused by STT)
   }
 
   /// Collapse sequences of single-character words into abbreviation candidates.

@@ -13,8 +13,20 @@ extension HebrewNormalization on String {
 
   /// Strip common Hebrew prefix letters that attach without spaces:
   /// ו (and), ה (the), ב (in), ל (to), מ (from), כ (like), ש (that)
+  /// Also handles multi-prefix combos: ובה, ולה, מה, שב, etc.
   String stripHebrewPrefixes() {
-    const prefixes = ['וה', 'בה', 'לה', 'מה', 'כה', 'שה', 'ו', 'ה', 'ב', 'ל', 'מ', 'כ', 'ש'];
+    const prefixes = [
+      // Triple combos
+      'ובה', 'ולה', 'ומה', 'וכה', 'ושה',
+      'ובל', 'ומל', 'וכל',
+      // Double combos
+      'וה', 'בה', 'לה', 'מה', 'כה', 'שה',
+      'וב', 'ול', 'ומ', 'וכ', 'וש',
+      'שב', 'של', 'שמ', 'שכ',
+      'כש', 'לכ', 'מב',
+      // Single
+      'ו', 'ה', 'ב', 'ל', 'מ', 'כ', 'ש',
+    ];
     for (final p in prefixes) {
       if (startsWith(p) && length - p.length >= 2) {
         return substring(p.length);

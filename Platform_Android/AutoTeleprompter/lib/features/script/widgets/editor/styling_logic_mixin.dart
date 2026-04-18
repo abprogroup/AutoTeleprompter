@@ -35,12 +35,7 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
 
     if (controller == null) return;
     final text = controller.text;
-    // v4.1.2: Require !isCollapsed so collapsed externalSelection (used to
-    // suppress highlight on out-of-range blocks) is never treated as a style
-    // range.  Falls back to native c.selection.
-    final selection = (controller.externalSelection != null &&
-            controller.externalSelection!.isValid &&
-            !controller.externalSelection!.isCollapsed)
+    final selection = (controller.externalSelection != null && controller.externalSelection!.isValid)
         ? controller.externalSelection!
         : controller.selection;
     if (selection == null || !selection.isValid) return;
@@ -112,10 +107,7 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
 
     if (controller == null) return;
     final text = controller.text;
-    // v4.1.2: Require !isCollapsed (same guard as wrapSelection).
-    final selection = (controller.externalSelection != null &&
-            controller.externalSelection!.isValid &&
-            !controller.externalSelection!.isCollapsed)
+    final selection = (controller.externalSelection != null && controller.externalSelection!.isValid)
         ? controller.externalSelection!
         : controller.selection;
     if (selection == null || !selection.isValid) return;
@@ -264,11 +256,10 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
     if (checkAt(start)) return true;
     if (checkAt(end)) return true;
     if (checkAt(mid)) return true;
-    // Backward scan only: handles cursor landing inside an invisible opening tag.
-    // Forward scan is intentionally omitted — it caused false positives when the
-    // cursor was just before the opening tag of the NEXT styled block.
+    // Check nearby positions to handle invisible tag characters
     for (int d = 1; d <= open.length + 2; d++) {
       if (start - d >= 0 && checkAt(start - d)) return true;
+      if (start + d <= text.length && checkAt(start + d)) return true;
     }
     return false;
   }

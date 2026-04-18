@@ -152,51 +152,6 @@ class MarkupController extends TextEditingController {
     super.value = newValue.copyWith(text: newText, selection: newSelection);
   }
 
-  // ── Visual-offset conversion helpers ─────────────────────────────────────
-  // Tags occupy raw character positions but render at zero visible width.
-  // These helpers let callers track selections by VISIBLE character count so
-  // that inserting or removing tags (B/I/U/size/color/font) never shifts the
-  // logical selection.
-
-  /// Number of visible (non-tag) characters from the start of [text] up to
-  /// (but not including) [rawOffset].
-  static int rawToVisualOffset(String text, int rawOffset) {
-    int visual = 0;
-    int cursor = 0;
-    for (final m in _tagRegex.allMatches(text)) {
-      if (m.start >= rawOffset) break;
-      final segEnd = m.start < rawOffset ? m.start : rawOffset;
-      visual += segEnd - cursor;
-      cursor = m.end;
-    }
-    if (cursor < rawOffset) visual += rawOffset - cursor;
-    return visual;
-  }
-
-  /// Raw offset of the [visualOffset]-th visible character in [text].
-  /// Returns [text.length] when [visualOffset] exceeds the visible char count.
-  static int visualToRawOffset(String text, int visualOffset) {
-    int visual = 0;
-    int cursor = 0;
-    for (final m in _tagRegex.allMatches(text)) {
-      if (m.start > cursor) {
-        final segLen = m.start - cursor;
-        if (visual + segLen >= visualOffset) {
-          return cursor + (visualOffset - visual);
-        }
-        visual += segLen;
-      }
-      cursor = m.end;
-    }
-    if (cursor < text.length) {
-      final segLen = text.length - cursor;
-      if (visual + segLen >= visualOffset) {
-        return cursor + (visualOffset - visual);
-      }
-    }
-    return text.length;
-  }
-
   static Color? _parseHex(String raw) {
     var hex = raw.trim().replaceFirst('#', '');
     if (hex.length == 6) hex = 'FF$hex';
@@ -214,18 +169,13 @@ class MarkupController extends TextEditingController {
     TextSelection renderSelection;
     if (isGlobalSelected) {
       renderSelection = TextSelection(baseOffset: 0, extentOffset: src.length);
-    } else if (externalSelection != null) {
-      // externalSelection is authoritative whenever it is set:
-      //   - range  → show amber highlight for that range
-      //   - collapsed (offset: 0) → suppress all highlight (block is outside
-      //     the global selection range). Do NOT fall through to the native
-      //     controller.selection, which may hold a stale range from a prior
-      //     user gesture and would leak an amber highlight.
+    } else if (externalSelection != null && !externalSelection!.isCollapsed) {
+      // Normalize RTL selection where base > extent
       final s = externalSelection!.start;
       final e = externalSelection!.end;
       renderSelection = TextSelection(baseOffset: s, extentOffset: e);
     } else {
-      // null → not in global-selection mode; show native cursor/selection.
+      // Use native selection, normalized
       final s = selection.start.clamp(0, src.length);
       final e = selection.end.clamp(0, src.length);
       renderSelection = TextSelection(baseOffset: s, extentOffset: e);

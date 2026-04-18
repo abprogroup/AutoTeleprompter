@@ -28,10 +28,6 @@ import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
-import '../services/rtf_service.dart';
-import '../services/pages_service.dart';
-import '../../../platform/file_import/platform_file_import.dart';
-import '../../../platform/keyboard/platform_keyboard.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // ── Switchboard Orchestrator ──────────────────────────────────────────────────
@@ -398,12 +394,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
         lastText = controller.text;
         _isDirty = true;
-        // v4.1.2: When the user edits text (not inside a style command), clear
-        // any pinned externalSelection so stale amber doesn't linger after typing.
-        if (!_isCommandExecuting && controller.externalSelection != null) {
-          controller.externalSelection = null;
-          controller.refresh();
-        }
         _onBlockChanged();
       });
 
@@ -440,15 +430,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         if (mounted) _isLoading = false;
       });
     }
-    // Sync toolbar state after load. Non-empty blocks don't auto-request focus,
-    // so _onSelectionChanged never fires — cursorStyleProvider stays at its
-    // default 'left'. Point lastFocusedController at the first block so
-    // _detectAlignAtCursor reads the right text, then run detection.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_controllers.isNotEmpty) _lastFocusedController = _controllers.first;
-      _onSelectionChanged();
-    });
   }
 
   void _onSelectionChanged() {
@@ -462,10 +443,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         // Keep global selection only if the active block is still fully selected
         // (i.e. the notification came from our own _selectAllBlocks).
         // Any other selection state (collapsed tap, partial drag) clears it.
-        // Guard: if the overlay has active handles (e.g. alignment was just applied
-        // or drag is in progress), do NOT clear — focus events fire before
-        // _isCommandExecuting is set and would prematurely destroy the selection.
-        if (_overlayKey.currentState?.hasSelection ?? false) return;
+        // Note: overlay/refined selection is cleared via onTap, not here,
+        // to avoid fighting with the overlay's drag handle updates.
         final textLen = controller.text.length;
         final isFullBlock = !controller.selection.isCollapsed &&
             controller.selection.start == 0 &&
@@ -558,22 +537,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final controller = _activeController;
     if (controller == null) return 'left';
     final text = controller.text;
-    // Clamp to 0 when selection is invalid (e.g. focus moved to layout suite).
-    // Alignment tags always wrap from position 0 so scanning at 0 is correct.
-    final rawOff = offset ?? controller.selection.baseOffset;
-    final off = rawOff.clamp(0, text.isEmpty ? 0 : text.length);
+    final off = offset ?? controller.selection.baseOffset;
+    if (off < 0) return 'left';
     final alignMatches = RegExp(r'\[(?:align=)?(center|left|right)\]').allMatches(text);
     final dirMatches = RegExp(r'\[(rtl|ltr)\]').allMatches(text);
     String found = 'left';
     for (final m in alignMatches) {
       if (m.start <= off) {
-        final val = m.group(1)!;
-        // Use the correct close tag depending on whether the opening was
-        // old-format [right] or new-format [align=right].
-        final isNewFormat = m.group(0)!.startsWith('[align=');
-        final closeTag = isNewFormat ? '[/align=$val]' : '[/$val]';
-        final nextClose = text.indexOf(closeTag, m.end);
-        if (nextClose == -1 || nextClose >= off) found = val;
+         final val = m.group(1)!;
+         final nextClose = text.indexOf('[/$val]', m.end);
+         if (nextClose == -1 || nextClose == text.indexOf('[/align=$val]', m.end) || nextClose >= off) found = val;
       }
     }
     if (found == 'left') {
@@ -584,9 +557,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           }
        }
     }
-    // Mirror the editor's own auto-RTL rule: if no explicit tag was found but
-    // the text is predominantly Hebrew, treat it as right-aligned.
-    if (found == 'left' && text.isHebrew) found = 'right';
     return found;
   }
 
@@ -1122,23 +1092,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
-        // v4.1.3: Apply style, then read c.selection synchronously.
-        // wrapSelection sets controller.value (and thus c.selection) in the same
-        // Dart call — iOS async platform resets only arrive at event-loop
-        // boundaries, so the read is guaranteed correct before we return.
+        // Refined overlay selection: apply per-controller with their externalSelection,
+        // then update externalSelection to account for tag offset changes.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
-          final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+          final oldLen = c.text.length;
           wrapSelection(open, close, controllerOverride: c, skipHistory: true);
-          if (hadSelection) {
-            final postSel = c.selection;
-            if (postSel.isValid && !postSel.isCollapsed) {
-              c.externalSelection = postSel;
-              c.refresh();
-            }
+          final newLen = c.text.length;
+          // Update externalSelection to match new text length
+          if (c.externalSelection != null && newLen != oldLen) {
+            c.externalSelection = TextSelection(
+              baseOffset: 0,
+              extentOffset: newLen,
+            );
           }
         }
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length > 1) {
         for (final c in targets) {
@@ -1146,24 +1114,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length == 1) {
-        final c = targets.first;
-        // v4.1.3: Check whether a selection exists, apply the style, then read
-        // c.selection synchronously — it is set by wrapSelection before any iOS
-        // platform event can interfere. No visual-offset conversion needed.
-        final hadSel =
-            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) ||
-            !c.selection.isCollapsed;
-        wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
-        if (hadSel) {
-          final postSel = c.selection;
-          if (postSel.isValid && !postSel.isCollapsed) {
-            c.externalSelection = postSel;
-            c.refresh();
-          }
-          if (_overlayKey.currentState?.hasSelection ?? false) {
-            _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
-          }
-        }
+        wrapSelection(open, close, controllerOverride: targets.first, skipHistory: skipH);
       }
     }
 
@@ -1201,35 +1152,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
-        // v4.1.3: Same synchronous-read approach as _applyStyleCmd multi-block.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
-          final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+          final oldLen = c.text.length;
           applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
-          if (hadSelection) {
-            final postSel = c.selection;
-            if (postSel.isValid && !postSel.isCollapsed) {
-              c.externalSelection = postSel;
-              c.refresh();
-            }
-          }
-        }
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
-      } else if (targets.length == 1) {
-        // v4.1.3: Same synchronous-read approach as _applyStyleCmd single-block.
-        final c = targets.first;
-        final hadSel =
-            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) ||
-            !c.selection.isCollapsed;
-        applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
-        if (hadSel) {
-          final postSel = c.selection;
-          if (postSel.isValid && !postSel.isCollapsed) {
-            c.externalSelection = postSel;
-            c.refresh();
-          }
-          if (_overlayKey.currentState?.hasSelection ?? false) {
-            _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+          final newLen = c.text.length;
+          if (c.externalSelection != null && newLen != oldLen) {
+            c.externalSelection = TextSelection(baseOffset: 0, extentOffset: newLen);
           }
         }
       } else {
@@ -1258,29 +1187,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     } else {
       final targets = _styleTargets();
       for (final controller in targets) {
-        // v4.1.3: Alignment strips/replaces the outer tag, shifting all raw
-        // offsets by the tag-length delta. Capture visual offsets (invariant
-        // to tag changes) before applying, then re-pin externalSelection after.
-        final hadSel = controller.externalSelection != null &&
-            controller.externalSelection!.isValid &&
-            !controller.externalSelection!.isCollapsed;
-        final visStart = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.start) : 0;
-        final visEnd   = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.end)   : 0;
         controller.value = TextEditingValue(
           text: StylingService.applyLayout(controller.text, controller.selection, dir),
           selection: TextSelection.collapsed(offset: 0),
         );
-        if (hadSel) {
-          final newStart = MarkupController.visualToRawOffset(controller.text, visStart);
-          final newEnd   = MarkupController.visualToRawOffset(controller.text, visEnd);
-          if (newEnd > newStart) {
-            controller.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
-            controller.refresh();
-          }
-        }
-      }
-      if (_overlayKey.currentState?.hasSelection ?? false) {
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(targets);
       }
     }
 
@@ -1290,10 +1200,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _commitHistory('Direction: $dir');
     }
     _onSelectionChanged();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _overlayKey.currentState?.refreshPositions();
-    });
     setState(() => _isCommandExecuting = false);
   }
 
@@ -1308,27 +1214,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     } else {
       final targets = _styleTargets();
       for (final controller in targets) {
-        // v4.1.3: Same visual-offset preservation as onDirection.
-        final hadSel = controller.externalSelection != null &&
-            controller.externalSelection!.isValid &&
-            !controller.externalSelection!.isCollapsed;
-        final visStart = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.start) : 0;
-        final visEnd   = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.end)   : 0;
         controller.value = TextEditingValue(
           text: StylingService.applyLayout(controller.text, controller.selection, align),
           selection: TextSelection.collapsed(offset: 0),
         );
-        if (hadSel) {
-          final newStart = MarkupController.visualToRawOffset(controller.text, visStart);
-          final newEnd   = MarkupController.visualToRawOffset(controller.text, visEnd);
-          if (newEnd > newStart) {
-            controller.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
-            controller.refresh();
-          }
-        }
-      }
-      if (_overlayKey.currentState?.hasSelection ?? false) {
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(targets);
       }
     }
 
@@ -1338,17 +1227,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _commitHistory('Align: $align');
     }
     _onSelectionChanged();
-    // Directly stamp the chosen alignment into cursorStyleProvider after the
-    // detection callback runs — detection is unreliable immediately after an
-    // apply because the focus/selection state is in flux.
-    // Also refresh overlay handle positions — text moved visually but handles
-    // are still at the old coordinates from before the alignment change.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.read(cursorStyleProvider.notifier).state =
-          ref.read(cursorStyleProvider).copyWith(textAlign: align);
-      _overlayKey.currentState?.refreshPositions();
-    });
     setState(() => _isCommandExecuting = false);
   }
 
@@ -1462,7 +1340,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   Future<void> _importFile() async {
-    final supportedExts = PlatformFileImport.supportedExtensions;
+    const supportedExts = ['rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text'];
     final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
     if (!mounted) return;
     if (result == null || result.files.single.path == null) {
@@ -1496,7 +1374,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               Text('.${ext.toUpperCase()} files cannot be used as scripts.', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 12),
               const Text('Supported formats:', style: TextStyle(color: Colors.white54, fontSize: 12)),
-              Text(PlatformFileImport.formatsLabel, style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
+              const Text('DOCX · DOC · RTF · PDF · TXT · ODT · MD', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
             ],
           ),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))],
@@ -1523,24 +1401,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (format == null || !mounted) return;
 
     final text = _getRefinedFullText();
-
-    // Generate bytes in the correct format for the chosen file type
-    final List<int> bytes;
-    if (format == 'docx') {
-      bytes = DocxService.generate(text);
-    } else if (format == 'rtf') {
-      bytes = RtfService.generate(text);
-    } else if (format == 'pages') {
-      bytes = PagesService.generate(text);
-    } else {
-      // txt, md — plain UTF-8
-      bytes = utf8.encode(text);
-    }
+    final bytes = utf8.encode(text);
 
     // Build filename with guaranteed extension — strip any prior extension first
     final safeName = _currentTitle
         .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
-        .replaceAll(RegExp(r'\.(txt|pdf|docx|rtf|pages|md)$', caseSensitive: false), '');
+        .replaceAll(RegExp(r'\.(txt|pdf|docx|rtf)$', caseSensitive: false), '');
     final fileName = '$safeName.$format';
 
     final savedPath = await FilePicker.platform.saveFile(
@@ -1577,51 +1443,31 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
 
-  Widget _buildBottomActions({bool keyboardVisible = false}) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (keyboardVisible && PlatformKeyboard.showDoneBar)
-          Container(
-            color: const Color(0xFF1C1C1E),
-            height: 44,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => FocusScope.of(context).unfocus(),
-                  child: const Text('Done', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 17, fontWeight: FontWeight.w600)),
-                ),
-                const SizedBox(width: 8),
-              ],
+  Widget _buildBottomActions() {
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.only(bottom: 12, top: 8),
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _startPresenting,
+              icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
+              label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFBF00),
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 12,
+                shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+              ),
             ),
           ),
-        Container(
-          color: Colors.black,
-          padding: const EdgeInsets.only(bottom: 12, top: 8),
-          child: Row(
-            children: [
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _startPresenting,
-                  icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
-                  label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFBF00),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 12,
-                    shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-            ],
-          ),
-        ),
-      ],
+          const SizedBox(width: 16),
+        ],
+      ),
     );
   }
 
@@ -1648,7 +1494,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     });
 
     final settings = ref.watch(settingsProvider);
-    final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
@@ -1665,11 +1510,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           onRename: _showRenameDialog,
         ),
       ),
-      bottomNavigationBar: _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        behavior: HitTestBehavior.translucent,
-        child: Stack(
+      bottomNavigationBar: _buildBottomActions(),
+      body: Stack(
         children: [
           Shortcuts(
         shortcuts: {
@@ -1834,7 +1676,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               child: IgnorePointer(child: _buildDebugSentry()),
             ),
         ],
-      ),
       ),
     );
   }
@@ -2056,12 +1897,7 @@ class _EditorBlock extends StatelessWidget {
           child: Theme(
             data: Theme.of(context).copyWith(
               textSelectionTheme: TextSelectionThemeData(
-                // Always transparent: all amber selection rendering is handled
-                // by MarkupController.buildTextSpan via externalSelection /
-                // isGlobalSelected. Native RenderEditable must never paint its
-                // own amber highlight or it leaks through when _isGlobalSelection
-                // flips to false during a handle drag (Bug 2 fix v4.0.6).
-                selectionColor: Colors.transparent,
+                selectionColor: isGlobalSelected ? Colors.transparent : const Color(0x66FFBF00),
               ),
             ),
           child: TextField(

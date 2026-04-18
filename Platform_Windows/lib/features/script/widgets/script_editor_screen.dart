@@ -1281,7 +1281,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
       }
       if (_overlayKey.currentState?.hasSelection ?? false) {
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(targets);
+        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
       }
     }
 
@@ -1329,7 +1329,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
       }
       if (_overlayKey.currentState?.hasSelection ?? false) {
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(targets);
+        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
       }
     }
 
@@ -2012,6 +2012,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   /// Re-sync externalSelection after a global style operation changes text lengths.
   void _resyncGlobalSelection() {
+    // If the overlay has a selection, refresh its boundaries so handles don't stay 
+    // at the pre-tag-insertion character offsets which are now mid-sentence.
+    if (_overlayKey.currentState?.hasSelection ?? false) {
+      _overlayKey.currentState?.selectAll();
+    }
     for (final c in _controllers) {
       c.isGlobalSelected = true;
       c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);

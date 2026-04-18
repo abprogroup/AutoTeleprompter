@@ -37,7 +37,11 @@ jobs:
           # 3. Stub out the Whisper Service Dart file to remove native dependencies
           $stubContent = @"
           import 'speech_service.dart';
+          dynamic whisperModelFromEngine(String engine) => null;
           class WhisperSpeechService { 
+            void Function(SpeechResult)? onResult;
+            void Function(SpeechStatus)? onStatusChange;
+            void Function(String)? onError;
             Future<void> start({String? localeId, dynamic model}) async {} 
             Future<void> stop() async {} 
             bool get isListening => false; 

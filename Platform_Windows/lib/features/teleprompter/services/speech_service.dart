@@ -71,6 +71,7 @@ class SpeechService {
   /// The string is the original requested locale ID.
   void Function(String requestedLocale)? onLanguageUnavailable;
   void Function(double level)? onSoundLevelChange;
+  bool debugLogging = true;
 
   Future<bool> initialize() async {
     try {
@@ -300,7 +301,7 @@ class SpeechService {
         listenOptions: SpeechListenOptions(
           partialResults: true,
           cancelOnError: false,
-          listenMode: ListenMode.dictation, // Essential for continuous Windows STT
+          listenFor: const Duration(seconds: 30),
         ),
         localeId: useLocale,
       );

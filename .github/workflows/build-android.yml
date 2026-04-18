@@ -33,14 +33,14 @@ jobs:
 
       - name: Install Dependencies
         run: flutter pub get
-        working-directory: Platform_Android/AutoTeleprompter
+        working-directory: Platform_Android
 
       - name: Build Android APK (Debug)
         run: flutter build apk --debug
-        working-directory: Platform_Android/AutoTeleprompter
+        working-directory: Platform_Android
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: AutoTeleprompter-Android-APK
-          path: Platform_Android/AutoTeleprompter/build/app/outputs/flutter-apk/app-debug.apk
+          path: Platform_Android/build/app/outputs/flutter-apk/app-debug.apk

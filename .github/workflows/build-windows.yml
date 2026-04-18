@@ -1,4 +1,4 @@
-name: Build Windows EXE (v4.1.4-Isolated)
+name: Build Windows EXE (v4.1.4-Isolated) # isolation-verified
 
 on:
   push:

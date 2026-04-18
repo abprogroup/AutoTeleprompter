@@ -1258,10 +1258,29 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     } else {
       final targets = _styleTargets();
       for (final controller in targets) {
+        // v4.1.3: Alignment strips/replaces the outer tag, shifting all raw
+        // offsets by the tag-length delta. Capture visual offsets (invariant
+        // to tag changes) before applying, then re-pin externalSelection after.
+        final hadSel = controller.externalSelection != null &&
+            controller.externalSelection!.isValid &&
+            !controller.externalSelection!.isCollapsed;
+        final visStart = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.start) : 0;
+        final visEnd   = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.end)   : 0;
         controller.value = TextEditingValue(
           text: StylingService.applyLayout(controller.text, controller.selection, dir),
           selection: TextSelection.collapsed(offset: 0),
         );
+        if (hadSel) {
+          final newStart = MarkupController.visualToRawOffset(controller.text, visStart);
+          final newEnd   = MarkupController.visualToRawOffset(controller.text, visEnd);
+          if (newEnd > newStart) {
+            controller.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
+            controller.refresh();
+          }
+        }
+      }
+      if (_overlayKey.currentState?.hasSelection ?? false) {
+        _overlayKey.currentState?.syncOffsetsFromExternalSelection(targets);
       }
     }
 
@@ -1289,10 +1308,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     } else {
       final targets = _styleTargets();
       for (final controller in targets) {
+        // v4.1.3: Same visual-offset preservation as onDirection.
+        final hadSel = controller.externalSelection != null &&
+            controller.externalSelection!.isValid &&
+            !controller.externalSelection!.isCollapsed;
+        final visStart = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.start) : 0;
+        final visEnd   = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.end)   : 0;
         controller.value = TextEditingValue(
           text: StylingService.applyLayout(controller.text, controller.selection, align),
           selection: TextSelection.collapsed(offset: 0),
         );
+        if (hadSel) {
+          final newStart = MarkupController.visualToRawOffset(controller.text, visStart);
+          final newEnd   = MarkupController.visualToRawOffset(controller.text, visEnd);
+          if (newEnd > newStart) {
+            controller.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
+            controller.refresh();
+          }
+        }
+      }
+      if (_overlayKey.currentState?.hasSelection ?? false) {
+        _overlayKey.currentState?.syncOffsetsFromExternalSelection(targets);
       }
     }
 

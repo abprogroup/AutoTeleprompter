@@ -283,10 +283,10 @@ class SpeechService {
         listenOptions: SpeechListenOptions(
           partialResults: true,
           cancelOnError: false,
-          // listenFor keeps Windows from freezing in a silent listen session.
-          // onStatus 'done' fires at the end and _scheduleRestart re-opens it.
-          listenFor: const Duration(seconds: 30),
         ),
+        // listenFor keeps Windows from freezing in a silent listen session.
+        // onStatus 'done' fires at the end and _scheduleRestart re-opens it.
+        listenFor: const Duration(seconds: 30),
         localeId: useLocale,
       );
     } catch (e) {

@@ -1,7 +1,19 @@
 # AutoTeleprompter v4.1.3
 # (Core Teleprompter Engine - iOS - Android - macOS - Windows)
 
-A high-performance, professional teleprompter engine for iOS, Android, macOS, and Windows, featuring a hardened autonomous development loop. Hardened at v4.0.7.
+A high-performance, professional teleprompter engine featuring a hardened autonomous development loop.
+
+## 🏛️ Project Architecture: The 4 Independent Platforms
+To guarantee absolute **Total Separation** and prevent cross-contamination of dependencies, this repository has abandoned the monolithic shared-folder model and physically split the project into 4 isolated environments:
+
+| Platform | Location | Status | Baseline |
+|---|---|---|---|
+| **Android** | `Platform_Android/` | 🟢 Sealed (Stable V4) | Preserved from 2026-04-11 (Pre-iOS) |
+| **iOS** | `Platform_iOS/` | 🟢 Sealed (Stable V4) | Preserved from 2026-04-18 (5:13 AM) |
+| **Windows** | `Platform_Windows/` | 🟡 Under Development | Contains CI/CD Cloud-Patch Engine |
+| **macOS** | `Platform_macOS/` | ⚪ Pending | Clean slate ready for development |
+
+*All future development must be routed exclusively inside the specific `Platform_*` directory.*
 
 ## Key Improvements (v4.1.3 - 2026-04-17)
 - Style Selection Locked (Synchronous Read): Applying Bold → Italic → Underline in sequence on any selection no longer shrinks the amber highlight. Root cause: all prior attempts (arithmetic shift, visual-offset conversion, snapshot-before-wrap) ultimately failed because they tried to reconstruct or preserve the selection position BEFORE the wrap, but the post-wrap raw offset is already computed correctly and synchronously by `wrapSelection`/`applyInlineProperty` via `controller.value = ...`. iOS platform resets of `c.selection` can only occur at event-loop boundaries (platform messages), never mid-function during synchronous Dart execution. Fixed by: reading `c.selection` DIRECTLY after `wrapSelection`/`applyInlineProperty` returns (guaranteed correct at that instant), pinning it to `c.externalSelection`, and discarding the visual-offset-conversion round-trip entirely. Applies to all four paths: single-block and multi-block overlay in both `_applyStyleCmd` and `_applyInlineCmd`.

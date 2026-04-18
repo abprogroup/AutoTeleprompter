@@ -20,6 +20,9 @@
 
 ---
 
+# MASTER TODO V4 — 4-Way Splitting Active
+> **NOTICE**: The repository has been physically split into `Platform_Android`, `Platform_iOS`, `Platform_Windows`, and `Platform_macOS`. All future work MUST be executed inside the specific platform's directory to ensure zero contamination.
+
 ## 🤖 APK — Sealed
 > ⚠️ v4.0 Android is complete. Do not modify this section. For v5.0 Android premium features, see MASTER_TODO_V5.md.
 

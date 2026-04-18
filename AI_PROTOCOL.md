@@ -38,7 +38,9 @@
 - **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
 - **Surgical Updates**: When updating documentation (MASTER_TODO.md, DAILY_LOG.md, README.md), the AI must ONLY modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items. Previous entries from earlier dates are PERMANENT and must never be removed.
 - **Root Directory Governance**: The AI MUST maintain a pristine project root. Only mandatory core files (`AI_PROTOCOL.md`, `README.md`, `MASTER_TODO.md`, `DAILY_LOG.md`) are authorized to reside in the root. 
-- **Total Platform Separation (Monolith Protection)**: You must preserve the mobile baseline. Desktop platforms (Windows/macOS) with conflicting dependencies must NOT alter the permanent `pubspec.yaml` or `.dart` source code. Any conflicting plugins or unsupported logic MUST be dynamically "Hot-Patched" in the platform's CI/CD script (e.g., `.github/workflows/build-windows.yml`).
+- **Total Platform Separation (The 4-Way MVP Strategy)**: The concept of a single 'Monolith' codebase is ABANDONED. The repository is physically decoupled into 4 directories (`Platform_Android`, `Platform_iOS`, `Platform_macOS`, `Platform_Windows`). 
+    - The AI agent MUST restrict all build operations, formatting, and file editing to the specific active platform folder. Mixing contexts is forbidden.
+    - **MVP Development Protocol**: When building a new feature or upgrading the app, it must ALWAYS be developed and stabilized as an **MVP (Minimum Viable Product)** inside ONE platform first (e.g., Mac). Only after the MVP feature is perfectly proven and stabilized in that folder is the AI authorized to manually copy/port the isolated logic over to the other three platforms. This permanently eliminates cross-platform regression risk.
 - **Dynamic Artifact Routing**: All other stray artifacts must be dynamically routed via 'Smart Understanding' to their specialized home based on type and intent:
     - **Test Proofs (PNG/MP4)**: `/test/deep_analysis/[TASK_ID]/`.
     - **Architectural Blueprints (Loop Schemes)**: `/schemes/`.

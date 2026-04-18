@@ -216,5 +216,9 @@
 ### 💤 Windows — Deferred (v4.1+ / v5.0)
 - [ ] **Whisper Offline STT (Backup Solution)**: Currently disabled for Windows build to prevent native plugin conflicts. To be revisited as a premium desktop feature. 
 
+### 📽️ Presentation Mode — Pending Fixes
+- [ ] **Upcoming Text Highlight**: Add a toggle in settings similar to "Upcoming text color" that resets the highlight background of read text.
+- [ ] **Spacing Synchronization**: Ensure line spacing, word spacing, and letter spacing values perfectly sync between the editor and presentation mode. Allow negative scales (down to -1.0) in presentation mode to match the editor's default limit constraints.
+
 ---
-*Last Updated: 2026-04-18 (v4.1.3 iOS Style Selection Synchronous Lock + Alignment Preservation — USER VERIFIED)*
+*Last Updated: 2026-04-18 (v4.1.4 4-Way Splitting / Windows MVP Initialization)*

@@ -102,6 +102,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
+  Timer? _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
 
   // v3.9.6: Professional History Bulking
   int _typingCharCount = 0;         // chars typed since last history commit
@@ -1549,17 +1550,40 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       bytes: Uint8List.fromList(bytes),
     );
 
-    // If the user saved but the OS stripped the extension, warn them
-    if (savedPath != null && !savedPath.endsWith('.$format')) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('File saved. Note: you may need to rename it to add ".$format" extension.'),
-            backgroundColor: Colors.orange[800],
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
+    if (!mounted) return;
+
+    if (savedPath == null) {
+      // User cancelled the dialog — make that explicit
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Save cancelled.'),
+          backgroundColor: Colors.black54,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else if (!savedPath.endsWith('.$format')) {
+      // Saved but OS stripped the extension
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved. Rename the file to add ".$format" extension if needed.'),
+          backgroundColor: Colors.orange[800],
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } else {
+      // Full success — show the filename so the user knows it worked
+      final name = savedPath.split(RegExp(r'[\\/]')).last;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(children: [
+            const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Saved: $name')),
+          ]),
+          backgroundColor: Colors.green[800],
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -1628,10 +1652,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   @override
   Widget build(BuildContext context) {
     // v3.9.5.71: Style History Sentry
-    // Detects when the user changes global formatting and triggers an Undo point + Auto-save
+    // Detects when the user changes global formatting and triggers an Undo point.
+    // v4.1.4: Uses a time-only 1.5s debounce timer instead of char-count bulk,
+    // so rapid slider drags (line spacing, etc.) only ever produce ONE history entry.
     ref.listen(settingsProvider, (previous, next) {
       if (_isCommandExecuting || previous == null) return;
-      
+
       final hasStyleChange = previous.fontSize != next.fontSize ||
           previous.fontFamily != next.fontFamily ||
           previous.lineSpacing != next.lineSpacing ||
@@ -1641,9 +1667,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           previous.scriptBgColor != next.scriptBgColor ||
           previous.currentWordColor != next.currentWordColor ||
           previous.futureWordColor != next.futureWordColor;
-          
+
       if (hasStyleChange) {
-        _saveHistory(description: 'Update Styling', debounce: true);
+        _settingsDebounceTimer?.cancel();
+        _settingsDebounceTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (mounted) _commitHistory('Update Styling');
+        });
       }
     });
 
@@ -1737,6 +1766,22 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                   _isDirty = false;
                   setState(() => _isCommandExecuting = false);
                   _saveHistory(description: 'Clear Format');
+                  // v4.1.4: After stripping alignment tags the text layout shifts,
+                  // but cursorStyleProvider and the overlay handles still hold the
+                  // old alignment. Force re-detection + handle refresh post-frame.
+                  _onSelectionChanged();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    final c = _activeController;
+                    if (c != null) {
+                      final hasAlign = RegExp(r'\[(?:align=)?(?:center|left|right)\]').hasMatch(c.text);
+                      if (!hasAlign) {
+                        ref.read(cursorStyleProvider.notifier).state =
+                            ref.read(cursorStyleProvider).copyWith(textAlign: 'left');
+                      }
+                    }
+                    _overlayKey.currentState?.refreshPositions();
+                  });
                 },
                 onFontSize: onFontSize, onAlign: onAlign, onDirection: onDirection,
                 onTextColor: onTextColorSelected, onBgColor: onBgColorSelected, onFontFamily: onFontFamily,

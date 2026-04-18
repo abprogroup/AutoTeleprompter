@@ -1122,23 +1122,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
-        // Refined overlay selection spanning multiple blocks: apply per-controller,
-        // then restore externalSelection using visual-offset conversion.
-        // v4.1.1: Convert raw positions → visual char counts BEFORE the style
-        // command, then convert back → raw AFTER.  Visual char counts are
-        // invariant to tag insertion/removal, so this survives any sequence of
-        // B/I/U/size/color/font operations regardless of tag lengths.
+        // v4.1.3: Apply style, then read c.selection synchronously.
+        // wrapSelection sets controller.value (and thus c.selection) in the same
+        // Dart call — iOS async platform resets only arrive at event-loop
+        // boundaries, so the read is guaranteed correct before we return.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
           final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-          final visStart = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.start) : 0;
-          final visEnd   = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.end)   : 0;
           wrapSelection(open, close, controllerOverride: c, skipHistory: true);
           if (hadSelection) {
-            final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
-            final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
-            if (newRawEnd > newRawStart) {
-              c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
+            final postSel = c.selection;
+            if (postSel.isValid && !postSel.isCollapsed) {
+              c.externalSelection = postSel;
               c.refresh();
             }
           }
@@ -1152,22 +1147,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length == 1) {
         final c = targets.first;
-        // v4.1.2: Capture selection from overlay externalSelection OR native
-        // c.selection — whichever is non-collapsed.  After wrap, pin amber via
-        // externalSelection so iOS async platform resets to c.selection (which
-        // can happen between user gestures) cannot corrupt subsequent B/I/U ops.
-        final selBeforeWrap =
-            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed)
-                ? c.externalSelection!
-                : (!c.selection.isCollapsed ? c.selection : null);
-        final visStart = selBeforeWrap != null ? MarkupController.rawToVisualOffset(c.text, selBeforeWrap.start) : 0;
-        final visEnd   = selBeforeWrap != null ? MarkupController.rawToVisualOffset(c.text, selBeforeWrap.end)   : 0;
+        // v4.1.3: Check whether a selection exists, apply the style, then read
+        // c.selection synchronously — it is set by wrapSelection before any iOS
+        // platform event can interfere. No visual-offset conversion needed.
+        final hadSel =
+            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) ||
+            !c.selection.isCollapsed;
         wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
-        if (selBeforeWrap != null) {
-          final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
-          final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
-          if (newRawEnd > newRawStart) {
-            c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
+        if (hadSel) {
+          final postSel = c.selection;
+          if (postSel.isValid && !postSel.isCollapsed) {
+            c.externalSelection = postSel;
             c.refresh();
           }
           if (_overlayKey.currentState?.hasSelection ?? false) {
@@ -1211,39 +1201,31 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
       if (hasOverlay && targets.length > 1) {
-        // v4.1.1: Visual-offset conversion — invariant to tag insertion/removal.
+        // v4.1.3: Same synchronous-read approach as _applyStyleCmd multi-block.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
           final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-          final visStart = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.start) : 0;
-          final visEnd   = hadSelection ? MarkupController.rawToVisualOffset(c.text, c.externalSelection!.end)   : 0;
           applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
           if (hadSelection) {
-            final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
-            final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
-            if (newRawEnd > newRawStart) {
-              c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
+            final postSel = c.selection;
+            if (postSel.isValid && !postSel.isCollapsed) {
+              c.externalSelection = postSel;
               c.refresh();
             }
           }
         }
         _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
       } else if (targets.length == 1) {
-        // v4.1.2: Single-block style — handles both overlay and native iOS
-        // selection, same pattern as _applyStyleCmd.
+        // v4.1.3: Same synchronous-read approach as _applyStyleCmd single-block.
         final c = targets.first;
-        final selBeforeWrap =
-            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed)
-                ? c.externalSelection!
-                : (!c.selection.isCollapsed ? c.selection : null);
-        final visStart = selBeforeWrap != null ? MarkupController.rawToVisualOffset(c.text, selBeforeWrap.start) : 0;
-        final visEnd   = selBeforeWrap != null ? MarkupController.rawToVisualOffset(c.text, selBeforeWrap.end)   : 0;
+        final hadSel =
+            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) ||
+            !c.selection.isCollapsed;
         applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
-        if (selBeforeWrap != null) {
-          final newRawStart = MarkupController.visualToRawOffset(c.text, visStart);
-          final newRawEnd   = MarkupController.visualToRawOffset(c.text, visEnd);
-          if (newRawEnd > newRawStart) {
-            c.externalSelection = TextSelection(baseOffset: newRawStart, extentOffset: newRawEnd);
+        if (hadSel) {
+          final postSel = c.selection;
+          if (postSel.isValid && !postSel.isCollapsed) {
+            c.externalSelection = postSel;
             c.refresh();
           }
           if (_overlayKey.currentState?.hasSelection ?? false) {

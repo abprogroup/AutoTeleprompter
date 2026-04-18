@@ -31,6 +31,12 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Accept Android SDK Licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Install NDK 27
+        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.0.11902837"
+
       - name: Install Dependencies
         run: flutter pub get
         working-directory: Platform_Android

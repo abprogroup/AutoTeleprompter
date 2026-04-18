@@ -900,10 +900,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                           ),
                         ),
 
-                      // Mic level bar — visible only when listening in speech mode
-                      if (settings.scrollMode != 'manual' && tState.isListening)
-                        _MicLevelBar(level: tState.soundLevel),
-
                       // Control bar
                       _ControlBar(
                         isListening: tState.isListening,
@@ -987,54 +983,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       case 'right': return WrapAlignment.end;
       default: return WrapAlignment.center;
     }
-  }
-}
-
-// ── Mic level bar ─────────────────────────────────────────────────────────────
-
-class _MicLevelBar extends StatelessWidget {
-  final double level; // 0.0 – 1.0
-
-  const _MicLevelBar({required this.level});
-
-  @override
-  Widget build(BuildContext context) {
-    final clamped = level.clamp(0.0, 1.0);
-    // Color: green → yellow → red as level rises
-    final color = clamped < 0.5
-        ? Color.lerp(Colors.greenAccent, Colors.yellowAccent, clamped * 2)!
-        : Color.lerp(Colors.yellowAccent, Colors.redAccent, (clamped - 0.5) * 2)!;
-
-    return Container(
-      color: Colors.black.withOpacity(0.6),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Row(
-        children: [
-          const Icon(Icons.mic, color: Colors.white54, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: clamped,
-                backgroundColor: Colors.white12,
-                valueColor: AlwaysStoppedAnimation<Color>(color),
-                minHeight: 8,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 36,
-            child: Text(
-              '${(clamped * 100).round()}%',
-              style: const TextStyle(color: Colors.white54, fontSize: 10),
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

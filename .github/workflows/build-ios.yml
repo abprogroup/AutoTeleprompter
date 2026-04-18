@@ -1,4 +1,4 @@
-name: Build iOS IPA (Free Edition)
+name: Build iOS IPA (v4.1.4-Isolated)
 
 on:
   push:

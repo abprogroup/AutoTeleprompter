@@ -3,19 +3,10 @@ name: Build Windows EXE (v4.1.4-Isolated)
 on:
   push:
     branches: [ main, master ]
-    # ONLY trigger when Windows platform files or this workflow change
+    # Only trigger when Windows platform files or this workflow change.
     paths:
       - 'Platform_Windows/**'
       - '.github/workflows/build-windows.yml'
-    # Never trigger from other platform directories
-    paths-ignore:
-      - 'Platform_iOS/**'
-      - 'Platform_Android/**'
-      - 'Platform_macOS/**'
-      - 'MASTER_TODO_V4.md'
-      - 'DAILY_LOG.md'
-      - 'README.md'
-      - 'AI_PROTOCOL.md'
   workflow_dispatch:
 
 jobs:

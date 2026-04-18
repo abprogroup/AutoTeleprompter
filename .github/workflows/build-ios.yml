@@ -3,19 +3,12 @@ name: Build iOS IPA (Free Edition)
 on:
   push:
     branches: [ main, master ]
-    # ONLY trigger when iOS platform files or this workflow change
+    # Only trigger when iOS platform files or this workflow change.
+    # paths alone is sufficient — paths-ignore cannot coexist with paths on
+    # the same event (GitHub Actions validation error).
     paths:
       - 'Platform_iOS/**'
       - '.github/workflows/build-ios.yml'
-    # Never trigger from other platform directories
-    paths-ignore:
-      - 'Platform_Windows/**'
-      - 'Platform_Android/**'
-      - 'Platform_macOS/**'
-      - 'MASTER_TODO_V4.md'
-      - 'DAILY_LOG.md'
-      - 'README.md'
-      - 'AI_PROTOCOL.md'
   workflow_dispatch:
 
 jobs:

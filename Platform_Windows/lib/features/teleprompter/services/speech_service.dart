@@ -70,6 +70,7 @@ class SpeechService {
   /// Fires when the language is confirmed unavailable (after retries exhausted).
   /// The string is the original requested locale ID.
   void Function(String requestedLocale)? onLanguageUnavailable;
+  void Function(double level)? onSoundLevelChange;
 
   Future<bool> initialize() async {
     try {
@@ -230,7 +231,15 @@ class SpeechService {
 
     if (localeId != null && localeId.isNotEmpty) {
       final bestMatch = _findBestLocale(locales, localeId);
-      if (bestMatch != null) {
+      final systemLocale = (await _stt.systemLocale())?.localeId;
+      
+      // OPTIMIZATION: On Windows, passing null (system default) to listen() 
+      // is significantly more stable than passing an explicit locale ID string 
+      // like 'en-US' or 'he-IL', especially if it's the device's main language.
+      if (bestMatch != null && systemLocale != null && 
+          bestMatch.toLowerCase().replaceAll('_', '-') == systemLocale.toLowerCase().replaceAll('_', '-')) {
+        _localeId = ''; // Force system default path
+      } else if (bestMatch != null) {
         _localeId = bestMatch;
       } else {
         // Requested language not available — fall back but flag it
@@ -274,12 +283,19 @@ class SpeechService {
       await _stt.listen(
         onResult: (SpeechRecognitionResult result) {
           _consecutiveErrors = 0;
+          // Verbose logging for recognition shards (helps debug "silent" Windows engines)
+          if (debugLogging) {
+             print('[SpeechService] onResult: words="${result.recognizedWords}", final=${result.finalResult}');
+          }
           if (result.recognizedWords.isNotEmpty) {
             onResult?.call(SpeechResult(result.recognizedWords, result.finalResult));
           }
           if (result.finalResult && _isActive && !_isRestarting) {
             _scheduleRestart(const Duration(milliseconds: 100));
           }
+        },
+        onSoundLevelChange: (level) {
+          onSoundLevelChange?.call(level);
         },
         listenOptions: SpeechListenOptions(
           partialResults: true,

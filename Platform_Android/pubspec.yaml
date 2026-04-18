@@ -33,7 +33,7 @@ dependencies:
   shelf: ^1.4.1
   shelf_router: ^1.1.4
   shelf_web_socket: ^2.0.1
-  record: ^5.0.0
+  record: ^6.2.0
   whisper_flutter_new: ^1.0.1
 
 dev_dependencies:

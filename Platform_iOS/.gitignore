@@ -1,37 +1,43 @@
-# ── Wrong-platform native directories (inside AutoTeleprompter/) ─────────────
-# Platform_iOS contains only an iOS Flutter project.
-AutoTeleprompter/macos/
-AutoTeleprompter/android/
-AutoTeleprompter/windows/
-AutoTeleprompter/web/
-
-# ── Ops / planning / AI agent files ─────────────────────────────────────────
-_agent/
-.claude/
-backups/
-development/
-guidelines_and_planning/
-releases/
-schemes/
-test/
-AI_PROTOCOL.md
-DAILY_LOG.md
-MASTER_TODO*.md
-*.todo.md
-Project platforms structure.md
-.github/
-
-# ── Build artifacts ──────────────────────────────────────────────────────────
-**/.flutter-plugins
-**/.flutter-plugins-dependencies
-**/build/
-**/.dart_tool/
-**/.idea/
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
 .DS_Store
-**/.DS_Store
-._*
-**/._.DS_Store
-*.apk
-*.aab
-*.ipa
-*.jar
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release

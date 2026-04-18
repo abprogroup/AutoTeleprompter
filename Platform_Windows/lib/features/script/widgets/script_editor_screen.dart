@@ -138,7 +138,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
       final result = await ref.read(scriptProvider.notifier).parseFile(file);
       final String content = result.text;
-      final String title = file.path.split('/').last;
+      final String title = file.path.split(RegExp(r'[\\/]')).last;
 
       // Conflict Detection Logic
       String? existingMeta;

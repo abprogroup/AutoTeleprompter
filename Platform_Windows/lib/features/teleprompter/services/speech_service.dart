@@ -298,10 +298,10 @@ class SpeechService {
         onSoundLevelChange: (levelValue) {
           onSoundLevelChange?.call(levelValue);
         },
+        listenFor: const Duration(seconds: 30),
         listenOptions: SpeechListenOptions(
           partialResults: true,
           cancelOnError: false,
-          listenFor: const Duration(seconds: 30),
         ),
         localeId: useLocale,
       );

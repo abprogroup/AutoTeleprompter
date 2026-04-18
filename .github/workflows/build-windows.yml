@@ -21,7 +21,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.6'
+          flutter-version: '3.24.3'
           channel: 'stable'
 
       - name: "PROTOCOL: Hot-Patch Windows Environment"
@@ -31,8 +31,9 @@ jobs:
           # 1. Strip incompatible Whisper plugin from pubspec.yaml (Isolated build only)
           (Get-Content pubspec.yaml) -replace '  whisper_flutter_new: \^1.0.1', '' | Set-Content pubspec.yaml
           
-          # 2. Fix intl version conflict for Windows SDK compatibility (Isolated build only)
+          # 2. Fix intl version and google_fonts (Isolated build only)
           (Get-Content pubspec.yaml) -replace '  intl: \^0.19.0', '  intl: ^0.20.2' | Set-Content pubspec.yaml
+          (Get-Content pubspec.yaml) -replace '  google_fonts: 5.1.0', '  google_fonts: ^6.2.1' | Set-Content pubspec.yaml
           
           # 3. Stub out the Whisper Service Dart file to remove native dependencies
           $stubContent = @"
@@ -50,6 +51,7 @@ jobs:
           }
           "@
           $stubContent | Set-Content lib/features/teleprompter/services/whisper_speech_service_native.dart
+
 
       - name: Sync Dependencies
         run: |

@@ -178,28 +178,28 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       if (_lastVolLog == null || now.difference(_lastVolLog!) > const Duration(milliseconds: 700)) {
         _lastVolLog = now;
         final bar = ('#' * (level * 10).round().clamp(0, 10)).padRight(10, '_');
-        _addDebugLog('🎤 [$platform] VOL: [$bar] (${level.toStringAsFixed(2)})');
-      }
-    };
+      _addDebugLog('🎤 [${_sttService.platformName}] VOL: [$bar] (${level.toStringAsFixed(2)})');
+    }
+  };
 
-    _sttService.onStatusChange = (status) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      // Ignore non-listening statuses during the start-up guard window.
-      // This prevents stale async 'notListening' from the previous stop()
-      // from resetting isListening=false right after the new session starts.
-      if (_startingSession && status != SpeechStatus.listening) return;
-      _startingSession = false;
-      _addDebugLog('🎤 [$platform] STATUS: $status');
-      _safeSetState((s) => s.copyWith(
-        isListening: status == SpeechStatus.listening,
-        statusMessage: '',
-        hasError: false,
-      ));
-    };
+  _sttService.onStatusChange = (status) {
+    if (_useWhisper || _disposed || _sessionStopped) return;
+    // Ignore non-listening statuses during the start-up guard window.
+    // This prevents stale async 'notListening' from the previous stop()
+    // from resetting isListening=false right after the new session starts.
+    if (_startingSession && status != SpeechStatus.listening) return;
+    _startingSession = false;
+    _addDebugLog('🎤 [${_sttService.platformName}] STATUS: $status');
+    _safeSetState((s) => s.copyWith(
+      isListening: status == SpeechStatus.listening,
+      statusMessage: '',
+      hasError: false,
+    ));
+  };
 
-    _sttService.onError = (error) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('🎤 [$platform] STT ERROR: $error');
+  _sttService.onError = (error) {
+    if (_useWhisper || _disposed || _sessionStopped) return;
+    _addDebugLog('🎤 [${_sttService.platformName}] STT ERROR: $error');
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
           error.contains('error_permission') ||

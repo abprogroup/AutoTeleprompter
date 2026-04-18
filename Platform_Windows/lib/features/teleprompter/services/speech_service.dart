@@ -294,8 +294,8 @@ class SpeechService {
             _scheduleRestart(const Duration(milliseconds: 100));
           }
         },
-        onSoundLevelChange: (level) {
-          onSoundLevelChange?.call(level);
+        onSoundLevelChange: (levelValue) {
+          onSoundLevelChange?.call(levelValue);
         },
         listenOptions: SpeechListenOptions(
           partialResults: true,

@@ -36,7 +36,7 @@ jobs:
         # flutter pub get generates macos/Podfile with the old platform version.
         # whisper_flutter_new requires macOS 10.15. Force it here before pod install runs.
         run: |
-          sed -i '' "s/platform :osx, '[0-9.]*'/platform :osx, '10.15'/" Platform_macOS/macos/Podfile
+          sed -i '' "s/platform :osx, '[0-9.]*'/platform :osx, '11.0'/" Platform_macOS/macos/Podfile
           head -3 Platform_macOS/macos/Podfile
 
       - name: Build macOS App

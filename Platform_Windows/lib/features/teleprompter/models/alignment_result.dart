@@ -10,6 +10,8 @@ class TeleprompterState {
   /// Non-null when the script's language isn't available for Google STT.
   /// The UI should show a dialog prompting the user to download it.
   final String? missingLanguage;
+  /// Live microphone input level: 0.0 (silent) → 1.0 (max). Only meaningful when isListening.
+  final double soundLevel;
 
   const TeleprompterState({
     this.confirmedWordIndex = 0,
@@ -18,6 +20,7 @@ class TeleprompterState {
     this.hasError = false,
     this.debugLogs = const [],
     this.missingLanguage,
+    this.soundLevel = 0.0,
   });
 
   TeleprompterState copyWith({
@@ -27,6 +30,7 @@ class TeleprompterState {
     bool? hasError,
     List<String>? debugLogs,
     String? missingLanguage = _clearSentinel,
+    double? soundLevel,
   }) {
     return TeleprompterState(
       confirmedWordIndex: confirmedWordIndex ?? this.confirmedWordIndex,
@@ -37,6 +41,7 @@ class TeleprompterState {
       missingLanguage: missingLanguage == _clearSentinel
           ? this.missingLanguage
           : missingLanguage,
+      soundLevel: soundLevel ?? this.soundLevel,
     );
   }
 }

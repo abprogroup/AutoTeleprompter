@@ -172,15 +172,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _sttService.onSoundLevelChange = (level) {
       if (_useWhisper || _disposed || _sessionStopped) return;
-      // High-precision sound level telemetry for debugging silent Windows engines.
-      // We throttle this to prevent UI stutter from log overflow.
+      // Push live level to UI state.
+      _safeSetState((s) => s.copyWith(soundLevel: level.clamp(0.0, 1.0)));
+      // Throttle debug log to avoid UI stutter.
       final now = DateTime.now();
       if (_lastVolLog == null || now.difference(_lastVolLog!) > const Duration(milliseconds: 700)) {
         _lastVolLog = now;
         final bar = ('#' * (level * 10).round().clamp(0, 10)).padRight(10, '_');
-      _addDebugLog('🎤 [${_sttService.platformName}] VOL: [$bar] (${level.toStringAsFixed(2)})');
-    }
-  };
+        _addDebugLog('🎤 [${_sttService.platformName}] VOL: [$bar] (${level.toStringAsFixed(2)})');
+      }
+    };
 
   _sttService.onStatusChange = (status) {
     if (_useWhisper || _disposed || _sessionStopped) return;
@@ -445,6 +446,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           isListening: false,
           hasError: false,
           statusMessage: '',
+          soundLevel: 0.0,
         );
       } catch (_) {}
     }

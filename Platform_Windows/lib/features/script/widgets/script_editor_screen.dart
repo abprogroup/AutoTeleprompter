@@ -1547,7 +1547,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final savedPath = await FilePicker.platform.saveFile(
       dialogTitle: 'Save as ${format.toUpperCase()}',
       fileName: fileName,
-      bytes: Uint8List.fromList(bytes),
     );
 
     if (!mounted) return;
@@ -1561,18 +1560,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           duration: Duration(seconds: 2),
         ),
       );
-    } else if (!savedPath.endsWith('.$format')) {
-      // Saved but OS stripped the extension
+      return;
+    }
+
+    // On Windows, FilePicker.saveFile only returns the path — it does NOT write
+    // the file. We must write it explicitly.
+    final finalPath = savedPath.endsWith('.$format') ? savedPath : '$savedPath.$format';
+    await File(finalPath).writeAsBytes(Uint8List.fromList(bytes));
+
+    if (!mounted) return;
+
+    final name = finalPath.split(RegExp(r'[\\/]')).last;
+    if (!savedPath.endsWith('.$format')) {
+      // OS stripped the extension — we added it back, but warn the user
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Saved. Rename the file to add ".$format" extension if needed.'),
+          content: Text('Saved as "$name" (extension was added automatically).'),
           backgroundColor: Colors.orange[800],
           duration: const Duration(seconds: 4),
         ),
       );
     } else {
-      // Full success — show the filename so the user knows it worked
-      final name = savedPath.split(RegExp(r'[\\/]')).last;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(children: [

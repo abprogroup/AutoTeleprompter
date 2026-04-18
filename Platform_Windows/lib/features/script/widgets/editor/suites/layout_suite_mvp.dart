@@ -58,13 +58,12 @@ class LayoutSuite extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         // ── Row 2: Line spacing ─────────────────────────────────────────
-        // Slider displays a delta from the 1.2× default. 0 = default.
         SliderRow(
           label: 'Line Spacing',
-          value: (settings.lineSpacing - 1.2).clamp(-1.0, 1.0),
-          min: -1.0,
-          max: 1.0,
-          onChanged: (v) { notifier.setLineSpacing(1.2 + v); onInteraction('Line Spacing'); },
+          value: settings.lineSpacing.clamp(0.5, 3.0),
+          min: 0.5,
+          max: 3.0,
+          onChanged: (v) { notifier.setLineSpacing(v); onInteraction('Line Spacing'); },
         ),
         // ── Row 3: Letter spacing ───────────────────────────────────────
         SliderRow(

@@ -282,8 +282,10 @@ class SpeechService {
         },
         listenOptions: SpeechListenOptions(
           partialResults: true,
-          listenMode: ListenMode.dictation,
           cancelOnError: false,
+          // listenFor keeps Windows from freezing in a silent listen session.
+          // onStatus 'done' fires at the end and _scheduleRestart re-opens it.
+          listenFor: const Duration(seconds: 30),
         ),
         localeId: useLocale,
       );

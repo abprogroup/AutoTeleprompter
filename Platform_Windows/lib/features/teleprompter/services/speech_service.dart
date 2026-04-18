@@ -152,10 +152,7 @@ class SpeechService {
             onStatusChange?.call(SpeechStatus.listening);
           }
         },
-        debugLogging: true,
-        options: [
-          SpeechToText.androidNoBluetooth,
-        ],
+        debugLogging: false, // v4.1.4: disable verbose logging in production
       );
     } catch (e) {
       onError?.call('STT init failed: $e');

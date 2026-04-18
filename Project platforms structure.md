@@ -6,8 +6,13 @@ AutoTeleprompter is a single Flutter project that builds natively for four
 platforms: **Android**, **iOS**, **macOS**, and **Windows (PC)**.
 
 All platforms share one codebase. Platform-specific behavior is isolated
-in a dedicated `lib/platform/` layer so that changes for one platform never
-accidentally affect another.
+in a dedicated `lib/platform/` layer.
+
+**Total Separation Protocol (CI/CD Hot-Patching):**
+To ensure `pubspec.yaml` plugin requirements (like Windows C++ limitations vs iOS/Android features) do not contaminate or break each other, this project uses **Build-Time Cloud Patching**:
+- The permanent `pubspec.yaml` is optimized for the **Mobile Baseline** (Android/iOS).
+- Desktop builds (e.g., Windows via GitHub Actions) dynamically strip out incompatible mobile plugins before compiling.
+- This guarantees zero risk to the shared `.dart` source code while achieving 100% platform isolation at release time.
 
 ---
 

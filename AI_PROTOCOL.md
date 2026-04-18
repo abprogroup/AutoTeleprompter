@@ -38,6 +38,7 @@
 - **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
 - **Surgical Updates**: When updating documentation (MASTER_TODO.md, DAILY_LOG.md, README.md), the AI must ONLY modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items. Previous entries from earlier dates are PERMANENT and must never be removed.
 - **Root Directory Governance**: The AI MUST maintain a pristine project root. Only mandatory core files (`AI_PROTOCOL.md`, `README.md`, `MASTER_TODO.md`, `DAILY_LOG.md`) are authorized to reside in the root. 
+- **Total Platform Separation (Monolith Protection)**: You must preserve the mobile baseline. Desktop platforms (Windows/macOS) with conflicting dependencies must NOT alter the permanent `pubspec.yaml` or `.dart` source code. Any conflicting plugins or unsupported logic MUST be dynamically "Hot-Patched" in the platform's CI/CD script (e.g., `.github/workflows/build-windows.yml`).
 - **Dynamic Artifact Routing**: All other stray artifacts must be dynamically routed via 'Smart Understanding' to their specialized home based on type and intent:
     - **Test Proofs (PNG/MP4)**: `/test/deep_analysis/[TASK_ID]/`.
     - **Architectural Blueprints (Loop Schemes)**: `/schemes/`.

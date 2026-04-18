@@ -1,0 +1,54 @@
+name: Build Windows EXE (v4.1.4)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build AutoTeleprompter for Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.6'
+          channel: 'stable'
+
+      - name: Install Windows Dependencies
+        run: |
+          # The Windows runner has Visual Studio pre-installed.
+          # Ensure the workload is available (usually is).
+
+      - name: Sync Dependencies
+        run: |
+          cd AutoTeleprompter
+          flutter pub get
+
+      - name: Enable Windows Desktop
+        run: |
+          flutter config --enable-windows-desktop
+
+      - name: Build Windows Archive
+        run: |
+          cd AutoTeleprompter
+          flutter build windows --release
+
+      - name: Package Artifacts
+        run: |
+          mkdir build-zip
+          # Copy the entire Release folder which includes the .exe and all necessary DLLs
+          xcopy /E /I AutoTeleprompter\build\windows\x64\runner\Release build-zip\AutoTeleprompter-Windows
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoTeleprompter-Windows-EXE
+          path: build-zip\AutoTeleprompter-Windows

@@ -1,0 +1,48 @@
+name: Build macOS App (v4.1-Isolated)
+
+on:
+  push:
+    branches: [ main, master ]
+    # Only trigger when macOS platform files or this workflow change.
+    paths:
+      - 'Platform_macOS/**'
+      - '.github/workflows/build-macos.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build AutoTeleprompter for macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.3'
+          channel: 'stable'
+          cache: true
+
+      - name: Enable macOS Desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Install Dependencies
+        run: flutter pub get
+        working-directory: Platform_macOS
+
+      - name: Build macOS App
+        run: flutter build macos --release
+        working-directory: Platform_macOS
+
+      - name: Zip App Bundle
+        run: |
+          cd Platform_macOS/build/macos/Build/Products/Release
+          zip -r AutoTeleprompter-macOS.zip autoteleprompter.app
+
+      - name: Upload App
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoTeleprompter-macOS
+          path: Platform_macOS/build/macos/Build/Products/Release/AutoTeleprompter-macOS.zip

@@ -281,10 +281,11 @@ class SpeechService {
             _scheduleRestart(const Duration(milliseconds: 100));
           }
         },
-        // Stripped listenOptions and listenFor entirely.
-        // Windows 'Windows.Media.SpeechRecognition' can hang or ignore listening 
-        // silently when timeout options or partial constraint options are injected 
-        // through Flutter's platform channel.
+        listenOptions: SpeechListenOptions(
+          partialResults: true,
+          cancelOnError: false,
+          listenMode: ListenMode.dictation, // Essential for continuous Windows STT
+        ),
         localeId: useLocale,
       );
     } catch (e) {

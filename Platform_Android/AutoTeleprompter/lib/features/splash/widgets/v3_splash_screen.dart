@@ -61,9 +61,9 @@ class _V3SplashScreenState extends State<V3SplashScreen> {
               'AUTOTELEPROMPTER',
               style: GoogleFonts.inter(
                 color: Colors.white,
-                fontSize: 28,
+                fontSize: 20,
                 fontWeight: FontWeight.w900,
-                letterSpacing: 4,
+                letterSpacing: 3,
               ),
             )
             .animate()

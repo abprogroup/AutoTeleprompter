@@ -32,9 +32,12 @@ class AppSettings {
   final bool showCurrentWordHighlight; // v3.9.5 toggle
   final bool showUpcomingWordColor;    // v3.9.5 toggle (default off)
   final String fontFamily;             // v3.9.5.46
+  final bool showAlignmentOverride;   // v3.9.8 toggle for presentation alignment override
+  final String sttEngine;          // v4.0: 'google', 'whisper_base', 'whisper_small'
+  final double readFadeIntensity;  // v4.1: gradient fade for read text (0.0=off, 1.0=full)
 
   const AppSettings({
-    this.fontSize = 18.0,
+    this.fontSize = 20.0,
     this.languageMode = 'auto',
     this.scrollLead = 0.32,
     this.lastScript = '',
@@ -51,7 +54,7 @@ class AppSettings {
     this.scriptBgColor = 0xFF000000,
     this.currentWordColor = 0xFFFFBF00,
     this.futureWordColor = 0xFFFFFFFF,
-    this.pastWordOpacity = 0.3,
+    this.pastWordOpacity = 0.7,
     this.debugMode = false,
     this.videoResolution = '720p',
     this.recentScripts = const [],
@@ -60,9 +63,12 @@ class AppSettings {
     this.lastHighlightColor = 0x4DFFFFFF,
     this.lastImportPath = '',
     this.lastHistoryIndex = -1,
-    this.showCurrentWordHighlight = true,
+    this.showCurrentWordHighlight = false,
     this.showUpcomingWordColor = false,
     this.fontFamily = 'Inter',
+    this.showAlignmentOverride = false,
+    this.sttEngine = 'google',
+    this.readFadeIntensity = 1.0,
   });
 
   AppSettings copyWith({
@@ -95,6 +101,9 @@ class AppSettings {
     bool? showCurrentWordHighlight,
     bool? showUpcomingWordColor,
     String? fontFamily,
+    bool? showAlignmentOverride,
+    String? sttEngine,
+    double? readFadeIntensity,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -126,6 +135,9 @@ class AppSettings {
       showCurrentWordHighlight: showCurrentWordHighlight ?? this.showCurrentWordHighlight,
       showUpcomingWordColor: showUpcomingWordColor ?? this.showUpcomingWordColor,
       fontFamily: fontFamily ?? this.fontFamily,
+      showAlignmentOverride: showAlignmentOverride ?? this.showAlignmentOverride,
+      sttEngine: sttEngine ?? this.sttEngine,
+      readFadeIntensity: readFadeIntensity ?? this.readFadeIntensity,
     );
   }
 }
@@ -159,6 +171,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _showCurrentWordHighlightKey = 'showCurrentWordHighlight';
   static const _showUpcomingWordColorKey = 'showUpcomingWordColor';
   static const _fontFamilyKey = 'fontFamily';
+  static const _showAlignmentOverrideKey = 'showAlignmentOverride';
+  static const _sttEngineKey = 'sttEngine';
+  static const _readFadeIntensityKey = 'readFadeIntensity';
 
   @override
   AppSettings build() {
@@ -219,7 +234,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
     }
 
     state = AppSettings(
-      fontSize: prefs.getDouble(_fontSizeKey) ?? 18.0,
+      fontSize: (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(10.0, 80.0),
       languageMode: prefs.getString(_languageKey) ?? 'auto',
       scrollLead: prefs.getDouble(_scrollLeadKey) ?? 0.32,
       lastScript: prefs.getString(_lastScriptKey) ?? '',
@@ -248,6 +263,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
       showCurrentWordHighlight: prefs.getBool(_showCurrentWordHighlightKey) ?? true,
       showUpcomingWordColor: prefs.getBool(_showUpcomingWordColorKey) ?? false,
       fontFamily: prefs.getString(_fontFamilyKey) ?? 'Inter',
+      showAlignmentOverride: prefs.getBool(_showAlignmentOverrideKey) ?? false,
+      sttEngine: prefs.getString(_sttEngineKey) ?? 'google',
+      readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
     );
   }
 
@@ -652,6 +670,24 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(showUpcomingWordColor: val);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_showUpcomingWordColorKey, val);
+  }
+
+  Future<void> setShowAlignmentOverride(bool val) async {
+    state = state.copyWith(showAlignmentOverride: val);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showAlignmentOverrideKey, val);
+  }
+
+  Future<void> setSttEngine(String engine) async {
+    state = state.copyWith(sttEngine: engine);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sttEngineKey, engine);
+  }
+
+  Future<void> setReadFadeIntensity(double intensity) async {
+    state = state.copyWith(readFadeIntensity: intensity);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_readFadeIntensityKey, intensity);
   }
 }
 

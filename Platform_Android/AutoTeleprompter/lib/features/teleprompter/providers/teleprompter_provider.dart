@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/speech_service.dart';
+import '../services/native_speech_service.dart';
+import '../services/whisper_speech_service.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -9,77 +11,64 @@ import '../../settings/providers/settings_provider.dart';
 import '../../remote/services/remote_control_service.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
-  late final SpeechService _speechService;
+  late final NativeSpeechService _nativeSttService;
+  late final WhisperSpeechService _whisperService;
   late final RemoteControlService _remoteControlService;
+  bool _useWhisper = false;
   Script? _currentScript;
   String _accumulatedTranscript = '';
   bool _disposed = false;
   int _noProgressCount = 0;
   Timer? _heartbeatTimer;
+  Timer? _fluidAdvanceTimer;
+  int _fluidTarget = 0;
+  String? _scriptLanguageLocale;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
-  // At ~3 partial results/sec, 25 means ~8 seconds of no progress before skip.
-  // This is generous — gives the user time to improvise without losing position.
-  static const int _skipAfterStuck = 25;
-  // Max words to advance per STT update — prevents jarring jumps
-  static const int _maxAdvancePerUpdate = 3;
+  static const int _googleSkipAfterStuck = 45;
+  static const int _whisperSkipAfterStuck = 10;
+  static const int _maxAdvancePerUpdate = 30;
 
   @override
   TeleprompterState build() {
     _disposed = false;
-    _speechService = SpeechService();
+    _nativeSttService = NativeSpeechService();
+    _whisperService = WhisperSpeechService();
     _remoteControlService = ref.read(remoteControlProvider);
     _setupRemoteCallbacks();
-    _setupSpeechCallbacks();
+    _setupNativeSttCallbacks();
+    _setupWhisperCallbacks();
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
-      _speechService.stop();
+      _nativeSttService.stop();
+      _whisperService.stop();
       _remoteControlService.stop();
     });
     return const TeleprompterState();
   }
 
-  void _setupRemoteCallbacks() {
-    _remoteControlService.onCommand.listen((cmd) {
-      if (_disposed) return;
-      final settings = ref.read(settingsProvider.notifier);
-      final sData = ref.read(settingsProvider);
-      
-      switch (cmd) {
-        case 'TOGGLE':
-          if (sData.scrollSpeed == 0) {
-            settings.setScrollSpeed(100);
-          } else {
-            settings.setScrollSpeed(0);
-          }
-          break;
-        case 'FASTER':
-          settings.setScrollSpeed((sData.scrollSpeed + 25).clamp(-300, 300));
-          break;
-        case 'SLOWER':
-          settings.setScrollSpeed((sData.scrollSpeed - 25).clamp(-300, 300));
-          break;
-        case 'RESET':
-          resetPosition();
-          break;
-      }
-    });
+  // v4.0: Remote control features hidden for stable release
+  void _setupRemoteCallbacks() {}
 
-    // Start remote server automatically
-    _remoteControlService.start();
-  }
+  bool _sessionStopped = false;
 
   void _safeSetState(TeleprompterState Function(TeleprompterState) updater) {
-    if (_disposed) return;
+    if (_disposed || _sessionStopped) return;
     try {
-      state = updater(state);
-    } catch (_) {}
+      final current = state;
+      state = updater(current);
+    } catch (_) {
+      _disposed = true;
+    }
   }
 
   void _addDebugLog(String log) {
-    final settings = ref.read(settingsProvider);
-    if (!settings.debugMode) return;
+    if (_disposed) return;
+    try {
+      final settings = ref.read(settingsProvider);
+      if (!settings.debugMode) return;
+    } catch (_) { return; }
     final now = DateTime.now();
     final ts = "${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}";
     final entry = "[$ts] $log";
@@ -88,15 +77,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _safeSetState((s) => s.copyWith(debugLogs: logs));
   }
 
-  void _setupSpeechCallbacks() {
-    _speechService.onResult = (result) {
-      if (_currentScript == null || _disposed) return;
+  /// Common handler for STT results — shared between Google and Whisper
+  void _handleSttResult(SpeechResult result) {
+    if (_currentScript == null || _disposed) return;
 
-      final words = result.words.toLowerCase();
+    final words = result.words.toLowerCase();
+    try {
       final settings = ref.read(settingsProvider);
 
-      // V3 Professional: Voice Commands
-      // Only check for commands if they appear in the partial result
+      // Voice Commands
       if (words.contains('stop prompt') || words.contains('עצור') || words.contains('עצירה')) {
         _addDebugLog('🗣️ VOICE COMMAND: STOP');
         ref.read(settingsProvider.notifier).setScrollSpeed(0);
@@ -114,54 +103,69 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         ref.read(settingsProvider.notifier).setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
         return;
       }
+    } catch (_) {}
 
-      _accumulatedTranscript = result.words;
-      final script = _currentScript!;
+    _accumulatedTranscript = result.words;
+    final script = _currentScript!;
 
-      final aligned = WordAligner.align(
-        script: script.words,
-        transcript: _accumulatedTranscript,
-        lastConfirmedIndex: state.confirmedWordIndex,
+    final aligned = WordAligner.align(
+      script: script.words,
+      transcript: _accumulatedTranscript,
+      lastConfirmedIndex: state.confirmedWordIndex,
+    );
+
+    final currentIdx = state.confirmedWordIndex;
+    final nextExpected = (currentIdx + 1 < script.words.length)
+        ? script.words.skip(currentIdx + 1).where((w) => !w.isNewline).take(3).map((w) => w.raw).join(' ')
+        : '<END>';
+
+    final engineTag = _useWhisper ? '🤖' : '🎤';
+    final skipThreshold = _useWhisper ? _whisperSkipAfterStuck : _googleSkipAfterStuck;
+
+    if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
+      _noProgressCount = 0;
+      final capped = aligned.confirmedWordIndex.clamp(
+        state.confirmedWordIndex,
+        state.confirmedWordIndex + _maxAdvancePerUpdate,
       );
+      final advancedWord = capped < script.words.length ? script.words[capped].raw : '?';
+      _addDebugLog('$engineTag ✅ ADVANCE → #$capped "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
 
-      // Build debug info
-      final currentIdx = state.confirmedWordIndex;
-      final nextExpected = (currentIdx + 1 < script.words.length)
-          ? script.words.skip(currentIdx + 1).where((w) => !w.isNewline).take(3).map((w) => w.raw).join(' ')
-          : '<END>';
-
-      if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
-        // ── MATCH: advance the position ──────────────────────────────────────
-        _noProgressCount = 0;
-        final capped = aligned.confirmedWordIndex.clamp(
-          state.confirmedWordIndex,
-          state.confirmedWordIndex + _maxAdvancePerUpdate,
-        );
-        final advancedWord = capped < script.words.length ? script.words[capped].raw : '?';
-        _addDebugLog('✅ ADVANCE → #$capped "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
-        if (aligned.debugInfo.isNotEmpty) {
-          _addDebugLog('   ${aligned.debugInfo.split('\n').first}');
-        }
+      // Fluid advancement: if jumping more than 3 words, animate
+      // through intermediate words so the user's eye can follow.
+      final jump = capped - state.confirmedWordIndex;
+      if (jump <= 3) {
+        // Small jump — instant
+        _fluidAdvanceTimer?.cancel();
         _safeSetState((s) => s.copyWith(confirmedWordIndex: capped));
       } else {
-        // ── NO MATCH: user is improvising or word wasn't recognized ──────────
-        _noProgressCount++;
-        _addDebugLog('⏸ WAIT #$_noProgressCount/$_skipAfterStuck | heard: "${result.words}" | next: "$nextExpected" | ${aligned.debugInfo.split('\n').first}');
+        // Large jump — advance word by word with short delays
+        _startFluidAdvance(capped, script);
+      }
+    } else {
+      _noProgressCount++;
+      _addDebugLog('$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
 
-        if (_noProgressCount >= _skipAfterStuck) {
-          _noProgressCount = 0;
-          final next = _nextRealWord(state.confirmedWordIndex, script);
-          if (next != null) {
-            final skippedWord = script.words[next].raw;
-            _addDebugLog('⏭ FORCE SKIP → #$next "$skippedWord" (stuck too long)');
-            _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
-          }
+      if (_noProgressCount >= skipThreshold) {
+        _noProgressCount = 0;
+        final next = _nextRealWord(state.confirmedWordIndex, script);
+        if (next != null) {
+          final skippedWord = script.words[next].raw;
+          _addDebugLog('🤖 ⏭ FORCE SKIP → #$next "$skippedWord" (stuck too long)');
+          _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
         }
       }
+    }
+  }
 
+  void _setupNativeSttCallbacks() {
+    _nativeSttService.onResult = (result) {
+      if (_disposed || _sessionStopped) return;
+      _handleSttResult(result);
     };
 
-    _speechService.onStatusChange = (status) {
+    _nativeSttService.onStatusChange = (status) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
       _addDebugLog('🎤 STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
@@ -170,24 +174,138 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       ));
     };
 
-    _speechService.onError = (error) {
-      _addDebugLog('❌ STT ERROR: $error');
-      // Routine errors are part of normal STT operation — suppress from UI
-      final isRoutine = error.contains('timeout') ||
-          error.contains('no_match') ||
-          error.contains('Client') ||
-          error.contains('busy') ||
-          error.contains('speech_timeout') ||
-          error.contains('recognizer_busy') ||
-          error.contains('Listen failed');
+    _nativeSttService.onError = (error) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
+      _addDebugLog('🎤 STT ERROR: $error');
+      if (error.contains('error_language')) return;
+      final isFatal = error.contains('error_audio') ||
+          error.contains('error_permission') ||
+          error.contains('not available');
       _safeSetState((s) => s.copyWith(
-        statusMessage: isRoutine ? '' : error,
-        hasError: !isRoutine,
-        // If it's a routine error, the service will instantly restart it, 
-        // so don't flash the UI to "Not Listening" state.
-        isListening: isRoutine ? s.isListening : false,
+        statusMessage: isFatal ? error : '',
+        hasError: isFatal,
+        isListening: isFatal ? false : s.isListening,
       ));
     };
+
+    _nativeSttService.onLanguageUnavailable = (requestedLocale) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
+      final langName = SpeechStartResult.languageNameFromLocale(
+        _scriptLanguageLocale ?? requestedLocale,
+      );
+      _addDebugLog('🎤 LANGUAGE UNAVAILABLE: $langName — speech data not installed');
+      _safeSetState((s) => s.copyWith(
+        missingLanguage: langName,
+        hasError: true,
+        isListening: false,
+        statusMessage: 'Speech recognition language not installed',
+      ));
+    };
+
+    _nativeSttService.onNeedLanguagePack = (locale) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
+      final langName = SpeechStartResult.languageNameFromLocale(locale);
+      _addDebugLog('🎤 ALL GOOGLE STT FAILED for $langName — internet required for cloud recognition');
+      _safeSetState((s) => s.copyWith(
+        hasError: true,
+        isListening: false,
+        statusMessage: '$langName speech recognition requires an internet connection. '
+            'This language is not available offline on your device. '
+            'Please connect to WiFi or mobile data and try again.',
+      ));
+    };
+  }
+
+  void _setupWhisperCallbacks() {
+    _whisperService.onResult = (result) {
+      if (_disposed || _sessionStopped) return;
+      _handleSttResult(result);
+    };
+
+    _whisperService.onStatusChange = (status) {
+      if (!_useWhisper || _disposed || _sessionStopped) return;
+      _addDebugLog('🤖 WHISPER STATUS: $status');
+      _safeSetState((s) => s.copyWith(
+        isListening: status == SpeechStatus.listening,
+        statusMessage: '',
+        hasError: false,
+      ));
+    };
+
+    _whisperService.onError = (error) {
+      if (_disposed || _sessionStopped) return;
+      _addDebugLog('🤖 WHISPER ERROR: $error');
+      final isFatal = error.contains('not available') || error.contains('init failed');
+      if (isFatal) {
+        _safeSetState((s) => s.copyWith(
+          statusMessage: error,
+          hasError: true,
+          isListening: false,
+        ));
+      }
+    };
+  }
+
+  /// Auto-fallback to Whisper when Google STT is completely blocked
+  /// (e.g., ColorOS devices where mic permission is restricted)
+  Future<void> _autoFallbackToWhisper(String langName) async {
+    if (_disposed || _sessionStopped) return;
+
+    // Try Whisper models in order: tiny (fastest), base, small
+    const fallbackModels = ['whisper_tiny', 'whisper_base', 'whisper_small'];
+
+    for (final engineKey in fallbackModels) {
+      final model = whisperModelFromEngine(engineKey);
+      final downloaded = await _whisperService.isModelDownloaded(model);
+      if (downloaded) {
+        _addDebugLog('🤖 WHISPER FALLBACK: Found $engineKey, switching...');
+        _useWhisper = true;
+        await _whisperService.start(
+          localeId: _scriptLanguageLocale,
+          model: model,
+        );
+        return;
+      }
+    }
+
+    // No Whisper model available — show error with guidance
+    _addDebugLog('❌ NO WHISPER MODEL — cannot fallback, showing error');
+    _safeSetState((s) => s.copyWith(
+      missingLanguage: langName,
+      hasError: true,
+      isListening: false,
+      statusMessage: 'Google speech blocked on this device. '
+          'Go to Settings and download a Whisper model for offline recognition.',
+    ));
+  }
+
+  /// Animate word advancement from current position to [target],
+  /// advancing one word every ~80ms so the eye can follow.
+  void _startFluidAdvance(int target, Script script) {
+    _fluidAdvanceTimer?.cancel();
+    _fluidTarget = target;
+
+    _fluidAdvanceTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) {
+      if (_disposed || _sessionStopped) { timer.cancel(); return; }
+      final current = state.confirmedWordIndex;
+
+      // If a newer result pushed the target further, follow it
+      final effectiveTarget = _fluidTarget;
+
+      if (current >= effectiveTarget) {
+        timer.cancel();
+        return;
+      }
+
+      // Advance to next non-newline word
+      int next = current + 1;
+      while (next < script.words.length && script.words[next].isNewline) {
+        next++;
+      }
+      if (next > effectiveTarget) next = effectiveTarget;
+
+      _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
+    });
   }
 
   /// Find the next non-newline word index after [from]
@@ -202,48 +320,97 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _currentScript = script;
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sessionStopped = false;
+    final sttEngine = ref.read(settingsProvider).sttEngine;
+    _useWhisper = sttEngine.startsWith('whisper');
     state = state.copyWith(
-        confirmedWordIndex: 0, isListening: false, hasError: false, 
-        statusMessage: '', debugLogs: []);
+        confirmedWordIndex: 0, isListening: false, hasError: false,
+        statusMessage: '', debugLogs: [], missingLanguage: null);
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
 
     // Auto-detect language from script content
     final realWords = script.words.where((w) => !w.isNewline).toList();
     String? localeId;
+    bool isHebrew = false;
     if (realWords.isNotEmpty) {
       final hebrewCount = realWords.where((w) => w.isRtl).length;
       final ratio = hebrewCount / realWords.length;
-      localeId = ratio > 0.3 ? 'he_IL' : 'en_US';
-      _addDebugLog('🌐 LANG: ${ratio > 0.3 ? "Hebrew" : "English"} (${(ratio * 100).round()}% Hebrew chars)');
+      isHebrew = ratio > 0.3;
+      localeId = isHebrew ? 'he_IL' : 'en_US';
+      _scriptLanguageLocale = localeId;
+      _addDebugLog('🌐 LANG: ${isHebrew ? "Hebrew" : "English"} (${(ratio * 100).round()}% Hebrew chars)');
     }
 
-    // Start heartbeat timer in debug mode to show STT is alive
+    // Start heartbeat timer in debug mode
     _heartbeatTimer?.cancel();
     final settings = ref.read(settingsProvider);
     if (settings.debugMode) {
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (_disposed) return;
-        final listening = _speechService.isListening;
+        final engineName = _useWhisper ? 'WHISPER' : 'NATIVE_STT';
+        final listening = _useWhisper
+            ? _whisperService.isListening
+            : _nativeSttService.isListening;
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
-        _addDebugLog('💓 HEARTBEAT: ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
+        _addDebugLog('💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
       });
     }
 
-    await _speechService.start(localeId: localeId);
+    if (_useWhisper) {
+      final model = whisperModelFromEngine(sttEngine);
+      _addDebugLog('🤖 Starting Whisper STT (${sttEngine}) offline...');
+      await _whisperService.start(localeId: localeId, model: model);
+    } else {
+      _addDebugLog('🎤 Starting Native STT locale=$localeId...');
+      final result = await _nativeSttService.start(localeId: localeId);
+
+      if (!result.success) {
+        _addDebugLog('🎤 STT FAILED: ${result.message}');
+        _safeSetState((s) => s.copyWith(
+          statusMessage: result.message ?? 'Speech recognition failed',
+          hasError: true,
+          isListening: false,
+        ));
+        return;
+      }
+
+      if (result.languageMissing && result.missingLanguageName != null) {
+        _addDebugLog('⚠️ LANG MISSING: ${result.missingLanguageName} not available, using ${result.actualLocale}');
+        _safeSetState((s) => s.copyWith(
+          missingLanguage: result.missingLanguageName,
+        ));
+      } else {
+        _addDebugLog('🎤 Using locale: ${result.actualLocale}');
+      }
+    }
   }
 
   Future<void> stopSession() async {
+    _sessionStopped = true;
     _heartbeatTimer?.cancel();
-    await _speechService.stop();
-    _addDebugLog('🛑 SESSION STOP');
-    if (!_disposed) state = state.copyWith(isListening: false);
+    _fluidAdvanceTimer?.cancel();
+
+    // Stop both — Whisper may have been auto-started via fallback
+    await _nativeSttService.stop();
+    await _whisperService.stop();
+
+    if (!_disposed) {
+      try {
+        state = state.copyWith(
+          isListening: false,
+          hasError: false,
+          statusMessage: '',
+        );
+      } catch (_) {}
+    }
   }
 
   void resetPosition() {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _fluidAdvanceTimer?.cancel();
     _addDebugLog('🔄 POSITION RESET → 0');
     state = state.copyWith(confirmedWordIndex: 0);
   }

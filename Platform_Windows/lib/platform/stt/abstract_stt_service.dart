@@ -14,7 +14,10 @@ abstract class AbstractSttService {
 
   /// Called on STT error. Receive the raw error string.
   void Function(String error)? onError;
-
+  
+  /// Called for sound level changes (audio telemetry).
+  void Function(double level)? onSoundLevelChange;
+  
   /// Called when the requested language is not installed on the device.
   void Function(String requestedLocale)? onLanguageUnavailable;
 

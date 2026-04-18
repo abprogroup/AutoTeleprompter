@@ -17,6 +17,7 @@ class SttAppleAdapter extends AbstractSttService {
     _inner.onResult = (r) => onResult?.call(r);
     _inner.onStatusChange = (s) => onStatusChange?.call(s);
     _inner.onError = (e) => onError?.call(e);
+    _inner.onSoundLevelChange = (l) => onSoundLevelChange?.call(l);
     _inner.onLanguageUnavailable = (l) => onLanguageUnavailable?.call(l);
     // onNeedLanguagePack: Apple never fires this — left wired but unused
     // (onNeedLanguagePack stays null on this adapter)

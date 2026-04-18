@@ -23,6 +23,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   Timer? _fluidAdvanceTimer;
   int _fluidTarget = 0;
   String? _scriptLanguageLocale;
+  DateTime? _lastVolLog;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
@@ -167,6 +168,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sttService.onResult = (result) {
       if (_disposed || _sessionStopped) return;
       _handleSttResult(result);
+    };
+
+    _sttService.onSoundLevelChange = (level) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
+      // High-precision sound level telemetry for debugging silent Windows engines.
+      // We throttle this to prevent UI stutter from log overflow.
+      final now = DateTime.now();
+      if (_lastVolLog == null || now.difference(_lastVolLog!) > const Duration(milliseconds: 700)) {
+        _lastVolLog = now;
+        final bar = ('#' * (level * 10).round().clamp(0, 10)).padRight(10, '_');
+        _addDebugLog('🎤 [$platform] VOL: [$bar] (${level.toStringAsFixed(2)})');
+      }
     };
 
     _sttService.onStatusChange = (status) {

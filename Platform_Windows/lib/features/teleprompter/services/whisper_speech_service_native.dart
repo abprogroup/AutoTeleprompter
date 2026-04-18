@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -110,9 +109,7 @@ class WhisperSpeechService {
   void Function(String)? onError;
 
   Future<String> _getModelDir() async {
-    final dir = Platform.isAndroid
-        ? await getApplicationSupportDirectory()
-        : await getLibraryDirectory();
+    final dir = await getApplicationSupportDirectory();
     return dir.path;
   }
 

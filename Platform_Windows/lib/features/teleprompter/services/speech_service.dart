@@ -152,7 +152,7 @@ class SpeechService {
             onStatusChange?.call(SpeechStatus.listening);
           }
         },
-        debugLogging: false, // v4.1.4: disable verbose logging in production
+        debugLogging: true, // v4.1.5: Force trace to debug Windows native STT silently failing
       );
     } catch (e) {
       onError?.call('STT init failed: $e');
@@ -179,20 +179,21 @@ class SpeechService {
   String? _findBestLocale(List<LocaleName> locales, String requestedId) {
     if (locales.isEmpty) return null;
 
-    // Normalize: both underscore and hyphen formats (en_US, en-US)
-    final normalized = requestedId.toLowerCase().replaceAll('-', '_');
-    final lang = normalized.split('_').first;
+    // Windows requires hyphens. Mac/iOS generally accept hyphens or underscores.
+    // It's safer to provide exact native casing if found.
+    final normalized = requestedId.toLowerCase().replaceAll('_', '-');
+    final lang = normalized.split('-').first;
 
-    // 1. Exact match
+    // 1. Exact match (case insensitive)
     for (final l in locales) {
-      if (l.localeId.toLowerCase().replaceAll('-', '_') == normalized) {
+      if (l.localeId.toLowerCase().replaceAll('_', '-') == normalized) {
         return l.localeId;
       }
     }
 
-    // 2. Language match (e.g. requested en_US, found en_GB)
+    // 2. Language match (e.g. requested en-US, found en-GB)
     for (final l in locales) {
-      if (l.localeId.toLowerCase().replaceAll('-', '_').startsWith('${lang}_')) {
+      if (l.localeId.toLowerCase().replaceAll('_', '-').startsWith('${lang}-')) {
         return l.localeId;
       }
     }
@@ -280,13 +281,10 @@ class SpeechService {
             _scheduleRestart(const Duration(milliseconds: 100));
           }
         },
-        listenOptions: SpeechListenOptions(
-          partialResults: true,
-          cancelOnError: false,
-        ),
-        // listenFor keeps Windows from freezing in a silent listen session.
-        // onStatus 'done' fires at the end and _scheduleRestart re-opens it.
-        listenFor: const Duration(seconds: 30),
+        // Stripped listenOptions and listenFor entirely.
+        // Windows 'Windows.Media.SpeechRecognition' can hang or ignore listening 
+        // silently when timeout options or partial constraint options are injected 
+        // through Flutter's platform channel.
         localeId: useLocale,
       );
     } catch (e) {

@@ -197,10 +197,11 @@
 - **iOS Build**: Triggered on push `89c4507`. IPA in `releases/iOS/v4/`.
 - **Status**: Bug A (multi-line drag) FIXED since v4.1.1. Bug B (style selection shrink) FIXED v4.1.3. Alignment selection corruption FIXED v4.1.3b. All iOS pending items USER VERIFIED 2026-04-18.
 
-### ✅ 2026-04-18 — v4.1.4 [PC_RELEASE_FOUNDATION]
-- **Session Goals**: Finalize Windows software branding and establish an automated release pipeline.
+### ✅ 2026-04-18 — v4.1.4 [PC_TOTAL_SEPARATION_STABLE]
+- **Session Goals**: Finalize Windows software with 100% platform isolation.
 - **Achievements**:
-    - **Windows Branding**: Updated all native metadata in `Runner.rc` and `CMakeLists.txt`. Binary is now named **AutoTeleprompter.exe**.
-    - **CI/CD Pipeline**: Created `.github/workflows/build-windows.yml`. This pipeline enables cloud-based production of the Windows `.exe`, bypassing local environment restrictions (missing Visual Studio/Admin).
-    - **Dependency Resolution**: Resolved `intl` package conflict in the shared codebase.
-- **Status**: Windows software logic "Finished". First release triggered via GitHub Actions.
+    - **Total Separation**: Updated `build-ios.yml` to ignore Windows changes. Shared source files (`pubspec.yaml` and `.dart` files) remain untouched for Android/iOS.
+    - **Cloud Hot-Patching**: Implemented dynamic patching in `build-windows.yml`. The runner now automatically resolves `intl` conflicts and stubs incompatible Whisper dependencies *at build-time* only.
+    - **Windows Branding**: Native metadata updated in `windows/` folder.
+- **Protocol**: Aligned with the AI Protocol for platform-specific isolation to prevent cross-platform regressions.
+- **Status**: Windows build pipeline fixed and isolated. First successful release incoming.

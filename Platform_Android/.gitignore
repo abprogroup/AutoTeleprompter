@@ -1,38 +1,34 @@
-# Project: AutoTeleprompter
-# NEVER TRACK BACKUPS - THEY CAUSE LOOPS
-backups/
-AutoTeleprompter_BACKUP_*
+# ── Wrong-platform native directories (inside AutoTeleprompter/) ─────────────
+# Platform_Android contains only an Android Flutter project.
+AutoTeleprompter/ios/
+AutoTeleprompter/macos/
+AutoTeleprompter/windows/
+AutoTeleprompter/web/
 
-# NEVER TRACK TESTS - THEY ARE NOT NEEDED
-test/
-schemes/
-guidelines_and_planning/
-AutoTeleprompter_TEST_*
-
-# NEVER TRACK AGENTS - THEY ARE PRIVATE
+# ── Ops / planning / AI agent files ─────────────────────────────────────────
 _agent/
 .claude/
-AutoTeleprompter_AGENT_*
-
-# Development SDKs and Tools
+backups/
 development/
+guidelines_and_planning/
+releases/
+schemes/
+test/
+AI_PROTOCOL.md
+DAILY_LOG.md
+MASTER_TODO*.md
+*.todo.md
+Project platforms structure.md
+.github/
 
-# User Folders
-TeleSmart/
-releases/v*/
-
-# General Code Ignores
+# ── Build artifacts ──────────────────────────────────────────────────────────
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
 **/build/
 **/.dart_tool/
 **/.idea/
 **/.DS_Store
+._*
 *.apk
 *.aab
 *.jar
-
-# Protocol Files
-CHANGELOG.md
-PROTOCOL.md
-README.md

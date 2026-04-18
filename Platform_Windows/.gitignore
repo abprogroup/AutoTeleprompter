@@ -1,23 +1,30 @@
-# Project: AutoTeleprompter
-# NEVER TRACK BACKUPS - THEY CAUSE LOOPS
-backups/
-AutoTeleprompter_BACKUP_*
-
-# Platform baseline folders (separate standalone repos — not submodules)
+# ── Wrong-platform native directories ───────────────────────────────────────
+# Platform_Windows is a Windows-only Flutter project. These dirs have no
+# place here and must never be tracked.
+ios/
+macos/
 android/
-ios-baseline/
-macos-baseline/
-windows-baseline/
+web/
 
-# NEVER TRACK TESTS - THEY ARE NOT NEEDED
-test/
-schemes/
-guidelines_and_planning/
-AutoTeleprompter_TEST_*
-
-# NEVER TRACK AGENTS - THEY ARE PRIVATE
+# ── Ops / planning / AI agent files ─────────────────────────────────────────
+# Keep locally if useful, but never commit to git.
 _agent/
 .claude/
+backups/
+development/
+guidelines_and_planning/
+releases/
+schemes/
+test/
+AI_PROTOCOL.md
+DAILY_LOG.md
+MASTER_TODO*.md
+*.todo.md
+Project platforms structure.md
+
+# ── Nested .github inside platform folder ───────────────────────────────────
+# The real workflows live at repo-root .github/workflows/ only.
+.github/
 AutoTeleprompter_AGENT_*
 
 # Development SDKs and Tools

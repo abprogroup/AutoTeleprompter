@@ -1,27 +1,27 @@
-# Project: AutoTeleprompter
-# NEVER TRACK BACKUPS - THEY CAUSE LOOPS
-backups/
-AutoTeleprompter_BACKUP_*
-
-# Platform baseline folders (separate standalone repos — not submodules)
+# ── Wrong-platform native directories ───────────────────────────────────────
+# Platform_macOS is a macOS-only Flutter project.
+ios/
 android/
-ios-baseline/
-macos-baseline/
-windows-baseline/
+windows/
+web/
 
-# NEVER TRACK TESTS - THEY ARE NOT NEEDED
-test/
-schemes/
-guidelines_and_planning/
-AutoTeleprompter_TEST_*
-
-# NEVER TRACK AGENTS - THEY ARE PRIVATE
+# ── Ops / planning / AI agent files ─────────────────────────────────────────
 _agent/
 .claude/
-AutoTeleprompter_AGENT_*
-
-# Development SDKs and Tools
+backups/
 development/
+guidelines_and_planning/
+releases/
+schemes/
+test/
+AI_PROTOCOL.md
+DAILY_LOG.md
+MASTER_TODO*.md
+*.todo.md
+Project platforms structure.md
+
+# ── Nested .github inside platform folder ───────────────────────────────────
+.github/
 
 # User Folders
 TeleSmart/

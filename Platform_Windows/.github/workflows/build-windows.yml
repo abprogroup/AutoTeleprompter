@@ -1,0 +1,80 @@
+name: Build Windows EXE (v4.1.4-Isolated)
+
+on:
+  push:
+    branches: [ main, master ]
+    # ONLY trigger when Windows files or the workflow itself changes
+    paths:
+      - 'AutoTeleprompter/windows/**'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build AutoTeleprompter for Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.6'
+          channel: 'stable'
+
+      - name: "PROTOCOL: Hot-Patch Windows Environment"
+        run: |
+          cd AutoTeleprompter
+          
+          # 1. Strip incompatible Whisper plugin from pubspec.yaml (Isolated build only)
+          (Get-Content pubspec.yaml) -replace '  whisper_flutter_new: \^1.0.1', '' | Set-Content pubspec.yaml
+          
+          # 2. Fix intl version and google_fonts (Isolated build only)
+          (Get-Content pubspec.yaml) -replace '  intl: \^0.19.0', '  intl: ^0.20.2' | Set-Content pubspec.yaml
+          (Get-Content pubspec.yaml) -replace '  google_fonts: 5.1.0', '  google_fonts: ^6.3.0' | Set-Content pubspec.yaml
+          
+          # 3. Stub out the Whisper Service Dart file to remove native dependencies
+          $stubContent = @"
+          import 'speech_service.dart';
+          dynamic whisperModelFromEngine(String engine) => null;
+          class WhisperSpeechService { 
+            void Function(SpeechResult)? onResult;
+            void Function(SpeechStatus)? onStatusChange;
+            void Function(String)? onError;
+            Future<void> start({String? localeId, dynamic model}) async {} 
+            Future<void> stop() async {} 
+            bool get isListening => false; 
+            Future<bool> isModelDownloaded(dynamic model) async => false;
+            Future<bool> initialize({required dynamic model, void Function(String)? onProgress}) async => false;
+          }
+          "@
+          $stubContent | Set-Content lib/features/teleprompter/services/whisper_speech_service_native.dart
+
+
+
+      - name: Sync Dependencies
+        run: |
+          cd AutoTeleprompter
+          flutter pub get
+
+      - name: Enable Windows Desktop
+        run: |
+          flutter config --enable-windows-desktop
+
+      - name: Build Windows Archive
+        run: |
+          cd AutoTeleprompter
+          flutter build windows --release
+
+      - name: Package Artifacts
+        run: |
+          mkdir build-zip
+          xcopy /E /I AutoTeleprompter\build\windows\x64\runner\Release build-zip\AutoTeleprompter-Windows
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoTeleprompter-Windows-EXE
+          path: build-zip\AutoTeleprompter-Windows

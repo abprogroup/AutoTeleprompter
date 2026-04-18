@@ -1,10 +1,12 @@
-name: Build Windows EXE (v4.1.4)
+name: Build Windows EXE (v4.1.4-Isolated)
 
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    # ONLY trigger when Windows files or the workflow itself changes
+    paths:
+      - 'AutoTeleprompter/windows/**'
+      - '.github/workflows/build-windows.yml'
   workflow_dispatch:
 
 jobs:
@@ -22,10 +24,28 @@ jobs:
           flutter-version: '3.41.6'
           channel: 'stable'
 
-      - name: Install Windows Dependencies
+      - name: "PROTOCOL: Hot-Patch Windows Environment"
         run: |
-          # The Windows runner has Visual Studio pre-installed.
-          # Ensure the workload is available (usually is).
+          cd AutoTeleprompter
+          
+          # 1. Strip incompatible Whisper plugin from pubspec.yaml (Isolated build only)
+          (Get-Content pubspec.yaml) -replace '  whisper_flutter_new: \^1.0.1', '' | Set-Content pubspec.yaml
+          
+          # 2. Fix intl version conflict for Windows SDK compatibility (Isolated build only)
+          (Get-Content pubspec.yaml) -replace '  intl: \^0.19.0', '  intl: ^0.20.2' | Set-Content pubspec.yaml
+          
+          # 3. Stub out the Whisper Service Dart file to remove native dependencies
+          $stubContent = @"
+          import 'speech_service.dart';
+          class WhisperSpeechService { 
+            Future<void> start({String? localeId, dynamic model}) async {} 
+            Future<void> stop() async {} 
+            bool get isListening => false; 
+            Future<bool> isModelDownloaded(dynamic model) async => false;
+            Future<bool> initialize({required dynamic model, void Function(String)? onProgress}) async => false;
+          }
+          "@
+          $stubContent | Set-Content lib/features/teleprompter/services/whisper_speech_service_native.dart
 
       - name: Sync Dependencies
         run: |
@@ -44,7 +64,6 @@ jobs:
       - name: Package Artifacts
         run: |
           mkdir build-zip
-          # Copy the entire Release folder which includes the .exe and all necessary DLLs
           xcopy /E /I AutoTeleprompter\build\windows\x64\runner\Release build-zip\AutoTeleprompter-Windows
           
       - name: Upload Artifact

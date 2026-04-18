@@ -40,15 +40,15 @@ jobs:
 
       - name: Check Environment (Flutter Doctor)
         run: flutter doctor
-        working-directory: Platform_iOS
+        working-directory: Platform_iOS/AutoTeleprompter
 
       - name: Clean Environment
         run: flutter clean
-        working-directory: Platform_iOS
+        working-directory: Platform_iOS/AutoTeleprompter
 
       - name: Install Dependencies
         run: flutter pub upgrade
-        working-directory: Platform_iOS
+        working-directory: Platform_iOS/AutoTeleprompter
 
       - name: Install Cocoapods (iOS only)
         run: |
@@ -59,7 +59,7 @@ jobs:
         # We add 'v' for verbose logging so we can see the exact error if it fails
         run: |
           flutter build ios --release --no-codesign -v
-        working-directory: Platform_iOS
+        working-directory: Platform_iOS/AutoTeleprompter
 
       - name: Zip .app to .ipa
         run: |
@@ -67,10 +67,10 @@ jobs:
           cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
           cd build/ios/iphoneos/
           zip -r AutoTeleprompter.ipa Payload
-        working-directory: Platform_iOS
+        working-directory: Platform_iOS/AutoTeleprompter
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: AutoTeleprompter-iOS
-          path: Platform_iOS/build/ios/iphoneos/AutoTeleprompter.ipa
+          path: Platform_iOS/AutoTeleprompter/build/ios/iphoneos/AutoTeleprompter.ipa

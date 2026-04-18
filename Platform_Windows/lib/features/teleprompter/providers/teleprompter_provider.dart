@@ -365,6 +365,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
         _addDebugLog('💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
+
+        // Dead-air detection (specific to Windows native STT hanging silently)
+        if (listening && pos == 0 && _noProgressCount > 0 && !state.hasError) {
+           _addDebugLog('⚠️ WARNING: 15 seconds of dead-air. Windows mic may be muted or blocked.');
+           if (_noProgressCount >= 3) {
+             _safeSetState((s) => s.copyWith(
+               statusMessage: 'Microphone is active but no audio detected. Check Windows sound settings or microphone privacy!',
+             ));
+           }
+        }
       });
     }
 

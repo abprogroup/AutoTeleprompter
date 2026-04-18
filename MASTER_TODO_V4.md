@@ -196,13 +196,19 @@
 
 ## 🖥️ macOS — Pending Development
 
-*No tasks yet. Append new macOS items here as development begins.*
+- [U] **Initialize Foundation**: `macos/` native layer exists and is integrated with `lib/platform/`.
+- [ ] **Verification**: Run macOS build on a Mac to verify `SttAppleAdapter` performance.
 
 ---
 
 ## 🪟 Windows — Pending Development
 
-*No tasks yet. Append new Windows items here as development begins.*
+- [U] **Initialize Platform Layer**: Generated `windows/` native layer via `flutter create`. (2026-04-18)
+- [U] **Fix Dependency Conflict**: Resolved `intl` version conflict in `pubspec.yaml` (^0.20.2). (2026-04-18)
+- [U] **Windows Branding**: Updated `BINARY_NAME` and `Runner.rc` metadata to professional "AutoTeleprompter" standards. (2026-04-18)
+- [U] **Setup Windows CI/CD Pipeline**: Created `.github/workflows/build-windows.yml` to produce real `.exe` releases via GitHub Actions. (2026-04-18)
+- [ ] **Trigger & Test**: Download the first `.exe` from GitHub Actions, place in `releases/`, and verify performance.
+- [ ] **Infrastructure Check**: Verify `SttDesktopAdapter` and `PlatformFileImport` for Windows.
 
 ---
 *Last Updated: 2026-04-18 (v4.1.3 iOS Style Selection Synchronous Lock + Alignment Preservation — USER VERIFIED)*

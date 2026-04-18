@@ -196,3 +196,11 @@
 - **Commits**: `ff1d1ed` (v4.1.3 synchronous read) → `89c4507` (v4.1.3b alignment preservation)
 - **iOS Build**: Triggered on push `89c4507`. IPA in `releases/iOS/v4/`.
 - **Status**: Bug A (multi-line drag) FIXED since v4.1.1. Bug B (style selection shrink) FIXED v4.1.3. Alignment selection corruption FIXED v4.1.3b. All iOS pending items USER VERIFIED 2026-04-18.
+
+### ✅ 2026-04-18 — v4.1.4 [PC_RELEASE_FOUNDATION]
+- **Session Goals**: Finalize Windows software branding and establish an automated release pipeline.
+- **Achievements**:
+    - **Windows Branding**: Updated all native metadata in `Runner.rc` and `CMakeLists.txt`. Binary is now named **AutoTeleprompter.exe**.
+    - **CI/CD Pipeline**: Created `.github/workflows/build-windows.yml`. This pipeline enables cloud-based production of the Windows `.exe`, bypassing local environment restrictions (missing Visual Studio/Admin).
+    - **Dependency Resolution**: Resolved `intl` package conflict in the shared codebase.
+- **Status**: Windows software logic "Finished". First release triggered via GitHub Actions.

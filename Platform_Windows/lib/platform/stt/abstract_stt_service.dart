@@ -24,6 +24,9 @@ abstract class AbstractSttService {
   /// Called with diagnostic messages (init result, locale list, etc.) for the debug panel.
   void Function(String message)? onDiagnostic;
 
+  /// URL of the embedded STT WebView (Windows browser adapter only). Null on other platforms.
+  String? get sttWebViewUrl => null;
+
   /// Android-only: fired when the Google STT cloud fallback also fails,
   /// meaning an offline language pack must be downloaded.
   /// On iOS, macOS, and Windows this callback will NEVER fire.

@@ -436,6 +436,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         Future.delayed(const Duration(milliseconds: 1500), () => _startingSession = false);
       }
 
+      // Expose WebView URL for the embedded browser STT (Windows only).
+      final webViewUrl = _sttService.sttWebViewUrl;
+      if (webViewUrl != null) {
+        _safeSetState((s) => s.copyWith(sttWebViewUrl: webViewUrl));
+      }
+
       if (result.languageMissing && result.missingLanguageName != null) {
         _addDebugLog('⚠️ [$platform] LANG MISSING: ${result.missingLanguageName} — using ${result.actualLocale}');
         _safeSetState((s) => s.copyWith(missingLanguage: result.missingLanguageName));
@@ -462,6 +468,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           hasError: false,
           statusMessage: '',
           soundLevel: 0.0,
+          sttWebViewUrl: null,
         );
       } catch (_) {}
     }

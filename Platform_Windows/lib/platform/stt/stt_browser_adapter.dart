@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show HttpServer, InternetAddress;
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -93,8 +93,7 @@ class SttBrowserAdapter extends AbstractSttService {
       );
     }
 
-    onDiagnostic?.call('🌐 [Browser STT] Opening browser — please allow microphone if prompted');
-    await Process.run('cmd', ['/c', 'start', 'http://localhost:$_port/'], runInShell: true);
+    onDiagnostic?.call('🌐 [Browser STT] WebView ready at http://localhost:$_port/');
 
     return SpeechStartResult(
       success: true,
@@ -126,6 +125,9 @@ class SttBrowserAdapter extends AbstractSttService {
 
   @override
   String get platformName => 'Windows';
+
+  @override
+  String? get sttWebViewUrl => _server != null ? 'http://localhost:$_port/' : null;
 
   @override
   // We call onStatusChange(listening) when the browser connects,

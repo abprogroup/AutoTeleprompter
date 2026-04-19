@@ -12,6 +12,8 @@ class TeleprompterState {
   final String? missingLanguage;
   /// Live microphone input level: 0.0 (silent) → 1.0 (max). Only meaningful when isListening.
   final double soundLevel;
+  /// URL of the embedded STT WebView (Windows only). Null on other platforms.
+  final String? sttWebViewUrl;
 
   const TeleprompterState({
     this.confirmedWordIndex = 0,
@@ -21,6 +23,7 @@ class TeleprompterState {
     this.debugLogs = const [],
     this.missingLanguage,
     this.soundLevel = 0.0,
+    this.sttWebViewUrl,
   });
 
   TeleprompterState copyWith({
@@ -31,6 +34,7 @@ class TeleprompterState {
     List<String>? debugLogs,
     String? missingLanguage = _clearSentinel,
     double? soundLevel,
+    String? sttWebViewUrl = _clearSentinel,
   }) {
     return TeleprompterState(
       confirmedWordIndex: confirmedWordIndex ?? this.confirmedWordIndex,
@@ -42,6 +46,9 @@ class TeleprompterState {
           ? this.missingLanguage
           : missingLanguage,
       soundLevel: soundLevel ?? this.soundLevel,
+      sttWebViewUrl: sttWebViewUrl == _clearSentinel
+          ? this.sttWebViewUrl
+          : sttWebViewUrl,
     );
   }
 }

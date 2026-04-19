@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:webview_windows/webview_windows.dart';
 import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -42,6 +43,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _scrollingBackward = false;
   StreamSubscription? _remoteCmdSub;
 
+  // Embedded STT WebView (Windows only)
+  WebviewController? _webviewController;
+  String? _loadedWebViewUrl;
+
   @override
   void initState() {
     super.initState();
@@ -53,14 +58,38 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         ref.read(teleprompterProvider.notifier).resetPosition();
         _scrollController.jumpTo(0);
         _initRemoteListener();
-        // Listen for missing language notifications
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage), (prev, next) {
-          if (next != null && next.isNotEmpty && mounted) {
-            _showMissingLanguageDialog(next);
-          }
+          if (next != null && next.isNotEmpty && mounted) _showMissingLanguageDialog(next);
         });
+        // Watch for the embedded STT WebView URL (Windows browser adapter)
+        ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl), (prev, next) {
+          if (next != null && next != _loadedWebViewUrl) _loadSttWebView(next);
+          if (next == null) _disposeSttWebView();
+        });
+        // Pre-initialize WebView controller on Windows
+        if (Platform.isWindows) _initWebViewController();
       }
     });
+  }
+
+  Future<void> _initWebViewController() async {
+    try {
+      final controller = WebviewController();
+      await controller.initialize();
+      if (mounted) setState(() => _webviewController = controller);
+    } catch (_) {}
+  }
+
+  Future<void> _loadSttWebView(String url) async {
+    _loadedWebViewUrl = url;
+    if (_webviewController == null) await _initWebViewController();
+    try {
+      await _webviewController?.loadUrl(url);
+    } catch (_) {}
+  }
+
+  void _disposeSttWebView() {
+    _loadedWebViewUrl = null;
   }
 
   void _initRemoteListener() {
@@ -113,6 +142,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _smoothScrollTimer?.cancel();
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
+    _webviewController?.dispose();
     ref.read(teleprompterProvider.notifier).stopSession();
     super.dispose();
   }
@@ -799,6 +829,20 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                 ),
               ),
  
+            // Embedded STT WebView (Windows) — hidden in production, visible in debug mode
+            if (_webviewController != null && tState.sttWebViewUrl != null)
+              Positioned(
+                right: 8,
+                // In debug mode: sit below the debug panel; in production: collapse to 1x1
+                top: settings.debugMode ? 420 : -2,
+                width: settings.debugMode ? 320 : 1,
+                height: settings.debugMode ? 130 : 1,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(settings.debugMode ? 8 : 0),
+                  child: Webview(_webviewController!),
+                ),
+              ),
+
             // Reading line
             Positioned(
               top: MediaQuery.of(context).size.height * settings.scrollLead - 2,

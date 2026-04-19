@@ -71,16 +71,19 @@ class SpeechService {
   /// The string is the original requested locale ID.
   void Function(String requestedLocale)? onLanguageUnavailable;
   void Function(double level)? onSoundLevelChange;
+  /// Fires with diagnostic messages (init results, locale list, etc.) for the debug panel.
+  void Function(String)? onDiagnostic;
   bool debugLogging = true;
 
   Future<bool> initialize() async {
     try {
+      onDiagnostic?.call('🔧 STT init starting...');
       _isInitialized = await _stt.initialize(
         onError: (error) {
           if (!_isActive) return;
 
           final msg = error.errorMsg;
-          onError?.call(msg);
+          onDiagnostic?.call('⚠️ STT error: $msg');
 
           // Language error — try fallback, then give up and notify
           if (msg.contains('error_language')) {
@@ -113,6 +116,10 @@ class SpeechService {
               msg == 'error_permission';
           if (fatal) {
             _isActive = false;
+            final userMsg = msg == 'error_audio'
+                ? 'Microphone blocked or in use by another app. Check Windows Settings → Privacy → Microphone.'
+                : 'Microphone permission denied. Enable in Windows Settings → Privacy → Microphone.';
+            onError?.call(userMsg);
             onStatusChange?.call(SpeechStatus.error);
             return;
           }
@@ -160,6 +167,9 @@ class SpeechService {
       onError?.call('STT init failed: $e');
       _isInitialized = false;
     }
+    onDiagnostic?.call(_isInitialized
+        ? '✅ STT init OK'
+        : '❌ STT init FAILED — check Windows Settings → Privacy → Microphone, and Time & Language → Speech');
     return _isInitialized;
   }
 
@@ -215,18 +225,20 @@ class SpeechService {
   Future<SpeechStartResult> start({String? localeId}) async {
     final hasPermission = await _stt.hasPermission;
 
+    onDiagnostic?.call('🔧 hasPermission=$hasPermission, initialized=$_isInitialized');
     if (!_isInitialized || !hasPermission) {
       final ok = await initialize();
       if (!ok) {
         return SpeechStartResult(
           success: false,
-          message: 'Speech recognition not available. Please install the Google app and check that speech recognition is enabled in your device settings.',
+          message: 'Speech recognition failed to start.\n\nOn Windows, check:\n1. Settings → Privacy → Microphone → allow desktop apps\n2. Settings → Time & Language → Speech → install a speech language pack',
         );
       }
     }
 
     // Get available locales from the device
     final locales = await _stt.locales();
+    onDiagnostic?.call('🌐 Available STT locales (${locales.length}): ${locales.map((l) => l.localeId).take(8).join(', ')}${locales.length > 8 ? '...' : ''}');
     bool languageMissing = false;
     String? requestedLang = localeId;
 

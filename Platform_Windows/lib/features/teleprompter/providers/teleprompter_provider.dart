@@ -183,6 +183,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
     };
 
+    _sttService.onDiagnostic = (msg) {
+      if (_disposed) return;
+      _addDebugLog(msg);
+    };
+
   _sttService.onStatusChange = (status) {
     if (_useWhisper || _disposed || _sessionStopped) return;
     // Ignore non-listening statuses during the start-up guard window.

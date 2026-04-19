@@ -17,9 +17,12 @@ abstract class AbstractSttService {
   
   /// Called for sound level changes (audio telemetry).
   void Function(double level)? onSoundLevelChange;
-  
+
   /// Called when the requested language is not installed on the device.
   void Function(String requestedLocale)? onLanguageUnavailable;
+
+  /// Called with diagnostic messages (init result, locale list, etc.) for the debug panel.
+  void Function(String message)? onDiagnostic;
 
   /// Android-only: fired when the Google STT cloud fallback also fails,
   /// meaning an offline language pack must be downloaded.

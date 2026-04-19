@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,8 +73,46 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     });
   }
 
+  /// Pre-grant microphone permission for localhost:8082 in the WebView2
+  /// Preferences file so Web Speech API works without a permission dialog.
+  /// WebView2 reads this file on startup; if permission is already stored it
+  /// skips the PermissionRequested event and grants access directly.
+  Future<void> _preGrantWebView2Mic() async {
+    try {
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final prefsFile = File('$exeDir\\EBWebView\\Default\\Preferences');
+
+      // Chrome-epoch timestamp: microseconds since 1601-01-01
+      final ts = DateTime.now()
+          .difference(DateTime.utc(1601, 1, 1))
+          .inMicroseconds
+          .toString();
+
+      Map<String, dynamic> prefs = {};
+      if (await prefsFile.exists()) {
+        try { prefs = jsonDecode(await prefsFile.readAsString()) as Map<String, dynamic>; }
+        catch (_) {}
+      }
+
+      final profile = prefs.putIfAbsent('profile', () => <String, dynamic>{}) as Map<String, dynamic>;
+      final cs      = profile.putIfAbsent('content_settings', () => <String, dynamic>{}) as Map<String, dynamic>;
+      final exc     = cs.putIfAbsent('exceptions', () => <String, dynamic>{}) as Map<String, dynamic>;
+      final mic     = exc.putIfAbsent('media_stream_mic', () => <String, dynamic>{}) as Map<String, dynamic>;
+
+      // Both key formats used by Chromium/WebView2
+      final grant = {'last_modified': ts, 'setting': 1};
+      mic['http://localhost:8082,*'] = grant;
+      mic['http://localhost:8082']   = grant;
+
+      await prefsFile.parent.create(recursive: true);
+      await prefsFile.writeAsString(jsonEncode(prefs));
+    } catch (_) {}
+  }
+
   Future<void> _initWebViewController() async {
     try {
+      // Write permission grant before WebView2 boots so it reads it on init
+      await _preGrantWebView2Mic();
       final controller = WebviewController();
       await controller.initialize();
       if (mounted) setState(() => _webviewController = controller);

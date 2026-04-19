@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HttpServer, InternetAddress;
+import 'dart:io' show HttpServer, InternetAddress, Process, ProcessStartMode, File;
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -11,15 +11,16 @@ import '../../features/teleprompter/services/speech_service.dart';
 
 /// Windows STT via browser Web Speech API.
 ///
-/// Opens a local page in Edge/Chrome that runs Web Speech API and streams
-/// results back to the Flutter app via WebSocket. This bypasses the broken
-/// Windows.Media.SpeechRecognition WinRT API which requires "Online speech
-/// recognition" to be enabled in Windows Privacy settings.
+/// Launches Edge/Chrome (minimized, app mode) to run Web Speech API and
+/// streams results back to Flutter via WebSocket on /ws.
+/// A second endpoint (/display + /display-ws) serves a read-only display
+/// page for the embedded WebView2 debug panel — no mic access required.
 class SttBrowserAdapter extends AbstractSttService {
   static const int _port = 8082;
 
   HttpServer? _server;
   WebSocketChannel? _wsClient;
+  final List<WebSocketChannel> _displayClients = [];
   bool _isActive = false;
 
   @override
@@ -33,13 +34,23 @@ class SttBrowserAdapter extends AbstractSttService {
 
     final router = Router();
 
+    // STT page — loaded by external Edge/Chrome browser
     router.get('/', (Request req) {
       return Response.ok(
-        _buildHtml(locale),
+        _buildSttHtml(locale),
         headers: {'content-type': 'text/html; charset=utf-8'},
       );
     });
 
+    // Display page — loaded by embedded WebView2 (no mic needed)
+    router.get('/display', (Request req) {
+      return Response.ok(
+        _buildDisplayHtml(),
+        headers: {'content-type': 'text/html; charset=utf-8'},
+      );
+    });
+
+    // STT WebSocket — browser sends recognition results here
     router.get('/ws', webSocketHandler((WebSocketChannel channel) {
       _wsClient = channel;
       onDiagnostic?.call('🔗 [Browser STT] Browser connected');
@@ -54,25 +65,29 @@ class SttBrowserAdapter extends AbstractSttService {
               case 'listening':
                 onStatusChange?.call(SpeechStatus.listening);
                 onDiagnostic?.call('🎤 [Browser STT] Web Speech API active — speak now');
+                _pushToDisplayClients(data);
                 break;
               case 'result':
                 final words = data['words'] as String? ?? '';
                 final isFinal = data['isFinal'] as bool? ?? false;
                 if (words.isNotEmpty) {
                   onResult?.call(SpeechResult(words, isFinal));
+                  _pushToDisplayClients(data);
                 }
                 break;
               case 'level':
                 final level = (data['level'] as num?)?.toDouble() ?? 0.0;
                 onSoundLevelChange?.call(level);
+                _pushToDisplayClients(data);
                 break;
               case 'error':
                 final err = data['error'] as String? ?? 'unknown';
                 if (err == 'not-allowed') {
-                  onError?.call('Microphone blocked in browser. Click the address bar lock icon → allow microphone.');
+                  onError?.call('Microphone blocked in browser — allow mic access when prompted.');
                 } else {
                   onDiagnostic?.call('⚠️ [Browser STT] error: $err');
                 }
+                _pushToDisplayClients(data);
                 break;
             }
           } catch (_) {}
@@ -81,6 +96,12 @@ class SttBrowserAdapter extends AbstractSttService {
           if (_isActive) onDiagnostic?.call('⚠️ [Browser STT] Browser disconnected');
         },
       );
+    }));
+
+    // Display WebSocket — embedded WebView2 subscribes here (read-only)
+    router.get('/display-ws', webSocketHandler((WebSocketChannel channel) {
+      _displayClients.add(channel);
+      channel.stream.listen((_) {}, onDone: () => _displayClients.remove(channel));
     }));
 
     try {
@@ -93,7 +114,10 @@ class SttBrowserAdapter extends AbstractSttService {
       );
     }
 
-    onDiagnostic?.call('🌐 [Browser STT] WebView ready at http://localhost:$_port/');
+    onDiagnostic?.call('🌐 [Browser STT] Server ready at http://localhost:$_port/');
+
+    // Launch Edge (or Chrome) minimized in app mode — Web Speech API runs there
+    _launchBrowser();
 
     return SpeechStartResult(
       success: true,
@@ -102,13 +126,40 @@ class SttBrowserAdapter extends AbstractSttService {
     );
   }
 
+  void _launchBrowser() {
+    const browsers = [
+      r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+      r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+    ];
+    for (final path in browsers) {
+      if (File(path).existsSync()) {
+        Process.start(
+          path,
+          ['--app=http://localhost:$_port/', '--start-minimized'],
+          mode: ProcessStartMode.detached,
+        ).catchError((_) => null);
+        onDiagnostic?.call('🌐 [Browser STT] Launched browser (minimized)');
+        return;
+      }
+    }
+    onDiagnostic?.call('⚠️ [Browser STT] Edge/Chrome not found — open http://localhost:$_port/ manually');
+  }
+
+  void _pushToDisplayClients(Map<String, dynamic> data) {
+    if (_displayClients.isEmpty) return;
+    final encoded = jsonEncode(data);
+    for (final client in List.of(_displayClients)) {
+      try { client.sink.add(encoded); } catch (_) {}
+    }
+  }
+
   Future<void> _stopServer() async {
-    try {
-      _wsClient?.sink.close();
-    } catch (_) {}
-    try {
-      await _server?.close(force: true);
-    } catch (_) {}
+    try { _wsClient?.sink.close(); } catch (_) {}
+    for (final c in List.of(_displayClients)) {
+      try { c.sink.close(); } catch (_) {}
+    }
+    _displayClients.clear();
+    try { await _server?.close(force: true); } catch (_) {}
     _wsClient = null;
     _server = null;
   }
@@ -126,15 +177,16 @@ class SttBrowserAdapter extends AbstractSttService {
   @override
   String get platformName => 'Windows';
 
+  /// URL of the display-only page for the embedded WebView2 debug panel.
   @override
-  String? get sttWebViewUrl => _server != null ? 'http://localhost:$_port/' : null;
+  String? get sttWebViewUrl => _server != null ? 'http://localhost:$_port/display' : null;
 
   @override
-  // We call onStatusChange(listening) when the browser connects,
-  // so set this to true to show listening state immediately.
   bool get requiresImmediateListeningFlag => true;
 
-  String _buildHtml(String locale) => '''<!DOCTYPE html>
+  // ── STT page (loaded in external browser) ──────────────────────────────────
+
+  String _buildSttHtml(String locale) => '''<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -199,7 +251,7 @@ function startRec(){
   rec.onerror=(e)=>{
     send({type:'error',error:e.error});
     if(e.error==='not-allowed'){
-      err.textContent='Microphone denied. Click the lock icon in the browser address bar and allow microphone.';
+      err.textContent='Microphone denied. Click the lock icon in the address bar and allow microphone.';
       dot.classList.remove('on');
     } else if(e.error!=='aborted'&&e.error!=='no-speech'){
       setTimeout(startRec,1000);
@@ -208,6 +260,59 @@ function startRec(){
   rec.onend=()=>{if(ws.readyState===1){dot.classList.remove('on');setTimeout(startRec,200);}};
   try{rec.start();}catch(e){setTimeout(startRec,500);}
 }
+</script>
+</body>
+</html>
+''';
+
+  // ── Display page (loaded in embedded WebView2 — no mic access needed) ───────
+
+  String _buildDisplayHtml() => '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>STT Display</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#eee;font-family:-apple-system,sans-serif;
+       display:flex;flex-direction:column;align-items:center;justify-content:center;
+       height:100vh;gap:10px;padding:12px;overflow:hidden}
+  .dot{width:10px;height:10px;border-radius:50%;background:#555;flex-shrink:0}
+  .dot.on{background:#22c55e;box-shadow:0 0 8px #22c55e88;animation:p 1s infinite}
+  @keyframes p{0%,100%{opacity:1}50%{opacity:.4}}
+  #row{display:flex;align-items:center;gap:8px}
+  #status{font-size:11px;color:#666}
+  #bar{height:6px;width:100%;max-width:200px;background:#222;border-radius:3px;overflow:hidden}
+  #fill{height:100%;width:0%;background:#22c55e;border-radius:3px;transition:width .1s}
+  #words{font-size:13px;color:#22c55e;text-align:center;max-width:280px;
+         min-height:36px;line-height:1.4;word-break:break-word}
+</style>
+</head>
+<body>
+<div id="row"><div class="dot" id="dot"></div><div id="status">Connecting...</div></div>
+<div id="bar"><div id="fill"></div></div>
+<div id="words"></div>
+<script>
+const dot=document.getElementById('dot');
+const status=document.getElementById('status');
+const fill=document.getElementById('fill');
+const words=document.getElementById('words');
+
+function connect(){
+  const ws=new WebSocket('ws://localhost:$_port/display-ws');
+  ws.onopen=()=>status.textContent='Waiting for speech...';
+  ws.onclose=()=>{dot.classList.remove('on');status.textContent='Disconnected';setTimeout(connect,2000);};
+  ws.onmessage=(e)=>{
+    const d=JSON.parse(e.data);
+    if(d.type==='listening'){dot.classList.add('on');status.textContent='Listening...';}
+    if(d.type==='result'){words.textContent=d.words;}
+    if(d.type==='level'){fill.style.width=Math.round(d.level*100)+'%';}
+    if(d.type==='error'&&d.error!=='no-speech'&&d.error!=='aborted'){
+      status.textContent='Error: '+d.error;dot.classList.remove('on');
+    }
+  };
+}
+connect();
 </script>
 </body>
 </html>

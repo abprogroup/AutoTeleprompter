@@ -1843,8 +1843,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             ),
         ],
       ),
-        ),
-      ),
+    ),
     );
   }
 

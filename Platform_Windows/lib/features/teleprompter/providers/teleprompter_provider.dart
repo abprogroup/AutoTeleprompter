@@ -24,6 +24,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _fluidTarget = 0;
   String? _scriptLanguageLocale;
   DateTime? _lastVolLog;
+  DateTime? _sessionStartTime;
+  bool _silentWarningFired = false;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
@@ -352,6 +354,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sessionStopped = false;
+    _sessionStartTime = DateTime.now();
+    _silentWarningFired = false;
+    _lastVolLog = null;
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
     state = state.copyWith(
@@ -385,14 +390,19 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         final total = script.words.where((w) => !w.isNewline).length;
         _addDebugLog('💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
 
-        // Dead-air detection (specific to Windows native STT hanging silently)
-        if (listening && pos == 0 && _noProgressCount > 0 && !state.hasError) {
-           _addDebugLog('⚠️ WARNING: 15 seconds of dead-air. Windows mic may be muted or blocked.');
-           if (_noProgressCount >= 3) {
-             _safeSetState((s) => s.copyWith(
-               statusMessage: 'Microphone is active but no audio detected. Check Windows sound settings or microphone privacy!',
-             ));
-           }
+        // Silent-listening detector: STT says listening but no audio level or results received.
+        // On Windows this typically means Online Speech Recognition is disabled.
+        if (!_useWhisper && listening && !_silentWarningFired && _lastVolLog == null && _sessionStartTime != null) {
+          final elapsed = DateTime.now().difference(_sessionStartTime!);
+          if (elapsed.inSeconds >= 10) {
+            _silentWarningFired = true;
+            _addDebugLog('🚨 SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
+            _addDebugLog('👉 FIX: Windows Settings → Privacy & Security → Speech → enable "Online speech recognition"');
+            _safeSetState((s) => s.copyWith(
+              statusMessage: 'Microphone blocked by Windows.\nGo to: Settings → Privacy & Security → Speech → turn ON "Online speech recognition"',
+              hasError: true,
+            ));
+          }
         }
       });
     }

@@ -1630,22 +1630,28 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           ),
         Container(
           color: Colors.black,
-          padding: const EdgeInsets.only(bottom: 12, top: 8),
+          padding: EdgeInsets.only(
+            bottom: keyboardVisible ? 16 : 32, // More breathing room when keyboard is open
+            top: 12,
+          ),
           child: Row(
             children: [
               const SizedBox(width: 16),
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _startPresenting,
-                  icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
-                  label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFBF00),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 12,
-                    shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+                child: Hero(
+                  tag: 'start_presentation',
+                  child: ElevatedButton.icon(
+                    onPressed: _startPresenting,
+                    icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
+                    label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFBF00),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 12,
+                      shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+                    ),
                   ),
                 ),
               ),
@@ -2128,6 +2134,7 @@ class _EditorBlock extends StatelessWidget {
             focusNode: focusNode,
             maxLines: null,
             onSubmitted: (_) => onSubmitted(),
+            onEditingComplete: () => FocusScope.of(context).unfocus(),
             onTap: onTap,
             textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
             textAlign: textAlign,

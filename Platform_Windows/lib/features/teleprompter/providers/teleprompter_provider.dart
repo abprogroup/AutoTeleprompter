@@ -165,8 +165,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   void _setupSttCallbacks() {
-    final platform = _sttService.platformName;
-
     _sttService.onResult = (result) {
       if (_disposed || _sessionStopped) return;
       _handleSttResult(result);
@@ -190,24 +188,24 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog(msg);
     };
 
-  _sttService.onStatusChange = (status) {
-    if (_useWhisper || _disposed || _sessionStopped) return;
-    // Ignore non-listening statuses during the start-up guard window.
-    // This prevents stale async 'notListening' from the previous stop()
-    // from resetting isListening=false right after the new session starts.
-    if (_startingSession && status != SpeechStatus.listening) return;
-    _startingSession = false;
-    _addDebugLog('🎤 [${_sttService.platformName}] STATUS: $status');
-    _safeSetState((s) => s.copyWith(
-      isListening: status == SpeechStatus.listening,
-      statusMessage: '',
-      hasError: false,
-    ));
-  };
+    _sttService.onStatusChange = (status) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
+      // Ignore non-listening statuses during the start-up guard window.
+      // This prevents stale async 'notListening' from the previous stop()
+      // from resetting isListening=false right after the new session starts.
+      if (_startingSession && status != SpeechStatus.listening) return;
+      _startingSession = false;
+      _addDebugLog('🎤 [${_sttService.platformName}] STATUS: $status');
+      _safeSetState((s) => s.copyWith(
+        isListening: status == SpeechStatus.listening,
+        statusMessage: '',
+        hasError: false,
+      ));
+    };
 
-  _sttService.onError = (error) {
-    if (_useWhisper || _disposed || _sessionStopped) return;
-    _addDebugLog('🎤 [${_sttService.platformName}] STT ERROR: $error');
+    _sttService.onError = (error) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
+      _addDebugLog('🎤 [${_sttService.platformName}] STT ERROR: $error');
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
           error.contains('error_permission') ||
@@ -224,7 +222,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       final langName = SpeechStartResult.languageNameFromLocale(
         _scriptLanguageLocale ?? requestedLocale,
       );
-      _addDebugLog('🎤 [$platform] LANGUAGE UNAVAILABLE: $langName');
+      _addDebugLog('🎤 [${_sttService.platformName}] LANGUAGE UNAVAILABLE: $langName');
       _safeSetState((s) => s.copyWith(
         missingLanguage: langName,
         hasError: true,
@@ -238,7 +236,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sttService.onNeedLanguagePack = (locale) {
       if (_useWhisper || _disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(locale);
-      _addDebugLog('🎤 [$platform] ALL STT FAILED for $langName — internet required');
+      _addDebugLog('🎤 [${_sttService.platformName}] ALL STT FAILED for $langName — internet required');
       _safeSetState((s) => s.copyWith(
         hasError: true,
         isListening: false,

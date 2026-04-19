@@ -377,17 +377,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
 
-    // Auto-detect language from script content
+    // Auto-detect language from the FIRST ~30 words (not whole-script average).
+    // A script that starts with English then switches to Hebrew should begin
+    // with en_US, not he_IL — the heartbeat handles mid-session switching.
     final realWords = script.words.where((w) => !w.isNewline).toList();
     String? localeId;
-    bool isHebrew = false;
     if (realWords.isNotEmpty) {
       final hebrewCount = realWords.where((w) => w.isRtl).length;
       final ratio = hebrewCount / realWords.length;
-      isHebrew = ratio > 0.3;
-      localeId = isHebrew ? 'he_IL' : 'en_US';
+      localeId = _detectLanguageAhead(0, script);
       _scriptLanguageLocale = localeId;
-      _addDebugLog('🌐 LANG: ${isHebrew ? "Hebrew" : "English"} (${(ratio * 100).round()}% Hebrew chars)');
+      _addDebugLog('🌐 LANG: ${localeId == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew overall)');
     }
 
     // Start heartbeat timer in debug mode

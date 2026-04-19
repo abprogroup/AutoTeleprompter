@@ -22,11 +22,13 @@ class SttBrowserAdapter extends AbstractSttService {
   WebSocketChannel? _wsClient;
   final List<WebSocketChannel> _displayClients = [];
   bool _isActive = false;
+  bool _everListened = false;
   String _currentLocale = 'en-US';
 
   @override
   Future<SpeechStartResult> start({String? localeId}) async {
     _isActive = true;
+    _everListened = false;
     _currentLocale = (localeId ?? 'en-US').replaceAll('_', '-');
 
     onDiagnostic?.call('🌐 [Browser STT] Starting local server on port $_port...');
@@ -64,8 +66,12 @@ class SttBrowserAdapter extends AbstractSttService {
             final type = data['type'] as String? ?? '';
             switch (type) {
               case 'listening':
-                onStatusChange?.call(SpeechStatus.listening);
-                onDiagnostic?.call('🎤 [Browser STT] Web Speech API active — speak now');
+                // Only fire onStatusChange once (not on every restart)
+                if (!_everListened) {
+                  _everListened = true;
+                  onStatusChange?.call(SpeechStatus.listening);
+                  onDiagnostic?.call('🎤 [Browser STT] Web Speech API active — speak now');
+                }
                 _pushToDisplay(data);
                 break;
               case 'result':
@@ -83,9 +89,10 @@ class SttBrowserAdapter extends AbstractSttService {
                 break;
               case 'error':
                 final err = data['error'] as String? ?? 'unknown';
+                // Suppress 'aborted' and 'no-speech' — normal restart chatter
                 if (err == 'not-allowed') {
                   onError?.call('Microphone blocked in browser — allow mic access when prompted.');
-                } else {
+                } else if (err != 'aborted' && err != 'no-speech') {
                   onDiagnostic?.call('⚠️ [Browser STT] error: $err');
                 }
                 _pushToDisplay(data);
@@ -118,6 +125,7 @@ class SttBrowserAdapter extends AbstractSttService {
     onDiagnostic?.call('🌐 [Browser STT] Server ready at http://localhost:$_port/');
 
     _launchBrowser();
+    _hideBrowserWindow(); // runs its own 6s sleep inside the PS1
 
     return SpeechStartResult(
       success: true,
@@ -158,16 +166,16 @@ class SttBrowserAdapter extends AbstractSttService {
       ['--app=http://localhost:$_port/', '--no-first-run', '--disable-features=TranslateUI'],
       mode: ProcessStartMode.detached,
     ).then((_) {
-      onDiagnostic?.call('🌐 [Browser STT] Browser launched — hiding window in 5s...');
-      // Hide window after Edge finishes initializing
-      Future.delayed(const Duration(seconds: 5), _hideBrowserWindow);
+      onDiagnostic?.call('🌐 [Browser STT] Browser launched — hiding window...');
     }).catchError((_) {
       onDiagnostic?.call('⚠️ [Browser STT] Failed to launch browser');
     });
   }
 
-  /// Write a temp PowerShell script that finds the Edge STT window by its
-  /// page title and hides it via Win32 ShowWindow(SW_HIDE = 0).
+  /// Write a temp PowerShell script that finds Edge/Chrome windows whose
+  /// title contains "AutoTeleprompter" and hides them via Win32 ShowWindow.
+  /// Uses Get-Process (not FindWindow) so it works regardless of whether
+  /// Edge appends "- Microsoft Edge" to the title.
   Future<void> _hideBrowserWindow() async {
     try {
       final ps1 = File('${Directory.systemTemp.path}\\at_stt_hide.ps1');
@@ -176,12 +184,26 @@ Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class W32 {
-    [DllImport("user32.dll")] public static extern IntPtr FindWindow(string cls, string title);
-    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int n);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }
 "@
-$hwnd = [W32]::FindWindow($null, "AutoTeleprompter — Mic")
-if ($hwnd -ne [IntPtr]::Zero) { [W32]::ShowWindow($hwnd, 0) }  # SW_HIDE
+# Wait for Edge to fully initialize and set the window title
+$maxAttempts = 8
+$attempt = 0
+$hidden = $false
+Start-Sleep -Seconds 4
+while ($attempt -lt $maxAttempts -and -not $hidden) {
+    $procs = Get-Process -Name msedge,chrome -ErrorAction SilentlyContinue
+    foreach ($p in $procs) {
+        $p.Refresh()
+        if ($p.MainWindowTitle -like "*AutoTeleprompter*" -and $p.MainWindowHandle -ne [IntPtr]::Zero) {
+            [W32]::ShowWindow($p.MainWindowHandle, 0)
+            $hidden = $true
+        }
+    }
+    if (-not $hidden) { Start-Sleep -Seconds 1 }
+    $attempt++
+}
 Remove-Item $PSCommandPath -Force -ErrorAction SilentlyContinue
 ''');
 
@@ -266,6 +288,8 @@ const words=document.getElementById('words');
 const err=document.getElementById('err');
 let rec;
 let currentLocale='$locale';
+let consecutiveFails=0;   // counts rapid aborts to throttle restart speed
+let lastNonAbortError=''; // tracks the last real error type
 
 ws.onopen=()=>{status.textContent='Starting microphone...';startRec(currentLocale);};
 ws.onclose=()=>{status.textContent='Session ended.';dot.classList.remove('on');if(rec)rec.abort();};
@@ -273,6 +297,7 @@ ws.onmessage=(e)=>{
   const d=JSON.parse(e.data);
   if(d.type==='setLocale'&&d.locale!==currentLocale){
     currentLocale=d.locale;
+    consecutiveFails=0;
     status.textContent='Switching to '+d.locale+'...';
     if(rec)rec.abort();
     setTimeout(()=>startRec(currentLocale),400);
@@ -281,6 +306,13 @@ ws.onmessage=(e)=>{
 
 function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o));}
 
+// Restart delay with exponential back-off for crash loops.
+// Normal restart: 300ms. After 3+ quick aborts: grows up to 8s.
+function restartDelay(){
+  if(consecutiveFails<=2) return 300;
+  return Math.min(300*Math.pow(2,consecutiveFails-2),8000);
+}
+
 function startRec(locale){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){err.textContent='Web Speech API not available. Please use Microsoft Edge or Google Chrome.';return;}
@@ -288,8 +320,15 @@ function startRec(locale){
   rec.lang=locale;
   rec.continuous=true;
   rec.interimResults=true;
-  rec.onstart=()=>{dot.classList.add('on');status.textContent='Listening ('+locale+')...';send({type:'listening'});};
+
+  rec.onstart=()=>{
+    consecutiveFails=0;
+    dot.classList.add('on');
+    status.textContent='Listening ('+locale+')...';
+    send({type:'listening'});
+  };
   rec.onresult=(e)=>{
+    consecutiveFails=0;
     for(let i=e.resultIndex;i<e.results.length;i++){
       const t=e.results[i][0].transcript;
       const f=e.results[i].isFinal;
@@ -305,12 +344,18 @@ function startRec(locale){
     if(e.error==='not-allowed'){
       err.textContent='Microphone denied. Click the lock icon and allow microphone.';
       dot.classList.remove('on');
-    } else if(e.error!=='aborted'&&e.error!=='no-speech'){
-      setTimeout(()=>startRec(currentLocale),1000);
+    } else if(e.error==='aborted'){
+      consecutiveFails++;
+    } else if(e.error!=='no-speech'){
+      lastNonAbortError=e.error;
+      consecutiveFails++;
     }
   };
-  rec.onend=()=>{if(ws.readyState===1){dot.classList.remove('on');setTimeout(()=>startRec(currentLocale),200);}};
-  try{rec.start();}catch(e){setTimeout(()=>startRec(currentLocale),500);}
+  rec.onend=()=>{
+    dot.classList.remove('on');
+    if(ws.readyState===1) setTimeout(()=>startRec(currentLocale),restartDelay());
+  };
+  try{rec.start();}catch(ex){consecutiveFails++;setTimeout(()=>startRec(currentLocale),restartDelay());}
 }
 </script>
 </body>

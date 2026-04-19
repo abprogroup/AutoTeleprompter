@@ -1,7 +1,7 @@
 name: autoteleprompter
 description: Auto-scrolling teleprompter with speech recognition for Hebrew and English.
 publish_to: 'none'
-version: 4.1.17+17
+version: 4.1.18+18
 
 environment:
   sdk: '>=3.4.4 <4.0.0'

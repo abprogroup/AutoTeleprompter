@@ -18,6 +18,7 @@ class NativeSpeechService {
   void Function(String)? onError;
   void Function(double level)? onSoundLevelChange;
   void Function(String requestedLocale)? onLanguageUnavailable;
+  void Function(String message)? onDiagnostic;
   /// Fires when the device needs an offline speech pack download
   /// (ColorOS/MIUI devices where regular STT mic is blocked).
   void Function(String locale)? onNeedLanguagePack;

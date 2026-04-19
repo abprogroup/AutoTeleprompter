@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HttpServer, InternetAddress, Process, ProcessStartMode, File;
+import 'dart:io' show Directory, File, HttpServer, InternetAddress, Process, ProcessStartMode;
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -11,10 +11,10 @@ import '../../features/teleprompter/services/speech_service.dart';
 
 /// Windows STT via browser Web Speech API.
 ///
-/// Launches Edge/Chrome (minimized, app mode) to run Web Speech API and
-/// streams results back to Flutter via WebSocket on /ws.
-/// A second endpoint (/display + /display-ws) serves a read-only display
-/// page for the embedded WebView2 debug panel — no mic access required.
+/// Launches Edge/Chrome completely hidden (Win32 ShowWindow via PowerShell)
+/// to run Web Speech API and streams results back to Flutter via WebSocket.
+/// A second /display + /display-ws endpoint is served for the embedded
+/// WebView2 debug panel — no mic access required in the WebView.
 class SttBrowserAdapter extends AbstractSttService {
   static const int _port = 8082;
 
@@ -22,11 +22,12 @@ class SttBrowserAdapter extends AbstractSttService {
   WebSocketChannel? _wsClient;
   final List<WebSocketChannel> _displayClients = [];
   bool _isActive = false;
+  String _currentLocale = 'en-US';
 
   @override
   Future<SpeechStartResult> start({String? localeId}) async {
     _isActive = true;
-    final locale = (localeId ?? 'en-US').replaceAll('_', '-');
+    _currentLocale = (localeId ?? 'en-US').replaceAll('_', '-');
 
     onDiagnostic?.call('🌐 [Browser STT] Starting local server on port $_port...');
 
@@ -34,10 +35,10 @@ class SttBrowserAdapter extends AbstractSttService {
 
     final router = Router();
 
-    // STT page — loaded by external Edge/Chrome browser
+    // STT page — loaded by external Edge/Chrome (hidden)
     router.get('/', (Request req) {
       return Response.ok(
-        _buildSttHtml(locale),
+        _buildSttHtml(_currentLocale),
         headers: {'content-type': 'text/html; charset=utf-8'},
       );
     });
@@ -65,20 +66,20 @@ class SttBrowserAdapter extends AbstractSttService {
               case 'listening':
                 onStatusChange?.call(SpeechStatus.listening);
                 onDiagnostic?.call('🎤 [Browser STT] Web Speech API active — speak now');
-                _pushToDisplayClients(data);
+                _pushToDisplay(data);
                 break;
               case 'result':
                 final words = data['words'] as String? ?? '';
                 final isFinal = data['isFinal'] as bool? ?? false;
                 if (words.isNotEmpty) {
                   onResult?.call(SpeechResult(words, isFinal));
-                  _pushToDisplayClients(data);
+                  _pushToDisplay(data);
                 }
                 break;
               case 'level':
                 final level = (data['level'] as num?)?.toDouble() ?? 0.0;
                 onSoundLevelChange?.call(level);
-                _pushToDisplayClients(data);
+                _pushToDisplay(data);
                 break;
               case 'error':
                 final err = data['error'] as String? ?? 'unknown';
@@ -87,7 +88,7 @@ class SttBrowserAdapter extends AbstractSttService {
                 } else {
                   onDiagnostic?.call('⚠️ [Browser STT] error: $err');
                 }
-                _pushToDisplayClients(data);
+                _pushToDisplay(data);
                 break;
             }
           } catch (_) {}
@@ -116,36 +117,85 @@ class SttBrowserAdapter extends AbstractSttService {
 
     onDiagnostic?.call('🌐 [Browser STT] Server ready at http://localhost:$_port/');
 
-    // Launch Edge (or Chrome) minimized in app mode — Web Speech API runs there
     _launchBrowser();
 
     return SpeechStartResult(
       success: true,
-      actualLocale: locale,
+      actualLocale: _currentLocale,
       requestedLocale: localeId,
     );
   }
+
+  /// Send a locale-switch message to the running browser — no restart needed.
+  @override
+  void setLocale(String locale) {
+    final normalized = locale.replaceAll('_', '-');
+    if (normalized == _currentLocale) return;
+    _currentLocale = normalized;
+    try {
+      _wsClient?.sink.add(jsonEncode({'type': 'setLocale', 'locale': normalized}));
+    } catch (_) {}
+  }
+
+  // ── Browser launch + window hiding ─────────────────────────────────────────
 
   void _launchBrowser() {
     const browsers = [
       r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
       r'C:\Program Files\Google\Chrome\Application\chrome.exe',
     ];
+    String? browserPath;
     for (final path in browsers) {
-      if (File(path).existsSync()) {
-        Process.start(
-          path,
-          ['--app=http://localhost:$_port/', '--start-minimized'],
-          mode: ProcessStartMode.detached,
-        ).catchError((_) => null);
-        onDiagnostic?.call('🌐 [Browser STT] Launched browser (minimized)');
-        return;
-      }
+      if (File(path).existsSync()) { browserPath = path; break; }
     }
-    onDiagnostic?.call('⚠️ [Browser STT] Edge/Chrome not found — open http://localhost:$_port/ manually');
+    if (browserPath == null) {
+      onDiagnostic?.call('⚠️ [Browser STT] Edge/Chrome not found — open http://localhost:$_port/ manually');
+      return;
+    }
+
+    Process.start(
+      browserPath,
+      ['--app=http://localhost:$_port/', '--no-first-run', '--disable-features=TranslateUI'],
+      mode: ProcessStartMode.detached,
+    ).then((_) {
+      onDiagnostic?.call('🌐 [Browser STT] Browser launched — hiding window in 5s...');
+      // Hide window after Edge finishes initializing
+      Future.delayed(const Duration(seconds: 5), _hideBrowserWindow);
+    }).catchError((_) {
+      onDiagnostic?.call('⚠️ [Browser STT] Failed to launch browser');
+    });
   }
 
-  void _pushToDisplayClients(Map<String, dynamic> data) {
+  /// Write a temp PowerShell script that finds the Edge STT window by its
+  /// page title and hides it via Win32 ShowWindow(SW_HIDE = 0).
+  Future<void> _hideBrowserWindow() async {
+    try {
+      final ps1 = File('${Directory.systemTemp.path}\\at_stt_hide.ps1');
+      await ps1.writeAsString(r'''
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class W32 {
+    [DllImport("user32.dll")] public static extern IntPtr FindWindow(string cls, string title);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int n);
+}
+"@
+$hwnd = [W32]::FindWindow($null, "AutoTeleprompter — Mic")
+if ($hwnd -ne [IntPtr]::Zero) { [W32]::ShowWindow($hwnd, 0) }  # SW_HIDE
+Remove-Item $PSCommandPath -Force -ErrorAction SilentlyContinue
+''');
+
+      await Process.start(
+        'powershell.exe',
+        ['-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1.path],
+        mode: ProcessStartMode.detached,
+      );
+    } catch (_) {}
+  }
+
+  // ── Internal helpers ────────────────────────────────────────────────────────
+
+  void _pushToDisplay(Map<String, dynamic> data) {
     if (_displayClients.isEmpty) return;
     final encoded = jsonEncode(data);
     for (final client in List.of(_displayClients)) {
@@ -177,30 +227,26 @@ class SttBrowserAdapter extends AbstractSttService {
   @override
   String get platformName => 'Windows';
 
-  /// URL of the display-only page for the embedded WebView2 debug panel.
   @override
   String? get sttWebViewUrl => _server != null ? 'http://localhost:$_port/display' : null;
 
   @override
   bool get requiresImmediateListeningFlag => true;
 
-  // ── STT page (loaded in external browser) ──────────────────────────────────
+  // ── STT page (external browser, hidden after init) ──────────────────────────
 
   String _buildSttHtml(String locale) => '''<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AutoTeleprompter — Mic</title>
+<title>AutoTeleprompter \u2014 Mic</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0d0d0d;color:#eee;font-family:-apple-system,sans-serif;
        display:flex;flex-direction:column;align-items:center;justify-content:center;
        min-height:100vh;gap:18px;padding:20px}
-  .mic{width:28px;height:28px;border-radius:50%;background:#333;
-       transition:background .3s}
-  .mic.on{background:#22c55e;box-shadow:0 0 12px #22c55e88;
-           animation:pulse 1s ease-in-out infinite}
+  .mic{width:28px;height:28px;border-radius:50%;background:#333;transition:background .3s}
+  .mic.on{background:#22c55e;box-shadow:0 0 12px #22c55e88;animation:pulse 1s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
   #status{font-size:13px;color:#888}
   #words{font-size:17px;color:#22c55e;max-width:320px;text-align:center;min-height:48px}
@@ -219,24 +265,30 @@ const status=document.getElementById('status');
 const words=document.getElementById('words');
 const err=document.getElementById('err');
 let rec;
+let currentLocale='$locale';
 
-ws.onopen=()=>{status.textContent='Starting microphone...';startRec();};
+ws.onopen=()=>{status.textContent='Starting microphone...';startRec(currentLocale);};
 ws.onclose=()=>{status.textContent='Session ended.';dot.classList.remove('on');if(rec)rec.abort();};
+ws.onmessage=(e)=>{
+  const d=JSON.parse(e.data);
+  if(d.type==='setLocale'&&d.locale!==currentLocale){
+    currentLocale=d.locale;
+    status.textContent='Switching to '+d.locale+'...';
+    if(rec)rec.abort();
+    setTimeout(()=>startRec(currentLocale),400);
+  }
+};
 
 function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o));}
 
-function startRec(){
+function startRec(locale){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){
-    err.textContent='Web Speech API not available. Please use Microsoft Edge or Google Chrome.';
-    return;
-  }
+  if(!SR){err.textContent='Web Speech API not available. Please use Microsoft Edge or Google Chrome.';return;}
   rec=new SR();
-  rec.lang='$locale';
+  rec.lang=locale;
   rec.continuous=true;
   rec.interimResults=true;
-
-  rec.onstart=()=>{dot.classList.add('on');status.textContent='Listening...';send({type:'listening'});};
+  rec.onstart=()=>{dot.classList.add('on');status.textContent='Listening ('+locale+')...';send({type:'listening'});};
   rec.onresult=(e)=>{
     for(let i=e.resultIndex;i<e.results.length;i++){
       const t=e.results[i][0].transcript;
@@ -251,21 +303,21 @@ function startRec(){
   rec.onerror=(e)=>{
     send({type:'error',error:e.error});
     if(e.error==='not-allowed'){
-      err.textContent='Microphone denied. Click the lock icon in the address bar and allow microphone.';
+      err.textContent='Microphone denied. Click the lock icon and allow microphone.';
       dot.classList.remove('on');
     } else if(e.error!=='aborted'&&e.error!=='no-speech'){
-      setTimeout(startRec,1000);
+      setTimeout(()=>startRec(currentLocale),1000);
     }
   };
-  rec.onend=()=>{if(ws.readyState===1){dot.classList.remove('on');setTimeout(startRec,200);}};
-  try{rec.start();}catch(e){setTimeout(startRec,500);}
+  rec.onend=()=>{if(ws.readyState===1){dot.classList.remove('on');setTimeout(()=>startRec(currentLocale),200);}};
+  try{rec.start();}catch(e){setTimeout(()=>startRec(currentLocale),500);}
 }
 </script>
 </body>
 </html>
 ''';
 
-  // ── Display page (loaded in embedded WebView2 — no mic access needed) ───────
+  // ── Display page (embedded WebView2 — no mic, shows live results) ──────────
 
   String _buildDisplayHtml() => '''<!DOCTYPE html>
 <html lang="en">

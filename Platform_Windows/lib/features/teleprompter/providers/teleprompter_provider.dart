@@ -341,6 +341,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     });
   }
 
+  /// Detect dominant language of the next 30 words starting at [wordIndex].
+  /// Returns 'he_IL' if >50% of upcoming real words are RTL, else 'en_US'.
+  String _detectLanguageAhead(int wordIndex, Script script) {
+    final words = script.words;
+    final start = wordIndex.clamp(0, words.length);
+    final end = (wordIndex + 30).clamp(0, words.length);
+    final window = words.sublist(start, end).where((w) => !w.isNewline).toList();
+    if (window.isEmpty) return _scriptLanguageLocale ?? 'en_US';
+    final hebrewCount = window.where((w) => w.isRtl).length;
+    return hebrewCount / window.length > 0.5 ? 'he_IL' : 'en_US';
+  }
+
   /// Find the next non-newline word index after [from]
   int? _nextRealWord(int from, Script script) {
     for (int i = from + 1; i < script.words.length; i++) {
@@ -391,7 +403,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _addDebugLog('💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
 
         // Silent-listening detector: STT says listening but no audio level or results received.
-        // On Windows this typically means Online Speech Recognition is disabled.
         if (!_useWhisper && listening && !_silentWarningFired && _lastVolLog == null && _sessionStartTime != null) {
           final elapsed = DateTime.now().difference(_sessionStartTime!);
           if (elapsed.inSeconds >= 10) {
@@ -402,6 +413,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
               statusMessage: 'Microphone blocked — embedded browser was denied mic access.\nCheck Windows microphone privacy settings.',
               hasError: true,
             ));
+          }
+        }
+
+        // Dynamic language switching for mixed Hebrew/English scripts.
+        // Every heartbeat, look 30 words ahead. If the dominant language
+        // changed, hot-switch the STT locale via WebSocket (no restart needed).
+        if (!_useWhisper && listening && _currentScript != null) {
+          final upcomingLocale = _detectLanguageAhead(state.confirmedWordIndex, _currentScript!);
+          if (upcomingLocale != _scriptLanguageLocale) {
+            _scriptLanguageLocale = upcomingLocale;
+            _addDebugLog('🔤 [$engineName] Switching STT locale → $upcomingLocale');
+            _sttService.setLocale(upcomingLocale);
           }
         }
       });

@@ -32,6 +32,10 @@ abstract class AbstractSttService {
   /// On iOS, macOS, and Windows this callback will NEVER fire.
   void Function(String locale)? onNeedLanguagePack;
 
+  /// Hot-switch the recognition locale without restarting the whole session.
+  /// Default no-op; browser adapter overrides to send a WebSocket message.
+  void setLocale(String locale) {}
+
   /// Starts speech recognition.
   Future<SpeechStartResult> start({String? localeId});
 

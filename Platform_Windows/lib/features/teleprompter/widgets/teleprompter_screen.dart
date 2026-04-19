@@ -76,6 +76,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     try {
       final controller = WebviewController();
       await controller.initialize();
+      // Auto-grant microphone permission so Web Speech API can access the mic inside WebView2
+      controller.permissionRequested.listen((event) {
+        event.callback(WebviewPermissionDecision.allow);
+      });
       if (mounted) setState(() => _webviewController = controller);
     } catch (_) {}
   }

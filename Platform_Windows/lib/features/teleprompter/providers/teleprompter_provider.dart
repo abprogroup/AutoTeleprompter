@@ -397,9 +397,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           if (elapsed.inSeconds >= 10) {
             _silentWarningFired = true;
             _addDebugLog('🚨 SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
-            _addDebugLog('👉 FIX: Windows Settings → Privacy & Security → Speech → enable "Online speech recognition"');
+            _addDebugLog('👉 FIX: Microphone permission may be blocked inside embedded browser. Ensure internet is active.');
             _safeSetState((s) => s.copyWith(
-              statusMessage: 'Microphone blocked by Windows.\nGo to: Settings → Privacy & Security → Speech → turn ON "Online speech recognition"',
+              statusMessage: 'Microphone blocked — embedded browser was denied mic access.\nCheck Windows microphone privacy settings.',
               hasError: true,
             ));
           }

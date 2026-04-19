@@ -1043,6 +1043,7 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Text('A', style: TextStyle(color: Colors.white70, fontSize: 16)),
               onPressed: () {
+                FocusManager.instance.primaryFocus?.unfocus();
                 final newSize = (settings.fontSize - 4).clamp(10.0, 80.0);
                 ref.read(settingsProvider.notifier).setFontSize(newSize);
               },
@@ -1068,13 +1069,17 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Text('A', style: TextStyle(color: Colors.white70, fontSize: 22, fontWeight: FontWeight.bold)),
               onPressed: () {
+                FocusManager.instance.primaryFocus?.unfocus();
                 final newSize = (settings.fontSize + 4).clamp(10.0, 80.0);
                 ref.read(settingsProvider.notifier).setFontSize(newSize);
               },
             ),
             IconButton(
               icon: const Icon(Icons.tune, color: Colors.white70),
-              onPressed: onSettings,
+              onPressed: () {
+                FocusManager.instance.primaryFocus?.unfocus();
+                onSettings();
+              },
             ),
             IconButton(
               icon: const Icon(Icons.replay, color: Colors.white70),

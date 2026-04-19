@@ -1568,6 +1568,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _startPresenting() {
+    FocusManager.instance.primaryFocus?.unfocus();
     try {
       ref.read(scriptProvider.notifier).loadText(_getRefinedFullText());
     } catch (_) {}
@@ -1596,29 +1597,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               ],
             ),
           ),
-        Container(
-          color: Colors.black,
-          padding: const EdgeInsets.only(bottom: 12, top: 8),
-          child: Row(
-            children: [
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _startPresenting,
-                  icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
-                  label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFBF00),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 12,
-                    shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+        Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Container(
+            color: Colors.black,
+            padding: const EdgeInsets.only(bottom: 12, top: 8),
+            child: Row(
+              children: [
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _startPresenting,
+                    icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
+                    label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFBF00),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 12,
+                      shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-            ],
+                const SizedBox(width: 16),
+              ],
+            ),
           ),
         ),
       ],
@@ -1649,7 +1655,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
     final settings = ref.watch(settingsProvider);
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
-    return Scaffold(
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         toolbarHeight: 110,
@@ -1835,6 +1843,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             ),
         ],
       ),
+        ),
       ),
     );
   }

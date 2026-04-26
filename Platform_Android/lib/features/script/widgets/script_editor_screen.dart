@@ -1779,21 +1779,25 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _selectAllBlocks() {
-    // Collapse native system selections (e.g. from double-tap) BEFORE setting
-    // _isGlobalSelection=true. The controller listener calls _onSelectionChanged
-    // which clears global selection when it sees a non-full-block selection —
-    // doing this first means the listener fires while the flag is still false.
-    for (final c in _controllers) {
-      if (!c.selection.isCollapsed) {
-        c.selection = TextSelection.collapsed(offset: c.selection.baseOffset);
-      }
+    // Guard _onSelectionChanged from reacting to the programmatic collapse below.
+    _isCommandExecuting = true;
+
+    // Collapse the focused block's native selection so its Android drag-handles
+    // are dismissed. Without this, dragging the handles fires the listener and
+    // clears the in-app global selection. Only the active controller matters —
+    // others are not focused and have no visible handles.
+    final active = _activeController;
+    if (active != null && !active.selection.isCollapsed) {
+      active.selection = TextSelection.collapsed(offset: active.selection.baseOffset);
     }
+
     _overlayKey.currentState?.selectAll();
     _isGlobalSelection = true;
     for (final c in _controllers) {
       c.isGlobalSelected = true;
       c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
+    _isCommandExecuting = false;
     setState(() {});
     // Refresh after setState so TextFields repaint with new flags.
     for (final c in _controllers) {

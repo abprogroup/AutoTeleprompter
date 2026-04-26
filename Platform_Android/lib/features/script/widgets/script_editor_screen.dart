@@ -1779,14 +1779,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _selectAllBlocks() {
-    _overlayKey.currentState?.selectAll();
-    _isGlobalSelection = true;
+    // Collapse native system selections (e.g. from double-tap) BEFORE setting
+    // _isGlobalSelection=true. The controller listener calls _onSelectionChanged
+    // which clears global selection when it sees a non-full-block selection —
+    // doing this first means the listener fires while the flag is still false.
     for (final c in _controllers) {
-      // Collapse any native system selection (e.g. from a double-tap) before
-      // applying in-app global selection, so only one highlight layer paints.
       if (!c.selection.isCollapsed) {
         c.selection = TextSelection.collapsed(offset: c.selection.baseOffset);
       }
+    }
+    _overlayKey.currentState?.selectAll();
+    _isGlobalSelection = true;
+    for (final c in _controllers) {
       c.isGlobalSelected = true;
       c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }

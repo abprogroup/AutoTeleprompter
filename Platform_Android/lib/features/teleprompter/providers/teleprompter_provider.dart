@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/speech_service.dart';
 import '../services/native_speech_service.dart';
-import '../services/whisper_speech_service.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -12,9 +11,7 @@ import '../../remote/services/remote_control_service.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final NativeSpeechService _nativeSttService;
-  late final WhisperSpeechService _whisperService;
   late final RemoteControlService _remoteControlService;
-  bool _useWhisper = false;
   Script? _currentScript;
   String _accumulatedTranscript = '';
   bool _disposed = false;
@@ -26,23 +23,19 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
-  static const int _whisperSkipAfterStuck = 10;
   static const int _maxAdvancePerUpdate = 30;
 
   @override
   TeleprompterState build() {
     _disposed = false;
     _nativeSttService = NativeSpeechService();
-    _whisperService = WhisperSpeechService();
     _remoteControlService = ref.read(remoteControlProvider);
     _setupRemoteCallbacks();
     _setupNativeSttCallbacks();
-    _setupWhisperCallbacks();
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
       _nativeSttService.stop();
-      _whisperService.stop();
       _remoteControlService.stop();
     });
     return const TeleprompterState();
@@ -77,7 +70,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _safeSetState((s) => s.copyWith(debugLogs: logs));
   }
 
-  /// Common handler for STT results — shared between Google and Whisper
   void _handleSttResult(SpeechResult result) {
     if (_currentScript == null || _disposed) return;
 
@@ -119,8 +111,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         ? script.words.skip(currentIdx + 1).where((w) => !w.isNewline).take(3).map((w) => w.raw).join(' ')
         : '<END>';
 
-    final engineTag = _useWhisper ? '🤖' : '🎤';
-    final skipThreshold = _useWhisper ? _whisperSkipAfterStuck : _googleSkipAfterStuck;
+    const engineTag = '🎤';
+    const skipThreshold = _googleSkipAfterStuck;
 
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
@@ -165,7 +157,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     };
 
     _nativeSttService.onStatusChange = (status) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+      if (_disposed || _sessionStopped) return;
       _addDebugLog('🎤 STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
@@ -175,7 +167,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     };
 
     _nativeSttService.onError = (error) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+      if (_disposed || _sessionStopped) return;
       _addDebugLog('🎤 STT ERROR: $error');
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
@@ -189,7 +181,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     };
 
     _nativeSttService.onLanguageUnavailable = (requestedLocale) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+      if (_disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(
         _scriptLanguageLocale ?? requestedLocale,
       );
@@ -203,7 +195,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     };
 
     _nativeSttService.onNeedLanguagePack = (locale) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+      if (_disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(locale);
       _addDebugLog('🎤 ALL GOOGLE STT FAILED for $langName — internet required for cloud recognition');
       _safeSetState((s) => s.copyWith(
@@ -214,69 +206,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             'Please connect to WiFi or mobile data and try again.',
       ));
     };
-  }
-
-  void _setupWhisperCallbacks() {
-    _whisperService.onResult = (result) {
-      if (_disposed || _sessionStopped) return;
-      _handleSttResult(result);
-    };
-
-    _whisperService.onStatusChange = (status) {
-      if (!_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('🤖 WHISPER STATUS: $status');
-      _safeSetState((s) => s.copyWith(
-        isListening: status == SpeechStatus.listening,
-        statusMessage: '',
-        hasError: false,
-      ));
-    };
-
-    _whisperService.onError = (error) {
-      if (_disposed || _sessionStopped) return;
-      _addDebugLog('🤖 WHISPER ERROR: $error');
-      final isFatal = error.contains('not available') || error.contains('init failed');
-      if (isFatal) {
-        _safeSetState((s) => s.copyWith(
-          statusMessage: error,
-          hasError: true,
-          isListening: false,
-        ));
-      }
-    };
-  }
-
-  /// Auto-fallback to Whisper when Google STT is completely blocked
-  /// (e.g., ColorOS devices where mic permission is restricted)
-  Future<void> _autoFallbackToWhisper(String langName) async {
-    if (_disposed || _sessionStopped) return;
-
-    // Try Whisper models in order: tiny (fastest), base, small
-    const fallbackModels = ['whisper_tiny', 'whisper_base', 'whisper_small'];
-
-    for (final engineKey in fallbackModels) {
-      final model = whisperModelFromEngine(engineKey);
-      final downloaded = await _whisperService.isModelDownloaded(model);
-      if (downloaded) {
-        _addDebugLog('🤖 WHISPER FALLBACK: Found $engineKey, switching...');
-        _useWhisper = true;
-        await _whisperService.start(
-          localeId: _scriptLanguageLocale,
-          model: model,
-        );
-        return;
-      }
-    }
-
-    // No Whisper model available — show error with guidance
-    _addDebugLog('❌ NO WHISPER MODEL — cannot fallback, showing error');
-    _safeSetState((s) => s.copyWith(
-      missingLanguage: langName,
-      hasError: true,
-      isListening: false,
-      statusMessage: 'Google speech blocked on this device. '
-          'Go to Settings and download a Whisper model for offline recognition.',
-    ));
   }
 
   /// Animate word advancement from current position to [target],
@@ -321,8 +250,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sessionStopped = false;
-    final sttEngine = ref.read(settingsProvider).sttEngine;
-    _useWhisper = sttEngine.startsWith('whisper');
     state = state.copyWith(
         confirmedWordIndex: 0, isListening: false, hasError: false,
         statusMessage: '', debugLogs: [], missingLanguage: null);
@@ -348,42 +275,32 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (settings.debugMode) {
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (_disposed) return;
-        final engineName = _useWhisper ? 'WHISPER' : 'NATIVE_STT';
-        final listening = _useWhisper
-            ? _whisperService.isListening
-            : _nativeSttService.isListening;
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
-        _addDebugLog('💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
+        _addDebugLog('💓 HEARTBEAT: NATIVE_STT ${_nativeSttService.isListening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
       });
     }
 
-    if (_useWhisper) {
-      final model = whisperModelFromEngine(sttEngine);
-      _addDebugLog('🤖 Starting Whisper STT (${sttEngine}) offline...');
-      await _whisperService.start(localeId: localeId, model: model);
+    _addDebugLog('🎤 Starting Native STT locale=$localeId...');
+    final result = await _nativeSttService.start(localeId: localeId);
+
+    if (!result.success) {
+      _addDebugLog('🎤 STT FAILED: ${result.message}');
+      _safeSetState((s) => s.copyWith(
+        statusMessage: result.message ?? 'Speech recognition failed',
+        hasError: true,
+        isListening: false,
+      ));
+      return;
+    }
+
+    if (result.languageMissing && result.missingLanguageName != null) {
+      _addDebugLog('⚠️ LANG MISSING: ${result.missingLanguageName} not available, using ${result.actualLocale}');
+      _safeSetState((s) => s.copyWith(
+        missingLanguage: result.missingLanguageName,
+      ));
     } else {
-      _addDebugLog('🎤 Starting Native STT locale=$localeId...');
-      final result = await _nativeSttService.start(localeId: localeId);
-
-      if (!result.success) {
-        _addDebugLog('🎤 STT FAILED: ${result.message}');
-        _safeSetState((s) => s.copyWith(
-          statusMessage: result.message ?? 'Speech recognition failed',
-          hasError: true,
-          isListening: false,
-        ));
-        return;
-      }
-
-      if (result.languageMissing && result.missingLanguageName != null) {
-        _addDebugLog('⚠️ LANG MISSING: ${result.missingLanguageName} not available, using ${result.actualLocale}');
-        _safeSetState((s) => s.copyWith(
-          missingLanguage: result.missingLanguageName,
-        ));
-      } else {
-        _addDebugLog('🎤 Using locale: ${result.actualLocale}');
-      }
+      _addDebugLog('🎤 Using locale: ${result.actualLocale}');
     }
   }
 
@@ -392,9 +309,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
 
-    // Stop both — Whisper may have been auto-started via fallback
     await _nativeSttService.stop();
-    await _whisperService.stop();
 
     if (!_disposed) {
       try {

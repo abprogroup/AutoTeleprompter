@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/speech_service.dart';
-import '../services/native_speech_service.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -10,7 +9,7 @@ import '../../settings/providers/settings_provider.dart';
 import '../../remote/services/remote_control_service.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
-  late final NativeSpeechService _nativeSttService;
+  late final SpeechService _nativeSttService;
   late final RemoteControlService _remoteControlService;
   Script? _currentScript;
   String _accumulatedTranscript = '';
@@ -28,7 +27,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   @override
   TeleprompterState build() {
     _disposed = false;
-    _nativeSttService = NativeSpeechService();
+    _nativeSttService = SpeechService();
     _remoteControlService = ref.read(remoteControlProvider);
     _setupRemoteCallbacks();
     _setupNativeSttCallbacks();
@@ -180,25 +179,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       ));
     };
 
-    _nativeSttService.onLanguageUnavailable = (requestedLocale) {
+    // SpeechService fires onLanguageUnavailable after exhausting all locale
+    // retries — equivalent to the old onNeedLanguagePack signal.
+    _nativeSttService.onLanguageUnavailable = (locale) {
       if (_disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(
-        _scriptLanguageLocale ?? requestedLocale,
+        _scriptLanguageLocale ?? locale,
       );
-      _addDebugLog('🎤 LANGUAGE UNAVAILABLE: $langName — speech data not installed');
+      _addDebugLog('🎤 LANGUAGE UNAVAILABLE: $langName — internet or offline pack required');
       _safeSetState((s) => s.copyWith(
         missingLanguage: langName,
-        hasError: true,
-        isListening: false,
-        statusMessage: 'Speech recognition language not installed',
-      ));
-    };
-
-    _nativeSttService.onNeedLanguagePack = (locale) {
-      if (_disposed || _sessionStopped) return;
-      final langName = SpeechStartResult.languageNameFromLocale(locale);
-      _addDebugLog('🎤 ALL GOOGLE STT FAILED for $langName — internet required for cloud recognition');
-      _safeSetState((s) => s.copyWith(
         hasError: true,
         isListening: false,
         statusMessage: '$langName speech recognition requires an internet connection. '

@@ -38,14 +38,17 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.autoteleprompter.autoteleprompter"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
         minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
+        ndk {
+            // arm64-v8a covers all Android phones since ~2017.
+            // armeabi-v7a kept for older devices (pre-2017, 32-bit).
+            // x86_64 (emulator only) excluded to halve APK size.
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
     }
 
     buildTypes {

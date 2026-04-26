@@ -394,6 +394,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           return;
         }
         lastText = controller.text;
+        // Cascade global delete: user pressed backspace while this block had
+        // full-block native selection (set by _selectAllBlocks). Clear all blocks.
+        if (_isGlobalSelection && !_isCommandExecuting && controller.text.isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _isGlobalSelection) _deleteGlobalSelection();
+          });
+          return;
+        }
         _isDirty = true;
         _onBlockChanged();
       });
@@ -1777,16 +1785,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _selectAllBlocks() {
-    // Guard _onSelectionChanged from reacting to the programmatic collapse below.
     _isCommandExecuting = true;
 
-    // Collapse the focused block's native selection so its Android drag-handles
-    // are dismissed. Without this, dragging the handles fires the listener and
-    // clears the in-app global selection. Only the active controller matters —
-    // others are not focused and have no visible handles.
+    // Keep full-block native selection on the focused block so the soft keyboard
+    // can delete via backspace (platform sees a selection → backspace clears it).
+    // GhostSelectionControls already hides the native teardrop handles, so there
+    // is no need to collapse to suppress them.
     final active = _activeController;
-    if (active != null && !active.selection.isCollapsed) {
-      active.selection = TextSelection.collapsed(offset: active.selection.baseOffset);
+    if (active != null) {
+      active.selection = TextSelection(baseOffset: 0, extentOffset: active.text.length);
     }
 
     _overlayKey.currentState?.selectAll();
@@ -1801,6 +1808,30 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     for (final c in _controllers) {
       c.refresh();
     }
+  }
+
+  void _deleteGlobalSelection() {
+    _isCommandExecuting = true;
+    _overlayKey.currentState?.clearSelection();
+    _isGlobalSelection = false;
+    for (final c in _controllers) {
+      c.isGlobalSelected = false;
+      c.externalSelection = null;
+      c.text = '';
+    }
+    setState(() {
+      while (_controllers.length > 1) {
+        _controllers.last.dispose();
+        _focusNodes.last.dispose();
+        _blockKeys.removeLast();
+        _controllers.removeLast();
+        _focusNodes.removeLast();
+      }
+    });
+    if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
+    _isCommandExecuting = false;
+    _isDirty = false;
+    _saveHistory(description: 'Delete Selection');
   }
 
   void _clearGlobalSelection() {
@@ -1854,6 +1885,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     for (final c in _controllers) {
       c.refresh();
     }
+    // Recalculate overlay handle positions after layout updates with new text.
+    // Text length may have changed (e.g. align tags inserted), so the old
+    // _handleEndPos is stale until the RenderEditable is re-measured.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _overlayKey.currentState?.selectAll();
+    });
   }
 
 }

@@ -153,94 +153,144 @@ class SttBrowserAdapter extends AbstractSttService {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AutoTeleprompter \u2014 Mic</title>
+<title>AutoTeleprompter — Pro Audio Console</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#0d0d0d;color:#eee;font-family:-apple-system,sans-serif;
+  body{background:#0A0A0A;color:#FFBF00;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
        display:flex;flex-direction:column;align-items:center;justify-content:center;
-       height:100vh;gap:12px;padding:16px;overflow:hidden}
-  .dot{width:14px;height:14px;border-radius:50%;background:#333;flex-shrink:0}
-  .dot.on{background:#22c55e;box-shadow:0 0 10px #22c55e88;animation:p 1s infinite}
-  @keyframes p{0%,100%{opacity:1}50%{opacity:.4}}
-  #row{display:flex;align-items:center;gap:8px}
-  #status{font-size:12px;color:#888}
-  #bar{height:5px;width:140px;background:#222;border-radius:3px;overflow:hidden}
-  #fill{height:100%;width:0%;background:#22c55e;border-radius:3px;transition:width .1s}
-  #words{font-size:14px;color:#22c55e;text-align:center;max-width:280px;
-         min-height:40px;line-height:1.4;word-break:break-word}
-  #err{color:#ef4444;font-size:11px;text-align:center;max-width:260px;line-height:1.4}
+       height:100vh;gap:8px;padding:12px;overflow:hidden;border:1px solid #222}
+  .header{display:flex;align-items:center;gap:10px;width:100%;justify-content:center}
+  .label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#555;font-weight:bold}
+  #status{font-size:11px;color:#FFBF00;opacity:0.8}
+  .visualizer-container{width:100%;height:40px;background:#111;border-radius:6px;overflow:hidden;position:relative;border:1px solid #1a1a1a}
+  #waveCanvas{width:100%;height:100%}
+  #words{font-size:14px;color:#FFF;text-align:center;width:100%;height:32px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-weight:500;text-shadow:0 0 10px rgba(255,191,0,0.2)}
+  #err{color:#FF4444;font-size:10px;text-align:center;width:100%}
+  .mic-indicator{width:8px;height:8px;border-radius:50%;background:#333}
+  .mic-indicator.on{background:#FFBF00;box-shadow:0 0 8px #FFBF00;animation:pulse 1.5s infinite}
+  @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
 </style>
 </head>
 <body>
-<div id="row"><div class="dot" id="dot"></div><div id="status">Connecting...</div></div>
-<div id="bar"><div id="fill"></div></div>
-<div id="words"></div>
+<div class="header">
+  <div class="mic-indicator" id="dot"></div>
+  <span class="label">Audio Console</span>
+  <div id="status">Connecting...</div>
+</div>
+<div class="visualizer-container">
+  <canvas id="waveCanvas"></canvas>
+</div>
+<div id="words">Ready for speech</div>
 <div id="err"></div>
 <script>
-const ws=new WebSocket('ws://localhost:$_port/ws');
-const dot=document.getElementById('dot');
-const status=document.getElementById('status');
-const fill=document.getElementById('fill');
-const words=document.getElementById('words');
-const err=document.getElementById('err');
+const ws = new WebSocket('ws://localhost:$_port/ws');
+const dot = document.getElementById('dot');
+const status = document.getElementById('status');
+const words = document.getElementById('words');
+const err = document.getElementById('err');
+const canvas = document.getElementById('waveCanvas');
+const ctx = canvas.getContext('2d');
 let rec;
-let currentLocale='$locale';
-let consecutiveFails=0;
+let currentLocale = '$locale';
+let consecutiveFails = 0;
+let audioContext;
+let analyser;
+let dataArray;
+let animationId;
 
-ws.onopen=()=>{status.textContent='Starting microphone...';startRec(currentLocale);};
-ws.onclose=()=>{status.textContent='Session ended.';dot.classList.remove('on');if(rec)rec.abort();};
-ws.onmessage=(e)=>{
-  const d=JSON.parse(e.data);
-  if(d.type==='setLocale'&&d.locale!==currentLocale){
-    currentLocale=d.locale;consecutiveFails=0;
-    status.textContent='Switching to '+d.locale+'...';
-    if(rec)rec.abort();
-    setTimeout(()=>startRec(currentLocale),400);
+function initVisualizer() {
+  if (audioContext) return;
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    const bufferLength = analyser.frequencyBinCount;
+    dataArray = new Uint8Array(bufferLength);
+    
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      draw();
+    }).catch(e => console.error('Visualizer mic error:', e));
+  } catch (e) { console.error('AudioContext fail:', e); }
+}
+
+function draw() {
+  animationId = requestAnimationFrame(draw);
+  analyser.getByteFrequencyData(dataArray);
+  
+  const width = canvas.width;
+  const height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+  
+  const barWidth = (width / dataArray.length) * 2.5;
+  let x = 0;
+  
+  for(let i = 0; i < dataArray.length; i++) {
+    const barHeight = (dataArray[i] / 255) * height;
+    ctx.fillStyle = i % 2 === 0 ? '#FFBF00' : '#886600';
+    ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+    x += barWidth + 1;
+  }
+}
+
+ws.onopen = () => { status.textContent = 'Mic Start...'; startRec(currentLocale); initVisualizer(); };
+ws.onclose = () => { status.textContent = 'Standby'; dot.classList.remove('on'); if(rec) rec.abort(); };
+ws.onmessage = (e) => {
+  const d = JSON.parse(e.data);
+  if(d.type === 'setLocale' && d.locale !== currentLocale) {
+    currentLocale = d.locale; consecutiveFails = 0;
+    status.textContent = 'Syncing ' + d.locale;
+    if(rec) rec.abort();
+    setTimeout(() => startRec(currentLocale), 400);
   }
 };
 
 function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o));}
 
-function restartDelay(){
-  if(consecutiveFails<=2)return 300;
-  return Math.min(300*Math.pow(2,consecutiveFails-2),8000);
+function restartDelay() {
+  if(consecutiveFails <= 2) return 300;
+  return Math.min(300 * Math.pow(2, consecutiveFails - 2), 8000);
 }
 
-function startRec(locale){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){err.textContent='Web Speech API not available in this browser.';return;}
-  rec=new SR();
-  rec.lang=locale;rec.continuous=true;rec.interimResults=true;
-  rec.onstart=()=>{
-    consecutiveFails=0;dot.classList.add('on');
-    status.textContent='Listening ('+locale+')...';send({type:'listening'});
+function startRec(locale) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ err.textContent = 'Browser STT Unavailable'; return; }
+  rec = new SR();
+  rec.lang = locale; rec.continuous = true; rec.interimResults = true;
+  rec.onstart = () => {
+    consecutiveFails = 0; dot.classList.add('on');
+    status.textContent = '[' + locale.toUpperCase() + '] Active'; send({type: 'listening'});
+    if (audioContext && audioContext.state === 'suspended') audioContext.resume();
   };
-  rec.onresult=(e)=>{
-    consecutiveFails=0;
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      const t=e.results[i][0].transcript;
-      const f=e.results[i].isFinal;
-      send({type:'result',words:t,isFinal:f});words.textContent=t;
+  rec.onresult = (e) => {
+    consecutiveFails = 0;
+    for(let i = e.resultIndex; i < e.results.length; i++){
+      const t = e.results[i][0].transcript;
+      const f = e.results[i].isFinal;
+      send({type: 'result', words: t, isFinal: f});
+      words.textContent = t.length > 30 ? '...' + t.slice(-30) : t;
     }
-    send({type:'level',level:0.65});fill.style.width='65%';
   };
-  rec.onspeechstart=()=>{send({type:'level',level:0.7});fill.style.width='70%';};
-  rec.onspeechend=()=>{send({type:'level',level:0.1});fill.style.width='10%';};
-  rec.onerror=(e)=>{
-    send({type:'error',error:e.error});
-    if(e.error==='not-allowed'){
-      err.textContent='Mic blocked — grant permission and restart session.';
-      dot.classList.remove('on');return;
+  rec.onerror = (e) => {
+    send({type: 'error', error: e.error});
+    if(e.error === 'not-allowed') {
+      err.textContent = 'Mic Permission Denied';
+      dot.classList.remove('on');
     }
-    if(e.error==='aborted')consecutiveFails++;
-    else if(e.error!=='no-speech')consecutiveFails++;
+    consecutiveFails++;
   };
-  rec.onend=()=>{
-    dot.classList.remove('on');fill.style.width='0%';
-    if(ws.readyState===1)setTimeout(()=>startRec(currentLocale),restartDelay());
+  rec.onend = () => {
+    dot.classList.remove('on');
+    if(ws.readyState === 1) setTimeout(() => startRec(currentLocale), restartDelay());
   };
-  try{rec.start();}catch(ex){consecutiveFails++;setTimeout(()=>startRec(currentLocale),restartDelay());}
+  try{ rec.start(); } catch(ex){ consecutiveFails++; setTimeout(() => startRec(currentLocale), restartDelay()); }
 }
+
+// Canvas resizing
+function resize() { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
+window.onresize = resize;
+resize();
 </script>
 </body>
 </html>

@@ -43,6 +43,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _manualScrolling = false;
   bool _scrollingBackward = false;
   StreamSubscription? _remoteCmdSub;
+  WebviewController? _webviewController;
+  String? _loadedWebViewUrl;
 
 
   @override
@@ -59,6 +61,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage), (prev, next) {
           if (next != null && next.isNotEmpty && mounted) _showMissingLanguageDialog(next);
         });
+        // Watch for STT Dashboard URL
+        ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl), (prev, next) {
+          if (next != null && next != _loadedWebViewUrl) _loadSttWebView(next);
+        });
+        if (Platform.isWindows) _initWebViewController();
       }
     });
   }
@@ -113,8 +120,47 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _smoothScrollTimer?.cancel();
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
+    _webviewController?.dispose();
     ref.read(teleprompterProvider.notifier).stopSession();
     super.dispose();
+  }
+
+  Future<void> _preGrantWebView2Mic() async {
+    try {
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final prefsFile = File('$exeDir\\EBWebView\\Default\\Preferences');
+      final ts = DateTime.now().difference(DateTime.utc(1601, 1, 1)).inMicroseconds.toString();
+      Map<String, dynamic> prefs = {};
+      if (await prefsFile.exists()) {
+        try { prefs = jsonDecode(await prefsFile.readAsString()) as Map<String, dynamic>; } catch (_) {}
+      }
+      final profile = prefs.putIfAbsent('profile', () => <String, dynamic>{}) as Map<String, dynamic>;
+      final cs = profile.putIfAbsent('content_settings', () => <String, dynamic>{}) as Map<String, dynamic>;
+      final exc = cs.putIfAbsent('exceptions', () => <String, dynamic>{}) as Map<String, dynamic>;
+      final mic = exc.putIfAbsent('media_stream_mic', () => <String, dynamic>{}) as Map<String, dynamic>;
+      final grant = {'last_modified': ts, 'setting': 1};
+      mic['http://localhost:8082,*'] = grant;
+      mic['http://localhost:8082'] = grant;
+      await prefsFile.parent.create(recursive: true);
+      await prefsFile.writeAsString(jsonEncode(prefs));
+    } catch (_) {}
+  }
+
+  Future<void> _initWebViewController() async {
+    try {
+      await _preGrantWebView2Mic();
+      final controller = WebviewController();
+      await controller.initialize();
+      if (mounted) setState(() => _webviewController = controller);
+    } catch (_) {}
+  }
+
+  Future<void> _loadSttWebView(String url) async {
+    _loadedWebViewUrl = url;
+    if (_webviewController == null) await _initWebViewController();
+    try {
+      await _webviewController?.loadUrl(url);
+    } catch (_) {}
   }
 
   void _scheduleHideControls() {
@@ -867,6 +913,33 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                       ),
                     ],
                   ),
+                ),
+              ),
+
+            // STT Pro Dashboard Integration
+            if (_webviewController != null && tState.sttWebViewUrl != null)
+              Positioned(
+                right: 12,
+                bottom: settings.debugMode ? 240 : 12,
+                width: 280,
+                height: 110,
+                child: Container(
+                   decoration: BoxDecoration(
+                     color: const Color(0xFF0A0A0A),
+                     borderRadius: BorderRadius.circular(12),
+                     border: Border.all(color: Colors.white.withOpacity(0.1)),
+                     boxShadow: [
+                       BoxShadow(
+                         color: Colors.black.withOpacity(0.5),
+                         blurRadius: 10,
+                         offset: const Offset(0, 4),
+                       ),
+                     ],
+                   ),
+                   child: ClipRRect(
+                     borderRadius: BorderRadius.circular(12),
+                     child: Webview(_webviewController!),
+                   ),
                 ),
               ),
 

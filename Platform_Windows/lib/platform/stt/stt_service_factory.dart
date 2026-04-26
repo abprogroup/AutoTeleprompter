@@ -2,7 +2,7 @@ import 'dart:io';
 import 'abstract_stt_service.dart';
 import 'stt_android_adapter.dart';
 import 'stt_apple_adapter.dart';
-import 'stt_desktop_adapter.dart';
+import 'stt_browser_adapter.dart';
 
 /// Creates the correct [AbstractSttService] implementation for the
 /// current runtime platform.
@@ -12,7 +12,7 @@ import 'stt_desktop_adapter.dart';
 /// │ Android         │ SttAndroidAdapter  (Google on-device via channel)│
 /// │ iOS             │ SttAppleAdapter    (Apple SFSpeechRecognizer)     │
 /// │ macOS           │ SttAppleAdapter    (Apple SFSpeechRecognizer)     │
-/// │ Windows         │ SttDesktopAdapter  (Windows SAPI / speech_to_text)│
+/// │ Windows         │ SttBrowserAdapter  (Web Speech API via Dashboard) │
 /// └─────────────────┴──────────────────────────────────────────────────┘
 ///
 /// Usage:
@@ -25,8 +25,8 @@ class SttServiceFactory {
   static AbstractSttService create() {
     if (Platform.isAndroid) return SttAndroidAdapter();
     if (Platform.isIOS || Platform.isMacOS) return SttAppleAdapter();
-    // Windows inherently uses Native Speech API (SAPI) via speech_to_text_windows
-    // If it fails due to missing offline packs, a custom deep-link dialog helps the user.
-    return SttDesktopAdapter();
+    // Windows: Use Browser engine for universal language support (including Hebrew).
+    // The "Dashboard" integration ensures mica remains active even when hidden.
+    return SttBrowserAdapter();
   }
 }

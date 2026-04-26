@@ -269,9 +269,12 @@ function startRec(locale) {
       const t = e.results[i][0].transcript;
       const f = e.results[i].isFinal;
       send({type: 'result', words: t, isFinal: f});
+      send({type: 'level', level: 0.65});
       words.textContent = t.length > 30 ? '...' + t.slice(-30) : t;
     }
   };
+  rec.onspeechstart = () => { send({type: 'level', level: 0.7}); };
+  rec.onspeechend = () => { send({type: 'level', level: 0.1}); };
   rec.onerror = (e) => {
     send({type: 'error', error: e.error});
     if(e.error === 'not-allowed') {

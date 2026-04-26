@@ -395,7 +395,8 @@ class WordAligner {
         final spokenWord = recentWords[j];
 
         final sim = _wordSimilarity(spokenWord, scriptWord, script[si].isRtl);
-        if (sim >= _matchThreshold) {
+        final threshold = script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
+        if (sim >= threshold) {
           seqScore += sim;
           matchCount++;
         }

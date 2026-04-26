@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:webview_windows/webview_windows.dart';
 import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -59,11 +59,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage), (prev, next) {
           if (next != null && next.isNotEmpty && mounted) _showMissingLanguageDialog(next);
         });
-        });
       }
     });
   }
-
 
   void _initRemoteListener() {
     _remoteCmdSub?.cancel();

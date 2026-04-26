@@ -155,6 +155,10 @@
 - [U] **FEATURE: Pages Export**: `PagesService.generate()` — valid ZIP with `index.xml`. Save dialog shows `.pages` on iOS/macOS only. Round-trip import works. (USER VERIFIED 2026-04-18)
 - [U] **BUG: Mic Button Stuck on Mic Icon**: Race condition — iOS async `notListening` from previous stop() overrode new session's `isListening=true`. Fixed: `_startingSession` guard in `TeleprompterNotifier`. (USER VERIFIED 2026-04-18)
 - [U] **BUG: Hebrew Colors Show White in Presenter (Toggle OFF)**: `showUpcomingWordColor` toggle ON correctly overrides all markup colors; toggle OFF shows per-word colors. Reverted incorrect "always win" fix. (USER VERIFIED 2026-04-18)
+- [U] **BUG: iOS Build Failure (STT Callbacks)**: Fixed syntax errors and bracket logic mapping in `TeleprompterNotifier` to properly construct STT callbacks, restoring CI builds. (USER VERIFIED v4.1.5)
+- [U] **UX: iOS Keyboard Parity (Editor)**: Wrapped the editor Scaffold in a internal `GestureDetector` so tapping the background correctly dismisses the soft keyboard. (USER VERIFIED v4.1.5)
+- [U] **UX: iOS Presentation Floating Button**: Pushed the "PRESENT" button upward intelligently using `MediaQuery.viewInsets.bottom` so it's always accessible above the active iOS keyboard. (USER VERIFIED v4.1.5)
+- [U] **UX: iOS Presentation Settings Focus Guard**: Forced explicit `FocusManager.instance.primaryFocus?.unfocus()` when launching presentation mode or interacting with the A+/A- and Settings buttons, blocking the OS from randomly triggering the keyboard. (USER VERIFIED v4.1.5)
 
 ## 🖊️ Editor Hardening (v4.0.3)
 - [U] **BUG: B/I/U Needs Two Clicks on Multi-Styled Text**: Forward scan `start+d` in `_isStyleActiveAt` caused false-positive "active" detection near opening tag of next styled block. First click was a no-op; second click applied correctly. Fixed: backward scan only. (USER VERIFIED 2026-04-18)
@@ -200,7 +204,7 @@
 ## 🖥️ macOS — Pending Development
 
 - [U] **Initialize Foundation**: `macos/` native layer exists and is integrated with `lib/platform/`.
-- [ ] **Verification**: Run macOS build on a Mac to verify `SttAppleAdapter` performance.
+- [-] **Verification**: Run macOS build on a Mac to verify `SttAppleAdapter` performance. (Moved to V5 Tracker)
 
 ---
 
@@ -214,11 +218,11 @@
 - [ ] **Infrastructure Check**: Verify `SttDesktopAdapter` and `PlatformFileImport` for Windows.
 
 ### 💤 Windows — Deferred (v4.1+ / v5.0)
-- [ ] **Whisper Offline STT (Backup Solution)**: Currently disabled for Windows build to prevent native plugin conflicts. To be revisited as a premium desktop feature. 
+- [-] **Whisper Offline STT (Backup Solution)**: Currently disabled for Windows build to prevent native plugin conflicts. To be revisited as a premium desktop feature. (Moved to V5 Tracker)
 
 ### 📽️ Presentation Mode — Pending Fixes
-- [ ] **Upcoming Text Highlight**: Add a toggle in settings similar to "Upcoming text color" that resets the highlight background of read text.
-- [ ] **Spacing Synchronization**: Ensure line spacing, word spacing, and letter spacing values perfectly sync between the editor and presentation mode. Allow negative scales (down to -1.0) in presentation mode to match the editor's default limit constraints.
+- [-] **Upcoming Text Highlight**: Add a toggle in settings similar to "Upcoming text color" that resets the highlight background of read text. (Moved to V5 Tracker)
+- [-] **Spacing Synchronization**: Ensure line spacing, word spacing, and letter spacing values perfectly sync between the editor and presentation mode. Allow negative scales (down to -1.0) in presentation mode to match the editor's default limit constraints. (Moved to V5 Tracker)
 
 ---
 *Last Updated: 2026-04-18 (v4.1.4 4-Way Splitting / Windows MVP Initialization)*

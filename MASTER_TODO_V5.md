@@ -1,5 +1,5 @@
-# Master TODO List: AutoTeleprompter v5.0 Android
-# (Premium Features & Deferred Functionality)
+# Master TODO List: AutoTeleprompter v5.0
+# (Premium Features & Deferred Functionality — All Platforms)
 
 ### Status Legend
 - `[ ]` = Planned; Not started.
@@ -165,6 +165,14 @@
 - [ ] **Faded Files in Picker**: Grey out/disable unsupported files in file picker. Needs dedicated file picker widget. (Deferred since v2.x)
 
 - [ ] **Emulator Hebrew Keyboard Bridge**: Hebrew keyboard input in Android emulator. (Deferred — hard to implement, not critical for production)
+
+## 🪟 Windows & macOS — Deferred
+- [ ] **Windows - Whisper Offline STT (Backup Solution)**: Disabled for Windows build to prevent native plugin conflicts. To be revisited as a premium desktop feature.
+- [ ] **macOS - Verification**: Run macOS build on a Mac to verify `SttAppleAdapter` performance.
+
+## 📽️ Presentation Mode — Pending Fixes
+- [ ] **Upcoming Text Highlight**: Add a toggle in settings similar to "Upcoming text color" that resets the highlight background of read text.
+- [ ] **Spacing Synchronization**: Ensure line spacing, word spacing, and letter spacing values perfectly sync between the editor and presentation mode. Allow negative scales (down to -1.0) in presentation mode to match the editor's default limit constraints.
 
 ---
 

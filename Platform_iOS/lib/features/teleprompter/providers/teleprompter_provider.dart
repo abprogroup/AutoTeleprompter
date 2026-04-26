@@ -23,6 +23,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   Timer? _fluidAdvanceTimer;
   int _fluidTarget = 0;
   String? _scriptLanguageLocale;
+  String? _activeLocale;          // locale the STT is currently using
+  int _lastLocaleSwitchIndex = -999; // debounce: don't switch within 10 words
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
@@ -145,6 +147,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         // Large jump — advance word by word with short delays
         _startFluidAdvance(capped, script);
       }
+      _checkAndSwitchLocale();
     } else {
       _noProgressCount++;
       _addDebugLog('$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
@@ -320,6 +323,46 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     });
   }
 
+  /// Look 15 words ahead and switch STT locale if the upcoming language
+  /// differs from the active one.  Debounced to at most once per 10 words.
+  void _checkAndSwitchLocale() {
+    if (_currentScript == null || _useWhisper || _disposed || _sessionStopped) return;
+    final currentIdx = state.confirmedWordIndex;
+    if (currentIdx - _lastLocaleSwitchIndex < 10) return;
+
+    final lookahead = _currentScript!.words
+        .skip(currentIdx + 1)
+        .where((w) => !w.isNewline)
+        .take(15)
+        .toList();
+    if (lookahead.isEmpty) return;
+
+    final hebrewRatio = lookahead.where((w) => w.isRtl).length / lookahead.length;
+    final upcomingHebrew = hebrewRatio > 0.5;
+    final currentHebrew = _activeLocale?.startsWith('he') ?? false;
+    if (upcomingHebrew == currentHebrew) return;
+
+    final newLocale = upcomingHebrew ? 'he_IL' : 'en_US';
+    _addDebugLog('🌐 LOCALE SWITCH: ${currentHebrew ? "he" : "en"} → ${upcomingHebrew ? "he" : "en"} '
+        '(${(hebrewRatio * 100).round()}% Hebrew in next ${lookahead.length} words)');
+    _activeLocale = newLocale;
+    _scriptLanguageLocale = newLocale;
+    _lastLocaleSwitchIndex = currentIdx;
+
+    // Restart STT with the new locale. Brief gap (~300 ms) while it restarts.
+    _sttService.stop().then((_) {
+      if (_disposed || _sessionStopped) return;
+      _sttService.start(localeId: newLocale).then((result) {
+        if (_disposed || _sessionStopped) return;
+        if (!result.success) {
+          _addDebugLog('⚠️ LOCALE SWITCH FAILED: ${result.message}');
+        } else {
+          _addDebugLog('🎤 LOCALE SWITCH OK: ${result.actualLocale}');
+        }
+      });
+    });
+  }
+
   /// Find the next non-newline word index after [from]
   int? _nextRealWord(int from, Script script) {
     for (int i = from + 1; i < script.words.length; i++) {
@@ -333,6 +376,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sessionStopped = false;
+    _lastLocaleSwitchIndex = -999;
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
     state = state.copyWith(
@@ -351,6 +395,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       isHebrew = ratio > 0.3;
       localeId = isHebrew ? 'he_IL' : 'en_US';
       _scriptLanguageLocale = localeId;
+      _activeLocale = localeId;
       _addDebugLog('🌐 LANG: ${isHebrew ? "Hebrew" : "English"} (${(ratio * 100).round()}% Hebrew chars)');
     }
 

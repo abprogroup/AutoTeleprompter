@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:webview_windows/webview_windows.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -44,9 +44,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _scrollingBackward = false;
   StreamSubscription? _remoteCmdSub;
 
-  // Embedded STT WebView (Windows only)
-  WebviewController? _webviewController;
-  String? _loadedWebViewUrl;
 
   @override
   void initState() {
@@ -62,74 +59,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage), (prev, next) {
           if (next != null && next.isNotEmpty && mounted) _showMissingLanguageDialog(next);
         });
-        // Watch for the embedded STT WebView URL (Windows browser adapter)
-        ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl), (prev, next) {
-          if (next != null && next != _loadedWebViewUrl) _loadSttWebView(next);
-          if (next == null) _disposeSttWebView();
         });
-        // Pre-initialize WebView controller on Windows
-        if (Platform.isWindows) _initWebViewController();
       }
     });
   }
 
-  /// Pre-grant microphone permission for localhost:8082 in the WebView2
-  /// Preferences file so Web Speech API works without a permission dialog.
-  /// WebView2 reads this file on startup; if permission is already stored it
-  /// skips the PermissionRequested event and grants access directly.
-  Future<void> _preGrantWebView2Mic() async {
-    try {
-      final exeDir = File(Platform.resolvedExecutable).parent.path;
-      final prefsFile = File('$exeDir\\EBWebView\\Default\\Preferences');
-
-      // Chrome-epoch timestamp: microseconds since 1601-01-01
-      final ts = DateTime.now()
-          .difference(DateTime.utc(1601, 1, 1))
-          .inMicroseconds
-          .toString();
-
-      Map<String, dynamic> prefs = {};
-      if (await prefsFile.exists()) {
-        try { prefs = jsonDecode(await prefsFile.readAsString()) as Map<String, dynamic>; }
-        catch (_) {}
-      }
-
-      final profile = prefs.putIfAbsent('profile', () => <String, dynamic>{}) as Map<String, dynamic>;
-      final cs      = profile.putIfAbsent('content_settings', () => <String, dynamic>{}) as Map<String, dynamic>;
-      final exc     = cs.putIfAbsent('exceptions', () => <String, dynamic>{}) as Map<String, dynamic>;
-      final mic     = exc.putIfAbsent('media_stream_mic', () => <String, dynamic>{}) as Map<String, dynamic>;
-
-      // Both key formats used by Chromium/WebView2
-      final grant = {'last_modified': ts, 'setting': 1};
-      mic['http://localhost:8082,*'] = grant;
-      mic['http://localhost:8082']   = grant;
-
-      await prefsFile.parent.create(recursive: true);
-      await prefsFile.writeAsString(jsonEncode(prefs));
-    } catch (_) {}
-  }
-
-  Future<void> _initWebViewController() async {
-    try {
-      // Write permission grant before WebView2 boots so it reads it on init
-      await _preGrantWebView2Mic();
-      final controller = WebviewController();
-      await controller.initialize();
-      if (mounted) setState(() => _webviewController = controller);
-    } catch (_) {}
-  }
-
-  Future<void> _loadSttWebView(String url) async {
-    _loadedWebViewUrl = url;
-    if (_webviewController == null) await _initWebViewController();
-    try {
-      await _webviewController?.loadUrl(url);
-    } catch (_) {}
-  }
-
-  void _disposeSttWebView() {
-    _loadedWebViewUrl = null;
-  }
 
   void _initRemoteListener() {
     _remoteCmdSub?.cancel();
@@ -181,7 +115,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _smoothScrollTimer?.cancel();
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
-    _webviewController?.dispose();
     ref.read(teleprompterProvider.notifier).stopSession();
     super.dispose();
   }
@@ -195,6 +128,77 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   /// Show a dialog when Google speech recognition fails
   void _showMissingLanguageDialog(String languageName) {
+    if (Platform.isWindows) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.settings_voice, color: Color(0xFFFFBF00), size: 24),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('Windows Built-In STT',
+                    style: TextStyle(color: Colors.white, fontSize: 18)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Windows requires the "$languageName" Speech Pack for offline recognition. If no offline pack exists for this language, please enable Online Speech Recognition.',
+                style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Action 1: Download Offline Pack',
+                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Open Windows Settings -> Time & Language -> Speech, and add the speech pack if available.',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Action 2: Enable Online Fallback',
+                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'If offline is unavailable, open Privacy -> Speech, and toggle "Online speech recognition" to ON.',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Process.run('cmd', ['/c', 'start', 'ms-settings:speech']);
+              },
+              child: const Text('Download Packs', style: TextStyle(color: Color(0xFF4DA8DA))),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Process.run('cmd', ['/c', 'start', 'ms-settings:privacy-speech']);
+              },
+              child: const Text('Online Fallback', style: TextStyle(color: Color(0xFF4DA8DA))),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -865,20 +869,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                       ),
                     ],
                   ),
-                ),
-              ),
- 
-            // Embedded STT WebView (Windows) — hidden in production, visible in debug mode
-            if (_webviewController != null && tState.sttWebViewUrl != null)
-              Positioned(
-                right: 8,
-                // In debug mode: sit below the debug panel; in production: collapse to 1x1
-                top: settings.debugMode ? 420 : -2,
-                width: settings.debugMode ? 320 : 1,
-                height: settings.debugMode ? 130 : 1,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(settings.debugMode ? 8 : 0),
-                  child: Webview(_webviewController!),
                 ),
               ),
 

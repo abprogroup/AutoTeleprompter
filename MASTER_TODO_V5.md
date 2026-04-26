@@ -168,6 +168,7 @@
 
 ## 🪟 Windows & macOS — Deferred
 - [ ] **Windows - Whisper Offline STT (Backup Solution)**: Disabled for Windows build to prevent native plugin conflicts. To be revisited as a premium desktop feature.
+- [ ] **Windows - Web Browser STT (Premium Fallback)**: The previously developed `webview_windows` embedded localhost STT wrapper. To be preserved as a premium fallback engine if native SAPI or Whisper fails, utilizing an optical trick (`Opacity(0.01)`) to maintain connection without disrupting the UI.
 - [ ] **macOS - Verification**: Run macOS build on a Mac to verify `SttAppleAdapter` performance.
 
 ## 📽️ Presentation Mode — Pending Fixes

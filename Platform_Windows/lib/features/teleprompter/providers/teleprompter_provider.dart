@@ -346,11 +346,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String _detectLanguageAhead(int wordIndex, Script script) {
     final words = script.words;
     final start = wordIndex.clamp(0, words.length);
-    final end = (wordIndex + 30).clamp(0, words.length);
+    // v4.2: Smaller window (8 words) for faster pivoting in bilingual scripts
+    final end = (wordIndex + 8).clamp(0, words.length);
     final window = words.sublist(start, end).where((w) => !w.isNewline).toList();
     if (window.isEmpty) return _scriptLanguageLocale ?? 'en_US';
     final hebrewCount = window.where((w) => w.isRtl).length;
-    return hebrewCount / window.length > 0.5 ? 'he_IL' : 'en_US';
+    // v4.2: Even if only 30% of the next 8 words are Hebrew, pivot to Hebrew.
+    // This prioritizes RTL recognition when transitions happen.
+    final ratio = hebrewCount / window.length;
+    return ratio > 0.3 ? 'he_IL' : 'en_US';
   }
 
   /// Find the next non-newline word index after [from]
@@ -377,17 +381,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
 
-    // Auto-detect language from the FIRST ~30 words (not whole-script average).
-    // A script that starts with English then switches to Hebrew should begin
-    // with en_US, not he_IL — the heartbeat handles mid-session switching.
-    final realWords = script.words.where((w) => !w.isNewline).toList();
-    String? localeId;
-    if (realWords.isNotEmpty) {
+    // v4.2: Detect starting locale focusing ONLY on the immediate first words.
+    // This prevents a long Hebrew document from forcing English start-text into Hebrew STT.
+    if (script.words.isNotEmpty) {
+      final initialLocale = _detectLanguageAhead(0, script);
+      _scriptLanguageLocale = initialLocale;
+      
+      final realWords = script.words.where((w) => !w.isNewline).toList();
       final hebrewCount = realWords.where((w) => w.isRtl).length;
       final ratio = hebrewCount / realWords.length;
-      localeId = _detectLanguageAhead(0, script);
-      _scriptLanguageLocale = localeId;
-      _addDebugLog('🌐 LANG: ${localeId == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew overall)');
+      _addDebugLog('🌐 LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew overall)');
+      localeId = initialLocale;
     }
 
     // Start heartbeat timer in debug mode

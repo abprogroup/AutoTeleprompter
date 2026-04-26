@@ -380,6 +380,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         statusMessage: '', debugLogs: [], missingLanguage: null);
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
+    String? localeId;
 
     // v4.2: Detect starting locale focusing ONLY on the immediate first words.
     // This prevents a long Hebrew document from forcing English start-text into Hebrew STT.

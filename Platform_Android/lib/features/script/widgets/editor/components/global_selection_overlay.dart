@@ -152,6 +152,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (!_isWholeScriptSelected) return;
     for (final c in widget.controllers) {
       c.isGlobalSelected = false;
+      // Collapse native selection so the platform highlight disappears.
+      // The overlay's externalSelection takes over the visual from here.
+      if (!c.selection.isCollapsed) {
+        c.selection = const TextSelection.collapsed(offset: 0);
+      }
     }
     widget.onSelectionChanged();
   }

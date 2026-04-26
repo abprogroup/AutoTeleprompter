@@ -1709,6 +1709,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               child: IgnorePointer(child: _buildDebugSentry()),
             ),
         ],
+        ),
+      ),
       ),
     );
   }

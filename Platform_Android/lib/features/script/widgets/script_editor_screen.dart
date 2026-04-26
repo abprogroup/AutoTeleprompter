@@ -441,16 +441,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       // Only reset Global Selection if a manual PARTIAL selection occurs.
       // If the selection is collapsed (cursor) or spans the whole block, keep the flag.
       if (_isGlobalSelection && !_isCommandExecuting) {
-        // Keep global selection only if the active block is still fully selected
-        // (i.e. the notification came from our own _selectAllBlocks).
-        // Any other selection state (collapsed tap, partial drag) clears it.
-        // Note: overlay/refined selection is cleared via onTap, not here,
-        // to avoid fighting with the overlay's drag handle updates.
+        // Only clear on a partial (non-collapsed, non-full-block) selection —
+        // that's the user dragging handles to a new range.
+        // Collapsed = we collapsed it ourselves in _selectAllBlocks to dismiss
+        // Android handles; full-block = escalation path. Neither should clear.
         final textLen = controller.text.length;
-        final isFullBlock = !controller.selection.isCollapsed &&
-            controller.selection.start == 0 &&
-            controller.selection.end == textLen;
-        if (!isFullBlock) {
+        final isPartial = !controller.selection.isCollapsed &&
+            !(controller.selection.start == 0 && controller.selection.end == textLen);
+        if (isPartial) {
           _clearGlobalSelection();
         }
       }

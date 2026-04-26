@@ -1782,6 +1782,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     _overlayKey.currentState?.selectAll();
     _isGlobalSelection = true;
     for (final c in _controllers) {
+      // Collapse any native system selection (e.g. from a double-tap) before
+      // applying in-app global selection, so only one highlight layer paints.
+      if (!c.selection.isCollapsed) {
+        c.selection = TextSelection.collapsed(offset: c.selection.baseOffset);
+      }
       c.isGlobalSelected = true;
       c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }

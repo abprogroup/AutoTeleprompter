@@ -128,21 +128,39 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   Future<void> _preGrantWebView2Mic() async {
     try {
       final exeDir = File(Platform.resolvedExecutable).parent.path;
-      final prefsFile = File('$exeDir\\EBWebView\\Default\\Preferences');
+      final localAppData = Platform.environment['LOCALAPPDATA'];
+      
+      // Possible locations for WebView2 User Data
+      final paths = [
+        '$exeDir\\EBWebView\\Default\\Preferences',
+        if (localAppData != null) '$localAppData\\AutoTeleprompter\\EBWebView\\Default\\Preferences',
+        if (localAppData != null) '$localAppData\\autoteleprompter_windows\\EBWebView\\Default\\Preferences',
+      ];
+
       final ts = DateTime.now().difference(DateTime.utc(1601, 1, 1)).inMicroseconds.toString();
-      Map<String, dynamic> prefs = {};
-      if (await prefsFile.exists()) {
-        try { prefs = jsonDecode(await prefsFile.readAsString()) as Map<String, dynamic>; } catch (_) {}
+      
+      for (final path in paths) {
+        final prefsFile = File(path);
+        Map<String, dynamic> prefs = {};
+        if (await prefsFile.exists()) {
+          try { prefs = jsonDecode(await prefsFile.readAsString()) as Map<String, dynamic>; } catch (_) {}
+        } else {
+          // If the file doesn't exist yet, we'll try to create the folder structure 
+          // but we can't write a partial prefs file safely without knowing the structure.
+          continue; 
+        }
+
+        final profile = prefs.putIfAbsent('profile', () => <String, dynamic>{}) as Map<String, dynamic>;
+        final cs = profile.putIfAbsent('content_settings', () => <String, dynamic>{}) as Map<String, dynamic>;
+        final exc = cs.putIfAbsent('exceptions', () => <String, dynamic>{}) as Map<String, dynamic>;
+        final mic = exc.putIfAbsent('media_stream_mic', () => <String, dynamic>{}) as Map<String, dynamic>;
+        
+        final grant = {'last_modified': ts, 'setting': 1};
+        mic['http://localhost:8082,*'] = grant;
+        mic['http://localhost:8082'] = grant;
+        
+        await prefsFile.writeAsString(jsonEncode(prefs));
       }
-      final profile = prefs.putIfAbsent('profile', () => <String, dynamic>{}) as Map<String, dynamic>;
-      final cs = profile.putIfAbsent('content_settings', () => <String, dynamic>{}) as Map<String, dynamic>;
-      final exc = cs.putIfAbsent('exceptions', () => <String, dynamic>{}) as Map<String, dynamic>;
-      final mic = exc.putIfAbsent('media_stream_mic', () => <String, dynamic>{}) as Map<String, dynamic>;
-      final grant = {'last_modified': ts, 'setting': 1};
-      mic['http://localhost:8082,*'] = grant;
-      mic['http://localhost:8082'] = grant;
-      await prefsFile.parent.create(recursive: true);
-      await prefsFile.writeAsString(jsonEncode(prefs));
     } catch (_) {}
   }
 
@@ -152,13 +170,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       final controller = WebviewController();
       await controller.initialize();
       
-      // Auto-grant microphone permissions when requested by the inner STT engine
-      controller.onPermissionRequested.listen((event) {
-        if (event.kind == WebviewPermissionKind.microphone) {
-          event.grant();
-        }
-      });
-
       if (mounted) setState(() => _webviewController = controller);
     } catch (_) {}
   }

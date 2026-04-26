@@ -151,6 +151,14 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       await _preGrantWebView2Mic();
       final controller = WebviewController();
       await controller.initialize();
+      
+      // Auto-grant microphone permissions when requested by the inner STT engine
+      controller.onPermissionRequested.listen((event) {
+        if (event.kind == WebviewPermissionKind.microphone) {
+          event.grant();
+        }
+      });
+
       if (mounted) setState(() => _webviewController = controller);
     } catch (_) {}
   }

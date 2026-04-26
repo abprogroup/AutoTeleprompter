@@ -397,6 +397,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           return;
         }
         lastText = controller.text;
+        // Cascade global delete: focused block cleared via backspace on its
+        // full-block native selection (set by _selectAllBlocks). Clear all blocks.
+        if (_isGlobalSelection && !_isCommandExecuting && controller.text.isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _isGlobalSelection) _deleteGlobalSelection();
+          });
+          return;
+        }
         _isDirty = true;
         // v4.1.2: When the user edits text (not inside a style command), clear
         // any pinned externalSelection so stale amber doesn't linger after typing.
@@ -1912,17 +1920,53 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _selectAllBlocks() {
+    _isCommandExecuting = true;
+
+    // Set full-block native selection on the focused block so the soft keyboard
+    // can delete the selection (backspace on a full-block selection clears it).
+    // GhostSelectionControls hides the native teardrop handles so no visible
+    // handles appear from this; selectionColor is transparent when isGlobalSelected.
+    final active = _activeController;
+    if (active != null) {
+      active.selection = TextSelection(baseOffset: 0, extentOffset: active.text.length);
+    }
+
     _overlayKey.currentState?.selectAll();
     _isGlobalSelection = true;
     for (final c in _controllers) {
       c.isGlobalSelected = true;
       c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
+    _isCommandExecuting = false;
     setState(() {});
     // Refresh after setState so TextFields repaint with new flags.
     for (final c in _controllers) {
       c.refresh();
     }
+  }
+
+  void _deleteGlobalSelection() {
+    _isCommandExecuting = true;
+    _overlayKey.currentState?.clearSelection();
+    _isGlobalSelection = false;
+    for (final c in _controllers) {
+      c.isGlobalSelected = false;
+      c.externalSelection = null;
+      c.text = '';
+    }
+    setState(() {
+      while (_controllers.length > 1) {
+        _controllers.last.dispose();
+        _focusNodes.last.dispose();
+        _blockKeys.removeLast();
+        _controllers.removeLast();
+        _focusNodes.removeLast();
+      }
+    });
+    if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
+    _isCommandExecuting = false;
+    _isDirty = false;
+    _saveHistory(description: 'Delete Selection');
   }
 
   void _clearGlobalSelection() {
@@ -1976,6 +2020,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     for (final c in _controllers) {
       c.refresh();
     }
+    // Recalculate overlay handle positions after layout updates with new text.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _overlayKey.currentState?.selectAll();
+    });
   }
 
 }

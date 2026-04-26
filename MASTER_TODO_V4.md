@@ -226,3 +226,17 @@
 
 ---
 *Last Updated: 2026-04-18 (v4.1.4 4-Way Splitting / Windows MVP Initialization)*
+
+## 🤖 Android v4.1.0 — SEALED (2026-04-26)
+- [U] **UX: Keyboard Parity (Editor)**: PRESENT button lifts above keyboard via `viewInsets.bottom`; keyboard auto-dismisses on PRESENT; tap-to-dismiss via outer `GestureDetector`; A−/A+/Settings buttons unfocus on tap. (USER VERIFIED 2026-04-26)
+- [U] **BUG: Hebrew STT Internet-Required Error**: `SttAndroidAdapter` was not forwarding `onLanguageUnavailable` to `onNeedLanguagePack`. Fixed forwarding chain — UI now correctly shows internet-required message for Hebrew offline. (USER VERIFIED 2026-04-26)
+- [U] **PERF: Whisper Removed from v4 Build**: `whisper_flutter_new` and `record` packages removed; `whisper_speech_service.dart` archived to `_v5_archive/`; all 39 provider references stripped. APK dropped from 193MB → 86MB. (USER VERIFIED 2026-04-26)
+- [U] **PERF: ABI Filtering**: `abiFilters 'arm64-v8a', 'armeabi-v7a'` added to `build.gradle` — excludes x86_64 (emulator only), targeting ~45MB APK. (USER VERIFIED 2026-04-26)
+- [U] **BUG: Select All Immediately Clears Itself**: `_onSelectionChanged` cleared global selection when active block had a collapsed cursor — which is exactly what `_selectAllBlocks()` sets to dismiss handles. Fixed: only clear on a PARTIAL selection (non-collapsed and non-full-block). (USER VERIFIED 2026-04-26)
+- [U] **BUG: Global Delete Not Working**: `_selectAllBlocks()` was collapsing the active block's native selection (to dismiss handles), so the soft keyboard saw no selection and deleted nothing. `GhostSelectionControls` already hides handles — collapse was unnecessary. Fixed: set full-block native selection; cascade delete detects "block cleared while global active" and calls `_deleteGlobalSelection()`. (USER VERIFIED 2026-04-26)
+- [U] **BUG: Overlay Handles Position Stale After Style**: `_resyncGlobalSelection()` updated `externalSelection` but never told the overlay to recalculate handle positions. Fixed: `addPostFrameCallback` calls `overlay.selectAll()` after layout settles. (USER VERIFIED 2026-04-26)
+- [U] **BUG: Native Highlight Persists After Handle Drag**: When entering refine mode, `isGlobalSelected=false` flipped `selectionColor` from transparent to amber, revealing the full-block native selection. Fixed: collapse native selections in `_enterRefineMode()` before handing control to `externalSelection`. (USER VERIFIED 2026-04-26)
+
+## 🍎 iOS v4.1.6 — Selection Delete Parity (2026-04-26)
+- [P] **BUG: Select All Delete Not Working (iOS)**: Same root cause as Android — native selection from double-tap persisted, so backspace only deleted the tapped word. Fixed: `_selectAllBlocks()` now sets full-block native selection + `_isCommandExecuting` guard; cascade delete via listener; `_deleteGlobalSelection()` clears all blocks. (PENDING USER VERIFICATION)
+- [P] **BUG: Overlay Handles Stale After Style (iOS)**: `_resyncGlobalSelection()` now schedules `overlay.selectAll()` in a postFrameCallback to recalculate handle positions after text-length changes. (PENDING USER VERIFICATION)

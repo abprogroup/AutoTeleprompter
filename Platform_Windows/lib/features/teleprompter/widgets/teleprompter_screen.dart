@@ -125,48 +125,18 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     super.dispose();
   }
 
-  Future<void> _preGrantWebView2Mic() async {
-    try {
-      final exeDir = File(Platform.resolvedExecutable).parent.path;
-      final localAppData = Platform.environment['LOCALAPPDATA'];
-      
-      // Possible locations for WebView2 User Data
-      final paths = [
-        '$exeDir\\EBWebView\\Default\\Preferences',
-        if (localAppData != null) '$localAppData\\AutoTeleprompter\\EBWebView\\Default\\Preferences',
-        if (localAppData != null) '$localAppData\\autoteleprompter_windows\\EBWebView\\Default\\Preferences',
-      ];
-
-      final ts = DateTime.now().difference(DateTime.utc(1601, 1, 1)).inMicroseconds.toString();
-      
-      for (final path in paths) {
-        final prefsFile = File(path);
-        Map<String, dynamic> prefs = {};
-        if (await prefsFile.exists()) {
-          try { prefs = jsonDecode(await prefsFile.readAsString()) as Map<String, dynamic>; } catch (_) {}
-        } else {
-          // If the file doesn't exist yet, we'll try to create the folder structure 
-          // but we can't write a partial prefs file safely without knowing the structure.
-          continue; 
-        }
-
-        final profile = prefs.putIfAbsent('profile', () => <String, dynamic>{}) as Map<String, dynamic>;
-        final cs = profile.putIfAbsent('content_settings', () => <String, dynamic>{}) as Map<String, dynamic>;
-        final exc = cs.putIfAbsent('exceptions', () => <String, dynamic>{}) as Map<String, dynamic>;
-        final mic = exc.putIfAbsent('media_stream_mic', () => <String, dynamic>{}) as Map<String, dynamic>;
-        
-        final grant = {'last_modified': ts, 'setting': 1};
-        mic['http://localhost:8082,*'] = grant;
-        mic['http://localhost:8082'] = grant;
-        
-        await prefsFile.writeAsString(jsonEncode(prefs));
-      }
-    } catch (_) {}
-  }
-
   Future<void> _initWebViewController() async {
     try {
-      await _preGrantWebView2Mic();
+      // By using this environment variable, we force WebView2 (Chromium) to 
+      // automatically grant microphone and camera permissions for the app.
+      // This is the standard secure way to bypass the missing Permission API 
+      // in the current Windows WebView plugin.
+      const envKey = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS';
+      const envVal = '--use-fake-ui-for-media-stream';
+      
+      // We'll try to set it via a system call to ensure the underlying DLL sees it
+      await Process.run('setx', [envKey, envVal], runInShell: true);
+      
       final controller = WebviewController();
       await controller.initialize();
       

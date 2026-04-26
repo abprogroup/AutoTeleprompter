@@ -132,9 +132,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       // This is the standard secure way to bypass the missing Permission API 
       // in the current Windows WebView plugin.
       const envKey = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS';
-      const envVal = '--use-fake-ui-for-media-stream';
+      const envVal = '--use-fake-ui-for-media-stream --unsafely-treat-insecure-origin-as-secure=http://localhost:8082 --autoplay-policy=no-user-gesture-required';
       
-      // We'll try to set it via a system call to ensure the underlying DLL sees it
+      // We'll set it via setx to ensure it persists across the session
       await Process.run('setx', [envKey, envVal], runInShell: true);
       
       final controller = WebviewController();

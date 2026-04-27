@@ -29,6 +29,7 @@ import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
+import './editor/mvp/file_save_mvp.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // ── Switchboard Orchestrator ──────────────────────────────────────────────────
@@ -1404,36 +1405,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   Future<void> _saveScript() async {
-    final format = await EditorDialogs.showSaveFormatDialog(context);
-    if (format == null || !mounted) return;
-
-    final text = _getRefinedFullText();
-    final bytes = utf8.encode(text);
-
-    // Build filename with guaranteed extension — strip any prior extension first
-    final safeName = _currentTitle
-        .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
-        .replaceAll(RegExp(r'\.(txt|pdf|docx|rtf)$', caseSensitive: false), '');
-    final fileName = '$safeName.$format';
-
-    final savedPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save as ${format.toUpperCase()}',
-      fileName: fileName,
-      bytes: Uint8List.fromList(bytes),
+    await FileSaveMvp.saveScript(
+      context: context,
+      title: _currentTitle,
+      getText: _getRefinedFullText,
     );
-
-    // If the user saved but the OS stripped the extension, warn them
-    if (savedPath != null && !savedPath.endsWith('.$format')) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('File saved. Note: you may need to rename it to add ".$format" extension.'),
-            backgroundColor: Colors.orange[800],
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    }
   }
 
   void _clearScript() {
@@ -2002,12 +1978,6 @@ class _EditorBlock extends StatelessWidget {
               CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
                 onInvoke: (_) {
                   onCopy();
-                  return null;
-                },
-              ),
-              CutSelectionTextIntent: CallbackAction<CutSelectionTextIntent>(
-                onInvoke: (_) {
-                  onCut();
                   return null;
                 },
               ),

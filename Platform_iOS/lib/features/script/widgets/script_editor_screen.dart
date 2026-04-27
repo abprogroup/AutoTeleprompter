@@ -2229,16 +2229,24 @@ class _EditorBlock extends StatelessWidget {
               // iterating contextMenuButtonItems would serve word-scoped
               // Cut/Copy actions instead of our global ones.
               if (isGlobalSelected) {
+                // Use ContextMenuButtonType.custom for Cut and Copy so that
+                // iOS does NOT additionally dispatch the native cut:/copy:
+                // UIResponder actions through the responder chain. Using
+                // .cut / .copy types causes UIKit to run the native action
+                // synchronously (writing only the native word to the
+                // clipboard) before our onPressed handler fires.
                 return AdaptiveTextSelectionToolbar.buttonItems(
                   anchors: editableTextState.contextMenuAnchors,
                   buttonItems: [
                     ContextMenuButtonItem(
                       onPressed: () { ContextMenuController.removeAny(); onCut(); },
-                      type: ContextMenuButtonType.cut,
+                      type: ContextMenuButtonType.custom,
+                      label: 'Cut',
                     ),
                     ContextMenuButtonItem(
                       onPressed: () { ContextMenuController.removeAny(); onCopy(); },
-                      type: ContextMenuButtonType.copy,
+                      type: ContextMenuButtonType.custom,
+                      label: 'Copy',
                     ),
                     ContextMenuButtonItem(
                       onPressed: () { ContextMenuController.removeAny(); onSelectAll(); },
@@ -2267,7 +2275,8 @@ class _EditorBlock extends StatelessWidget {
                       ContextMenuController.removeAny();
                       onCut();
                     },
-                    type: ContextMenuButtonType.cut,
+                    type: ContextMenuButtonType.custom,
+                    label: 'Cut',
                   ));
                 } else if (item.type == ContextMenuButtonType.copy) {
                   customItems.add(ContextMenuButtonItem(
@@ -2275,7 +2284,8 @@ class _EditorBlock extends StatelessWidget {
                       ContextMenuController.removeAny();
                       onCopy();
                     },
-                    type: ContextMenuButtonType.copy,
+                    type: ContextMenuButtonType.custom,
+                    label: 'Copy',
                   ));
                 } else {
                   customItems.add(item);

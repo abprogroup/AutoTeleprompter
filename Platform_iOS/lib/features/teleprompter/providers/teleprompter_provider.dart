@@ -24,7 +24,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _fluidTarget = 0;
   String? _scriptLanguageLocale;
   String? _activeLocale;          // locale the STT is currently using
-  int _lastLocaleSwitchIndex = -999; // debounce: don't switch within 10 words
+  List<String> _sectionLocales = []; // per-word locale map, pre-computed at session start
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
@@ -323,40 +323,77 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     });
   }
 
-  /// Look 5 words ahead and switch STT locale if the upcoming language
-  /// differs from the active one. Debounced to at most once per 8 words.
+  /// Pre-compute a per-word locale map for the entire script.
   ///
-  /// Uses setLocale() instead of stop/start to avoid any race with stopSession():
-  /// setLocale() updates _localeId on SpeechService and calls _stt.cancel(),
-  /// which triggers the service's own _scheduleRestart — no async chain.
+  /// Algorithm:
+  /// 1. Assign each real word its raw language (Hebrew / English).
+  /// 2. Find contiguous same-language runs.
+  /// 3. Absorb any run shorter than [minSectionWords] into the surrounding
+  ///    language so isolated foreign words (names, technical terms) don't
+  ///    trigger a pointless STT restart.
+  /// 4. Map the result back across the full word list (including newlines)
+  ///    so it aligns with confirmedWordIndex.
+  void _precomputeSectionLocales(Script script) {
+    const minSectionWords = 3;
+
+    final words = script.words.where((w) => !w.isNewline).toList();
+    if (words.isEmpty) { _sectionLocales = []; return; }
+
+    // Step 1 — raw per-word language
+    final raw = words.map((w) => w.isRtl ? 'he_IL' : 'en_US').toList();
+
+    // Step 2 — find runs, absorb short ones into surrounding context
+    final smoothed = List<String>.from(raw);
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      int i = 0;
+      while (i < smoothed.length) {
+        final locale = smoothed[i];
+        int runStart = i;
+        while (i < smoothed.length && smoothed[i] == locale) i++;
+        final runLen = i - runStart;
+        if (runLen < minSectionWords) {
+          // Inherit from left neighbour if available, else right
+          final inherit = runStart > 0
+              ? smoothed[runStart - 1]
+              : (i < smoothed.length ? smoothed[i] : locale);
+          if (inherit != locale) {
+            for (int j = runStart; j < i; j++) smoothed[j] = inherit;
+            changed = true;
+          }
+        }
+      }
+    }
+
+    // Step 3 — map back onto the full word list (newlines inherit previous)
+    _sectionLocales = [];
+    int wordIdx = 0;
+    for (final w in script.words) {
+      if (w.isNewline) {
+        _sectionLocales.add(_sectionLocales.isNotEmpty ? _sectionLocales.last : 'en_US');
+      } else {
+        _sectionLocales.add(wordIdx < smoothed.length ? smoothed[wordIdx] : 'en_US');
+        wordIdx++;
+      }
+    }
+  }
+
+  /// Switch STT locale the moment confirmedWordIndex enters a new language section.
+  /// Because sections are pre-computed, this is exact — no thresholds, no debounce.
   void _checkAndSwitchLocale() {
-    if (_currentScript == null || _useWhisper || _disposed || _sessionStopped) return;
+    if (_useWhisper || _disposed || _sessionStopped) return;
+    if (_sectionLocales.isEmpty) return;
     final currentIdx = state.confirmedWordIndex;
-    if (currentIdx - _lastLocaleSwitchIndex < 8) return;
+    if (currentIdx < 0 || currentIdx >= _sectionLocales.length) return;
 
-    final lookahead = _currentScript!.words
-        .skip(currentIdx + 1)
-        .where((w) => !w.isNewline)
-        .take(5)
-        .toList();
-    if (lookahead.isEmpty) return;
+    final needed = _sectionLocales[currentIdx];
+    if (needed == _activeLocale) return;
 
-    final hebrewRatio = lookahead.where((w) => w.isRtl).length / lookahead.length;
-    final currentHebrew = _activeLocale?.startsWith('he') ?? false;
-
-    // Asymmetric thresholds to minimise missed words at boundaries:
-    // Switch to English only when the next 5 words are almost entirely English.
-    // Switch to Hebrew when the majority of the next 5 words are Hebrew.
-    final upcomingHebrew = currentHebrew ? hebrewRatio > 0.2 : hebrewRatio > 0.6;
-    if (upcomingHebrew == currentHebrew) return;
-
-    final newLocale = upcomingHebrew ? 'he_IL' : 'en_US';
-    _addDebugLog('🌐 LOCALE SWITCH: ${currentHebrew ? "he" : "en"} → ${upcomingHebrew ? "he" : "en"} '
-        '(${(hebrewRatio * 100).round()}% Hebrew in next ${lookahead.length} words)');
-    _activeLocale = newLocale;
-    _scriptLanguageLocale = newLocale;
-    _lastLocaleSwitchIndex = currentIdx;
-    _sttService.setLocale(newLocale);
+    _addDebugLog('🌐 SECTION SWITCH: ${_activeLocale ?? "?"} → $needed at word #$currentIdx');
+    _activeLocale = needed;
+    _scriptLanguageLocale = needed;
+    _sttService.setLocale(needed);
   }
 
   /// Find the next non-newline word index after [from]
@@ -372,7 +409,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sessionStopped = false;
-    _lastLocaleSwitchIndex = -999;
+    _precomputeSectionLocales(script);
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
     state = state.copyWith(
@@ -381,19 +418,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
 
-    // Auto-detect language from script content
-    final realWords = script.words.where((w) => !w.isNewline).toList();
-    String? localeId;
-    bool isHebrew = false;
-    if (realWords.isNotEmpty) {
-      final hebrewCount = realWords.where((w) => w.isRtl).length;
-      final ratio = hebrewCount / realWords.length;
-      isHebrew = ratio > 0.3;
-      localeId = isHebrew ? 'he_IL' : 'en_US';
-      _scriptLanguageLocale = localeId;
-      _activeLocale = localeId;
-      _addDebugLog('🌐 LANG: ${isHebrew ? "Hebrew" : "English"} (${(ratio * 100).round()}% Hebrew chars)');
-    }
+    // Starting locale comes from the pre-computed section map (word 0).
+    // This is exact: if the script opens in English but has a Hebrew section
+    // later, we start in English — not skewed by the whole-script ratio.
+    final localeId = _sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US';
+    _scriptLanguageLocale = localeId;
+    _activeLocale = localeId;
+    _addDebugLog('🌐 START LOCALE: $localeId | ${_sectionLocales.toSet().length} distinct section(s)');
 
     // Start heartbeat timer in debug mode
     _heartbeatTimer?.cancel();
@@ -472,23 +503,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _fluidAdvanceTimer?.cancel();
-    _lastLocaleSwitchIndex = -999;
     _addDebugLog('🔄 POSITION RESET → 0');
     state = state.copyWith(confirmedWordIndex: 0);
 
-    // Restore the starting locale if the STT switched languages mid-script.
-    if (_currentScript != null && !_useWhisper) {
-      final firstWords = _currentScript!.words
-          .where((w) => !w.isNewline).take(10).toList();
-      if (firstWords.isNotEmpty) {
-        final hebrewRatio = firstWords.where((w) => w.isRtl).length / firstWords.length;
-        final startLocale = hebrewRatio > 0.3 ? 'he_IL' : 'en_US';
-        if (startLocale != _activeLocale) {
-          _activeLocale = startLocale;
-          _scriptLanguageLocale = startLocale;
-          _addDebugLog('🔄 RESET LOCALE → $startLocale');
-          _sttService.setLocale(startLocale);
-        }
+    // Restore the starting locale from the pre-computed section map.
+    if (!_useWhisper && _sectionLocales.isNotEmpty) {
+      final startLocale = _sectionLocales.first;
+      if (startLocale != _activeLocale) {
+        _activeLocale = startLocale;
+        _scriptLanguageLocale = startLocale;
+        _addDebugLog('🔄 RESET LOCALE → $startLocale');
+        _sttService.setLocale(startLocale);
       }
     }
   }

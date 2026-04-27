@@ -380,6 +380,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   Future<void> startSession(Script script) async {
+    final sameScript = identical(_currentScript, script);
     _currentScript = script;
     _accumulatedTranscript = '';
     _noProgressCount = 0;
@@ -389,17 +390,22 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _lastVolLog = null;
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
+    final resumeIndex = sameScript ? state.confirmedWordIndex : 0;
+    final startIndex = resumeIndex.clamp(
+      0,
+      script.words.isEmpty ? 0 : script.words.length - 1,
+    );
     state = state.copyWith(
-        confirmedWordIndex: 0, isListening: false, isStarting: true, hasError: false,
+        confirmedWordIndex: startIndex, isListening: false, isStarting: true, hasError: false,
         statusMessage: '', debugLogs: [], missingLanguage: null);
 
-    _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
+    _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
     String? localeId;
 
     // v4.2: Detect starting locale focusing ONLY on the immediate first words.
     // This prevents a long Hebrew document from forcing English start-text into Hebrew STT.
     if (script.words.isNotEmpty) {
-      final initialLocale = _detectLanguageAhead(0, script);
+      final initialLocale = _detectLanguageAhead(startIndex, script);
       _scriptLanguageLocale = initialLocale;
       
       final realWords = script.words.where((w) => !w.isNewline).toList();
@@ -525,6 +531,26 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     state = state.copyWith(confirmedWordIndex: 0);
     if (!_sessionStopped && _currentScript != null && state.isListening) {
       _syncLocaleForPosition(_currentScript!, 0, reason: 'reset');
+    }
+  }
+
+  void jumpToPosition(int index, {Script? script}) {
+    if (script != null) _currentScript = script;
+    final activeScript = _currentScript;
+    if (_disposed || activeScript == null || activeScript.words.isEmpty) return;
+    final target = index.clamp(0, activeScript.words.length - 1);
+    _accumulatedTranscript = '';
+    _noProgressCount = 0;
+    _fluidAdvanceTimer?.cancel();
+    _addDebugLog('📍 POSITION JUMP → #$target "${activeScript.words[target].raw}"');
+    try {
+      state = state.copyWith(confirmedWordIndex: target);
+    } catch (_) {
+      _disposed = true;
+      return;
+    }
+    if (!_sessionStopped && state.isListening) {
+      _syncLocaleForPosition(activeScript, target, reason: 'manual jump');
     }
   }
 }

@@ -174,6 +174,7 @@
 ## 📽️ Presentation Mode — Pending Fixes
 - [ ] **Upcoming Text Highlight**: Add a toggle in settings similar to "Upcoming text color" that resets the highlight background of read text.
 - [ ] **Spacing Synchronization**: Ensure line spacing, word spacing, and letter spacing values perfectly sync between the editor and presentation mode. Allow negative scales (down to -1.0) in presentation mode to match the editor's default limit constraints.
+- [ ] **Bookmarks / Chapter Jumping**: Add script-level bookmarks so long scripts can be divided into chapters, scenes, or filming sections. Presentation mode should allow jumping directly to saved bookmark sentences, starting STT from that point, and resuming after pause/stop without resetting to the beginning. v4.1 Windows has the first lightweight step: tap a word in presentation mode to set the current resume point; full bookmark creation, labels, persistence, and chapter navigation belong to v5.
 
 ---
 

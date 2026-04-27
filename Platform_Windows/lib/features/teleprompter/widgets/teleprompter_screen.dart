@@ -56,8 +56,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _scheduleHideControls();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(teleprompterProvider.notifier).resetPosition();
-        _scrollController.jumpTo(0);
         _initRemoteListener();
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage), (prev, next) {
           if (next != null && next.isNotEmpty && mounted) _showMissingLanguageDialog(next);
@@ -71,6 +69,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           }
         });
         if (Platform.isWindows) _initWebViewController();
+        final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
+        if (currentIndex > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _scrollToWordIndex(currentIndex);
+          });
+        }
       }
     });
   }
@@ -550,6 +554,16 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     }
   }
 
+  void _jumpToWordIndex(int index) {
+    final script = ref.read(scriptProvider);
+    if (script == null) return;
+    _stopManualScroll();
+    setState(() => _manualWordIndex = index);
+    ref.read(teleprompterProvider.notifier).jumpToPosition(index, script: script);
+    _scrollToWordIndex(index);
+    _showControls();
+  }
+
   /// 60fps smooth scroll — glides toward _scrollTarget using lerp.
   /// Stops automatically when close enough.
   void _smoothScrollTick(Timer timer) {
@@ -733,26 +747,30 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                     // Use Container padding instead of trailing space for word gaps.
                     // Container.color covers padding area → continuous highlight blocks.
                     final wordGap = effectiveFontSize * 0.28;
-                    return Directionality(
-                      textDirection: word.effectiveRtl ? TextDirection.rtl : TextDirection.ltr,
-                      child: Container(
-                        key: _wordKeys[i],
-                        padding: EdgeInsets.only(
-                          right: word.effectiveRtl ? 0 : wordGap,
-                          left: word.effectiveRtl ? wordGap : 0,
-                        ),
-                        color: effectiveBg,
-                        child: Text(
-                          displayText,
-                          style: TextStyle(
-                            fontSize: effectiveFontSize,
-                            fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
-                            fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
-                            letterSpacing: settings.letterSpacing,
-                            wordSpacing: settings.wordSpacing,
-                            color: textColor,
-                            height: settings.lineSpacing,
-                            decoration: word.isUnderline ? TextDecoration.underline : null,
+                    return GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () => _jumpToWordIndex(i),
+                      child: Directionality(
+                        textDirection: word.effectiveRtl ? TextDirection.rtl : TextDirection.ltr,
+                        child: Container(
+                          key: _wordKeys[i],
+                          padding: EdgeInsets.only(
+                            right: word.effectiveRtl ? 0 : wordGap,
+                            left: word.effectiveRtl ? wordGap : 0,
+                          ),
+                          color: effectiveBg,
+                          child: Text(
+                            displayText,
+                            style: TextStyle(
+                              fontSize: effectiveFontSize,
+                              fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
+                              fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
+                              letterSpacing: settings.letterSpacing,
+                              wordSpacing: settings.wordSpacing,
+                              color: textColor,
+                              height: settings.lineSpacing,
+                              decoration: word.isUnderline ? TextDecoration.underline : null,
+                            ),
                           ),
                         ),
                       ),

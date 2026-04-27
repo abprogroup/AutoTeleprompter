@@ -484,10 +484,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
 
-    // Stop all engines — Whisper may have been auto-started via fallback
-    await _sttService.stop();
-    await _whisperService.stop();
-
+    // Update UI synchronously before the async stop so re-entry never sees
+    // a stale isListening=true if the user exits and returns quickly.
     if (!_disposed) {
       try {
         state = state.copyWith(
@@ -497,6 +495,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         );
       } catch (_) {}
     }
+
+    // Stop all engines — Whisper may have been auto-started via fallback
+    await _sttService.stop();
+    await _whisperService.stop();
   }
 
   void resetPosition() {

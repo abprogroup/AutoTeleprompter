@@ -908,27 +908,33 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             // STT Pro Dashboard Integration
             if (_webviewController != null && tState.sttWebViewUrl != null)
               Positioned(
-                right: 12,
+                left: 12, // Moved from right to left to avoid script text
                 bottom: settings.debugMode ? 240 : 12,
                 width: 280,
                 height: 110,
-                child: Container(
-                   decoration: BoxDecoration(
-                     color: const Color(0xFF0A0A0A),
-                     borderRadius: BorderRadius.circular(12),
-                     border: Border.all(color: Colors.white.withOpacity(0.1)),
-                     boxShadow: [
-                       BoxShadow(
-                         color: Colors.black.withOpacity(0.5),
-                         blurRadius: 10,
-                         offset: const Offset(0, 4),
+                child: Opacity(
+                  opacity: settings.debugMode ? 1.0 : 0.0, // Hide completely when debug mode is off
+                  child: Container(
+                     decoration: BoxDecoration(
+                       color: const Color(0xFF0A0A0A),
+                       borderRadius: BorderRadius.circular(12),
+                       border: Border.all(color: Colors.white.withOpacity(0.1)),
+                       boxShadow: [
+                         BoxShadow(
+                           color: Colors.black.withOpacity(0.5),
+                           blurRadius: 10,
+                           offset: const Offset(0, 4),
+                         ),
+                       ],
+                     ),
+                     child: IgnorePointer( // Prevent accidental taps when invisible
+                       ignoring: !settings.debugMode,
+                       child: ClipRRect(
+                         borderRadius: BorderRadius.circular(12),
+                         child: Webview(_webviewController!),
                        ),
-                     ],
-                   ),
-                   child: ClipRRect(
-                     borderRadius: BorderRadius.circular(12),
-                     child: Webview(_webviewController!),
-                   ),
+                     ),
+                  ),
                 ),
               ),
 

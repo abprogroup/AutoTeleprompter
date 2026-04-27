@@ -9,6 +9,7 @@
 4. **[WAV] Mandate**: Workspace Access Verification is REQUIRED after loop mode selection. The AI must verify R/W/X permissions for `/lib`, `/_agent`, and `/backups` by executing the `/clearance` authority ritual before any 7-hour autonomous session.
 5. **[ATOMIC_TIMING]**: The 30-minute safety limit applies ONLY to a single task. In Mega-Loops, the timer MUST be reset (`start`) for each new TODO.
 6. **[ZERO-COLLATERAL EDITING]**: The AI MUST NEVER delete, overwrite, or "clean up" unrelated code, dependencies, or UI elements while fixing a specific bug. When hiding elements, use non-destructive methods (e.g., `Opacity(0.0)`) instead of removing them from the tree unless explicitly requested. When modifying configuration files (like `pubspec.yaml`), the AI must use precision edits and NEVER overwrite the entire file or drop existing dependencies.
+7. **[CUMULATIVE DOCUMENTATION EXPANSION]**: The AI is STRICTLY FORBIDDEN from truncating, summarizing, or deleting existing rows, methods, or architectural details in MVP documentation files. Updates MUST exclusively append new details or surgically modify rows ONLY to increase precision. Overwriting structural blocks to simplify files is completely unauthorized.
 
 ## 🚀 AUTONOMOUS ENGINE (v3.6.1) [/run]
 - **Dual-Mode Loop**: Use this for broad, multi-task bug fixing.

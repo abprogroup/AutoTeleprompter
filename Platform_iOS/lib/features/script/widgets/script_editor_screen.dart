@@ -1897,29 +1897,36 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
 
     if (isGlobal || hasGlobal || hasOverlay) {
-      // ── Step 1: build clipboard text synchronously from current state ──
+      // ── Step 1: build clipboard text from captured state ──
+      // When isGlobal is true, bypass c.isGlobalSelected entirely —
+      // by the time the loop runs that flag may already be stale.
+      // Instead use the top-level captured booleans as the source of truth.
       final plainBuf = StringBuffer();
-      for (final c in _controllers) {
-        String? slice;
-        if (c.isGlobalSelected) {
-          slice = StylingService.stripTags(c.text);
-        } else {
-          final sel = c.externalSelection;
-          if (sel != null && sel.isValid && !sel.isCollapsed) {
-            slice = StylingService.stripTags(
-                c.text.substring(sel.start.clamp(0, c.text.length),
-                                 sel.end.clamp(0, c.text.length)));
+      if (isGlobal || hasGlobal) {
+        // Global path: copy every block unconditionally.
+        // Use a space (not \n) between blocks — iOS paste can truncate
+        // multi-line clipboard content at the first newline in some contexts.
+        for (final c in _controllers) {
+          final t = StylingService.stripTags(c.text);
+          if (t.isNotEmpty) {
+            if (plainBuf.isNotEmpty) plainBuf.write(' ');
+            plainBuf.write(t);
           }
         }
-        if (slice != null && slice.isNotEmpty) {
-          if (plainBuf.isNotEmpty) plainBuf.write('\n');
-          plainBuf.write(slice);
+      } else {
+        // Refined overlay path: copy only the selected ranges.
+        for (final c in _controllers) {
+          final sel = c.externalSelection;
+          if (sel == null || !sel.isValid || sel.isCollapsed) continue;
+          final t = StylingService.stripTags(
+              c.text.substring(sel.start.clamp(0, c.text.length),
+                               sel.end.clamp(0, c.text.length)));
+          if (t.isNotEmpty) {
+            if (plainBuf.isNotEmpty) plainBuf.write('\n');
+            plainBuf.write(t);
+          }
         }
       }
-      // Write directly — bypasses RichClipboard which is Android-only for
-      // the native channel; on iOS it would fall through to Clipboard.setData
-      // anyway, but calling it here ensures the write is initiated before
-      // any state changes occur.
       if (plainBuf.isNotEmpty) {
         Clipboard.setData(ClipboardData(text: plainBuf.toString()));
       }

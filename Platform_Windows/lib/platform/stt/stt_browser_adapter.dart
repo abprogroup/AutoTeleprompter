@@ -225,6 +225,7 @@ function draw() {
   
   const barWidth = (width / dataArray.length) * 2.5;
   let x = 0;
+  let sum = 0;
   
   for(let i = 0; i < dataArray.length; i++) {
     const barHeight = (dataArray[i] / 255) * height;

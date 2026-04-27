@@ -42,6 +42,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   int _manualWordIndex = 0;
   bool _manualScrolling = false;
   bool _scrollingBackward = false;
+  bool _closingPresentation = false;
   StreamSubscription? _remoteCmdSub;
   WebviewController? _webviewController;
   String? _loadedWebViewUrl;
@@ -111,6 +112,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   @override
   void dispose() {
+    ref.read(teleprompterProvider.notifier).stopSession();
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -121,8 +123,24 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
     _webviewController?.dispose();
-    ref.read(teleprompterProvider.notifier).stopSession();
     super.dispose();
+  }
+
+  Future<void> _stopPresentationSession() async {
+    _stopManualScroll();
+    await ref.read(teleprompterProvider.notifier).stopSession();
+  }
+
+  Future<void> _exitPresentation() async {
+    if (_closingPresentation) return;
+    final navigator = Navigator.of(context);
+    if (mounted) {
+      setState(() => _closingPresentation = true);
+    } else {
+      _closingPresentation = true;
+    }
+    await _stopPresentationSession();
+    if (mounted) navigator.pop();
   }
 
   Future<void> _initWebViewController() async {
@@ -758,9 +776,15 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: Color(settings.scriptBgColor),
-      body: GestureDetector(
+    return PopScope(
+      canPop: _closingPresentation,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _exitPresentation();
+      },
+      child: Scaffold(
+        backgroundColor: Color(settings.scriptBgColor),
+        body: GestureDetector(
         onTap: _showControls,
         child: Stack(
           children: [
@@ -1073,7 +1097,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                                 curve: Curves.easeOutCubic);
                           }
                         },
-                        onBack: () => Navigator.of(context).pop(),
+                        onBack: () {
+                          _exitPresentation();
+                        },
                         onSettings: _showSettings,
                       ),
                     ],
@@ -1083,6 +1109,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -149,11 +149,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         // Large jump — advance word by word with short delays
         _startFluidAdvance(capped, script);
       }
-      _syncLocaleForPosition(script, capped, reason: 'advance');
+      _syncLocaleForPosition(script, capped + 1, reason: 'advance');
     } else {
       _noProgressCount++;
       _addDebugLog('$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
-      _syncLocaleForPosition(script, state.confirmedWordIndex, reason: 'boundary wait');
+      _syncLocaleForPosition(script, state.confirmedWordIndex + 1, reason: 'boundary wait');
 
       if (_noProgressCount >= skipThreshold) {
         _noProgressCount = 0;
@@ -162,6 +162,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           final skippedWord = script.words[next].raw;
           _addDebugLog('🤖 ⏭ FORCE SKIP → #$next "$skippedWord" (stuck too long)');
           _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
+          _syncLocaleForPosition(script, next + 1, reason: 'force skip');
         }
       }
     }
@@ -179,13 +180,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       if (_useWhisper || _disposed || _sessionStopped) return;
       // Push live level to UI state.
       _safeSetState((s) => s.copyWith(soundLevel: level.clamp(0.0, 1.0)));
-      // Throttle debug log to avoid UI stutter.
-      final now = DateTime.now();
-      if (_lastVolLog == null || now.difference(_lastVolLog!) > const Duration(milliseconds: 700)) {
-        _lastVolLog = now;
-        final bar = ('#' * (level * 10).round().clamp(0, 10)).padRight(10, '_');
-        _addDebugLog('🎤 [${_sttService.platformName}] VOL: [$bar] (${level.toStringAsFixed(2)})');
-      }
+      _lastVolLog = DateTime.now();
     };
 
     _sttService.onDiagnostic = (msg) {
@@ -351,20 +346,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     });
   }
 
-  /// Detect dominant language of the next 30 words starting at [wordIndex].
-  /// Returns 'he_IL' if >50% of upcoming real words are RTL, else 'en_US'.
+  /// Detect the language of the next real expected word starting at [wordIndex].
+  /// Broad lookahead can pivot too early in bilingual scripts; the recognizer
+  /// should switch only when the next speakable word actually changes language.
   String _detectLanguageAhead(int wordIndex, Script script) {
     final words = script.words;
     final start = wordIndex.clamp(0, words.length);
-    // v4.2: Smaller window (8 words) for faster pivoting in bilingual scripts
-    final end = (wordIndex + 8).clamp(0, words.length);
-    final window = words.sublist(start, end).where((w) => !w.isNewline).toList();
-    if (window.isEmpty) return _scriptLanguageLocale ?? 'en_US';
-    final hebrewCount = window.where((w) => w.isRtl).length;
-    // v4.2: Even if only 30% of the next 8 words are Hebrew, pivot to Hebrew.
-    // This prioritizes RTL recognition when transitions happen.
-    final ratio = hebrewCount / window.length;
-    return ratio > 0.3 ? 'he_IL' : 'en_US';
+    for (int i = start; i < words.length; i++) {
+      if (words[i].isNewline) continue;
+      return words[i].isRtl ? 'he_IL' : 'en_US';
+    }
+    return _scriptLanguageLocale ?? 'en_US';
   }
 
   void _syncLocaleForPosition(Script script, int wordIndex, {required String reason}) {
@@ -444,10 +436,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         }
 
         // Dynamic language switching for mixed Hebrew/English scripts.
-        // Every heartbeat, look 30 words ahead. If the dominant language
-        // changed, hot-switch the STT locale via WebSocket (no restart needed).
+        // Every heartbeat, check the next expected word. If its language
+        // changed, hot-switch the STT locale via WebSocket.
         if (!_useWhisper && listening && _currentScript != null) {
-          _syncLocaleForPosition(_currentScript!, state.confirmedWordIndex, reason: 'heartbeat');
+          _syncLocaleForPosition(_currentScript!, state.confirmedWordIndex + 1, reason: 'heartbeat');
         }
       });
     }
@@ -502,6 +494,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _startingSession = false;
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
+    _accumulatedTranscript = '';
+    _noProgressCount = 0;
+    _lastVolLog = null;
+    _scriptLanguageLocale = null;
 
     // Stop all engines — Whisper may have been auto-started via fallback
     await _sttService.stop();
@@ -527,6 +523,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('🔄 POSITION RESET → 0');
     state = state.copyWith(confirmedWordIndex: 0);
+    if (!_sessionStopped && _currentScript != null && state.isListening) {
+      _syncLocaleForPosition(_currentScript!, 0, reason: 'reset');
+    }
   }
 }
 

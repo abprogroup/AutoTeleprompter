@@ -794,6 +794,22 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                   ),
                 ),
               ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: settings.debugMode ? 240 : 12,
+              child: Opacity(
+                opacity: settings.debugMode ? 1.0 : 0.0,
+                child: IgnorePointer(
+                  ignoring: !settings.debugMode,
+                  child: _SoundLevelBar(
+                    level: tState.soundLevel,
+                    isListening: tState.isListening,
+                    accentColor: Color(settings.currentWordColor),
+                  ),
+                ),
+              ),
+            ),
             // Technical Debug Overlay
             if (settings.debugMode)
               Positioned(
@@ -1122,6 +1138,69 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       case 'right': return WrapAlignment.end;
       default: return WrapAlignment.center;
     }
+  }
+}
+
+class _SoundLevelBar extends StatelessWidget {
+  final double level;
+  final bool isListening;
+  final Color accentColor;
+
+  const _SoundLevelBar({
+    required this.level,
+    required this.isListening,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final clampedLevel = level.clamp(0.0, 1.0).toDouble();
+    final activeColor = isListening ? accentColor : Colors.white38;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.78),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Row(
+          children: [
+            Icon(
+              isListening ? Icons.graphic_eq : Icons.volume_off,
+              color: activeColor,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: clampedLevel,
+                  minHeight: 7,
+                  backgroundColor: Colors.white.withOpacity(0.12),
+                  valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 38,
+              child: Text(
+                '${(clampedLevel * 100).round()}%',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

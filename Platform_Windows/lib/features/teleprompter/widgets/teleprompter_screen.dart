@@ -64,7 +64,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         });
         // Watch for STT Dashboard URL
         ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl), (prev, next) {
-          if (next != null && next != _loadedWebViewUrl) _loadSttWebView(next);
+          if (next == null) {
+            _loadedWebViewUrl = null;
+          } else if (next != _loadedWebViewUrl) {
+            _loadSttWebView(next);
+          }
         });
         if (Platform.isWindows) _initWebViewController();
       }

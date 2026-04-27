@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HttpServer, InternetAddress;
+import 'dart:io' show HttpServer;
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -25,12 +25,14 @@ class SttBrowserAdapter extends AbstractSttService {
   bool _isActive = false;
   bool _everListened = false;
   String _currentLocale = 'en-US';
+  int _sessionId = 0;
 
   @override
   Future<SpeechStartResult> start({String? localeId}) async {
     _isActive = true;
     _everListened = false;
     _currentLocale = (localeId ?? 'en-US').replaceAll('_', '-');
+    _sessionId++;
 
     onDiagnostic?.call('🌐 [Browser STT] Starting local server on port $_port...');
 
@@ -102,7 +104,7 @@ class SttBrowserAdapter extends AbstractSttService {
       );
     }
 
-    onDiagnostic?.call('🌐 [Browser STT] WebView ready at http://localhost:$_port/');
+    onDiagnostic?.call('🌐 [Browser STT] WebView ready at http://localhost:$_port/?session=$_sessionId');
 
     return SpeechStartResult(
       success: true,
@@ -146,7 +148,8 @@ class SttBrowserAdapter extends AbstractSttService {
 
   /// URL loaded by the embedded WebviewController (the STT page itself).
   @override
-  String? get sttWebViewUrl => _server != null ? 'http://localhost:$_port/' : null;
+  String? get sttWebViewUrl =>
+      _server != null ? 'http://localhost:$_port/?session=$_sessionId' : null;
 
   String _buildHtml(String locale) => '''<!DOCTYPE html>
 <html lang="en">
@@ -196,6 +199,9 @@ let audioContext;
 let analyser;
 let dataArray;
 let animationId;
+let restartTimer;
+let switchingLocale = false;
+let closedByHost = false;
 
 function initVisualizer() {
   if (audioContext) return;
@@ -246,14 +252,21 @@ function draw() {
 }
 
 ws.onopen = () => { status.textContent = 'Mic Start...'; startRec(currentLocale); initVisualizer(); };
-ws.onclose = () => { status.textContent = 'Standby'; dot.classList.remove('on'); if(rec) rec.abort(); };
+ws.onclose = () => {
+  closedByHost = true;
+  if(restartTimer) clearTimeout(restartTimer);
+  status.textContent = 'Standby';
+  dot.classList.remove('on');
+  if(rec) rec.abort();
+};
 ws.onmessage = (e) => {
   const d = JSON.parse(e.data);
   if(d.type === 'setLocale' && d.locale !== currentLocale) {
-    currentLocale = d.locale; consecutiveFails = 0;
+    currentLocale = d.locale; consecutiveFails = 0; switchingLocale = true;
     status.textContent = 'Syncing ' + d.locale;
+    if(restartTimer) clearTimeout(restartTimer);
     if(rec) rec.abort();
-    setTimeout(() => startRec(currentLocale), 400);
+    restartTimer = setTimeout(() => startRec(currentLocale), 250);
   }
 };
 
@@ -265,12 +278,14 @@ function restartDelay() {
 }
 
 function startRec(locale) {
+  if(closedByHost || ws.readyState !== 1) return;
+  if(restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ err.textContent = 'Browser STT Unavailable'; return; }
   rec = new SR();
   rec.lang = locale; rec.continuous = true; rec.interimResults = true;
   rec.onstart = () => {
-    consecutiveFails = 0; dot.classList.add('on');
+    switchingLocale = false; consecutiveFails = 0; dot.classList.add('on');
     status.textContent = '[' + locale.toUpperCase() + '] Active'; 
     // ALWAYS send listening to clear the UI's 'starting' state
     send({type: 'listening'});
@@ -289,6 +304,7 @@ function startRec(locale) {
   rec.onspeechstart = () => { send({type: 'level', level: 0.7}); };
   rec.onspeechend = () => { send({type: 'level', level: 0.1}); };
   rec.onerror = (e) => {
+    if(e.error === 'aborted') return;
     send({type: 'error', error: e.error});
     if(e.error === 'not-allowed') {
       err.textContent = 'Mic Permission Denied';
@@ -298,9 +314,16 @@ function startRec(locale) {
   };
   rec.onend = () => {
     dot.classList.remove('on');
-    if(ws.readyState === 1) setTimeout(() => startRec(currentLocale), restartDelay());
+    if(closedByHost || ws.readyState !== 1) return;
+    if(switchingLocale) return;
+    restartTimer = setTimeout(() => startRec(currentLocale), restartDelay());
   };
-  try{ rec.start(); } catch(ex){ consecutiveFails++; setTimeout(() => startRec(currentLocale), restartDelay()); }
+  try{ rec.start(); } catch(ex){
+    consecutiveFails++;
+    if(!closedByHost && ws.readyState === 1) {
+      restartTimer = setTimeout(() => startRec(currentLocale), restartDelay());
+    }
+  }
 }
 
 // Canvas resizing

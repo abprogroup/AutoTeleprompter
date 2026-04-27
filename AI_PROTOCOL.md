@@ -8,6 +8,7 @@
    - **Surgical Mirror**: Mandatory per-file before any edit (`pre_change_backup.sh`).
 4. **[WAV] Mandate**: Workspace Access Verification is REQUIRED after loop mode selection. The AI must verify R/W/X permissions for `/lib`, `/_agent`, and `/backups` by executing the `/clearance` authority ritual before any 7-hour autonomous session.
 5. **[ATOMIC_TIMING]**: The 30-minute safety limit applies ONLY to a single task. In Mega-Loops, the timer MUST be reset (`start`) for each new TODO.
+6. **[ZERO-COLLATERAL EDITING]**: The AI MUST NEVER delete, overwrite, or "clean up" unrelated code, dependencies, or UI elements while fixing a specific bug. When hiding elements, use non-destructive methods (e.g., `Opacity(0.0)`) instead of removing them from the tree unless explicitly requested. When modifying configuration files (like `pubspec.yaml`), the AI must use precision edits and NEVER overwrite the entire file or drop existing dependencies.
 
 ## 🚀 AUTONOMOUS ENGINE (v3.6.1) [/run]
 - **Dual-Mode Loop**: Use this for broad, multi-task bug fixing.
@@ -38,6 +39,7 @@
 - **README.md**: Architectural source of truth; updated via terminal cat for bypass reliability.
 - **Surgical Updates**: When updating documentation (MASTER_TODO.md, DAILY_LOG.md, README.md), the AI must ONLY modify the specific item(s) related to the current task. Do NOT shorten, delete, or summarize unrelated items. Previous entries from earlier dates are PERMANENT and must never be removed.
 - **Root Directory Governance**: The AI MUST maintain a pristine project root. Only mandatory core files (`AI_PROTOCOL.md`, `README.md`, `MASTER_TODO.md`, `DAILY_LOG.md`) are authorized to reside in the root. 
+- **Conversations History Retention**: The files stored in system application folders (e.g., `.gemini/antigravity/conversations`) are CRITICAL core state files. The AI is STRICTLY FORBIDDEN from moving, deleting, archiving, or cleaning these files. They must be left completely untouched to preserve session integrity.
 - **Total Platform Separation (The 4-Way MVP Strategy)**: The concept of a single 'Monolith' codebase is ABANDONED. The repository is physically decoupled into 4 directories (`Platform_Android`, `Platform_iOS`, `Platform_macOS`, `Platform_Windows`). 
     - The AI agent MUST restrict all build operations, formatting, and file editing to the specific active platform folder. Mixing contexts is forbidden.
     - **MVP Development Protocol**: When building a new feature or upgrading the app, it must ALWAYS be developed and stabilized as an **MVP (Minimum Viable Product)** inside ONE platform first (e.g., Mac). Only after the MVP feature is perfectly proven and stabilized in that folder is the AI authorized to manually copy/port the isolated logic over to the other three platforms. This permanently eliminates cross-platform regression risk.

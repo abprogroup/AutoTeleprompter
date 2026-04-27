@@ -5,31 +5,25 @@ platforms: Windows
 last_updated: 2026-04-27
 ---
 
-# Teleprompter Engine MVP (Windows)
+# Teleprompter Engine MVP — Windows
 
-Governs the visual physics of the scrolling text, the fluid advance animations, play/pause controls, and layout rendering.
+Governs the rendering architectures and hardware execution flags.
 
 ---
 
 ## Owned Files
 
-### Shared Contract
 | File | Role |
 |------|------|
-| `lib/features/teleprompter/providers/teleprompter_state.dart` | Manages rendering states (scrolling position, active speed). |
-
-### Platform_Windows Specifics
-| File | Role |
-|------|------|
-| `lib/features/teleprompter/widgets/teleprompter_screen.dart` | The core visual layer displaying the teleprompter script. |
+| `Platform_Windows/lib/features/teleprompter/providers/teleprompter_provider.dart` | Riverpod controller handling voice command prioritization and manual overrides. |
 
 ---
 
 ## External API (what outside code may call)
 
-| Method / Field | Caller |
-|----------------|--------|
-| `TeleprompterScreen` entry point | `main.dart` / Script Editor — Navigating to start reading. |
+| Method / Field | Where called |
+|----------------|-------------|
+| `_handleSttResult(...)` | Callback routers parsing active inputs. |
 
 ---
 
@@ -37,17 +31,22 @@ Governs the visual physics of the scrolling text, the fluid advance animations, 
 
 | Caller | File | What it calls |
 |--------|------|---------------|
-| App Router | `main.dart` | Passes loaded script arguments to render the screen. |
+| Teleprompter UI | `teleprompter_screen.dart` | Listens to scrolling offsets. |
 
 ---
 
 ## Invariants
 
-1. **Strict Decoupling**: The engine handles visually updating the scroll offset based on position indexes. It must NEVER contain logic to process user speech—it only receives instructions from the external STT MVP.
+1. **Bypass Limits**: Maximum words allowed per single frame update cannot break boundaries.
 
 ---
 
 ## Forbidden Changes
 
-- Do not place background audio listeners inside this visual component.
-- Do not remove performance optimizations (like `ScrollablePositionedList`) that prevent UI lag during rapid scrolling.
+- Never interrupt active layout listeners.
+
+---
+
+## Known Fragilities
+
+- Stale timers can occasionally cascade. Ensure safe clears.

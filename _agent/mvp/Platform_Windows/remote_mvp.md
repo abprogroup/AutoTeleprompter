@@ -5,32 +5,27 @@ platforms: Windows
 last_updated: 2026-04-27
 ---
 
-# Remote MVP (Windows)
+# Remote MVP — Windows
 
-Governs the integration of external hardware remote controls (e.g., Bluetooth clickers, pedals) to manually control the teleprompter scrolling.
+Governs the integration of the embedded hardware remote controls. It sets up an isolated `shelf` HTTP/WebSocket local daemon on port 8080 so external controllers (or phones) can securely manage the teleprompter scrolling behavior over a local area network.
 
 ---
 
 ## Owned Files
 
-### Shared Contract
 | File | Role |
 |------|------|
-| `lib/features/remote/services/remote_control_service.dart` | The core listener for keyboard/HID events sent by remote hardware. |
-| `lib/features/remote/models/remote_command.dart` | Enums and models defining actions like 'Play', 'Pause', 'SpeedUp', 'SpeedDown'. |
-
-### Platform_Windows Specifics
-| File | Role |
-|------|------|
-| `lib/features/remote/services/windows_hid_listener.dart` | (If applicable) Windows-specific HID event capture layer. |
+| `Platform_Windows/lib/features/remote/services/remote_control_service.dart` | Serves the raw HTML console and parses internal action requests (`MODE_MANUAL`, `MODE_AUTO`, `TOGGLE`, `FASTER`, `SLOWER`, `RESET`) |
 
 ---
 
 ## External API (what outside code may call)
 
-| Method / Field | Caller |
-|----------------|--------|
-| `commandStream` / callbacks | `TeleprompterScreen` — To react to physical button presses. |
+| Method / Field | Where called |
+|----------------|-------------|
+| `start()` | Global application boot configurations |
+| `stop()` | App disposal routines / app lifecycle state changes |
+| `onCommand` | Listening stream inside main state adapters |
 
 ---
 
@@ -38,17 +33,24 @@ Governs the integration of external hardware remote controls (e.g., Bluetooth cl
 
 | Caller | File | What it calls |
 |--------|------|---------------|
-| Teleprompter UI | `teleprompter_screen.dart` | Listens to the Remote Service to trigger `TeleprompterProvider` methods (scroll, pause, adjust speed). |
+| Core Broadcaster UI | `teleprompter_provider.dart` | Subscribes to the `onCommand` stream |
 
 ---
 
 ## Invariants
 
-1. **Passive Emitting**: The Remote MVP must ONLY emit command events. It must NEVER directly mutate the `TeleprompterProvider` state or directly manipulate the scroll controller. The UI layer receives the command and decides how to act on it.
+1. **Port Binding Locks**: The service actively binds to `InternetAddress.anyIPv4` on port `8080`. Do NOT attempt to bind alternative services to this port.
+
+2. **State Passing Isolation**: The web client interface does NOT track internal speed values—it only pipes commands asynchronously.
 
 ---
 
 ## Forbidden Changes
 
-- Do not hardcode specific scroll speeds inside the remote listener (it only sends commands, the provider applies the speed changes).
-- Do not make the STT MVP listen to the Remote MVP directly. Both must communicate via the UI/Provider layer.
+- Do not run state updates on multiple background isolates (web-sockets require a single instance path).
+
+---
+
+## Known Fragilities
+
+- Port 8080 may be occupied by other developer tools, leading to uncaught binding exceptions. Consider adding dynamic fallback configurations in the future.

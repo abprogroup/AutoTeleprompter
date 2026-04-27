@@ -5,32 +5,26 @@ platforms: Windows
 last_updated: 2026-04-27
 ---
 
-# Settings MVP (Windows)
+# Settings MVP — Windows
 
-Governs global application settings, persistent user configurations, custom themes, and typography options.
+Governs the persistence of user UI defaults, scrolling preferences, typography specifications, and external file paths mapped securely to background isolates.
 
 ---
 
 ## Owned Files
 
-### Shared Contract
 | File | Role |
 |------|------|
-| `lib/features/settings/providers/settings_provider.dart` | Riverpod provider maintaining current state of settings. |
-| `lib/features/settings/models/app_settings.dart` | The immutable model containing scrolling speeds, font sizes, colors. |
-
-### Platform_Windows Specifics
-| File | Role |
-|------|------|
-| `lib/features/settings/widgets/settings_drawer.dart` | The sidebar/modal UI for users to adjust values locally. |
+| `Platform_Windows/lib/features/settings/providers/settings_provider.dart` | Manages background persistence using `SharedPreferences`. |
 
 ---
 
 ## External API (what outside code may call)
 
-| Method / Field | Caller |
-|----------------|--------|
-| `settingsProvider` | Used everywhere to adapt visual rendering to user preferences. |
+| Method / Field | Where called |
+|----------------|-------------|
+| `setFontSize(double)` | Interactive control nodes |
+| `saveScript(...)` | Writing script payloads |
 
 ---
 
@@ -38,18 +32,22 @@ Governs global application settings, persistent user configurations, custom them
 
 | Caller | File | What it calls |
 |--------|------|---------------|
-| UI Theme wrappers | `main.dart` | Pulls core color values. |
-| Teleprompter Engine | `teleprompter_screen.dart` | Pulls target font sizes and line heights. |
+| Root Display Settings | `main.dart` | Subscribes to active layout configurations |
 
 ---
 
 ## Invariants
 
-1. **Persist on Change**: Any user modification via the `settings_drawer` MUST immediately trigger a write to local storage (e.g. `SharedPreferences`) to avoid data loss across app restarts.
+1. **Strict Lower Bounds**: Spacing settings are clamped above 0.1 to preserve screen draw calculations safely.
 
 ---
 
 ## Forbidden Changes
 
-- Do not move the active STT locale selection logic out of the `TeleprompterProvider` into Settings (Settings only stores user defaults, not live session data).
-- Do not write large, heavy data blobs (like scripts) into the settings storage mechanism.
+- Never wipe metadata headers unexpectedly.
+
+---
+
+## Known Fragilities
+
+- **Race Conditions**: Large payload writes can saturate IO channels causing lag. Guard accordingly.

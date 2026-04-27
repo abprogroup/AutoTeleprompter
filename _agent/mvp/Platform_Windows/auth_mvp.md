@@ -5,31 +5,31 @@ platforms: Windows
 last_updated: 2026-04-27
 ---
 
-# Auth MVP (Windows)
+# Auth MVP — Windows
 
-Governs user authentication, session state management, and the visual login UI. 
+Governs user authentication, session state management, Pro license key validation, and the high-end visual login interface.
 
 ---
 
 ## Owned Files
 
-### Shared Contract
 | File | Role |
 |------|------|
-| `lib/features/auth/providers/auth_provider.dart` | Manages global auth state (logged in/out, user token). |
-
-### Platform_Windows Specifics
-| File | Role |
-|------|------|
-| `lib/features/auth/widgets/login_screen.dart` | The UI for user login. Specific to Windows layout dimensions and interactions. |
+| `Platform_Windows/lib/features/auth/providers/auth_provider.dart` | Global state management: `AuthState` model, `AuthNotifier` logic (`_loadState`, `login`, `logout`, `activateLicense`). |
+| `Platform_Windows/lib/features/auth/widgets/login_screen.dart` | The visual activation interface: captures credentials, maps UI events to the backend provider. |
 
 ---
 
 ## External API (what outside code may call)
 
-| Method / Field | Caller |
-|----------------|--------|
-| `authProvider` state | `main.dart` / Router — To determine whether to show Login or Home screen. |
+| Method / Field | Where called |
+|----------------|-------------|
+| `login(String email)` | `_handleActivation()` on button tap |
+| `logout()` | Settings/Drawer logout action |
+| `activateLicense(String key)` | `_handleActivation()` on button tap |
+| `state.email` | Routing state checks, welcome banners |
+| `state.isPro` | Gating premium feature overlays |
+| `state.isAdmin` | Auto-unlocking Pro tools for developers |
 
 ---
 
@@ -37,19 +37,31 @@ Governs user authentication, session state management, and the visual login UI.
 
 | Caller | File | What it calls |
 |--------|------|---------------|
-| App Router | `main.dart` | Listens to auth state changes to redirect users. |
-
-No other feature code should touch the Auth MVP directly. The Script Editor and STT Engine must NOT depend on Auth state internally; they simply assume a valid user if they are rendered on screen.
+| Initial Boot Check | `main.dart` | Reads `authProvider` to route to `LoginScreen` or `TeleprompterScreen` |
+| Settings Drawer | `settings_drawer.dart` | Calls `authNotifier.logout()` |
 
 ---
 
 ## Invariants
 
-1. **State Isolation**: Auth state is completely isolated from Script state. Logging out must safely dispose of auth tokens without directly destroying local un-synced script data (that is the domain of the Script Editor MVP).
+1. **State Persistence Keys**: The SharedPreferences keys MUST strictly be `auth_email`, `auth_is_pro`, and `auth_license_key`. Changing these will break backwards compatibility with existing local data.
+
+2. **Admin Override Privilege**: The address `abmpro.office@gmail.com` is a hardcoded administrative bypass. Entering this email guarantees automatic Pro suite unlock using license key `PRO-ADMIN-V3`.
+
+3. **License Format Control**: Valid license activation strings MUST start with `PRO-` prefix to bypass visual rejection.
+
+4. **Cross-Feature Cleanliness**: Logging out wipes the auth tokens, but it DOES NOT wipe the cached scripts from the database.
 
 ---
 
 ## Forbidden Changes
 
-- Do not inject STT or Teleprompter logic into the Auth Provider.
-- Do not bypass the auth provider to manually navigate past the login screen.
+- Do not call `activateLicense()` without first executing a valid `login()` pass to establish the email context.
+- Do not route users to the application environment if `state.email` is empty.
+
+---
+
+## Known Fragilities
+
+- **Mock Verification**: The license key verification system is completely mocked locally. Do not trust it as an enterprise security layer against tampering.
+- **Context Mounting**: `_handleActivation()` calls `Navigator.pop(context)` asynchronously. Ensure `if (mounted)` guards remain wrapped around dialog/snack dismissals.

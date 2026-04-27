@@ -194,3 +194,13 @@
 
 ---
 *Created: 2026-04-13 (Carried deferred items from v4.0 sealed TODO)*
+
+## 🎙️ iOS Audio Buffer MVP — Seamless Bilingual STT Switching
+
+- [ ] **Audio Buffer for Gap-Free Locale Switching (iOS)**: When the STT switches languages mid-script, a ~300ms gap occurs where speech is captured by neither the old nor new recognizer. For fast readers this causes words to be missed at every section boundary.
+  - *Design doc*: `_agent/mvp/Platform_iOS/audio_buffer_mvp.md`
+  - *Approach*: Replace `speech_to_text` plugin on iOS with a custom native `SpeechBridge.swift` that owns `AVAudioEngine` directly. At `setLocale()` call: tap continues capturing to an in-memory buffer → new `SFSpeechRecognizer` initialized → buffer replayed via `SFSpeechAudioBufferRecognitionRequest` → live mic hands off seamlessly.
+  - *Why deferred*: Requires replacing the `speech_to_text` plugin for iOS — high-risk change to a working STT system. Deferred until v5 native plugin work is planned.
+  - *User preference option*: In v5, expose an STT method selector so users can choose between: (A) current plugin-based switching, (B) native bridge with audio buffer catch-up.
+  - *Implementation phases (documented in MVP)*: Phase 1 — custom bridge parity; Phase 2 — audio tap + buffer; Phase 3 — `setLocale()` with buffer replay; Phase 4 — remove `speech_to_text` from iOS pubspec.
+  - *Dependency*: Must ship after STT Engine Selector UI (above) is restored, since the selector UI is how users would choose between methods.

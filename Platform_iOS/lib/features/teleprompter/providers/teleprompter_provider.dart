@@ -125,7 +125,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         : '<END>';
 
     final engineTag = _useWhisper ? '🤖' : '🎤';
-    final skipThreshold = _useWhisper ? _whisperSkipAfterStuck : _googleSkipAfterStuck;
+    // Near a section boundary use a tight threshold so any unrecognised
+    // word in the STT restart gap is force-skipped in under a second
+    // rather than waiting the full 45-cycle window.
+    final skipThreshold = _useWhisper ? _whisperSkipAfterStuck : _effectiveSkipThreshold();
 
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
@@ -379,18 +382,43 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
   }
 
-  /// Switch STT locale the moment confirmedWordIndex enters a new language section.
-  /// Because sections are pre-computed, this is exact — no thresholds, no debounce.
+  /// Returns a tight force-skip threshold when the current position is within
+  /// 2 words of an upcoming language boundary, normal threshold otherwise.
+  /// This lets the STT skip over the ~1 unrecognised word in the restart gap
+  /// in under a second instead of waiting the full 45-cycle window.
+  int _effectiveSkipThreshold() {
+    if (_sectionLocales.isEmpty) return _googleSkipAfterStuck;
+    final currentIdx = state.confirmedWordIndex;
+    for (int lookahead = 1; lookahead <= 2; lookahead++) {
+      final checkIdx = currentIdx + lookahead;
+      if (checkIdx < _sectionLocales.length &&
+          _sectionLocales[checkIdx] != _activeLocale) {
+        return 5; // near boundary — skip fast
+      }
+    }
+    return _googleSkipAfterStuck;
+  }
+
+  /// Pre-emptively switch STT locale 1 word BEFORE the section boundary so
+  /// the new recognizer is initialised and listening by the time the first
+  /// word of the new language is spoken.  For fast readers the STT restart
+  /// (~300 ms) completes during that 1-word window rather than after it.
+  ///
+  /// The 1 transition word that lands in the wrong-locale window is handled
+  /// by the tight force-skip threshold from _effectiveSkipThreshold().
   void _checkAndSwitchLocale() {
     if (_useWhisper || _disposed || _sessionStopped) return;
     if (_sectionLocales.isEmpty) return;
     final currentIdx = state.confirmedWordIndex;
     if (currentIdx < 0 || currentIdx >= _sectionLocales.length) return;
 
-    final needed = _sectionLocales[currentIdx];
+    // Look 1 word ahead — switch early so STT is ready at the boundary.
+    final lookIdx = (currentIdx + 1).clamp(0, _sectionLocales.length - 1);
+    final needed = _sectionLocales[lookIdx];
     if (needed == _activeLocale) return;
 
-    _addDebugLog('🌐 SECTION SWITCH: ${_activeLocale ?? "?"} → $needed at word #$currentIdx');
+    _addDebugLog('🌐 PRE-SWITCH: ${_activeLocale ?? "?"} → $needed '
+        '(1 word ahead, cur=#$currentIdx)');
     _activeLocale = needed;
     _scriptLanguageLocale = needed;
     _sttService.setLocale(needed);

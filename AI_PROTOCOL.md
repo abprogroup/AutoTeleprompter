@@ -55,13 +55,20 @@
 
 ## 🧩 COMPONENT MVP PROTOCOL
 
-A **Component MVP** is a self-contained system whose logic, state, and persistence contract are encapsulated behind a defined public API. The three active Component MVPs are:
+A **Component MVP** is a self-contained system whose logic, state, and persistence contract are encapsulated behind a defined public API. Every feature is separated into platform-specific directories under `_agent/mvp/Platform_[Windows/iOS/Android/macOS]/`.
+
+The active Component MVPs for each platform are:
 
 | MVP | Context Doc | Governs |
 |-----|-------------|---------|
-| Selection | `_agent/mvp/selection_mvp.md` | Multi-block selection, overlay handles, cut/copy |
-| History | `_agent/mvp/history_mvp.md` | Undo/redo stack, persistence, gallery restore |
-| STT | `_agent/mvp/stt_mvp.md` | Speech recognition, bilingual switching, session lifecycle |
+| Selection | `.../[platform]/selection_mvp.md` | Multi-block selection, overlay handles, cut/copy |
+| History | `.../[platform]/history_mvp.md` | Undo/redo stack, persistence, gallery restore |
+| STT | `.../[platform]/stt_mvp.md` | Speech recognition, bilingual switching, session lifecycle |
+| Auth | `.../[platform]/auth_mvp.md` | Session authentication, user accounts |
+| Remote | `.../[platform]/remote_mvp.md` | Background hardware control integrations |
+| Script Editor | `.../[platform]/script_editor_mvp.md` | Text parsing, layout tokenization |
+| Settings | `.../[platform]/settings_mvp.md` | Persistent bounds configurations |
+| Teleprompter Engine | `.../[platform]/teleprompter_engine_mvp.md` | Visual updates and physics configurations |
 
 ### Mandatory Pre-Touch Protocol
 Before modifying **any file owned by a Component MVP**, the AI MUST:

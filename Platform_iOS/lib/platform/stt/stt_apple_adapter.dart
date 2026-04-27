@@ -37,4 +37,7 @@ class SttAppleAdapter extends AbstractSttService {
 
   @override
   bool get requiresImmediateListeningFlag => true;
+
+  @override
+  void setLocale(String locale) => _inner.setLocale(locale);
 }

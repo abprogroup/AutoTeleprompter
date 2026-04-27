@@ -1033,6 +1033,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
       });
       _forceRecentUpdate();
+      try { ref.read(scriptProvider.notifier).updateHistoryIndex(_historyIndex); } catch (_) {}
     }
   }
 
@@ -1048,6 +1049,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
       });
       _forceRecentUpdate();
+      try { ref.read(scriptProvider.notifier).updateHistoryIndex(_historyIndex); } catch (_) {}
     }
   }
 

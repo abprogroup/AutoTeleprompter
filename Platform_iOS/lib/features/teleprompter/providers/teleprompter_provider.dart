@@ -323,23 +323,31 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     });
   }
 
-  /// Look 15 words ahead and switch STT locale if the upcoming language
-  /// differs from the active one.  Debounced to at most once per 10 words.
+  /// Look 5 words ahead and switch STT locale if the upcoming language
+  /// differs from the active one. Debounced to at most once per 8 words.
+  ///
+  /// Uses setLocale() instead of stop/start to avoid any race with stopSession():
+  /// setLocale() updates _localeId on SpeechService and calls _stt.cancel(),
+  /// which triggers the service's own _scheduleRestart — no async chain.
   void _checkAndSwitchLocale() {
     if (_currentScript == null || _useWhisper || _disposed || _sessionStopped) return;
     final currentIdx = state.confirmedWordIndex;
-    if (currentIdx - _lastLocaleSwitchIndex < 10) return;
+    if (currentIdx - _lastLocaleSwitchIndex < 8) return;
 
     final lookahead = _currentScript!.words
         .skip(currentIdx + 1)
         .where((w) => !w.isNewline)
-        .take(15)
+        .take(5)
         .toList();
     if (lookahead.isEmpty) return;
 
     final hebrewRatio = lookahead.where((w) => w.isRtl).length / lookahead.length;
-    final upcomingHebrew = hebrewRatio > 0.5;
     final currentHebrew = _activeLocale?.startsWith('he') ?? false;
+
+    // Asymmetric thresholds to minimise missed words at boundaries:
+    // Switch to English only when the next 5 words are almost entirely English.
+    // Switch to Hebrew when the majority of the next 5 words are Hebrew.
+    final upcomingHebrew = currentHebrew ? hebrewRatio > 0.2 : hebrewRatio > 0.6;
     if (upcomingHebrew == currentHebrew) return;
 
     final newLocale = upcomingHebrew ? 'he_IL' : 'en_US';
@@ -348,19 +356,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _activeLocale = newLocale;
     _scriptLanguageLocale = newLocale;
     _lastLocaleSwitchIndex = currentIdx;
-
-    // Restart STT with the new locale. Brief gap (~300 ms) while it restarts.
-    _sttService.stop().then((_) {
-      if (_disposed || _sessionStopped) return;
-      _sttService.start(localeId: newLocale).then((result) {
-        if (_disposed || _sessionStopped) return;
-        if (!result.success) {
-          _addDebugLog('⚠️ LOCALE SWITCH FAILED: ${result.message}');
-        } else {
-          _addDebugLog('🎤 LOCALE SWITCH OK: ${result.actualLocale}');
-        }
-      });
-    });
+    _sttService.setLocale(newLocale);
   }
 
   /// Find the next non-newline word index after [from]
@@ -476,8 +472,25 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _fluidAdvanceTimer?.cancel();
+    _lastLocaleSwitchIndex = -999;
     _addDebugLog('🔄 POSITION RESET → 0');
     state = state.copyWith(confirmedWordIndex: 0);
+
+    // Restore the starting locale if the STT switched languages mid-script.
+    if (_currentScript != null && !_useWhisper) {
+      final firstWords = _currentScript!.words
+          .where((w) => !w.isNewline).take(10).toList();
+      if (firstWords.isNotEmpty) {
+        final hebrewRatio = firstWords.where((w) => w.isRtl).length / firstWords.length;
+        final startLocale = hebrewRatio > 0.3 ? 'he_IL' : 'en_US';
+        if (startLocale != _activeLocale) {
+          _activeLocale = startLocale;
+          _scriptLanguageLocale = startLocale;
+          _addDebugLog('🔄 RESET LOCALE → $startLocale');
+          _sttService.setLocale(startLocale);
+        }
+      }
+    }
   }
 }
 

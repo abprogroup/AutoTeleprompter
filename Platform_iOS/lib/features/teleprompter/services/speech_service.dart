@@ -317,4 +317,15 @@ class SpeechService {
   }
 
   bool get isListening => _stt.isListening;
+
+  /// Switch locale without stopping — new locale takes effect on next restart.
+  /// Calls _stt.cancel() to trigger _scheduleRestart immediately so the switch
+  /// is near-instant rather than waiting for the next utterance boundary.
+  void setLocale(String locale) {
+    if (locale == _localeId) return;
+    _localeId = locale;
+    if (_isActive && !_isRestarting && _stt.isListening) {
+      _stt.cancel();
+    }
+  }
 }

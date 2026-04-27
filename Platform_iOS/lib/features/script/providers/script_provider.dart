@@ -167,6 +167,15 @@ class ScriptNotifier extends Notifier<Script?> {
     );
   }
 
+  /// Keep the in-memory script state in sync with the editor's current undo
+  /// position. Without this, re-entering the editor reads the stale historyIndex
+  /// that was set when the script was first loaded, ignoring any undo/redo.
+  void updateHistoryIndex(int index) {
+    final current = state;
+    if (current == null) return;
+    state = current.copyWith(historyIndex: index);
+  }
+
   Future<_ParsedFile> parseFile(File file) async {
     final lower = file.path.toLowerCase();
     final rawBytes = await file.readAsBytes();

@@ -35,6 +35,11 @@ abstract class AbstractSttService {
   /// Human-readable platform identifier used in debug logs.
   String get platformName;
 
+  /// Switch the recognition locale without stopping the session.
+  /// The new locale takes effect on the next recognition restart.
+  /// Default is a no-op; override in adapters that support hot-switching.
+  void setLocale(String locale) {}
+
   /// True if the service fires onStatusChange(listening) asynchronously
   /// after start() returns, requiring the caller to set isListening
   /// immediately rather than waiting for the callback.

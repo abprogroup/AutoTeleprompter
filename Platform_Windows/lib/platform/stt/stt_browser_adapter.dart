@@ -231,6 +231,17 @@ function draw() {
     ctx.fillStyle = i % 2 === 0 ? '#FFBF00' : '#886600';
     ctx.fillRect(x, height - barHeight, barWidth, barHeight);
     x += barWidth + 1;
+    sum += dataArray[i];
+  }
+  
+  // Calculate average volume (0.0 to 1.0) and send to Flutter
+  const avgVol = sum / dataArray.length / 255.0;
+  // Boost the signal slightly so even quiet speech registers
+  const normalizedVol = Math.min(1.0, avgVol * 2.5);
+  // Send every ~300ms to avoid flooding the websocket
+  if (!window.lastVolSend || Date.now() - window.lastVolSend > 300) {
+     send({type: 'level', level: normalizedVol});
+     window.lastVolSend = Date.now();
   }
 }
 
@@ -260,7 +271,9 @@ function startRec(locale) {
   rec.lang = locale; rec.continuous = true; rec.interimResults = true;
   rec.onstart = () => {
     consecutiveFails = 0; dot.classList.add('on');
-    status.textContent = '[' + locale.toUpperCase() + '] Active'; send({type: 'listening'});
+    status.textContent = '[' + locale.toUpperCase() + '] Active'; 
+    // ALWAYS send listening to clear the UI's 'starting' state
+    send({type: 'listening'});
     if (audioContext && audioContext.state === 'suspended') audioContext.resume();
   };
   rec.onresult = (e) => {

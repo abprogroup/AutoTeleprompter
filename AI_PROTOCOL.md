@@ -52,6 +52,35 @@
     - **Temporary Tools/Scripts**: Must be deleted or moved to `/_agent/scripts/` after the task.
 - **Visual Proof Mandate**: Every fix MUST have a `final_proof.png` in `/test` showing the fix in a stable, non-selected state.
 
+## 🧩 COMPONENT MVP PROTOCOL
+
+A **Component MVP** is a self-contained system whose logic, state, and persistence contract are encapsulated behind a defined public API. The three active Component MVPs are:
+
+| MVP | Context Doc | Governs |
+|-----|-------------|---------|
+| Selection | `_agent/mvp/selection_mvp.md` | Multi-block selection, overlay handles, cut/copy |
+| History | `_agent/mvp/history_mvp.md` | Undo/redo stack, persistence, gallery restore |
+| STT | `_agent/mvp/stt_mvp.md` | Speech recognition, bilingual switching, session lifecycle |
+
+### Mandatory Pre-Touch Protocol
+Before modifying **any file owned by a Component MVP**, the AI MUST:
+
+1. **READ the MVP context doc** — understand what the MVP owns, its invariants, all callers, and what is explicitly forbidden.
+2. **List the invariants** that the planned change could affect and confirm each one is preserved.
+3. **List all callers** of the method or field being changed, and verify none are silently broken.
+4. **Never change the external API** without updating every caller listed in the context doc AND updating the context doc itself.
+5. **After the fix**, update the context doc if any invariant, caller, or file list changed.
+
+### What a Context Doc Must Contain
+- **Owned files** — every file the MVP controls (no other code should directly mutate its internal state)
+- **External API** — the public methods/fields that outside code is allowed to call
+- **All callers** — every call site outside the MVP files, with file path and context
+- **Invariants** — rules that must always hold; violating any one breaks the system
+- **Forbidden changes** — specific things that must never be done regardless of the fix
+- **Known fragilities** — areas proven to be easy to accidentally break
+
+---
+
 ## ⚖️ VERSIONING & GOVERNANCE
 1. **Stable Versioning Control**: Only the **USER** is authorized to decide when to advance to a major stable version (e.g., v3.7.2 to v4.0.0).
 2. **AI Iteration Limit**: The AI is permitted to advance sub-versions (e.g., v3.4.5 to v3.4.6) to track incremental progress and surgical backups.

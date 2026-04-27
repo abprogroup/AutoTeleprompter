@@ -117,6 +117,8 @@ class SttBrowserAdapter extends AbstractSttService {
     final normalized = locale.replaceAll('_', '-');
     if (normalized == _currentLocale) return;
     _currentLocale = normalized;
+    _everListened = false;
+    onDiagnostic?.call('🔤 [Browser STT] Switching locale → $normalized');
     try {
       _wsClient?.sink.add(jsonEncode({'type': 'setLocale', 'locale': normalized}));
     } catch (_) {}
@@ -145,9 +147,6 @@ class SttBrowserAdapter extends AbstractSttService {
   /// URL loaded by the embedded WebviewController (the STT page itself).
   @override
   String? get sttWebViewUrl => _server != null ? 'http://localhost:$_port/' : null;
-
-  @override
-  bool get requiresImmediateListeningFlag => true;
 
   String _buildHtml(String locale) => '''<!DOCTYPE html>
 <html lang="en">

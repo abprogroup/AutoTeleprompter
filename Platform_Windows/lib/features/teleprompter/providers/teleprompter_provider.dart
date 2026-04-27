@@ -86,6 +86,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   /// Common handler for STT results — shared between Google and Whisper
   void _handleSttResult(SpeechResult result) {
     if (_currentScript == null || _disposed) return;
+    _safeSetState((s) => s.copyWith(isStarting: false));
 
     final words = result.words.toLowerCase();
     try {
@@ -148,9 +149,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         // Large jump — advance word by word with short delays
         _startFluidAdvance(capped, script);
       }
+      _syncLocaleForPosition(script, capped, reason: 'advance');
     } else {
       _noProgressCount++;
       _addDebugLog('$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
+      _syncLocaleForPosition(script, state.confirmedWordIndex, reason: 'boundary wait');
 
       if (_noProgressCount >= skipThreshold) {
         _noProgressCount = 0;
@@ -200,6 +203,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _addDebugLog('🎤 [${_sttService.platformName}] STATUS: $status');
     _safeSetState((s) => s.copyWith(
       isListening: status == SpeechStatus.listening,
+      isStarting: false,
       statusMessage: '',
       hasError: false,
     ));
@@ -216,6 +220,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         statusMessage: isFatal ? error : '',
         hasError: isFatal,
         isListening: isFatal ? false : s.isListening,
+        isStarting: isFatal ? false : s.isStarting,
       ));
     };
 
@@ -229,6 +234,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         missingLanguage: langName,
         hasError: true,
         isListening: false,
+        isStarting: false,
         statusMessage: 'Speech recognition language not installed on this device',
       ));
     };
@@ -242,6 +248,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _safeSetState((s) => s.copyWith(
         hasError: true,
         isListening: false,
+        isStarting: false,
         statusMessage: '$langName speech recognition requires an internet connection. '
             'This language is not available offline on your device. '
             'Please connect to WiFi or mobile data and try again.',
@@ -260,6 +267,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog('🤖 WHISPER STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
+        isStarting: false,
         statusMessage: '',
         hasError: false,
       ));
@@ -274,6 +282,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           statusMessage: error,
           hasError: true,
           isListening: false,
+          isStarting: false,
         ));
       }
     };
@@ -307,6 +316,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       missingLanguage: langName,
       hasError: true,
       isListening: false,
+      isStarting: false,
       statusMessage: 'Google speech blocked on this device. '
           'Go to Settings and download a Whisper model for offline recognition.',
     ));
@@ -357,6 +367,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     return ratio > 0.3 ? 'he_IL' : 'en_US';
   }
 
+  void _syncLocaleForPosition(Script script, int wordIndex, {required String reason}) {
+    if (_useWhisper || _sessionStopped || _disposed) return;
+    final upcomingLocale = _detectLanguageAhead(wordIndex, script);
+    if (upcomingLocale == _scriptLanguageLocale) return;
+    _scriptLanguageLocale = upcomingLocale;
+    _accumulatedTranscript = '';
+    final engineName = _sttService.platformName.toUpperCase();
+    _addDebugLog('🔤 [$engineName] Switching STT locale → $upcomingLocale ($reason)');
+    _safeSetState((s) => s.copyWith(isStarting: true, soundLevel: 0.0));
+    _sttService.setLocale(upcomingLocale);
+  }
+
   /// Find the next non-newline word index after [from]
   int? _nextRealWord(int from, Script script) {
     for (int i = from + 1; i < script.words.length; i++) {
@@ -376,7 +398,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
     state = state.copyWith(
-        confirmedWordIndex: 0, isListening: false, hasError: false,
+        confirmedWordIndex: 0, isListening: false, isStarting: true, hasError: false,
         statusMessage: '', debugLogs: [], missingLanguage: null);
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
@@ -425,12 +447,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         // Every heartbeat, look 30 words ahead. If the dominant language
         // changed, hot-switch the STT locale via WebSocket (no restart needed).
         if (!_useWhisper && listening && _currentScript != null) {
-          final upcomingLocale = _detectLanguageAhead(state.confirmedWordIndex, _currentScript!);
-          if (upcomingLocale != _scriptLanguageLocale) {
-            _scriptLanguageLocale = upcomingLocale;
-            _addDebugLog('🔤 [$engineName] Switching STT locale → $upcomingLocale');
-            _sttService.setLocale(upcomingLocale);
-          }
+          _syncLocaleForPosition(_currentScript!, state.confirmedWordIndex, reason: 'heartbeat');
         }
       });
     }
@@ -450,6 +467,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           statusMessage: result.message ?? 'Speech recognition failed',
           hasError: true,
           isListening: false,
+          isStarting: false,
         ));
         return;
       }
@@ -459,7 +477,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       // staying yellow while waiting for the callback.
       if (_sttService.requiresImmediateListeningFlag) {
         _startingSession = true;
-        _safeSetState((s) => s.copyWith(isListening: true));
+        _safeSetState((s) => s.copyWith(isListening: true, isStarting: false));
         // Auto-clear the guard after 1.5 s in case listening status never fires
         Future.delayed(const Duration(milliseconds: 1500), () => _startingSession = false);
       }
@@ -493,6 +511,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       try {
         state = state.copyWith(
           isListening: false,
+          isStarting: false,
           hasError: false,
           statusMessage: '',
           soundLevel: 0.0,

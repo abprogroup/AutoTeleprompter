@@ -805,11 +805,23 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                   child: _SoundLevelBar(
                     level: tState.soundLevel,
                     isListening: tState.isListening,
+                    isStarting: tState.isStarting,
                     accentColor: Color(settings.currentWordColor),
                   ),
                 ),
               ),
             ),
+            if (tState.isStarting && !tState.hasError)
+              Positioned(
+                top: 22,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _SttStartingIndicator(
+                    accentColor: Color(settings.currentWordColor),
+                  ),
+                ),
+              ),
             // Technical Debug Overlay
             if (settings.debugMode)
               Positioned(
@@ -924,32 +936,15 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             // STT Pro Dashboard Integration
             if (_webviewController != null && tState.sttWebViewUrl != null)
               Positioned(
-                left: 12, // Moved from right to left to avoid script text
-                bottom: settings.debugMode ? 240 : 12,
-                width: 280,
-                height: 110,
-                child: Opacity(
-                  opacity: settings.debugMode ? 1.0 : 0.0, // Hide completely when debug mode is off
-                  child: Container(
-                     decoration: BoxDecoration(
-                       color: const Color(0xFF0A0A0A),
-                       borderRadius: BorderRadius.circular(12),
-                       border: Border.all(color: Colors.white.withOpacity(0.1)),
-                       boxShadow: [
-                         BoxShadow(
-                           color: Colors.black.withOpacity(0.5),
-                           blurRadius: 10,
-                           offset: const Offset(0, 4),
-                         ),
-                       ],
-                     ),
-                     child: IgnorePointer( // Prevent accidental taps when invisible
-                       ignoring: !settings.debugMode,
-                       child: ClipRRect(
-                         borderRadius: BorderRadius.circular(12),
-                         child: Webview(_webviewController!),
-                       ),
-                     ),
+                left: 0,
+                bottom: 0,
+                width: 1,
+                height: 1,
+                child: IgnorePointer(
+                  ignoring: true,
+                  child: Opacity(
+                    opacity: 0.01,
+                    child: Webview(_webviewController!),
                   ),
                 ),
               ),
@@ -1058,6 +1053,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                       // Control bar
                       _ControlBar(
                         isListening: tState.isListening,
+                        isStarting: tState.isStarting,
                         isManualMode: settings.scrollMode == 'manual',
                         isManualScrolling: _manualScrolling,
                         isScrollingBackward: _scrollingBackward,
@@ -1144,11 +1140,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 class _SoundLevelBar extends StatelessWidget {
   final double level;
   final bool isListening;
+  final bool isStarting;
   final Color accentColor;
 
   const _SoundLevelBar({
     required this.level,
     required this.isListening,
+    required this.isStarting,
     required this.accentColor,
   });
 
@@ -1168,7 +1166,9 @@ class _SoundLevelBar extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              isListening ? Icons.graphic_eq : Icons.volume_off,
+              isStarting
+                  ? Icons.hourglass_top
+                  : (isListening ? Icons.graphic_eq : Icons.volume_off),
               color: activeColor,
               size: 16,
             ),
@@ -1204,10 +1204,54 @@ class _SoundLevelBar extends StatelessWidget {
   }
 }
 
+class _SttStartingIndicator extends StatelessWidget {
+  final Color accentColor;
+
+  const _SttStartingIndicator({required this.accentColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accentColor.withOpacity(0.35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+              ),
+            ),
+            const SizedBox(width: 9),
+            const Text(
+              'STARTING STT',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Control bar ────────────────────────────────────────────────────────────────
 
 class _ControlBar extends ConsumerWidget {
   final bool isListening;
+  final bool isStarting;
   final bool isManualMode;
   final bool isManualScrolling;
   final bool isScrollingBackward;
@@ -1221,6 +1265,7 @@ class _ControlBar extends ConsumerWidget {
 
   const _ControlBar({
     required this.isListening,
+    required this.isStarting,
     required this.isManualMode,
     required this.isManualScrolling,
     required this.isScrollingBackward,
@@ -1239,7 +1284,7 @@ class _ControlBar extends ConsumerWidget {
     // Forward scroll is active when scrolling but NOT backward
     final isActive = isManualMode
         ? (isManualScrolling && settings.scrollSpeed != 0)
-        : isListening;
+        : (isListening || isStarting);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -1277,7 +1322,7 @@ class _ControlBar extends ConsumerWidget {
                 child: Icon(
                   isManualMode
                       ? (isManualScrolling && settings.scrollSpeed != 0 ? Icons.pause : Icons.play_arrow)
-                      : (isListening ? Icons.stop : Icons.mic),
+                      : (isStarting ? Icons.hourglass_top : (isListening ? Icons.stop : Icons.mic)),
                   color: isActive ? Colors.white : Colors.black,
                   size: 30,
                 ),

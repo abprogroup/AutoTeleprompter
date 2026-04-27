@@ -372,10 +372,11 @@ class _ScriptListItem extends ConsumerWidget {
                       }
                     }
 
-                    scriptNotifier.loadText(fullText, 
-                      title: title, 
-                      sourceType: type, 
+                    scriptNotifier.loadText(fullText,
+                      title: title,
+                      sourceType: type,
                       sessionId: sessionId,
+                      historyIndex: (decodedMeta?['historyIndex'] as num?)?.toInt(),
                       historyJson: decodedMeta?['historyJson'],
                       fontSize: (decodedMeta?['style']?['fontSize'] as num?)?.toDouble(),
                       fontFamily: decodedMeta?['style']?['fontFamily'],

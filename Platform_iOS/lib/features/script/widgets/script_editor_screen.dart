@@ -1813,6 +1813,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         },
                         onSelectAll: _selectAllBlocks,
                         onCopy: _onCopyClean,
+                        onCut: _onCutClean,
                       ),
                     ),
                   ),
@@ -1884,6 +1885,39 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         ],
       ),
     );
+  }
+
+  void _onCutClean() {
+    _onCopyClean(); // copy first, then delete
+    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+    if (_isGlobalSelection || hasOverlay) {
+      _isCommandExecuting = true;
+      if (_isGlobalSelection) {
+        for (final c in _controllers) { c.text = ''; }
+      } else {
+        for (final c in _controllers) {
+          final sel = c.externalSelection;
+          if (sel == null || !sel.isValid || sel.isCollapsed) continue;
+          final s = sel.start.clamp(0, c.text.length);
+          final e = sel.end.clamp(0, c.text.length);
+          c.text = c.text.substring(0, s) + c.text.substring(e);
+        }
+      }
+      _clearGlobalSelection();
+      _isCommandExecuting = false;
+      _saveHistory(description: 'Cut');
+      setState(() {});
+    } else {
+      final c = _activeController;
+      if (c == null) return;
+      final sel = c.selection;
+      if (!sel.isValid || sel.isCollapsed) return;
+      c.value = TextEditingValue(
+        text: c.text.substring(0, sel.start) + c.text.substring(sel.end),
+        selection: TextSelection.collapsed(offset: sel.start),
+      );
+      _saveHistory(description: 'Cut');
+    }
   }
 
   void _onCopyClean() {
@@ -2039,12 +2073,13 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
+  final VoidCallback onCut;
 
   const _EditorBlock({
     super.key,
     required this.controller, required this.focusNode, required this.settings,
     required this.isGlobalSelected, required this.onSubmitted, required this.onTap,
-    required this.onSelectAll, required this.onCopy,
+    required this.onSelectAll, required this.onCopy, required this.onCut,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2102,6 +2137,12 @@ class _EditorBlock extends StatelessWidget {
               CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
                 onInvoke: (_) {
                   onCopy();
+                  return null;
+                },
+              ),
+              CutSelectionTextIntent: CallbackAction<CutSelectionTextIntent>(
+                onInvoke: (_) {
+                  onCut();
                   return null;
                 },
               ),
@@ -2164,6 +2205,14 @@ class _EditorBlock extends StatelessWidget {
                       onSelectAll();
                     },
                     type: ContextMenuButtonType.selectAll,
+                  ));
+                } else if (item.type == ContextMenuButtonType.cut) {
+                  customItems.add(ContextMenuButtonItem(
+                    onPressed: () {
+                      ContextMenuController.removeAny();
+                      onCut();
+                    },
+                    type: ContextMenuButtonType.cut,
                   ));
                 } else if (item.type == ContextMenuButtonType.copy) {
                   customItems.add(ContextMenuButtonItem(

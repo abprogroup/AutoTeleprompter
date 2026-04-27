@@ -50,6 +50,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _scheduleHideControls();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        // Defensively stop any lingering session from a previous entry.
+        // dispose() of the previous screen calls stopSession(), but the
+        // async STT teardown may not have fully completed before this
+        // screen's initState fires, leaving the recognizer active.
+        ref.read(teleprompterProvider.notifier).stopSession();
         ref.read(teleprompterProvider.notifier).resetPosition();
         _scrollController.jumpTo(0);
         _initRemoteListener();
@@ -652,7 +657,14 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       );
     }
 
-    return Scaffold(
+    return PopScope(
+      // Stop STT the moment the back gesture is confirmed — before the
+      // exit animation starts and long before dispose() is called.
+      // dispose() still calls stopSession() as a safety net.
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) ref.read(teleprompterProvider.notifier).stopSession();
+      },
+      child: Scaffold(
       backgroundColor: Color(settings.scriptBgColor),
       body: GestureDetector(
         onTap: _showControls,
@@ -933,6 +945,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 

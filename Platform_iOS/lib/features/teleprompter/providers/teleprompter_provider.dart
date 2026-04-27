@@ -536,8 +536,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _addDebugLog('🔄 POSITION RESET → 0');
     state = state.copyWith(confirmedWordIndex: 0);
 
-    // Restore the starting locale from the pre-computed section map.
-    if (!_useWhisper && _sectionLocales.isNotEmpty) {
+    // Only adjust the STT locale when a session is actually running.
+    // Calling setLocale() while _sessionStopped=true can race with a
+    // concurrent stopSession() and re-trigger the recognizer.
+    if (!_useWhisper && !_sessionStopped && _sectionLocales.isNotEmpty) {
       final startLocale = _sectionLocales.first;
       if (startLocale != _activeLocale) {
         _activeLocale = startLocale;

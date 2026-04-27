@@ -1891,11 +1891,42 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _onCutClean() {
-    _onCopyClean(); // copy first, then delete
+    // Capture selection state before anything mutates it.
+    final isGlobal = _isGlobalSelection;
+    final hasGlobal = _controllers.any((c) => c.isGlobalSelected);
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
-    if (_isGlobalSelection || hasOverlay) {
+
+    if (isGlobal || hasGlobal || hasOverlay) {
+      // ── Step 1: build clipboard text synchronously from current state ──
+      final plainBuf = StringBuffer();
+      for (final c in _controllers) {
+        String? slice;
+        if (c.isGlobalSelected) {
+          slice = StylingService.stripTags(c.text);
+        } else {
+          final sel = c.externalSelection;
+          if (sel != null && sel.isValid && !sel.isCollapsed) {
+            slice = StylingService.stripTags(
+                c.text.substring(sel.start.clamp(0, c.text.length),
+                                 sel.end.clamp(0, c.text.length)));
+          }
+        }
+        if (slice != null && slice.isNotEmpty) {
+          if (plainBuf.isNotEmpty) plainBuf.write('\n');
+          plainBuf.write(slice);
+        }
+      }
+      // Write directly — bypasses RichClipboard which is Android-only for
+      // the native channel; on iOS it would fall through to Clipboard.setData
+      // anyway, but calling it here ensures the write is initiated before
+      // any state changes occur.
+      if (plainBuf.isNotEmpty) {
+        Clipboard.setData(ClipboardData(text: plainBuf.toString()));
+      }
+
+      // ── Step 2: delete ──
       _isCommandExecuting = true;
-      if (_isGlobalSelection) {
+      if (isGlobal || hasGlobal) {
         for (final c in _controllers) { c.text = ''; }
       } else {
         for (final c in _controllers) {
@@ -1911,6 +1942,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _saveHistory(description: 'Cut');
       setState(() {});
     } else {
+      // Single-block native path — copy then delete the focused selection.
+      _onCopyClean();
       final c = _activeController;
       if (c == null) return;
       final sel = c.selection;

@@ -2187,6 +2187,31 @@ class _EditorBlock extends StatelessWidget {
               contentPadding: EdgeInsets.symmetric(vertical: 2),
             ),
             contextMenuBuilder: (context, editableTextState) {
+              // When the block is globally selected, bypass editableTextState
+              // entirely. iOS asynchronously resets the native selection back
+              // to the original double-tapped word after Select All, so
+              // iterating contextMenuButtonItems would serve word-scoped
+              // Cut/Copy actions instead of our global ones.
+              if (isGlobalSelected) {
+                return AdaptiveTextSelectionToolbar.buttonItems(
+                  anchors: editableTextState.contextMenuAnchors,
+                  buttonItems: [
+                    ContextMenuButtonItem(
+                      onPressed: () { ContextMenuController.removeAny(); onCut(); },
+                      type: ContextMenuButtonType.cut,
+                    ),
+                    ContextMenuButtonItem(
+                      onPressed: () { ContextMenuController.removeAny(); onCopy(); },
+                      type: ContextMenuButtonType.copy,
+                    ),
+                    ContextMenuButtonItem(
+                      onPressed: () { ContextMenuController.removeAny(); onSelectAll(); },
+                      type: ContextMenuButtonType.selectAll,
+                    ),
+                  ],
+                );
+              }
+
               final List<ContextMenuButtonItem> items = editableTextState.contextMenuButtonItems;
               final List<ContextMenuButtonItem> customItems = [];
               bool hasSelectAll = false;
@@ -2220,8 +2245,7 @@ class _EditorBlock extends StatelessWidget {
                   customItems.add(item);
                 }
               }
-              // Force-inject a global Select All even when the native menu
-              // omits it (e.g. the block is already fully selected).
+              // Force-inject Select All even when the native menu omits it.
               if (!hasSelectAll) {
                 customItems.add(ContextMenuButtonItem(
                   onPressed: () {

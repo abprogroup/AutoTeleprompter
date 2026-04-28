@@ -1904,26 +1904,33 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       try { if (!ref.read(settingsProvider).debugMode) return; } catch (_) { return; }
+      // Dismiss keyboard first — dialog would be hidden behind it otherwise.
+      FocusManager.instance.primaryFocus?.unfocus();
       final chars = _globalClipboard?.length ?? 0;
       final preview = chars == 0 ? '(empty)' : _globalClipboard!.substring(0, chars.clamp(0, 200));
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text('✂️ CUT DEBUG', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 15)),
-          content: SingleChildScrollView(child: Text(
-            'Branch : $branch\n'
-            'Blocks : ${_controllers.length}\n'
-            'Chars  : $chars\n\n'
-            '"$preview"',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          )),
-          actions: [TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK', style: TextStyle(color: Color(0xFFFFBF00))),
-          )],
-        ),
-      );
+      // Wait for keyboard to slide away before presenting dialog.
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          useRootNavigator: true,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            title: const Text('✂️ CUT DEBUG', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 15)),
+            content: SingleChildScrollView(child: Text(
+              'Branch : $branch\n'
+              'Blocks : ${_controllers.length}\n'
+              'Chars  : $chars\n\n'
+              '"$preview"',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            )),
+            actions: [TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK', style: TextStyle(color: Color(0xFFFFBF00))),
+            )],
+          ),
+        );
+      });
     });
   }
 

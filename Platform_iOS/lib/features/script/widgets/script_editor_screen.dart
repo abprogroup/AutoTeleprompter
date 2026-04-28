@@ -1901,36 +1901,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   // Shown in debug mode after every Cut so the exact clipboard content
   // and which code path ran are visible without a build tool.
   void _showCutDebug(String branch) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      try { if (!ref.read(settingsProvider).debugMode) return; } catch (_) { return; }
-      // Dismiss keyboard first — dialog would be hidden behind it otherwise.
-      FocusManager.instance.primaryFocus?.unfocus();
-      final chars = _globalClipboard?.length ?? 0;
-      final preview = chars == 0 ? '(empty)' : _globalClipboard!.substring(0, chars.clamp(0, 200));
-      // Wait for keyboard to slide away before presenting dialog.
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          useRootNavigator: true,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            title: const Text('✂️ CUT DEBUG', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 15)),
-            content: SingleChildScrollView(child: Text(
-              'Branch : $branch\n'
-              'Blocks : ${_controllers.length}\n'
-              'Chars  : $chars\n\n'
-              '"$preview"',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            )),
-            actions: [TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK', style: TextStyle(color: Color(0xFFFFBF00))),
-            )],
-          ),
-        );
-      });
+    try { if (!ref.read(settingsProvider).debugMode) return; } catch (_) { return; }
+    // Write debug into the title bar — always visible above the keyboard.
+    final chars = _globalClipboard?.length ?? 0;
+    final preview = _globalClipboard?.substring(0, chars.clamp(0, 35)) ?? '';
+    setState(() {
+      _currentTitle = '[$branch | ${_controllers.length}blk | ${chars}ch | "$preview"]';
     });
   }
 
@@ -2084,6 +2060,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     );
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
+    try {
+      if (ref.read(settingsProvider).debugMode) {
+        setState(() {
+          _currentTitle = '[PASTED ${text.length}ch | "${text.substring(0, text.length.clamp(0, 35))}"]';
+        });
+      }
+    } catch (_) {}
   }
 
   void _selectAllBlocks() {
@@ -2293,6 +2276,15 @@ class _EditorBlock extends StatelessWidget {
                   return null;
                 },
               ),
+              // Intercept every paste path (context menu, Cmd+V, system paste)
+              // so our in-app clipboard is used whenever _globalClipboard is set.
+              if (onPaste != null)
+                PasteTextIntent: CallbackAction<PasteTextIntent>(
+                  onInvoke: (_) {
+                    onPaste!();
+                    return null;
+                  },
+                ),
             },
           child: Theme(
             data: Theme.of(context).copyWith(

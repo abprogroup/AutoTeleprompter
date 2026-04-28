@@ -1904,10 +1904,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final plainBuf = StringBuffer();
       if (isGlobal || hasGlobal) {
         // Global path: copy every block unconditionally.
-        // Use a space (not \n) between blocks — iOS paste can truncate
-        // multi-line clipboard content at the first newline in some contexts.
+        // Strip ALL newlines from the content — iOS paste truncates at the
+        // first \n regardless of whether it's a block separator or embedded
+        // inside a block (e.g. from Shift+Enter). Join with a single space.
         for (final c in _controllers) {
-          final t = StylingService.stripTags(c.text);
+          final t = StylingService.stripTags(c.text)
+              .replaceAll('\n', ' ')
+              .trim();
           if (t.isNotEmpty) {
             if (plainBuf.isNotEmpty) plainBuf.write(' ');
             plainBuf.write(t);

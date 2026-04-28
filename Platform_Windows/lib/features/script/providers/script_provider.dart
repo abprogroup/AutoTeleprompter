@@ -182,6 +182,50 @@ class ScriptNotifier extends Notifier<Script?> {
         );
   }
 
+  Future<void> updateStyleMetadata({
+    double? fontSize,
+    String? fontFamily,
+    double? lineSpacing,
+    double? letterSpacing,
+    double? wordSpacing,
+    String? textAlign,
+    int? scriptBgColor,
+    int? currentWordColor,
+    int? futureWordColor,
+  }) async {
+    final current = state;
+    if (current == null) return;
+    final next = current.copyWith(
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      lineSpacing: lineSpacing,
+      letterSpacing: letterSpacing,
+      wordSpacing: wordSpacing,
+      textAlign: textAlign,
+      scriptBgColor: scriptBgColor,
+      currentWordColor: currentWordColor,
+      futureWordColor: futureWordColor,
+    );
+    state = next;
+    await ref.read(settingsProvider.notifier).saveScript(
+          next.rawText,
+          title: next.title,
+          type: next.sourceType,
+          historyIndex: next.historyIndex,
+          sessionId: next.sessionId,
+          fontSize: next.fontSize,
+          fontFamily: next.fontFamily,
+          lineSpacing: next.lineSpacing,
+          letterSpacing: next.letterSpacing,
+          wordSpacing: next.wordSpacing,
+          textAlign: next.textAlign,
+          scriptBgColor: next.scriptBgColor,
+          currentWordColor: next.currentWordColor,
+          futureWordColor: next.futureWordColor,
+          historyJson: next.historyJson,
+        );
+  }
+
   Future<_ParsedFile> parseFile(File file) async {
     final lower = file.path.toLowerCase();
     final rawBytes = await file.readAsBytes();

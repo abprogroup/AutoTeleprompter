@@ -10,6 +10,7 @@ import '../../../../settings/providers/settings_provider.dart';
 class LayoutSuite extends ConsumerWidget {
   final ValueChanged<String> onAlign, onDirection;
   final ValueChanged<String> onInteraction;
+  static const double _defaultLineSpacing = 1.2;
 
   const LayoutSuite({
     super.key,
@@ -37,21 +38,30 @@ class LayoutSuite extends ConsumerWidget {
                 icon: Icons.format_align_left_rounded,
                 tooltip: 'Align Left',
                 active: style.textAlign == 'left',
-                onTap: () { onAlign('left'); onInteraction('Alignment'); },
+                onTap: () {
+                  onAlign('left');
+                  onInteraction('Alignment');
+                },
               ),
               const SizedBox(width: 8),
               _AlignBtn(
                 icon: Icons.format_align_center_rounded,
                 tooltip: 'Align Center',
                 active: style.textAlign == 'center',
-                onTap: () { onAlign('center'); onInteraction('Alignment'); },
+                onTap: () {
+                  onAlign('center');
+                  onInteraction('Alignment');
+                },
               ),
               const SizedBox(width: 8),
               _AlignBtn(
                 icon: Icons.format_align_right_rounded,
                 tooltip: 'Align Right',
                 active: style.textAlign == 'right',
-                onTap: () { onAlign('right'); onInteraction('Alignment'); },
+                onTap: () {
+                  onAlign('right');
+                  onInteraction('Alignment');
+                },
               ),
             ],
           ),
@@ -63,7 +73,14 @@ class LayoutSuite extends ConsumerWidget {
           value: settings.lineSpacing.clamp(0.5, 3.0),
           min: 0.5,
           max: 3.0,
-          onChanged: (v) { notifier.setLineSpacing(v); onInteraction('Line Spacing'); },
+          displayValue: _formatDefaultOffset(
+            settings.lineSpacing,
+            _defaultLineSpacing,
+          ),
+          onChanged: (v) {
+            notifier.setLineSpacing(v);
+            onInteraction('Line Spacing');
+          },
         ),
         // ── Row 3: Letter spacing ───────────────────────────────────────
         SliderRow(
@@ -71,7 +88,10 @@ class LayoutSuite extends ConsumerWidget {
           value: settings.letterSpacing.clamp(-2.0, 5.0),
           min: -2.0,
           max: 5.0,
-          onChanged: (v) { notifier.setLetterSpacing(v); onInteraction('Letter Spacing'); },
+          onChanged: (v) {
+            notifier.setLetterSpacing(v);
+            onInteraction('Letter Spacing');
+          },
         ),
         // ── Row 4: Word spacing ─────────────────────────────────────────
         SliderRow(
@@ -79,10 +99,20 @@ class LayoutSuite extends ConsumerWidget {
           value: settings.wordSpacing.toDouble().clamp(-5.0, 20.0),
           min: -5,
           max: 20,
-          onChanged: (v) { notifier.setWordSpacing(v); onInteraction('Word Spacing'); },
+          onChanged: (v) {
+            notifier.setWordSpacing(v);
+            onInteraction('Word Spacing');
+          },
         ),
       ],
     );
+  }
+
+  String _formatDefaultOffset(double value, double defaultValue) {
+    final delta = value - defaultValue;
+    if (delta.abs() < 0.05) return '0.0';
+    final sign = delta > 0 ? '+' : '';
+    return '$sign${delta.toStringAsFixed(1)}';
   }
 }
 

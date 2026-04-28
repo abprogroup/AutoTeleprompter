@@ -18,9 +18,9 @@ resume-point handoff between bookmark jumps and STT start/stop behavior.
 | File | Role |
 | --- | --- |
 | `Platform_Windows/lib/features/script/services/script_bookmark_service.dart` | Bookmark model, SharedPreferences scope key, load/save/upsert persistence |
-| `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | Editor add/previous/next bookmark commands, editor position mapping, editor scroll-to-bookmark, editor marker rendering, presenter handoff identity |
-| `Platform_Windows/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Editor bookmark toolbar buttons |
-| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Presenter add/previous/next bookmark commands, presenter word-index jumps, presenter marker rendering |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | Editor add/remove/previous/next bookmark commands, editor position mapping, editor scroll-to-bookmark, editor marker rendering, presenter handoff identity |
+| `Platform_Windows/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Editor bookmark add/remove/navigation toolbar buttons |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Presenter add/remove/previous/next bookmark commands, presenter word-index jumps, presenter marker rendering |
 | `MASTER_TODO_V5.md` | Future presenter edit-from-current-position requirement |
 
 ---
@@ -44,8 +44,8 @@ Anything not listed here is private implementation detail.
 
 | Caller | Dependency |
 | --- | --- |
-| Script editor app bar | Adds a bookmark at the current cursor and navigates previous/next bookmark |
-| Presentation control bar | Adds a bookmark at `confirmedWordIndex` and navigates previous/next bookmark while STT is stopped |
+| Script editor app bar | Adds/removes a bookmark at the current cursor/block and navigates previous/next bookmark |
+| Presentation control bar | Adds/removes a bookmark at `confirmedWordIndex` and navigates previous/next bookmark while STT is stopped |
 | Teleprompter provider | Receives bookmark jumps through `jumpToPosition(...)` only |
 | SharedPreferences | Stores bookmarks under a script-scoped key derived from session id/title |
 
@@ -78,8 +78,9 @@ Anything not listed here is private implementation detail.
    presenter mode loads the same bookmark scope that editor mode saved.
 10. **Bookmarks are visible and removable**: Editor and present mode must render
     a visible marker such as `»` at saved bookmark positions. Selecting the
-    marker deletes the bookmark from the shared script scope. The marker is
-    UI-only and must not be inserted into script text.
+    marker deletes the bookmark from the shared script scope, and both editor
+    and present mode must also expose an explicit remove-bookmark button. The
+    marker is UI-only and must not be inserted into script text.
 11. **Editor and presenter stay in sync**: Bookmarks created or deleted in
     present mode must be visible after returning to the editor. Bookmarks created
     or deleted in the editor must be visible after entering present mode.
@@ -101,7 +102,8 @@ Anything not listed here is private implementation detail.
 - Do not enter presentation by rebuilding the script with a fresh session id
   when an editor session id already exists.
 - Do not hide bookmark markers behind debug mode or search state.
-- Do not leave bookmarks write-only. A visible marker must expose deletion.
+- Do not leave bookmarks write-only. A visible marker and explicit remove button
+  must expose deletion.
 - Do not use estimated font-size scroll math when an exact editor block context
   is available.
 

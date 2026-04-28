@@ -43,6 +43,7 @@ to STT MVP; this MVP owns what the app does with confirmed words.
 | `TeleprompterState.soundLevel` | Audio-level UI |
 | `TeleprompterState.sttWebViewUrl` | Windows browser STT view when that adapter is active |
 | `TeleprompterState.audioInputDevices` | Windows presenter mic selector; populated by STT adapter discovery |
+| `ScriptNotifier.updateStyleMetadata(fontSize: ...)` | Present-mode font size buttons and settings slider |
 
 ---
 
@@ -53,6 +54,7 @@ to STT MVP; this MVP owns what the app does with confirmed words.
 | Presentation screen | `teleprompter_screen.dart` | Reads provider state, starts/stops/resets session |
 | Control bar | `teleprompter_screen.dart` | Calls `stopSession()`, toggles manual presentation behavior locally |
 | Settings panel | `teleprompter_screen.dart` | Reads/writes settings while presentation runs |
+| Script provider | `script_provider.dart` | Receives present-mode font metadata updates so editor re-entry matches presenter changes |
 | Windows mic selector | `teleprompter_screen.dart` | Reads `audioInputDevices`, persists preferred mic, and forwards live changes to provider |
 | STT callbacks | `teleprompter_provider.dart` | Call `_handleSttResult()` after `SpeechResult` arrives |
 | Remote hooks | `teleprompter_provider.dart` | Placeholder `_setupRemoteCallbacks()` intersects with future remote control |
@@ -184,6 +186,16 @@ earlier Windows MVP file and remain part of the engine contract:
     font size and line spacing. Present mode must not visually collapse multiple
     blank lines into a single tight gap.
 
+24. **Presenter font controls persist metadata**: Present-mode font size buttons
+    and the presenter settings font-size slider must update both
+    `settingsProvider.fontSize` and the active script metadata through
+    `ScriptNotifier.updateStyleMetadata(fontSize: ...)`. Returning to the editor
+    must show the same font size in the font suite.
+
+25. **Default-relative spacing display**: Presenter line-spacing controls may
+    store the real rendering value (`1.2` by default), but the visible value must
+    show the user offset from default, so default reads `0.0`.
+
 ---
 
 ## Forbidden Changes
@@ -220,6 +232,10 @@ earlier Windows MVP file and remain part of the engine contract:
   starting. Active STT owns the reading-line position.
 - Do not reduce hard blank-line markers to zero-height or half-hidden spacers in
   presentation mode.
+- Do not make present-mode font size controls runtime-only. They must persist to
+  the active script metadata that the editor/font suite reads.
+- Do not show raw `1.2` as the default line-spacing label in presenter settings;
+  the UI label must display default-relative `0.0`.
 
 ---
 

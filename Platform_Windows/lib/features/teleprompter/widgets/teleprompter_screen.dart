@@ -870,6 +870,37 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     );
   }
 
+  Future<void> _deletePresenterBookmarkAtCurrentPosition() async {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+    await _loadBookmarksForScript(script, force: true);
+    if (!mounted) return;
+    if (_bookmarks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No bookmarks saved for this script yet'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    final current = ref
+        .read(teleprompterProvider)
+        .confirmedWordIndex
+        .clamp(0, script.words.length - 1)
+        .toInt();
+    if (!_bookmarks.any((bookmark) => bookmark.wordIndex == current)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No bookmark at the current presenter position'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    await _deletePresenterBookmark(current);
+  }
+
   Future<void> _showSearchDialog() async {
     if (_searchDialogOpen) return;
     _searchDialogOpen = true;
@@ -1704,6 +1735,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                                 },
                                 onSettings: _showSettings,
                                 onAddBookmark: _addPresenterBookmark,
+                                onRemoveBookmark:
+                                    _deletePresenterBookmarkAtCurrentPosition,
                                 onPreviousBookmark: () =>
                                     _jumpPresenterBookmark(-1),
                                 onNextBookmark: () => _jumpPresenterBookmark(1),
@@ -1908,6 +1941,7 @@ class _ControlBar extends ConsumerWidget {
   final VoidCallback onBack;
   final VoidCallback onSettings;
   final VoidCallback onAddBookmark;
+  final VoidCallback onRemoveBookmark;
   final VoidCallback onPreviousBookmark;
   final VoidCallback onNextBookmark;
 
@@ -1925,6 +1959,7 @@ class _ControlBar extends ConsumerWidget {
     required this.onBack,
     required this.onSettings,
     required this.onAddBookmark,
+    required this.onRemoveBookmark,
     required this.onPreviousBookmark,
     required this.onNextBookmark,
   });
@@ -1936,6 +1971,15 @@ class _ControlBar extends ConsumerWidget {
     final isActive = isManualMode
         ? (isManualScrolling && settings.scrollSpeed != 0)
         : (isListening || isStarting);
+    void applyPresenterFontSize(double size) {
+      final clamped = size.clamp(10.0, 80.0).toDouble();
+      unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              fontSize: clamped,
+            ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -1960,18 +2004,12 @@ class _ControlBar extends ConsumerWidget {
               tooltip: 'Previous bookmark',
             ),
             IconButton(
-              icon: const Icon(Icons.bookmark_add_outlined,
-                  color: Colors.white70),
-              onPressed: onAddBookmark,
-              tooltip: 'Add bookmark',
-            ),
-            IconButton(
               icon: const Text('A',
                   style: TextStyle(color: Colors.white70, fontSize: 16)),
               onPressed: () {
-                final newSize = (settings.fontSize - 4).clamp(10.0, 80.0);
-                ref.read(settingsProvider.notifier).setFontSize(newSize);
+                applyPresenterFontSize(settings.fontSize - 4);
               },
+              tooltip: 'Smaller font',
             ),
             // Backward button removed in favor of bidirectional slider
             GestureDetector(
@@ -2003,9 +2041,21 @@ class _ControlBar extends ConsumerWidget {
                       fontSize: 22,
                       fontWeight: FontWeight.bold)),
               onPressed: () {
-                final newSize = (settings.fontSize + 4).clamp(10.0, 80.0);
-                ref.read(settingsProvider.notifier).setFontSize(newSize);
+                applyPresenterFontSize(settings.fontSize + 4);
               },
+              tooltip: 'Larger font',
+            ),
+            IconButton(
+              icon: const Icon(Icons.bookmark_add_outlined,
+                  color: Colors.white70),
+              onPressed: onAddBookmark,
+              tooltip: 'Add bookmark',
+            ),
+            IconButton(
+              icon: const Icon(Icons.bookmark_remove_outlined,
+                  color: Colors.white70),
+              onPressed: isListening || isStarting ? null : onRemoveBookmark,
+              tooltip: 'Remove bookmark',
             ),
             IconButton(
               icon: const Icon(Icons.tune, color: Colors.white70),
@@ -2037,6 +2087,22 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final tState = ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    void applyPresenterFontSize(double size) {
+      final clamped = size.clamp(10.0, 80.0).toDouble();
+      unawaited(notifier.setFontSize(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              fontSize: clamped,
+            ),
+      );
+    }
+
+    String formatDefaultOffset(double value, double defaultValue) {
+      final delta = value - defaultValue;
+      if (delta.abs() < 0.05) return '0.0';
+      final sign = delta > 0 ? '+' : '';
+      return '$sign${delta.toStringAsFixed(1)}';
+    }
 
     const labelStyle = TextStyle(color: Colors.white70, fontSize: 14);
     const sectionStyle = TextStyle(
@@ -2197,13 +2263,13 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             divisions: 35,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setFontSize(v),
+            onChanged: applyPresenterFontSize,
           ),
 
           Row(children: [
             const Text('Line Spacing', style: labelStyle),
             const Spacer(),
-            Text(settings.lineSpacing.toStringAsFixed(1),
+            Text(formatDefaultOffset(settings.lineSpacing, 1.2),
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(

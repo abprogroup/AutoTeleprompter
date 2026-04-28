@@ -1868,7 +1868,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (mounted) {
       await Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
-      if (mounted) await _loadBookmarksForCurrentScript(force: true);
+      if (mounted) {
+        await _loadBookmarksForCurrentScript(force: true);
+        _onSelectionChanged();
+        unawaited(_forceRecentUpdate());
+      }
     }
   }
 
@@ -1973,6 +1977,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           onImport: _importFile,
           onRename: _showRenameDialog,
           onAddBookmark: _addEditorBookmark,
+          onRemoveBookmark: () =>
+              unawaited(_deleteEditorBookmarkAtCurrentPosition()),
           onPreviousBookmark: () => _jumpEditorBookmark(-1),
           onNextBookmark: () => _jumpEditorBookmark(1),
         ),
@@ -2454,12 +2460,60 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     });
   }
 
-  Future<void> _deleteEditorBookmarksForBlock(int block) async {
-    final before = _bookmarks.length;
-    final next = _bookmarks.where((bookmark) {
+  Future<void> _deleteEditorBookmarkAtCurrentPosition() async {
+    await _loadBookmarksForCurrentScript(force: true);
+    if (_bookmarks.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No bookmarks saved for this script yet'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final block = _currentEditorBlockIndex();
+    final offset = _currentEditorOffset(block);
+    final blockBookmarks = _bookmarks.where((bookmark) {
       final position = _editorPositionForBookmark(bookmark);
-      return position.block != block;
+      return position.block == block;
     }).toList();
+    if (blockBookmarks.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No bookmark in the current editor block'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    blockBookmarks.sort((a, b) {
+      final aPosition = _editorPositionForBookmark(a);
+      final bPosition = _editorPositionForBookmark(b);
+      return (aPosition.offset - offset)
+          .abs()
+          .compareTo((bPosition.offset - offset).abs());
+    });
+    await _deleteEditorBookmarkIds({blockBookmarks.first.id});
+  }
+
+  Future<void> _deleteEditorBookmarksForBlock(int block) async {
+    final ids = _bookmarks
+        .where(
+            (bookmark) => _editorPositionForBookmark(bookmark).block == block)
+        .map((bookmark) => bookmark.id)
+        .toSet();
+    await _deleteEditorBookmarkIds(ids);
+  }
+
+  Future<void> _deleteEditorBookmarkIds(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final before = _bookmarks.length;
+    final next =
+        _bookmarks.where((bookmark) => !ids.contains(bookmark.id)).toList();
     final deleted = before - next.length;
     if (deleted <= 0) return;
     setState(() => _bookmarks = next);
@@ -2799,7 +2853,7 @@ class _EditorBlock extends StatelessWidget {
         children: [
           if (hasBookmark)
             Positioned(
-              left: -18,
+              left: 0,
               top: 2,
               child: Tooltip(
                 message: 'Delete bookmark',
@@ -2820,101 +2874,126 @@ class _EditorBlock extends StatelessWidget {
                 ),
               ),
             ),
-          Shortcuts(
-            shortcuts: const {
-              SingleActivator(LogicalKeyboardKey.keyA, control: true):
-                  _SelectAllIntent(),
-              SingleActivator(LogicalKeyboardKey.keyA, meta: true):
-                  _SelectAllIntent(),
-              SingleActivator(LogicalKeyboardKey.keyC, control: true):
-                  _CopyIntent(),
-              SingleActivator(LogicalKeyboardKey.keyC, meta: true):
-                  _CopyIntent(),
-              SingleActivator(LogicalKeyboardKey.keyF,
-                  control: true, shift: true): _SearchIntent(),
-              SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
-                  _SearchIntent(),
-            },
-            child: Actions(
-              actions: {
-                _SelectAllIntent:
-                    CallbackAction<_SelectAllIntent>(onInvoke: (_) {
-                  onSelectAll();
-                  return null;
-                }),
-                _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
-                  onCopy();
-                  return null;
-                }),
-                _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) {
-                  onSearch();
-                  return null;
-                }),
-                // Override the internal EditableText intents too. These are
-                // marked Action.overridable inside EditableText, so placing
-                // our own handlers at this ancestor wins — catching both the
-                // keyboard Cmd+C and Flutter's internal copy dispatch paths.
-                CopySelectionTextIntent:
-                    CallbackAction<CopySelectionTextIntent>(
-                  onInvoke: (_) {
-                    onCopy();
-                    return null;
-                  },
-                ),
-                SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
-                  onInvoke: (_) {
+          Padding(
+            padding: const EdgeInsets.only(left: 30),
+            child: Shortcuts(
+              shortcuts: const {
+                SingleActivator(LogicalKeyboardKey.keyA, control: true):
+                    _SelectAllIntent(),
+                SingleActivator(LogicalKeyboardKey.keyA, meta: true):
+                    _SelectAllIntent(),
+                SingleActivator(LogicalKeyboardKey.keyC, control: true):
+                    _CopyIntent(),
+                SingleActivator(LogicalKeyboardKey.keyC, meta: true):
+                    _CopyIntent(),
+                SingleActivator(LogicalKeyboardKey.keyF,
+                    control: true, shift: true): _SearchIntent(),
+                SingleActivator(LogicalKeyboardKey.keyF,
+                    meta: true, shift: true): _SearchIntent(),
+              },
+              child: Actions(
+                actions: {
+                  _SelectAllIntent:
+                      CallbackAction<_SelectAllIntent>(onInvoke: (_) {
                     onSelectAll();
                     return null;
-                  },
-                ),
-              },
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  textSelectionTheme: TextSelectionThemeData(
-                    // Always transparent: all amber selection rendering is handled
-                    // by MarkupController.buildTextSpan via externalSelection /
-                    // isGlobalSelected. Native RenderEditable must never paint its
-                    // own amber highlight or it leaks through when _isGlobalSelection
-                    // flips to false during a handle drag (Bug 2 fix v4.0.6).
-                    selectionColor: Colors.transparent,
+                  }),
+                  _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
+                    onCopy();
+                    return null;
+                  }),
+                  _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) {
+                    onSearch();
+                    return null;
+                  }),
+                  // Override the internal EditableText intents too. These are
+                  // marked Action.overridable inside EditableText, so placing
+                  // our own handlers at this ancestor wins — catching both the
+                  // keyboard Cmd+C and Flutter's internal copy dispatch paths.
+                  CopySelectionTextIntent:
+                      CallbackAction<CopySelectionTextIntent>(
+                    onInvoke: (_) {
+                      onCopy();
+                      return null;
+                    },
                   ),
-                ),
-                child: TextField(
-                  selectionControls: GhostSelectionControls(),
-                  controller: controller,
-                  focusNode: focusNode,
-                  maxLines: null,
-                  onSubmitted: (_) => onSubmitted(),
-                  onTap: onTap,
-                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                  textAlign: textAlign,
-                  cursorColor: Colors.amber,
-                  cursorHeight: maxFontSize,
-                  strutStyle: StrutStyle(
-                    fontSize: maxFontSize,
-                    height: settings.lineSpacing,
-                    forceStrutHeight: true,
+                  SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
+                    onInvoke: (_) {
+                      onSelectAll();
+                      return null;
+                    },
                   ),
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: settings.fontSize,
-                    height: settings.lineSpacing,
-                    letterSpacing: settings.letterSpacing,
-                    wordSpacing: settings.wordSpacing,
+                },
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    textSelectionTheme: TextSelectionThemeData(
+                      // Always transparent: all amber selection rendering is handled
+                      // by MarkupController.buildTextSpan via externalSelection /
+                      // isGlobalSelected. Native RenderEditable must never paint its
+                      // own amber highlight or it leaks through when _isGlobalSelection
+                      // flips to false during a handle drag (Bug 2 fix v4.0.6).
+                      selectionColor: Colors.transparent,
+                    ),
                   ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 2),
-                  ),
-                  contextMenuBuilder: (context, editableTextState) {
-                    final List<ContextMenuButtonItem> items =
-                        editableTextState.contextMenuButtonItems;
-                    final List<ContextMenuButtonItem> customItems = [];
-                    bool hasSelectAll = false;
-                    for (final item in items) {
-                      if (item.type == ContextMenuButtonType.selectAll) {
-                        hasSelectAll = true;
+                  child: TextField(
+                    selectionControls: GhostSelectionControls(),
+                    controller: controller,
+                    focusNode: focusNode,
+                    maxLines: null,
+                    onSubmitted: (_) => onSubmitted(),
+                    onTap: onTap,
+                    textDirection:
+                        isRtl ? TextDirection.rtl : TextDirection.ltr,
+                    textAlign: textAlign,
+                    cursorColor: Colors.amber,
+                    cursorHeight: maxFontSize,
+                    strutStyle: StrutStyle(
+                      fontSize: maxFontSize,
+                      height: settings.lineSpacing,
+                      forceStrutHeight: true,
+                    ),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: settings.fontSize,
+                      height: settings.lineSpacing,
+                      letterSpacing: settings.letterSpacing,
+                      wordSpacing: settings.wordSpacing,
+                    ),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 2),
+                    ),
+                    contextMenuBuilder: (context, editableTextState) {
+                      final List<ContextMenuButtonItem> items =
+                          editableTextState.contextMenuButtonItems;
+                      final List<ContextMenuButtonItem> customItems = [];
+                      bool hasSelectAll = false;
+                      for (final item in items) {
+                        if (item.type == ContextMenuButtonType.selectAll) {
+                          hasSelectAll = true;
+                          customItems.add(ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onSelectAll();
+                            },
+                            type: ContextMenuButtonType.selectAll,
+                          ));
+                        } else if (item.type == ContextMenuButtonType.copy) {
+                          customItems.add(ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onCopy();
+                            },
+                            type: ContextMenuButtonType.copy,
+                          ));
+                        } else {
+                          customItems.add(item);
+                        }
+                      }
+                      // Force-inject a global Select All even when the native menu
+                      // omits it (e.g. the block is already fully selected).
+                      if (!hasSelectAll) {
                         customItems.add(ContextMenuButtonItem(
                           onPressed: () {
                             ContextMenuController.removeAny();
@@ -2922,34 +3001,13 @@ class _EditorBlock extends StatelessWidget {
                           },
                           type: ContextMenuButtonType.selectAll,
                         ));
-                      } else if (item.type == ContextMenuButtonType.copy) {
-                        customItems.add(ContextMenuButtonItem(
-                          onPressed: () {
-                            ContextMenuController.removeAny();
-                            onCopy();
-                          },
-                          type: ContextMenuButtonType.copy,
-                        ));
-                      } else {
-                        customItems.add(item);
                       }
-                    }
-                    // Force-inject a global Select All even when the native menu
-                    // omits it (e.g. the block is already fully selected).
-                    if (!hasSelectAll) {
-                      customItems.add(ContextMenuButtonItem(
-                        onPressed: () {
-                          ContextMenuController.removeAny();
-                          onSelectAll();
-                        },
-                        type: ContextMenuButtonType.selectAll,
-                      ));
-                    }
-                    return AdaptiveTextSelectionToolbar.buttonItems(
-                      anchors: editableTextState.contextMenuAnchors,
-                      buttonItems: customItems,
-                    );
-                  },
+                      return AdaptiveTextSelectionToolbar.buttonItems(
+                        anchors: editableTextState.contextMenuAnchors,
+                        buttonItems: customItems,
+                      );
+                    },
+                  ),
                 ),
               ),
             ),

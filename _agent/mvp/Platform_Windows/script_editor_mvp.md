@@ -37,6 +37,7 @@ settings.
 |----------------|--------|
 | `scriptProvider` | Gallery, editor, teleprompter screen |
 | `ScriptNotifier.loadText(...)` | Gallery open, editor import, new-script flows |
+| `ScriptNotifier.updateStyleMetadata(...)` | Presenter/editor style sync without replacing script text |
 | `ScriptNotifier.importFile(File)` | File import entry points |
 | `ScriptNotifier.parseFile(File)` | Import preview/error handling |
 | `ScriptNotifier.clear()` | Clear/new script flows |
@@ -93,46 +94,55 @@ part of the Script model/import contract:
    spacing, alignment, colors, `sessionId`, `historyJson`, and `historyIndex`
    must be passed through load/save/open paths.
 
-4. **Editor block lifecycle is centralized**: Controller creation, listener
+4. **Style metadata may update without text replacement**:
+   `ScriptNotifier.updateStyleMetadata(...)` may change active script style
+   fields and persistence metadata, but it must not rebuild words, replace
+   `rawText`, reset `sessionId`, or clear history.
+
+5. **Editor block lifecycle is centralized**: Controller creation, listener
    attachment, focus tracking, and disposal stay in `script_editor_screen.dart`.
    Do not create block controllers in suite widgets.
 
-5. **Selection changes are silent**: Cursor/selection motion updates
+6. **Selection changes are silent**: Cursor/selection motion updates
    `cursorStyleProvider` but must not create history entries by itself.
 
-6. **Import and save route through File I/O rules**: File extension decisions,
+7. **Import and save route through File I/O rules**: File extension decisions,
    DOCX/RTF/Pages generation, and platform format lists belong to File I/O MVP.
 
-7. **Gallery re-entry must preserve history**: When opening a recent script,
+8. **Gallery re-entry must preserve history**: When opening a recent script,
    gallery/provider code must pass both `historyJson` and `historyIndex` to the
    editor load path.
 
-8. **Settings updates are not editor rewrites**: Settings provider changes may
+9. **Settings updates are not editor rewrites**: Settings provider changes may
    update presentation defaults, but they must not rebuild controllers or discard
    raw editor text.
 
-9. **Import parsing preserves intentional blank-line depth**: Script import
+10. **Import parsing preserves intentional blank-line depth**: Script import
    paths must not collapse `\n\n\n` or larger newline runs before the script
    reaches editor/presentation state. Trimming outer file noise is allowed, but
    internal chapter/section spacing must be retained.
 
-10. **Editor search is keyboard-accessible**: `Ctrl+Shift+F` must open the editor
+11. **Editor search is keyboard-accessible**: `Ctrl+Shift+F` must open the editor
    search dialog from both the editor-level shortcut layer and individual block
    shortcut layers.
 
-11. **Editor search preserves document structure**: Search may focus the matching
+12. **Editor search preserves document structure**: Search may focus the matching
     block, select the matched raw-text range, and scroll the block into view, but
     it must not rewrite controller text, strip markup, create history entries, or
     change script metadata.
 
-12. **Editor search wraps predictably**: Search starts after the current active
+13. **Editor search wraps predictably**: Search starts after the current active
     selection/cursor, proceeds through later blocks, then wraps to the beginning
     through the original start point.
 
-13. **Editor search is visible-text based**: Search must match the text the user
+14. **Editor search is visible-text based**: Search must match the text the user
     can see, not hidden markup tags. After a visible match is found, it must
     translate the visual offset back to raw `MarkupController` offsets before
     setting selection.
+
+15. **Default-relative spacing display**: Editor layout controls may store the
+    real line-spacing value (`1.2` by default), but the visible value must show
+    the user offset from default, so default reads `0.0`.
 
 ---
 

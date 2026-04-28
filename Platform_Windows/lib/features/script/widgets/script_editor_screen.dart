@@ -26,10 +26,12 @@ import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
+import '../services/script_bookmark_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
 import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
+import '../../teleprompter/services/word_aligner.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
@@ -84,6 +86,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final List<MarkupController> _controllers = [];
   final List<FocusNode> _focusNodes = [];
   final List<GlobalKey> _blockKeys = [];
+  final ScrollController _editorScrollController = ScrollController();
   String _currentTitle = 'New Project';
 
   TextSelection? _lastSelection;
@@ -103,6 +106,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   Color _lastChosenTextColor = const Color(0xFFFFBF00);
   Color _lastChosenHighlightColor = const Color(0x4DFFFFFF);
   String _lastSearchQuery = '';
+  String? _bookmarkScopeKey;
+  String? _bookmarkLoadingKey;
+  bool _bookmarksLoaded = false;
+  List<ScriptBookmark> _bookmarks = const [];
 
   bool _isInit = false;
   bool _isCleaning = false; // v3.9.5.1: Suppression flag
@@ -255,6 +262,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _sourceType = finalType;
       _currentSessionId = finalSessionId ?? _currentSessionId;
       _loadText(finalContent);
+      unawaited(_loadBookmarksForCurrentScript());
 
       if (finalHistoryJson != null) {
         try {
@@ -340,6 +348,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         _saveHistory(description: 'Initial Load');
       }
       _forceRecentUpdate();
+      unawaited(_loadBookmarksForCurrentScript());
     }
   }
 
@@ -349,6 +358,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _controllers.clear();
     _focusNodes.clear();
     _blockKeys.clear();
+  }
+
+  Future<void> _loadBookmarksForCurrentScript({bool force = false}) async {
+    final key =
+        ScriptBookmarkService.scopeKey(_currentSessionId, _currentTitle);
+    if (!force &&
+        _bookmarkScopeKey == key &&
+        (_bookmarksLoaded || _bookmarkLoadingKey == key)) {
+      return;
+    }
+    _bookmarkScopeKey = key;
+    _bookmarkLoadingKey = key;
+    _bookmarksLoaded = false;
+    final loaded = await ScriptBookmarkService.load(key);
+    if (!mounted || _bookmarkScopeKey != key) return;
+    setState(() {
+      _bookmarks = loaded;
+      _bookmarksLoaded = true;
+      _bookmarkLoadingKey = null;
+    });
+  }
+
+  Future<void> _saveBookmarks() async {
+    final key = _bookmarkScopeKey ??
+        ScriptBookmarkService.scopeKey(_currentSessionId, _currentTitle);
+    _bookmarkScopeKey = key;
+    _bookmarksLoaded = true;
+    await ScriptBookmarkService.save(key, _bookmarks);
   }
 
   void _addBlock(int index, {String text = ''}) {
@@ -784,6 +821,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _autoSaveTimer?.cancel();
     _typingBulkTimer?.cancel();
     _suiteAutoSaveTimer?.cancel();
+    _editorScrollController.dispose();
     _clearControllers();
     super.dispose();
   }
@@ -1915,6 +1953,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           onSave: _saveScript,
           onImport: _importFile,
           onRename: _showRenameDialog,
+          onAddBookmark: _addEditorBookmark,
+          onPreviousBookmark: () => _jumpEditorBookmark(-1),
+          onNextBookmark: () => _jumpEditorBookmark(1),
         ),
       ),
       bottomNavigationBar:
@@ -2102,6 +2143,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                 _controllers.every((c) => c.isGlobalSelected);
                           }),
                           child: ListView.builder(
+                            controller: _editorScrollController,
                             padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
                             itemCount: _controllers.length,
                             itemBuilder: (context, index) => _EditorBlock(
@@ -2212,6 +2254,211 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         ],
       ),
     );
+  }
+
+  int _currentEditorBlockIndex() {
+    final active = _activeController;
+    final index = active == null ? -1 : _controllers.indexOf(active);
+    return index >= 0 ? index : 0;
+  }
+
+  int _currentEditorOffset(int block) {
+    if (block < 0 || block >= _controllers.length) return 0;
+    final selection = _controllers[block].selection;
+    return selection.isValid
+        ? selection.baseOffset.clamp(0, _controllers[block].text.length)
+        : 0;
+  }
+
+  int _wordIndexForEditorPosition(int block, int offset) {
+    final textBefore = StringBuffer();
+    for (var i = 0; i < block && i < _controllers.length; i++) {
+      if (textBefore.isNotEmpty) textBefore.write('\n');
+      textBefore.write(_controllers[i].text);
+    }
+    if (block >= 0 && block < _controllers.length) {
+      if (textBefore.isNotEmpty) textBefore.write('\n');
+      textBefore.write(
+        _controllers[block]
+            .text
+            .substring(0, offset.clamp(0, _controllers[block].text.length)),
+      );
+    }
+    final beforeWords =
+        WordAligner.tokenize(textBefore.toString()).where((w) => !w.isNewline);
+    final totalWords =
+        WordAligner.tokenize(_getRefinedFullText()).where((w) => !w.isNewline);
+    final maxIndex = totalWords.isEmpty ? 0 : totalWords.length - 1;
+    return beforeWords.length.clamp(0, maxIndex).toInt();
+  }
+
+  String _bookmarkLabelForEditorPosition(int block, int offset) {
+    if (block < 0 || block >= _controllers.length) return 'Bookmark';
+    final text = StylingService.stripTags(_controllers[block].text)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (text.isEmpty) return 'Block ${block + 1}';
+    return text.length <= 44 ? text : '${text.substring(0, 44)}...';
+  }
+
+  Future<void> _addEditorBookmark() async {
+    if (_controllers.isEmpty) return;
+    await _loadBookmarksForCurrentScript(force: true);
+    final block = _currentEditorBlockIndex();
+    final offset = _currentEditorOffset(block);
+    final bookmark = ScriptBookmark(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      label: _bookmarkLabelForEditorPosition(block, offset),
+      wordIndex: _wordIndexForEditorPosition(block, offset),
+      blockIndex: block,
+      offset: offset,
+      createdAt: DateTime.now(),
+    );
+    setState(() {
+      _bookmarks = ScriptBookmarkService.upsert(_bookmarks, bookmark);
+    });
+    await _saveBookmarks();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Bookmark saved: ${bookmark.label}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _jumpEditorBookmark(int direction) async {
+    await _loadBookmarksForCurrentScript(force: true);
+    if (_bookmarks.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No bookmarks saved for this script yet'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    final block = _currentEditorBlockIndex();
+    final offset = _currentEditorOffset(block);
+    final currentWord = _wordIndexForEditorPosition(block, offset);
+    int target;
+    if (direction >= 0) {
+      target = _bookmarks.indexWhere((b) => b.wordIndex > currentWord);
+      if (target == -1) target = 0;
+    } else {
+      target = _bookmarks.lastIndexWhere((b) => b.wordIndex < currentWord);
+      if (target == -1) target = _bookmarks.length - 1;
+    }
+    _goToEditorBookmark(target);
+  }
+
+  ({int block, int offset}) _editorPositionForBookmark(
+      ScriptBookmark bookmark) {
+    if (bookmark.blockIndex >= 0 && bookmark.blockIndex < _controllers.length) {
+      return (
+        block: bookmark.blockIndex,
+        offset: bookmark.offset.clamp(
+          0,
+          _controllers[bookmark.blockIndex].text.length,
+        )
+      );
+    }
+
+    var runningWords = 0;
+    final tokenPattern = RegExp(r'\S+');
+    for (var block = 0; block < _controllers.length; block++) {
+      final matches =
+          tokenPattern.allMatches(_controllers[block].text).toList();
+      if (bookmark.wordIndex < runningWords + matches.length) {
+        final local = (bookmark.wordIndex - runningWords)
+            .clamp(0, matches.length - 1)
+            .toInt();
+        return (block: block, offset: matches[local].start);
+      }
+      runningWords += matches.length;
+    }
+    final last = _controllers.isEmpty ? -1 : _controllers.length - 1;
+    return (
+      block: last,
+      offset: last >= 0 && last < _controllers.length
+          ? _controllers[last].text.length
+          : 0
+    );
+  }
+
+  void _goToEditorBookmark(int bookmarkIndex) {
+    if (bookmarkIndex < 0 || bookmarkIndex >= _bookmarks.length) return;
+    final bookmark = _bookmarks[bookmarkIndex];
+    final position = _editorPositionForBookmark(bookmark);
+    if (position.block < 0 || position.block >= _controllers.length) return;
+    final controller = _controllers[position.block];
+    final selection = TextSelection.collapsed(offset: position.offset);
+    _overlayKey.currentState?.clearSelection();
+    for (final c in _controllers) {
+      c.externalSelection = null;
+      c.isGlobalSelected = false;
+    }
+    controller.selection = selection;
+    _lastFocusedController = controller;
+    setState(() {
+      _isGlobalSelection = false;
+    });
+    _focusNodes[position.block].requestFocus();
+    _scrollEditorBlockIntoView(position.block, alignment: 0.28);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Bookmark: ${bookmark.label}'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  double _estimatedEditorOffsetForBlock(int block) {
+    final settings = ref.read(settingsProvider);
+    final width = MediaQuery.of(context).size.width.clamp(320.0, 2400.0);
+    final charsPerLine =
+        (width / (settings.fontSize * 0.62)).clamp(22.0, 120.0);
+    var offset = 24.0;
+    for (var i = 0; i < block && i < _controllers.length; i++) {
+      final lines =
+          (_controllers[i].text.length / charsPerLine).ceil().clamp(1, 80);
+      offset += lines * settings.fontSize * settings.lineSpacing + 24.0;
+    }
+    return offset;
+  }
+
+  void _scrollEditorBlockIntoView(int block, {double alignment = 0.25}) {
+    if (block < 0 || block >= _blockKeys.length) return;
+    void ensure() {
+      final ctx = _blockKeys[block].currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        alignment: alignment,
+      );
+    }
+
+    final ctx = _blockKeys[block].currentContext;
+    if (ctx != null) {
+      ensure();
+      return;
+    }
+    if (_editorScrollController.hasClients) {
+      final max = _editorScrollController.position.maxScrollExtent;
+      _editorScrollController
+          .animateTo(
+        _estimatedEditorOffsetForBlock(block).clamp(0.0, max),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      )
+          .whenComplete(() {
+        if (!mounted) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) => ensure());
+      });
+    }
   }
 
   void _onCopyClean() {
@@ -2358,17 +2605,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _focusNodes[match.block].requestFocus();
     c.refresh();
     setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _blockKeys[match!.block].currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          alignment: 0.25,
-        );
-      }
-    });
+    _scrollEditorBlockIntoView(match.block, alignment: 0.25);
   }
 
   void _selectAllBlocks() {

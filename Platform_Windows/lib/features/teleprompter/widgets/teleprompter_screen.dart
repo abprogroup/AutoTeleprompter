@@ -10,6 +10,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_windows/webview_windows.dart';
 import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
+import '../../script/models/script.dart';
+import '../../script/services/script_bookmark_service.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../../core/widgets/global_color_picker.dart';
@@ -53,6 +55,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   String? _loadedWebViewUrl;
   String _lastSearchQuery = '';
   bool _searchDialogOpen = false;
+  String? _bookmarkScopeKey;
+  String? _bookmarkLoadingKey;
+  bool _bookmarksLoaded = false;
+  List<ScriptBookmark> _bookmarks = const [];
 
   @override
   void initState() {
@@ -605,9 +611,22 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   // ── Speech-mode scroll ──────────────────────────────────────────────────────
 
-  void _scrollToWordIndex(int index) {
-    if (index < 0 || index >= _wordKeys.length) return;
-    final key = _wordKeys[index];
+  int _anticipatoryScrollIndex(int index) {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return index;
+    var seen = 0;
+    for (var i = index + 1; i < script.words.length; i++) {
+      if (script.words[i].isNewline) continue;
+      seen++;
+      if (seen >= 6) return i;
+    }
+    return index;
+  }
+
+  void _scrollToWordIndex(int index, {bool anticipate = false}) {
+    final targetIndex = anticipate ? _anticipatoryScrollIndex(index) : index;
+    if (targetIndex < 0 || targetIndex >= _wordKeys.length) return;
+    final key = _wordKeys[targetIndex];
     final ctx = key.currentContext;
     if (ctx == null) return;
 
@@ -699,6 +718,126 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(targetIndex, script: script);
+  }
+
+  Future<void> _loadBookmarksForScript(Script script,
+      {bool force = false}) async {
+    final key = ScriptBookmarkService.scopeKey(script.sessionId, script.title);
+    if (!force &&
+        _bookmarkScopeKey == key &&
+        (_bookmarksLoaded || _bookmarkLoadingKey == key)) {
+      return;
+    }
+    _bookmarkScopeKey = key;
+    _bookmarkLoadingKey = key;
+    _bookmarksLoaded = false;
+    final loaded = await ScriptBookmarkService.load(key);
+    if (!mounted || _bookmarkScopeKey != key) return;
+    setState(() {
+      _bookmarks = loaded;
+      _bookmarksLoaded = true;
+      _bookmarkLoadingKey = null;
+    });
+  }
+
+  Future<void> _saveBookmarksForScript(Script script) async {
+    final key = ScriptBookmarkService.scopeKey(script.sessionId, script.title);
+    _bookmarkScopeKey = key;
+    _bookmarksLoaded = true;
+    await ScriptBookmarkService.save(key, _bookmarks);
+  }
+
+  String _bookmarkLabelForWord(Script script, int wordIndex) {
+    final buffer = StringBuffer();
+    for (var i = wordIndex; i < script.words.length && i < wordIndex + 8; i++) {
+      final word = script.words[i];
+      if (word.isNewline) continue;
+      final text = word.raw
+          .replaceAll(_tagStripRe, '')
+          .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '')
+          .trim();
+      if (text.isEmpty) continue;
+      if (buffer.isNotEmpty) buffer.write(' ');
+      buffer.write(text);
+    }
+    final label = buffer.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (label.isEmpty) return 'Position ${wordIndex + 1}';
+    return label.length <= 44 ? label : '${label.substring(0, 44)}...';
+  }
+
+  Future<void> _addPresenterBookmark() async {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+    await _loadBookmarksForScript(script, force: true);
+    final index = ref
+        .read(teleprompterProvider)
+        .confirmedWordIndex
+        .clamp(0, script.words.length - 1)
+        .toInt();
+    final bookmark = ScriptBookmark(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      label: _bookmarkLabelForWord(script, index),
+      wordIndex: index,
+      blockIndex: -1,
+      offset: 0,
+      createdAt: DateTime.now(),
+    );
+    setState(() {
+      _bookmarks = ScriptBookmarkService.upsert(_bookmarks, bookmark);
+    });
+    await _saveBookmarksForScript(script);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Bookmark saved: ${bookmark.label}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _jumpPresenterBookmark(int direction) async {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+    final sttState = ref.read(teleprompterProvider);
+    if (sttState.isListening || sttState.isStarting) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Stop STT before jumping between bookmarks'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    await _loadBookmarksForScript(script, force: true);
+    if (!mounted) return;
+    if (_bookmarks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No bookmarks saved for this script yet'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final current = sttState.confirmedWordIndex;
+    int target;
+    if (direction >= 0) {
+      target = _bookmarks.indexWhere((b) => b.wordIndex > current);
+      if (target == -1) target = 0;
+    } else {
+      target = _bookmarks.lastIndexWhere((b) => b.wordIndex < current);
+      if (target == -1) target = _bookmarks.length - 1;
+    }
+    final bookmark = _bookmarks[target];
+    _jumpToWordIndex(
+        bookmark.wordIndex.clamp(0, script.words.length - 1).toInt());
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Bookmark: ${bookmark.label}'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   Future<void> _showSearchDialog() async {
@@ -809,16 +948,17 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     final diff = _scrollTarget - current;
 
     // Close enough — snap and stop
-    if (diff.abs() < 0.5) {
+    if (diff.abs() < 0.35) {
       _scrollController.jumpTo(_scrollTarget);
       timer.cancel();
       _smoothScrollActive = false;
       return;
     }
 
-    // Lerp factor: 0.12 gives smooth ~8-frame glide.
-    // Larger = snappier, smaller = silkier.
-    final next = current + diff * 0.12;
+    var step = diff * 0.055;
+    step = step.clamp(-18.0, 18.0).toDouble();
+    if (step.abs() < 0.8) step = diff.isNegative ? -0.8 : 0.8;
+    final next = current + step;
     _scrollController
         .jumpTo(next.clamp(0.0, _scrollController.position.maxScrollExtent));
   }
@@ -844,6 +984,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       while (_wordKeys.length < script.words.length) {
         _wordKeys.add(GlobalKey());
       }
+      unawaited(_loadBookmarksForScript(script));
     }
 
     // Auto-scroll on speech recognition
@@ -851,7 +992,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         (prev, next) {
       final liveState = ref.read(teleprompterProvider);
       if (settings.scrollMode == 'auto' && liveState.isListening && next > 0) {
-        _scrollToWordIndex(next);
+        _scrollToWordIndex(next, anticipate: true);
       }
     });
 
@@ -1497,6 +1638,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                                   _exitPresentation();
                                 },
                                 onSettings: _showSettings,
+                                onAddBookmark: _addPresenterBookmark,
+                                onPreviousBookmark: () =>
+                                    _jumpPresenterBookmark(-1),
+                                onNextBookmark: () => _jumpPresenterBookmark(1),
                               ),
                             ],
                           ),
@@ -1697,6 +1842,9 @@ class _ControlBar extends ConsumerWidget {
   final VoidCallback onReset;
   final VoidCallback onBack;
   final VoidCallback onSettings;
+  final VoidCallback onAddBookmark;
+  final VoidCallback onPreviousBookmark;
+  final VoidCallback onNextBookmark;
 
   const _ControlBar({
     required this.isListening,
@@ -1711,6 +1859,9 @@ class _ControlBar extends ConsumerWidget {
     required this.onReset,
     required this.onBack,
     required this.onSettings,
+    required this.onAddBookmark,
+    required this.onPreviousBookmark,
+    required this.onNextBookmark,
   });
 
   @override
@@ -1737,6 +1888,17 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white70),
               onPressed: onBack,
+            ),
+            IconButton(
+              icon: const Icon(Icons.skip_previous, color: Colors.white70),
+              onPressed: isListening || isStarting ? null : onPreviousBookmark,
+              tooltip: 'Previous bookmark',
+            ),
+            IconButton(
+              icon: const Icon(Icons.bookmark_add_outlined,
+                  color: Colors.white70),
+              onPressed: onAddBookmark,
+              tooltip: 'Add bookmark',
             ),
             IconButton(
               icon: const Text('A',
@@ -1783,6 +1945,11 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.tune, color: Colors.white70),
               onPressed: onSettings,
+            ),
+            IconButton(
+              icon: const Icon(Icons.skip_next, color: Colors.white70),
+              onPressed: isListening || isStarting ? null : onNextBookmark,
+              tooltip: 'Next bookmark',
             ),
             IconButton(
               icon: const Icon(Icons.replay, color: Colors.white70),

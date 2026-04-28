@@ -99,8 +99,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   bool _isCommandExecuting = false;
   bool _isDirty = false;
   bool _isLoading = false;
-  String? _globalClipboard;          // plain text for system clipboard (cross-app)
-  List<String>? _globalClipboardBlocks; // raw markup per block for in-app restore
+  String? _globalClipboard;
+  List<String>? _globalClipboardBlocks; // raw markup per block — used for block-by-block paste restore
   String? _pendingGlobalText;
   List<String>? _pendingGlobalBlocks;
   Timer? _pendingGlobalTimer;
@@ -108,7 +108,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   // the iOS-triggered onTap (which fires after menu dismissal) skips clearing
   // the global selection — leaving _isGlobalSelection intact for the handler.
   bool _skipNextSelectionClear = false;
-  List<String>? _capturedForMenuBlocks; // pre-captured in onBeforeMenuAction before iOS events fire
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
@@ -1792,33 +1791,29 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                   setState(() => _isSuiteDirty = true);
                 },
               ),
-              // Global-selection action bar — shown instead of context menu so
-              // Cut/Copy always work regardless of iOS toolbar timing issues.
               if (_isGlobalSelection)
                 Container(
                   height: 44,
                   color: const Color(0xFF1A1A1A),
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 4),
-                      TextButton.icon(
-                        onPressed: _onCutClean,
-                        icon: const Icon(Icons.content_cut, size: 18, color: Color(0xFFFFBF00)),
-                        label: const Text('Cut', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13)),
-                      ),
-                      TextButton.icon(
-                        onPressed: _onCopyClean,
-                        icon: const Icon(Icons.content_copy, size: 18, color: Color(0xFFFFBF00)),
-                        label: const Text('Copy', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13)),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: _clearGlobalSelection,
-                        child: const Text('✕', style: TextStyle(color: Colors.white38, fontSize: 16)),
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                  ),
+                  child: Row(children: [
+                    const SizedBox(width: 4),
+                    TextButton.icon(
+                      onPressed: _onCutClean,
+                      icon: const Icon(Icons.content_cut, size: 18, color: Color(0xFFFFBF00)),
+                      label: const Text('Cut', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13)),
+                    ),
+                    TextButton.icon(
+                      onPressed: _onCopyClean,
+                      icon: const Icon(Icons.content_copy, size: 18, color: Color(0xFFFFBF00)),
+                      label: const Text('Copy', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13)),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _clearGlobalSelection,
+                      child: const Text('✕', style: TextStyle(color: Colors.white38, fontSize: 16)),
+                    ),
+                    const SizedBox(width: 4),
+                  ]),
                 ),
               Expanded(
                 child: Container(
@@ -1846,28 +1841,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                             _skipNextSelectionClear = false;
                             return;
                           }
-                          // When globally selected, tapping a block keeps the
-                          // selection alive so the user can press Cut/Copy in
-                          // the action bar above. The ✕ button clears it.
                           if (_isGlobalSelection ||
                               _controllers.any((c) => c.isGlobalSelected)) {
-                            return;
+                            _clearGlobalSelection();
                           }
                         },
                         onSelectAll: _selectAllBlocks,
                         onCopy: _onCopyClean,
                         onCut: _onCutClean,
                         onPaste: _globalClipboard != null ? _pasteFromGlobalClipboard : null,
-                        onBeforeMenuAction: () {
-                          _skipNextSelectionClear = true;
-                          // Capture global block state NOW — fires synchronously before
-                          // iOS can clear _isGlobalSelection via onTap.
-                          if (_isGlobalSelection || _controllers.any((c) => c.isGlobalSelected)) {
-                            _capturedForMenuBlocks = _controllers.map((c) => c.text).toList();
-                          } else {
-                            _capturedForMenuBlocks = null;
-                          }
-                        },
+                        onBeforeMenuAction: () { _skipNextSelectionClear = true; },
                       ),
                     ),
                   ),
@@ -1941,66 +1924,58 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     );
   }
 
-  // Shown in debug mode after every Cut so the exact clipboard content
-  // and which code path ran are visible without a build tool.
-  void _showCutDebug(String branch) {
-    try { if (!ref.read(settingsProvider).debugMode) return; } catch (_) { return; }
-    // Write debug into the title bar — always visible above the keyboard.
-    final chars = _globalClipboard?.length ?? 0;
-    final preview = _globalClipboard?.substring(0, chars.clamp(0, 35)) ?? '';
-    setState(() {
-      _currentTitle = '[$branch | ${_controllers.length}blk | ${chars}ch | "$preview"]';
-    });
-  }
-
-  // Strips markup tags and ALL whitespace control chars (\r, \n) that would
-  // cause iOS paste to truncate at the first line break.
-  static String _visibleText(String raw) =>
-      StylingService.stripTags(raw).replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-
   void _onCutClean() {
-    // Consume pre-captured state (set by onBeforeMenuAction synchronously before iOS events fire).
-    final captured = _capturedForMenuBlocks;
-    _capturedForMenuBlocks = null;
-
+    // Capture selection state before anything mutates it.
     final isGlobal = _isGlobalSelection;
     final hasGlobal = _controllers.any((c) => c.isGlobalSelected);
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
 
-    if (isGlobal || hasGlobal || hasOverlay || captured != null) {
-      // Build block list from live state when still available, else from pre-capture.
-      final List<String> blockTexts;
-      if (isGlobal || hasGlobal) {
-        blockTexts = _controllers.map((c) => c.text).toList();
-      } else if (captured != null) {
-        blockTexts = captured; // live state was cleared by iOS onTap before cut ran
-      } else {
-        // hasOverlay: partial selection via drag handles
-        blockTexts = _controllers.map((c) {
-          final sel = c.externalSelection;
-          if (sel == null || !sel.isValid || sel.isCollapsed) return '';
-          return c.text.substring(
-              sel.start.clamp(0, c.text.length),
-              sel.end.clamp(0, c.text.length));
-        }).toList();
-      }
-
+    if (isGlobal || hasGlobal || hasOverlay) {
+      // ── Step 1: build clipboard text from captured state ──
+      // When isGlobal is true, bypass c.isGlobalSelected entirely —
+      // by the time the loop runs that flag may already be stale.
+      // Instead use the top-level captured booleans as the source of truth.
       final plainBuf = StringBuffer();
-      for (final t in blockTexts.map(_visibleText).where((t) => t.isNotEmpty)) {
-        if (plainBuf.isNotEmpty) plainBuf.write(' ');
-        plainBuf.write(t);
+      if (isGlobal || hasGlobal) {
+        // Global path: copy every block unconditionally.
+        // Strip ALL newlines from the content — iOS paste truncates at the
+        // first \n regardless of whether it's a block separator or embedded
+        // inside a block (e.g. from Shift+Enter). Join with a single space.
+        for (final c in _controllers) {
+          final t = StylingService.stripTags(c.text)
+              .replaceAll('\n', ' ')
+              .trim();
+          if (t.isNotEmpty) {
+            if (plainBuf.isNotEmpty) plainBuf.write(' ');
+            plainBuf.write(t);
+          }
+        }
+      } else {
+        // Refined overlay path: copy only the selected ranges.
+        for (final c in _controllers) {
+          final sel = c.externalSelection;
+          if (sel == null || !sel.isValid || sel.isCollapsed) continue;
+          final t = StylingService.stripTags(
+              c.text.substring(sel.start.clamp(0, c.text.length),
+                               sel.end.clamp(0, c.text.length)));
+          if (t.isNotEmpty) {
+            if (plainBuf.isNotEmpty) plainBuf.write('\n');
+            plainBuf.write(t);
+          }
+        }
       }
       if (plainBuf.isNotEmpty) {
         _globalClipboard = plainBuf.toString();
-        _globalClipboardBlocks = blockTexts;
+        _globalClipboardBlocks = _controllers.map((c) => c.text).toList();
         Clipboard.setData(ClipboardData(text: _globalClipboard!));
       }
       _pendingGlobalTimer?.cancel();
       _pendingGlobalText = null;
       _pendingGlobalBlocks = null;
 
+      // ── Step 2: delete ──
       _isCommandExecuting = true;
-      if (isGlobal || hasGlobal || captured != null) {
+      if (isGlobal || hasGlobal) {
         for (final c in _controllers) { c.text = ''; }
       } else {
         for (final c in _controllers) {
@@ -2015,12 +1990,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isCommandExecuting = false;
       _saveHistory(description: 'Cut');
       setState(() {});
-      _showCutDebug(isGlobal ? 'isGlobal' : hasGlobal ? 'hasGlobal' : captured != null ? 'captured' : 'overlay');
-    } else if (_pendingGlobalText != null || _pendingGlobalBlocks != null) {
-      // Last-resort: _pendingGlobal* from _selectAllBlocks() survived all clear paths.
+    } else if (_pendingGlobalText != null) {
+      // Global selection was active at Select-All time but _isGlobalSelection
+      // was cleared by onTap firing on the TextField when the menu overlay
+      // dismissed. Use the pre-computed text and delete all blocks.
       _pendingGlobalTimer?.cancel();
-      _globalClipboard = _pendingGlobalText ??
-          _pendingGlobalBlocks!.map(_visibleText).where((t) => t.isNotEmpty).join(' ');
+      _globalClipboard = _pendingGlobalText!;
       _globalClipboardBlocks = _pendingGlobalBlocks;
       _pendingGlobalText = null;
       _pendingGlobalBlocks = null;
@@ -2031,11 +2006,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isCommandExecuting = false;
       _saveHistory(description: 'Cut');
       setState(() {});
-      _showCutDebug('pendingGlobal');
     } else {
-      // True single-block native cut — no global selection was ever active.
-      _globalClipboardBlocks = null; // clear stale block clipboard to prevent wrong paste
-      _showCutDebug('singleBlock');
+      // True single-block native path — no global selection was ever active.
       _onCopyClean();
       final c = _activeController;
       if (c == null) return;
@@ -2066,7 +2038,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           slice = c.text.substring(sel.start, sel.end);
         }
         if (slice.isEmpty) continue;
-        final plain = _visibleText(slice);
+        final plain = StylingService.stripTags(slice)
+            .replaceAll('\n', ' ')
+            .trim();
         if (plain.isEmpty) continue;
         if (plainBuf.isNotEmpty) plainBuf.write(' ');
         plainBuf.write(plain);
@@ -2098,15 +2072,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _pasteFromGlobalClipboard() {
-    final blocks = _globalClipboardBlocks;
-    final fallback = _globalClipboard;
-    if ((blocks == null || blocks.isEmpty) && (fallback == null || fallback.isEmpty)) return;
     if (_controllers.isEmpty) return;
-
-    _isCommandExecuting = true;
+    final blocks = _globalClipboardBlocks;
     if (blocks != null && blocks.isNotEmpty) {
-      // Restore original block structure — each block gets its own text back.
-      // Grow the controller list if needed.
+      _isCommandExecuting = true;
       while (_controllers.length < blocks.length) {
         _addBlock(_controllers.length);
       }
@@ -2116,25 +2085,19 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           selection: TextSelection.collapsed(offset: blocks[i].length),
         );
       }
+      _isCommandExecuting = false;
     } else {
-      // Fallback: put everything in the first block.
+      final text = _globalClipboard;
+      if (text == null || text.isEmpty) return;
+      _isCommandExecuting = true;
       _controllers.first.value = TextEditingValue(
-        text: fallback!,
-        selection: TextSelection.collapsed(offset: fallback.length),
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
       );
+      _isCommandExecuting = false;
     }
-    _isCommandExecuting = false;
-    setState(() {}); // ensure ListView reflects restored controller values
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
-    try {
-      if (ref.read(settingsProvider).debugMode) {
-        final chars = blocks?.fold<int>(0, (s, t) => s + t.length) ?? fallback?.length ?? 0;
-        setState(() {
-          _currentTitle = '[PASTED ${blocks?.length ?? 1}blk | ${chars}ch]';
-        });
-      }
-    } catch (_) {}
   }
 
   void _selectAllBlocks() {
@@ -2162,13 +2125,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // before _onCutClean() runs. _pendingGlobalText survives that clear.
     _pendingGlobalBlocks = _controllers.map((c) => c.text).toList();
     _pendingGlobalText = _pendingGlobalBlocks!
-        .map((t) => _visibleText(t))
+        .map((t) => StylingService.stripTags(t).replaceAll('\n', ' ').trim())
         .where((t) => t.isNotEmpty)
         .join(' ');
     _pendingGlobalTimer?.cancel();
     _pendingGlobalTimer = Timer(const Duration(seconds: 10), () {
       _pendingGlobalText = null;
-      _pendingGlobalBlocks = null;
     });
 
     _isCommandExecuting = false;
@@ -2346,15 +2308,6 @@ class _EditorBlock extends StatelessWidget {
                   return null;
                 },
               ),
-              // Intercept every paste path (context menu, Cmd+V, system paste)
-              // so our in-app clipboard is used whenever _globalClipboard is set.
-              if (onPaste != null)
-                PasteTextIntent: CallbackAction<PasteTextIntent>(
-                  onInvoke: (_) {
-                    onPaste!();
-                    return null;
-                  },
-                ),
             },
           child: Theme(
             data: Theme.of(context).copyWith(
@@ -2422,14 +2375,7 @@ class _EditorBlock extends StatelessWidget {
                       label: 'Copy',
                     ),
                     ContextMenuButtonItem(
-                      onPressed: () {
-                        onBeforeMenuAction?.call();
-                        ContextMenuController.removeAny();
-                        onSelectAll();
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          editableTextState.showToolbar();
-                        });
-                      },
+                      onPressed: () { ContextMenuController.removeAny(); onSelectAll(); },
                       type: ContextMenuButtonType.selectAll,
                     ),
                   ],
@@ -2444,14 +2390,8 @@ class _EditorBlock extends StatelessWidget {
                   hasSelectAll = true;
                   customItems.add(ContextMenuButtonItem(
                     onPressed: () {
-                      onBeforeMenuAction?.call(); // guard against iOS tap-through clearing global selection
                       ContextMenuController.removeAny();
                       onSelectAll();
-                      // Re-show toolbar next frame so contextMenuBuilder sees isGlobalSelected=true
-                      // and displays the global Cut/Copy menu instead of the single-block menu.
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        editableTextState.showToolbar();
-                      });
                     },
                     type: ContextMenuButtonType.selectAll,
                   ));
@@ -2493,12 +2433,8 @@ class _EditorBlock extends StatelessWidget {
               if (!hasSelectAll) {
                 customItems.add(ContextMenuButtonItem(
                   onPressed: () {
-                    onBeforeMenuAction?.call();
                     ContextMenuController.removeAny();
                     onSelectAll();
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      editableTextState.showToolbar();
-                    });
                   },
                   type: ContextMenuButtonType.selectAll,
                 ));

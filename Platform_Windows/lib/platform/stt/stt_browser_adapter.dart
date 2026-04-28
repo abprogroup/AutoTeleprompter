@@ -51,12 +51,18 @@ class SttBrowserAdapter extends AbstractSttService {
     });
 
     router.get('/ws', webSocketHandler((WebSocketChannel channel) {
+      final previousClient = _wsClient;
       _wsClient = channel;
+      if (previousClient != null && previousClient != channel) {
+        try {
+          previousClient.sink.close();
+        } catch (_) {}
+      }
       onDiagnostic?.call('🔗 [Browser STT] WebView connected');
 
       channel.stream.listen(
         (message) {
-          if (!_isActive) return;
+          if (!_isActive || _wsClient != channel) return;
           try {
             final data = jsonDecode(message as String) as Map<String, dynamic>;
             final type = data['type'] as String? ?? '';
@@ -90,8 +96,9 @@ class SttBrowserAdapter extends AbstractSttService {
               case 'result':
                 final words = data['words'] as String? ?? '';
                 final isFinal = data['isFinal'] as bool? ?? false;
-                if (words.isNotEmpty)
+                if (words.isNotEmpty) {
                   onResult?.call(SpeechResult(words, isFinal));
+                }
                 break;
               case 'level':
                 final level = (data['level'] as num?)?.toDouble() ?? 0.0;
@@ -125,8 +132,13 @@ class SttBrowserAdapter extends AbstractSttService {
           } catch (_) {}
         },
         onDone: () {
-          if (_isActive)
+          final wasCurrentClient = _wsClient == channel;
+          if (wasCurrentClient) {
+            _wsClient = null;
+          }
+          if (_isActive && wasCurrentClient) {
             onDiagnostic?.call('⚠️ [Browser STT] WebView disconnected');
+          }
         },
       );
     }));
@@ -186,13 +198,14 @@ class SttBrowserAdapter extends AbstractSttService {
   }
 
   Future<void> _stopServer() async {
+    final client = _wsClient;
+    _wsClient = null;
     try {
-      _wsClient?.sink.close();
+      client?.sink.close();
     } catch (_) {}
     try {
       await _server?.close(force: true);
     } catch (_) {}
-    _wsClient = null;
     _server = null;
   }
 

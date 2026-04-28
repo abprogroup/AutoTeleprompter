@@ -98,9 +98,11 @@ Windows MVP file and remain part of the settings persistence contract:
    entries and infers missing source types. Do not remove this compatibility
    path.
 
-6. **Style bounds stay safe**: Font size, line spacing, word spacing, letter
-   spacing, colors, mirror flags, and rotation must remain valid for editor and
-   teleprompter rendering.
+6. **Style bounds stay safe and platform-consistent**: Font size, line spacing,
+   word spacing, letter spacing, colors, mirror flags, and rotation must remain
+   valid for editor and teleprompter rendering. Windows editor and presenter
+   controls must share the same spacing ranges: line `0.5..3.0`, word
+   `-5.0..20.0`, and letter `-2.0..5.0`.
 
 7. **Debug mode is hidden but functional**: `debugMode` may be toggled by hidden
    gallery gesture and read by teleprompter debug logs.
@@ -135,6 +137,8 @@ Windows MVP file and remain part of the settings persistence contract:
 - Do not save a microphone `deviceId` without the matching display label.
 - Do not treat a missing saved microphone as a settings reset. The STT adapter
   owns runtime fallback to system default.
+- Do not narrow present-mode spacing settings independently from the editor
+  Layout Suite.
 
 ---
 

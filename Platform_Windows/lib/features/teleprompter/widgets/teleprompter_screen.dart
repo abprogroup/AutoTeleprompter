@@ -1998,7 +1998,8 @@ class _ControlBar extends ConsumerWidget {
     // Forward scroll is active when scrolling but NOT backward
     final isActive = isManualMode
         ? (isManualScrolling && settings.scrollSpeed != 0)
-        : (isListening || isStarting);
+        : isListening;
+    final isBooting = !isManualMode && isStarting;
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(10.0, 80.0).toDouble();
       unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
@@ -2041,7 +2042,7 @@ class _ControlBar extends ConsumerWidget {
             ),
             // Backward button removed in favor of bidirectional slider
             GestureDetector(
-              onTap: isActive ? onStop : onStart,
+              onTap: isBooting ? null : (isActive ? onStop : onStart),
               child: Container(
                 width: 64,
                 height: 64,
@@ -2121,6 +2122,36 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
       unawaited(
         ref.read(scriptProvider.notifier).updateStyleMetadata(
               fontSize: clamped,
+            ),
+      );
+    }
+
+    void applyPresenterLineSpacing(double spacing) {
+      final clamped = spacing.clamp(0.5, 3.0).toDouble();
+      unawaited(notifier.setLineSpacing(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              lineSpacing: clamped,
+            ),
+      );
+    }
+
+    void applyPresenterWordSpacing(double spacing) {
+      final clamped = spacing.clamp(-5.0, 20.0).toDouble();
+      unawaited(notifier.setWordSpacing(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              wordSpacing: clamped,
+            ),
+      );
+    }
+
+    void applyPresenterLetterSpacing(double spacing) {
+      final clamped = spacing.clamp(-2.0, 5.0).toDouble();
+      unawaited(notifier.setLetterSpacing(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              letterSpacing: clamped,
             ),
       );
     }
@@ -2301,13 +2332,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.lineSpacing,
-            min: 1.0,
+            value: settings.lineSpacing.clamp(0.5, 3.0).toDouble(),
+            min: 0.5,
             max: 3.0,
-            divisions: 20,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setLineSpacing(v),
+            onChanged: applyPresenterLineSpacing,
           ),
 
           Row(children: [
@@ -2317,13 +2347,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.wordSpacing,
-            min: 0.0,
+            value: settings.wordSpacing.clamp(-5.0, 20.0).toDouble(),
+            min: -5.0,
             max: 20.0,
-            divisions: 20,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setWordSpacing(v),
+            onChanged: applyPresenterWordSpacing,
           ),
 
           Row(children: [
@@ -2333,13 +2362,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.letterSpacing,
-            min: -1.0,
+            value: settings.letterSpacing.clamp(-2.0, 5.0).toDouble(),
+            min: -2.0,
             max: 5.0,
-            divisions: 24,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setLetterSpacing(v),
+            onChanged: applyPresenterLetterSpacing,
           ),
 
           Row(children: [

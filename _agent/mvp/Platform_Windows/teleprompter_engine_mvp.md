@@ -188,15 +188,27 @@ earlier Windows MVP file and remain part of the engine contract:
     font size and line spacing. Present mode must not visually collapse multiple
     blank lines into a single tight gap.
 
-24. **Presenter font controls persist metadata**: Present-mode font size buttons
-    and the presenter settings font-size slider must update both
-    `settingsProvider.fontSize` and the active script metadata through
-    `ScriptNotifier.updateStyleMetadata(fontSize: ...)`. Returning to the editor
-    must show the same font size in the font suite.
+24. **Presenter typography controls persist metadata**: Present-mode font size
+    buttons, the presenter settings font-size slider, and presenter
+    line/word/letter spacing sliders must update both `settingsProvider` and the
+    active script metadata through `ScriptNotifier.updateStyleMetadata(...)`.
+    Returning to the editor must show the same typography values in the font and
+    layout suites.
 
 25. **Default-relative spacing display**: Presenter line-spacing controls may
     store the real rendering value (`1.2` by default), but the visible value must
     show the user offset from default, so default reads `0.0`.
+
+26. **Presenter spacing range matches the editor**: Present-mode line spacing
+    must allow `0.5..3.0`, word spacing must allow `-5.0..20.0`, and letter
+    spacing must allow `-2.0..5.0`, matching the Windows editor Layout Suite.
+    Do not narrow presenter ranges independently.
+
+27. **STT startup control is not a red stop state**: While
+    `TeleprompterState.isStarting` is true and `isListening` is false, the
+    central presenter control may show a loading/hourglass glyph, but it must
+    not present as the red stop button or accept a second start/stop tap as if
+    recognition were already active. Red means an active stoppable session.
 
 ---
 
@@ -235,10 +247,15 @@ earlier Windows MVP file and remain part of the engine contract:
   bookmark previous/next commands.
 - Do not reduce hard blank-line markers to zero-height or half-hidden spacers in
   presentation mode.
-- Do not make present-mode font size controls runtime-only. They must persist to
-  the active script metadata that the editor/font suite reads.
+- Do not make present-mode typography controls runtime-only. Font size and
+  line/word/letter spacing must persist to the active script metadata that the
+  editor font/layout suites read.
 - Do not show raw `1.2` as the default line-spacing label in presenter settings;
   the UI label must display default-relative `0.0`.
+- Do not give the presenter spacing sliders narrower bounds than the editor
+  Layout Suite.
+- Do not make the STT startup/hourglass state look like the red active stop
+  state.
 
 ---
 

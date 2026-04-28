@@ -156,6 +156,12 @@ owns how confirmed indices are rendered after STT produces results.
     selected external mic, the adapter must fall back to system default and log a
     diagnostic rather than failing the whole STT session.
 
+21. **Only the current WebView socket may drive STT state**: Browser STT may
+    briefly produce duplicate WebView/WebSocket connections during first load,
+    reload, or stop/start. `SttBrowserAdapter` must close replaced socket
+    clients, ignore messages from stale clients, and treat stale disconnects as
+    non-events so an old WebView cannot poison the active listening session.
+
 ---
 
 ## Forbidden Changes
@@ -186,6 +192,9 @@ owns how confirmed indices are rendered after STT produces results.
   devices can disappear between sessions.
 - Do not persist a selected input device without also persisting its human label
   for settings/debug display.
+- Do not process WebView STT messages from a socket that is no longer
+  `_wsClient`, and do not let a replaced socket's disconnect log or mutate the
+  active session.
 
 ---
 
@@ -210,6 +219,9 @@ owns how confirmed indices are rendered after STT produces results.
   `navigator.mediaDevices` for enumeration and capture constraints, but final
   speech-recognition routing remains Chromium/Web Speech behavior. The app must
   show the selected device and retain OS-default fallback.
+- **Duplicate WebView connects can happen**: WebView2 can connect more than once
+  during initial load/reload. The adapter must keep only the most recent socket
+  authoritative.
 
 ---
 

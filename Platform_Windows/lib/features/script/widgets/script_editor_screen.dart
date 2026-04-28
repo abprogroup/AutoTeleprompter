@@ -31,6 +31,7 @@ import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
 import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
+import '../services/markup_export_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
@@ -1770,7 +1771,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       bytes = PagesService.generate(text);
     } else {
       // txt, md — plain UTF-8
-      bytes = utf8.encode(text);
+      bytes = utf8.encode(MarkupExportService.toPlainText(text));
     }
 
     // Build filename with guaranteed extension — strip any prior extension first
@@ -2840,6 +2841,10 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+    const editorPreviewScale = 0.5;
+    final editorFontSize = settings.fontSize * editorPreviewScale;
+    final editorMaxFontSize = maxFontSize * editorPreviewScale;
+    controller.fontSizeScale = editorPreviewScale;
 
     return Container(
       decoration: BoxDecoration(
@@ -2944,15 +2949,15 @@ class _EditorBlock extends StatelessWidget {
                         isRtl ? TextDirection.rtl : TextDirection.ltr,
                     textAlign: textAlign,
                     cursorColor: Colors.amber,
-                    cursorHeight: maxFontSize,
+                    cursorHeight: editorMaxFontSize,
                     strutStyle: StrutStyle(
-                      fontSize: maxFontSize,
+                      fontSize: editorMaxFontSize,
                       height: settings.lineSpacing,
                       forceStrutHeight: true,
                     ),
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: settings.fontSize,
+                      fontSize: editorFontSize,
                       height: settings.lineSpacing,
                       letterSpacing: settings.letterSpacing,
                       wordSpacing: settings.wordSpacing,

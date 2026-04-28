@@ -1111,7 +1111,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
     // Presentation mode uses 2x font size for readability.
     // The editor shows smaller text for fluid editing; the teleprompter enlarges it.
-    final presentationFontSize = settings.fontSize * 2.0;
+    final presentationFontSize = settings.fontSize;
     final debugConsoleHeight =
         settings.debugMode ? (_debugConsoleMinimized ? 36.0 : 220.0) : 0.0;
     final bookmarkWordIndexes = _bookmarks.map((b) => b.wordIndex).toSet();
@@ -1183,9 +1183,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                       .replaceAll(_tagStripRe, '')
                       .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
 
-                  final effectiveFontSize = word.fontSize != null
-                      ? presentationFontSize * (word.fontSize! / 17.0)
-                      : presentationFontSize;
+                  final effectiveFontSize =
+                      word.fontSize ?? presentationFontSize;
 
                   // User-applied highlight (from tokenizer-parsed [bg=] tags)
                   final userBgColor = word.highlight;
@@ -2001,7 +2000,7 @@ class _ControlBar extends ConsumerWidget {
         : isListening;
     final isBooting = !isManualMode && isStarting;
     void applyPresenterFontSize(double size) {
-      final clamped = size.clamp(10.0, 80.0).toDouble();
+      final clamped = size.clamp(14.0, 120.0).toDouble();
       unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
       unawaited(
         ref.read(scriptProvider.notifier).updateStyleMetadata(
@@ -2117,7 +2116,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
     final tState = ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
     void applyPresenterFontSize(double size) {
-      final clamped = size.clamp(10.0, 80.0).toDouble();
+      final clamped = size.clamp(14.0, 120.0).toDouble();
       unawaited(notifier.setFontSize(clamped));
       unawaited(
         ref.read(scriptProvider.notifier).updateStyleMetadata(
@@ -2312,14 +2311,13 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           Row(children: [
             const Text('Font Size', style: labelStyle),
             const Spacer(),
-            Text('${(settings.fontSize * 2).round()}px',
+            Text('${settings.fontSize.round()}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.fontSize.clamp(10.0, 80.0),
-            min: 10,
-            max: 80,
-            divisions: 35,
+            value: settings.fontSize.clamp(14.0, 120.0).toDouble(),
+            min: 14,
+            max: 120,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
             onChanged: applyPresenterFontSize,

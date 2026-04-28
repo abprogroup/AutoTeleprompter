@@ -2,7 +2,7 @@
 name: Styling Engine MVP
 type: component
 platform: Windows
-last_updated: 2026-04-27
+last_updated: 2026-04-28
 ---
 
 # Styling Engine MVP - Windows
@@ -41,6 +41,8 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
 | `StylingService.stripTags(...)` | Clipboard/recent/export snippets |
 | `StylingService.applyLayout(...)` | Alignment wrappers |
 | `StylingService.markupToHtml(...)` | Rich clipboard |
+| `MarkupExportService.parse(...)` | File export conversion from raw markup into styled document runs |
+| `MarkupExportService.toPlainText(...)` | Plain export conversion from raw markup into visible text |
 
 ---
 
@@ -91,13 +93,19 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
    paths must pin post-wrap selection to `externalSelection` and refresh/sync
    overlay state.
 
-10. **No raw-tag leaks**: Clipboard, recent snippets, and plain-text exports must
-    strip internal markup unless the target format intentionally round-trips it.
+10. **No raw-tag leaks**: Clipboard, recent snippets, plain-text exports, and
+    generated document files must expose only visible script text or real
+    document styling, not internal tags.
 
 11. **Display-only symbols are preserved**: Tokenization may create
     `ScriptWord` entries whose `normalized` value is empty when the visible token
     is punctuation or a symbol such as `"` or `»`. These tokens are unspeakable
     for STT alignment but must still render in presentation mode.
+
+12. **Editor preview scale is visual only**: The editor may render text at 50%
+    of the saved presenter font size for comfortable editing, but raw metadata
+    and suite controls must keep the real number. A saved `28px` script remains
+    `28px`; only editor preview painting is scaled.
 
 ---
 
@@ -109,6 +117,8 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
   handles the case.
 - Do not let alignment tags nest or accumulate.
 - Do not let copy/paste expose raw style tags to the user.
+- Do not use editor preview scaling to mutate `settings.fontSize`, `[size=...]`
+  tags, script metadata, or exported document sizes.
 - Do not add history saves to cursor/style detection.
 - Do not skip punctuation-only or symbol-only tokens merely because
   `normalizeForMatching()` returns an empty string. Skip only empty markup/tag

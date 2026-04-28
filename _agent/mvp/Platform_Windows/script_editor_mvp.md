@@ -94,6 +94,11 @@ part of the Script model/import contract:
    spacing, alignment, colors, `sessionId`, `historyJson`, and `historyIndex`
    must be passed through load/save/open paths.
 
+3a. **Editor font preview is scaled, metadata is not**: The editor text field may
+    paint script text at 50% of `settings.fontSize` for fluid editing, but the
+    font suite, script metadata, file export, and presenter must keep the real
+    saved font-size number.
+
 4. **Style metadata may update without text replacement**:
    `ScriptNotifier.updateStyleMetadata(...)` may change active script style
    fields and persistence metadata, but it must not rebuild words, replace
@@ -160,6 +165,8 @@ part of the Script model/import contract:
   focus changes.
 - Do not bypass `ScriptNotifier.loadText()` for active script replacement.
 - Do not remove history metadata from recent-script JSON.
+- Do not halve or double saved font-size metadata to compensate for editor
+  preview scaling.
 - Do not add `Platform.isWindows` branching inside editor feature code unless the
   platform helper layer cannot represent the behavior.
 - Do not implement editor search by flattening all controller text and rewriting
@@ -262,7 +269,7 @@ and persistent local script state transitions.
 name: Script Editor MVP
 type: feature
 platforms: Windows
-last_updated: 2026-04-27
+last_updated: 2026-04-28
 ---
 
 # Script Editor MVP â€” Windows

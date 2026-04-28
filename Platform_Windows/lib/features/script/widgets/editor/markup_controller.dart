@@ -17,6 +17,10 @@ class MarkupController extends TextEditingController {
   /// Whether the entire block is selected (e.g. during Select All).
   bool isGlobalSelected = false;
 
+  /// Visual-only scale used by the editor to preview presenter font sizes at a
+  /// smaller size without changing the saved metadata value.
+  double fontSizeScale = 1.0;
+
   /// Force a repaint after mutating [externalSelection] or [isGlobalSelected].
   /// These fields live outside [value], so listeners otherwise won't fire.
   void refresh() => notifyListeners();
@@ -58,7 +62,8 @@ class MarkupController extends TextEditingController {
 
     if (newText != oldText) {
       int prefix = 0;
-      final minLen = oldText.length < newText.length ? oldText.length : newText.length;
+      final minLen =
+          oldText.length < newText.length ? oldText.length : newText.length;
       while (prefix < minLen &&
           oldText.codeUnitAt(prefix) == newText.codeUnitAt(prefix)) {
         prefix++;
@@ -110,7 +115,8 @@ class MarkupController extends TextEditingController {
           }
         }
         if (victim != null) {
-          newText = oldText.substring(0, victim) + oldText.substring(victim + 1);
+          newText =
+              oldText.substring(0, victim) + oldText.substring(victim + 1);
           newSelection = TextSelection.collapsed(offset: victim);
         } else {
           return;
@@ -123,11 +129,17 @@ class MarkupController extends TextEditingController {
     if (newSelection.isValid && !newSelection.isCollapsed) {
       final matches = _tagRegex.allMatches(newText);
       int s = newSelection.start; // normalized min
-      int e = newSelection.end;   // normalized max
+      int e = newSelection.end; // normalized max
       bool shifted = false;
       for (final m in matches) {
-        if (s > m.start && s < m.end) { s = m.start; shifted = true; }
-        if (e > m.start && e < m.end) { e = m.end; shifted = true; }
+        if (s > m.start && s < m.end) {
+          s = m.start;
+          shifted = true;
+        }
+        if (e > m.start && e < m.end) {
+          e = m.end;
+          shifted = true;
+        }
       }
       if (shifted) {
         // Preserve the original direction (RTL selections have base > extent)
@@ -139,7 +151,8 @@ class MarkupController extends TextEditingController {
       }
     } else if (newSelection.isCollapsed && newSelection.baseOffset > 0) {
       for (final m in _tagRegex.allMatches(newText)) {
-        if (newSelection.baseOffset > m.start && newSelection.baseOffset < m.end) {
+        if (newSelection.baseOffset > m.start &&
+            newSelection.baseOffset < m.end) {
           final toStart = (newSelection.baseOffset - m.start).abs();
           final toEnd = (newSelection.baseOffset - m.end).abs();
           final target = (toStart <= toEnd) ? m.start : m.end;
@@ -247,7 +260,9 @@ class MarkupController extends TextEditingController {
       if (underline) s = s.copyWith(decoration: TextDecoration.underline);
       if (textColors.isNotEmpty) s = s.copyWith(color: textColors.last);
       if (bgColors.isNotEmpty) s = s.copyWith(backgroundColor: bgColors.last);
-      if (sizes.isNotEmpty) s = s.copyWith(fontSize: sizes.last);
+      if (sizes.isNotEmpty) {
+        s = s.copyWith(fontSize: sizes.last * fontSizeScale);
+      }
       if (fonts.isNotEmpty) s = s.copyWith(fontFamily: fonts.last);
       return s;
     }
@@ -261,20 +276,23 @@ class MarkupController extends TextEditingController {
           renderSelection.end > start &&
           renderSelection.start < end;
       if (!hasSelection) {
-        children.add(TextSpan(text: src.substring(start, end), style: baseStyle));
+        children
+            .add(TextSpan(text: src.substring(start, end), style: baseStyle));
         return;
       }
       final selStart = renderSelection.start.clamp(start, end);
       final selEnd = renderSelection.end.clamp(start, end);
       if (selStart > start) {
-        children.add(TextSpan(text: src.substring(start, selStart), style: baseStyle));
+        children.add(
+            TextSpan(text: src.substring(start, selStart), style: baseStyle));
       }
       children.add(TextSpan(
         text: src.substring(selStart, selEnd),
         style: baseStyle.copyWith(backgroundColor: _selectionBg),
       ));
       if (selEnd < end) {
-        children.add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
+        children
+            .add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
       }
     }
 

@@ -195,16 +195,21 @@ earlier Windows MVP file and remain part of the engine contract:
     Returning to the editor must show the same typography values in the font and
     layout suites.
 
-25. **Default-relative spacing display**: Presenter line-spacing controls may
+25. **Presenter font size is the real metadata value**: Presentation rendering
+    must use `settings.fontSize` directly. Do not multiply it for present mode.
+    The editor owns a visual-only 50% preview scale so editing remains compact
+    without changing the saved font-size number.
+
+26. **Default-relative spacing display**: Presenter line-spacing controls may
     store the real rendering value (`1.2` by default), but the visible value must
     show the user offset from default, so default reads `0.0`.
 
-26. **Presenter spacing range matches the editor**: Present-mode line spacing
+27. **Presenter spacing range matches the editor**: Present-mode line spacing
     must allow `0.5..3.0`, word spacing must allow `-5.0..20.0`, and letter
     spacing must allow `-2.0..5.0`, matching the Windows editor Layout Suite.
     Do not narrow presenter ranges independently.
 
-27. **STT startup control is not a red stop state**: While
+28. **STT startup control is not a red stop state**: While
     `TeleprompterState.isStarting` is true and `isListening` is false, the
     central presenter control may show a loading/hourglass glyph, but it must
     not present as the red stop button or accept a second start/stop tap as if
@@ -250,6 +255,8 @@ earlier Windows MVP file and remain part of the engine contract:
 - Do not make present-mode typography controls runtime-only. Font size and
   line/word/letter spacing must persist to the active script metadata that the
   editor font/layout suites read.
+- Do not multiply presenter font size to compensate for editor preview scaling.
+  The stored number is the presenter number.
 - Do not show raw `1.2` as the default line-spacing label in presenter settings;
   the UI label must display default-relative `0.0`.
 - Do not give the presenter spacing sliders narrower bounds than the editor
@@ -349,7 +356,7 @@ execution flags.
 name: Teleprompter Engine MVP
 type: feature
 platforms: Windows
-last_updated: 2026-04-27
+last_updated: 2026-04-28
 ---
 
 # Teleprompter Engine MVP â€” Windows

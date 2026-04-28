@@ -255,7 +255,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
     }
 
     state = AppSettings(
-      fontSize: (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(10.0, 80.0),
+      fontSize:
+          (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(14.0, 120.0).toDouble(),
       languageMode: prefs.getString(_languageKey) ?? 'auto',
       scrollLead: prefs.getDouble(_scrollLeadKey) ?? 0.32,
       lastScript: prefs.getString(_lastScriptKey) ?? '',
@@ -295,9 +296,10 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setFontSize(double size) async {
-    state = state.copyWith(fontSize: size);
+    final clamped = size.clamp(14.0, 120.0).toDouble();
+    state = state.copyWith(fontSize: clamped);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_fontSizeKey, size);
+    await prefs.setDouble(_fontSizeKey, clamped);
   }
 
   Future<void> setLanguageMode(String mode) async {

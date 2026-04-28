@@ -196,9 +196,10 @@ earlier Windows MVP file and remain part of the engine contract:
     layout suites.
 
 25. **Presenter font size shares one metadata value**: Presenter controls,
-    editor controls, style tags, and export all use the same saved font-size
-    number. The teleprompter render path may enlarge that value for presenter
-    readability, but it must never save the enlarged number back to metadata.
+    editor controls, settings provider, script metadata, and export all use the
+    same saved font-size number. The teleprompter render path may enlarge that
+    value for presenter readability, but it must never save the enlarged number
+    back to metadata or display the enlarged number in controls.
 
 26. **Default-relative spacing display**: Presenter line-spacing controls may
     store the real rendering value (`1.2` by default), but the visible value must

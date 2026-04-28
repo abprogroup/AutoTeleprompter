@@ -95,9 +95,11 @@ part of the Script model/import contract:
    must be passed through load/save/open paths.
 
 3a. **Editor font size is the metadata value**: The editor text field, font
-    suite, script metadata, and file export must all use the same saved
-    font-size number. Presentation-only enlargement belongs to the
-    Teleprompter Engine MVP, not the editor.
+    suite, script metadata, settings provider, and file export must all use the
+    same saved font-size number. The font suite reads `settingsProvider.fontSize`
+    and `Script.fontSize`, not the cursor-detected `[size=...]` inline value.
+    Presentation-only enlargement belongs to the Teleprompter Engine MVP, not
+    the editor.
 
 4. **Style metadata may update without text replacement**:
    `ScriptNotifier.updateStyleMetadata(...)` may change active script style
@@ -167,6 +169,9 @@ part of the Script model/import contract:
 - Do not remove history metadata from recent-script JSON.
 - Do not halve or double saved font-size metadata to compensate for presentation
   readability.
+- Do not let cursor/inline `[size=...]` detection become the editor font-size
+  dropdown authority. Changing the editor font-size control must update
+  `settingsProvider.fontSize` and `ScriptNotifier.updateStyleMetadata(...)`.
 - Do not add `Platform.isWindows` branching inside editor feature code unless the
   platform helper layer cannot represent the behavior.
 - Do not implement editor search by flattening all controller text and rewriting

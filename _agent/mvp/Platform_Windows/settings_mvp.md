@@ -104,6 +104,11 @@ Windows MVP file and remain part of the settings persistence contract:
    controls must share the same font and spacing ranges: font `14.0..120.0`,
    line `0.5..3.0`, word `-5.0..20.0`, and letter `-2.0..5.0`.
 
+6a. **Font size is a shared raw value**: `AppSettings.fontSize` is the raw script
+    metadata number shown in both editor and present-mode controls. It must not
+    store editor preview scaling, presenter render enlargement, or cursor-local
+    inline `[size=...]` detection.
+
 7. **Debug mode is hidden but functional**: `debugMode` may be toggled by hidden
    gallery gesture and read by teleprompter debug logs.
 
@@ -141,6 +146,8 @@ Windows MVP file and remain part of the settings persistence contract:
   Layout Suite.
 - Do not store half-size editor preview values in `fontSize`; settings store the
   real presenter font size.
+- Do not let a hardcoded legacy default such as `18.0` override a loaded
+  script/session font-size value or the current settings fallback.
 
 ---
 

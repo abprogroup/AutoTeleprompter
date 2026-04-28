@@ -119,7 +119,7 @@ class ScriptNotifier extends Notifier<Script?> {
       sessionId: sessionId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       historyJson: historyJson,
       historyIndex: historyIndex ?? -1,
-      fontSize: fontSize ?? 18.0,
+      fontSize: fontSize ?? settings.fontSize,
       fontFamily: fontFamily ?? 'Inter',
       lineSpacing: lineSpacing ?? settings.lineSpacing,
       letterSpacing: letterSpacing ?? settings.letterSpacing,

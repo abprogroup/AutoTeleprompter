@@ -103,9 +103,14 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
     for STT alignment but must still render in presentation mode.
 
 12. **Font-size metadata is never scaled in the editor**: The editor text field,
-    font suite, script metadata, file export, and style tags all use the same
-    saved font-size number. Any presentation enlargement belongs only to the
-    teleprompter render path.
+    font suite, script metadata, settings provider, file export, and style tags
+    all use the same saved font-size number. Any presentation enlargement
+    belongs only to the teleprompter render path.
+
+13. **Inline size tags are local styling, not global controls**: `[size=...]`
+    tags may affect a styled visible range, but cursor detection of those tags
+    must not drive the global editor font-size dropdown or overwrite
+    `settingsProvider.fontSize`.
 
 ---
 
@@ -120,6 +125,8 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
 - Do not use editor preview scaling to mutate or reinterpret
   `settings.fontSize`, `[size=...]` tags, script metadata, or exported document
   sizes.
+- Do not promote cursor-local `[size=...]` detection into the global
+  script/session font-size source of truth.
 - Do not add history saves to cursor/style detection.
 - Do not skip punctuation-only or symbol-only tokens merely because
   `normalizeForMatching()` returns an empty string. Skip only empty markup/tag

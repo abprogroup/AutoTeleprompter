@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/widgets/global_color_picker.dart';
+import '../models/script.dart';
 import '../models/cursor_style.dart';
 import '../models/editor_state.dart';
 import './editor/editor_dialogs.dart';
@@ -309,6 +310,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         initialTitle = script.title;
         _sourceType = script.sourceType;
         _currentSessionId = script.sessionId;
+        Future.microtask(() {
+          if (!mounted) return;
+          _applySettingsFromScript(script);
+        });
       }
       _currentSessionId ??= DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -1225,6 +1230,19 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     notifier.setWordSpacing(s.wordSpacing);
   }
 
+  void _applySettingsFromScript(Script script) {
+    final notifier = ref.read(settingsProvider.notifier);
+    notifier.setFontSize(script.fontSize);
+    notifier.setFontFamily(script.fontFamily);
+    notifier.setLineSpacing(script.lineSpacing);
+    notifier.setLetterSpacing(script.letterSpacing);
+    notifier.setWordSpacing(script.wordSpacing);
+    notifier.setTextAlign(script.textAlign);
+    notifier.setScriptBgColor(script.scriptBgColor);
+    notifier.setCurrentWordColor(script.currentWordColor);
+    notifier.setFutureWordColor(script.futureWordColor);
+  }
+
   void _applyState(EditorState state) {
     _loadText(state.text);
     _applySettingsFromState(state);
@@ -1559,8 +1577,31 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     setState(() => _isCommandExecuting = false);
   }
 
-  void onFontSize(int size) =>
-      _applyInlineCmd('size', '[size=$size]', '[/size]', 'Font Size');
+  void onFontSize(int size) {
+    _applyGlobalFontSize(size.toDouble());
+  }
+
+  Future<void> _applyGlobalFontSize(double size) async {
+    final clamped = size.clamp(14.0, 120.0).toDouble();
+    final inSuite = _activeSuite != EditorSuite.none;
+    if (inSuite) {
+      _trackSuiteSection('Font Size');
+      _isSuiteDirty = true;
+    }
+    await ref.read(settingsProvider.notifier).setFontSize(clamped);
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          fontSize: clamped,
+        );
+    if (!mounted) return;
+    ref.read(cursorStyleProvider.notifier).state =
+        ref.read(cursorStyleProvider).copyWith(fontSize: clamped.round());
+    if (inSuite) {
+      _scheduleRecentUpdate();
+    } else {
+      _commitHistory('Font Size');
+    }
+    _onSelectionChanged();
+  }
 
   void onFontFamily(String family) =>
       _applyInlineCmd('font', '[font=$family]', '[/font]', 'Font Family');

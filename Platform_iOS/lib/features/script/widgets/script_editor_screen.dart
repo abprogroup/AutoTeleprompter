@@ -1798,12 +1798,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                   child: Row(children: [
                     const SizedBox(width: 4),
                     TextButton.icon(
-                      onPressed: _onCutClean,
+                      onPressed: _onGlobalCut,
                       icon: const Icon(Icons.content_cut, size: 18, color: Color(0xFFFFBF00)),
                       label: const Text('Cut', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13)),
                     ),
                     TextButton.icon(
-                      onPressed: _onCopyClean,
+                      onPressed: _onGlobalCopy,
                       icon: const Icon(Icons.content_copy, size: 18, color: Color(0xFFFFBF00)),
                       label: const Text('Copy', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13)),
                     ),
@@ -1922,6 +1922,44 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         ],
       ),
     );
+  }
+
+  // Called from the action bar — captures ALL block texts directly, no flag
+  // checks. Bypasses the IF/else-if chain so focus-change timing cannot affect
+  // whether _globalClipboardBlocks is set.
+  void _onGlobalCut() {
+    if (_controllers.isEmpty) return;
+    final blockTexts = _controllers.map((c) => c.text).toList();
+    final combined = blockTexts
+        .map((t) => StylingService.stripTags(t).replaceAll('\n', ' ').trim())
+        .where((t) => t.isNotEmpty)
+        .join(' ');
+    if (combined.isEmpty) return;
+    _globalClipboard = combined;
+    _globalClipboardBlocks = blockTexts;
+    Clipboard.setData(ClipboardData(text: combined));
+    _pendingGlobalTimer?.cancel();
+    _pendingGlobalText = null;
+    _pendingGlobalBlocks = null;
+    _isCommandExecuting = true;
+    for (final c in _controllers) { c.text = ''; }
+    _clearGlobalSelection();
+    _isCommandExecuting = false;
+    _saveHistory(description: 'Cut');
+    setState(() {});
+  }
+
+  void _onGlobalCopy() {
+    if (_controllers.isEmpty) return;
+    final blockTexts = _controllers.map((c) => c.text).toList();
+    final combined = blockTexts
+        .map((t) => StylingService.stripTags(t).replaceAll('\n', ' ').trim())
+        .where((t) => t.isNotEmpty)
+        .join(' ');
+    if (combined.isEmpty) return;
+    _globalClipboard = combined;
+    _globalClipboardBlocks = blockTexts;
+    Clipboard.setData(ClipboardData(text: combined));
   }
 
   void _onCutClean() {
@@ -2308,6 +2346,10 @@ class _EditorBlock extends StatelessWidget {
                   return null;
                 },
               ),
+              if (onPaste != null)
+                PasteTextIntent: CallbackAction<PasteTextIntent>(
+                  onInvoke: (_) { onPaste!(); return null; },
+                ),
             },
           child: Theme(
             data: Theme.of(context).copyWith(

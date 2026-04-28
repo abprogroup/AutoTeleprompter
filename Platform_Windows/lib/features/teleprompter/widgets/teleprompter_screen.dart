@@ -20,7 +20,12 @@ import '../../../platform/permissions/platform_permissions.dart';
 const _systemChannel = MethodChannel('autoteleprompter/system');
 
 // Regex to strip any unprocessed markup tags that somehow leaked into word.raw
-final _tagStripRe = RegExp(r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
+final _tagStripRe = RegExp(
+    r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
+
+class _PresentationSearchIntent extends Intent {
+  const _PresentationSearchIntent();
+}
 
 class TeleprompterScreen extends ConsumerStatefulWidget {
   const TeleprompterScreen({super.key});
@@ -33,6 +38,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
+  bool _debugConsoleMinimized = false;
   Timer? _manualScrollTimer;
   Timer? _wordTrackTimer;
   Timer? _hideControlsTimer;
@@ -46,7 +52,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   StreamSubscription? _remoteCmdSub;
   WebviewController? _webviewController;
   String? _loadedWebViewUrl;
-
+  String _lastSearchQuery = '';
 
   @override
   void initState() {
@@ -57,11 +63,14 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initRemoteListener();
-        ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage), (prev, next) {
-          if (next != null && next.isNotEmpty && mounted) _showMissingLanguageDialog(next);
+        ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage),
+            (prev, next) {
+          if (next != null && next.isNotEmpty && mounted)
+            _showMissingLanguageDialog(next);
         });
         // Watch for STT Dashboard URL
-        ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl), (prev, next) {
+        ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl),
+            (prev, next) {
           if (next == null) {
             _loadedWebViewUrl = null;
           } else if (next != _loadedWebViewUrl) {
@@ -84,21 +93,27 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _remoteCmdSub = ref.read(remoteControlProvider).onCommand.listen((cmd) {
       if (!mounted) return;
       final settings = ref.read(settingsProvider);
-      
+
       switch (cmd) {
         case 'TOGGLE':
           if (settings.scrollMode == 'manual') {
-             _manualScrolling ? _stopManualScroll() : _startManualScroll();
+            _manualScrolling ? _stopManualScroll() : _startManualScroll();
           } else {
-             final tState = ref.read(teleprompterProvider);
-             tState.isListening ? ref.read(teleprompterProvider.notifier).stopSession() : _requestAndStart();
+            final tState = ref.read(teleprompterProvider);
+            tState.isListening
+                ? ref.read(teleprompterProvider.notifier).stopSession()
+                : _requestAndStart();
           }
           break;
         case 'FASTER':
-          ref.read(settingsProvider.notifier).setScrollSpeed((settings.scrollSpeed + 15).clamp(-300.0, 300.0));
+          ref
+              .read(settingsProvider.notifier)
+              .setScrollSpeed((settings.scrollSpeed + 15).clamp(-300.0, 300.0));
           break;
         case 'SLOWER':
-          ref.read(settingsProvider.notifier).setScrollSpeed((settings.scrollSpeed - 15).clamp(-300.0, 300.0));
+          ref
+              .read(settingsProvider.notifier)
+              .setScrollSpeed((settings.scrollSpeed - 15).clamp(-300.0, 300.0));
           break;
         case 'RESET':
           if (settings.scrollMode == 'manual') {
@@ -153,19 +168,20 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   Future<void> _initWebViewController() async {
     try {
-      // By using this environment variable, we force WebView2 (Chromium) to 
+      // By using this environment variable, we force WebView2 (Chromium) to
       // automatically grant microphone and camera permissions for the app.
-      // This is the standard secure way to bypass the missing Permission API 
+      // This is the standard secure way to bypass the missing Permission API
       // in the current Windows WebView plugin.
       const envKey = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS';
-      const envVal = '--use-fake-ui-for-media-stream --unsafely-treat-insecure-origin-as-secure=http://localhost:8082 --autoplay-policy=no-user-gesture-required';
-      
+      const envVal =
+          '--use-fake-ui-for-media-stream --unsafely-treat-insecure-origin-as-secure=http://localhost:8082 --autoplay-policy=no-user-gesture-required';
+
       // We'll set it via setx to ensure it persists across the session
       await Process.run('setx', [envKey, envVal], runInShell: true);
-      
+
       final controller = WebviewController();
       await controller.initialize();
-      
+
       if (mounted) setState(() => _webviewController = controller);
     } catch (_) {}
   }
@@ -192,10 +208,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.settings_voice, color: Color(0xFFFFBF00), size: 24),
+              const Icon(Icons.settings_voice,
+                  color: Color(0xFFFFBF00), size: 24),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text('Windows Built-In STT',
@@ -209,12 +227,16 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             children: [
               Text(
                 'Windows requires the "$languageName" Speech Pack for offline recognition. If no offline pack exists for this language, please enable Online Speech Recognition.',
-                style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 14, height: 1.4),
               ),
               const SizedBox(height: 16),
               const Text(
                 'Action 1: Download Offline Pack',
-                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               const Text(
@@ -224,7 +246,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
               const SizedBox(height: 16),
               const Text(
                 'Action 2: Enable Online Fallback',
-                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               const Text(
@@ -239,18 +264,22 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                 Navigator.pop(ctx);
                 Process.run('cmd', ['/c', 'start', 'ms-settings:speech']);
               },
-              child: const Text('Download Packs', style: TextStyle(color: Color(0xFF4DA8DA))),
+              child: const Text('Download Packs',
+                  style: TextStyle(color: Color(0xFF4DA8DA))),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                Process.run('cmd', ['/c', 'start', 'ms-settings:privacy-speech']);
+                Process.run(
+                    'cmd', ['/c', 'start', 'ms-settings:privacy-speech']);
               },
-              child: const Text('Online Fallback', style: TextStyle(color: Color(0xFF4DA8DA))),
+              child: const Text('Online Fallback',
+                  style: TextStyle(color: Color(0xFF4DA8DA))),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+              child:
+                  const Text('Cancel', style: TextStyle(color: Colors.white54)),
             ),
           ],
         ),
@@ -265,7 +294,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.wifi_off_rounded, color: Color(0xFFFFBF00), size: 24),
+            const Icon(Icons.wifi_off_rounded,
+                color: Color(0xFFFFBF00), size: 24),
             const SizedBox(width: 10),
             Expanded(
               child: Text('$languageName Speech Recognition',
@@ -289,7 +319,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                 Expanded(
                   child: Text(
                     'An internet connection (WiFi or mobile data) is required for this language.',
-                    style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                        color: Color(0xFFFFBF00),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -297,28 +330,34 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             const SizedBox(height: 16),
             const Text(
               'Please try:',
-              style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
               '1. Connect to WiFi or enable mobile data\n\n'
               '2. Make sure the Google app is installed and updated\n\n'
               '3. Restart the teleprompter session',
-              style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 12),
             const Text(
               'Note: English may work offline if the speech pack is already downloaded. '
               'Other languages (Hebrew, Arabic, etc.) typically require an internet connection.',
-              style: TextStyle(color: Colors.white38, fontSize: 11, fontStyle: FontStyle.italic),
+              style: TextStyle(
+                  color: Colors.white38,
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK',
-                style: TextStyle(color: Colors.white54)),
+            child: const Text('OK', style: TextStyle(color: Colors.white54)),
           ),
         ],
       ),
@@ -330,7 +369,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     if (error.contains('requires an internet connection')) {
       return error; // Already user-friendly from provider
     }
-    if (error.contains('error_permission') || error.contains('insufficient_permissions')) {
+    if (error.contains('error_permission') ||
+        error.contains('insufficient_permissions')) {
       return 'Microphone permission denied. Please enable it in your device settings: Settings → Apps → AutoTeleprompter → Permissions → Microphone';
     }
     if (error.contains('error_language')) {
@@ -368,10 +408,16 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
               style: TextStyle(color: Colors.white70),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
               TextButton(
-                  onPressed: () { Navigator.pop(context); openAppSettings(); },
-                  child: const Text('Open Settings', style: TextStyle(color: Color(0xFFFFBF00)))),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel')),
+              TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    openAppSettings();
+                  },
+                  child: const Text('Open Settings',
+                      style: TextStyle(color: Color(0xFFFFBF00)))),
             ],
           ),
         );
@@ -400,10 +446,16 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                 style: TextStyle(color: Colors.white70),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                 TextButton(
-                    onPressed: () { Navigator.pop(context); openAppSettings(); },
-                    child: const Text('Open Settings', style: TextStyle(color: Color(0xFFFFBF00)))),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      openAppSettings();
+                    },
+                    child: const Text('Open Settings',
+                        style: TextStyle(color: Color(0xFFFFBF00)))),
               ],
             ),
           );
@@ -425,7 +477,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
               style: TextStyle(color: Colors.white70),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK')),
             ],
           ),
         );
@@ -452,19 +506,20 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _manualScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (!mounted || !_scrollController.hasClients) return;
       final settings = ref.read(settingsProvider);
-      
+
       // Speed can be negative for backward scrolling
-      final speed = settings.scrollMode == 'manual' ? settings.scrollSpeed : 100.0;
+      final speed =
+          settings.scrollMode == 'manual' ? settings.scrollSpeed : 100.0;
       if (speed == 0) return;
 
       // pixels per tick: speed(wpm) × 3px × 16ms/1000ms
       final pxPerTick = speed.abs() * 3.0 * 16.0 / 1000.0;
       final isBackward = speed < 0;
       final delta = isBackward ? -pxPerTick : pxPerTick;
-      
+
       final next = _scrollController.offset + delta;
       final max = _scrollController.position.maxScrollExtent;
-      
+
       if (!isBackward && next >= max) {
         _scrollController.jumpTo(max);
         _stopManualScroll();
@@ -487,7 +542,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   void _updateManualWordIndex() {
     if (!mounted || !_scrollController.hasClients) return;
     final settings = ref.read(settingsProvider);
-    final targetScreenY = MediaQuery.of(context).size.height * settings.scrollLead;
+    final targetScreenY =
+        MediaQuery.of(context).size.height * settings.scrollLead;
 
     int bestIndex = _manualWordIndex;
     double bestDist = double.infinity;
@@ -542,15 +598,18 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     final screenH = MediaQuery.of(context).size.height;
     final targetY = screenH * settings.scrollLead;
 
-    final wordPos = box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
+    final wordPos =
+        box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
     final rawTarget = _scrollController.offset + wordPos.dy - targetY;
-    _scrollTarget = rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollTarget =
+        rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
 
     // Start the smooth scroll timer if not already running
     if (!_smoothScrollActive) {
       _smoothScrollActive = true;
       _smoothScrollTimer?.cancel();
-      _smoothScrollTimer = Timer.periodic(const Duration(milliseconds: 16), _smoothScrollTick);
+      _smoothScrollTimer =
+          Timer.periodic(const Duration(milliseconds: 16), _smoothScrollTick);
     }
   }
 
@@ -559,9 +618,103 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     if (script == null) return;
     _stopManualScroll();
     setState(() => _manualWordIndex = index);
-    ref.read(teleprompterProvider.notifier).jumpToPosition(index, script: script);
+    ref
+        .read(teleprompterProvider.notifier)
+        .jumpToPosition(index, script: script);
     _scrollToWordIndex(index);
     _showControls();
+  }
+
+  Future<void> _showSearchDialog() async {
+    final controller = TextEditingController(text: _lastSearchQuery);
+    final query = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title:
+            const Text('Search script', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Word to find',
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.white24)),
+            focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFFFFBF00))),
+          ),
+          textInputAction: TextInputAction.search,
+          onSubmitted: (value) => Navigator.pop(ctx, value),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFBF00),
+                foregroundColor: Colors.black),
+            child: const Text('Find'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query == null) return;
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return;
+    _lastSearchQuery = trimmed;
+    _jumpToSearchMatch(trimmed);
+  }
+
+  void _jumpToSearchMatch(String query) {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+    final needle = query.toLowerCase();
+    final words = script.words;
+    final current = ref
+        .read(teleprompterProvider)
+        .confirmedWordIndex
+        .clamp(0, words.length - 1);
+
+    int? match;
+    for (var i = current + 1; i < words.length; i++) {
+      if (_wordMatchesQuery(words[i], needle)) {
+        match = i;
+        break;
+      }
+    }
+    if (match == null) {
+      for (var i = 0; i <= current && i < words.length; i++) {
+        if (_wordMatchesQuery(words[i], needle)) {
+          match = i;
+          break;
+        }
+      }
+    }
+
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No match for "$query"'),
+          backgroundColor: Colors.black.withOpacity(0.9),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    _jumpToWordIndex(match);
+  }
+
+  bool _wordMatchesQuery(ScriptWord word, String needle) {
+    if (word.isNewline) return false;
+    final text = word.raw
+        .replaceAll(_tagStripRe, '')
+        .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '')
+        .toLowerCase();
+    return text.contains(needle);
   }
 
   /// 60fps smooth scroll — glides toward _scrollTarget using lerp.
@@ -587,7 +740,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     // Lerp factor: 0.12 gives smooth ~8-frame glide.
     // Larger = snappier, smaller = silkier.
     final next = current + diff * 0.12;
-    _scrollController.jumpTo(next.clamp(0.0, _scrollController.position.maxScrollExtent));
+    _scrollController
+        .jumpTo(next.clamp(0.0, _scrollController.position.maxScrollExtent));
   }
 
   void _showSettings() {
@@ -614,7 +768,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     }
 
     // Auto-scroll on speech recognition
-    ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex), (prev, next) {
+    ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex),
+        (prev, next) {
       if (settings.scrollMode == 'auto' && next > 0) {
         _scrollToWordIndex(next);
       }
@@ -623,7 +778,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     if (script == null || script.isEmpty) {
       return Scaffold(
         backgroundColor: Color(settings.scriptBgColor),
-        body: const Center(child: Text('No script loaded.', style: TextStyle(color: Colors.white))),
+        body: const Center(
+            child: Text('No script loaded.',
+                style: TextStyle(color: Colors.white))),
       );
     }
 
@@ -645,6 +802,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     // Presentation mode uses 2x font size for readability.
     // The editor shows smaller text for fluid editing; the teleprompter enlarges it.
     final presentationFontSize = settings.fontSize * 2.0;
+    final debugConsoleHeight =
+        settings.debugMode ? (_debugConsoleMinimized ? 36.0 : 220.0) : 0.0;
 
     Widget wordList = Padding(
       padding: EdgeInsets.symmetric(
@@ -663,14 +822,21 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           }
 
           final firstWord = para.first;
-          final paraDir = firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
+          final paraDir =
+              firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
           TextAlign? paraAlign;
           if (settings.showAlignmentOverride) {
             // Override mode: use the settings alignment instead of editor tags
             switch (settings.textAlign) {
-              case 'left': paraAlign = TextAlign.left; break;
-              case 'right': paraAlign = TextAlign.right; break;
-              default: paraAlign = TextAlign.center; break;
+              case 'left':
+                paraAlign = TextAlign.left;
+                break;
+              case 'right':
+                paraAlign = TextAlign.right;
+                break;
+              default:
+                paraAlign = TextAlign.center;
+                break;
             }
           } else {
             try {
@@ -684,102 +850,119 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
           return Padding(
             padding: EdgeInsets.only(
-              bottom: presentationFontSize * (settings.lineSpacing - 1.0).clamp(0.0, 1.0),
+              bottom: presentationFontSize *
+                  (settings.lineSpacing - 1.0).clamp(0.0, 1.0),
             ),
             child: Directionality(
+              textDirection: paraDir,
+              child: Wrap(
                 textDirection: paraDir,
-                child: Wrap(
-                  textDirection: paraDir,
-                  alignment: _toWrapAlignment(paraAlign, settings, firstWord.effectiveRtl),
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: para.map<Widget>((wordObj) {
-                    final ScriptWord word = wordObj as ScriptWord;
-                    final i = word.index;
-                    final isManual = settings.scrollMode == 'manual';
-                    final isCurrent = !isManual && i == tState.confirmedWordIndex;
-                    final isPast = !isManual && i < tState.confirmedWordIndex;
-                    final displayText = word.raw
+                alignment: _toWrapAlignment(
+                    paraAlign, settings, firstWord.effectiveRtl),
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: para.map<Widget>((wordObj) {
+                  final ScriptWord word = wordObj as ScriptWord;
+                  final i = word.index;
+                  final isManual = settings.scrollMode == 'manual';
+                  final isCurrent = !isManual && i == tState.confirmedWordIndex;
+                  final isPast = !isManual && i < tState.confirmedWordIndex;
+                  final displayText = word.raw
                       .replaceAll(_tagStripRe, '')
                       .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
 
-                    final effectiveFontSize = word.fontSize != null
-                        ? presentationFontSize * (word.fontSize! / 17.0)
-                        : presentationFontSize;
+                  final effectiveFontSize = word.fontSize != null
+                      ? presentationFontSize * (word.fontSize! / 17.0)
+                      : presentationFontSize;
 
-                    // User-applied highlight (from tokenizer-parsed [bg=] tags)
-                    final userBgColor = word.highlight;
-                    // Word-tracking highlight (current word)
-                    final trackingBgColor = isCurrent && settings.showCurrentWordHighlight
-                        ? Color(settings.currentWordColor).withOpacity(0.3)
-                        : null;
-                    final effectiveBg = trackingBgColor
-                        ?? (isPast ? userBgColor?.withOpacity(0.15) : userBgColor);
+                  // User-applied highlight (from tokenizer-parsed [bg=] tags)
+                  final userBgColor = word.highlight;
+                  // Word-tracking highlight (current word)
+                  final trackingBgColor =
+                      isCurrent && settings.showCurrentWordHighlight
+                          ? Color(settings.currentWordColor).withOpacity(0.3)
+                          : null;
+                  final effectiveBg = trackingBgColor ??
+                      (isPast ? userBgColor?.withOpacity(0.15) : userBgColor);
 
-                    // Text color with graduated opacity for smooth spotlight effect.
-                    // Words close to the current position gently transition between
-                    // full brightness and past-word dimness.
-                    final int currentIdx = tState.confirmedWordIndex;
-                    final int dist = i - currentIdx; // negative = past, positive = future
-                    final Color textColor;
-                    if (isCurrent) {
-                      textColor = settings.showCurrentWordHighlight
-                          ? Color(settings.currentWordColor)
-                          : (settings.showUpcomingWordColor
-                              ? Color(settings.futureWordColor)
-                              : (word.textColor ?? Color(settings.futureWordColor)));
-                    } else if (isPast) {
-                      final base = settings.showUpcomingWordColor
-                          ? Color(settings.futureWordColor)
-                          : (word.textColor ?? Color(settings.futureWordColor));
-                      // Graduated fade: words just behind current are brighter
-                      final pastDist = dist.abs(); // 1 = just passed, 2 = two back, etc.
-                      final gradOpacity = pastDist <= 3
-                          ? settings.pastWordOpacity + (1.0 - settings.pastWordOpacity) * (1.0 - pastDist / 3.0) * 0.5
-                          : settings.pastWordOpacity;
-                      textColor = base.withOpacity(gradOpacity.clamp(0.0, 1.0));
-                    } else {
-                      // Toggle ON: uniform override color. Toggle OFF: use per-word markup color.
-                      textColor = settings.showUpcomingWordColor
-                          ? Color(settings.futureWordColor)
-                          : (word.textColor ?? Color(0xFFFFFFFF));
-                    }
+                  // Text color with graduated opacity for smooth spotlight effect.
+                  // Words close to the current position gently transition between
+                  // full brightness and past-word dimness.
+                  final int currentIdx = tState.confirmedWordIndex;
+                  final int dist =
+                      i - currentIdx; // negative = past, positive = future
+                  final Color textColor;
+                  if (isCurrent) {
+                    textColor = settings.showCurrentWordHighlight
+                        ? Color(settings.currentWordColor)
+                        : (settings.showUpcomingWordColor
+                            ? Color(settings.futureWordColor)
+                            : (word.textColor ??
+                                Color(settings.futureWordColor)));
+                  } else if (isPast) {
+                    final base = settings.showUpcomingWordColor
+                        ? Color(settings.futureWordColor)
+                        : (word.textColor ?? Color(settings.futureWordColor));
+                    // Graduated fade: words just behind current are brighter
+                    final pastDist =
+                        dist.abs(); // 1 = just passed, 2 = two back, etc.
+                    final gradOpacity = pastDist <= 3
+                        ? settings.pastWordOpacity +
+                            (1.0 - settings.pastWordOpacity) *
+                                (1.0 - pastDist / 3.0) *
+                                0.5
+                        : settings.pastWordOpacity;
+                    textColor = base.withOpacity(gradOpacity.clamp(0.0, 1.0));
+                  } else {
+                    // Toggle ON: uniform override color. Toggle OFF: use per-word markup color.
+                    textColor = settings.showUpcomingWordColor
+                        ? Color(settings.futureWordColor)
+                        : (word.textColor ?? Color(0xFFFFFFFF));
+                  }
 
-                    // Use Container padding instead of trailing space for word gaps.
-                    // Container.color covers padding area → continuous highlight blocks.
-                    final wordGap = effectiveFontSize * 0.28;
-                    return GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: () => _jumpToWordIndex(i),
-                      child: Directionality(
-                        textDirection: word.effectiveRtl ? TextDirection.rtl : TextDirection.ltr,
-                        child: Container(
-                          key: _wordKeys[i],
-                          padding: EdgeInsets.only(
-                            right: word.effectiveRtl ? 0 : wordGap,
-                            left: word.effectiveRtl ? wordGap : 0,
-                          ),
-                          color: effectiveBg,
-                          child: Text(
-                            displayText,
-                            style: TextStyle(
-                              fontSize: effectiveFontSize,
-                              fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
-                              fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
-                              letterSpacing: settings.letterSpacing,
-                              wordSpacing: settings.wordSpacing,
-                              color: textColor,
-                              height: settings.lineSpacing,
-                              decoration: word.isUnderline ? TextDecoration.underline : null,
-                            ),
+                  // Use Container padding instead of trailing space for word gaps.
+                  // Container.color covers padding area → continuous highlight blocks.
+                  final wordGap = effectiveFontSize * 0.28;
+                  return GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () => _jumpToWordIndex(i),
+                    child: Directionality(
+                      textDirection: word.effectiveRtl
+                          ? TextDirection.rtl
+                          : TextDirection.ltr,
+                      child: Container(
+                        key: _wordKeys[i],
+                        padding: EdgeInsets.only(
+                          right: word.effectiveRtl ? 0 : wordGap,
+                          left: word.effectiveRtl ? wordGap : 0,
+                        ),
+                        color: effectiveBg,
+                        child: Text(
+                          displayText,
+                          style: TextStyle(
+                            fontSize: effectiveFontSize,
+                            fontWeight:
+                                word.isBold ? FontWeight.bold : FontWeight.w500,
+                            fontStyle: word.isItalic
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            letterSpacing: settings.letterSpacing,
+                            wordSpacing: settings.wordSpacing,
+                            color: textColor,
+                            height: settings.lineSpacing,
+                            decoration: word.isUnderline
+                                ? TextDecoration.underline
+                                : null,
                           ),
                         ),
                       ),
-                    );
-                  }).toList(),
-                ),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
-          ).animate(key: ValueKey('para_${para.first.index}'))
-           .fadeIn(duration: 300.ms);
+          )
+              .animate(key: ValueKey('para_${para.first.index}'))
+              .fadeIn(duration: 300.ms);
         }).toList(),
       ),
     );
@@ -806,354 +989,464 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       },
       child: Scaffold(
         backgroundColor: Color(settings.scriptBgColor),
-        body: GestureDetector(
-        onTap: _showControls,
-        child: Stack(
-          children: [
-            // Scrollable script
-            SingleChildScrollView(
-              controller: _scrollController,
-              physics: const ClampingScrollPhysics(),
-              child: wordList,
-            ),
-            // Reading fade overlay: gradient that dims already-read text above the reading line
-            if (settings.readFadeIntensity > 0)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: MediaQuery.of(context).size.height * settings.scrollLead + 20,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(settings.scriptBgColor).withOpacity(settings.readFadeIntensity),
-                          Color(settings.scriptBgColor).withOpacity(settings.readFadeIntensity * 0.6),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.7, 1.0],
-                      ),
+        body: Focus(
+          autofocus: true,
+          child: Shortcuts(
+            shortcuts: const {
+              SingleActivator(LogicalKeyboardKey.keyF,
+                  control: true, shift: true): _PresentationSearchIntent(),
+              SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
+                  _PresentationSearchIntent(),
+            },
+            child: Actions(
+              actions: {
+                _PresentationSearchIntent:
+                    CallbackAction<_PresentationSearchIntent>(onInvoke: (_) {
+                  _showSearchDialog();
+                  return null;
+                }),
+              },
+              child: GestureDetector(
+                onTap: _showControls,
+                child: Stack(
+                  children: [
+                    // Scrollable script
+                    SingleChildScrollView(
+                      controller: _scrollController,
+                      physics: const ClampingScrollPhysics(),
+                      child: wordList,
                     ),
-                  ),
-                ),
-              ),
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: settings.debugMode ? 240 : 12,
-              child: Opacity(
-                opacity: settings.debugMode ? 1.0 : 0.0,
-                child: IgnorePointer(
-                  ignoring: !settings.debugMode,
-                  child: _SoundLevelBar(
-                    level: tState.soundLevel,
-                    isListening: tState.isListening,
-                    isStarting: tState.isStarting,
-                    accentColor: Color(settings.currentWordColor),
-                  ),
-                ),
-              ),
-            ),
-            if (tState.isStarting && !tState.hasError)
-              Positioned(
-                top: 22,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: _SttStartingIndicator(
-                    accentColor: Color(settings.currentWordColor),
-                  ),
-                ),
-              ),
-            // Technical Debug Overlay
-            if (settings.debugMode)
-              Positioned(
-                bottom: 10,
-                left: 6,
-                right: 6,
-                child: Container(
-                  height: 220,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.92),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.orange, width: 1.5),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Header bar with current status
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1A1A00),
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(9)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              tState.isListening ? Icons.mic : Icons.mic_off,
-                              color: tState.isListening ? Colors.greenAccent : Colors.red,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              tState.isListening ? 'LISTENING' : 'IDLE',
-                              style: TextStyle(
-                                color: tState.isListening ? Colors.greenAccent : Colors.red,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'monospace',
+                    // Reading fade overlay: gradient that dims already-read text above the reading line
+                    if (settings.readFadeIntensity > 0)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: MediaQuery.of(context).size.height *
+                                settings.scrollLead +
+                            20,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Color(settings.scriptBgColor)
+                                      .withOpacity(settings.readFadeIntensity),
+                                  Color(settings.scriptBgColor).withOpacity(
+                                      settings.readFadeIntensity * 0.6),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0.0, 0.7, 1.0],
                               ),
                             ),
-                            const Spacer(),
-                            Text(
-                              'POS: ${tState.confirmedWordIndex}/${script?.words.where((w) => !w.isNewline).length ?? 0}',
-                              style: const TextStyle(
-                                color: Colors.orange,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'monospace',
-                              ),
-                            ),
-                            const Spacer(),
-                            const Text(
-                              '🔧 DEV',
-                              style: TextStyle(color: Colors.orange, fontSize: 10),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              icon: const Icon(Icons.copy, color: Colors.orange, size: 16),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              onPressed: () {
-                                final text = tState.debugLogs.reversed.join('\n');
-                                Clipboard.setData(ClipboardData(text: text));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Debug logs copied to clipboard', style: TextStyle(color: Colors.black)), backgroundColor: Colors.orange, duration: Duration(seconds: 2)),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Log list
-                      Expanded(
-                        child: ListView.builder(
-                          reverse: true,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          itemCount: tState.debugLogs.length,
-                          itemBuilder: (context, idx) {
-                            final log = tState.debugLogs[tState.debugLogs.length - 1 - idx];
-                            Color logColor = Colors.greenAccent;
-                            if (log.contains('⏸') || log.contains('WAIT')) {
-                              logColor = Colors.yellow.shade200;
-                            } else if (log.contains('❌') || log.contains('SKIP') || log.contains('⏭')) {
-                              logColor = Colors.redAccent.shade100;
-                            } else if (log.contains('🎤') || log.contains('STATUS')) {
-                              logColor = Colors.cyan.shade200;
-                            } else if (log.contains('💓') || log.contains('HEARTBEAT')) {
-                              logColor = Colors.purple.shade200;
-                            } else if (log.contains('🚀') || log.contains('🌐')) {
-                              logColor = Colors.blue.shade200;
-                            }
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 1),
-                              child: Text(
-                                log,
-                                style: TextStyle(
-                                  color: logColor,
-                                  fontSize: 9.5,
-                                  fontFamily: 'monospace',
-                                  height: 1.3,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // STT Pro Dashboard Integration
-            if (_webviewController != null && tState.sttWebViewUrl != null)
-              Positioned(
-                left: 0,
-                bottom: 0,
-                width: 1,
-                height: 1,
-                child: IgnorePointer(
-                  ignoring: true,
-                  child: Opacity(
-                    opacity: 0.01,
-                    child: Webview(_webviewController!),
-                  ),
-                ),
-              ),
-
-            // Reading line
-            Positioned(
-              top: MediaQuery.of(context).size.height * settings.scrollLead - 2,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 3,
-                color: Color(settings.currentWordColor).withOpacity(0.35),
-              ),
-            ),
-
-            // Error banner with actionable guidance
-            if (tState.hasError && tState.statusMessage.isNotEmpty)
-              Positioned(
-                top: 60, left: 20, right: 20,
-                child: GestureDetector(
-                  onTap: () {
-                    // Tapping the error banner opens app settings for permission issues
-                    if (tState.statusMessage.contains('permission') ||
-                        tState.statusMessage.contains('Permission')) {
-                      openAppSettings();
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _getUserFriendlyError(tState.statusMessage),
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
-                        ),
-                        if (tState.statusMessage.contains('permission'))
-                          const Padding(
-                            padding: EdgeInsets.only(top: 6),
-                            child: Text('Tap here to open Settings',
-                              style: TextStyle(color: Colors.white70, fontSize: 11,
-                                decoration: TextDecoration.underline)),
                           ),
-                      ],
+                        ),
+                      ),
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: settings.debugMode ? debugConsoleHeight + 20 : 12,
+                      child: Opacity(
+                        opacity: settings.debugMode ? 1.0 : 0.0,
+                        child: IgnorePointer(
+                          ignoring: !settings.debugMode,
+                          child: _SoundLevelBar(
+                            level: tState.soundLevel,
+                            isListening: tState.isListening,
+                            isStarting: tState.isStarting,
+                            accentColor: Color(settings.currentWordColor),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
-
-            // Controls overlay — control bar + speed slider stacked at bottom
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: AnimatedOpacity(
-                opacity: _controlsVisible ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 400),
-                child: IgnorePointer(
-                  ignoring: !_controlsVisible,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Speed slider — sits just above the control bar, always visible in manual mode
-                      if (settings.scrollMode == 'manual')
-                        Container(
-                          color: Colors.black.withOpacity(0.75),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          child: Row(
+                    if (tState.isStarting && !tState.hasError)
+                      Positioned(
+                        top: 22,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: _SttStartingIndicator(
+                            accentColor: Color(settings.currentWordColor),
+                          ),
+                        ),
+                      ),
+                    // Technical Debug Overlay
+                    if (settings.debugMode)
+                      Positioned(
+                        bottom: 10,
+                        left: 6,
+                        right: 6,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutCubic,
+                          height: debugConsoleHeight,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.92),
+                            borderRadius: BorderRadius.circular(10),
+                            border:
+                                Border.all(color: Colors.orange, width: 1.5),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Icon(Icons.speed, color: Colors.white54, size: 18),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Slider(
-                                  value: settings.scrollSpeed,
-                                  min: -300,
-                                  max: 300,
-                                  divisions: 120, // 5wpm steps
-                                  activeColor: Color(settings.currentWordColor),
-                                  inactiveColor: Colors.white24,
-                                  onChanged: (v) {
-                                    ref.read(settingsProvider.notifier).setScrollSpeed(v);
-                                    if (_manualScrolling && v != 0) {
-                                      // If already scrolling, update will happen in next tick of timer
-                                      // No need to restart timer if we handle speed dynamically
-                                    } else if (v != 0 && !_manualScrolling) {
-                                      _startManualScroll();
-                                    } else if (v == 0) {
-                                      _stopManualScroll();
-                                    }
-                                  },
+                              // Header bar with current status
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 2),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF1A1A00),
+                                  borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(9)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      tState.isListening
+                                          ? Icons.mic
+                                          : Icons.mic_off,
+                                      color: tState.isListening
+                                          ? Colors.greenAccent
+                                          : Colors.red,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      tState.isListening ? 'LISTENING' : 'IDLE',
+                                      style: TextStyle(
+                                        color: tState.isListening
+                                            ? Colors.greenAccent
+                                            : Colors.red,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      'POS: ${tState.confirmedWordIndex}/${script?.words.where((w) => !w.isNewline).length ?? 0}',
+                                      style: const TextStyle(
+                                        color: Colors.orange,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    const Text(
+                                      '🔧 DEV',
+                                      style: TextStyle(
+                                          color: Colors.orange, fontSize: 10),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Tooltip(
+                                      message: _debugConsoleMinimized
+                                          ? 'Expand debug output'
+                                          : 'Minimize debug output',
+                                      child: IconButton(
+                                        icon: Icon(
+                                          _debugConsoleMinimized
+                                              ? Icons.keyboard_arrow_up_rounded
+                                              : Icons
+                                                  .keyboard_arrow_down_rounded,
+                                          color: Colors.orange,
+                                          size: 18,
+                                        ),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(
+                                            minWidth: 28, minHeight: 28),
+                                        onPressed: () => setState(() {
+                                          _debugConsoleMinimized =
+                                              !_debugConsoleMinimized;
+                                        }),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.copy,
+                                          color: Colors.orange, size: 16),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                          minWidth: 28, minHeight: 28),
+                                      onPressed: () {
+                                        final text = tState.debugLogs.reversed
+                                            .join('\n');
+                                        Clipboard.setData(
+                                            ClipboardData(text: text));
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content: Text(
+                                                  'Debug logs copied to clipboard',
+                                                  style: TextStyle(
+                                                      color: Colors.black)),
+                                              backgroundColor: Colors.orange,
+                                              duration: Duration(seconds: 2)),
+                                        );
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ),
-                              SizedBox(
-                                width: 62,
-                                child: Text('${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
-                                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                              // Log list
+                              if (!_debugConsoleMinimized)
+                                Expanded(
+                                  child: ListView.builder(
+                                    reverse: true,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    itemCount: tState.debugLogs.length,
+                                    itemBuilder: (context, idx) {
+                                      final log = tState.debugLogs[
+                                          tState.debugLogs.length - 1 - idx];
+                                      Color logColor = Colors.greenAccent;
+                                      if (log.contains('⏸') ||
+                                          log.contains('WAIT')) {
+                                        logColor = Colors.yellow.shade200;
+                                      } else if (log.contains('❌') ||
+                                          log.contains('SKIP') ||
+                                          log.contains('⏭')) {
+                                        logColor = Colors.redAccent.shade100;
+                                      } else if (log.contains('🎤') ||
+                                          log.contains('STATUS')) {
+                                        logColor = Colors.cyan.shade200;
+                                      } else if (log.contains('💓') ||
+                                          log.contains('HEARTBEAT')) {
+                                        logColor = Colors.purple.shade200;
+                                      } else if (log.contains('🚀') ||
+                                          log.contains('🌐')) {
+                                        logColor = Colors.blue.shade200;
+                                      }
+                                      return Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 1),
+                                        child: Text(
+                                          log,
+                                          style: TextStyle(
+                                            color: logColor,
+                                            fontSize: 9.5,
+                                            fontFamily: 'monospace',
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    // STT Pro Dashboard Integration
+                    if (_webviewController != null &&
+                        tState.sttWebViewUrl != null)
+                      Positioned(
+                        left: 0,
+                        bottom: 0,
+                        width: 1,
+                        height: 1,
+                        child: IgnorePointer(
+                          ignoring: true,
+                          child: Opacity(
+                            opacity: 0.01,
+                            child: Webview(_webviewController!),
+                          ),
+                        ),
+                      ),
+
+                    // Reading line
+                    Positioned(
+                      top: MediaQuery.of(context).size.height *
+                              settings.scrollLead -
+                          2,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        height: 3,
+                        color:
+                            Color(settings.currentWordColor).withOpacity(0.35),
+                      ),
+                    ),
+
+                    // Error banner with actionable guidance
+                    if (tState.hasError && tState.statusMessage.isNotEmpty)
+                      Positioned(
+                        top: 60,
+                        left: 20,
+                        right: 20,
+                        child: GestureDetector(
+                          onTap: () {
+                            // Tapping the error banner opens app settings for permission issues
+                            if (tState.statusMessage.contains('permission') ||
+                                tState.statusMessage.contains('Permission')) {
+                              openAppSettings();
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _getUserFriendlyError(tState.statusMessage),
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 13),
+                                ),
+                                if (tState.statusMessage.contains('permission'))
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 6),
+                                    child: Text('Tap here to open Settings',
+                                        style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 11,
+                                            decoration:
+                                                TextDecoration.underline)),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Controls overlay — control bar + speed slider stacked at bottom
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: AnimatedOpacity(
+                        opacity: _controlsVisible ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 400),
+                        child: IgnorePointer(
+                          ignoring: !_controlsVisible,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Speed slider — sits just above the control bar, always visible in manual mode
+                              if (settings.scrollMode == 'manual')
+                                Container(
+                                  color: Colors.black.withOpacity(0.75),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.speed,
+                                          color: Colors.white54, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Slider(
+                                          value: settings.scrollSpeed,
+                                          min: -300,
+                                          max: 300,
+                                          divisions: 120, // 5wpm steps
+                                          activeColor:
+                                              Color(settings.currentWordColor),
+                                          inactiveColor: Colors.white24,
+                                          onChanged: (v) {
+                                            ref
+                                                .read(settingsProvider.notifier)
+                                                .setScrollSpeed(v);
+                                            if (_manualScrolling && v != 0) {
+                                              // If already scrolling, update will happen in next tick of timer
+                                              // No need to restart timer if we handle speed dynamically
+                                            } else if (v != 0 &&
+                                                !_manualScrolling) {
+                                              _startManualScroll();
+                                            } else if (v == 0) {
+                                              _stopManualScroll();
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 62,
+                                        child: Text(
+                                            '${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
+                                            style: const TextStyle(
+                                                color: Colors.white54,
+                                                fontSize: 11)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                              // Control bar
+                              _ControlBar(
+                                isListening: tState.isListening,
+                                isStarting: tState.isStarting,
+                                isManualMode: settings.scrollMode == 'manual',
+                                isManualScrolling: _manualScrolling,
+                                isScrollingBackward: _scrollingBackward,
+                                accentColor: Color(settings.currentWordColor),
+                                onStart: settings.scrollMode == 'manual'
+                                    ? _startManualScroll
+                                    : _requestAndStart,
+                                onStartBackward: () =>
+                                    _startManualScroll(backward: true),
+                                onStop: settings.scrollMode == 'manual'
+                                    ? _stopManualScroll
+                                    : () => ref
+                                        .read(teleprompterProvider.notifier)
+                                        .stopSession(),
+                                onReset: () {
+                                  if (settings.scrollMode == 'manual') {
+                                    _resetManual();
+                                  } else {
+                                    ref
+                                        .read(teleprompterProvider.notifier)
+                                        .resetPosition();
+                                    _scrollController.animateTo(0,
+                                        duration:
+                                            const Duration(milliseconds: 400),
+                                        curve: Curves.easeOutCubic);
+                                  }
+                                },
+                                onBack: () {
+                                  _exitPresentation();
+                                },
+                                onSettings: _showSettings,
                               ),
                             ],
                           ),
                         ),
-
-                      // Control bar
-                      _ControlBar(
-                        isListening: tState.isListening,
-                        isStarting: tState.isStarting,
-                        isManualMode: settings.scrollMode == 'manual',
-                        isManualScrolling: _manualScrolling,
-                        isScrollingBackward: _scrollingBackward,
-                        accentColor: Color(settings.currentWordColor),
-                        onStart: settings.scrollMode == 'manual' ? _startManualScroll : _requestAndStart,
-                        onStartBackward: () => _startManualScroll(backward: true),
-                        onStop: settings.scrollMode == 'manual'
-                            ? _stopManualScroll
-                            : () => ref.read(teleprompterProvider.notifier).stopSession(),
-                        onReset: () {
-                          if (settings.scrollMode == 'manual') {
-                            _resetManual();
-                          } else {
-                            ref.read(teleprompterProvider.notifier).resetPosition();
-                            _scrollController.animateTo(0,
-                                duration: const Duration(milliseconds: 400),
-                                curve: Curves.easeOutCubic);
-                          }
-                        },
-                        onBack: () {
-                          _exitPresentation();
-                        },
-                        onSettings: _showSettings,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
         ),
-      ),
       ),
     );
   }
 
-  TextAlign _toTextAlign(TextAlign? paraAlign, AppSettings settings, bool isRtl) {
+  TextAlign _toTextAlign(
+      TextAlign? paraAlign, AppSettings settings, bool isRtl) {
     if (paraAlign != null) return paraAlign;
     // v3.8: Source of Truth - If no tag, Hebrew defaults to Right, English to Left
     return isRtl ? TextAlign.right : TextAlign.left;
   }
 
-  Alignment _toAlignment(TextAlign? paraAlign, AppSettings settings, bool isRtl) {
+  Alignment _toAlignment(
+      TextAlign? paraAlign, AppSettings settings, bool isRtl) {
     final textAlign = _toTextAlign(paraAlign, settings, isRtl);
     if (textAlign == TextAlign.center) return Alignment.center;
-    
+
     if (textAlign == TextAlign.right) return Alignment.centerRight;
     if (textAlign == TextAlign.left) return Alignment.centerLeft;
-    
+
     // Default fallback
     return Alignment.center;
   }
 
-  WrapAlignment _toWrapAlignment(TextAlign? paraAlign, AppSettings settings, bool isRtl) {
+  WrapAlignment _toWrapAlignment(
+      TextAlign? paraAlign, AppSettings settings, bool isRtl) {
     final textAlign = _toTextAlign(paraAlign, settings, isRtl);
     if (textAlign == TextAlign.center) return WrapAlignment.center;
 
@@ -1173,15 +1466,21 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   WrapAlignment _parseWrapAlignment(String align, bool isRtl) {
     if (isRtl) {
       switch (align) {
-        case 'right': return WrapAlignment.start;
-        case 'left':  return WrapAlignment.end;
-        default: return WrapAlignment.center;
+        case 'right':
+          return WrapAlignment.start;
+        case 'left':
+          return WrapAlignment.end;
+        default:
+          return WrapAlignment.center;
       }
     }
     switch (align) {
-      case 'left':  return WrapAlignment.start;
-      case 'right': return WrapAlignment.end;
-      default: return WrapAlignment.center;
+      case 'left':
+        return WrapAlignment.start;
+      case 'right':
+        return WrapAlignment.end;
+      default:
+        return WrapAlignment.center;
     }
   }
 }
@@ -1353,7 +1652,8 @@ class _ControlBar extends ConsumerWidget {
               onPressed: onBack,
             ),
             IconButton(
-              icon: const Text('A', style: TextStyle(color: Colors.white70, fontSize: 16)),
+              icon: const Text('A',
+                  style: TextStyle(color: Colors.white70, fontSize: 16)),
               onPressed: () {
                 final newSize = (settings.fontSize - 4).clamp(10.0, 80.0);
                 ref.read(settingsProvider.notifier).setFontSize(newSize);
@@ -1363,22 +1663,31 @@ class _ControlBar extends ConsumerWidget {
             GestureDetector(
               onTap: isActive ? onStop : onStart,
               child: Container(
-                width: 64, height: 64,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isActive ? Colors.red : accentColor,
                 ),
                 child: Icon(
                   isManualMode
-                      ? (isManualScrolling && settings.scrollSpeed != 0 ? Icons.pause : Icons.play_arrow)
-                      : (isStarting ? Icons.hourglass_top : (isListening ? Icons.stop : Icons.mic)),
+                      ? (isManualScrolling && settings.scrollSpeed != 0
+                          ? Icons.pause
+                          : Icons.play_arrow)
+                      : (isStarting
+                          ? Icons.hourglass_top
+                          : (isListening ? Icons.stop : Icons.mic)),
                   color: isActive ? Colors.white : Colors.black,
                   size: 30,
                 ),
               ),
             ),
             IconButton(
-              icon: const Text('A', style: TextStyle(color: Colors.white70, fontSize: 22, fontWeight: FontWeight.bold)),
+              icon: const Text('A',
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold)),
               onPressed: () {
                 final newSize = (settings.fontSize + 4).clamp(10.0, 80.0);
                 ref.read(settingsProvider.notifier).setFontSize(newSize);
@@ -1410,7 +1719,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
     final notifier = ref.read(settingsProvider.notifier);
 
     const labelStyle = TextStyle(color: Colors.white70, fontSize: 14);
-    const sectionStyle = TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600);
+    const sectionStyle = TextStyle(
+        color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600);
 
     return DraggableScrollableSheet(
       expand: false,
@@ -1422,10 +1732,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
         children: [
           Center(
             child: Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                  color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2)),
             ),
           ),
 
@@ -1434,8 +1746,14 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const SizedBox(height: 8),
           SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: 'auto', label: Text('Speech Auto'), icon: Icon(Icons.mic)),
-              ButtonSegment(value: 'manual', label: Text('Manual Speed'), icon: Icon(Icons.speed)),
+              ButtonSegment(
+                  value: 'auto',
+                  label: Text('Speech Auto'),
+                  icon: Icon(Icons.mic)),
+              ButtonSegment(
+                  value: 'manual',
+                  label: Text('Manual Speed'),
+                  icon: Icon(Icons.speed)),
             ],
             selected: {settings.scrollMode},
             onSelectionChanged: (val) => notifier.setScrollMode(val.first),
@@ -1447,12 +1765,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Row(children: [
               const Text('Manual Scroll Speed', style: labelStyle),
               const Spacer(),
-              Text('${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
+              Text(
+                  '${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
                   style: const TextStyle(color: Colors.white, fontSize: 14)),
             ]),
             Slider(
-              value: settings.scrollSpeed, min: -300, max: 300, divisions: 120,
-              activeColor: Color(settings.currentWordColor), inactiveColor: Colors.white24,
+              value: settings.scrollSpeed,
+              min: -300,
+              max: 300,
+              divisions: 120,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
               onChanged: (v) => notifier.setScrollSpeed(v),
             ),
             const SizedBox(height: 8),
@@ -1479,9 +1802,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               ignoring: !settings.showAlignmentOverride,
               child: SegmentedButton<String>(
                 segments: const [
-                  ButtonSegment(value: 'left', icon: Icon(Icons.format_align_left)),
-                  ButtonSegment(value: 'center', icon: Icon(Icons.format_align_center)),
-                  ButtonSegment(value: 'right', icon: Icon(Icons.format_align_right)),
+                  ButtonSegment(
+                      value: 'left', icon: Icon(Icons.format_align_left)),
+                  ButtonSegment(
+                      value: 'center', icon: Icon(Icons.format_align_center)),
+                  ButtonSegment(
+                      value: 'right', icon: Icon(Icons.format_align_right)),
                 ],
                 selected: {settings.textAlign},
                 onSelectionChanged: (val) => notifier.setTextAlign(val.first),
@@ -1501,11 +1827,20 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _PresetBtn(label: 'Classic', icon: Icons.document_scanner, onTap: () => notifier.applyPreset('Classic')),
+                _PresetBtn(
+                    label: 'Classic',
+                    icon: Icons.document_scanner,
+                    onTap: () => notifier.applyPreset('Classic')),
                 const SizedBox(width: 8),
-                _PresetBtn(label: 'High-Contrast', icon: Icons.visibility, onTap: () => notifier.applyPreset('High Contrast')),
+                _PresetBtn(
+                    label: 'High-Contrast',
+                    icon: Icons.visibility,
+                    onTap: () => notifier.applyPreset('High Contrast')),
                 const SizedBox(width: 8),
-                _PresetBtn(label: 'Modern Soft', icon: Icons.auto_awesome_mosaic, onTap: () => notifier.applyPreset('Modern Soft')),
+                _PresetBtn(
+                    label: 'Modern Soft',
+                    icon: Icons.auto_awesome_mosaic,
+                    onTap: () => notifier.applyPreset('Modern Soft')),
               ],
             ),
           ),
@@ -1518,8 +1853,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.fontSize.clamp(10.0, 80.0), min: 10, max: 80, divisions: 35,
-            activeColor: Color(settings.currentWordColor), inactiveColor: Colors.white24,
+            value: settings.fontSize.clamp(10.0, 80.0),
+            min: 10,
+            max: 80,
+            divisions: 35,
+            activeColor: Color(settings.currentWordColor),
+            inactiveColor: Colors.white24,
             onChanged: (v) => notifier.setFontSize(v),
           ),
 
@@ -1530,8 +1869,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.lineSpacing, min: 1.0, max: 3.0, divisions: 20,
-            activeColor: Color(settings.currentWordColor), inactiveColor: Colors.white24,
+            value: settings.lineSpacing,
+            min: 1.0,
+            max: 3.0,
+            divisions: 20,
+            activeColor: Color(settings.currentWordColor),
+            inactiveColor: Colors.white24,
             onChanged: (v) => notifier.setLineSpacing(v),
           ),
 
@@ -1542,8 +1885,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.wordSpacing, min: 0.0, max: 20.0, divisions: 20,
-            activeColor: Color(settings.currentWordColor), inactiveColor: Colors.white24,
+            value: settings.wordSpacing,
+            min: 0.0,
+            max: 20.0,
+            divisions: 20,
+            activeColor: Color(settings.currentWordColor),
+            inactiveColor: Colors.white24,
             onChanged: (v) => notifier.setWordSpacing(v),
           ),
 
@@ -1554,8 +1901,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.letterSpacing, min: -1.0, max: 5.0, divisions: 24,
-            activeColor: Color(settings.currentWordColor), inactiveColor: Colors.white24,
+            value: settings.letterSpacing,
+            min: -1.0,
+            max: 5.0,
+            divisions: 24,
+            activeColor: Color(settings.currentWordColor),
+            inactiveColor: Colors.white24,
             onChanged: (v) => notifier.setLetterSpacing(v),
           ),
 
@@ -1566,8 +1917,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.scrollLead, min: 0.15, max: 0.60, divisions: 18,
-            activeColor: Color(settings.currentWordColor), inactiveColor: Colors.white24,
+            value: settings.scrollLead,
+            min: 0.15,
+            max: 0.60,
+            divisions: 18,
+            activeColor: Color(settings.currentWordColor),
+            inactiveColor: Colors.white24,
             onChanged: (v) => notifier.setScrollLead(v),
           ),
 
@@ -1625,20 +1980,31 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.pastWordOpacity, min: 0.05, max: 1.0, divisions: 19,
-            activeColor: Color(settings.currentWordColor), inactiveColor: Colors.white24,
+            value: settings.pastWordOpacity,
+            min: 0.05,
+            max: 1.0,
+            divisions: 19,
+            activeColor: Color(settings.currentWordColor),
+            inactiveColor: Colors.white24,
             onChanged: (v) => notifier.setPastWordOpacity(v),
           ),
 
           Row(children: [
             const Text('Fade Past Lines', style: labelStyle),
             const Spacer(),
-            Text(settings.readFadeIntensity == 0 ? 'Off' : '${(settings.readFadeIntensity * 100).round()}%',
+            Text(
+                settings.readFadeIntensity == 0
+                    ? 'Off'
+                    : '${(settings.readFadeIntensity * 100).round()}%',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.readFadeIntensity, min: 0.0, max: 1.0, divisions: 20,
-            activeColor: Color(settings.currentWordColor), inactiveColor: Colors.white24,
+            value: settings.readFadeIntensity,
+            min: 0.0,
+            max: 1.0,
+            divisions: 20,
+            activeColor: Color(settings.currentWordColor),
+            inactiveColor: Colors.white24,
             onChanged: (v) => notifier.setReadFadeIntensity(v),
           ),
 
@@ -1691,7 +2057,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   ButtonStyle _segmentStyle(AppSettings settings) {
     return ButtonStyle(
       backgroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return Color(settings.currentWordColor);
+        if (states.contains(WidgetState.selected))
+          return Color(settings.currentWordColor);
         return const Color(0xFF2A2A2A);
       }),
       foregroundColor: WidgetStateProperty.resolveWith((states) {
@@ -1706,7 +2073,8 @@ class _PresetBtn extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
-  const _PresetBtn({required this.label, required this.icon, required this.onTap});
+  const _PresetBtn(
+      {required this.label, required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1724,7 +2092,11 @@ class _PresetBtn extends StatelessWidget {
           children: [
             Icon(icon, color: const Color(0xFFFFBF00), size: 18),
             const SizedBox(height: 6),
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -1749,4 +2121,3 @@ class _ColorGrid extends StatelessWidget {
     );
   }
 }
-

@@ -44,53 +44,65 @@ class _CopyIntent extends Intent {
   const _CopyIntent();
 }
 
+class _SearchIntent extends Intent {
+  const _SearchIntent();
+}
+
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
-  const ScriptEditorScreen({super.key, this.shouldAutoLoad = false, this.pendingFile});
+  const ScriptEditorScreen(
+      {super.key, this.shouldAutoLoad = false, this.pendingFile});
 
   @override
   ConsumerState<ScriptEditorScreen> createState() => _ScriptEditorScreenState();
 }
 
-class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with StylingLogicMixin<ScriptEditorScreen> {
+class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
+    with StylingLogicMixin<ScriptEditorScreen> {
   // ── Mixin Implementation for StylingLogicMixin ────────────────────────────
   @override
   List<MarkupController> get controllers => _controllers;
   @override
-  MarkupController? get activeController => _lastFocusedController ?? (_controllers.isNotEmpty ? _controllers[0] : null);
+  MarkupController? get activeController =>
+      _lastFocusedController ??
+      (_controllers.isNotEmpty ? _controllers[0] : null);
   @override
   bool get isGlobalSelection => _isGlobalSelection;
   @override
-  set isGlobalSelection(bool value) => setState(() => _isGlobalSelection = value);
+  set isGlobalSelection(bool value) =>
+      setState(() => _isGlobalSelection = value);
   @override
   bool get isCleaning => _isCleaning;
   @override
   set isCleaning(bool value) => setState(() => _isCleaning = value);
   @override
-  void saveHistory({required String description, bool debounce = true}) => _saveHistory(description: description, debounce: debounce);
+  void saveHistory({required String description, bool debounce = true}) =>
+      _saveHistory(description: description, debounce: debounce);
 
   // ── State Members ──────────────────────────────────────────────────────────
   final List<MarkupController> _controllers = [];
   final List<FocusNode> _focusNodes = [];
   final List<GlobalKey> _blockKeys = [];
   String _currentTitle = 'New Project';
-  
+
   TextSelection? _lastSelection;
+
   /// Preserved non-collapsed selection — survives focus loss from dialogs.
   /// Updated only when the selection is non-collapsed, so opening a dialog
   /// (which collapses the selection) doesn't overwrite this.
   TextSelection? _preservedSelection;
   MarkupController? _lastFocusedController;
-  
+
   String _sourceType = 'TEMP';
   String? _currentSessionId;
   final List<EditorState> _history = [];
   int _historyIndex = -1;
   static const int _maxHistory = 50;
-  
+
   Color _lastChosenTextColor = const Color(0xFFFFBF00);
   Color _lastChosenHighlightColor = const Color(0x4DFFFFFF);
+  String _lastSearchQuery = '';
 
   bool _isInit = false;
   bool _isCleaning = false; // v3.9.5.1: Suppression flag
@@ -102,14 +114,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
-  Timer? _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
+  Timer?
+      _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
 
   // v3.9.6: Professional History Bulking
-  int _typingCharCount = 0;         // chars typed since last history commit
-  Timer? _typingBulkTimer;          // 10-second typing bulk window
-  Timer? _suiteAutoSaveTimer;       // 3-second auto-checkpoint while suite is open
-  String? _suiteSection;            // current function section within a suite (e.g. 'Bold', 'Font Size')
-  final GlobalKey<GlobalSelectionOverlayState> _overlayKey = GlobalKey<GlobalSelectionOverlayState>();
+  int _typingCharCount = 0; // chars typed since last history commit
+  Timer? _typingBulkTimer; // 10-second typing bulk window
+  Timer? _suiteAutoSaveTimer; // 3-second auto-checkpoint while suite is open
+  String?
+      _suiteSection; // current function section within a suite (e.g. 'Bold', 'Font Size')
+  final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
+      GlobalKey<GlobalSelectionOverlayState>();
 
   @override
   void initState() {
@@ -142,7 +157,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
       // Conflict Detection Logic
       String? existingMeta;
-      final List<String> recentScripts = ref.read(settingsProvider).recentScripts;
+      final List<String> recentScripts =
+          ref.read(settingsProvider).recentScripts;
       String normalize(String? t) => (t ?? '').replaceAll('\r', '').trim();
       final String normalizedNew = normalize(content);
 
@@ -179,30 +195,41 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             barrierDismissible: false,
             builder: (ctx) => AlertDialog(
               backgroundColor: const Color(0xFF1E1E1E),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               title: const Row(children: [
-                Icon(Icons.warning_amber_rounded, color: Color(0xFFFFBF00), size: 22),
+                Icon(Icons.warning_amber_rounded,
+                    color: Color(0xFFFFBF00), size: 22),
                 SizedBox(width: 10),
-                Text("Conflict Detected", style: TextStyle(color: Colors.white, fontSize: 17)),
+                Text("Conflict Detected",
+                    style: TextStyle(color: Colors.white, fontSize: 17)),
               ]),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('"$title" is already in your Recents.', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text('"$title" is already in your Recents.',
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  const Text('The version on your disk is different from the version in your history. What do you want to do?', style: TextStyle(color: Colors.white70)),
+                  const Text(
+                      'The version on your disk is different from the version in your history. What do you want to do?',
+                      style: TextStyle(color: Colors.white70)),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, 'cancel'),
-                  child: const Text("KEEP HISTORY", style: TextStyle(color: Colors.white54)),
+                  child: const Text("KEEP HISTORY",
+                      style: TextStyle(color: Colors.white54)),
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(ctx, 'reload'),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFBF00), foregroundColor: Colors.black),
-                  child: const Text("RELOAD & DISCARD EDITS", style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFBF00),
+                      foregroundColor: Colors.black),
+                  child: const Text("RELOAD & DISCARD EDITS",
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -217,8 +244,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             finalSessionId = sessionId;
             finalHistoryJson = decoded['historyJson'];
           } else {
-             if (mounted) Navigator.pop(context);
-             return;
+            if (mounted) Navigator.pop(context);
+            return;
           }
         }
       }
@@ -248,10 +275,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   void _startAutoSave() {
     _autoSaveTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
-      if (!mounted) { timer.cancel(); return; }
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       final text = _getRefinedFullText();
       if (text.isEmpty && _currentTitle == 'New Project') return;
-      try { _forceRecentUpdate(); } catch (_) {}
+      try {
+        _forceRecentUpdate();
+      } catch (_) {}
     });
   }
 
@@ -262,7 +294,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final script = ref.read(scriptProvider);
       String initialText = '';
       String initialTitle = 'Last Session';
-      
+
       if (script != null) {
         initialText = script.rawText;
         initialTitle = script.title;
@@ -288,24 +320,28 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       }
 
       _isInit = true;
-      if (script != null && script.historyIndex >= 0 && script.historyIndex < _history.length) {
+      if (script != null &&
+          script.historyIndex >= 0 &&
+          script.historyIndex < _history.length) {
         _historyIndex = script.historyIndex;
         final s = _history[_historyIndex];
         _loadText(s.text);
-        Future.microtask(() { if (mounted) _applySettingsFromState(s); });
+        Future.microtask(() {
+          if (mounted) _applySettingsFromState(s);
+        });
       } else if (_history.isNotEmpty) {
         _historyIndex = _history.length - 1;
         final s = _history.last;
         _loadText(s.text);
-        Future.microtask(() { if (mounted) _applySettingsFromState(s); });
+        Future.microtask(() {
+          if (mounted) _applySettingsFromState(s);
+        });
       } else {
         _saveHistory(description: 'Initial Load');
       }
       _forceRecentUpdate();
     }
   }
-
-
 
   void _clearControllers() {
     for (final c in _controllers) c.dispose();
@@ -319,10 +355,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     setState(() {
       final controller = MarkupController(text: text);
       final blockKey = GlobalKey(); // v3.9.5.66
-      
+
       final node = FocusNode(onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
+        if (event.logicalKey == LogicalKeyboardKey.enter &&
+            !HardwareKeyboard.instance.isShiftPressed) {
           final currentText = controller.text;
           final sel = controller.selection;
           String p1 = currentText, p2 = '';
@@ -338,14 +375,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && idx + 1 < _focusNodes.length) {
                 _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                _controllers[idx + 1].selection =
+                    const TextSelection.collapsed(offset: 0);
               }
             });
           });
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
+        if (event.logicalKey == LogicalKeyboardKey.backspace &&
+            controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
           if (_controllers.length > 1 && idx != -1) {
             setState(() {
@@ -359,10 +398,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
         return KeyEventResult.ignored;
       });
-      
+
       node.addListener(() {
-        if (node.hasFocus) { _lastFocusedController = controller; _onSelectionChanged(); }
-        else if (_isDirty && !_isCommandExecuting) {
+        if (node.hasFocus) {
+          _lastFocusedController = controller;
+          _onSelectionChanged();
+        } else if (_isDirty && !_isCommandExecuting) {
           // Flush any pending typing bulk on focus loss
           if (_typingCharCount > 0) {
             _commitHistory('Edit Text');
@@ -385,7 +426,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             // Catches all paths: context menu, keyboard, platform menu.
             // Skip when overlay has active handles (refine mode) to avoid
             // infinite loop: refine clears isGlobal → escalation re-selects → loop.
-            final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
+            final overlayActive =
+                _overlayKey.currentState?.hasSelection ?? false;
             if (!_isGlobalSelection &&
                 !_isCommandExecuting &&
                 !overlayActive &&
@@ -412,7 +454,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _focusNodes.insert(index, node);
       _blockKeys.insert(index, blockKey);
     });
-    
+
     if (text.isEmpty) {
       Future.delayed(Duration.zero, () => _focusNodes[index].requestFocus());
     }
@@ -434,7 +476,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     try {
       _clearControllers();
       final paragraphs = text.split('\n');
-      for (int i = 0; i < paragraphs.length; i++) _addBlock(i, text: paragraphs[i]);
+      for (int i = 0; i < paragraphs.length; i++)
+        _addBlock(i, text: paragraphs[i]);
       if (_controllers.isEmpty) _addBlock(0);
     } finally {
       Future.delayed(const Duration(milliseconds: 100), () {
@@ -510,22 +553,22 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (text.trim().isEmpty) return;
     final settings = ref.read(settingsProvider);
     await ref.read(settingsProvider.notifier).saveScript(
-      text, 
-      title: _currentTitle, 
-      type: _sourceType, 
-      historyIndex: _historyIndex, 
-      sessionId: _currentSessionId,
-      fontSize: settings.fontSize,
-      fontFamily: settings.fontFamily,
-      lineSpacing: settings.lineSpacing,
-      letterSpacing: settings.letterSpacing,
-      wordSpacing: settings.wordSpacing,
-      textAlign: settings.textAlign,
-      scriptBgColor: settings.scriptBgColor,
-      currentWordColor: settings.currentWordColor,
-      futureWordColor: settings.futureWordColor,
-      historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
-    );
+          text,
+          title: _currentTitle,
+          type: _sourceType,
+          historyIndex: _historyIndex,
+          sessionId: _currentSessionId,
+          fontSize: settings.fontSize,
+          fontFamily: settings.fontFamily,
+          lineSpacing: settings.lineSpacing,
+          letterSpacing: settings.letterSpacing,
+          wordSpacing: settings.wordSpacing,
+          textAlign: settings.textAlign,
+          scriptBgColor: settings.scriptBgColor,
+          currentWordColor: settings.currentWordColor,
+          futureWordColor: settings.futureWordColor,
+          historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+        );
   }
 
   void _onBlockChanged() {
@@ -545,11 +588,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     Color? found;
     for (final m in matches) {
       if (m.start <= off) {
-         final nextClose = text.indexOf(closeTag, m.end);
-         if (nextClose == -1 || nextClose >= off) {
-            final hex = m.group(1)!.trim().replaceFirst('#', '');
-            found = Color(int.tryParse('FF$hex', radix: 16) ?? (textColor ? 0xFFFFFFFF : 0x00000000));
-         }
+        final nextClose = text.indexOf(closeTag, m.end);
+        if (nextClose == -1 || nextClose >= off) {
+          final hex = m.group(1)!.trim().replaceFirst('#', '');
+          found = Color(int.tryParse('FF$hex', radix: 16) ??
+              (textColor ? 0xFFFFFFFF : 0x00000000));
+        }
       }
     }
     return found ?? const Color(0x00000000);
@@ -563,7 +607,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // Alignment tags always wrap from position 0 so scanning at 0 is correct.
     final rawOff = offset ?? controller.selection.baseOffset;
     final off = rawOff.clamp(0, text.isEmpty ? 0 : text.length);
-    final alignMatches = RegExp(r'\[(?:align=)?(center|left|right)\]').allMatches(text);
+    final alignMatches =
+        RegExp(r'\[(?:align=)?(center|left|right)\]').allMatches(text);
     final dirMatches = RegExp(r'\[(rtl|ltr)\]').allMatches(text);
     String found = 'left';
     for (final m in alignMatches) {
@@ -578,12 +623,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       }
     }
     if (found == 'left') {
-       for (final m in dirMatches) {
-          if (m.start <= off) {
-             final nextClose = text.indexOf('[/${m.group(1)}]', m.end);
-             if (nextClose == -1 || nextClose >= off) if (m.group(1) == 'rtl') found = 'right';
-          }
-       }
+      for (final m in dirMatches) {
+        if (m.start <= off) {
+          final nextClose = text.indexOf('[/${m.group(1)}]', m.end);
+          if (nextClose == -1 || nextClose >= off) if (m.group(1) == 'rtl')
+            found = 'right';
+        }
+      }
     }
     // Mirror the editor's own auto-RTL rule: if no explicit tag was found but
     // the text is predominantly Hebrew, treat it as right-aligned.
@@ -599,7 +645,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final start = selection.start.clamp(0, text.length);
     final end = selection.end.clamp(0, text.length);
     final mid = (start + (end - start) / 2).floor().clamp(0, text.length);
-    bool isPointActive(int off) => _detectStyleAtPoint(text, selection, off, open, close);
+    bool isPointActive(int off) =>
+        _detectStyleAtPoint(text, selection, off, open, close);
     if (selection.isCollapsed) return isPointActive(selection.baseOffset);
     return isPointActive(start) || isPointActive(end) || isPointActive(mid);
   }
@@ -609,9 +656,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (controller == null) return defaultValue;
     final text = controller.text;
     final selection = controller.selection;
-    int valAtPoint(int off) => _detectIntAtPoint(text, selection, off, prefix, defaultValue);
+    int valAtPoint(int off) =>
+        _detectIntAtPoint(text, selection, off, prefix, defaultValue);
     if (selection.isCollapsed) return valAtPoint(selection.baseOffset);
-    final mid = (selection.start + (selection.end - selection.start) / 2).floor().clamp(0, text.length);
+    final mid = (selection.start + (selection.end - selection.start) / 2)
+        .floor()
+        .clamp(0, text.length);
     final vMid = valAtPoint(mid);
     if (vMid != defaultValue) return vMid;
     return valAtPoint(selection.start);
@@ -622,122 +672,163 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (controller == null) return defaultValue;
     final text = controller.text;
     final selection = controller.selection;
-    String valAtPoint(int off) => _detectStringAtPoint(text, selection, off, prefix, defaultValue);
+    String valAtPoint(int off) =>
+        _detectStringAtPoint(text, selection, off, prefix, defaultValue);
     if (selection.isCollapsed) return valAtPoint(selection.baseOffset);
-    final mid = (selection.start + (selection.end - selection.start) / 2).floor().clamp(0, text.length);
+    final mid = (selection.start + (selection.end - selection.start) / 2)
+        .floor()
+        .clamp(0, text.length);
     final vMid = valAtPoint(mid);
     if (vMid != defaultValue) return vMid;
     return valAtPoint(selection.start);
   }
 
-  bool _detectStyleAtPoint(String text, TextSelection selection, int off, String open, String close) {
-      if (off < 0 || off > text.length) return false;
-      bool check(int p) {
-        if (p < 0 || p > text.length) return false;
-        if (open == '**' && close == '**') {
-          final subText = text.substring(0, p);
-          final count = RegExp(r'\*\*').allMatches(subText).length;
-          return count % 2 != 0;
-        }
-        final tagIdx = text.lastIndexOf(open, p);
-        if (tagIdx == -1) return false;
-        final exitIdx = text.indexOf(close, tagIdx + open.length);
-        return exitIdx != -1 && exitIdx >= p;
+  bool _detectStyleAtPoint(String text, TextSelection selection, int off,
+      String open, String close) {
+    if (off < 0 || off > text.length) return false;
+    bool check(int p) {
+      if (p < 0 || p > text.length) return false;
+      if (open == '**' && close == '**') {
+        final subText = text.substring(0, p);
+        final count = RegExp(r'\*\*').allMatches(subText).length;
+        return count % 2 != 0;
       }
-      // Check at cursor, one back, and several nearby positions to handle
-      // landing on invisible tag characters (fontSize: 0.1 in MarkupController)
-      if (check(off)) return true;
-      for (int delta = 1; delta <= open.length + 2; delta++) {
-        if (off - delta >= 0 && check(off - delta)) return true;
-        if (off + delta <= text.length && check(off + delta)) return true;
-      }
-      return false;
+      final tagIdx = text.lastIndexOf(open, p);
+      if (tagIdx == -1) return false;
+      final exitIdx = text.indexOf(close, tagIdx + open.length);
+      return exitIdx != -1 && exitIdx >= p;
+    }
+
+    // Check at cursor, one back, and several nearby positions to handle
+    // landing on invisible tag characters (fontSize: 0.1 in MarkupController)
+    if (check(off)) return true;
+    for (int delta = 1; delta <= open.length + 2; delta++) {
+      if (off - delta >= 0 && check(off - delta)) return true;
+      if (off + delta <= text.length && check(off + delta)) return true;
+    }
+    return false;
   }
 
-  int _detectIntAtPoint(String text, TextSelection selection, int off, String prefix, int defaultValue) {
-      final openTag = '[' + prefix;
-      int check(int p) {
-        if (p < 0 || p > text.length) return defaultValue;
-        final tagIdx = text.lastIndexOf(openTag, p);
-        if (tagIdx == -1) return defaultValue;
-        final closeBracket = text.indexOf(']', tagIdx);
-        if (closeBracket == -1 || closeBracket > p) return defaultValue;
-        final tagName = prefix.split('=').first;
-        final closeTag = '[/' + tagName + ']';
-        final exitIdx = text.indexOf(closeTag, tagIdx);
-        if (exitIdx != -1 && exitIdx < p) return defaultValue;
-        if (exitIdx == -1) return defaultValue;
-        return int.tryParse(text.substring(tagIdx + openTag.length, closeBracket)) ?? defaultValue;
+  int _detectIntAtPoint(String text, TextSelection selection, int off,
+      String prefix, int defaultValue) {
+    final openTag = '[' + prefix;
+    int check(int p) {
+      if (p < 0 || p > text.length) return defaultValue;
+      final tagIdx = text.lastIndexOf(openTag, p);
+      if (tagIdx == -1) return defaultValue;
+      final closeBracket = text.indexOf(']', tagIdx);
+      if (closeBracket == -1 || closeBracket > p) return defaultValue;
+      final tagName = prefix.split('=').first;
+      final closeTag = '[/' + tagName + ']';
+      final exitIdx = text.indexOf(closeTag, tagIdx);
+      if (exitIdx != -1 && exitIdx < p) return defaultValue;
+      if (exitIdx == -1) return defaultValue;
+      return int.tryParse(
+              text.substring(tagIdx + openTag.length, closeBracket)) ??
+          defaultValue;
+    }
+
+    final atBoundary = check(off);
+    if (atBoundary != defaultValue) return atBoundary;
+    // Search nearby positions to handle cursor landing on tag characters
+    for (int delta = 1; delta <= openTag.length + 2; delta++) {
+      if (off - delta >= 0) {
+        final v = check(off - delta);
+        if (v != defaultValue) return v;
       }
-      final atBoundary = check(off);
-      if (atBoundary != defaultValue) return atBoundary;
-      // Search nearby positions to handle cursor landing on tag characters
-      for (int delta = 1; delta <= openTag.length + 2; delta++) {
-        if (off - delta >= 0) { final v = check(off - delta); if (v != defaultValue) return v; }
-        if (off + delta <= text.length) { final v = check(off + delta); if (v != defaultValue) return v; }
+      if (off + delta <= text.length) {
+        final v = check(off + delta);
+        if (v != defaultValue) return v;
       }
-      return defaultValue;
+    }
+    return defaultValue;
   }
 
-  String _detectStringAtPoint(String text, TextSelection selection, int off, String prefix, String defaultValue) {
-      final openTag = '[' + prefix;
-      String check(int p) {
-        if (p < 0 || p > text.length) return defaultValue;
-        final tagIdx = text.lastIndexOf(openTag, p);
-        if (tagIdx == -1) return defaultValue;
-        final closeBracket = text.indexOf(']', tagIdx);
-        if (closeBracket == -1 || closeBracket > p) return defaultValue;
-        final tagName = prefix.split('=').first;
-        final closeTag = '[/' + tagName + ']';
-        final exitIdx = text.indexOf(closeTag, tagIdx);
-        if (exitIdx != -1 && exitIdx < p) return defaultValue;
-        if (exitIdx == -1) return defaultValue;
-        return text.substring(tagIdx + openTag.length, closeBracket);
+  String _detectStringAtPoint(String text, TextSelection selection, int off,
+      String prefix, String defaultValue) {
+    final openTag = '[' + prefix;
+    String check(int p) {
+      if (p < 0 || p > text.length) return defaultValue;
+      final tagIdx = text.lastIndexOf(openTag, p);
+      if (tagIdx == -1) return defaultValue;
+      final closeBracket = text.indexOf(']', tagIdx);
+      if (closeBracket == -1 || closeBracket > p) return defaultValue;
+      final tagName = prefix.split('=').first;
+      final closeTag = '[/' + tagName + ']';
+      final exitIdx = text.indexOf(closeTag, tagIdx);
+      if (exitIdx != -1 && exitIdx < p) return defaultValue;
+      if (exitIdx == -1) return defaultValue;
+      return text.substring(tagIdx + openTag.length, closeBracket);
+    }
+
+    final atBoundary = check(off);
+    if (atBoundary != defaultValue) return atBoundary;
+    // Search nearby positions to handle cursor landing on tag characters
+    for (int delta = 1; delta <= openTag.length + 2; delta++) {
+      if (off - delta >= 0) {
+        final v = check(off - delta);
+        if (v != defaultValue) return v;
       }
-      final atBoundary = check(off);
-      if (atBoundary != defaultValue) return atBoundary;
-      // Search nearby positions to handle cursor landing on tag characters
-      for (int delta = 1; delta <= openTag.length + 2; delta++) {
-        if (off - delta >= 0) { final v = check(off - delta); if (v != defaultValue) return v; }
-        if (off + delta <= text.length) { final v = check(off + delta); if (v != defaultValue) return v; }
+      if (off + delta <= text.length) {
+        final v = check(off + delta);
+        if (v != defaultValue) return v;
       }
-      return defaultValue;
+    }
+    return defaultValue;
   }
 
   @override
   void dispose() {
-    _historyTimer?.cancel(); _recentTimer?.cancel(); _autoSaveTimer?.cancel(); _typingBulkTimer?.cancel(); _suiteAutoSaveTimer?.cancel();
-    _clearControllers(); super.dispose();
+    _historyTimer?.cancel();
+    _recentTimer?.cancel();
+    _autoSaveTimer?.cancel();
+    _typingBulkTimer?.cancel();
+    _suiteAutoSaveTimer?.cancel();
+    _clearControllers();
+    super.dispose();
   }
 
   void _showRenameDialog() {
     final controller = TextEditingController(text: _currentTitle);
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF1A1A1A),
-      title: const Text('Rename Production', style: TextStyle(color: Colors.white)),
-      content: TextField(controller: controller, autofocus: true, style: const TextStyle(color: Colors.white)),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        TextButton(onPressed: () {
-          final newName = controller.text.trim();
-          if (newName.isNotEmpty) {
-            setState(() => _currentTitle = newName);
-            _forceRecentUpdate();
-            Navigator.pop(ctx);
-          }
-        }, child: const Text('Rename', style: TextStyle(color: Color(0xFFFFBF00)))),
-      ],
-    ));
+    showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              title: const Text('Rename Production',
+                  style: TextStyle(color: Colors.white)),
+              content: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white)),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () {
+                      final newName = controller.text.trim();
+                      if (newName.isNotEmpty) {
+                        setState(() => _currentTitle = newName);
+                        _forceRecentUpdate();
+                        Navigator.pop(ctx);
+                      }
+                    },
+                    child: const Text('Rename',
+                        style: TextStyle(color: Color(0xFFFFBF00)))),
+              ],
+            ));
   }
 
-  String _getRefinedFullText() => _controllers.map((c) => c.text).join('\n').trim();
+  String _getRefinedFullText() =>
+      _controllers.map((c) => c.text).join('\n').trim();
 
   /// Clear style at cursor: find the word at cursor, then strip all tags from
   /// just that word — surgically splitting any enclosing styled regions so the
   /// rest of the text keeps its styling.
   void _clearStyleAtCursor(MarkupController c, int cursor) {
     final text = c.text;
-    final tagPattern = RegExp(r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
+    final tagPattern = RegExp(
+        r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
 
     // Step 1: Find the word boundaries at cursor (skipping over tag characters)
     // Walk left to find word start, walk right to find word end,
@@ -791,9 +882,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
     // Step 3: Rebuild text with clean word
     String result = before + cleanWord + after;
-    int newCursor = (cursor - (wordEnd - wordStart - cleanWord.length)).clamp(0, result.length);
+    int newCursor = (cursor - (wordEnd - wordStart - cleanWord.length))
+        .clamp(0, result.length);
     // Adjust cursor: it was relative to old text, account for removed tags before cursor
-    final tagsBeforeCursor = tagPattern.allMatches(wordContent.substring(0, (cursor - wordStart).clamp(0, wordContent.length)));
+    final tagsBeforeCursor = tagPattern.allMatches(wordContent.substring(
+        0, (cursor - wordStart).clamp(0, wordContent.length)));
     int removedBefore = 0;
     for (final m in tagsBeforeCursor) {
       removedBefore += m.end - m.start;
@@ -804,7 +897,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // so surrounding text keeps its style.
     final wordStartInResult = wordStart;
     final wordEndInResult = wordStart + cleanWord.length;
-    result = _splitAllEnclosingStyles(result, wordStartInResult, wordEndInResult, tagPattern);
+    result = _splitAllEnclosingStyles(
+        result, wordStartInResult, wordEndInResult, tagPattern);
 
     // Reclamp cursor
     newCursor = newCursor.clamp(0, result.length);
@@ -817,7 +911,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   /// Split ALL enclosing style tag pairs around a range, so the range loses
   /// styling but surrounding text keeps it.
-  String _splitAllEnclosingStyles(String text, int start, int end, RegExp tagPattern) {
+  String _splitAllEnclosingStyles(
+      String text, int start, int end, RegExp tagPattern) {
     final families = <String, List<String>>{
       'bold': ['**', '**'],
       'underline': ['[u]', '[/u]'],
@@ -830,7 +925,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     int curEnd = end;
 
     for (final entry in families.entries) {
-      final result = _splitEnclosingStyle(current, curStart, curEnd, entry.value[0], entry.value[1]);
+      final result = _splitEnclosingStyle(
+          current, curStart, curEnd, entry.value[0], entry.value[1]);
       if (result != null) {
         current = result[0] as String;
         curStart = result[1] as int;
@@ -844,7 +940,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         if (m.start <= curStart) {
           final closeIdx = current.indexOf(close, m.end);
           if (closeIdx != -1 && closeIdx >= curEnd) {
-            final result = _splitEnclosingStyle(current, curStart, curEnd, current.substring(m.start, m.end), close);
+            final result = _splitEnclosingStyle(current, curStart, curEnd,
+                current.substring(m.start, m.end), close);
             if (result != null) {
               current = result[0] as String;
               curStart = result[1] as int;
@@ -859,7 +956,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   /// Find enclosing open/close pair around a midpoint. Returns [openStart, openEnd, closeStart, closeEnd] or null.
-  List<int>? _findEnclosingPair(String text, int cursor, String open, String close) {
+  List<int>? _findEnclosingPair(
+      String text, int cursor, String open, String close) {
     if (open == '**' && close == '**') {
       final matches = RegExp(r'\*\*').allMatches(text).toList();
       for (int i = 0; i < matches.length - 1; i += 2) {
@@ -889,8 +987,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   /// Split an enclosing style around a range: keep style on before/after, remove from range.
-  List<Object>? _splitEnclosingStyle(String text, int selStart, int selEnd, String open, String close) {
-    final pair = _findEnclosingPair(text, (selStart + selEnd) ~/ 2, open, close);
+  List<Object>? _splitEnclosingStyle(
+      String text, int selStart, int selEnd, String open, String close) {
+    final pair =
+        _findEnclosingPair(text, (selStart + selEnd) ~/ 2, open, close);
     if (pair == null) return null;
     final oStart = pair[0], oEnd = pair[1], cStart = pair[2], cEnd = pair[3];
 
@@ -945,14 +1045,24 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
     final settings = ref.read(settingsProvider);
     final state = EditorState(
-      text: currentText, timestamp: DateTime.now(), description: description,
-      fontSize: settings.fontSize, fontFamily: settings.fontFamily ?? 'Inter',
-      lineSpacing: settings.lineSpacing, letterSpacing: settings.letterSpacing, wordSpacing: settings.wordSpacing,
-      scriptBgColor: settings.scriptBgColor, currentWordColor: settings.currentWordColor, futureWordColor: settings.futureWordColor, textAlign: settings.textAlign,
+      text: currentText,
+      timestamp: DateTime.now(),
+      description: description,
+      fontSize: settings.fontSize,
+      fontFamily: settings.fontFamily ?? 'Inter',
+      lineSpacing: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+      scriptBgColor: settings.scriptBgColor,
+      currentWordColor: settings.currentWordColor,
+      futureWordColor: settings.futureWordColor,
+      textAlign: settings.textAlign,
     );
     setState(() {
-      if (_historyIndex < _history.length - 1) _history.removeRange(_historyIndex + 1, _history.length);
-      _history.add(state); if (_history.length > 50) _history.removeAt(0);
+      if (_historyIndex < _history.length - 1)
+        _history.removeRange(_historyIndex + 1, _history.length);
+      _history.add(state);
+      if (_history.length > 50) _history.removeAt(0);
       _historyIndex = _history.length - 1;
     });
     _scheduleRecentUpdate();
@@ -1016,7 +1126,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (_historyIndex > 0) {
       _isCommandExecuting = true;
       _isDirty = false;
-      setState(() { _historyIndex--; _applyState(_history[_historyIndex]); });
+      setState(() {
+        _historyIndex--;
+        _applyState(_history[_historyIndex]);
+      });
       // Keep _isCommandExecuting true until _isLoading resets (100ms)
       // to prevent controller listeners from corrupting history
       Future.delayed(const Duration(milliseconds: 150), () {
@@ -1033,7 +1146,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (_historyIndex < _history.length - 1) {
       _isCommandExecuting = true;
       _isDirty = false;
-      setState(() { _historyIndex++; _applyState(_history[_historyIndex]); });
+      setState(() {
+        _historyIndex++;
+        _applyState(_history[_historyIndex]);
+      });
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) {
           _isCommandExecuting = false;
@@ -1048,7 +1164,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (idx < 0 || idx >= _history.length || idx == _historyIndex) return;
     _isCommandExecuting = true;
     _isDirty = false;
-    setState(() { _historyIndex = idx; _applyState(_history[idx]); });
+    setState(() {
+      _historyIndex = idx;
+      _applyState(_history[idx]);
+    });
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) {
         _isCommandExecuting = false;
@@ -1074,12 +1193,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   MarkupController? get _activeController {
-    for (var i=0; i<_focusNodes.length; i++) if (_focusNodes[i].hasFocus) return _controllers[i];
-    return _lastFocusedController ?? (_controllers.isNotEmpty ? _controllers.last : null);
+    for (var i = 0; i < _focusNodes.length; i++)
+      if (_focusNodes[i].hasFocus) return _controllers[i];
+    return _lastFocusedController ??
+        (_controllers.isNotEmpty ? _controllers.last : null);
   }
 
   void handleBgColorChange(int color) {
-    _isSuiteDirty = true; // Always treat as session change if color picker is involved
+    _isSuiteDirty =
+        true; // Always treat as session change if color picker is involved
     ref.read(settingsProvider.notifier).setScriptBgColor(color);
     if (_activeSuite == EditorSuite.none) {
       _saveHistory(description: 'Change Background', debounce: true);
@@ -1093,7 +1215,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (_isGlobalSelection || hasOverlay) {
       final refined = _controllers
-          .where((c) => c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed)
+          .where((c) =>
+              c.externalSelection != null &&
+              c.externalSelection!.isValid &&
+              !c.externalSelection!.isCollapsed)
           .toList();
       if (refined.isNotEmpty) return refined;
       return List.of(_controllers);
@@ -1113,7 +1238,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isGlobalSelection = false;
       for (final c in _controllers) {
         if (c.text.isEmpty) continue;
-        c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+        c.externalSelection =
+            TextSelection(baseOffset: 0, extentOffset: c.text.length);
         wrapSelection(open, close, controllerOverride: c, skipHistory: true);
       }
       if (!skipH) _saveHistory(description: 'Global $label');
@@ -1129,7 +1255,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         // boundaries, so the read is guaranteed correct before we return.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
-          final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
+          final hadSelection = c.externalSelection != null &&
+              c.externalSelection!.isValid &&
+              !c.externalSelection!.isCollapsed;
           wrapSelection(open, close, controllerOverride: c, skipHistory: true);
           if (hadSelection) {
             final postSel = c.selection;
@@ -1139,7 +1267,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             }
           }
         }
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+        _overlayKey.currentState
+            ?.syncOffsetsFromExternalSelection(_controllers);
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length > 1) {
         for (final c in targets) {
@@ -1151,8 +1280,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         // v4.1.3: Check whether a selection exists, apply the style, then read
         // c.selection synchronously — it is set by wrapSelection before any iOS
         // platform event can interfere. No visual-offset conversion needed.
-        final hadSel =
-            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) ||
+        final hadSel = (c.externalSelection != null &&
+                c.externalSelection!.isValid &&
+                !c.externalSelection!.isCollapsed) ||
             !c.selection.isCollapsed;
         wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
         if (hadSel) {
@@ -1162,7 +1292,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             c.refresh();
           }
           if (_overlayKey.currentState?.hasSelection ?? false) {
-            _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+            _overlayKey.currentState
+                ?.syncOffsetsFromExternalSelection(_controllers);
           }
         }
       }
@@ -1184,7 +1315,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final skipH = _activeSuite != EditorSuite.none;
     // Section mapping: size → Font Size, font → Font Family, color → Text Color, bg → Highlight
     if (skipH) {
-      final sectionMap = {'size': 'Font Size', 'font': 'Font Family', 'color': 'Text Color', 'bg': 'Highlight'};
+      final sectionMap = {
+        'size': 'Font Size',
+        'font': 'Font Family',
+        'color': 'Text Color',
+        'bg': 'Highlight'
+      };
       _trackSuiteSection(sectionMap[family] ?? label);
     }
 
@@ -1192,8 +1328,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isGlobalSelection = false;
       for (final c in _controllers) {
         if (c.text.isEmpty) continue;
-        c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
-        applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
+        c.externalSelection =
+            TextSelection(baseOffset: 0, extentOffset: c.text.length);
+        applyInlineProperty(family, open, close,
+            controllerOverride: c, skipHistory: true);
       }
       if (!skipH) _saveHistory(description: 'Global $label');
       _isGlobalSelection = true;
@@ -1205,8 +1343,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         // v4.1.3: Same synchronous-read approach as _applyStyleCmd multi-block.
         for (final c in targets) {
           if (c.text.isEmpty) continue;
-          final hadSelection = c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed;
-          applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
+          final hadSelection = c.externalSelection != null &&
+              c.externalSelection!.isValid &&
+              !c.externalSelection!.isCollapsed;
+          applyInlineProperty(family, open, close,
+              controllerOverride: c, skipHistory: true);
           if (hadSelection) {
             final postSel = c.selection;
             if (postSel.isValid && !postSel.isCollapsed) {
@@ -1215,14 +1356,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             }
           }
         }
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+        _overlayKey.currentState
+            ?.syncOffsetsFromExternalSelection(_controllers);
       } else if (targets.length == 1) {
         // v4.1.3: Same synchronous-read approach as _applyStyleCmd single-block.
         final c = targets.first;
-        final hadSel =
-            (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) ||
+        final hadSel = (c.externalSelection != null &&
+                c.externalSelection!.isValid &&
+                !c.externalSelection!.isCollapsed) ||
             !c.selection.isCollapsed;
-        applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
+        applyInlineProperty(family, open, close,
+            controllerOverride: c, skipHistory: true);
         if (hadSel) {
           final postSel = c.selection;
           if (postSel.isValid && !postSel.isCollapsed) {
@@ -1230,12 +1374,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             c.refresh();
           }
           if (_overlayKey.currentState?.hasSelection ?? false) {
-            _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+            _overlayKey.currentState
+                ?.syncOffsetsFromExternalSelection(_controllers);
           }
         }
       } else {
         for (final c in targets) {
-          applyInlineProperty(family, open, close, controllerOverride: c, skipHistory: true);
+          applyInlineProperty(family, open, close,
+              controllerOverride: c, skipHistory: true);
         }
       }
       if (!skipH && targets.isNotEmpty) {
@@ -1254,8 +1400,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (inSuite) _trackSuiteSection('Alignment');
 
     if (_isGlobalSelection) {
-       broadcastAlign(dir, open: '[$dir]', close: '[/$dir]');
-       _resyncGlobalSelection();
+      broadcastAlign(dir, open: '[$dir]', close: '[/$dir]');
+      _resyncGlobalSelection();
     } else {
       final targets = _styleTargets();
       for (final controller in targets) {
@@ -1265,23 +1411,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         final hadSel = controller.externalSelection != null &&
             controller.externalSelection!.isValid &&
             !controller.externalSelection!.isCollapsed;
-        final visStart = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.start) : 0;
-        final visEnd   = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.end)   : 0;
+        final visStart = hadSel
+            ? MarkupController.rawToVisualOffset(
+                controller.text, controller.externalSelection!.start)
+            : 0;
+        final visEnd = hadSel
+            ? MarkupController.rawToVisualOffset(
+                controller.text, controller.externalSelection!.end)
+            : 0;
         controller.value = TextEditingValue(
-          text: StylingService.applyLayout(controller.text, controller.selection, dir),
+          text: StylingService.applyLayout(
+              controller.text, controller.selection, dir),
           selection: TextSelection.collapsed(offset: 0),
         );
         if (hadSel) {
-          final newStart = MarkupController.visualToRawOffset(controller.text, visStart);
-          final newEnd   = MarkupController.visualToRawOffset(controller.text, visEnd);
+          final newStart =
+              MarkupController.visualToRawOffset(controller.text, visStart);
+          final newEnd =
+              MarkupController.visualToRawOffset(controller.text, visEnd);
           if (newEnd > newStart) {
-            controller.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
+            controller.externalSelection =
+                TextSelection(baseOffset: newStart, extentOffset: newEnd);
             controller.refresh();
           }
         }
       }
       if (_overlayKey.currentState?.hasSelection ?? false) {
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+        _overlayKey.currentState
+            ?.syncOffsetsFromExternalSelection(_controllers);
       }
     }
 
@@ -1304,8 +1461,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (inSuite) _trackSuiteSection('Alignment');
 
     if (_isGlobalSelection) {
-       broadcastAlign(align, open: '[align=$align]', close: '[/align=$align]');
-       _resyncGlobalSelection();
+      broadcastAlign(align, open: '[align=$align]', close: '[/align=$align]');
+      _resyncGlobalSelection();
     } else {
       final targets = _styleTargets();
       for (final controller in targets) {
@@ -1313,23 +1470,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         final hadSel = controller.externalSelection != null &&
             controller.externalSelection!.isValid &&
             !controller.externalSelection!.isCollapsed;
-        final visStart = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.start) : 0;
-        final visEnd   = hadSel ? MarkupController.rawToVisualOffset(controller.text, controller.externalSelection!.end)   : 0;
+        final visStart = hadSel
+            ? MarkupController.rawToVisualOffset(
+                controller.text, controller.externalSelection!.start)
+            : 0;
+        final visEnd = hadSel
+            ? MarkupController.rawToVisualOffset(
+                controller.text, controller.externalSelection!.end)
+            : 0;
         controller.value = TextEditingValue(
-          text: StylingService.applyLayout(controller.text, controller.selection, align),
+          text: StylingService.applyLayout(
+              controller.text, controller.selection, align),
           selection: TextSelection.collapsed(offset: 0),
         );
         if (hadSel) {
-          final newStart = MarkupController.visualToRawOffset(controller.text, visStart);
-          final newEnd   = MarkupController.visualToRawOffset(controller.text, visEnd);
+          final newStart =
+              MarkupController.visualToRawOffset(controller.text, visStart);
+          final newEnd =
+              MarkupController.visualToRawOffset(controller.text, visEnd);
           if (newEnd > newStart) {
-            controller.externalSelection = TextSelection(baseOffset: newStart, extentOffset: newEnd);
+            controller.externalSelection =
+                TextSelection(baseOffset: newStart, extentOffset: newEnd);
             controller.refresh();
           }
         }
       }
       if (_overlayKey.currentState?.hasSelection ?? false) {
-        _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+        _overlayKey.currentState
+            ?.syncOffsetsFromExternalSelection(_controllers);
       }
     }
 
@@ -1365,7 +1533,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   void _restoreSelectionIfNeeded() {
     final c = _activeController;
     if (c == null) return;
-    if (c.selection.isCollapsed && _preservedSelection != null && !_preservedSelection!.isCollapsed) {
+    if (c.selection.isCollapsed &&
+        _preservedSelection != null &&
+        !_preservedSelection!.isCollapsed) {
       final sel = _preservedSelection!;
       if (sel.end <= c.text.length) {
         c.selection = sel;
@@ -1400,7 +1570,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     }
     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0x00FFFFFF);
     setState(() => _lastChosenHighlightColor = color);
-    ref.read(settingsProvider.notifier).setLastChosenHighlightColor(color.value);
+    ref
+        .read(settingsProvider.notifier)
+        .setLastChosenHighlightColor(color.value);
     _restoreSelectionIfNeeded();
     _applyInlineCmd('bg', '[bg=#$cleanHex]', '[/bg]', 'Highlight Color');
   }
@@ -1422,7 +1594,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     } else {
       final targets = _styleTargets();
       for (final c in targets) {
-        final sel = (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed)
+        final sel = (c.externalSelection != null &&
+                c.externalSelection!.isValid &&
+                !c.externalSelection!.isCollapsed)
             ? c.externalSelection!
             : c.selection;
         if (sel.isCollapsed) {
@@ -1430,7 +1604,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           final text = c.text;
           final tagMatch = openPattern.allMatches(text).where((m) {
             final closeIdx = text.indexOf(close, m.end);
-            return closeIdx != -1 && m.start <= sel.start && closeIdx + close.length >= sel.end;
+            return closeIdx != -1 &&
+                m.start <= sel.start &&
+                closeIdx + close.length >= sel.end;
           }).toList();
           if (tagMatch.isNotEmpty) {
             final m = tagMatch.last;
@@ -1438,7 +1614,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             final newText = text.substring(0, m.start) +
                 text.substring(m.end, closeIdx) +
                 text.substring(closeIdx + close.length);
-            final offset = (sel.start - m.group(0)!.length).clamp(0, newText.length);
+            final offset =
+                (sel.start - m.group(0)!.length).clamp(0, newText.length);
             c.value = TextEditingValue(
               text: newText,
               selection: TextSelection.collapsed(offset: offset),
@@ -1449,10 +1626,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           final before = c.text.substring(0, sel.start);
           final selected = c.text.substring(sel.start, sel.end);
           final after = c.text.substring(sel.end);
-          final cleaned = selected.replaceAll(openPattern, '').replaceAll(close, '');
+          final cleaned =
+              selected.replaceAll(openPattern, '').replaceAll(close, '');
           c.value = TextEditingValue(
             text: before + cleaned + after,
-            selection: TextSelection(baseOffset: sel.start, extentOffset: sel.start + cleaned.length),
+            selection: TextSelection(
+                baseOffset: sel.start,
+                extentOffset: sel.start + cleaned.length),
           );
         }
       }
@@ -1464,7 +1644,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   Future<void> _importFile() async {
     final supportedExts = PlatformFileImport.supportedExtensions;
-    final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
+    final result = await FilePicker.platform
+        .pickFiles(type: FileType.any, allowMultiple: false);
     if (!mounted) return;
     if (result == null || result.files.single.path == null) {
       // v3.9.5.59: Fluid navigation fallback
@@ -1482,25 +1663,41 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(children: [
             Icon(Icons.block_rounded, color: Colors.redAccent, size: 22),
             SizedBox(width: 10),
-            Text("Not Supported", style: TextStyle(color: Colors.white, fontSize: 17)),
+            Text("Not Supported",
+                style: TextStyle(color: Colors.white, fontSize: 17)),
           ]),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('"${selectedFile.path.split('/').last}"', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              Text('"${selectedFile.path.split('/').last}"',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
-              Text('.${ext.toUpperCase()} files cannot be used as scripts.', style: const TextStyle(color: Colors.white70)),
+              Text('.${ext.toUpperCase()} files cannot be used as scripts.',
+                  style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 12),
-              const Text('Supported formats:', style: TextStyle(color: Colors.white54, fontSize: 12)),
-              Text(PlatformFileImport.formatsLabel, style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
+              const Text('Supported formats:',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(PlatformFileImport.formatsLabel,
+                  style: const TextStyle(
+                      color: Color(0xFFFFBF00),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold)),
             ],
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("OK",
+                    style: TextStyle(
+                        color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))
+          ],
         ),
       );
       return;
@@ -1515,7 +1712,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // pending-file load flow (conflict detection focuses an existing
     // recent if the file is already known, otherwise it loads as new).
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => ScriptEditorScreen(pendingFile: selectedFile)),
+      MaterialPageRoute(
+          builder: (_) => ScriptEditorScreen(pendingFile: selectedFile)),
     );
   }
 
@@ -1541,7 +1739,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // Build filename with guaranteed extension — strip any prior extension first
     final safeName = _currentTitle
         .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
-        .replaceAll(RegExp(r'\.(txt|pdf|docx|rtf|pages|md)$', caseSensitive: false), '');
+        .replaceAll(
+            RegExp(r'\.(txt|pdf|docx|rtf|pages|md)$', caseSensitive: false),
+            '');
     final fileName = '$safeName.$format';
 
     final savedPath = await FilePicker.platform.saveFile(
@@ -1565,7 +1765,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
     // On Windows, FilePicker.saveFile only returns the path — it does NOT write
     // the file. We must write it explicitly.
-    final finalPath = savedPath.endsWith('.$format') ? savedPath : '$savedPath.$format';
+    final finalPath =
+        savedPath.endsWith('.$format') ? savedPath : '$savedPath.$format';
     await File(finalPath).writeAsBytes(Uint8List.fromList(bytes));
 
     if (!mounted) return;
@@ -1575,7 +1776,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       // OS stripped the extension — we added it back, but warn the user
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Saved as "$name" (extension was added automatically).'),
+          content:
+              Text('Saved as "$name" (extension was added automatically).'),
           backgroundColor: Colors.orange[800],
           duration: const Duration(seconds: 4),
         ),
@@ -1584,7 +1786,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+            const Icon(Icons.check_circle_outline,
+                color: Colors.white, size: 18),
             const SizedBox(width: 8),
             Expanded(child: Text('Saved: $name')),
           ]),
@@ -1596,7 +1799,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _clearScript() {
-    setState(() { _loadText(''); _saveHistory(description: 'Clear'); });
+    setState(() {
+      _loadText('');
+      _saveHistory(description: 'Clear');
+    });
   }
 
   void _startPresenting() {
@@ -1604,10 +1810,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       ref.read(scriptProvider.notifier).loadText(_getRefinedFullText());
     } catch (_) {}
     if (mounted) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
     }
   }
-
 
   Widget _buildBottomActions({bool keyboardVisible = false}) {
     return Column(
@@ -1622,7 +1828,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               children: [
                 TextButton(
                   onPressed: () => FocusScope.of(context).unfocus(),
-                  child: const Text('Done', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 17, fontWeight: FontWeight.w600)),
+                  child: const Text('Done',
+                      style: TextStyle(
+                          color: Color(0xFFFFBF00),
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -1638,12 +1848,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                 child: ElevatedButton.icon(
                   onPressed: _startPresenting,
                   icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
-                  label: const Text('PRESENT', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
+                  label: const Text('PRESENT',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          letterSpacing: 1.5)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFFBF00),
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                     elevation: 12,
                     shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
                   ),
@@ -1702,192 +1917,259 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           onRename: _showRenameDialog,
         ),
       ),
-      bottomNavigationBar: _buildBottomActions(keyboardVisible: keyboardVisible),
+      bottomNavigationBar:
+          _buildBottomActions(keyboardVisible: keyboardVisible),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         behavior: HitTestBehavior.translucent,
         child: Stack(
-        children: [
-          Shortcuts(
-        shortcuts: {
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): const _CopyIntent(),
-        },
-        child: Actions(
-          actions: {
-            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-              _selectAllBlocks(); return null;
-            }),
-            _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
-              _onCopyClean(); return null;
-            }),
-          },
-          child: Column(
-            children: [
-              FormattingToolbarMVP(
-                onBold: _onBold, onUnderline: _onUnderline, onItalic: _onItalic,
-                onClear: () {
-                  setState(() => _isCommandExecuting = true);
-                  final tagPattern = RegExp(r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
-                  if (_isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false)) {
-                    // Global: strip ALL tags from every block
-                    for (final c in _controllers) {
-                      c.text = c.text.replaceAll(tagPattern, '');
-                    }
-                  } else {
-                    final c = _activeController;
-                    if (c != null) {
-                      final text = c.text;
-                      final sel = c.selection;
-                      if (sel.isValid && !sel.isCollapsed) {
-                        // Selection: strip tags inside the selected range, then
-                        // split any enclosing tags so surrounding text keeps style.
-                        final before = text.substring(0, sel.start);
-                        final selected = text.substring(sel.start, sel.end);
-                        final after = text.substring(sel.end);
-                        final cleaned = selected.replaceAll(tagPattern, '');
-                        final intermediate = before + cleaned + after;
-                        final cleanEnd = sel.start + cleaned.length;
-                        final result = _splitAllEnclosingStyles(intermediate, sel.start, cleanEnd, tagPattern);
-                        c.value = TextEditingValue(
-                          text: result,
-                          selection: TextSelection.collapsed(offset: sel.start),
-                        );
-                      } else if (sel.isValid && sel.isCollapsed) {
-                        // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
-                        final plainText = text.replaceAll(tagPattern, '');
-                        final cursorInPlain = sel.start >= text.length || text.substring(sel.start).replaceAll(tagPattern, '').isEmpty;
-                        if (cursorInPlain) {
-                          // Baseline Mode: clear ALL tags from ALL blocks
-                          for (final ctrl in _controllers) {
-                            ctrl.text = ctrl.text.replaceAll(tagPattern, '');
+          children: [
+            Shortcuts(
+              shortcuts: {
+                LogicalKeySet(
+                        LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
+                    const _SelectAllIntent(),
+                LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
+                    const _SelectAllIntent(),
+                LogicalKeySet(
+                        LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
+                    const _CopyIntent(),
+                LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
+                    const _CopyIntent(),
+                LogicalKeySet(
+                    LogicalKeyboardKey.control,
+                    LogicalKeyboardKey.shift,
+                    LogicalKeyboardKey.keyF): const _SearchIntent(),
+                LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
+                    LogicalKeyboardKey.keyF): const _SearchIntent(),
+              },
+              child: Actions(
+                actions: {
+                  _SelectAllIntent:
+                      CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
+                    _selectAllBlocks();
+                    return null;
+                  }),
+                  _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
+                    _onCopyClean();
+                    return null;
+                  }),
+                  _SearchIntent:
+                      CallbackAction<_SearchIntent>(onInvoke: (intent) {
+                    _showSearchDialog();
+                    return null;
+                  }),
+                },
+                child: Column(
+                  children: [
+                    FormattingToolbarMVP(
+                      onBold: _onBold,
+                      onUnderline: _onUnderline,
+                      onItalic: _onItalic,
+                      onClear: () {
+                        setState(() => _isCommandExecuting = true);
+                        final tagPattern = RegExp(
+                            r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
+                        if (_isGlobalSelection ||
+                            (_overlayKey.currentState?.hasSelection ?? false)) {
+                          // Global: strip ALL tags from every block
+                          for (final c in _controllers) {
+                            c.text = c.text.replaceAll(tagPattern, '');
                           }
                         } else {
-                          // Word Mode: clear styles for the word at cursor
-                          _clearStyleAtCursor(c, sel.start);
-                        }
-                      }
-                    }
-                  }
-                  _isDirty = false;
-                  setState(() => _isCommandExecuting = false);
-                  _saveHistory(description: 'Clear Format');
-                  // v4.1.4: After stripping alignment tags the text layout shifts,
-                  // but cursorStyleProvider and the overlay handles still hold the
-                  // old alignment. Force re-detection + handle refresh post-frame.
-                  _onSelectionChanged();
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    final c = _activeController;
-                    if (c != null) {
-                      final hasAlign = RegExp(r'\[(?:align=)?(?:center|left|right)\]').hasMatch(c.text);
-                      if (!hasAlign) {
-                        ref.read(cursorStyleProvider.notifier).state =
-                            ref.read(cursorStyleProvider).copyWith(textAlign: 'left');
-                      }
-                    }
-                    _overlayKey.currentState?.refreshPositions();
-                  });
-                },
-                onFontSize: onFontSize, onAlign: onAlign, onDirection: onDirection,
-                onTextColor: onTextColorSelected, onBgColor: onBgColorSelected, onFontFamily: onFontFamily,
-                onBgColorChange: handleBgColorChange, lastTextColor: _lastChosenTextColor, lastHighlightColor: _lastChosenHighlightColor,
-                onUndo: _undo, onRedo: _redo, canUndo: _historyIndex > 0, canRedo: _historyIndex < _history.length - 1,
-                history: _history, historyIndex: _historyIndex, onHistorySelected: (idx) => _jumpToHistory(idx),
-                activeSuite: _activeSuite,
-                onSuiteToggle: (suite) {
-                  // Closing = explicitly closing (none), toggling same suite off, or switching suites
-                  final willClose = suite == EditorSuite.none || suite == _activeSuite;
-                  final willSwitch = suite != _activeSuite && _activeSuite != EditorSuite.none;
-                  _suiteAutoSaveTimer?.cancel();
-                  if ((willClose || willSwitch) && _isSuiteDirty) {
-                    _commitHistory(_suiteSection ?? '${_activeSuite.name.toUpperCase()} Session');
-                    _isSuiteDirty = false;
-                    _suiteSection = null;
-                  }
-                  setState(() { _activeSuite = (_activeSuite == suite) ? EditorSuite.none : suite; });
-                  if (_activeSuite != EditorSuite.none) {
-                    _suiteSection = null;
-                  }
-                },
-                onLayoutInteraction: (section) {
-                  _trackSuiteSection(section);
-                  setState(() => _isSuiteDirty = true);
-                },
-              ),
-              Expanded(
-                child: Container(
-                  color: Color(settings.scriptBgColor),
-                  child: GlobalSelectionOverlay(
-                    key: _overlayKey,
-                    controllers: _controllers,
-                    blockKeys: _blockKeys,
-                    onSelectionChanged: () => setState(() {
-                      _isGlobalSelection = _controllers.isNotEmpty &&
-                          _controllers.every((c) => c.isGlobalSelected);
-                    }),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
-                      itemCount: _controllers.length,
-                      itemBuilder: (context, index) => _EditorBlock(
-                        key: _blockKeys[index],
-                        controller: _controllers[index],
-                        focusNode: _focusNodes[index],
-                        settings: settings,
-                        isGlobalSelected: _isGlobalSelection,
-                        onSubmitted: () => _addBlock(index + 1),
-                        onTap: () {
-                          if (_isGlobalSelection ||
-                              _controllers.any((c) => c.isGlobalSelected) ||
-                              (_overlayKey.currentState?.hasSelection ?? false) ||
-                              _controllers.any((c) => c.externalSelection != null)) {
-                            _clearGlobalSelection();
+                          final c = _activeController;
+                          if (c != null) {
+                            final text = c.text;
+                            final sel = c.selection;
+                            if (sel.isValid && !sel.isCollapsed) {
+                              // Selection: strip tags inside the selected range, then
+                              // split any enclosing tags so surrounding text keeps style.
+                              final before = text.substring(0, sel.start);
+                              final selected =
+                                  text.substring(sel.start, sel.end);
+                              final after = text.substring(sel.end);
+                              final cleaned =
+                                  selected.replaceAll(tagPattern, '');
+                              final intermediate = before + cleaned + after;
+                              final cleanEnd = sel.start + cleaned.length;
+                              final result = _splitAllEnclosingStyles(
+                                  intermediate,
+                                  sel.start,
+                                  cleanEnd,
+                                  tagPattern);
+                              c.value = TextEditingValue(
+                                text: result,
+                                selection:
+                                    TextSelection.collapsed(offset: sel.start),
+                              );
+                            } else if (sel.isValid && sel.isCollapsed) {
+                              // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
+                              final plainText = text.replaceAll(tagPattern, '');
+                              final cursorInPlain = sel.start >= text.length ||
+                                  text
+                                      .substring(sel.start)
+                                      .replaceAll(tagPattern, '')
+                                      .isEmpty;
+                              if (cursorInPlain) {
+                                // Baseline Mode: clear ALL tags from ALL blocks
+                                for (final ctrl in _controllers) {
+                                  ctrl.text =
+                                      ctrl.text.replaceAll(tagPattern, '');
+                                }
+                              } else {
+                                // Word Mode: clear styles for the word at cursor
+                                _clearStyleAtCursor(c, sel.start);
+                              }
+                            }
                           }
-                        },
-                        onSelectAll: _selectAllBlocks,
-                        onCopy: _onCopyClean,
+                        }
+                        _isDirty = false;
+                        setState(() => _isCommandExecuting = false);
+                        _saveHistory(description: 'Clear Format');
+                        // v4.1.4: After stripping alignment tags the text layout shifts,
+                        // but cursorStyleProvider and the overlay handles still hold the
+                        // old alignment. Force re-detection + handle refresh post-frame.
+                        _onSelectionChanged();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted) return;
+                          final c = _activeController;
+                          if (c != null) {
+                            final hasAlign =
+                                RegExp(r'\[(?:align=)?(?:center|left|right)\]')
+                                    .hasMatch(c.text);
+                            if (!hasAlign) {
+                              ref.read(cursorStyleProvider.notifier).state = ref
+                                  .read(cursorStyleProvider)
+                                  .copyWith(textAlign: 'left');
+                            }
+                          }
+                          _overlayKey.currentState?.refreshPositions();
+                        });
+                      },
+                      onFontSize: onFontSize,
+                      onAlign: onAlign,
+                      onDirection: onDirection,
+                      onTextColor: onTextColorSelected,
+                      onBgColor: onBgColorSelected,
+                      onFontFamily: onFontFamily,
+                      onBgColorChange: handleBgColorChange,
+                      lastTextColor: _lastChosenTextColor,
+                      lastHighlightColor: _lastChosenHighlightColor,
+                      onUndo: _undo,
+                      onRedo: _redo,
+                      canUndo: _historyIndex > 0,
+                      canRedo: _historyIndex < _history.length - 1,
+                      history: _history,
+                      historyIndex: _historyIndex,
+                      onHistorySelected: (idx) => _jumpToHistory(idx),
+                      activeSuite: _activeSuite,
+                      onSuiteToggle: (suite) {
+                        // Closing = explicitly closing (none), toggling same suite off, or switching suites
+                        final willClose =
+                            suite == EditorSuite.none || suite == _activeSuite;
+                        final willSwitch = suite != _activeSuite &&
+                            _activeSuite != EditorSuite.none;
+                        _suiteAutoSaveTimer?.cancel();
+                        if ((willClose || willSwitch) && _isSuiteDirty) {
+                          _commitHistory(_suiteSection ??
+                              '${_activeSuite.name.toUpperCase()} Session');
+                          _isSuiteDirty = false;
+                          _suiteSection = null;
+                        }
+                        setState(() {
+                          _activeSuite = (_activeSuite == suite)
+                              ? EditorSuite.none
+                              : suite;
+                        });
+                        if (_activeSuite != EditorSuite.none) {
+                          _suiteSection = null;
+                        }
+                      },
+                      onLayoutInteraction: (section) {
+                        _trackSuiteSection(section);
+                        setState(() => _isSuiteDirty = true);
+                      },
+                    ),
+                    Expanded(
+                      child: Container(
+                        color: Color(settings.scriptBgColor),
+                        child: GlobalSelectionOverlay(
+                          key: _overlayKey,
+                          controllers: _controllers,
+                          blockKeys: _blockKeys,
+                          onSelectionChanged: () => setState(() {
+                            _isGlobalSelection = _controllers.isNotEmpty &&
+                                _controllers.every((c) => c.isGlobalSelected);
+                          }),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
+                            itemCount: _controllers.length,
+                            itemBuilder: (context, index) => _EditorBlock(
+                              key: _blockKeys[index],
+                              controller: _controllers[index],
+                              focusNode: _focusNodes[index],
+                              settings: settings,
+                              isGlobalSelected: _isGlobalSelection,
+                              onSubmitted: () => _addBlock(index + 1),
+                              onTap: () {
+                                if (_isGlobalSelection ||
+                                    _controllers
+                                        .any((c) => c.isGlobalSelected) ||
+                                    (_overlayKey.currentState?.hasSelection ??
+                                        false) ||
+                                    _controllers.any(
+                                        (c) => c.externalSelection != null)) {
+                                  _clearGlobalSelection();
+                                }
+                              },
+                              onSelectAll: _selectAllBlocks,
+                              onCopy: _onCopyClean,
+                              onSearch: _showSearchDialog,
+                            ),
+                          ),
+                        ),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_isPendingLoad)
+              Positioned.fill(
+                child: Container(
+                  color: const Color(0xFF0A0A0A),
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 4,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFFFFBF00)),
+                          ),
+                        ),
+                        SizedBox(height: 18),
+                        Text('Loading script…',
+                            style: TextStyle(
+                                color: Color(0xFFFFBF00),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600)),
+                      ],
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-          if (_isPendingLoad)
-            Positioned.fill(
-              child: Container(
-                color: const Color(0xFF0A0A0A),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 56,
-                        height: 56,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 4,
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFBF00)),
-                        ),
-                      ),
-                      SizedBox(height: 18),
-                      Text('Loading script…',
-                          style: TextStyle(color: Color(0xFFFFBF00), fontSize: 14, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
+            if (settings.debugMode)
+              Positioned(
+                bottom: 24,
+                left: 24,
+                child: IgnorePointer(child: _buildDebugSentry()),
               ),
-             ),
-          if (settings.debugMode)
-            Positioned(
-              bottom: 24, left: 24,
-              child: IgnorePointer(child: _buildDebugSentry()),
-            ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -1901,20 +2183,32 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         color: Colors.black87,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.amber.withOpacity(0.5)),
-        boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 4, spreadRadius: 1)],
+        boxShadow: [
+          BoxShadow(color: Colors.black54, blurRadius: 4, spreadRadius: 1)
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('⚙️ EDITOR SENTRY', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1.5)),
+          const Text('⚙️ EDITOR SENTRY',
+              style: TextStyle(
+                  color: Colors.amber,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                  letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          Text('Blocks: ${_controllers.length}', style: const TextStyle(color: Colors.white, fontSize: 10)),
-          Text('Active Block: ${activeIdx != -1 ? activeIdx : "None"}', style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Blocks: ${_controllers.length}',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Active Block: ${activeIdx != -1 ? activeIdx : "None"}',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
           if (sel != null)
-             Text('Cursor: [${sel.baseOffset}, ${sel.extentOffset}]', style: const TextStyle(color: Colors.white, fontSize: 10)),
-          Text('Global Selection: $_isGlobalSelection', style: const TextStyle(color: Colors.white, fontSize: 10)),
-          Text('History States: ${_history.length}', style: const TextStyle(color: Colors.white, fontSize: 10)),
+            Text('Cursor: [${sel.baseOffset}, ${sel.extentOffset}]',
+                style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Global Selection: $_isGlobalSelection',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('History States: ${_history.length}',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
         ],
       ),
     );
@@ -1942,7 +2236,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         htmlBuf.write(StylingService.markupToHtml(slice));
       }
       if (plainBuf.isEmpty) return;
-      RichClipboard.setHtml(plain: plainBuf.toString(), html: htmlBuf.toString());
+      RichClipboard.setHtml(
+          plain: plainBuf.toString(), html: htmlBuf.toString());
       return;
     }
     final controller = _activeController;
@@ -1955,12 +2250,134 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     );
   }
 
+  Future<void> _showSearchDialog() async {
+    final controller = TextEditingController(text: _lastSearchQuery);
+    final query = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title:
+            const Text('Search script', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Word to find',
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.white24)),
+            focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFFFFBF00))),
+          ),
+          textInputAction: TextInputAction.search,
+          onSubmitted: (value) => Navigator.pop(ctx, value),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFBF00),
+                foregroundColor: Colors.black),
+            child: const Text('Find'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query == null) return;
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return;
+    _lastSearchQuery = trimmed;
+    _findInEditor(trimmed);
+  }
+
+  void _findInEditor(String query) {
+    if (_controllers.isEmpty) return;
+    final needle = query.toLowerCase();
+    final activeIndex = _activeController != null
+        ? _controllers.indexOf(_activeController!)
+        : 0;
+    final startBlock = activeIndex < 0 ? 0 : activeIndex;
+    final activeSelection = _controllers[startBlock].selection;
+    final startOffset = activeSelection.isValid
+        ? activeSelection.end.clamp(0, _controllers[startBlock].text.length)
+        : 0;
+
+    ({int block, int offset})? match;
+    for (var i = startBlock; i < _controllers.length; i++) {
+      final from = i == startBlock ? startOffset : 0;
+      final idx = _controllers[i].text.toLowerCase().indexOf(needle, from);
+      if (idx >= 0) {
+        match = (block: i, offset: idx);
+        break;
+      }
+    }
+    if (match == null) {
+      for (var i = 0; i <= startBlock && i < _controllers.length; i++) {
+        final end = i == startBlock ? startOffset : _controllers[i].text.length;
+        final idx = _controllers[i]
+            .text
+            .toLowerCase()
+            .substring(0, end)
+            .indexOf(needle);
+        if (idx >= 0) {
+          match = (block: i, offset: idx);
+          break;
+        }
+      }
+    }
+
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No match for "$query"'),
+          backgroundColor: Colors.black.withOpacity(0.9),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    _overlayKey.currentState?.clearSelection();
+    _isGlobalSelection = false;
+    for (final ctrl in _controllers) {
+      ctrl.isGlobalSelected = false;
+      ctrl.externalSelection = null;
+    }
+    final c = _controllers[match.block];
+    final selection = TextSelection(
+      baseOffset: match.offset,
+      extentOffset: match.offset + query.length,
+    );
+    c.externalSelection = selection;
+    c.selection = selection;
+    _lastFocusedController = c;
+    _focusNodes[match.block].requestFocus();
+    c.refresh();
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _blockKeys[match!.block].currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          alignment: 0.25,
+        );
+      }
+    });
+  }
+
   void _selectAllBlocks() {
     _overlayKey.currentState?.selectAll();
     _isGlobalSelection = true;
     for (final c in _controllers) {
       c.isGlobalSelected = true;
-      c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+      c.externalSelection =
+          TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
     setState(() {});
     // Refresh after setState so TextFields repaint with new flags.
@@ -2012,21 +2429,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   /// Re-sync externalSelection after a global style operation changes text lengths.
   void _resyncGlobalSelection() {
-    // If the overlay has a selection, refresh its boundaries so handles don't stay 
+    // If the overlay has a selection, refresh its boundaries so handles don't stay
     // at the pre-tag-insertion character offsets which are now mid-sentence.
     if (_overlayKey.currentState?.hasSelection ?? false) {
       _overlayKey.currentState?.selectAll();
     }
     for (final c in _controllers) {
       c.isGlobalSelected = true;
-      c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+      c.externalSelection =
+          TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
     setState(() {});
     for (final c in _controllers) {
       c.refresh();
     }
   }
-
 }
 
 class _EditorBlock extends StatelessWidget {
@@ -2038,16 +2455,24 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
+  final VoidCallback onSearch;
 
   const _EditorBlock({
     super.key,
-    required this.controller, required this.focusNode, required this.settings,
-    required this.isGlobalSelected, required this.onSubmitted, required this.onTap,
-    required this.onSelectAll, required this.onCopy,
+    required this.controller,
+    required this.focusNode,
+    required this.settings,
+    required this.isGlobalSelected,
+    required this.onSubmitted,
+    required this.onTap,
+    required this.onSelectAll,
+    required this.onCopy,
+    required this.onSearch,
   });
 
   TextAlign? _markupAlign(String text) {
-    if (RegExp(r'\[(?:align=)?center\]').hasMatch(text)) return TextAlign.center;
+    if (RegExp(r'\[(?:align=)?center\]').hasMatch(text))
+      return TextAlign.center;
     if (RegExp(r'\[(?:align=)?right\]').hasMatch(text)) return TextAlign.right;
     if (RegExp(r'\[(?:align=)?left\]').hasMatch(text)) return TextAlign.left;
     return null;
@@ -2078,39 +2503,50 @@ class _EditorBlock extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Shortcuts(
-          shortcuts: const {
-            SingleActivator(LogicalKeyboardKey.keyA, control: true): _SelectAllIntent(),
-            SingleActivator(LogicalKeyboardKey.keyA, meta: true): _SelectAllIntent(),
-            SingleActivator(LogicalKeyboardKey.keyC, control: true): _CopyIntent(),
-            SingleActivator(LogicalKeyboardKey.keyC, meta: true): _CopyIntent(),
-          },
-          child: Actions(
-            actions: {
-              _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (_) {
-                onSelectAll();
-                return null;
-              }),
-              _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.keyA, control: true):
+              _SelectAllIntent(),
+          SingleActivator(LogicalKeyboardKey.keyA, meta: true):
+              _SelectAllIntent(),
+          SingleActivator(LogicalKeyboardKey.keyC, control: true):
+              _CopyIntent(),
+          SingleActivator(LogicalKeyboardKey.keyC, meta: true): _CopyIntent(),
+          SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true):
+              _SearchIntent(),
+          SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
+              _SearchIntent(),
+        },
+        child: Actions(
+          actions: {
+            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (_) {
+              onSelectAll();
+              return null;
+            }),
+            _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
+              onCopy();
+              return null;
+            }),
+            _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) {
+              onSearch();
+              return null;
+            }),
+            // Override the internal EditableText intents too. These are
+            // marked Action.overridable inside EditableText, so placing
+            // our own handlers at this ancestor wins — catching both the
+            // keyboard Cmd+C and Flutter's internal copy dispatch paths.
+            CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
+              onInvoke: (_) {
                 onCopy();
                 return null;
-              }),
-              // Override the internal EditableText intents too. These are
-              // marked Action.overridable inside EditableText, so placing
-              // our own handlers at this ancestor wins — catching both the
-              // keyboard Cmd+C and Flutter's internal copy dispatch paths.
-              CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
-                onInvoke: (_) {
-                  onCopy();
-                  return null;
-                },
-              ),
-              SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
-                onInvoke: (_) {
-                  onSelectAll();
-                  return null;
-                },
-              ),
-            },
+              },
+            ),
+            SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
+              onInvoke: (_) {
+                onSelectAll();
+                return null;
+              },
+            ),
+          },
           child: Theme(
             data: Theme.of(context).copyWith(
               textSelectionTheme: TextSelectionThemeData(
@@ -2122,41 +2558,64 @@ class _EditorBlock extends StatelessWidget {
                 selectionColor: Colors.transparent,
               ),
             ),
-          child: TextField(
-            selectionControls: GhostSelectionControls(),
-            controller: controller,
-            focusNode: focusNode,
-            maxLines: null,
-            onSubmitted: (_) => onSubmitted(),
-            onTap: onTap,
-            textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-            textAlign: textAlign,
-            cursorColor: Colors.amber,
-            cursorHeight: maxFontSize,
-            strutStyle: StrutStyle(
-              fontSize: maxFontSize,
-              height: settings.lineSpacing,
-              forceStrutHeight: true,
-            ),
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: settings.fontSize,
-              height: settings.lineSpacing,
-              letterSpacing: settings.letterSpacing,
-              wordSpacing: settings.wordSpacing,
-            ),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(vertical: 2),
-            ),
-            contextMenuBuilder: (context, editableTextState) {
-              final List<ContextMenuButtonItem> items = editableTextState.contextMenuButtonItems;
-              final List<ContextMenuButtonItem> customItems = [];
-              bool hasSelectAll = false;
-              for (final item in items) {
-                if (item.type == ContextMenuButtonType.selectAll) {
-                  hasSelectAll = true;
+            child: TextField(
+              selectionControls: GhostSelectionControls(),
+              controller: controller,
+              focusNode: focusNode,
+              maxLines: null,
+              onSubmitted: (_) => onSubmitted(),
+              onTap: onTap,
+              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+              textAlign: textAlign,
+              cursorColor: Colors.amber,
+              cursorHeight: maxFontSize,
+              strutStyle: StrutStyle(
+                fontSize: maxFontSize,
+                height: settings.lineSpacing,
+                forceStrutHeight: true,
+              ),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: settings.fontSize,
+                height: settings.lineSpacing,
+                letterSpacing: settings.letterSpacing,
+                wordSpacing: settings.wordSpacing,
+              ),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 2),
+              ),
+              contextMenuBuilder: (context, editableTextState) {
+                final List<ContextMenuButtonItem> items =
+                    editableTextState.contextMenuButtonItems;
+                final List<ContextMenuButtonItem> customItems = [];
+                bool hasSelectAll = false;
+                for (final item in items) {
+                  if (item.type == ContextMenuButtonType.selectAll) {
+                    hasSelectAll = true;
+                    customItems.add(ContextMenuButtonItem(
+                      onPressed: () {
+                        ContextMenuController.removeAny();
+                        onSelectAll();
+                      },
+                      type: ContextMenuButtonType.selectAll,
+                    ));
+                  } else if (item.type == ContextMenuButtonType.copy) {
+                    customItems.add(ContextMenuButtonItem(
+                      onPressed: () {
+                        ContextMenuController.removeAny();
+                        onCopy();
+                      },
+                      type: ContextMenuButtonType.copy,
+                    ));
+                  } else {
+                    customItems.add(item);
+                  }
+                }
+                // Force-inject a global Select All even when the native menu
+                // omits it (e.g. the block is already fully selected).
+                if (!hasSelectAll) {
                   customItems.add(ContextMenuButtonItem(
                     onPressed: () {
                       ContextMenuController.removeAny();
@@ -2164,39 +2623,16 @@ class _EditorBlock extends StatelessWidget {
                     },
                     type: ContextMenuButtonType.selectAll,
                   ));
-                } else if (item.type == ContextMenuButtonType.copy) {
-                  customItems.add(ContextMenuButtonItem(
-                    onPressed: () {
-                      ContextMenuController.removeAny();
-                      onCopy();
-                    },
-                    type: ContextMenuButtonType.copy,
-                  ));
-                } else {
-                  customItems.add(item);
                 }
-              }
-              // Force-inject a global Select All even when the native menu
-              // omits it (e.g. the block is already fully selected).
-              if (!hasSelectAll) {
-                customItems.add(ContextMenuButtonItem(
-                  onPressed: () {
-                    ContextMenuController.removeAny();
-                    onSelectAll();
-                  },
-                  type: ContextMenuButtonType.selectAll,
-                ));
-              }
-              return AdaptiveTextSelectionToolbar.buttonItems(
-                anchors: editableTextState.contextMenuAnchors,
-                buttonItems: customItems,
-              );
-            },
+                return AdaptiveTextSelectionToolbar.buttonItems(
+                  anchors: editableTextState.contextMenuAnchors,
+                  buttonItems: customItems,
+                );
+              },
+            ),
           ),
         ),
-      ),
       ),
     );
   }
 }
-

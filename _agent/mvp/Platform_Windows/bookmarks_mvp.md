@@ -76,9 +76,16 @@ Anything not listed here is private implementation detail.
 9. **Presenter handoff preserves identity**: Entering present mode from the
    editor must pass the current title and session id into `scriptProvider` so
    presenter mode loads the same bookmark scope that editor mode saved.
-10. **Bookmarks are visible**: Editor and present mode must render a visible
-    marker such as `»` at saved bookmark positions. The marker is UI-only and
-    must not be inserted into script text.
+10. **Bookmarks are visible and removable**: Editor and present mode must render
+    a visible marker such as `»` at saved bookmark positions. Selecting the
+    marker deletes the bookmark from the shared script scope. The marker is
+    UI-only and must not be inserted into script text.
+11. **Editor and presenter stay in sync**: Bookmarks created or deleted in
+    present mode must be visible after returning to the editor. Bookmarks created
+    or deleted in the editor must be visible after entering present mode.
+12. **Bookmark jumps are direct**: Previous/next bookmark jumps in present mode
+    must move directly to the saved anchor without the active-STT soft-follow
+    animation.
 
 ---
 
@@ -94,6 +101,9 @@ Anything not listed here is private implementation detail.
 - Do not enter presentation by rebuilding the script with a fresh session id
   when an editor session id already exists.
 - Do not hide bookmark markers behind debug mode or search state.
+- Do not leave bookmarks write-only. A visible marker must expose deletion.
+- Do not use estimated font-size scroll math when an exact editor block context
+  is available.
 
 ---
 

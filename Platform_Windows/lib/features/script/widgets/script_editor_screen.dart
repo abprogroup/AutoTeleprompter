@@ -1866,8 +1866,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           );
     } catch (_) {}
     if (mounted) {
-      Navigator.of(context)
+      await Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
+      if (mounted) await _loadBookmarksForCurrentScript(force: true);
     }
   }
 
@@ -2160,33 +2161,39 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                             _isGlobalSelection = _controllers.isNotEmpty &&
                                 _controllers.every((c) => c.isGlobalSelected);
                           }),
-                          child: ListView.builder(
+                          child: SingleChildScrollView(
                             controller: _editorScrollController,
                             padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
-                            itemCount: _controllers.length,
-                            itemBuilder: (context, index) => _EditorBlock(
-                              key: _blockKeys[index],
-                              controller: _controllers[index],
-                              focusNode: _focusNodes[index],
-                              settings: settings,
-                              isGlobalSelected: _isGlobalSelection,
-                              onSubmitted: () => _addBlock(index + 1),
-                              onTap: () {
-                                if (_isGlobalSelection ||
-                                    _controllers
-                                        .any((c) => c.isGlobalSelected) ||
-                                    (_overlayKey.currentState?.hasSelection ??
-                                        false) ||
-                                    _controllers.any(
-                                        (c) => c.externalSelection != null)) {
-                                  _clearGlobalSelection();
-                                }
-                              },
-                              onSelectAll: _selectAllBlocks,
-                              onCopy: _onCopyClean,
-                              onSearch: _showSearchDialog,
-                              hasBookmark:
-                                  _bookmarks.any((b) => b.blockIndex == index),
+                            child: Column(
+                              children: List.generate(
+                                _controllers.length,
+                                (index) => _EditorBlock(
+                                  key: _blockKeys[index],
+                                  controller: _controllers[index],
+                                  focusNode: _focusNodes[index],
+                                  settings: settings,
+                                  isGlobalSelected: _isGlobalSelection,
+                                  onSubmitted: () => _addBlock(index + 1),
+                                  onTap: () {
+                                    if (_isGlobalSelection ||
+                                        _controllers
+                                            .any((c) => c.isGlobalSelected) ||
+                                        (_overlayKey
+                                                .currentState?.hasSelection ??
+                                            false) ||
+                                        _controllers.any((c) =>
+                                            c.externalSelection != null)) {
+                                      _clearGlobalSelection();
+                                    }
+                                  },
+                                  onSelectAll: _selectAllBlocks,
+                                  onCopy: _onCopyClean,
+                                  onSearch: _showSearchDialog,
+                                  hasBookmark: _hasBookmarkInEditorBlock(index),
+                                  onBookmarkTap: () =>
+                                      _deleteEditorBookmarksForBlock(index),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -2440,28 +2447,41 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     );
   }
 
-  double _estimatedEditorOffsetForBlock(int block) {
-    final settings = ref.read(settingsProvider);
-    final width = MediaQuery.of(context).size.width.clamp(320.0, 2400.0);
-    final charsPerLine =
-        (width / (settings.fontSize * 0.62)).clamp(22.0, 120.0);
-    var offset = 24.0;
-    for (var i = 0; i < block && i < _controllers.length; i++) {
-      final lines =
-          (_controllers[i].text.length / charsPerLine).ceil().clamp(1, 80);
-      offset += lines * settings.fontSize * settings.lineSpacing + 24.0;
-    }
-    return offset;
+  bool _hasBookmarkInEditorBlock(int block) {
+    return _bookmarks.any((bookmark) {
+      final position = _editorPositionForBookmark(bookmark);
+      return position.block == block;
+    });
+  }
+
+  Future<void> _deleteEditorBookmarksForBlock(int block) async {
+    final before = _bookmarks.length;
+    final next = _bookmarks.where((bookmark) {
+      final position = _editorPositionForBookmark(bookmark);
+      return position.block != block;
+    }).toList();
+    final deleted = before - next.length;
+    if (deleted <= 0) return;
+    setState(() => _bookmarks = next);
+    await _saveBookmarks();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            deleted == 1 ? 'Bookmark deleted' : '$deleted bookmarks deleted'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _scrollEditorBlockIntoView(int block, {double alignment = 0.25}) {
     if (block < 0 || block >= _blockKeys.length) return;
-    void ensure() {
+    void ensure({Duration duration = const Duration(milliseconds: 260)}) {
       final ctx = _blockKeys[block].currentContext;
       if (ctx == null) return;
       Scrollable.ensureVisible(
         ctx,
-        duration: const Duration(milliseconds: 260),
+        duration: duration,
         curve: Curves.easeOutCubic,
         alignment: alignment,
       );
@@ -2472,19 +2492,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       ensure();
       return;
     }
-    if (_editorScrollController.hasClients) {
-      final max = _editorScrollController.position.maxScrollExtent;
-      _editorScrollController
-          .animateTo(
-        _estimatedEditorOffsetForBlock(block).clamp(0.0, max),
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-      )
-          .whenComplete(() {
-        if (!mounted) return;
-        WidgetsBinding.instance.addPostFrameCallback((_) => ensure());
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => ensure());
   }
 
   void _onCopyClean() {
@@ -2737,6 +2745,7 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onSearch;
   final bool hasBookmark;
+  final VoidCallback onBookmarkTap;
 
   const _EditorBlock({
     super.key,
@@ -2750,6 +2759,7 @@ class _EditorBlock extends StatelessWidget {
     required this.onCopy,
     required this.onSearch,
     required this.hasBookmark,
+    required this.onBookmarkTap,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2788,15 +2798,25 @@ class _EditorBlock extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           if (hasBookmark)
-            const Positioned(
+            Positioned(
               left: -18,
               top: 2,
-              child: Text(
-                '»',
-                style: TextStyle(
-                  color: Color(0xFFFFBF00),
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+              child: Tooltip(
+                message: 'Delete bookmark',
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: onBookmarkTap,
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Text(
+                      '»',
+                      style: TextStyle(
+                        color: Color(0xFFFFBF00),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -623,7 +623,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     return index;
   }
 
-  void _scrollToWordIndex(int index, {bool anticipate = false}) {
+  void _scrollToWordIndex(int index,
+      {bool anticipate = false, bool immediate = false}) {
     final targetIndex = anticipate ? _anticipatoryScrollIndex(index) : index;
     if (targetIndex < 0 || targetIndex >= _wordKeys.length) return;
     final key = _wordKeys[targetIndex];
@@ -643,6 +644,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _scrollTarget =
         rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
 
+    if (immediate) {
+      _cancelSmoothScroll();
+      _scrollController.jumpTo(_scrollTarget);
+      return;
+    }
+
     // Start the smooth scroll timer if not already running
     if (!_smoothScrollActive) {
       _smoothScrollActive = true;
@@ -652,7 +659,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     }
   }
 
-  void _jumpToWordIndex(int index) {
+  void _jumpToWordIndex(int index, {bool immediate = false}) {
     final script = ref.read(scriptProvider);
     if (script == null) return;
     _stopManualScroll();
@@ -660,7 +667,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(index, script: script);
-    _scrollToWordIndex(index);
+    _scrollToWordIndex(index, immediate: immediate);
     _showControls();
   }
 
@@ -831,11 +838,34 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     }
     final bookmark = _bookmarks[target];
     _jumpToWordIndex(
-        bookmark.wordIndex.clamp(0, script.words.length - 1).toInt());
+      bookmark.wordIndex.clamp(0, script.words.length - 1).toInt(),
+      immediate: true,
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Bookmark: ${bookmark.label}'),
         duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  Future<void> _deletePresenterBookmark(int wordIndex) async {
+    final script = ref.read(scriptProvider);
+    if (script == null) return;
+    final before = _bookmarks.length;
+    final next = _bookmarks
+        .where((bookmark) => bookmark.wordIndex != wordIndex)
+        .toList();
+    final deleted = before - next.length;
+    if (deleted <= 0) return;
+    setState(() => _bookmarks = next);
+    await _saveBookmarksForScript(script);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            deleted == 1 ? 'Bookmark deleted' : '$deleted bookmarks deleted'),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -1187,13 +1217,28 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        '»',
-                        style: TextStyle(
-                          color: Color(settings.currentWordColor),
-                          fontSize: effectiveFontSize * 0.62,
-                          fontWeight: FontWeight.bold,
-                          height: settings.lineSpacing,
+                      Tooltip(
+                        message: 'Delete bookmark',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: speechActive
+                              ? null
+                              : () => _deletePresenterBookmark(i),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: effectiveFontSize * 0.06,
+                              vertical: effectiveFontSize * 0.04,
+                            ),
+                            child: Text(
+                              '»',
+                              style: TextStyle(
+                                color: Color(settings.currentWordColor),
+                                fontSize: effectiveFontSize * 0.62,
+                                fontWeight: FontWeight.bold,
+                                height: settings.lineSpacing,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                       SizedBox(width: effectiveFontSize * 0.08),

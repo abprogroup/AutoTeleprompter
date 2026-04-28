@@ -90,6 +90,8 @@ Anything not listed here is private implementation detail.
 - Do not make manual scroll speed change the STT auto-follow speed.
 - Do not collapse blank-line markers to zero-height spacers; they affect scroll
   rhythm and visual structure.
+- Do not soft-scroll present-mode previous/next bookmark jumps. Bookmark
+  navigation is a direct chapter/anchor jump, not active-STT follow.
 
 ---
 
@@ -114,4 +116,3 @@ calculation, timers, scroll notifications, scroll physics, and viewport motion.
 `teleprompter_provider.dart` remains owned primarily by STT and Teleprompter
 Engine. Scrolling may read or call `confirmedWordIndex`/`jumpToPosition(...)`
 but must not move transcript or recognizer lifecycle state into the widget.
-

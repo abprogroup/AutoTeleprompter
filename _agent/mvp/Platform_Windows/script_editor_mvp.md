@@ -111,16 +111,21 @@ part of the Script model/import contract:
    update presentation defaults, but they must not rebuild controllers or discard
    raw editor text.
 
-9. **Editor search is keyboard-accessible**: `Ctrl+Shift+F` must open the editor
+9. **Import parsing preserves intentional blank-line depth**: Script import
+   paths must not collapse `\n\n\n` or larger newline runs before the script
+   reaches editor/presentation state. Trimming outer file noise is allowed, but
+   internal chapter/section spacing must be retained.
+
+10. **Editor search is keyboard-accessible**: `Ctrl+Shift+F` must open the editor
    search dialog from both the editor-level shortcut layer and individual block
    shortcut layers.
 
-10. **Editor search preserves document structure**: Search may focus the matching
+11. **Editor search preserves document structure**: Search may focus the matching
     block, select the matched raw-text range, and scroll the block into view, but
     it must not rewrite controller text, strip markup, create history entries, or
     change script metadata.
 
-11. **Editor search wraps predictably**: Search starts after the current active
+12. **Editor search wraps predictably**: Search starts after the current active
     selection/cursor, proceeds through later blocks, then wraps to the beginning
     through the original start point.
 
@@ -142,6 +147,8 @@ part of the Script model/import contract:
   blocks. Block boundaries and raw markup offsets must remain intact.
 - Do not make `Ctrl+Shift+F` presentation-only. The editor owns its own search
   shortcut contract.
+- Do not collapse internal multi-newline runs during import or provider parsing;
+  they may mark scene/chapter breaks for presentation.
 
 ---
 

@@ -897,7 +897,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             final isHard = para[0].raw == '\n\n';
             return SizedBox(
               key: _wordKeys[para[0].index],
-              height: isHard ? presentationFontSize * 0.5 : 0.0,
+              height:
+                  isHard ? presentationFontSize * settings.lineSpacing : 0.0,
             );
           }
 

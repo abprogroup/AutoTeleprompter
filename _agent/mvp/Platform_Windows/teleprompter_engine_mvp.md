@@ -179,6 +179,11 @@ earlier Windows MVP file and remain part of the engine contract:
     `confirmedWordIndex`, scroll to the top, or discard the current resume
     point.
 
+23. **Blank lines render as blank lines**: Hard newline markers (`\n\n`) in
+    `script.words` must render with real vertical height based on presentation
+    font size and line spacing. Present mode must not visually collapse multiple
+    blank lines into a single tight gap.
+
 ---
 
 ## Forbidden Changes
@@ -213,6 +218,8 @@ earlier Windows MVP file and remain part of the engine contract:
   is a runtime presentation control, not only a diagnostic.
 - Do not allow drag scrolling or word-tap resume jumps while STT is listening or
   starting. Active STT owns the reading-line position.
+- Do not reduce hard blank-line markers to zero-height or half-hidden spacers in
+  presentation mode.
 
 ---
 
@@ -246,6 +253,7 @@ earlier Windows MVP file and remain part of the engine contract:
 | Stopped-session browsing | While STT is stopped, manual scrolling cancels stale smooth-scroll targets and updates the resume point from the reading line on scroll end. |
 | Active STT auto-follow | Auto-follow remains enabled only while STT is listening; user drag scrolling and word-tap jumps are disabled during active/startup STT. |
 | Windows external mic selector | Presentation settings can show discovered `audioinput` devices, persist selection, and apply the chosen input without resetting script position. |
+| Blank-line rendering | Hard blank lines render at presentation line height so multiple newlines remain visible. |
 
 ---
 

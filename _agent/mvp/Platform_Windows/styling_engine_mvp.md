@@ -96,8 +96,8 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
 
 11. **Display-only symbols are preserved**: Tokenization may create
     `ScriptWord` entries whose `normalized` value is empty when the visible token
-    is punctuation or a symbol such as `»`. These tokens are unspeakable for STT
-    alignment but must still render in presentation mode.
+    is punctuation or a symbol such as `"` or `»`. These tokens are unspeakable
+    for STT alignment but must still render in presentation mode.
 
 ---
 

@@ -511,6 +511,14 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     final script = ref.read(scriptProvider);
     if (script != null) {
       await ref.read(teleprompterProvider.notifier).startSession(script);
+      final currentIndex = ref
+          .read(teleprompterProvider)
+          .confirmedWordIndex
+          .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
+          .toInt();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToWordIndex(currentIndex, anticipate: true);
+      });
     }
   }
 
@@ -611,21 +619,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   // ── Speech-mode scroll ──────────────────────────────────────────────────────
 
-  int _anticipatoryScrollIndex(int index) {
-    final script = ref.read(scriptProvider);
-    if (script == null || script.words.isEmpty) return index;
-    var seen = 0;
-    for (var i = index + 1; i < script.words.length; i++) {
-      if (script.words[i].isNewline) continue;
-      seen++;
-      if (seen >= 6) return i;
-    }
-    return index;
-  }
-
   void _scrollToWordIndex(int index,
       {bool anticipate = false, bool immediate = false}) {
-    final targetIndex = anticipate ? _anticipatoryScrollIndex(index) : index;
+    final targetIndex = index;
     if (targetIndex < 0 || targetIndex >= _wordKeys.length) return;
     final key = _wordKeys[targetIndex];
     final ctx = key.currentContext;
@@ -640,7 +636,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
     final wordPos =
         box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
-    final rawTarget = _scrollController.offset + wordPos.dy - targetY;
+    final rowProgress = anticipate ? _visualRowProgress(targetIndex, box) : 0.0;
+    final lineAdvance =
+        (box.size.height * settings.lineSpacing).clamp(0.0, screenH * 0.22);
+    final rawTarget = _scrollController.offset +
+        wordPos.dy -
+        targetY +
+        rowProgress * lineAdvance;
     _scrollTarget =
         rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
 
@@ -669,6 +671,41 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         .jumpToPosition(index, script: script);
     _scrollToWordIndex(index, immediate: immediate);
     _showControls();
+  }
+
+  double _visualRowProgress(int index, RenderBox currentBox) {
+    if (index < 0 || index >= _wordKeys.length) return 0.0;
+    final currentDy = currentBox.localToGlobal(Offset.zero).dy;
+    final tolerance = (currentBox.size.height * 0.7).clamp(10.0, 90.0);
+
+    var rowStart = index;
+    for (var i = index - 1; i >= 0; i--) {
+      final box = _boxForWordIndex(i);
+      if (box == null) break;
+      final dy = box.localToGlobal(Offset.zero).dy;
+      if ((dy - currentDy).abs() > tolerance) break;
+      rowStart = i;
+    }
+
+    var rowEnd = index;
+    for (var i = index + 1; i < _wordKeys.length; i++) {
+      final box = _boxForWordIndex(i);
+      if (box == null) break;
+      final dy = box.localToGlobal(Offset.zero).dy;
+      if ((dy - currentDy).abs() > tolerance) break;
+      rowEnd = i;
+    }
+
+    final span = rowEnd - rowStart;
+    if (span <= 0) return 0.0;
+    return ((index - rowStart) / span).clamp(0.0, 1.0).toDouble();
+  }
+
+  RenderBox? _boxForWordIndex(int index) {
+    if (index < 0 || index >= _wordKeys.length) return null;
+    final ctx = _wordKeys[index].currentContext;
+    if (ctx == null) return null;
+    return ctx.findRenderObject() as RenderBox?;
   }
 
   bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
@@ -806,15 +843,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     final sttState = ref.read(teleprompterProvider);
-    if (sttState.isListening || sttState.isStarting) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Stop STT before jumping between bookmarks'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
     await _loadBookmarksForScript(script, force: true);
     if (!mounted) return;
     if (_bookmarks.isEmpty) {
@@ -1009,16 +1037,16 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     final diff = _scrollTarget - current;
 
     // Close enough — snap and stop
-    if (diff.abs() < 0.35) {
+    if (diff.abs() < 0.2) {
       _scrollController.jumpTo(_scrollTarget);
       timer.cancel();
       _smoothScrollActive = false;
       return;
     }
 
-    var step = diff * 0.055;
-    step = step.clamp(-18.0, 18.0).toDouble();
-    if (step.abs() < 0.8) step = diff.isNegative ? -0.8 : 0.8;
+    var step = diff * 0.035;
+    step = step.clamp(-7.0, 7.0).toDouble();
+    if (step.abs() < 0.25) step = diff.isNegative ? -0.25 : 0.25;
     final next = current + step;
     _scrollController
         .jumpTo(next.clamp(0.0, _scrollController.position.maxScrollExtent));
@@ -2000,7 +2028,7 @@ class _ControlBar extends ConsumerWidget {
             ),
             IconButton(
               icon: const Icon(Icons.skip_previous, color: Colors.white70),
-              onPressed: isListening || isStarting ? null : onPreviousBookmark,
+              onPressed: onPreviousBookmark,
               tooltip: 'Previous bookmark',
             ),
             IconButton(
@@ -2063,7 +2091,7 @@ class _ControlBar extends ConsumerWidget {
             ),
             IconButton(
               icon: const Icon(Icons.skip_next, color: Colors.white70),
-              onPressed: isListening || isStarting ? null : onNextBookmark,
+              onPressed: onNextBookmark,
               tooltip: 'Next bookmark',
             ),
             IconButton(

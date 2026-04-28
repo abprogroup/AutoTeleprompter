@@ -65,8 +65,11 @@ Anything not listed here is private implementation detail.
    `TeleprompterNotifier.jumpToPosition(...)`.
 5. **Bookmark jumps preserve resume state**: Jumping to a bookmark updates the
    provider position and must make the next STT start resume from that point.
-6. **Active STT owns the reading line**: Previous/next bookmark navigation in
-   present mode is disabled while STT is listening or starting.
+6. **Bookmarks override active STT position by command**: Previous/next bookmark
+   navigation in present mode must work while STT is listening or starting. The
+   command routes through `TeleprompterNotifier.jumpToPosition(...)` so
+   transcript/no-progress state clears and locale sync can restart from the new
+   anchor.
 7. **Bookmark persistence is additive**: Saving bookmarks must write only the
    bookmark list for that script scope; it must not rewrite script text,
    history, recents, or settings.
@@ -95,8 +98,8 @@ Anything not listed here is private implementation detail.
 - Do not reset `confirmedWordIndex` to zero when jumping to a bookmark.
 - Do not use the restart button behavior for bookmark navigation.
 - Do not clear the bookmark list when adding a new anchor.
-- Do not allow present-mode bookmark navigation while STT is active unless the
-  STT contract is explicitly updated.
+- Do not disable present-mode previous/next bookmark navigation while STT is
+  active. Bookmarks exist so the operator can jump anchors without pausing.
 - Do not store bookmarks inside visible script text or markup tags.
 - Do not make bookmarks depend on debug mode.
 - Do not enter presentation by rebuilding the script with a fresh session id

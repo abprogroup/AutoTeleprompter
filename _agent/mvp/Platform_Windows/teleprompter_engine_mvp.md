@@ -168,8 +168,10 @@ earlier Windows MVP file and remain part of the engine contract:
 20. **Active STT locks user browsing**: While `TeleprompterState.isListening` or
     `isStarting` is true, presentation scrolling must use
     `NeverScrollableScrollPhysics` for user input and word taps must not call
-    `jumpToPosition(...)`. The only movement during active STT is provider-driven
-    auto-follow from the confirmed word index.
+    `jumpToPosition(...)`. Bookmark previous/next controls are the allowed
+    operator exception and must call `jumpToPosition(...)` directly. Other
+    movement during active STT is provider-driven auto-follow from the confirmed
+    word index.
 
 21. **Debug console collapse is visual only**: Debug-mode minimize/expand changes
     only the debug output window height. It must not clear `debugLogs`, unmount
@@ -229,7 +231,8 @@ earlier Windows MVP file and remain part of the engine contract:
 - Do not hide the Windows mic selector behind debug mode. External input choice
   is a runtime presentation control, not only a diagnostic.
 - Do not allow drag scrolling or word-tap resume jumps while STT is listening or
-  starting. Active STT owns the reading-line position.
+  starting. Active STT owns the reading-line position except for explicit
+  bookmark previous/next commands.
 - Do not reduce hard blank-line markers to zero-height or half-hidden spacers in
   presentation mode.
 - Do not make present-mode font size controls runtime-only. They must persist to

@@ -64,9 +64,10 @@ Anything not listed here is private implementation detail.
    allowed and must not be pulled back to an old STT target.
 3. **Stopped browsing updates resume point**: On stopped scroll end, the nearest
    word to the reading line must become the next `confirmedWordIndex`.
-4. **STT auto-follow is anticipatory**: Active STT should target a small number
-   of readable words ahead of the confirmed word so the viewport starts moving
-   before a row is fully completed.
+4. **STT auto-follow is row-progressive**: Active STT follows the confirmed word
+   and adds visual-row progress to the scroll target so the viewport starts
+   moving while the reader advances through the row, not only after the row is
+   complete.
 5. **Smooth motion is bounded**: The smooth timer must move toward `_scrollTarget`
    with small bounded frame steps, not large `animateTo` row jumps.
 6. **Exact jumps stay exact**: Search, bookmark, tap, reset, and initial resume
@@ -84,8 +85,9 @@ Anything not listed here is private implementation detail.
 
 - Do not call `_scrollToWordIndex()` from stopped user-scroll notifications.
 - Do not use `animateTo` row jumps for every STT word advancement.
-- Do not allow word taps, drag browsing, or bookmark previous/next jumps while
-  STT is listening/starting.
+- Do not allow word taps or drag browsing while STT is listening/starting.
+  Bookmark previous/next commands are explicit operator jumps and remain
+  allowed through `jumpToPosition(...)`.
 - Do not reset the provider index as a side effect of smooth scrolling.
 - Do not make manual scroll speed change the STT auto-follow speed.
 - Do not collapse blank-line markers to zero-height spacers; they affect scroll
@@ -97,8 +99,8 @@ Anything not listed here is private implementation detail.
 
 ## Known Fragilities
 
-- Anticipatory scrolling uses a fixed lookahead count. Very large fonts, very
-  short lines, or mixed RTL/LTR rows may need future tuning.
+- Row-progress scrolling depends on visible word render boxes. Very large fonts,
+  very short lines, or mixed RTL/LTR rows may need future tuning.
 - The smooth timer uses `jumpTo` frame steps rather than Flutter physics; this
   is deliberate for deterministic teleprompter movement, but it must be watched
   for frame pacing on weak machines.

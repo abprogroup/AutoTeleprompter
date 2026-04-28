@@ -102,10 +102,10 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
     is punctuation or a symbol such as `"` or `»`. These tokens are unspeakable
     for STT alignment but must still render in presentation mode.
 
-12. **Editor preview scale is visual only**: The editor may render text at 50%
-    of the saved presenter font size for comfortable editing, but raw metadata
-    and suite controls must keep the real number. A saved `28px` script remains
-    `28px`; only editor preview painting is scaled.
+12. **Font-size metadata is never scaled in the editor**: The editor text field,
+    font suite, script metadata, file export, and style tags all use the same
+    saved font-size number. Any presentation enlargement belongs only to the
+    teleprompter render path.
 
 ---
 
@@ -117,8 +117,9 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
   handles the case.
 - Do not let alignment tags nest or accumulate.
 - Do not let copy/paste expose raw style tags to the user.
-- Do not use editor preview scaling to mutate `settings.fontSize`, `[size=...]`
-  tags, script metadata, or exported document sizes.
+- Do not use editor preview scaling to mutate or reinterpret
+  `settings.fontSize`, `[size=...]` tags, script metadata, or exported document
+  sizes.
 - Do not add history saves to cursor/style detection.
 - Do not skip punctuation-only or symbol-only tokens merely because
   `normalizeForMatching()` returns an empty string. Skip only empty markup/tag

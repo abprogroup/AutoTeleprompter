@@ -195,10 +195,10 @@ earlier Windows MVP file and remain part of the engine contract:
     Returning to the editor must show the same typography values in the font and
     layout suites.
 
-25. **Presenter font size is the real metadata value**: Presentation rendering
-    must use `settings.fontSize` directly. Do not multiply it for present mode.
-    The editor owns a visual-only 50% preview scale so editing remains compact
-    without changing the saved font-size number.
+25. **Presenter font size shares one metadata value**: Presenter controls,
+    editor controls, style tags, and export all use the same saved font-size
+    number. The teleprompter render path may enlarge that value for presenter
+    readability, but it must never save the enlarged number back to metadata.
 
 26. **Default-relative spacing display**: Presenter line-spacing controls may
     store the real rendering value (`1.2` by default), but the visible value must
@@ -255,8 +255,8 @@ earlier Windows MVP file and remain part of the engine contract:
 - Do not make present-mode typography controls runtime-only. Font size and
   line/word/letter spacing must persist to the active script metadata that the
   editor font/layout suites read.
-- Do not multiply presenter font size to compensate for editor preview scaling.
-  The stored number is the presenter number.
+- Do not save presentation-enlarged font sizes back to settings, style tags, or
+  script metadata. The stored number remains the editor/export/control number.
 - Do not show raw `1.2` as the default line-spacing label in presenter settings;
   the UI label must display default-relative `0.0`.
 - Do not give the presenter spacing sliders narrower bounds than the editor

@@ -2841,10 +2841,6 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
-    const editorPreviewScale = 0.5;
-    final editorFontSize = settings.fontSize * editorPreviewScale;
-    final editorMaxFontSize = maxFontSize * editorPreviewScale;
-    controller.fontSizeScale = editorPreviewScale;
 
     return Container(
       decoration: BoxDecoration(
@@ -2949,15 +2945,15 @@ class _EditorBlock extends StatelessWidget {
                         isRtl ? TextDirection.rtl : TextDirection.ltr,
                     textAlign: textAlign,
                     cursorColor: Colors.amber,
-                    cursorHeight: editorMaxFontSize,
+                    cursorHeight: maxFontSize,
                     strutStyle: StrutStyle(
-                      fontSize: editorMaxFontSize,
+                      fontSize: maxFontSize,
                       height: settings.lineSpacing,
                       forceStrutHeight: true,
                     ),
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: editorFontSize,
+                      fontSize: settings.fontSize,
                       height: settings.lineSpacing,
                       letterSpacing: settings.letterSpacing,
                       wordSpacing: settings.wordSpacing,

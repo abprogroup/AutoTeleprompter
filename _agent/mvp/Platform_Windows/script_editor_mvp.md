@@ -94,10 +94,10 @@ part of the Script model/import contract:
    spacing, alignment, colors, `sessionId`, `historyJson`, and `historyIndex`
    must be passed through load/save/open paths.
 
-3a. **Editor font preview is scaled, metadata is not**: The editor text field may
-    paint script text at 50% of `settings.fontSize` for fluid editing, but the
-    font suite, script metadata, file export, and presenter must keep the real
-    saved font-size number.
+3a. **Editor font size is the metadata value**: The editor text field, font
+    suite, script metadata, and file export must all use the same saved
+    font-size number. Presentation-only enlargement belongs to the
+    Teleprompter Engine MVP, not the editor.
 
 4. **Style metadata may update without text replacement**:
    `ScriptNotifier.updateStyleMetadata(...)` may change active script style
@@ -165,8 +165,8 @@ part of the Script model/import contract:
   focus changes.
 - Do not bypass `ScriptNotifier.loadText()` for active script replacement.
 - Do not remove history metadata from recent-script JSON.
-- Do not halve or double saved font-size metadata to compensate for editor
-  preview scaling.
+- Do not halve or double saved font-size metadata to compensate for presentation
+  readability.
 - Do not add `Platform.isWindows` branching inside editor feature code unless the
   platform helper layer cannot represent the behavior.
 - Do not implement editor search by flattening all controller text and rewriting

@@ -1109,9 +1109,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     }
     if (currentParagraph.isNotEmpty) paragraphs.add(currentParagraph);
 
-    // Presentation mode uses 2x font size for readability.
-    // The editor shows smaller text for fluid editing; the teleprompter enlarges it.
-    final presentationFontSize = settings.fontSize;
+    // Presentation mode is a viewing surface, so it renders the single saved
+    // font-size value larger without changing the metadata number shared with
+    // the editor.
+    final presentationFontSize = settings.fontSize * 2.0;
     final debugConsoleHeight =
         settings.debugMode ? (_debugConsoleMinimized ? 36.0 : 220.0) : 0.0;
     final bookmarkWordIndexes = _bookmarks.map((b) => b.wordIndex).toSet();
@@ -1183,8 +1184,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                       .replaceAll(_tagStripRe, '')
                       .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
 
-                  final effectiveFontSize =
-                      word.fontSize ?? presentationFontSize;
+                  final effectiveFontSize = word.fontSize != null
+                      ? word.fontSize! * 2.0
+                      : presentationFontSize;
 
                   // User-applied highlight (from tokenizer-parsed [bg=] tags)
                   final userBgColor = word.highlight;

@@ -17,10 +17,6 @@ class MarkupController extends TextEditingController {
   /// Whether the entire block is selected (e.g. during Select All).
   bool isGlobalSelected = false;
 
-  /// Visual-only scale used by the editor to preview presenter font sizes at a
-  /// smaller size without changing the saved metadata value.
-  double fontSizeScale = 1.0;
-
   /// Force a repaint after mutating [externalSelection] or [isGlobalSelected].
   /// These fields live outside [value], so listeners otherwise won't fire.
   void refresh() => notifyListeners();
@@ -260,9 +256,7 @@ class MarkupController extends TextEditingController {
       if (underline) s = s.copyWith(decoration: TextDecoration.underline);
       if (textColors.isNotEmpty) s = s.copyWith(color: textColors.last);
       if (bgColors.isNotEmpty) s = s.copyWith(backgroundColor: bgColors.last);
-      if (sizes.isNotEmpty) {
-        s = s.copyWith(fontSize: sizes.last * fontSizeScale);
-      }
+      if (sizes.isNotEmpty) s = s.copyWith(fontSize: sizes.last);
       if (fonts.isNotEmpty) s = s.copyWith(fontFamily: fonts.last);
       return s;
     }

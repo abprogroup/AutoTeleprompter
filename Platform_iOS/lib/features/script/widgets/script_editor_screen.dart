@@ -1936,6 +1936,20 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         _globalClipboard = plainBuf.toString();
         Clipboard.setData(ClipboardData(text: _globalClipboard!));
       }
+      // DIAGNOSTIC — remove after confirming fix:
+      // Shows how many chars were captured and from how many blocks.
+      // This tells us whether the bug is in write (cut) or read (paste).
+      final diagBlocks = _controllers.length;
+      final diagChars = _globalClipboard?.length ?? 0;
+      final diagPreview = _globalClipboard?.substring(0, (_globalClipboard?.length ?? 0).clamp(0, 60)) ?? 'null';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('CUT: $diagBlocks blocks, $diagChars chars\n"$diagPreview..."'),
+            duration: const Duration(seconds: 12),
+          ));
+        }
+      });
 
       // ── Step 2: delete ──
       _isCommandExecuting = true;

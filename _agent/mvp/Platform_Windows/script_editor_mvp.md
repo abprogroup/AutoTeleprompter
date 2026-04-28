@@ -129,6 +129,11 @@ part of the Script model/import contract:
     selection/cursor, proceeds through later blocks, then wraps to the beginning
     through the original start point.
 
+13. **Editor search is visible-text based**: Search must match the text the user
+    can see, not hidden markup tags. After a visible match is found, it must
+    translate the visual offset back to raw `MarkupController` offsets before
+    setting selection.
+
 ---
 
 ## Forbidden Changes
@@ -149,6 +154,8 @@ part of the Script model/import contract:
   shortcut contract.
 - Do not collapse internal multi-newline runs during import or provider parsing;
   they may mark scene/chapter breaks for presentation.
+- Do not calculate editor search jumps from raw markup offsets alone; invisible
+  tags must not push the selection or scroll target away from the visible match.
 
 ---
 
@@ -175,6 +182,7 @@ part of the Script model/import contract:
 |---------|----------|
 | Editor search shortcut | `Ctrl+Shift+F` opens the search dialog in script editor mode. |
 | Match behavior | Search starts after the active selection/cursor, wraps through the document, focuses the matching block, selects the match, and scrolls it into view. |
+| Visible text mapping | Search matches tag-stripped visible text, then maps visual offsets back to raw controller offsets for selection. |
 | Ownership boundary | Editor search owns block focus/selection only. Present-mode search and resume-point jumps belong to Teleprompter Engine MVP. |
 
 ---

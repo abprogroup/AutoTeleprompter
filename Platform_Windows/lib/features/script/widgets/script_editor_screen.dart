@@ -1843,9 +1843,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     });
   }
 
-  void _startPresenting() {
+  void _startPresenting() async {
+    await _saveBookmarks();
     try {
-      ref.read(scriptProvider.notifier).loadText(_getRefinedFullText());
+      final settings = ref.read(settingsProvider);
+      ref.read(scriptProvider.notifier).loadText(
+            _getRefinedFullText(),
+            title: _currentTitle,
+            sourceType: _sourceType,
+            sessionId: _currentSessionId,
+            historyIndex: _historyIndex,
+            historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+            fontSize: settings.fontSize,
+            fontFamily: settings.fontFamily,
+            lineSpacing: settings.lineSpacing,
+            letterSpacing: settings.letterSpacing,
+            wordSpacing: settings.wordSpacing,
+            textAlign: settings.textAlign,
+            scriptBgColor: settings.scriptBgColor,
+            currentWordColor: settings.currentWordColor,
+            futureWordColor: settings.futureWordColor,
+          );
     } catch (_) {}
     if (mounted) {
       Navigator.of(context)
@@ -2167,6 +2185,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                               onSelectAll: _selectAllBlocks,
                               onCopy: _onCopyClean,
                               onSearch: _showSearchDialog,
+                              hasBookmark:
+                                  _bookmarks.any((b) => b.blockIndex == index),
                             ),
                           ),
                         ),
@@ -2284,12 +2304,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
             .substring(0, offset.clamp(0, _controllers[block].text.length)),
       );
     }
-    final beforeWords =
-        WordAligner.tokenize(textBefore.toString()).where((w) => !w.isNewline);
-    final totalWords =
-        WordAligner.tokenize(_getRefinedFullText()).where((w) => !w.isNewline);
-    final maxIndex = totalWords.isEmpty ? 0 : totalWords.length - 1;
-    return beforeWords.length.clamp(0, maxIndex).toInt();
+    final beforeTokens = WordAligner.tokenize(textBefore.toString());
+    final allTokens = WordAligner.tokenize(_getRefinedFullText());
+    final maxIndex = allTokens.isEmpty ? 0 : allTokens.length - 1;
+    return beforeTokens.length.clamp(0, maxIndex).toInt();
   }
 
   String _bookmarkLabelForEditorPosition(int block, int offset) {
@@ -2365,18 +2383,19 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       );
     }
 
-    var runningWords = 0;
-    final tokenPattern = RegExp(r'\S+');
+    var runningTokens = 0;
     for (var block = 0; block < _controllers.length; block++) {
-      final matches =
-          tokenPattern.allMatches(_controllers[block].text).toList();
-      if (bookmark.wordIndex < runningWords + matches.length) {
-        final local = (bookmark.wordIndex - runningWords)
-            .clamp(0, matches.length - 1)
+      final blockTokens = WordAligner.tokenize(_controllers[block].text);
+      if (bookmark.wordIndex < runningTokens + blockTokens.length) {
+        final localToken = (bookmark.wordIndex - runningTokens)
+            .clamp(0, blockTokens.isEmpty ? 0 : blockTokens.length - 1)
             .toInt();
-        return (block: block, offset: matches[local].start);
+        return (
+          block: block,
+          offset: _rawOffsetForTokenIndex(_controllers[block].text, localToken)
+        );
       }
-      runningWords += matches.length;
+      runningTokens += blockTokens.length + 1;
     }
     final last = _controllers.isEmpty ? -1 : _controllers.length - 1;
     return (
@@ -2385,6 +2404,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           ? _controllers[last].text.length
           : 0
     );
+  }
+
+  int _rawOffsetForTokenIndex(String text, int tokenIndex) {
+    final matches = RegExp(r'\S+').allMatches(text).toList();
+    if (matches.isEmpty) return 0;
+    final target = tokenIndex.clamp(0, matches.length - 1).toInt();
+    return matches[target].start;
   }
 
   void _goToEditorBookmark(int bookmarkIndex) {
@@ -2553,25 +2579,26 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         ? activeSelection.end.clamp(0, _controllers[startBlock].text.length)
         : 0;
 
-    ({int block, int offset})? match;
+    ({int block, int visualOffset})? match;
     for (var i = startBlock; i < _controllers.length; i++) {
-      final from = i == startBlock ? startOffset : 0;
-      final idx = _controllers[i].text.toLowerCase().indexOf(needle, from);
+      final rawText = _controllers[i].text;
+      final fromRaw = i == startBlock ? startOffset : 0;
+      final fromVisual = MarkupController.rawToVisualOffset(rawText, fromRaw);
+      final idx = _visibleSearchIndex(rawText, needle, fromVisual);
       if (idx >= 0) {
-        match = (block: i, offset: idx);
+        match = (block: i, visualOffset: idx);
         break;
       }
     }
     if (match == null) {
       for (var i = 0; i <= startBlock && i < _controllers.length; i++) {
-        final end = i == startBlock ? startOffset : _controllers[i].text.length;
-        final idx = _controllers[i]
-            .text
-            .toLowerCase()
-            .substring(0, end)
-            .indexOf(needle);
+        final rawText = _controllers[i].text;
+        final endRaw = i == startBlock ? startOffset : rawText.length;
+        final endVisual = MarkupController.rawToVisualOffset(rawText, endRaw);
+        final idx = _visibleSearchIndex(rawText, needle, 0,
+            endVisualExclusive: endVisual);
         if (idx >= 0) {
-          match = (block: i, offset: idx);
+          match = (block: i, visualOffset: idx);
           break;
         }
       }
@@ -2595,9 +2622,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       ctrl.externalSelection = null;
     }
     final c = _controllers[match.block];
+    final rawStart =
+        MarkupController.visualToRawOffset(c.text, match.visualOffset);
+    final rawEnd = MarkupController.visualToRawOffset(
+      c.text,
+      match.visualOffset + query.length,
+    ).clamp(rawStart, c.text.length);
     final selection = TextSelection(
-      baseOffset: match.offset,
-      extentOffset: match.offset + query.length,
+      baseOffset: rawStart,
+      extentOffset: rawEnd,
     );
     c.externalSelection = selection;
     c.selection = selection;
@@ -2606,6 +2639,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     c.refresh();
     setState(() {});
     _scrollEditorBlockIntoView(match.block, alignment: 0.25);
+  }
+
+  int _visibleSearchIndex(String rawText, String needle, int startVisual,
+      {int? endVisualExclusive}) {
+    final visible = StylingService.stripTags(rawText).toLowerCase();
+    final start = startVisual.clamp(0, visible.length).toInt();
+    final end = (endVisualExclusive ?? visible.length)
+        .clamp(start, visible.length)
+        .toInt();
+    return visible.substring(0, end).indexOf(needle, start);
   }
 
   void _selectAllBlocks() {
@@ -2693,6 +2736,7 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
   final VoidCallback onSearch;
+  final bool hasBookmark;
 
   const _EditorBlock({
     super.key,
@@ -2705,6 +2749,7 @@ class _EditorBlock extends StatelessWidget {
     required this.onSelectAll,
     required this.onCopy,
     required this.onSearch,
+    required this.hasBookmark,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2739,136 +2784,157 @@ class _EditorBlock extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Shortcuts(
-        shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.keyA, control: true):
-              _SelectAllIntent(),
-          SingleActivator(LogicalKeyboardKey.keyA, meta: true):
-              _SelectAllIntent(),
-          SingleActivator(LogicalKeyboardKey.keyC, control: true):
-              _CopyIntent(),
-          SingleActivator(LogicalKeyboardKey.keyC, meta: true): _CopyIntent(),
-          SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true):
-              _SearchIntent(),
-          SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
-              _SearchIntent(),
-        },
-        child: Actions(
-          actions: {
-            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (_) {
-              onSelectAll();
-              return null;
-            }),
-            _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
-              onCopy();
-              return null;
-            }),
-            _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) {
-              onSearch();
-              return null;
-            }),
-            // Override the internal EditableText intents too. These are
-            // marked Action.overridable inside EditableText, so placing
-            // our own handlers at this ancestor wins — catching both the
-            // keyboard Cmd+C and Flutter's internal copy dispatch paths.
-            CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
-              onInvoke: (_) {
-                onCopy();
-                return null;
-              },
-            ),
-            SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
-              onInvoke: (_) {
-                onSelectAll();
-                return null;
-              },
-            ),
-          },
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              textSelectionTheme: TextSelectionThemeData(
-                // Always transparent: all amber selection rendering is handled
-                // by MarkupController.buildTextSpan via externalSelection /
-                // isGlobalSelected. Native RenderEditable must never paint its
-                // own amber highlight or it leaks through when _isGlobalSelection
-                // flips to false during a handle drag (Bug 2 fix v4.0.6).
-                selectionColor: Colors.transparent,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          if (hasBookmark)
+            const Positioned(
+              left: -18,
+              top: 2,
+              child: Text(
+                '»',
+                style: TextStyle(
+                  color: Color(0xFFFFBF00),
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-            child: TextField(
-              selectionControls: GhostSelectionControls(),
-              controller: controller,
-              focusNode: focusNode,
-              maxLines: null,
-              onSubmitted: (_) => onSubmitted(),
-              onTap: onTap,
-              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-              textAlign: textAlign,
-              cursorColor: Colors.amber,
-              cursorHeight: maxFontSize,
-              strutStyle: StrutStyle(
-                fontSize: maxFontSize,
-                height: settings.lineSpacing,
-                forceStrutHeight: true,
-              ),
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: settings.fontSize,
-                height: settings.lineSpacing,
-                letterSpacing: settings.letterSpacing,
-                wordSpacing: settings.wordSpacing,
-              ),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 2),
-              ),
-              contextMenuBuilder: (context, editableTextState) {
-                final List<ContextMenuButtonItem> items =
-                    editableTextState.contextMenuButtonItems;
-                final List<ContextMenuButtonItem> customItems = [];
-                bool hasSelectAll = false;
-                for (final item in items) {
-                  if (item.type == ContextMenuButtonType.selectAll) {
-                    hasSelectAll = true;
-                    customItems.add(ContextMenuButtonItem(
-                      onPressed: () {
-                        ContextMenuController.removeAny();
-                        onSelectAll();
-                      },
-                      type: ContextMenuButtonType.selectAll,
-                    ));
-                  } else if (item.type == ContextMenuButtonType.copy) {
-                    customItems.add(ContextMenuButtonItem(
-                      onPressed: () {
-                        ContextMenuController.removeAny();
-                        onCopy();
-                      },
-                      type: ContextMenuButtonType.copy,
-                    ));
-                  } else {
-                    customItems.add(item);
-                  }
-                }
-                // Force-inject a global Select All even when the native menu
-                // omits it (e.g. the block is already fully selected).
-                if (!hasSelectAll) {
-                  customItems.add(ContextMenuButtonItem(
-                    onPressed: () {
-                      ContextMenuController.removeAny();
-                      onSelectAll();
-                    },
-                    type: ContextMenuButtonType.selectAll,
-                  ));
-                }
-                return AdaptiveTextSelectionToolbar.buttonItems(
-                  anchors: editableTextState.contextMenuAnchors,
-                  buttonItems: customItems,
-                );
+          Shortcuts(
+            shortcuts: const {
+              SingleActivator(LogicalKeyboardKey.keyA, control: true):
+                  _SelectAllIntent(),
+              SingleActivator(LogicalKeyboardKey.keyA, meta: true):
+                  _SelectAllIntent(),
+              SingleActivator(LogicalKeyboardKey.keyC, control: true):
+                  _CopyIntent(),
+              SingleActivator(LogicalKeyboardKey.keyC, meta: true):
+                  _CopyIntent(),
+              SingleActivator(LogicalKeyboardKey.keyF,
+                  control: true, shift: true): _SearchIntent(),
+              SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
+                  _SearchIntent(),
+            },
+            child: Actions(
+              actions: {
+                _SelectAllIntent:
+                    CallbackAction<_SelectAllIntent>(onInvoke: (_) {
+                  onSelectAll();
+                  return null;
+                }),
+                _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
+                  onCopy();
+                  return null;
+                }),
+                _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) {
+                  onSearch();
+                  return null;
+                }),
+                // Override the internal EditableText intents too. These are
+                // marked Action.overridable inside EditableText, so placing
+                // our own handlers at this ancestor wins — catching both the
+                // keyboard Cmd+C and Flutter's internal copy dispatch paths.
+                CopySelectionTextIntent:
+                    CallbackAction<CopySelectionTextIntent>(
+                  onInvoke: (_) {
+                    onCopy();
+                    return null;
+                  },
+                ),
+                SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
+                  onInvoke: (_) {
+                    onSelectAll();
+                    return null;
+                  },
+                ),
               },
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  textSelectionTheme: TextSelectionThemeData(
+                    // Always transparent: all amber selection rendering is handled
+                    // by MarkupController.buildTextSpan via externalSelection /
+                    // isGlobalSelected. Native RenderEditable must never paint its
+                    // own amber highlight or it leaks through when _isGlobalSelection
+                    // flips to false during a handle drag (Bug 2 fix v4.0.6).
+                    selectionColor: Colors.transparent,
+                  ),
+                ),
+                child: TextField(
+                  selectionControls: GhostSelectionControls(),
+                  controller: controller,
+                  focusNode: focusNode,
+                  maxLines: null,
+                  onSubmitted: (_) => onSubmitted(),
+                  onTap: onTap,
+                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                  textAlign: textAlign,
+                  cursorColor: Colors.amber,
+                  cursorHeight: maxFontSize,
+                  strutStyle: StrutStyle(
+                    fontSize: maxFontSize,
+                    height: settings.lineSpacing,
+                    forceStrutHeight: true,
+                  ),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: settings.fontSize,
+                    height: settings.lineSpacing,
+                    letterSpacing: settings.letterSpacing,
+                    wordSpacing: settings.wordSpacing,
+                  ),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 2),
+                  ),
+                  contextMenuBuilder: (context, editableTextState) {
+                    final List<ContextMenuButtonItem> items =
+                        editableTextState.contextMenuButtonItems;
+                    final List<ContextMenuButtonItem> customItems = [];
+                    bool hasSelectAll = false;
+                    for (final item in items) {
+                      if (item.type == ContextMenuButtonType.selectAll) {
+                        hasSelectAll = true;
+                        customItems.add(ContextMenuButtonItem(
+                          onPressed: () {
+                            ContextMenuController.removeAny();
+                            onSelectAll();
+                          },
+                          type: ContextMenuButtonType.selectAll,
+                        ));
+                      } else if (item.type == ContextMenuButtonType.copy) {
+                        customItems.add(ContextMenuButtonItem(
+                          onPressed: () {
+                            ContextMenuController.removeAny();
+                            onCopy();
+                          },
+                          type: ContextMenuButtonType.copy,
+                        ));
+                      } else {
+                        customItems.add(item);
+                      }
+                    }
+                    // Force-inject a global Select All even when the native menu
+                    // omits it (e.g. the block is already fully selected).
+                    if (!hasSelectAll) {
+                      customItems.add(ContextMenuButtonItem(
+                        onPressed: () {
+                          ContextMenuController.removeAny();
+                          onSelectAll();
+                        },
+                        type: ContextMenuButtonType.selectAll,
+                      ));
+                    }
+                    return AdaptiveTextSelectionToolbar.buttonItems(
+                      anchors: editableTextState.contextMenuAnchors,
+                      buttonItems: customItems,
+                    );
+                  },
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

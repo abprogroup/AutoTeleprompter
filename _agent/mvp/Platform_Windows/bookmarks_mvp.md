@@ -18,9 +18,9 @@ resume-point handoff between bookmark jumps and STT start/stop behavior.
 | File | Role |
 | --- | --- |
 | `Platform_Windows/lib/features/script/services/script_bookmark_service.dart` | Bookmark model, SharedPreferences scope key, load/save/upsert persistence |
-| `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | Editor add/previous/next bookmark commands, editor position mapping, editor scroll-to-bookmark |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | Editor add/previous/next bookmark commands, editor position mapping, editor scroll-to-bookmark, editor marker rendering, presenter handoff identity |
 | `Platform_Windows/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Editor bookmark toolbar buttons |
-| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Presenter add/previous/next bookmark commands, presenter word-index jumps |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Presenter add/previous/next bookmark commands, presenter word-index jumps, presenter marker rendering |
 | `MASTER_TODO_V5.md` | Future presenter edit-from-current-position requirement |
 
 ---
@@ -73,6 +73,12 @@ Anything not listed here is private implementation detail.
 8. **Cross-mode mapping is best effort**: When a bookmark lacks editor block
    coordinates, the editor may approximate from `wordIndex`, but must not mutate
    script text to make the mapping easier.
+9. **Presenter handoff preserves identity**: Entering present mode from the
+   editor must pass the current title and session id into `scriptProvider` so
+   presenter mode loads the same bookmark scope that editor mode saved.
+10. **Bookmarks are visible**: Editor and present mode must render a visible
+    marker such as `»` at saved bookmark positions. The marker is UI-only and
+    must not be inserted into script text.
 
 ---
 
@@ -85,6 +91,9 @@ Anything not listed here is private implementation detail.
   STT contract is explicitly updated.
 - Do not store bookmarks inside visible script text or markup tags.
 - Do not make bookmarks depend on debug mode.
+- Do not enter presentation by rebuilding the script with a fresh session id
+  when an editor session id already exists.
+- Do not hide bookmark markers behind debug mode or search state.
 
 ---
 
@@ -111,3 +120,7 @@ toolbar commands, editor coordinate mapping, and bookmark scroll/focus paths.
 and Scrolling MVPs. Bookmark edits may touch only bookmark buttons, bookmark
 loading/saving, and stopped-session bookmark jumps.
 
+Search is owned by Script Editor MVP, but bookmark handoff depends on the same
+editor position mapping helpers. Search must match visible text and translate
+back to raw markup offsets instead of treating hidden tags as visible
+characters.

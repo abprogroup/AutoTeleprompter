@@ -1025,6 +1025,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     final presentationFontSize = settings.fontSize * 2.0;
     final debugConsoleHeight =
         settings.debugMode ? (_debugConsoleMinimized ? 36.0 : 220.0) : 0.0;
+    final bookmarkWordIndexes = _bookmarks.map((b) => b.wordIndex).toSet();
 
     Widget wordList = Padding(
       padding: EdgeInsets.symmetric(
@@ -1085,6 +1086,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                 children: para.map<Widget>((wordObj) {
                   final ScriptWord word = wordObj as ScriptWord;
                   final i = word.index;
+                  final hasBookmark = bookmarkWordIndexes.contains(i);
                   final isManual = settings.scrollMode == 'manual';
                   final isCurrent = !isManual && i == tState.confirmedWordIndex;
                   final isPast = !isManual && i < tState.confirmedWordIndex;
@@ -1145,7 +1147,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                   // Container.color covers padding area → continuous highlight blocks.
                   final wordGap = effectiveFontSize * 0.28;
                   final speechActive = tState.isListening || tState.isStarting;
-                  return GestureDetector(
+                  final wordWidget = GestureDetector(
                     behavior: HitTestBehavior.translucent,
                     onTap: speechActive ? null : () => _jumpToWordIndex(i),
                     child: Directionality(
@@ -1179,6 +1181,24 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                         ),
                       ),
                     ),
+                  );
+                  if (!hasBookmark) return wordWidget;
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        '»',
+                        style: TextStyle(
+                          color: Color(settings.currentWordColor),
+                          fontSize: effectiveFontSize * 0.62,
+                          fontWeight: FontWeight.bold,
+                          height: settings.lineSpacing,
+                        ),
+                      ),
+                      SizedBox(width: effectiveFontSize * 0.08),
+                      wordWidget,
+                    ],
                   );
                 }).toList(),
               ),

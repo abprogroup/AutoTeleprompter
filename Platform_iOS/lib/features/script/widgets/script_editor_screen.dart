@@ -1792,6 +1792,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                   setState(() => _isSuiteDirty = true);
                 },
               ),
+              // Global-selection action bar — shown instead of context menu so
+              // Cut/Copy always work regardless of iOS toolbar timing issues.
+              if (_isGlobalSelection)
+                Container(
+                  height: 44,
+                  color: const Color(0xFF1A1A1A),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 4),
+                      TextButton.icon(
+                        onPressed: _onCutClean,
+                        icon: const Icon(Icons.content_cut, size: 18, color: Color(0xFFFFBF00)),
+                        label: const Text('Cut', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13)),
+                      ),
+                      TextButton.icon(
+                        onPressed: _onCopyClean,
+                        icon: const Icon(Icons.content_copy, size: 18, color: Color(0xFFFFBF00)),
+                        label: const Text('Copy', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13)),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: _clearGlobalSelection,
+                        child: const Text('✕', style: TextStyle(color: Colors.white38, fontSize: 16)),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                  ),
+                ),
               Expanded(
                 child: Container(
                   color: Color(settings.scriptBgColor),
@@ -1818,9 +1846,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                             _skipNextSelectionClear = false;
                             return;
                           }
+                          // When globally selected, tapping a block keeps the
+                          // selection alive so the user can press Cut/Copy in
+                          // the action bar above. The ✕ button clears it.
                           if (_isGlobalSelection ||
                               _controllers.any((c) => c.isGlobalSelected)) {
-                            _clearGlobalSelection();
+                            return;
                           }
                         },
                         onSelectAll: _selectAllBlocks,

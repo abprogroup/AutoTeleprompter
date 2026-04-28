@@ -108,6 +108,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   // the iOS-triggered onTap (which fires after menu dismissal) skips clearing
   // the global selection — leaving _isGlobalSelection intact for the handler.
   bool _skipNextSelectionClear = false;
+  List<String>? _capturedForMenuBlocks; // pre-captured in onBeforeMenuAction before iOS events fire
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
@@ -1826,7 +1827,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onCopy: _onCopyClean,
                         onCut: _onCutClean,
                         onPaste: _globalClipboard != null ? _pasteFromGlobalClipboard : null,
-                        onBeforeMenuAction: () { _skipNextSelectionClear = true; },
+                        onBeforeMenuAction: () {
+                          _skipNextSelectionClear = true;
+                          // Capture global block state NOW — fires synchronously before
+                          // iOS can clear _isGlobalSelection via onTap.
+                          if (_isGlobalSelection || _controllers.any((c) => c.isGlobalSelected)) {
+                            _capturedForMenuBlocks = _controllers.map((c) => c.text).toList();
+                          } else {
+                            _capturedForMenuBlocks = null;
+                          }
+                        },
                       ),
                     ),
                   ),
@@ -1918,37 +1928,40 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       StylingService.stripTags(raw).replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
 
   void _onCutClean() {
-    // Capture selection state before anything mutates it.
+    // Consume pre-captured state (set by onBeforeMenuAction synchronously before iOS events fire).
+    final captured = _capturedForMenuBlocks;
+    _capturedForMenuBlocks = null;
+
     final isGlobal = _isGlobalSelection;
     final hasGlobal = _controllers.any((c) => c.isGlobalSelected);
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
 
-    if (isGlobal || hasGlobal || hasOverlay) {
-      final plainBuf = StringBuffer();
+    if (isGlobal || hasGlobal || hasOverlay || captured != null) {
+      // Build block list from live state when still available, else from pre-capture.
+      final List<String> blockTexts;
       if (isGlobal || hasGlobal) {
-        for (final c in _controllers) {
-          final t = _visibleText(c.text);
-          if (t.isNotEmpty) {
-            if (plainBuf.isNotEmpty) plainBuf.write(' ');
-            plainBuf.write(t);
-          }
-        }
+        blockTexts = _controllers.map((c) => c.text).toList();
+      } else if (captured != null) {
+        blockTexts = captured; // live state was cleared by iOS onTap before cut ran
       } else {
-        for (final c in _controllers) {
+        // hasOverlay: partial selection via drag handles
+        blockTexts = _controllers.map((c) {
           final sel = c.externalSelection;
-          if (sel == null || !sel.isValid || sel.isCollapsed) continue;
-          final t = _visibleText(c.text.substring(
+          if (sel == null || !sel.isValid || sel.isCollapsed) return '';
+          return c.text.substring(
               sel.start.clamp(0, c.text.length),
-              sel.end.clamp(0, c.text.length)));
-          if (t.isNotEmpty) {
-            if (plainBuf.isNotEmpty) plainBuf.write(' ');
-            plainBuf.write(t);
-          }
-        }
+              sel.end.clamp(0, c.text.length));
+        }).toList();
+      }
+
+      final plainBuf = StringBuffer();
+      for (final t in blockTexts.map(_visibleText).where((t) => t.isNotEmpty)) {
+        if (plainBuf.isNotEmpty) plainBuf.write(' ');
+        plainBuf.write(t);
       }
       if (plainBuf.isNotEmpty) {
         _globalClipboard = plainBuf.toString();
-        _globalClipboardBlocks = _controllers.map((c) => c.text).toList();
+        _globalClipboardBlocks = blockTexts;
         Clipboard.setData(ClipboardData(text: _globalClipboard!));
       }
       _pendingGlobalTimer?.cancel();
@@ -1956,7 +1969,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _pendingGlobalBlocks = null;
 
       _isCommandExecuting = true;
-      if (isGlobal || hasGlobal) {
+      if (isGlobal || hasGlobal || captured != null) {
         for (final c in _controllers) { c.text = ''; }
       } else {
         for (final c in _controllers) {
@@ -1971,10 +1984,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isCommandExecuting = false;
       _saveHistory(description: 'Cut');
       setState(() {});
-      _showCutDebug(isGlobal ? 'isGlobal' : hasGlobal ? 'hasGlobal' : 'overlay');
-    } else if (_pendingGlobalText != null) {
+      _showCutDebug(isGlobal ? 'isGlobal' : hasGlobal ? 'hasGlobal' : captured != null ? 'captured' : 'overlay');
+    } else if (_pendingGlobalText != null || _pendingGlobalBlocks != null) {
+      // Last-resort: _pendingGlobal* from _selectAllBlocks() survived all clear paths.
       _pendingGlobalTimer?.cancel();
-      _globalClipboard = _pendingGlobalText!;
+      _globalClipboard = _pendingGlobalText ??
+          _pendingGlobalBlocks!.map(_visibleText).where((t) => t.isNotEmpty).join(' ');
       _globalClipboardBlocks = _pendingGlobalBlocks;
       _pendingGlobalText = null;
       _pendingGlobalBlocks = null;
@@ -1987,8 +2002,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       setState(() {});
       _showCutDebug('pendingGlobal');
     } else {
-      _showCutDebug('singleBlock ← global was cleared before cut ran');
-      // True single-block native path — no global selection was ever active.
+      // True single-block native cut — no global selection was ever active.
+      _globalClipboardBlocks = null; // clear stale block clipboard to prevent wrong paste
+      _showCutDebug('singleBlock');
       _onCopyClean();
       final c = _activeController;
       if (c == null) return;
@@ -2077,6 +2093,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       );
     }
     _isCommandExecuting = false;
+    setState(() {}); // ensure ListView reflects restored controller values
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
     try {
@@ -2120,6 +2137,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     _pendingGlobalTimer?.cancel();
     _pendingGlobalTimer = Timer(const Duration(seconds: 10), () {
       _pendingGlobalText = null;
+      _pendingGlobalBlocks = null;
     });
 
     _isCommandExecuting = false;

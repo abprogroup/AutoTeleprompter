@@ -53,10 +53,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   WebviewController? _webviewController;
   String? _loadedWebViewUrl;
   String _lastSearchQuery = '';
+  bool _searchDialogOpen = false;
 
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handlePresentationKey);
     WakelockPlus.enable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _scheduleHideControls();
@@ -135,6 +137,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handlePresentationKey);
     ref.read(teleprompterProvider.notifier).stopSession();
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
@@ -147,6 +150,19 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _remoteCmdSub?.cancel();
     _webviewController?.dispose();
     super.dispose();
+  }
+
+  bool _handlePresentationKey(KeyEvent event) {
+    if (event is! KeyDownEvent || _searchDialogOpen || !mounted) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    final isSearchShortcut = event.logicalKey == LogicalKeyboardKey.keyF &&
+        keyboard.isShiftPressed &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed);
+    if (!isSearchShortcut) return false;
+    Future.microtask(_showSearchDialog);
+    return true;
   }
 
   Future<void> _stopPresentationSession() async {
@@ -626,6 +642,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   }
 
   Future<void> _showSearchDialog() async {
+    if (_searchDialogOpen) return;
+    _searchDialogOpen = true;
     final controller = TextEditingController(text: _lastSearchQuery);
     final query = await showDialog<String>(
       context: context,
@@ -662,6 +680,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       ),
     );
     controller.dispose();
+    _searchDialogOpen = false;
     if (query == null) return;
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;

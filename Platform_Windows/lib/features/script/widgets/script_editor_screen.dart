@@ -857,8 +857,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
             ));
   }
 
-  String _getRefinedFullText() =>
-      _controllers.map((c) => c.text).join('\n').trim();
+  String _getRefinedFullText() => _controllers.map((c) => c.text).join('\n');
 
   /// Clear style at cursor: find the word at cursor, then strip all tags from
   /// just that word — surgically splitting any enclosing styled regions so the
@@ -1871,7 +1870,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       if (mounted) {
         await _loadBookmarksForCurrentScript(force: true);
         _onSelectionChanged();
-        unawaited(_forceRecentUpdate());
       }
     }
   }

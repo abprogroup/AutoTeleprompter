@@ -122,25 +122,29 @@ part of the Script model/import contract:
    reaches editor/presentation state. Trimming outer file noise is allowed, but
    internal chapter/section spacing must be retained.
 
-11. **Editor search is keyboard-accessible**: `Ctrl+Shift+F` must open the editor
+11. **Editor serialization preserves blank edges**: `_getRefinedFullText()` must
+   join editor blocks without `trim()`. Leading, trailing, and repeated empty
+   lines are script content, not cleanup noise.
+
+12. **Editor search is keyboard-accessible**: `Ctrl+Shift+F` must open the editor
    search dialog from both the editor-level shortcut layer and individual block
    shortcut layers.
 
-12. **Editor search preserves document structure**: Search may focus the matching
+13. **Editor search preserves document structure**: Search may focus the matching
     block, select the matched raw-text range, and scroll the block into view, but
     it must not rewrite controller text, strip markup, create history entries, or
     change script metadata.
 
-13. **Editor search wraps predictably**: Search starts after the current active
+14. **Editor search wraps predictably**: Search starts after the current active
     selection/cursor, proceeds through later blocks, then wraps to the beginning
     through the original start point.
 
-14. **Editor search is visible-text based**: Search must match the text the user
+15. **Editor search is visible-text based**: Search must match the text the user
     can see, not hidden markup tags. After a visible match is found, it must
     translate the visual offset back to raw `MarkupController` offsets before
     setting selection.
 
-15. **Default-relative spacing display**: Editor layout controls may store the
+16. **Default-relative spacing display**: Editor layout controls may store the
     real line-spacing value (`1.2` by default), but the visible value must show
     the user offset from default, so default reads `0.0`.
 

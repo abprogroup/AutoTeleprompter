@@ -1898,6 +1898,40 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     );
   }
 
+  // Shown in debug mode after every Cut so the exact clipboard content
+  // and which code path ran are visible without a build tool.
+  void _showCutDebug(String branch) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try { if (!ref.read(settingsProvider).debugMode) return; } catch (_) { return; }
+      final chars = _globalClipboard?.length ?? 0;
+      final preview = chars == 0 ? '(empty)' : _globalClipboard!.substring(0, chars.clamp(0, 200));
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text('✂️ CUT DEBUG', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 15)),
+          content: SingleChildScrollView(child: Text(
+            'Branch : $branch\n'
+            'Blocks : ${_controllers.length}\n'
+            'Chars  : $chars\n\n'
+            '"$preview"',
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          )),
+          actions: [TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(color: Color(0xFFFFBF00))),
+          )],
+        ),
+      );
+    });
+  }
+
+  // Strips markup tags and ALL whitespace control chars (\r, \n) that would
+  // cause iOS paste to truncate at the first line break.
+  static String _visibleText(String raw) =>
+      StylingService.stripTags(raw).replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+
   void _onCutClean() {
     // Capture selection state before anything mutates it.
     final isGlobal = _isGlobalSelection;
@@ -1905,35 +1939,24 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
 
     if (isGlobal || hasGlobal || hasOverlay) {
-      // ── Step 1: build clipboard text from captured state ──
-      // When isGlobal is true, bypass c.isGlobalSelected entirely —
-      // by the time the loop runs that flag may already be stale.
-      // Instead use the top-level captured booleans as the source of truth.
       final plainBuf = StringBuffer();
       if (isGlobal || hasGlobal) {
-        // Global path: copy every block unconditionally.
-        // Strip ALL newlines from the content — iOS paste truncates at the
-        // first \n regardless of whether it's a block separator or embedded
-        // inside a block (e.g. from Shift+Enter). Join with a single space.
         for (final c in _controllers) {
-          final t = StylingService.stripTags(c.text)
-              .replaceAll('\n', ' ')
-              .trim();
+          final t = _visibleText(c.text);
           if (t.isNotEmpty) {
             if (plainBuf.isNotEmpty) plainBuf.write(' ');
             plainBuf.write(t);
           }
         }
       } else {
-        // Refined overlay path: copy only the selected ranges.
         for (final c in _controllers) {
           final sel = c.externalSelection;
           if (sel == null || !sel.isValid || sel.isCollapsed) continue;
-          final t = StylingService.stripTags(
-              c.text.substring(sel.start.clamp(0, c.text.length),
-                               sel.end.clamp(0, c.text.length)));
+          final t = _visibleText(c.text.substring(
+              sel.start.clamp(0, c.text.length),
+              sel.end.clamp(0, c.text.length)));
           if (t.isNotEmpty) {
-            if (plainBuf.isNotEmpty) plainBuf.write('\n');
+            if (plainBuf.isNotEmpty) plainBuf.write(' ');
             plainBuf.write(t);
           }
         }
@@ -1945,7 +1968,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _pendingGlobalTimer?.cancel();
       _pendingGlobalText = null;
 
-      // ── Step 2: delete ──
       _isCommandExecuting = true;
       if (isGlobal || hasGlobal) {
         for (final c in _controllers) { c.text = ''; }
@@ -1962,10 +1984,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isCommandExecuting = false;
       _saveHistory(description: 'Cut');
       setState(() {});
+      _showCutDebug(isGlobal ? 'isGlobal' : hasGlobal ? 'hasGlobal' : 'overlay');
     } else if (_pendingGlobalText != null) {
-      // Global selection was active at Select-All time but _isGlobalSelection
-      // was cleared by onTap firing on the TextField when the menu overlay
-      // dismissed. Use the pre-computed text and delete all blocks.
       _pendingGlobalTimer?.cancel();
       _globalClipboard = _pendingGlobalText!;
       _pendingGlobalText = null;
@@ -1976,7 +1996,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isCommandExecuting = false;
       _saveHistory(description: 'Cut');
       setState(() {});
+      _showCutDebug('pendingGlobal');
     } else {
+      _showCutDebug('singleBlock ← global was cleared before cut ran');
       // True single-block native path — no global selection was ever active.
       _onCopyClean();
       final c = _activeController;
@@ -2008,9 +2030,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           slice = c.text.substring(sel.start, sel.end);
         }
         if (slice.isEmpty) continue;
-        final plain = StylingService.stripTags(slice)
-            .replaceAll('\n', ' ')
-            .trim();
+        final plain = _visibleText(slice);
         if (plain.isEmpty) continue;
         if (plainBuf.isNotEmpty) plainBuf.write(' ');
         plainBuf.write(plain);
@@ -2080,7 +2100,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // TextField (after the overlay dismisses), which clears global selection
     // before _onCutClean() runs. _pendingGlobalText survives that clear.
     _pendingGlobalText = _controllers
-        .map((c) => StylingService.stripTags(c.text).replaceAll('\n', ' ').trim())
+        .map((c) => _visibleText(c.text))
         .where((t) => t.isNotEmpty)
         .join(' ');
     _pendingGlobalTimer?.cancel();

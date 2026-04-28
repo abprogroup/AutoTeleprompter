@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -49,6 +50,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _manualScrolling = false;
   bool _scrollingBackward = false;
   bool _closingPresentation = false;
+  bool _userBrowsingWhileStopped = false;
   StreamSubscription? _remoteCmdSub;
   WebviewController? _webviewController;
   String? _loadedWebViewUrl;
@@ -592,6 +594,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     if (mounted) setState(() => _manualScrolling = false);
   }
 
+  void _cancelSmoothScroll() {
+    _smoothScrollTimer?.cancel();
+    _smoothScrollActive = false;
+  }
+
   void _resetManual() {
     _stopManualScroll();
     _manualWordIndex = 0;
@@ -639,6 +646,62 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         .jumpToPosition(index, script: script);
     _scrollToWordIndex(index);
     _showControls();
+  }
+
+  bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
+    final sttState = ref.read(teleprompterProvider);
+    if (sttState.isListening || sttState.isStarting) {
+      _userBrowsingWhileStopped = false;
+      return false;
+    }
+
+    final isUserScrollStart = notification is ScrollStartNotification &&
+        notification.dragDetails != null;
+    final isUserScrollUpdate = notification is UserScrollNotification &&
+        notification.direction != ScrollDirection.idle;
+    if (isUserScrollStart || isUserScrollUpdate) {
+      _userBrowsingWhileStopped = true;
+      _cancelSmoothScroll();
+      _stopManualScroll();
+    }
+
+    if (notification is ScrollEndNotification && _userBrowsingWhileStopped) {
+      _userBrowsingWhileStopped = false;
+      _syncResumePointToReadingLine();
+    }
+    return false;
+  }
+
+  void _syncResumePointToReadingLine() {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty || !_scrollController.hasClients)
+      return;
+    final settings = ref.read(settingsProvider);
+    final targetScreenY =
+        MediaQuery.of(context).size.height * settings.scrollLead;
+
+    int? bestIndex;
+    double bestDist = double.infinity;
+    for (var i = 0; i < _wordKeys.length && i < script.words.length; i++) {
+      if (script.words[i].isNewline) continue;
+      final ctx = _wordKeys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final posY = box.localToGlobal(Offset.zero).dy;
+      final dist = (posY - targetScreenY).abs();
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIndex = i;
+      }
+    }
+
+    final targetIndex = bestIndex;
+    if (targetIndex == null) return;
+    setState(() => _manualWordIndex = targetIndex);
+    ref
+        .read(teleprompterProvider.notifier)
+        .jumpToPosition(targetIndex, script: script);
   }
 
   Future<void> _showSearchDialog() async {
@@ -789,7 +852,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     // Auto-scroll on speech recognition
     ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex),
         (prev, next) {
-      if (settings.scrollMode == 'auto' && next > 0) {
+      final liveState = ref.read(teleprompterProvider);
+      if (settings.scrollMode == 'auto' && liveState.isListening && next > 0) {
         _scrollToWordIndex(next);
       }
     });
@@ -1030,10 +1094,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                 child: Stack(
                   children: [
                     // Scrollable script
-                    SingleChildScrollView(
-                      controller: _scrollController,
-                      physics: const ClampingScrollPhysics(),
-                      child: wordList,
+                    NotificationListener<ScrollNotification>(
+                      onNotification: _handleStoppedBrowsingScroll,
+                      child: SingleChildScrollView(
+                        controller: _scrollController,
+                        physics: const ClampingScrollPhysics(),
+                        child: wordList,
+                      ),
                     ),
                     // Reading fade overlay: gradient that dims already-read text above the reading line
                     if (settings.readFadeIntensity > 0)

@@ -99,8 +99,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   bool _isCommandExecuting = false;
   bool _isDirty = false;
   bool _isLoading = false;
-  String? _globalClipboard;
+  String? _globalClipboard;          // plain text for system clipboard (cross-app)
+  List<String>? _globalClipboardBlocks; // raw markup per block for in-app restore
   String? _pendingGlobalText;
+  List<String>? _pendingGlobalBlocks;
   Timer? _pendingGlobalTimer;
   // When a global Cut/Copy menu button is about to fire, set this true so
   // the iOS-triggered onTap (which fires after menu dismissal) skips clearing
@@ -1946,10 +1948,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       }
       if (plainBuf.isNotEmpty) {
         _globalClipboard = plainBuf.toString();
+        _globalClipboardBlocks = _controllers.map((c) => c.text).toList();
         Clipboard.setData(ClipboardData(text: _globalClipboard!));
       }
       _pendingGlobalTimer?.cancel();
       _pendingGlobalText = null;
+      _pendingGlobalBlocks = null;
 
       _isCommandExecuting = true;
       if (isGlobal || hasGlobal) {
@@ -1971,7 +1975,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     } else if (_pendingGlobalText != null) {
       _pendingGlobalTimer?.cancel();
       _globalClipboard = _pendingGlobalText!;
+      _globalClipboardBlocks = _pendingGlobalBlocks;
       _pendingGlobalText = null;
+      _pendingGlobalBlocks = null;
       Clipboard.setData(ClipboardData(text: _globalClipboard!));
       _isCommandExecuting = true;
       for (final c in _controllers) { c.text = ''; }
@@ -2045,25 +2051,39 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _pasteFromGlobalClipboard() {
-    final text = _globalClipboard;
-    if (text == null || text.isEmpty) return;
-    // Always paste into the FIRST block — after a global cut all blocks are
-    // empty and the active block is whichever the user tapped to open the menu
-    // (often the LAST tapped, not block 0). Pasting into the active block
-    // causes reversed order: the tapped (lower) block gets the content while
-    // block 0 stays empty above it.
+    final blocks = _globalClipboardBlocks;
+    final fallback = _globalClipboard;
+    if ((blocks == null || blocks.isEmpty) && (fallback == null || fallback.isEmpty)) return;
     if (_controllers.isEmpty) return;
-    final c = _controllers.first;
-    c.value = TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
+
+    _isCommandExecuting = true;
+    if (blocks != null && blocks.isNotEmpty) {
+      // Restore original block structure — each block gets its own text back.
+      // Grow the controller list if needed.
+      while (_controllers.length < blocks.length) {
+        _addBlock(_controllers.length);
+      }
+      for (int i = 0; i < blocks.length; i++) {
+        _controllers[i].value = TextEditingValue(
+          text: blocks[i],
+          selection: TextSelection.collapsed(offset: blocks[i].length),
+        );
+      }
+    } else {
+      // Fallback: put everything in the first block.
+      _controllers.first.value = TextEditingValue(
+        text: fallback!,
+        selection: TextSelection.collapsed(offset: fallback.length),
+      );
+    }
+    _isCommandExecuting = false;
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
     try {
       if (ref.read(settingsProvider).debugMode) {
+        final chars = blocks?.fold<int>(0, (s, t) => s + t.length) ?? fallback?.length ?? 0;
         setState(() {
-          _currentTitle = '[PASTED ${text.length}ch | "${text.substring(0, text.length.clamp(0, 35))}"]';
+          _currentTitle = '[PASTED ${blocks?.length ?? 1}blk | ${chars}ch]';
         });
       }
     } catch (_) {}
@@ -2092,8 +2112,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     // On iOS, tapping the Cut menu button fires onTap on the underlying
     // TextField (after the overlay dismisses), which clears global selection
     // before _onCutClean() runs. _pendingGlobalText survives that clear.
-    _pendingGlobalText = _controllers
-        .map((c) => _visibleText(c.text))
+    _pendingGlobalBlocks = _controllers.map((c) => c.text).toList();
+    _pendingGlobalText = _pendingGlobalBlocks!
+        .map((t) => _visibleText(t))
         .where((t) => t.isNotEmpty)
         .join(' ');
     _pendingGlobalTimer?.cancel();

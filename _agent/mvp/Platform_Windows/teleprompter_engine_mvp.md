@@ -163,11 +163,17 @@ earlier Windows MVP file and remain part of the engine contract:
     listening. Stopped/paused presentation mode is a browsing/position-picking
     state, not an auto-follow state.
 
-20. **Debug console collapse is visual only**: Debug-mode minimize/expand changes
+20. **Active STT locks user browsing**: While `TeleprompterState.isListening` or
+    `isStarting` is true, presentation scrolling must use
+    `NeverScrollableScrollPhysics` for user input and word taps must not call
+    `jumpToPosition(...)`. The only movement during active STT is provider-driven
+    auto-follow from the confirmed word index.
+
+21. **Debug console collapse is visual only**: Debug-mode minimize/expand changes
     only the debug output window height. It must not clear `debugLogs`, unmount
     STT processing, reset `soundLevel`, or move the resume point.
 
-21. **Mic selection must not reset presentation position**: Choosing a Windows
+22. **Mic selection must not reset presentation position**: Choosing a Windows
     external microphone from the presenter settings panel may restart/reopen STT
     capture internals, but it must not call `resetPosition()`, clear
     `confirmedWordIndex`, scroll to the top, or discard the current resume
@@ -205,6 +211,8 @@ earlier Windows MVP file and remain part of the engine contract:
   list state. Collapse is a UI-height toggle only.
 - Do not hide the Windows mic selector behind debug mode. External input choice
   is a runtime presentation control, not only a diagnostic.
+- Do not allow drag scrolling or word-tap resume jumps while STT is listening or
+  starting. Active STT owns the reading-line position.
 
 ---
 
@@ -236,7 +244,7 @@ earlier Windows MVP file and remain part of the engine contract:
 | Present-mode search | `Ctrl+Shift+F` opens a search dialog in presentation mode even when focus was captured by full-screen/overlay surfaces. |
 | Search-to-resume | A found word becomes the next resume point through `jumpToPosition(...)`. |
 | Stopped-session browsing | While STT is stopped, manual scrolling cancels stale smooth-scroll targets and updates the resume point from the reading line on scroll end. |
-| Active STT auto-follow | Auto-follow remains enabled only while STT is listening. |
+| Active STT auto-follow | Auto-follow remains enabled only while STT is listening; user drag scrolling and word-tap jumps are disabled during active/startup STT. |
 | Windows external mic selector | Presentation settings can show discovered `audioinput` devices, persist selection, and apply the chosen input without resetting script position. |
 
 ---

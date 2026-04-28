@@ -405,7 +405,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final words = script.words;
     final start = wordIndex.clamp(0, words.length);
     for (int i = start; i < words.length; i++) {
-      if (words[i].isNewline) continue;
+      if (words[i].isNewline || words[i].normalized.isEmpty) continue;
       return words[i].isRtl ? 'he_IL' : 'en_US';
     }
     return _scriptLanguageLocale ?? 'en_US';
@@ -428,7 +428,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   /// Find the next non-newline word index after [from]
   int? _nextRealWord(int from, Script script) {
     for (int i = from + 1; i < script.words.length; i++) {
-      if (!script.words[i].isNewline) return i;
+      if (!script.words[i].isNewline && script.words[i].normalized.isNotEmpty) {
+        return i;
+      }
     }
     return null;
   }

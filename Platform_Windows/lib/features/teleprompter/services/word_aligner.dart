@@ -6,7 +6,8 @@ class AlignmentResult {
   final int confirmedWordIndex;
   final double confidence;
   final String debugInfo; // detailed debug info about match decision
-  AlignmentResult(this.confirmedWordIndex, this.confidence, [this.debugInfo = '']);
+  AlignmentResult(this.confirmedWordIndex, this.confidence,
+      [this.debugInfo = '']);
 }
 
 class WordAligner {
@@ -60,10 +61,12 @@ class WordAligner {
             // v3.9.7: Strip residual markup tags before RTL detection AND normalization
             // so [color=#HEX] etc. don't dilute the Hebrew character ratio
             final cleanPart = part.replaceAll(
-              RegExp(r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr)(?:=[^\]]+)?\]|\*\*'), '');
+                RegExp(
+                    r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr)(?:=[^\]]+)?\]|\*\*'),
+                '');
             final isRtl = cleanPart.isHebrew;
             final normalized = cleanPart.normalizeForMatching();
-            if (normalized.isEmpty) continue;
+            if (normalized.isEmpty && cleanPart.trim().isEmpty) continue;
             words.add(ScriptWord(
               raw: part,
               normalized: normalized,
@@ -80,7 +83,7 @@ class WordAligner {
             ));
           }
         }
-        
+
         // v3.9.5.3: Preserve single newlines as paragraph breaks
         if (li < lines.length - 1) {
           words.add(ScriptWord(
@@ -137,31 +140,44 @@ class WordAligner {
     for (final m in pattern.allMatches(text)) {
       if (m.start > last) {
         spans.add(_Span(text.substring(last, m.start),
-            isBold: base.isBold, isUnderline: base.isUnderline, fontSize: base.fontSize, 
-            alignment: base.alignment, isItalic: base.isItalic, isParagraphRtl: base.isParagraphRtl,
-            highlight: base.highlight, textColor: base.textColor));
+            isBold: base.isBold,
+            isUnderline: base.isUnderline,
+            fontSize: base.fontSize,
+            alignment: base.alignment,
+            isItalic: base.isItalic,
+            isParagraphRtl: base.isParagraphRtl,
+            highlight: base.highlight,
+            textColor: base.textColor));
       }
       if (m.group(1) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(1)!,
-            base.copyWith(text: '', isBold: true)));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(1)!, base.copyWith(text: '', isBold: true)));
       } else if (m.group(2) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(2)!,
-            base.copyWith(text: '', highlight: Colors.yellow.withOpacity(0.6))));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(2)!,
+            base.copyWith(
+                text: '', highlight: Colors.yellow.withOpacity(0.6))));
       } else if (m.group(3) != null) {
         spans.addAll(_parseMarkupRecursive(m.group(3)!,
             base.copyWith(text: '', highlight: Colors.red.withOpacity(0.55))));
       } else if (m.group(4) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(4)!,
-            base.copyWith(text: '', highlight: Colors.green.withOpacity(0.55))));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(4)!,
+            base.copyWith(
+                text: '', highlight: Colors.green.withOpacity(0.55))));
       } else if (m.group(5) != null) {
         spans.addAll(_parseMarkupRecursive(m.group(5)!,
             base.copyWith(text: '', highlight: Colors.blue.withOpacity(0.45))));
       } else if (m.group(6) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(6)!,
-            base.copyWith(text: '', highlight: Colors.orange.withOpacity(0.50))));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(6)!,
+            base.copyWith(
+                text: '', highlight: Colors.orange.withOpacity(0.50))));
       } else if (m.group(7) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(7)!,
-            base.copyWith(text: '', highlight: Colors.purple.withOpacity(0.45))));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(7)!,
+            base.copyWith(
+                text: '', highlight: Colors.purple.withOpacity(0.45))));
       } else if (m.group(8) != null) {
         spans.addAll(_parseMarkupRecursive(m.group(8)!,
             base.copyWith(text: '', highlight: Colors.cyan.withOpacity(0.45))));
@@ -193,32 +209,32 @@ class WordAligner {
         spans.addAll(_parseMarkupRecursive(m.group(17)!,
             base.copyWith(text: '', textColor: Colors.pink.shade300)));
       } else if (m.group(18) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(18)!,
-            base.copyWith(text: '', isUnderline: true)));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(18)!, base.copyWith(text: '', isUnderline: true)));
       } else if (m.group(19) != null && m.group(20) != null) {
         final sz = double.tryParse(m.group(19)!);
-        spans.addAll(_parseMarkupRecursive(m.group(20)!,
-            base.copyWith(text: '', fontSize: sz)));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(20)!, base.copyWith(text: '', fontSize: sz)));
       } else if (m.group(21) != null && m.group(22) != null) {
         // [center|left|right] legacy format
         final alignStr = m.group(21)!;
         TextAlign align = TextAlign.center;
         if (alignStr == 'left') align = TextAlign.left;
         if (alignStr == 'right') align = TextAlign.right;
-        spans.addAll(_parseMarkupRecursive(m.group(22)!,
-            base.copyWith(text: '', alignment: align)));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(22)!, base.copyWith(text: '', alignment: align)));
       } else if (m.group(23) != null && m.group(24) != null) {
         // [align=center|left|right] current editor format
         final alignStr = m.group(23)!;
         TextAlign align = TextAlign.center;
         if (alignStr == 'left') align = TextAlign.left;
         if (alignStr == 'right') align = TextAlign.right;
-        spans.addAll(_parseMarkupRecursive(m.group(24)!,
-            base.copyWith(text: '', alignment: align)));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(24)!, base.copyWith(text: '', alignment: align)));
       } else if (m.group(25) != null) {
         // [i] italics
-        spans.addAll(_parseMarkupRecursive(m.group(25)!,
-            base.copyWith(text: '', isItalic: true)));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(25)!, base.copyWith(text: '', isItalic: true)));
       } else if (m.group(26) != null && m.group(27) != null) {
         // [rtl|ltr]
         final dir = m.group(26)!;
@@ -228,8 +244,8 @@ class WordAligner {
         // [color=#HEX] custom text color
         final c = _parseHexColor(m.group(28)!);
         if (c != null) {
-          spans.addAll(_parseMarkupRecursive(m.group(29)!,
-              base.copyWith(text: '', textColor: c)));
+          spans.addAll(_parseMarkupRecursive(
+              m.group(29)!, base.copyWith(text: '', textColor: c)));
         } else {
           spans.addAll(_parseMarkupRecursive(m.group(29)!, base));
         }
@@ -237,8 +253,8 @@ class WordAligner {
         // [bg=#HEX] custom highlight/background color
         final c = _parseHexColor(m.group(30)!);
         if (c != null) {
-          spans.addAll(_parseMarkupRecursive(m.group(31)!,
-              base.copyWith(text: '', highlight: c)));
+          spans.addAll(_parseMarkupRecursive(
+              m.group(31)!, base.copyWith(text: '', highlight: c)));
         } else {
           spans.addAll(_parseMarkupRecursive(m.group(31)!, base));
         }
@@ -247,9 +263,14 @@ class WordAligner {
     }
     if (last < text.length) {
       spans.add(_Span(text.substring(last),
-          isBold: base.isBold, isUnderline: base.isUnderline, fontSize: base.fontSize, 
-          alignment: base.alignment, isParagraphRtl: base.isParagraphRtl,
-          isItalic: base.isItalic, highlight: base.highlight, textColor: base.textColor));
+          isBold: base.isBold,
+          isUnderline: base.isUnderline,
+          fontSize: base.fontSize,
+          alignment: base.alignment,
+          isParagraphRtl: base.isParagraphRtl,
+          isItalic: base.isItalic,
+          highlight: base.highlight,
+          textColor: base.textColor));
     }
     return spans;
   }
@@ -287,7 +308,8 @@ class WordAligner {
     }
 
     final nonNL = script.where((w) => !w.isNewline).toList();
-    if (nonNL.isEmpty) return AlignmentResult(lastConfirmedIndex, 0.0, 'NO_WORDS');
+    if (nonNL.isEmpty)
+      return AlignmentResult(lastConfirmedIndex, 0.0, 'NO_WORDS');
 
     // Preprocess transcript
     final rawWords = transcript
@@ -297,15 +319,17 @@ class WordAligner {
         .toList();
 
     final transcriptWords = _collapseAbbreviations(rawWords);
-    if (transcriptWords.isEmpty) return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY_NORM');
+    if (transcriptWords.isEmpty)
+      return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY_NORM');
 
     final lastSpoken = transcriptWords.last;
 
     // Find the search start: skip over newlines AND unspeakable tokens
     // (numbers, dates, punctuation that STT won't produce reliably)
     int searchStart = lastConfirmedIndex + 1;
-    while (searchStart < script.length && 
-           (script[searchStart].isNewline || _isUnspeakable(script[searchStart]))) {
+    while (searchStart < script.length &&
+        (script[searchStart].isNewline ||
+            _isUnspeakable(script[searchStart]))) {
       searchStart++;
     }
     if (searchStart >= script.length) {
@@ -348,7 +372,8 @@ class WordAligner {
       // Apply distance penalty — farther words need higher confidence
       final adjustedSim = sim - (distance * _distancePenaltyPerWord);
 
-      debugScans += '  [${i}]"${scriptWord}" sim=${sim.toStringAsFixed(2)} adj=${adjustedSim.toStringAsFixed(2)}\n';
+      debugScans +=
+          '  [${i}]"${scriptWord}" sim=${sim.toStringAsFixed(2)} adj=${adjustedSim.toStringAsFixed(2)}\n';
 
       if (adjustedSim > bestSingleSim) {
         bestSingleSim = adjustedSim;
@@ -358,8 +383,10 @@ class WordAligner {
 
     if (bestSingleIdx >= 0) {
       // Use lower threshold for Hebrew words since STT is less precise
-      final bestIsHebrew = bestSingleIdx < script.length && script[bestSingleIdx].isRtl;
-      final singleThreshold = bestIsHebrew ? _hebrewMatchThreshold : _fastMatchThreshold;
+      final bestIsHebrew =
+          bestSingleIdx < script.length && script[bestSingleIdx].isRtl;
+      final singleThreshold =
+          bestIsHebrew ? _hebrewMatchThreshold : _fastMatchThreshold;
       if (bestSingleSim >= singleThreshold) {
         final jumpDist = bestSingleIdx - lastConfirmedIndex;
         // Single-word matches only allow small jumps to prevent false skips
@@ -391,11 +418,15 @@ class WordAligner {
       for (int j = 0; j < recentWords.length && si < script.length; si++) {
         if (script[si].isNewline) continue;
         final scriptWord = script[si].normalized;
-        if (scriptWord.isEmpty) { j++; continue; }
+        if (scriptWord.isEmpty) {
+          j++;
+          continue;
+        }
         final spokenWord = recentWords[j];
 
         final sim = _wordSimilarity(spokenWord, scriptWord, script[si].isRtl);
-        final threshold = script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
+        final threshold =
+            script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
         if (sim >= threshold) {
           seqScore += sim;
           matchCount++;
@@ -406,7 +437,8 @@ class WordAligner {
       final distance = i - searchStart;
       final distPenalty = distance * _distancePenaltyPerWord;
       final available = recentWords.length;
-      final normalizedScore = available > 0 ? (seqScore / available) - distPenalty : 0.0;
+      final normalizedScore =
+          available > 0 ? (seqScore / available) - distPenalty : 0.0;
 
       if (normalizedScore > bestSeqScore && matchCount >= 1) {
         final seqJump = (si - 1) - lastConfirmedIndex;
@@ -415,20 +447,22 @@ class WordAligner {
         if (matchCount >= minMatches && seqJump <= _maxSeqJump) {
           bestSeqScore = normalizedScore;
           bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
-          bestSeqDebug = 'SEQ@$i: matched=$matchCount/$available score=${normalizedScore.toStringAsFixed(2)} end=$bestSeqEndIdx jump=$seqJump';
+          bestSeqDebug =
+              'SEQ@$i: matched=$matchCount/$available score=${normalizedScore.toStringAsFixed(2)} end=$bestSeqEndIdx jump=$seqJump';
         }
       }
     }
 
     if (bestSeqScore >= _matchThreshold && bestSeqEndIdx > lastConfirmedIndex) {
-      return AlignmentResult(bestSeqEndIdx, bestSeqScore,
-          '$bestSeqDebug\n$debugScans');
+      return AlignmentResult(
+          bestSeqEndIdx, bestSeqScore, '$bestSeqDebug\n$debugScans');
     }
 
     // ── NO MATCH ────────────────────────────────────────────────────────────
     // The spoken word didn't match anything in our window. This is normal
     // during improvisation — the user is saying something not in the script.
-    final nextExpected = searchStart < script.length ? script[searchStart].normalized : '?';
+    final nextExpected =
+        searchStart < script.length ? script[searchStart].normalized : '?';
     return AlignmentResult(lastConfirmedIndex, bestSingleSim.clamp(0.0, 1.0),
         'NO_MATCH: heard="${lastSpoken}" expected="${nextExpected}" bestSim=${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
   }
@@ -473,8 +507,9 @@ class WordAligner {
       if (sim < 0.60) {
         if (ls.length >= 3 && ss.length >= 3) {
           if (ls.contains(ss) || ss.contains(ls)) {
-            final overlapRatio = (ls.length < ss.length ? ls.length : ss.length) /
-                (ls.length > ss.length ? ls.length : ss.length);
+            final overlapRatio =
+                (ls.length < ss.length ? ls.length : ss.length) /
+                    (ls.length > ss.length ? ls.length : ss.length);
             final subSim = 0.70 * overlapRatio + 0.20;
             if (subSim > sim) sim = subSim;
           }
@@ -503,7 +538,10 @@ class WordAligner {
     while (i < words.length) {
       if (words[i].length == 1 && !words[i].isHebrew) {
         int j = i;
-        while (j < words.length && words[j].length == 1 && !words[j].isHebrew && j - i < 6) {
+        while (j < words.length &&
+            words[j].length == 1 &&
+            !words[j].isHebrew &&
+            j - i < 6) {
           j++;
         }
         if (j - i >= 2) {
@@ -518,6 +556,7 @@ class WordAligner {
     }
     return result;
   }
+
   static bool _isUnspeakable(ScriptWord word) {
     if (word.isNewline) return true;
     final norm = word.normalized;

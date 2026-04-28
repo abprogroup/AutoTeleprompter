@@ -121,7 +121,8 @@ owns how confirmed indices are rendered after STT produces results.
 14. **Mixed-language switching follows the next expected word**: Windows STT
     must not switch locale from a broad Hebrew/English ratio while English words
     are still next in sequence. `_detectLanguageAhead()` follows the next
-    non-newline script word from the requested index.
+    speakable script word from the requested index, skipping newlines and
+    display-only symbols whose `normalized` value is empty.
 
 15. **Browser STT sessions must reload the WebView**: Every browser-STT
     `start()` increments a session id and exposes `sttWebViewUrl` with a
@@ -172,6 +173,8 @@ owns how confirmed indices are rendered after STT produces results.
 - Do not reintroduce recurring volume-bar debug rows while the sound bar exists.
 - Do not pivot to Hebrew based only on a distant lookahead ratio when the next
   expected speakable word is still English.
+- Do not let display-only punctuation/symbol tokens control STT locale switches
+  or force-skip targets.
 - Do not remove the `?session=` reload token from browser STT URLs.
 - Do not let Web Speech `onend` and locale-switch handlers both start new
   recognizers for the same language pivot.

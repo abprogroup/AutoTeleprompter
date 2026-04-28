@@ -1002,9 +1002,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                   // Use Container padding instead of trailing space for word gaps.
                   // Container.color covers padding area → continuous highlight blocks.
                   final wordGap = effectiveFontSize * 0.28;
+                  final speechActive = tState.isListening || tState.isStarting;
                   return GestureDetector(
                     behavior: HitTestBehavior.translucent,
-                    onTap: () => _jumpToWordIndex(i),
+                    onTap: speechActive ? null : () => _jumpToWordIndex(i),
                     child: Directionality(
                       textDirection: word.effectiveRtl
                           ? TextDirection.rtl
@@ -1095,7 +1096,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
                       onNotification: _handleStoppedBrowsingScroll,
                       child: SingleChildScrollView(
                         controller: _scrollController,
-                        physics: const ClampingScrollPhysics(),
+                        physics: (tState.isListening || tState.isStarting)
+                            ? const NeverScrollableScrollPhysics()
+                            : const ClampingScrollPhysics(),
                         child: wordList,
                       ),
                     ),

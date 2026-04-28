@@ -99,6 +99,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   bool _isCommandExecuting = false;
   bool _isDirty = false;
   bool _isLoading = false;
+  String? _globalClipboard; // in-app clipboard for global cut/copy
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
@@ -1817,6 +1818,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onSelectAll: _selectAllBlocks,
                         onCopy: _onCopyClean,
                         onCut: _onCutClean,
+                        onPaste: _globalClipboard != null ? _pasteFromGlobalClipboard : null,
                       ),
                     ),
                   ),
@@ -1931,7 +1933,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
       }
       if (plainBuf.isNotEmpty) {
-        Clipboard.setData(ClipboardData(text: plainBuf.toString()));
+        _globalClipboard = plainBuf.toString();
+        Clipboard.setData(ClipboardData(text: _globalClipboard!));
       }
 
       // ── Step 2: delete ──
@@ -1992,7 +1995,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         htmlBuf.write(StylingService.markupToHtml(slice));
       }
       if (plainBuf.isEmpty) return;
-      RichClipboard.setHtml(plain: plainBuf.toString(), html: htmlBuf.toString());
+      _globalClipboard = plainBuf.toString();
+      RichClipboard.setHtml(plain: _globalClipboard!, html: htmlBuf.toString());
       return;
     }
     final controller = _activeController;
@@ -2003,6 +2007,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       plain: StylingService.stripTags(slice),
       html: StylingService.markupToHtml(slice),
     );
+  }
+
+  void _pasteFromGlobalClipboard() {
+    final text = _globalClipboard;
+    if (text == null || text.isEmpty) return;
+    final c = _activeController;
+    if (c == null) return;
+    final sel = c.selection;
+    final start = sel.isValid ? sel.start : c.text.length;
+    final end   = sel.isValid ? sel.end   : c.text.length;
+    c.value = TextEditingValue(
+      text: c.text.substring(0, start) + text + c.text.substring(end),
+      selection: TextSelection.collapsed(offset: start + text.length),
+    );
+    _saveHistory(description: 'Paste');
   }
 
   void _selectAllBlocks() {
@@ -2124,12 +2143,13 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
   final VoidCallback onCut;
+  final VoidCallback? onPaste;
 
   const _EditorBlock({
     super.key,
     required this.controller, required this.focusNode, required this.settings,
     required this.isGlobalSelected, required this.onSubmitted, required this.onTap,
-    required this.onSelectAll, required this.onCopy, required this.onCut,
+    required this.onSelectAll, required this.onCopy, required this.onCut, this.onPaste,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2301,6 +2321,16 @@ class _EditorBlock extends StatelessWidget {
                     type: ContextMenuButtonType.custom,
                     label: 'Copy',
                   ));
+                } else if (item.type == ContextMenuButtonType.paste && onPaste != null) {
+                  // Intercept native paste with our in-app clipboard when available.
+                  customItems.add(ContextMenuButtonItem(
+                    onPressed: () {
+                      ContextMenuController.removeAny();
+                      onPaste!();
+                    },
+                    type: ContextMenuButtonType.custom,
+                    label: 'Paste',
+                  ));
                 } else {
                   customItems.add(item);
                 }
@@ -2313,6 +2343,18 @@ class _EditorBlock extends StatelessWidget {
                     onSelectAll();
                   },
                   type: ContextMenuButtonType.selectAll,
+                ));
+              }
+              // Force-inject our Paste when _globalClipboard is set but
+              // the native menu didn't offer a paste item (e.g. field was empty).
+              if (onPaste != null && !customItems.any((i) => i.label == 'Paste' || i.type == ContextMenuButtonType.paste)) {
+                customItems.add(ContextMenuButtonItem(
+                  onPressed: () {
+                    ContextMenuController.removeAny();
+                    onPaste!();
+                  },
+                  type: ContextMenuButtonType.custom,
+                  label: 'Paste',
                 ));
               }
               return AdaptiveTextSelectionToolbar.buttonItems(

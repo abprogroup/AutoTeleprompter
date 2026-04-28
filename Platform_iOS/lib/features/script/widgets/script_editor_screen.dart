@@ -99,9 +99,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   bool _isCommandExecuting = false;
   bool _isDirty = false;
   bool _isLoading = false;
-  String? _globalClipboard;    // in-app clipboard for global cut/copy
-  String? _pendingGlobalText;  // pre-computed at Select-All time; survives onTap→clearGlobalSelection
+  String? _globalClipboard;
+  String? _pendingGlobalText;
   Timer? _pendingGlobalTimer;
+  // When a global Cut/Copy menu button is about to fire, set this true so
+  // the iOS-triggered onTap (which fires after menu dismissal) skips clearing
+  // the global selection — leaving _isGlobalSelection intact for the handler.
+  bool _skipNextSelectionClear = false;
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
@@ -1807,11 +1811,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         isGlobalSelected: _isGlobalSelection,
                         onSubmitted: () => _addBlock(index + 1),
                         onTap: () {
-                          // Only clear GLOBAL selection on tap — user may be
-                          // tapping to bring up the context menu on a refined
-                          // (handle-drag) selection. Clearing refined selection
-                          // here would prevent Cut/Copy from ever reaching the
-                          // overlay-selected range.
+                          if (_skipNextSelectionClear) {
+                            _skipNextSelectionClear = false;
+                            return;
+                          }
                           if (_isGlobalSelection ||
                               _controllers.any((c) => c.isGlobalSelected)) {
                             _clearGlobalSelection();
@@ -1821,6 +1824,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onCopy: _onCopyClean,
                         onCut: _onCutClean,
                         onPaste: _globalClipboard != null ? _pasteFromGlobalClipboard : null,
+                        onBeforeMenuAction: () { _skipNextSelectionClear = true; },
                       ),
                     ),
                   ),
@@ -2186,12 +2190,13 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onCut;
   final VoidCallback? onPaste;
+  final VoidCallback? onBeforeMenuAction;
 
   const _EditorBlock({
     super.key,
     required this.controller, required this.focusNode, required this.settings,
     required this.isGlobalSelected, required this.onSubmitted, required this.onTap,
-    required this.onSelectAll, required this.onCopy, required this.onCut, this.onPaste,
+    required this.onSelectAll, required this.onCopy, required this.onCut, this.onPaste, this.onBeforeMenuAction,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2315,12 +2320,12 @@ class _EditorBlock extends StatelessWidget {
                   anchors: editableTextState.contextMenuAnchors,
                   buttonItems: [
                     ContextMenuButtonItem(
-                      onPressed: () { ContextMenuController.removeAny(); onCut(); },
+                      onPressed: () { onBeforeMenuAction?.call(); ContextMenuController.removeAny(); onCut(); },
                       type: ContextMenuButtonType.custom,
                       label: 'Cut',
                     ),
                     ContextMenuButtonItem(
-                      onPressed: () { ContextMenuController.removeAny(); onCopy(); },
+                      onPressed: () { onBeforeMenuAction?.call(); ContextMenuController.removeAny(); onCopy(); },
                       type: ContextMenuButtonType.custom,
                       label: 'Copy',
                     ),
@@ -2348,6 +2353,7 @@ class _EditorBlock extends StatelessWidget {
                 } else if (item.type == ContextMenuButtonType.cut) {
                   customItems.add(ContextMenuButtonItem(
                     onPressed: () {
+                      onBeforeMenuAction?.call();
                       ContextMenuController.removeAny();
                       onCut();
                     },
@@ -2357,6 +2363,7 @@ class _EditorBlock extends StatelessWidget {
                 } else if (item.type == ContextMenuButtonType.copy) {
                   customItems.add(ContextMenuButtonItem(
                     onPressed: () {
+                      onBeforeMenuAction?.call();
                       ContextMenuController.removeAny();
                       onCopy();
                     },

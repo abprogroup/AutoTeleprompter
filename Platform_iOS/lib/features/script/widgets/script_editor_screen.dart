@@ -99,7 +99,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   bool _isCommandExecuting = false;
   bool _isDirty = false;
   bool _isLoading = false;
-  String? _globalClipboard; // in-app clipboard for global cut/copy
+  String? _globalClipboard;    // in-app clipboard for global cut/copy
+  String? _pendingGlobalText;  // pre-computed at Select-All time; survives onTap→clearGlobalSelection
+  Timer? _pendingGlobalTimer;
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
@@ -1936,20 +1938,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         _globalClipboard = plainBuf.toString();
         Clipboard.setData(ClipboardData(text: _globalClipboard!));
       }
-      // DIAGNOSTIC — remove after confirming fix:
-      // Shows how many chars were captured and from how many blocks.
-      // This tells us whether the bug is in write (cut) or read (paste).
-      final diagBlocks = _controllers.length;
-      final diagChars = _globalClipboard?.length ?? 0;
-      final diagPreview = _globalClipboard?.substring(0, (_globalClipboard?.length ?? 0).clamp(0, 60)) ?? 'null';
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('CUT: $diagBlocks blocks, $diagChars chars\n"$diagPreview..."'),
-            duration: const Duration(seconds: 12),
-          ));
-        }
-      });
+      _pendingGlobalTimer?.cancel();
+      _pendingGlobalText = null;
 
       // ── Step 2: delete ──
       _isCommandExecuting = true;
@@ -1968,8 +1958,22 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isCommandExecuting = false;
       _saveHistory(description: 'Cut');
       setState(() {});
+    } else if (_pendingGlobalText != null) {
+      // Global selection was active at Select-All time but _isGlobalSelection
+      // was cleared by onTap firing on the TextField when the menu overlay
+      // dismissed. Use the pre-computed text and delete all blocks.
+      _pendingGlobalTimer?.cancel();
+      _globalClipboard = _pendingGlobalText!;
+      _pendingGlobalText = null;
+      Clipboard.setData(ClipboardData(text: _globalClipboard!));
+      _isCommandExecuting = true;
+      for (final c in _controllers) { c.text = ''; }
+      _clearGlobalSelection();
+      _isCommandExecuting = false;
+      _saveHistory(description: 'Cut');
+      setState(() {});
     } else {
-      // Single-block native path — copy then delete the focused selection.
+      // True single-block native path — no global selection was ever active.
       _onCopyClean();
       final c = _activeController;
       if (c == null) return;
@@ -2009,8 +2013,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         htmlBuf.write(StylingService.markupToHtml(slice));
       }
       if (plainBuf.isEmpty) return;
+      _pendingGlobalTimer?.cancel();
+      _pendingGlobalText = null;
       _globalClipboard = plainBuf.toString();
       RichClipboard.setHtml(plain: _globalClipboard!, html: htmlBuf.toString());
+      return;
+    }
+    // Fallback: check pre-computed pending global text
+    if (_pendingGlobalText != null) {
+      _pendingGlobalTimer?.cancel();
+      _globalClipboard = _pendingGlobalText!;
+      _pendingGlobalText = null;
+      Clipboard.setData(ClipboardData(text: _globalClipboard!));
       return;
     }
     final controller = _activeController;
@@ -2056,6 +2070,20 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       c.isGlobalSelected = true;
       c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
+    // Pre-compute the full visible text NOW, before any tap event can
+    // call _clearGlobalSelection() and wipe _isGlobalSelection.
+    // On iOS, tapping the Cut menu button fires onTap on the underlying
+    // TextField (after the overlay dismisses), which clears global selection
+    // before _onCutClean() runs. _pendingGlobalText survives that clear.
+    _pendingGlobalText = _controllers
+        .map((c) => StylingService.stripTags(c.text).replaceAll('\n', ' ').trim())
+        .where((t) => t.isNotEmpty)
+        .join(' ');
+    _pendingGlobalTimer?.cancel();
+    _pendingGlobalTimer = Timer(const Duration(seconds: 10), () {
+      _pendingGlobalText = null;
+    });
+
     _isCommandExecuting = false;
     setState(() {});
     // Refresh after setState so TextFields repaint with new flags.

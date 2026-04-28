@@ -32,6 +32,7 @@ the settings/profile UI.
 | `AppSettings.recentScripts` | Gallery, script provider, recent-script operations |
 | `AppSettings.lastScript` / `lastScriptTitle` | Startup restore and active script persistence |
 | `AppSettings.sttEngine` | `TeleprompterNotifier.startSession()` |
+| `AppSettings.sttInputDeviceId` / `sttInputDeviceLabel` | Windows STT input selection and presenter/settings display |
 | `AppSettings.debugMode` | Teleprompter debug logs and hidden gesture |
 | `SettingsNotifier.saveScript(...)` | Editor/provider persistence and history metadata sync |
 | `SettingsNotifier.addToRecent(...)` / `removeFromRecent(...)` | Gallery/recent management |
@@ -47,9 +48,9 @@ the settings/profile UI.
 | Script provider | `script_provider.dart` | Reads settings on build, calls `saveScript()` and style persistence |
 | Script editor | `script_editor_screen.dart` | Reads display/style settings, calls setters and `saveScript()` |
 | Script gallery | `script_gallery_screen.dart` | Reads and mutates `recentScripts` |
-| Teleprompter provider | `teleprompter_provider.dart` | Reads `sttEngine`, `debugMode`, `scrollSpeed`, updates `scrollSpeed` via voice commands |
-| Teleprompter screen | `teleprompter_screen.dart` | Reads display colors, scroll, mirror, spacing, fade, settings panel values |
-| Settings screen | `app_settings_screen.dart` | Calls display/profile setters |
+| Teleprompter provider | `teleprompter_provider.dart` | Reads `sttEngine`, `sttInputDeviceId`, `sttInputDeviceLabel`, `debugMode`, `scrollSpeed`, updates `scrollSpeed` via voice commands |
+| Teleprompter screen | `teleprompter_screen.dart` | Reads display colors, scroll, mirror, spacing, fade, settings panel values, mic selection labels |
+| Settings screen | `app_settings_screen.dart` | Calls display/profile setters and exposes Windows input settings/reset entry points |
 | Color suite | `color_suite_mvp.dart` | Reads last chosen colors and background; calls color setters |
 
 ---
@@ -112,10 +113,11 @@ Windows MVP file and remain part of the settings persistence contract:
    toggling or collapsing diagnostics must not reset STT, scroll position, or
    `confirmedWordIndex`.
 
-10. **Input-device selection is not a settings contract yet**: `sttEngine` is
-    persisted, but explicit microphone device selection is not currently stored
-    in `AppSettings`. Until that field exists, Windows uses the OS/default
-    input device selected outside the app.
+10. **Input-device selection is a Windows settings contract**: `sttEngine`,
+    `sttInputDeviceId`, and `sttInputDeviceLabel` are persisted independently.
+    Empty `sttInputDeviceId` means system default microphone. The label must be
+    retained even if the device is not currently connected so the user can see
+    what preference was saved.
 
 ---
 
@@ -130,8 +132,9 @@ Windows MVP file and remain part of the settings persistence contract:
 - Do not activate hidden V5 cloud/STT/recording settings without explicit scope.
 - Do not treat `debugMode=false` as permission to stop STT or unload provider
   state. It is a diagnostics visibility setting.
-- Do not add a persisted microphone ID/name key without also updating STT MVP,
-  Settings MVP, and any platform fallback behavior.
+- Do not save a microphone `deviceId` without the matching display label.
+- Do not treat a missing saved microphone as a settings reset. The STT adapter
+  owns runtime fallback to system default.
 
 ---
 
@@ -146,9 +149,9 @@ Windows MVP file and remain part of the settings persistence contract:
   refreshed state view.
 - **Legacy defaults**: Some reset paths use older defaults such as `fontSize`
   18.0 while current defaults may be 20.0. Treat resets carefully.
-- **Future mic persistence**: External microphone selection will require a new
-  persisted key and migration/fallback behavior. It is currently only tracked as
-  a pending feature, not an implemented setting.
+- **Device IDs can change**: WebView2/Chromium device IDs may change after
+  permission resets, OS changes, or hardware reconnects. Preserve the saved
+  label for user visibility and let STT fall back safely when the ID is stale.
 
 ---
 

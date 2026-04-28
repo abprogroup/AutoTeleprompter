@@ -42,6 +42,7 @@ to STT MVP; this MVP owns what the app does with confirmed words.
 | `TeleprompterState.statusMessage` / `hasError` | Error banners and dialogs |
 | `TeleprompterState.soundLevel` | Audio-level UI |
 | `TeleprompterState.sttWebViewUrl` | Windows browser STT view when that adapter is active |
+| `TeleprompterState.audioInputDevices` | Windows presenter mic selector; populated by STT adapter discovery |
 
 ---
 
@@ -52,6 +53,7 @@ to STT MVP; this MVP owns what the app does with confirmed words.
 | Presentation screen | `teleprompter_screen.dart` | Reads provider state, starts/stops/resets session |
 | Control bar | `teleprompter_screen.dart` | Calls `stopSession()`, toggles manual presentation behavior locally |
 | Settings panel | `teleprompter_screen.dart` | Reads/writes settings while presentation runs |
+| Windows mic selector | `teleprompter_screen.dart` | Reads `audioInputDevices`, persists preferred mic, and forwards live changes to provider |
 | STT callbacks | `teleprompter_provider.dart` | Call `_handleSttResult()` after `SpeechResult` arrives |
 | Remote hooks | `teleprompter_provider.dart` | Placeholder `_setupRemoteCallbacks()` intersects with future remote control |
 
@@ -165,6 +167,12 @@ earlier Windows MVP file and remain part of the engine contract:
     only the debug output window height. It must not clear `debugLogs`, unmount
     STT processing, reset `soundLevel`, or move the resume point.
 
+21. **Mic selection must not reset presentation position**: Choosing a Windows
+    external microphone from the presenter settings panel may restart/reopen STT
+    capture internals, but it must not call `resetPosition()`, clear
+    `confirmedWordIndex`, scroll to the top, or discard the current resume
+    point.
+
 ---
 
 ## Forbidden Changes
@@ -195,6 +203,8 @@ earlier Windows MVP file and remain part of the engine contract:
   editor and presentation contexts.
 - Do not collapse the debug console by disabling debug mode or deleting the log
   list state. Collapse is a UI-height toggle only.
+- Do not hide the Windows mic selector behind debug mode. External input choice
+  is a runtime presentation control, not only a diagnostic.
 
 ---
 
@@ -227,6 +237,7 @@ earlier Windows MVP file and remain part of the engine contract:
 | Search-to-resume | A found word becomes the next resume point through `jumpToPosition(...)`. |
 | Stopped-session browsing | While STT is stopped, manual scrolling cancels stale smooth-scroll targets and updates the resume point from the reading line on scroll end. |
 | Active STT auto-follow | Auto-follow remains enabled only while STT is listening. |
+| Windows external mic selector | Presentation settings can show discovered `audioinput` devices, persist selection, and apply the chosen input without resetting script position. |
 
 ---
 

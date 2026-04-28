@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
@@ -13,12 +12,10 @@ import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
-import '../../script/models/script.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
-
-const _systemChannel = MethodChannel('autoteleprompter/system');
+import '../../../platform/stt/abstract_stt_service.dart';
 
 // Regex to strip any unprocessed markup tags that somehow leaked into word.raw
 final _tagStripRe = RegExp(
@@ -1802,6 +1799,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    final tState = ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
 
     const labelStyle = TextStyle(color: Colors.white70, fontSize: 14);
@@ -1846,6 +1844,24 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             style: _segmentStyle(settings),
           ),
           const SizedBox(height: 16),
+
+          if (Platform.isWindows) ...[
+            const Text('Speech Input', style: sectionStyle),
+            const SizedBox(height: 8),
+            _WindowsMicSelector(
+              selectedDeviceId: settings.sttInputDeviceId,
+              selectedLabel: settings.sttInputDeviceLabel,
+              devices: tState.audioInputDevices,
+              accentColor: Color(settings.currentWordColor),
+              onSelected: (deviceId, label) async {
+                await notifier.setSttInputDevice(deviceId, label);
+                ref
+                    .read(teleprompterProvider.notifier)
+                    .setSttInputDevice(deviceId, label);
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
 
           if (settings.scrollMode == 'manual') ...[
             Row(children: [
@@ -2151,6 +2167,112 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
         if (states.contains(WidgetState.selected)) return Colors.black;
         return Colors.white70;
       }),
+    );
+  }
+}
+
+class _WindowsMicSelector extends StatelessWidget {
+  final String selectedDeviceId;
+  final String selectedLabel;
+  final List<SttAudioInputDevice> devices;
+  final Color accentColor;
+  final Future<void> Function(String deviceId, String label) onSelected;
+
+  const _WindowsMicSelector({
+    required this.selectedDeviceId,
+    required this.selectedLabel,
+    required this.devices,
+    required this.accentColor,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final knownIds = devices.map((device) => device.id).toSet();
+    final value = knownIds.contains(selectedDeviceId) ? selectedDeviceId : '';
+    final entries = <DropdownMenuItem<String>>[
+      const DropdownMenuItem(
+        value: '',
+        child: Text('System default microphone'),
+      ),
+      ...devices.map(
+        (device) => DropdownMenuItem(
+          value: device.id,
+          child: Text(
+            device.label,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          value: value,
+          dropdownColor: const Color(0xFF1A1A1A),
+          iconEnabledColor: accentColor,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.mic_external_on, color: accentColor),
+            helperText: devices.isEmpty
+                ? 'Start the mic once to discover connected inputs.'
+                : 'Switches the active WebView2 audio input when available.',
+            helperStyle: const TextStyle(color: Colors.white38, fontSize: 11),
+            filled: true,
+            fillColor: const Color(0xFF111111),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.white12),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: accentColor),
+            ),
+          ),
+          items: entries,
+          selectedItemBuilder: (_) => entries
+              .map((entry) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      entry.value == ''
+                          ? 'System default microphone'
+                          : selectedLabel,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ))
+              .toList(),
+          onChanged: (deviceId) {
+            if (deviceId == null) return;
+            final label = deviceId.isEmpty
+                ? 'System default microphone'
+                : devices
+                    .firstWhere(
+                      (device) => device.id == deviceId,
+                      orElse: () => SttAudioInputDevice(
+                        id: deviceId,
+                        label: selectedLabel,
+                      ),
+                    )
+                    .label;
+            onSelected(deviceId, label);
+          },
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            icon: const Icon(Icons.settings_input_component, size: 17),
+            label: const Text('Open Windows input settings'),
+            style: TextButton.styleFrom(foregroundColor: accentColor),
+            onPressed: () {
+              Process.run('cmd', ['/c', 'start', 'ms-settings:sound']);
+            },
+          ),
+        ),
+      ],
     );
   }
 }

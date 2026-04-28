@@ -1,5 +1,15 @@
 import '../../features/teleprompter/services/speech_service.dart';
 
+class SttAudioInputDevice {
+  final String id;
+  final String label;
+
+  const SttAudioInputDevice({
+    required this.id,
+    required this.label,
+  });
+}
+
 /// Platform-agnostic contract for Speech-to-Text services.
 ///
 /// All platform-specific adapters extend this class.
@@ -14,7 +24,7 @@ abstract class AbstractSttService {
 
   /// Called on STT error. Receive the raw error string.
   void Function(String error)? onError;
-  
+
   /// Called for sound level changes (audio telemetry).
   void Function(double level)? onSoundLevelChange;
 
@@ -23,6 +33,9 @@ abstract class AbstractSttService {
 
   /// Called with diagnostic messages (init result, locale list, etc.) for the debug panel.
   void Function(String message)? onDiagnostic;
+
+  /// Called when the platform adapter discovers audio input devices.
+  void Function(List<SttAudioInputDevice> devices)? onAudioInputDevicesChanged;
 
   /// URL of the embedded STT WebView (Windows browser adapter only). Null on other platforms.
   String? get sttWebViewUrl => null;
@@ -35,6 +48,10 @@ abstract class AbstractSttService {
   /// Hot-switch the recognition locale without restarting the whole session.
   /// Default no-op; browser adapter overrides to send a WebSocket message.
   void setLocale(String locale) {}
+
+  /// Select the preferred audio input device for adapters that can route it.
+  /// Default no-op; Windows WebView2/browser STT overrides this.
+  void setAudioInputDevice(String? deviceId, {String? label}) {}
 
   /// Starts speech recognition.
   Future<SpeechStartResult> start({String? localeId});

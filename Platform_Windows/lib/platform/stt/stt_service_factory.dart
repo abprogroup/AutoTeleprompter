@@ -12,7 +12,7 @@ import 'stt_browser_adapter.dart';
 /// │ Android         │ SttAndroidAdapter  (Google on-device via channel)│
 /// │ iOS             │ SttAppleAdapter    (Apple SFSpeechRecognizer)     │
 /// │ macOS           │ SttAppleAdapter    (Apple SFSpeechRecognizer)     │
-/// │ Windows         │ SttBrowserAdapter  (Web Speech API via Dashboard) │
+/// │ Windows         │ SttBrowserAdapter  (Web Speech API via WebView2)   │
 /// └─────────────────┴──────────────────────────────────────────────────┘
 ///
 /// Usage:
@@ -25,8 +25,7 @@ class SttServiceFactory {
   static AbstractSttService create() {
     if (Platform.isAndroid) return SttAndroidAdapter();
     if (Platform.isIOS || Platform.isMacOS) return SttAppleAdapter();
-    // Windows: Use Browser engine for universal language support (including Hebrew).
-    // The "Dashboard" integration ensures mica remains active even when hidden.
+    // Windows: WebView2/Web Speech supports Hebrew and browser audio inputs.
     return SttBrowserAdapter();
   }
 }

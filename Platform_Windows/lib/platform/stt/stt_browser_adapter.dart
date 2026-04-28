@@ -25,6 +25,8 @@ class SttBrowserAdapter extends AbstractSttService {
   bool _isActive = false;
   bool _everListened = false;
   String _currentLocale = 'en-US';
+  String? _selectedAudioInputDeviceId;
+  String _selectedAudioInputDeviceLabel = 'System default microphone';
   int _sessionId = 0;
 
   @override
@@ -34,7 +36,8 @@ class SttBrowserAdapter extends AbstractSttService {
     _currentLocale = (localeId ?? 'en-US').replaceAll('_', '-');
     _sessionId++;
 
-    onDiagnostic?.call('🌐 [Browser STT] Starting local server on port $_port...');
+    onDiagnostic
+        ?.call('🌐 [Browser STT] Starting local server on port $_port...');
 
     await _stopServer();
 
@@ -42,7 +45,7 @@ class SttBrowserAdapter extends AbstractSttService {
 
     router.get('/', (Request req) {
       return Response.ok(
-        _buildHtml(_currentLocale),
+        _buildHtml(_currentLocale, _selectedAudioInputDeviceId),
         headers: {'content-type': 'text/html; charset=utf-8'},
       );
     });
@@ -58,29 +61,62 @@ class SttBrowserAdapter extends AbstractSttService {
             final data = jsonDecode(message as String) as Map<String, dynamic>;
             final type = data['type'] as String? ?? '';
             switch (type) {
+              case 'devices':
+                final rawDevices = data['devices'];
+                if (rawDevices is List) {
+                  final devices = rawDevices
+                      .whereType<Map>()
+                      .map((raw) {
+                        final id = raw['id'] as String? ?? '';
+                        final label = raw['label'] as String? ?? '';
+                        return SttAudioInputDevice(
+                          id: id,
+                          label: label.isEmpty ? 'Microphone' : label,
+                        );
+                      })
+                      .where((device) => device.id.isNotEmpty)
+                      .toList();
+                  onAudioInputDevicesChanged?.call(devices);
+                }
+                break;
               case 'listening':
                 if (!_everListened) {
                   _everListened = true;
                   onStatusChange?.call(SpeechStatus.listening);
-                  onDiagnostic?.call('🎤 [Browser STT] Web Speech API active — speak now');
+                  onDiagnostic?.call(
+                      '🎤 [Browser STT] Web Speech API active — speak now');
                 }
                 break;
               case 'result':
                 final words = data['words'] as String? ?? '';
                 final isFinal = data['isFinal'] as bool? ?? false;
-                if (words.isNotEmpty) onResult?.call(SpeechResult(words, isFinal));
+                if (words.isNotEmpty)
+                  onResult?.call(SpeechResult(words, isFinal));
                 break;
               case 'level':
                 final level = (data['level'] as num?)?.toDouble() ?? 0.0;
                 onSoundLevelChange?.call(level);
                 break;
+              case 'inputReady':
+                final label = data['label'] as String? ?? '';
+                if (label.isNotEmpty) {
+                  _selectedAudioInputDeviceLabel = label;
+                }
+                onDiagnostic?.call(
+                    '🎙️ [Browser STT] Input ready: $_selectedAudioInputDeviceLabel');
+                break;
               case 'error':
                 final err = data['error'] as String? ?? 'unknown';
-                if (err == 'not-allowed') {
-                  onError?.call(
-                    'Microphone blocked in WebView2.\n'
-                    'Grant mic access once: open http://localhost:$_port/ in Edge, '
-                    'allow microphone, then restart the session.');
+                if (err == 'input-device-missing') {
+                  onDiagnostic?.call(
+                      '⚠️ [Browser STT] Selected microphone unavailable; using system default.');
+                } else if (err == 'input-device-failed') {
+                  onDiagnostic?.call(
+                      '⚠️ [Browser STT] Could not open selected microphone; using system default.');
+                } else if (err == 'not-allowed') {
+                  onError?.call('Microphone blocked in WebView2.\n'
+                      'Grant mic access once: open http://localhost:$_port/ in Edge, '
+                      'allow microphone, then restart the session.');
                 } else if (err != 'aborted' && err != 'no-speech') {
                   onDiagnostic?.call('⚠️ [Browser STT] error: $err');
                 }
@@ -89,7 +125,8 @@ class SttBrowserAdapter extends AbstractSttService {
           } catch (_) {}
         },
         onDone: () {
-          if (_isActive) onDiagnostic?.call('⚠️ [Browser STT] WebView disconnected');
+          if (_isActive)
+            onDiagnostic?.call('⚠️ [Browser STT] WebView disconnected');
         },
       );
     }));
@@ -104,7 +141,8 @@ class SttBrowserAdapter extends AbstractSttService {
       );
     }
 
-    onDiagnostic?.call('🌐 [Browser STT] WebView ready at http://localhost:$_port/?session=$_sessionId');
+    onDiagnostic?.call(
+        '🌐 [Browser STT] WebView ready at http://localhost:$_port/?session=$_sessionId');
 
     return SpeechStartResult(
       success: true,
@@ -122,13 +160,38 @@ class SttBrowserAdapter extends AbstractSttService {
     _everListened = false;
     onDiagnostic?.call('🔤 [Browser STT] Switching locale → $normalized');
     try {
-      _wsClient?.sink.add(jsonEncode({'type': 'setLocale', 'locale': normalized}));
+      _wsClient?.sink
+          .add(jsonEncode({'type': 'setLocale', 'locale': normalized}));
+    } catch (_) {}
+  }
+
+  @override
+  void setAudioInputDevice(String? deviceId, {String? label}) {
+    final normalized =
+        deviceId == null || deviceId.trim().isEmpty ? null : deviceId.trim();
+    _selectedAudioInputDeviceId = normalized;
+    _selectedAudioInputDeviceLabel = (label == null || label.trim().isEmpty)
+        ? 'System default microphone'
+        : label.trim();
+    onDiagnostic?.call(normalized == null
+        ? '🎙️ [Browser STT] Using system default microphone'
+        : '🎙️ [Browser STT] Requested microphone: $_selectedAudioInputDeviceLabel');
+    try {
+      _wsClient?.sink.add(jsonEncode({
+        'type': 'setAudioInputDevice',
+        'deviceId': normalized ?? '',
+        'label': _selectedAudioInputDeviceLabel,
+      }));
     } catch (_) {}
   }
 
   Future<void> _stopServer() async {
-    try { _wsClient?.sink.close(); } catch (_) {}
-    try { await _server?.close(force: true); } catch (_) {}
+    try {
+      _wsClient?.sink.close();
+    } catch (_) {}
+    try {
+      await _server?.close(force: true);
+    } catch (_) {}
     _wsClient = null;
     _server = null;
   }
@@ -151,7 +214,10 @@ class SttBrowserAdapter extends AbstractSttService {
   String? get sttWebViewUrl =>
       _server != null ? 'http://localhost:$_port/?session=$_sessionId' : null;
 
-  String _buildHtml(String locale) => '''<!DOCTYPE html>
+  String _buildHtml(String locale, String? selectedDeviceId) {
+    final localeJson = jsonEncode(locale);
+    final selectedDeviceJson = jsonEncode(selectedDeviceId ?? '');
+    return '''<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -193,31 +259,82 @@ const err = document.getElementById('err');
 const canvas = document.getElementById('waveCanvas');
 const ctx = canvas.getContext('2d');
 let rec;
-let currentLocale = '$locale';
+let currentLocale = $localeJson;
+let selectedDeviceId = $selectedDeviceJson;
 let consecutiveFails = 0;
 let audioContext;
 let analyser;
 let dataArray;
+let activeStream;
 let animationId;
 let restartTimer;
 let switchingLocale = false;
+let switchingInput = false;
 let closedByHost = false;
 
-function initVisualizer() {
-  if (audioContext) return;
+function audioConstraints() {
+  if (selectedDeviceId) {
+    return { audio: { deviceId: { exact: selectedDeviceId } } };
+  }
+  return { audio: true };
+}
+
+async function refreshDevices() {
   try {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices
+      .filter(d => d.kind === 'audioinput')
+      .map((d, index) => ({
+        id: d.deviceId,
+        label: d.label || ('Microphone ' + (index + 1))
+      }));
+    send({type: 'devices', devices: inputs});
+    return inputs;
+  } catch(e) {
+    return [];
+  }
+}
+
+function stopActiveStream() {
+  if (!activeStream) return;
+  activeStream.getTracks().forEach(track => track.stop());
+  activeStream = null;
+}
+
+async function initVisualizer() {
+  try {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    stopActiveStream();
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
     const bufferLength = analyser.frequencyBinCount;
     dataArray = new Uint8Array(bufferLength);
-    
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-      draw();
-    }).catch(e => console.error('Visualizer mic error:', e));
-  } catch (e) { console.error('AudioContext fail:', e); }
+
+    try {
+      activeStream = await navigator.mediaDevices.getUserMedia(audioConstraints());
+    } catch(e) {
+      if (selectedDeviceId) {
+        selectedDeviceId = '';
+        send({type: 'error', error: e.name === 'OverconstrainedError' ? 'input-device-missing' : 'input-device-failed'});
+        activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } else {
+        throw e;
+      }
+    }
+
+    const source = audioContext.createMediaStreamSource(activeStream);
+    source.connect(analyser);
+    await refreshDevices();
+    const currentTrack = activeStream.getAudioTracks()[0];
+    const trackLabel = currentTrack ? currentTrack.label : '';
+    if (trackLabel) send({type: 'inputReady', label: trackLabel});
+    if (!animationId) draw();
+  } catch (e) {
+    console.error('Visualizer mic error:', e);
+    send({type: 'error', error: e.name === 'NotAllowedError' ? 'not-allowed' : 'input-device-failed'});
+  }
 }
 
 function draw() {
@@ -251,13 +368,18 @@ function draw() {
   }
 }
 
-ws.onopen = () => { status.textContent = 'Mic Start...'; startRec(currentLocale); initVisualizer(); };
+ws.onopen = async () => {
+  status.textContent = 'Mic Start...';
+  await initVisualizer();
+  startRec(currentLocale);
+};
 ws.onclose = () => {
   closedByHost = true;
   if(restartTimer) clearTimeout(restartTimer);
   status.textContent = 'Standby';
   dot.classList.remove('on');
   if(rec) rec.abort();
+  stopActiveStream();
 };
 ws.onmessage = (e) => {
   const d = JSON.parse(e.data);
@@ -267,6 +389,19 @@ ws.onmessage = (e) => {
     if(restartTimer) clearTimeout(restartTimer);
     if(rec) rec.abort();
     restartTimer = setTimeout(() => startRec(currentLocale), 250);
+  }
+  if(d.type === 'setAudioInputDevice') {
+    selectedDeviceId = d.deviceId || '';
+    switchingInput = true;
+    status.textContent = selectedDeviceId ? 'Switching input' : 'System input';
+    if(restartTimer) clearTimeout(restartTimer);
+    if(rec) rec.abort();
+    initVisualizer().finally(() => {
+      switchingInput = false;
+      if(!closedByHost && ws.readyState === 1) {
+        restartTimer = setTimeout(() => startRec(currentLocale), 250);
+      }
+    });
   }
 };
 
@@ -316,6 +451,7 @@ function startRec(locale) {
     dot.classList.remove('on');
     if(closedByHost || ws.readyState !== 1) return;
     if(switchingLocale) return;
+    if(switchingInput) return;
     restartTimer = setTimeout(() => startRec(currentLocale), restartDelay());
   };
   try{ rec.start(); } catch(ex){
@@ -334,4 +470,5 @@ resize();
 </body>
 </html>
 ''';
+  }
 }

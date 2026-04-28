@@ -18,10 +18,10 @@ owns how confirmed indices are rendered after STT produces results.
 
 | File | Role |
 |------|------|
-| `Platform_Windows/lib/platform/stt/abstract_stt_service.dart` | Platform-agnostic STT interface, callbacks, status contract, `sttWebViewUrl`, `requiresImmediateListeningFlag` |
-| `Platform_Windows/lib/platform/stt/stt_service_factory.dart` | Sole adapter factory; Windows must return `SttDesktopAdapter()` unless explicitly changing engine strategy |
-| `Platform_Windows/lib/platform/stt/stt_desktop_adapter.dart` | Windows native/SAPI adapter wrapping `SpeechService` |
-| `Platform_Windows/lib/platform/stt/stt_browser_adapter.dart` | Dormant WebView2/Web Speech adapter on localhost port 8082 |
+| `Platform_Windows/lib/platform/stt/abstract_stt_service.dart` | Platform-agnostic STT interface, callbacks, status contract, `sttWebViewUrl`, `requiresImmediateListeningFlag`, audio-input device contract |
+| `Platform_Windows/lib/platform/stt/stt_service_factory.dart` | Sole adapter factory; Windows returns `SttBrowserAdapter()` for WebView2/Web Speech and audio-input routing |
+| `Platform_Windows/lib/platform/stt/stt_desktop_adapter.dart` | Windows native/SAPI adapter wrapping `SpeechService`; preserved fallback/source-present path |
+| `Platform_Windows/lib/platform/stt/stt_browser_adapter.dart` | Active Windows WebView2/Web Speech adapter on localhost port 8082, including device enumeration and selected input requests |
 | `Platform_Windows/lib/platform/stt/stt_apple_adapter.dart` | Source-present Apple adapter; not a Windows runtime path |
 | `Platform_Windows/lib/platform/stt/stt_android_adapter.dart` | Source-present Android adapter; not a Windows runtime path |
 | `Platform_Windows/lib/features/teleprompter/services/speech_service.dart` | `speech_to_text` wrapper, `SpeechResult`, `SpeechStatus`, locale/error/status callbacks |
@@ -43,6 +43,8 @@ owns how confirmed indices are rendered after STT produces results.
 | `AbstractSttService.onResult` | `_setupSttCallbacks()` forwards to `_handleSttResult()` |
 | `onStatusChange`, `onError`, `onSoundLevelChange`, `onLanguageUnavailable`, `onDiagnostic` | `_setupSttCallbacks()` |
 | `AbstractSttService.sttWebViewUrl` | `TeleprompterState.sttWebViewUrl` for browser adapter |
+| `AbstractSttService.setAudioInputDevice(String? deviceId, {String? label})` | Settings/presenter mic selector; empty/null means system default |
+| `AbstractSttService.onAudioInputDevicesChanged` | Provider updates `TeleprompterState.audioInputDevices` for the presenter settings panel |
 | `requiresImmediateListeningFlag` | Startup guard behavior in `startSession()` |
 | `WordAligner.align(...)` | `_handleSttResult()` |
 | `_stopInFlight` / `_sessionToken` | Provider-internal restart serialization and stale-callback rejection |
@@ -57,8 +59,9 @@ owns how confirmed indices are rendered after STT produces results.
 | Session start | `teleprompter_provider.dart` | Calls `start(localeId: ...)`, reads success and actual locale |
 | Session stop/dispose | `teleprompter_provider.dart` | Calls `_sttService.stop()` |
 | Bilingual heartbeat | `teleprompter_provider.dart` | Calls `_sttService.setLocale(upcomingLocale)` |
-| Presentation screen | `teleprompter_screen.dart` | Starts/stops provider session, may use `sttWebViewUrl` for browser STT UI |
+| Presentation screen | `teleprompter_screen.dart` | Starts/stops provider session, uses hidden `sttWebViewUrl`, and displays the Windows mic selector |
 | Debug panel | `teleprompter_screen.dart` | Reads provider `debugLogs`, `soundLevel`, `statusMessage` |
+| Settings provider | `settings_provider.dart` | Persists `sttInputDeviceId` and `sttInputDeviceLabel` consumed before STT start |
 
 ---
 
@@ -68,8 +71,9 @@ owns how confirmed indices are rendered after STT produces results.
    `SttServiceFactory.create()`. Do not instantiate `SttDesktopAdapter` or
    `SttBrowserAdapter` directly in UI code.
 
-2. **Windows default is native desktop adapter**: The factory currently returns
-   `SttDesktopAdapter()` for Windows. Browser STT is preserved but dormant.
+2. **Windows default is WebView2/browser STT**: The factory currently returns
+   `SttBrowserAdapter()` for Windows because it supports Web Speech, Hebrew
+   recognition, WebView lifecycle reloads, and browser audio-input enumeration.
 
 3. **Callback guards are mandatory**: Every STT callback in
    `teleprompter_provider.dart` must return immediately when `_disposed` or
@@ -144,10 +148,12 @@ owns how confirmed indices are rendered after STT produces results.
     it must not reset `confirmedWordIndex`. Only the explicit restart/reset
     control may return the text to index `0`.
 
-20. **External microphone status is currently OS-owned**: Until an explicit
-    input-device selector is implemented, Windows STT uses the microphone chosen
-    by Windows/WebView/native speech as the default input device. MVP docs and UI
-    must not claim in-app external mic selection exists yet.
+20. **External microphone selection is persisted and best-effort routed**:
+    Windows stores `sttInputDeviceId` and `sttInputDeviceLabel`; before
+    `startSession(...)`, the provider calls `setAudioInputDevice(...)` on the
+    STT adapter. Empty ID means system default input. If WebView2 cannot open the
+    selected external mic, the adapter must fall back to system default and log a
+    diagnostic rather than failing the whole STT session.
 
 ---
 
@@ -173,8 +179,10 @@ owns how confirmed indices are rendered after STT produces results.
   stop/start in the same presentation depends on them.
 - Do not reset `confirmedWordIndex` from `stopSession()` or from STT adapter
   callbacks.
-- Do not document explicit external mic selection as implemented until the
-  platform can enumerate/select/persist input devices in app.
+- Do not remove the system-default microphone fallback; external USB/Bluetooth
+  devices can disappear between sessions.
+- Do not persist a selected input device without also persisting its human label
+  for settings/debug display.
 
 ---
 
@@ -195,19 +203,22 @@ owns how confirmed indices are rendered after STT produces results.
 - **Fast stop/start race**: Browser/WebView/native recognizers can finish
   teardown after the user has already pressed mic again. Restart serialization is
   required so the old stop cannot poison the new session.
-- **External mic routing gap**: Connected USB/Bluetooth/interface microphones
-  can work when selected as the OS default input, but there is no guaranteed
-  in-app microphone picker/status contract yet.
+- **Web Speech input routing is browser-owned**: WebView2 exposes
+  `navigator.mediaDevices` for enumeration and capture constraints, but final
+  speech-recognition routing remains Chromium/Web Speech behavior. The app must
+  show the selected device and retain OS-default fallback.
 
 ---
 
-## External Microphone Contract Gap
+## External Microphone Contract
 
 | State | Contract |
 |-------|----------|
-| Current Windows behavior | STT uses the active OS/WebView/native default microphone. External microphones are expected to work when Windows routes the default input to them. |
-| Not yet implemented | In-app enumeration, active device display, USB/Bluetooth/interface device picker, and persisted preferred microphone. |
-| Required future behavior | Add a device-selection layer before `startSession(...)` so STT starts with an explicitly chosen input device when the platform API allows it, otherwise surface a clear OS-default fallback message. |
+| System default | Empty `sttInputDeviceId` means the adapter requests `{ audio: true }` and lets Windows/WebView2 choose the default input. |
+| Explicit external mic | The presenter settings panel lists discovered WebView2 `audioinput` devices; selecting one persists its `deviceId` and label and sends `setAudioInputDevice` to the active adapter. |
+| Runtime switch | If STT is running, changing the selector tells the browser adapter to reopen the visualizer stream with the new device and restart Web Speech without resetting `confirmedWordIndex`. |
+| Missing device fallback | If the saved USB/Bluetooth/interface mic is gone, the browser page reports the failure, clears the exact device request, and continues on system default input. |
+| Remaining caveat | Web Speech does not expose a direct `MediaStream` parameter; the app can request the selected audio input for WebView capture and diagnostics, while Chromium ultimately controls recognition routing. |
 
 ---
 

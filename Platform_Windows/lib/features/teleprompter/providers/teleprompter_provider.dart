@@ -211,6 +211,27 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog(msg);
     };
 
+    _sttService.onAudioInputDevicesChanged = (devices) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
+      _safeSetState((s) => s.copyWith(audioInputDevices: devices));
+
+      final selectedId = ref.read(settingsProvider).sttInputDeviceId;
+      if (selectedId.isEmpty) return;
+      for (final device in devices) {
+        if (device.id == selectedId) {
+          final currentLabel = ref.read(settingsProvider).sttInputDeviceLabel;
+          if (device.label.isNotEmpty && device.label != currentLabel) {
+            ref
+                .read(settingsProvider.notifier)
+                .setSttInputDevice(device.id, device.label);
+          }
+          return;
+        }
+      }
+      _addDebugLog(
+          '🎙️ Selected microphone was not found; using system default input.');
+    };
+
     _sttService.onStatusChange = (status) {
       if (_useWhisper || _disposed || _sessionStopped) return;
       // Ignore non-listening statuses during the start-up guard window.
@@ -516,7 +537,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
     } else {
       final platform = _sttService.platformName;
+      final selectedMicId = settings.sttInputDeviceId.trim();
+      final selectedMicLabel = settings.sttInputDeviceLabel.trim();
+      _sttService.setAudioInputDevice(
+        selectedMicId.isEmpty ? null : selectedMicId,
+        label: selectedMicLabel.isEmpty
+            ? 'System default microphone'
+            : selectedMicLabel,
+      );
       _addDebugLog('🎤 [$platform] Starting STT locale=$localeId...');
+      _addDebugLog(selectedMicId.isEmpty
+          ? '🎙️ [$platform] Microphone: system default input'
+          : '🎙️ [$platform] Microphone: $selectedMicLabel');
       final result = await _sttService.start(localeId: localeId);
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _sttService.stop();
@@ -634,6 +666,19 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (!_sessionStopped && state.isListening) {
       _syncLocaleForPosition(activeScript, target, reason: 'manual jump');
     }
+  }
+
+  void setSttInputDevice(String deviceId, String label) {
+    final normalizedId = deviceId.trim();
+    final normalizedLabel =
+        label.trim().isEmpty ? 'System default microphone' : label.trim();
+    _sttService.setAudioInputDevice(
+      normalizedId.isEmpty ? null : normalizedId,
+      label: normalizedLabel,
+    );
+    _addDebugLog(normalizedId.isEmpty
+        ? '🎙️ Microphone input set to system default'
+        : '🎙️ Microphone input set to $normalizedLabel');
   }
 }
 

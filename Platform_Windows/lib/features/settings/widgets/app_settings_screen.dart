@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,7 +20,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
-        title: Text('Settings', style: GoogleFonts.bebasNeue(fontSize: 24, letterSpacing: 1.5)),
+        title: Text('Settings',
+            style: GoogleFonts.bebasNeue(fontSize: 24, letterSpacing: 1.5)),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -35,6 +38,32 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             onTap: () => _editDisplayName(context),
           ),
 
+          if (Platform.isWindows) ...[
+            const SizedBox(height: 22),
+            _SectionHeader(title: 'SPEECH INPUT'),
+            const SizedBox(height: 8),
+            _SettingsTile(
+              icon: Icons.mic_external_on_outlined,
+              title: 'Preferred Microphone',
+              subtitle: settings.sttInputDeviceId.isEmpty
+                  ? 'System default microphone'
+                  : settings.sttInputDeviceLabel,
+              onTap: settings.sttInputDeviceId.isEmpty
+                  ? null
+                  : () => ref
+                      .read(settingsProvider.notifier)
+                      .setSttInputDevice('', 'System default microphone'),
+            ),
+            const SizedBox(height: 8),
+            _SettingsTile(
+              icon: Icons.settings_input_component_outlined,
+              title: 'Windows Input Settings',
+              subtitle: 'Choose or test the default external mic',
+              onTap: () =>
+                  Process.run('cmd', ['/c', 'start', 'ms-settings:sound']),
+            ),
+          ],
+
           // v4.1+: Speech Recognition Engine selector and Whisper offline models
           // are hidden for stable release. See MASTER_TODO.md deferred section.
         ],
@@ -43,12 +72,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   }
 
   void _editDisplayName(BuildContext context) {
-    final controller = TextEditingController(text: ref.read(settingsProvider).displayName);
+    final controller =
+        TextEditingController(text: ref.read(settingsProvider).displayName);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Display Name', style: TextStyle(color: Colors.white)),
+        title:
+            const Text('Display Name', style: TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -60,7 +91,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
             onPressed: () {
               final name = controller.text.trim();
@@ -69,7 +101,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               }
               Navigator.pop(ctx);
             },
-            child: const Text('Save', style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
+            child: const Text('Save',
+                style: TextStyle(
+                    color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -83,10 +117,13 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(title, style: const TextStyle(
-      color: Color(0xFFFFBF00), fontSize: 12,
-      fontWeight: FontWeight.bold, letterSpacing: 1.5,
-    ));
+    return Text(title,
+        style: const TextStyle(
+          color: Color(0xFFFFBF00),
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.5,
+        ));
   }
 }
 
@@ -96,7 +133,11 @@ class _SettingsTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback? onTap;
 
-  const _SettingsTile({required this.icon, required this.title, required this.subtitle, this.onTap});
+  const _SettingsTile(
+      {required this.icon,
+      required this.title,
+      required this.subtitle,
+      this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -120,13 +161,20 @@ class _SettingsTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                    Text(title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 13)),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 13)),
                   ],
                 ),
               ),
-              if (onTap != null) const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+              if (onTap != null)
+                const Icon(Icons.chevron_right_rounded, color: Colors.white24),
             ],
           ),
         ),

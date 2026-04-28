@@ -2391,7 +2391,14 @@ class _EditorBlock extends StatelessWidget {
                       label: 'Copy',
                     ),
                     ContextMenuButtonItem(
-                      onPressed: () { ContextMenuController.removeAny(); onSelectAll(); },
+                      onPressed: () {
+                        onBeforeMenuAction?.call();
+                        ContextMenuController.removeAny();
+                        onSelectAll();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          editableTextState.showToolbar();
+                        });
+                      },
                       type: ContextMenuButtonType.selectAll,
                     ),
                   ],
@@ -2406,8 +2413,14 @@ class _EditorBlock extends StatelessWidget {
                   hasSelectAll = true;
                   customItems.add(ContextMenuButtonItem(
                     onPressed: () {
+                      onBeforeMenuAction?.call(); // guard against iOS tap-through clearing global selection
                       ContextMenuController.removeAny();
                       onSelectAll();
+                      // Re-show toolbar next frame so contextMenuBuilder sees isGlobalSelected=true
+                      // and displays the global Cut/Copy menu instead of the single-block menu.
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        editableTextState.showToolbar();
+                      });
                     },
                     type: ContextMenuButtonType.selectAll,
                   ));
@@ -2449,8 +2462,12 @@ class _EditorBlock extends StatelessWidget {
               if (!hasSelectAll) {
                 customItems.add(ContextMenuButtonItem(
                   onPressed: () {
+                    onBeforeMenuAction?.call();
                     ContextMenuController.removeAny();
                     onSelectAll();
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      editableTextState.showToolbar();
+                    });
                   },
                   type: ContextMenuButtonType.selectAll,
                 ));

@@ -2064,15 +2064,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   void _pasteFromGlobalClipboard() {
     final text = _globalClipboard;
     if (text == null || text.isEmpty) return;
-    final c = _activeController;
-    if (c == null) return;
-    final sel = c.selection;
-    final start = sel.isValid ? sel.start : c.text.length;
-    final end   = sel.isValid ? sel.end   : c.text.length;
+    // Always paste into the FIRST block — after a global cut all blocks are
+    // empty and the active block is whichever the user tapped to open the menu
+    // (often the LAST tapped, not block 0). Pasting into the active block
+    // causes reversed order: the tapped (lower) block gets the content while
+    // block 0 stays empty above it.
+    if (_controllers.isEmpty) return;
+    final c = _controllers.first;
     c.value = TextEditingValue(
-      text: c.text.substring(0, start) + text + c.text.substring(end),
-      selection: TextSelection.collapsed(offset: start + text.length),
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
+    if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
   }
 

@@ -2397,31 +2397,10 @@ class _EditorBlock extends StatelessWidget {
               // iterating contextMenuButtonItems would serve word-scoped
               // Cut/Copy actions instead of our global ones.
               if (isGlobalSelected) {
-                // Use ContextMenuButtonType.custom for Cut and Copy so that
-                // iOS does NOT additionally dispatch the native cut:/copy:
-                // UIResponder actions through the responder chain. Using
-                // .cut / .copy types causes UIKit to run the native action
-                // synchronously (writing only the native word to the
-                // clipboard) before our onPressed handler fires.
-                return AdaptiveTextSelectionToolbar.buttonItems(
-                  anchors: editableTextState.contextMenuAnchors,
-                  buttonItems: [
-                    ContextMenuButtonItem(
-                      onPressed: () { onBeforeMenuAction?.call(); ContextMenuController.removeAny(); onCut(); },
-                      type: ContextMenuButtonType.custom,
-                      label: 'Cut',
-                    ),
-                    ContextMenuButtonItem(
-                      onPressed: () { onBeforeMenuAction?.call(); ContextMenuController.removeAny(); onCopy(); },
-                      type: ContextMenuButtonType.custom,
-                      label: 'Copy',
-                    ),
-                    ContextMenuButtonItem(
-                      onPressed: () { ContextMenuController.removeAny(); onSelectAll(); },
-                      type: ContextMenuButtonType.selectAll,
-                    ),
-                  ],
-                );
+                // Action bar (above the script) already shows Cut/Copy for the
+                // global selection — suppress the context menu entirely so the
+                // user has one clear place to act.
+                return const SizedBox.shrink();
               }
 
               final List<ContextMenuButtonItem> items = editableTextState.contextMenuButtonItems;

@@ -1983,8 +1983,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           slice = c.text.substring(sel.start, sel.end);
         }
         if (slice.isEmpty) continue;
-        if (plainBuf.isNotEmpty) plainBuf.write('\n');
-        plainBuf.write(StylingService.stripTags(slice));
+        final plain = StylingService.stripTags(slice)
+            .replaceAll('\n', ' ')
+            .trim();
+        if (plain.isEmpty) continue;
+        if (plainBuf.isNotEmpty) plainBuf.write(' ');
+        plainBuf.write(plain);
         htmlBuf.write(StylingService.markupToHtml(slice));
       }
       if (plainBuf.isEmpty) return;

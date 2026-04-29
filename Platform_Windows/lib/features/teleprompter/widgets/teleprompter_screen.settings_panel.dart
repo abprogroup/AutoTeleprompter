@@ -114,6 +114,16 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 16),
+            _SwitchRow(
+              icon: Icons.visibility_outlined,
+              title: 'Allow visible text skip',
+              subtitle:
+                  'Off by default. When on, STT may jump only to text currently visible on screen.',
+              value: settings.sttVisibleSkipEnabled,
+              accentColor: Color(settings.currentWordColor),
+              onChanged: notifier.setSttVisibleSkipEnabled,
+            ),
+            const SizedBox(height: 16),
           ],
 
           if (settings.scrollMode == 'manual') ...[

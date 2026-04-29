@@ -293,3 +293,26 @@
 - **Validation**: `dart format` completed on the split files. Targeted
   `flutter analyze` on the Windows teleprompter and script editor entrypoints
   reported no compile errors; it still reports existing warning/info lint noise.
+
+### 2026-04-29 - Windows v4.1.12 Visible STT Skip Safety
+
+- **Session Goal**: Add the final Windows v4 STT skip behavior: default strict
+  no-skip alignment, with an opt-in setting that allows skipping only to text
+  actually visible in the presenter viewport.
+- **Settings Result**: Added persisted `sttVisibleSkipEnabled`, defaulting to
+  `false`, exposed in Windows presenter settings as `Allow visible text skip`.
+- **STT Result**: `WordAligner.align(...)` now defaults to strict next-expected
+  alignment while still allowing one STT result to confirm consecutive words
+  read in order. When visible skipping is enabled, the aligner window is capped
+  by the presenter-provided visible word range.
+- **Presenter Result**: The presenter computes the visible word window from
+  actual rendered word boxes and publishes it to the provider. The window is
+  throttled during smooth scrolling and forced after layout/direct jumps.
+- **Safety Contract**: Hidden/offscreen paragraphs cannot be skipped to by
+  speech alone. Display-only punctuation, blank lines, and unspeakable markers
+  do not become skip targets.
+- **MVP Documentation Result**: Updated Windows STT, Teleprompter Engine,
+  Scrolling, and Settings MVP docs with the opt-in visible-skip contract.
+- **Validation**: `dart format` completed. Targeted `flutter analyze` reported
+  no new compile errors, only existing warning/info lint noise. Windows
+  teleprompter split files remain below the 750-line ceiling.

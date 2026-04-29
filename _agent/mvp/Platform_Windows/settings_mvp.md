@@ -322,3 +322,15 @@ Windows V5 prep split. Settings-owned edits should now target
 `teleprompter_screen.settings_panel.dart` or
 `teleprompter_screen.settings_widgets.dart` when changing presenter controls,
 and should target `settings_provider.dart` only for persisted state changes.
+
+---
+
+## Visible Skip Setting
+
+| Field | Default | Owner | Contract |
+|-------|---------|-------|----------|
+| `sttVisibleSkipEnabled` | `false` | Settings | Opt-in Windows presenter setting that allows STT to skip only to text currently visible on screen. Off means strict no-skip alignment. |
+
+This setting is intentionally separate from scroll mode and debug mode. It must
+not be silently enabled by presets, STT startup, bookmark navigation, or
+external microphone selection.

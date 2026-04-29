@@ -87,6 +87,51 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _smoothScrollActive = false;
   }
 
+  void _scheduleVisibleWordWindowSync() {
+    if (_visibleWindowSyncScheduled) return;
+    _visibleWindowSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _visibleWindowSyncScheduled = false;
+      if (mounted) _syncVisibleWordWindow(force: true);
+    });
+  }
+
+  void _syncVisibleWordWindow({bool force = false}) {
+    final now = DateTime.now();
+    final previous = _lastVisibleWindowSync;
+    if (!force &&
+        previous != null &&
+        now.difference(previous).inMilliseconds < 150) {
+      return;
+    }
+    _lastVisibleWindowSync = now;
+
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty || !_scrollController.hasClients)
+      return;
+    final viewportH = MediaQuery.of(context).size.height;
+    int? firstVisible;
+    int? lastVisible;
+
+    for (var i = 0; i < _wordKeys.length && i < script.words.length; i++) {
+      final word = script.words[i];
+      if (word.isNewline || word.normalized.isEmpty) continue;
+      final ctx = _wordKeys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final top = box.localToGlobal(Offset.zero).dy;
+      final bottom = top + box.size.height;
+      if (bottom < 0 || top > viewportH) continue;
+      firstVisible ??= i;
+      lastVisible = i;
+    }
+
+    ref
+        .read(teleprompterProvider.notifier)
+        .setVisibleWordWindow(firstVisible, lastVisible);
+  }
+
   void _resetManual() {
     _stopManualScroll();
     _manualWordIndex = 0;
@@ -126,6 +171,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (immediate) {
       _cancelSmoothScroll();
       _scrollController.jumpTo(_scrollTarget);
+      _syncVisibleWordWindow(force: true);
       return;
     }
 
@@ -204,6 +250,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
     if (notification is ScrollEndNotification && _userBrowsingWhileStopped) {
       _userBrowsingWhileStopped = false;
+      _syncVisibleWordWindow(force: true);
       _syncResumePointToReadingLine();
     }
     return false;

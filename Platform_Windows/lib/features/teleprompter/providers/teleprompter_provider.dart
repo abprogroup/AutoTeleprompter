@@ -28,6 +28,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   bool _silentWarningFired = false;
   Future<void>? _stopInFlight;
   int _sessionToken = 0;
+  int? _visibleWordStart;
+  int? _visibleWordEnd;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
@@ -126,11 +128,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _accumulatedTranscript = result.words;
     final script = _currentScript!;
+    final settings = ref.read(settingsProvider);
+    final maxSkipTargetIndex =
+        settings.sttVisibleSkipEnabled && _visibleWordStart != null
+            ? _visibleWordEnd
+            : null;
 
     final aligned = WordAligner.align(
       script: script.words,
       transcript: _accumulatedTranscript,
       lastConfirmedIndex: state.confirmedWordIndex,
+      maxSkipTargetIndex: maxSkipTargetIndex,
     );
 
     final currentIdx = state.confirmedWordIndex;
@@ -146,7 +154,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final engineTag = _useWhisper ? '🤖' : '🎤';
     final skipThreshold =
         _useWhisper ? _whisperSkipAfterStuck : _googleSkipAfterStuck;
-
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
       final capped = aligned.confirmedWordIndex.clamp(
@@ -449,6 +456,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sessionStartTime = DateTime.now();
     _silentWarningFired = false;
     _lastVolLog = null;
+    _visibleWordStart = null;
+    _visibleWordEnd = null;
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
     final resumeIndex = sameScript ? state.confirmedWordIndex : 0;
@@ -681,6 +690,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _addDebugLog(normalizedId.isEmpty
         ? '🎙️ Microphone input set to system default'
         : '🎙️ Microphone input set to $normalizedLabel');
+  }
+
+  void setVisibleWordWindow(int? startIndex, int? endIndex) {
+    if (_disposed) return;
+    _visibleWordStart = startIndex;
+    _visibleWordEnd = endIndex;
   }
 }
 

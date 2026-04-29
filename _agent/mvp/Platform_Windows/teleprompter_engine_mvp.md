@@ -226,6 +226,12 @@ earlier Windows MVP file and remain part of the engine contract:
     not present as the red stop button or accept a second start/stop tap as if
     recognition were already active. Red means an active stoppable session.
 
+29. **Visible skipping is opt-in and screen-bounded**: The default Windows STT
+    behavior is no skip. If the presenter setting enables visible skipping, the
+    screen must continuously publish the rendered visible word window, and STT
+    alignment may land only inside that window. Hidden paragraphs must never be
+    skipped to by speech alone.
+
 ---
 
 ## Forbidden Changes
@@ -274,6 +280,8 @@ earlier Windows MVP file and remain part of the engine contract:
   Layout Suite.
 - Do not make the STT startup/hourglass state look like the red active stop
   state.
+- Do not allow STT alignment to jump to offscreen text. Visible skipping is
+  opt-in, and its maximum target must come from the presenter viewport.
 
 ---
 
@@ -308,6 +316,7 @@ earlier Windows MVP file and remain part of the engine contract:
 | Active STT auto-follow | Auto-follow remains enabled only while STT is listening; user drag scrolling and word-tap jumps are disabled during active/startup STT. |
 | Windows external mic selector | Presentation settings can show discovered `audioinput` devices, persist selection, and apply the chosen input without resetting script position. |
 | Blank-line rendering | Hard blank lines render at presentation line height so multiple newlines remain visible. |
+| Visible STT skip | Disabled by default; when enabled, STT can jump only to a confident target visible in the current presenter viewport. |
 
 ---
 

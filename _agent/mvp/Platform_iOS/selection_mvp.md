@@ -70,16 +70,20 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 
 7. **Overlay `_isSelecting`**: Must be `true` whenever any `externalSelection` is set. `clearSelection()` must reset all controller fields as well as its own state.
 
-8. **Global selection snapshot is not the paste clipboard**: `_selectAllBlocks()`
-   may arm a short-lived raw-markup global selection snapshot for iOS
-   context-menu timing, but only Cut/Copy may write `_blockClipboard`.
-   This prevents a later one-block native selection event from downgrading the
-   multi-block paste payload.
+8. **Global selection snapshot protects paste recovery**: `_selectAllBlocks()`
+   arms a short-lived raw-markup global selection snapshot for iOS context-menu
+   timing. Cut/Copy write `_blockClipboard`, but Paste must prefer the largest
+   recent protected snapshot if a later one-block native selection event
+   downgraded or bypassed `_blockClipboard`.
 
 9. **Multi-block paste restores block structure**: Global Cut/Copy stores one
    raw-markup string per paragraph block. `_pasteFromGlobalClipboard()` must add
    missing controllers before restoration and assign `TextEditingValue(text:
    rawMarkup)` so styling tags remain intact.
+
+10. **Paste affordance may come from snapshot**: The editor context menu must
+    expose the custom in-app Paste action when either `_blockClipboard` exists or
+    a recent protected global selection snapshot exists.
 
 ---
 
@@ -110,4 +114,5 @@ Additional clipboard prohibitions:
   selection or fire a tap-through before the menu action reaches Flutter. The
   short-lived global selection snapshot exists only to let Cut/Copy recover the
   intended multi-block selection; it must not become a permanent hidden
-  selection state.
+  selection state. Paste may also use it as a fallback when native Cut bypassed
+  the in-app Cut command but Select All was captured correctly.

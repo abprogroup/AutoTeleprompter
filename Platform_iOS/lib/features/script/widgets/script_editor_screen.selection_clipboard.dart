@@ -6,15 +6,32 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   List<String> _snapshotAllControllerMarkup() =>
       _controllers.map((c) => c.text).toList(growable: false);
 
+  int _nonEmptyBlockCount(List<String> blocks) =>
+      blocks.where((b) => b.trim().isNotEmpty).length;
+
+  bool _isBetterBlockSnapshot(List<String> candidate, List<String>? current) {
+    if (current == null) return true;
+    final candidateNonEmpty = _nonEmptyBlockCount(candidate);
+    final currentNonEmpty = _nonEmptyBlockCount(current);
+    return candidate.length > current.length ||
+        (candidate.length == current.length &&
+            candidateNonEmpty >= currentNonEmpty);
+  }
+
   void _captureGlobalSelectionSnapshot(String reason) {
     final blocks = _snapshotAllControllerMarkup();
     if (blocks.isEmpty || blocks.every((b) => b.isEmpty)) {
       _selectionClipboardDebug = '$reason: ignored empty snapshot';
       return;
     }
-    _globalSelectionSnapshot = blocks;
-    _globalSelectionSnapshotAt = DateTime.now();
-    _selectionClipboardDebug = '$reason: armed ${blocks.length} blocks';
+    if (_isBetterBlockSnapshot(blocks, _globalSelectionSnapshot)) {
+      _globalSelectionSnapshot = blocks;
+      _globalSelectionSnapshotAt = DateTime.now();
+      _selectionClipboardDebug = '$reason: armed ${blocks.length} blocks';
+    } else {
+      _selectionClipboardDebug =
+          '$reason: kept armed ${_globalSelectionSnapshot!.length} blocks';
+    }
   }
 
   bool get _hasRecentGlobalSelectionSnapshot {
@@ -24,12 +41,26 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
         DateTime.now().difference(capturedAt) < _globalSelectionSnapshotTtl;
   }
 
+  bool get _hasPasteableBlockClipboard =>
+      (_blockClipboard != null && _blockClipboard!.isNotEmpty) ||
+      (_hasRecentGlobalSelectionSnapshot &&
+          _globalSelectionSnapshot != null &&
+          _globalSelectionSnapshot!.isNotEmpty);
+
   List<String>? _globalBlocksForCommand(String reason) {
     final allBlocksSelected = _controllers.isNotEmpty &&
         _controllers.every((c) => c.isGlobalSelected);
     if (_isGlobalSelection || allBlocksSelected) {
+      final before = _globalSelectionSnapshot;
       _captureGlobalSelectionSnapshot(reason);
-      return _globalSelectionSnapshot;
+      final after = _globalSelectionSnapshot;
+      if (before != null &&
+          after != null &&
+          before.length > after.length &&
+          _hasRecentGlobalSelectionSnapshot) {
+        return List<String>.of(before);
+      }
+      return after == null ? null : List<String>.of(after);
     }
     if (_hasRecentGlobalSelectionSnapshot) {
       _selectionClipboardDebug =
@@ -40,11 +71,18 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   }
 
   void _storeBlockClipboard(List<String> blocks, String reason) {
-    _blockClipboard = List<String>.of(blocks);
+    final protectedBlocks = _globalSelectionSnapshot;
+    final selectedBlocks = protectedBlocks != null &&
+            _hasRecentGlobalSelectionSnapshot &&
+            _isBetterBlockSnapshot(protectedBlocks, blocks)
+        ? protectedBlocks
+        : blocks;
+    _blockClipboard = List<String>.of(selectedBlocks);
     _blockClipboardTimer?.cancel();
     _blockClipboardTimer =
         Timer(const Duration(seconds: 60), () => _blockClipboard = null);
-    _selectionClipboardDebug = '$reason: stored ${blocks.length} blocks';
+    _selectionClipboardDebug =
+        '$reason: stored ${selectedBlocks.length} blocks';
   }
 
   void _writePlainClipboardForBlocks(List<String> blocks) {
@@ -59,7 +97,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     final globalBlocks = _globalBlocksForCommand('cut');
     if (globalBlocks != null && globalBlocks.isNotEmpty) {
       _storeBlockClipboard(globalBlocks, 'cut');
-      _writePlainClipboardForBlocks(globalBlocks);
+      _writePlainClipboardForBlocks(_blockClipboard ?? globalBlocks);
       _isCommandExecuting = true;
       for (final c in _controllers) {
         c.text = '';
@@ -105,9 +143,10 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     final globalBlocks = _globalBlocksForCommand('copy');
     if (globalBlocks != null && globalBlocks.isNotEmpty) {
       _storeBlockClipboard(globalBlocks, 'copy');
+      final copiedBlocks = _blockClipboard ?? globalBlocks;
       final plainBuf = StringBuffer();
       final htmlBuf = StringBuffer();
-      for (final slice in globalBlocks) {
+      for (final slice in copiedBlocks) {
         if (slice.isEmpty) continue;
         if (plainBuf.isNotEmpty) plainBuf.write('\n');
         plainBuf.write(StylingService.stripTags(slice));
@@ -156,7 +195,13 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   }
 
   void _pasteFromGlobalClipboard() {
-    final blocks = _blockClipboard;
+    var blocks = _blockClipboard;
+    final protectedBlocks = _globalSelectionSnapshot;
+    if (protectedBlocks != null &&
+        _hasRecentGlobalSelectionSnapshot &&
+        _isBetterBlockSnapshot(protectedBlocks, blocks)) {
+      blocks = protectedBlocks;
+    }
     if (blocks == null || blocks.isEmpty || _controllers.isEmpty) return;
     _selectionClipboardDebug =
         'paste: restoring ${blocks.length} blocks into ${_controllers.length} controllers';

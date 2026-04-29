@@ -474,4 +474,9 @@
 - **Validation Result**: Targeted `flutter analyze --no-pub` on the iOS script
   editor found no compile errors; remaining warnings/infos are pre-existing
   root-file analyzer noise.
+- **Follow-Up Result**: User testing showed the first fix still pasted only one
+  block. The paste path was hardened again so the custom Paste action is exposed
+  from either `_blockClipboard` or the recent protected global snapshot, and
+  paste restores the largest available protected block list instead of accepting
+  a downgraded one-block payload.
 

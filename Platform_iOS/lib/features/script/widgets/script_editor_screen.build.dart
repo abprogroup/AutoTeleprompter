@@ -228,7 +228,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 onSelectAll: _selectAllBlocks,
                                 onCopy: _onCopyClean,
                                 onCut: _onCutClean,
-                                onPaste: _blockClipboard != null
+                                onPaste: _hasPasteableBlockClipboard
                                     ? _pasteFromGlobalClipboard
                                     : null,
                               ),

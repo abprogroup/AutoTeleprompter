@@ -254,6 +254,32 @@ Next active platform: iOS. Before touching iOS source, read the matching
 terms. Do not copy Windows WebView2 or desktop-specific implementation details
 blindly.
 
+## iOS V5 Prep Split Capsule (Added 2026-04-29)
+
+The iOS maintainability split gate has started with the same behavior-preserving
+Dart `part` pattern used for Windows. The split is platform-local to
+`Platform_iOS/` and must not imply shared code between platforms.
+
+Current iOS split result:
+
+- `script_editor_screen.dart` was split into a root shell plus:
+  `script_editor_screen.load_blocks.dart`,
+  `script_editor_screen.dialogs_history.dart`,
+  `script_editor_screen.styling_commands.dart`,
+  `script_editor_screen.file_present.dart`,
+  `script_editor_screen.build.dart`,
+  `script_editor_screen.selection_clipboard.dart`, and
+  `script_editor_screen.editor_block.dart`.
+- `teleprompter_screen.dart` was split into a root shell plus:
+  `teleprompter_screen.session_stt.dart`,
+  `teleprompter_screen.manual_scroll.dart`,
+  `teleprompter_screen.build.dart`,
+  `teleprompter_screen.control_bar.dart`, and
+  `teleprompter_screen.settings_panel.dart`.
+- Every Dart file under `Platform_iOS/lib` is now below the 800-line gate.
+- This split is a mechanical refactor only. Feature parity with Windows is the
+  next migration step and must be implemented through the owning iOS MVP files.
+
 ## ⚖️ Zero-Collateral Damage Mandate
 
 When working within an MVP:

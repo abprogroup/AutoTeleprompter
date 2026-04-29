@@ -262,6 +262,21 @@
   iOS editor/presenter screens by MVP ownership using the Windows Dart `part`
   pattern only if it preserves private state and behavior. This is a refactor
   gate, not a feature task.
+- [x] **iOS Large File Split Gate Completed**: Completed 2026-04-29. The iOS
+  editor and presenter roots were split into MVP-owned Dart `part` files, every
+  Dart file under `Platform_iOS/lib` is now below 800 lines, and the matching
+  iOS MVP docs record the new ownership boundaries. This was mechanical only;
+  Windows feature parity still remains to be implemented.
+- [ ] **iOS Windows-Parity Difference List**: Current missing iOS feature set
+  versus final Windows v4.1.12: STT stop/resume without reset; default 5-word
+  local recovery; opt-in visible viewport skip with nearby phrase priority;
+  active-STT scroll lock and row-progress follow; stopped browsing/resume-point
+  selection; editor/presenter bookmarks with visible markers, add/remove,
+  previous/next, and active-STT jumps; visible-text search with raw-offset
+  mapping; one font-size metadata authority; synced spacing ranges; preservation
+  of standalone symbols, quotes, punctuation, and intentional blank lines;
+  markup-safe RTF/DOCX/Pages/plain export; and a documented external microphone
+  selection/routing policy for iOS.
 - [ ] **iOS STT Resume + Visible Skip Migration**: Port the final Windows STT
   behavior to iOS with platform-appropriate Apple STT implementation:
   stop/start preserves position, default local recovery allows up to 5 missed

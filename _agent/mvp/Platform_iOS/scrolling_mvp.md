@@ -18,6 +18,9 @@ bookmark/search/restart commands jump directly.
 | File | Role |
 |------|------|
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Planned scroll controller, reading-line anchor, user-scroll lock, direct navigation, row-progress follow |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart` | Planned scroll controller helpers, smooth-follow loop, user-scroll gating, direct jump execution |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Planned visible word/window publication and viewport/rendering data consumed by skip logic |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.control_bar.dart` | Planned controls that trigger direct navigation or restart/reset |
 | `Platform_iOS/lib/features/teleprompter/providers/teleprompter_provider.dart` | Confirmed index and `jumpToPosition(...)` provider state consumed by scroll UI |
 | `_agent/mvp/Platform_iOS/teleprompter_engine_mvp.md` | Presenter ownership coordination |
 | `_agent/mvp/Platform_iOS/stt_mvp.md` | STT lifecycle and active-state coordination |
@@ -67,6 +70,10 @@ bookmark/search/restart commands jump directly.
 `teleprompter_screen.dart` is shared by Teleprompter Engine, STT, Settings,
 Bookmarks, and Scrolling. Scrolling owns scroll physics, target calculations,
 and user-scroll lock only.
+
+After the 2026-04-29 iOS split, scrolling implementation must target the listed
+part files rather than re-expanding the root screen file. Root files remain
+shell/delegate files.
 
 ---
 

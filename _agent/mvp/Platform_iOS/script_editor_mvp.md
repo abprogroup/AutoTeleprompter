@@ -81,6 +81,33 @@ Selection, Styling, File I/O, Settings, and Editor Suites.
 History, Selection, Styling Engine, Editor Suites, and File I/O own sections
 inside the editor screen; read those MVPs before editing their sections.
 
+## Split File Ownership - 2026-04-29
+
+This MVP was behavior-preservingly split for iOS V5 preparation. The split is
+mechanical only: all private helpers remain in the same Dart library through
+`part` files, and no in-app behavior is allowed to change because of the split.
+
+| File | Split responsibility |
+|------|----------------------|
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.dart` | Thin editor shell, imports, `part` declarations, widget/state fields, root lifecycle delegates |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.load_blocks.dart` | Pending file load, auto-save timer, dependency load, block/controller lifecycle, selection detection, cleanup body |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.dialogs_history.dart` | Rename dialog, refined-text save body, clear-style command, history snapshots, undo/redo/apply state |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.styling_commands.dart` | Inline style, alignment, color, font, size, and command execution helpers |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.file_present.dart` | Import/save/clear flows, present-mode handoff, bottom action callbacks |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.build.dart` | Main editor build tree and debug sentry rendering |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.selection_clipboard.dart` | Clean selection, copy/cut/paste/select-all/delete, overlay resync |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.editor_block.dart` | `_EditorBlock` widget and block-level editing surface |
+
+Split invariants:
+
+1. The root file owns lifecycle order; extracted files must not call
+   `super.dispose()` directly.
+2. Extracted helpers must stay private to the same library unless a public API is
+   intentionally added and documented.
+3. Search/bookmark/font/export migrations must edit the smallest owning part
+   file, not rebuild the monolithic screen.
+4. Future feature ports must update this ownership table when ownership moves.
+
 ---
 
 ## Windows v4.1.12 Final Migration Target

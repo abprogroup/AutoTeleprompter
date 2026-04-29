@@ -19,7 +19,13 @@ active-STT jumps without resetting the session.
 | File | Role |
 |------|------|
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.dart` | Planned editor bookmark marker rendering, add/remove/previous/next controls, visible-text coordinate mapping, presenter handoff identity |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.file_present.dart` | Planned editor bookmark persistence and presenter handoff identity when launching present mode |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.build.dart` | Planned editor toolbar/button placement and bookmark marker rendering coordination |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.editor_block.dart` | Planned visible bookmark marker hit target and deletion affordance inside editor blocks |
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Planned presenter bookmark controls, marker rendering, direct jump behavior, active-STT bookmark jumps |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Planned presenter bookmark marker rendering and visible word coordinate mapping |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.control_bar.dart` | Planned add/remove/previous/next bookmark controls in present mode |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart` | Planned direct jump execution and stopped/active scroll coordination |
 | `Platform_iOS/lib/features/script/services/script_bookmark_service.dart` | Planned shared persistence service mirroring the Windows baseline |
 | `_agent/mvp/Platform_iOS/script_editor_mvp.md` | Must document editor shared-file ownership before implementation |
 | `_agent/mvp/Platform_iOS/teleprompter_engine_mvp.md` | Must document presenter shared-file ownership before implementation |
@@ -81,6 +87,10 @@ marker rendering, persistence handoff, and coordinate mapping.
 `teleprompter_screen.dart` is shared with Teleprompter Engine, STT, Settings,
 and Scrolling. Bookmark changes may touch only controls, markers, bookmark
 loading/saving, and jump calls.
+
+After the 2026-04-29 iOS split, bookmark implementation must target the listed
+part files rather than re-expanding the root screen files. Root files remain
+shell/delegate files.
 
 ---
 

@@ -71,6 +71,33 @@ STT MVP.
 STT owns speech lifecycle sections in `teleprompter_provider.dart`; this MVP
 owns confirmed-word state, presentation rendering, reset, stop, and scrolling.
 
+## Split File Ownership - 2026-04-29
+
+This MVP was behavior-preservingly split for iOS V5 preparation. The split is
+mechanical only: all private helpers remain in the same Dart library through
+`part` files, and no in-app behavior is allowed to change because of the split.
+
+| File | Split responsibility |
+|------|----------------------|
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Thin presenter shell, imports, `part` declarations, widget/state fields, root lifecycle delegates, alignment helpers |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.session_stt.dart` | Remote listener lifecycle, STT start request, missing-language dialog, error text, control visibility timer, cleanup body |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart` | Manual scroll helpers, smooth scroll loop, runtime settings launch/update helpers |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Main presenter build tree, highlighted word rendering, overlay structure |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.control_bar.dart` | `_ControlBar` presentation controls |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.settings_panel.dart` | `TeleprompterSettingsPanel`, presets, color grid, runtime display settings |
+
+Split invariants:
+
+1. The root file owns lifecycle order; extracted files must not call
+   `super.dispose()` directly.
+2. Session cleanup, timer cancellation, and remote subscription cleanup stay in
+   the cleanup body called by root `dispose()`.
+3. STT migration work must respect STT MVP ownership and may not move adapter
+   lifecycle into the screen.
+4. Scrolling/bookmark/search migrations must edit the smallest owning part file
+   and preserve direct-navigation versus smooth-follow boundaries.
+5. Future feature ports must update this ownership table when ownership moves.
+
 ---
 
 ## Windows v4.1.12 Final Migration Target

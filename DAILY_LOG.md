@@ -408,3 +408,49 @@
   Selection, History, and Styling Engine. Port behavior surgically; do not copy
   Windows implementation details blindly.
 
+### 2026-04-29 - iOS V5 Prep Screen Split and Windows Parity Map
+
+- **Session Goal**: Prepare `Platform_iOS` for safe V5 development by splitting
+  the oversized editor and presenter screen files into smaller MVP-owned Dart
+  `part` files, then document the Windows v4.1.12 feature gaps that still need
+  iOS implementation.
+- **Backup Result**: Created surgical backup
+  `backups/surgical/20260429_204819` before iOS source edits and
+  `backups/surgical/20260429_205627` before MVP/root documentation edits.
+- **Script Editor Split Result**: `script_editor_screen.dart` is now a shell
+  with state fields and lifecycle delegates. Extracted iOS editor parts:
+  `script_editor_screen.load_blocks.dart`,
+  `script_editor_screen.dialogs_history.dart`,
+  `script_editor_screen.styling_commands.dart`,
+  `script_editor_screen.file_present.dart`,
+  `script_editor_screen.build.dart`,
+  `script_editor_screen.selection_clipboard.dart`, and
+  `script_editor_screen.editor_block.dart`.
+- **Teleprompter Split Result**: `teleprompter_screen.dart` is now a shell with
+  state fields, alignment helpers, and lifecycle delegates. Extracted iOS
+  presenter parts: `teleprompter_screen.session_stt.dart`,
+  `teleprompter_screen.manual_scroll.dart`,
+  `teleprompter_screen.build.dart`,
+  `teleprompter_screen.control_bar.dart`, and
+  `teleprompter_screen.settings_panel.dart`.
+- **Line-Size Result**: Every Dart file under `Platform_iOS/lib` is below 800
+  lines after the split. The largest files are `settings_provider.dart` (643),
+  `script_editor_screen.load_blocks.dart` (612), `script_provider.dart` (592),
+  `teleprompter_screen.build.dart` (542), and `word_aligner.dart` (528).
+- **Validation Result**: `dart format` completed on all touched iOS split files.
+  Targeted `flutter analyze --no-pub` on the iOS editor/presenter roots reported
+  no compile errors; remaining output is pre-existing warning/info noise.
+  Full pub-resolving analysis is blocked locally by the current SDK/`intl`
+  constraint mismatch and was not changed in this split-only pass.
+- **Documentation Result**: Updated iOS Script Editor, Teleprompter Engine,
+  Bookmarks, Scrolling, and root MVP docs with split ownership rules and the
+  Windows-to-iOS migration targets. No platform README files were edited.
+- **Windows Features Still Missing in iOS**: STT stop/resume without reset;
+  default 5-word local recovery; opt-in visible viewport skip with nearby phrase
+  priority; active-STT scroll lock and row-progress follow; stopped browsing
+  resume-point selection; cross-mode bookmarks with visible markers and
+  add/remove/previous/next controls; active-STT bookmark jumps; visible-text
+  search with raw-offset mapping; one font-size metadata authority; synced
+  spacing ranges; symbol/quote/blank-line preservation audit; markup-safe
+  export; and platform-specific external microphone policy.
+

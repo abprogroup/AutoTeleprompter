@@ -331,3 +331,19 @@
   `_agent/mvp/Platform_iOS/*.md` contracts and port the Windows behavior
   surgically without copying Windows-specific WebView2/STT implementation
   details blindly.
+
+### iOS Prep Status (2026-04-29)
+
+- [U] **iOS Large File Split Gate**: `Platform_iOS` editor/presenter split is
+  complete as a behavior-preserving refactor. Every Dart file under
+  `Platform_iOS/lib` is below 800 lines. The old oversized
+  `script_editor_screen.dart` and `teleprompter_screen.dart` are now shell files
+  with MVP-owned `part` files documented in `_agent/mvp/Platform_iOS/`.
+- [ ] **iOS Windows-Parity Feature Gap List**: Implement after the split, in
+  iOS-native terms: STT stop/resume without reset, default 5-word local
+  recovery, opt-in visible viewport skip with nearby phrase priority,
+  active-STT scroll lock/row-progress follow, stopped browsing resume
+  selection, cross-mode bookmarks, active-STT bookmark jumps, visible-text
+  search, one font-size metadata authority, synced spacing, preservation of
+  symbols/quotes/blank lines, markup-safe export, and external microphone
+  routing policy.

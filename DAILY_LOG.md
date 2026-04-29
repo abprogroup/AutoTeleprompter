@@ -316,3 +316,16 @@
 - **Validation**: `dart format` completed. Targeted `flutter analyze` reported
   no new compile errors, only existing warning/info lint noise. Windows
   teleprompter split files remain below the 750-line ceiling.
+
+### 2026-04-29 - Windows Visible STT Skip Full-Viewport Tuning
+
+- **Session Goal**: Correct visible skipping so speaking a phrase visible lower
+  in the presenter viewport can jump over an entire visible paragraph, not only
+  one or two rows.
+- **STT Result**: Visible skip now scans the full presenter-published viewport
+  for multi-word sequence matches. The old fixed 30-word large-jump cap no
+  longer blocks confirmed multi-word targets that are actually visible.
+- **Safety Result**: Single-word jumps remain near-range only. Long visible
+  jumps require multi-word confirmation and still cannot target offscreen text.
+- **MVP Documentation Result**: Updated Windows STT, Teleprompter Engine, and
+  Scrolling MVP docs to define visible skip as viewport-bounded, not row-bounded.

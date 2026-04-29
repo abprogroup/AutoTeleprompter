@@ -89,6 +89,9 @@ Anything not listed here is private implementation detail.
 10. **Visible skip does not change scroll ownership**: Publishing the visible
    window is informational. It must not move the scroll controller, mutate the
    transcript, or reset the provider index.
+11. **Visible window is not row-limited**: The published window represents every
+    speakable word visible in the current viewport. It must not be shortened to
+    one row, two rows, or a fixed 30-word cap before STT receives it.
 
 ---
 
@@ -107,6 +110,8 @@ Anything not listed here is private implementation detail.
   navigation is a direct chapter/anchor jump, not active-STT follow.
 - Do not calculate the STT skip window from raw indices alone. The window must
   be based on words the presenter is actually showing.
+- Do not trim the STT skip window to an arbitrary row count. If the operator can
+  see the text, the window may include it.
 
 ---
 

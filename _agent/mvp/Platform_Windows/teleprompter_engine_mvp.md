@@ -232,6 +232,12 @@ earlier Windows MVP file and remain part of the engine contract:
     alignment may land only inside that window. Hidden paragraphs must never be
     skipped to by speech alone.
 
+30. **Visible means the whole viewport**: When visible skipping is enabled, STT
+    may skip across any amount of text currently visible to the operator. Do not
+    retain row-count, 30-word, or 1-2-line caps for multi-word sequence matches.
+    Safety comes from the rendered viewport bound plus multi-word confirmation,
+    not from a fixed distance limit.
+
 ---
 
 ## Forbidden Changes

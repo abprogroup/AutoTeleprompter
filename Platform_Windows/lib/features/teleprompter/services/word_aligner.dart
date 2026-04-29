@@ -341,12 +341,15 @@ class WordAligner {
     // allowing one STT result to confirm several consecutive spoken words.
     // When visible skipping is enabled, the provider caps this at the last
     // visible word in the presentation viewport.
+    final visibleMaxSkipTargetIndex = maxSkipTargetIndex;
+    final visibleSkipEnabled = visibleMaxSkipTargetIndex != null;
     final strictEnd = searchStart + 1;
-    final allowedEnd = maxSkipTargetIndex == null
+    final allowedEnd = visibleMaxSkipTargetIndex == null
         ? strictEnd
-        : (maxSkipTargetIndex + 1).clamp(strictEnd, script.length);
-    final windowEnd =
-        (searchStart + _searchWindowSize).clamp(0, allowedEnd).toInt();
+        : (visibleMaxSkipTargetIndex + 1).clamp(strictEnd, script.length);
+    final scanEnd =
+        visibleSkipEnabled ? allowedEnd : searchStart + _searchWindowSize;
+    final windowEnd = scanEnd.clamp(0, allowedEnd).toInt();
 
     // ── STEP 1: NEXT-WORD PRIORITY ──────────────────────────────────────────
     // The most common case: user said the very next word. Check it first with
@@ -423,8 +426,9 @@ class WordAligner {
       int matchCount = 0;
       double seqScore = 0.0;
       int si = i;
+      final sequenceEnd = visibleSkipEnabled ? windowEnd : script.length;
 
-      for (int j = 0; j < recentWords.length && si < script.length; si++) {
+      for (int j = 0; j < recentWords.length && si < sequenceEnd; si++) {
         if (script[si].isNewline) continue;
         final scriptWord = script[si].normalized;
         if (scriptWord.isEmpty) {
@@ -444,16 +448,23 @@ class WordAligner {
       }
 
       final distance = i - searchStart;
-      final distPenalty = distance * _distancePenaltyPerWord;
+      final distPenalty = visibleSkipEnabled
+          ? (distance * _distancePenaltyPerWord).clamp(0.0, 0.20)
+          : distance * _distancePenaltyPerWord;
       final available = recentWords.length;
       final normalizedScore =
           available > 0 ? (seqScore / available) - distPenalty : 0.0;
 
       if (normalizedScore > bestSeqScore && matchCount >= 1) {
         final seqJump = (si - 1) - lastConfirmedIndex;
+        final maxSeqJump = visibleMaxSkipTargetIndex == null
+            ? _maxSeqJump
+            : (visibleMaxSkipTargetIndex - lastConfirmedIndex)
+                .clamp(0, script.length)
+                .toInt();
         // For large jumps, require at least 2 matching words for confidence
         final minMatches = seqJump > _maxSingleJump ? 2 : 1;
-        if (matchCount >= minMatches && seqJump <= _maxSeqJump) {
+        if (matchCount >= minMatches && seqJump <= maxSeqJump) {
           bestSeqScore = normalizedScore;
           bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
           bestSeqDebug =

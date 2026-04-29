@@ -2,7 +2,7 @@
 name: Scrolling MVP
 type: mvp
 platform: Windows
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 ## Scope
@@ -18,6 +18,9 @@ and smooth motion rules for the presentation viewport.
 | File | Role |
 | --- | --- |
 | `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Scroll controller, active STT auto-follow, smooth glide timer, stopped browsing, manual scroll, search/bookmark jump scroll |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart` | Extracted manual scroll, auto-follow, stopped browsing, and resume sync methods after V5 file split |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.smooth_settings.dart` | Extracted smooth-scroll timer tick after V5 file split |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Presenter scroll view and active/stopped scroll physics wiring |
 | `Platform_Windows/lib/features/teleprompter/providers/teleprompter_provider.dart` | `confirmedWordIndex`, `jumpToPosition(...)`, reset/start/stop state that drives presenter scroll |
 | `Platform_Windows/lib/features/settings/providers/settings_provider.dart` | `scrollLead`, `scrollMode`, and `scrollSpeed` persisted settings |
 | `_agent/mvp/Platform_Windows/teleprompter_engine_mvp.md` | Parent presentation engine contract |
@@ -118,3 +121,15 @@ calculation, timers, scroll notifications, scroll physics, and viewport motion.
 `teleprompter_provider.dart` remains owned primarily by STT and Teleprompter
 Engine. Scrolling may read or call `confirmedWordIndex`/`jumpToPosition(...)`
 but must not move transcript or recognizer lifecycle state into the widget.
+---
+
+## Windows v4.1.12 Final Seal Notes
+
+- Active STT scrolling is row-progress follow, not row-end snapping.
+- User drag browsing is disabled while STT is listening or starting.
+- Stopped mode browsing is allowed and must update the resume point near the
+  reading line.
+- Bookmark/search/tap/restart navigation is exact and immediate.
+- Blank-line markers affect scroll rhythm and must keep real height.
+- Future refactors must keep scroll ownership separated from STT recognizer
+  lifecycle state.

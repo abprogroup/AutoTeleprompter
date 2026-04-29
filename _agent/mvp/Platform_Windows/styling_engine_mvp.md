@@ -2,7 +2,7 @@
 name: Styling Engine MVP
 type: component
 platform: Windows
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 # Styling Engine MVP - Windows
@@ -22,6 +22,9 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
 | `Platform_Windows/lib/features/script/services/styling_service.dart` | Script-level styling helpers and HTML conversion |
 | `Platform_Windows/lib/core/services/styling_service.dart` | Core duplicate styling helper used by shared surfaces |
 | `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | `_applyStyleCmd`, `_applyInlineCmd`, `onAlign`, `onDirection`, `_detect*AtCursor`, `_clearStyleAtCursor`, color remove paths |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.styling_commands.dart` | Extracted style, inline style, alignment, direction, font, color, remove-tag, and selection-restore commands after V5 file split |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.load_blocks.dart` | Extracted cursor style detection helpers used by suites after V5 file split |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.editor_block.dart` | Extracted editor block render surface that hides markup tags while preserving raw offsets |
 | `Platform_Windows/lib/features/script/models/cursor_style.dart` | `CursorStyle` and `cursorStyleProvider` state bridge |
 | `Platform_Windows/lib/core/services/rich_clipboard.dart` | Rich clipboard output after style stripping/conversion |
 
@@ -156,3 +159,14 @@ selection behavior, and no-leak transformations for clipboard/recent/export.
 Styling Engine owns style mutation and rendering sections in
 `script_editor_screen.dart` and `markup_controller.dart`. Selection owns target
 ranges; History owns save timing; File I/O owns external document conversion.
+
+---
+
+## V5 File Split Notes
+
+Styling logic was not rewritten during the Windows split. Existing commands were
+moved to `script_editor_screen.styling_commands.dart`; cursor detection helpers
+were moved to `script_editor_screen.load_blocks.dart`; `_EditorBlock` rendering
+was moved to `script_editor_screen.editor_block.dart`. Future styling edits must
+stay inside those part files unless a model/service API change is explicitly
+required.

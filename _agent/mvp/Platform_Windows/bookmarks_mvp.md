@@ -2,7 +2,7 @@
 name: Bookmarks MVP
 type: mvp
 platform: Windows
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 ## Scope
@@ -19,8 +19,10 @@ resume-point handoff between bookmark jumps and STT start/stop behavior.
 | --- | --- |
 | `Platform_Windows/lib/features/script/services/script_bookmark_service.dart` | Bookmark model, SharedPreferences scope key, load/save/upsert persistence |
 | `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | Editor add/remove/previous/next bookmark commands, editor position mapping, editor scroll-to-bookmark, editor marker rendering, presenter handoff identity |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.debug_bookmarks_search.dart` | Extracted editor bookmark commands and mapping after V5 file split |
 | `Platform_Windows/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Editor bookmark add/remove/navigation toolbar buttons |
 | `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Presenter add/remove/previous/next bookmark commands, presenter word-index jumps, presenter marker rendering |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.bookmarks_search.dart` | Extracted presenter bookmark/search commands after V5 file split |
 | `MASTER_TODO_V5.md` | Future presenter edit-from-current-position requirement |
 
 ---
@@ -139,3 +141,15 @@ Search is owned by Script Editor MVP, but bookmark handoff depends on the same
 editor position mapping helpers. Search must match visible text and translate
 back to raw markup offsets instead of treating hidden tags as visible
 characters.
+---
+
+## Windows v4.1.12 Final Seal Notes
+
+- Bookmarks are a sealed Windows v4 feature and must be ported as a shared
+  editor/presenter contract, not as presenter-only state.
+- Multiple anchors per script are allowed.
+- Markers are visible UI only and must be removable from editor and presenter.
+- Previous/next bookmark navigation must remain available while STT is active.
+- Presenter bookmark jumps are direct and must not use smooth STT scrolling.
+- A bookmark added or removed in present mode must be reflected when returning
+  to editor mode, and the reverse must also hold.

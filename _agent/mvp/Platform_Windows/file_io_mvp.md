@@ -2,7 +2,7 @@
 name: File I/O MVP
 type: component
 platform: Windows
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 # File I/O MVP - Windows
@@ -25,6 +25,8 @@ round-trip behavior for Windows.
 | `Platform_Windows/lib/platform/file_import/platform_file_import.dart` | Windows supported extensions and display label |
 | `Platform_Windows/lib/features/script/widgets/editor/editor_dialogs.dart` | Save/import/rename dialog helpers |
 | `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | `_runPendingFileLoad`, `_saveScript`, import/save action wiring |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.load_blocks.dart` | Extracted pending-file load and import parse handoff after V5 file split |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.file_present.dart` | Extracted import, save, clear, and present handoff after V5 file split |
 | `Platform_Windows/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Save/import buttons that enter File I/O flow |
 
 ---
@@ -125,3 +127,27 @@ round-trip behavior for Windows.
 File I/O owns parse/generate/save/import sections. Script Editor owns the editor
 orchestration that calls these paths. Settings owns metadata persistence after
 save/import. Styling Engine owns the meaning of internal markup.
+---
+
+## Windows v4.1.12 Final Seal Notes
+
+- RTF/DOCX export must translate app markup into document styling; raw
+  app-private tags such as `[color]`, `[size]`, alignment tags, and bold syntax
+  must not spill into saved documents.
+- Plain text, markdown, and Pages-like plain paths must write visible text only.
+- Default teleprompter white is display metadata and must not force white body
+  text in normal exported documents.
+- Import/export must preserve standalone symbols, quotes, punctuation, Hebrew,
+  Unicode text, and intentional repeated blank lines.
+- File I/O must not rewrite bookmark lists, history indices, or STT resume
+  metadata as a side effect of export.
+
+---
+
+## V5 File Split Notes
+
+Editor File I/O entry points now live primarily in
+`script_editor_screen.file_present.dart` and pending-load parsing lives in
+`script_editor_screen.load_blocks.dart`. File service behavior was not changed
+by the split; future export/import edits must preserve markup-safe export and
+blank-line/symbol preservation.

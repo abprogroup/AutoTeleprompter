@@ -209,3 +209,42 @@
   - *User preference option*: In v5, expose an STT method selector so users can choose between: (A) current plugin-based switching, (B) native bridge with audio buffer catch-up.
   - *Implementation phases (documented in MVP)*: Phase 1 — custom bridge parity; Phase 2 — audio tap + buffer; Phase 3 — `setLocale()` with buffer replay; Phase 4 — remove `speech_to_text` from iOS pubspec.
   - *Dependency*: Must ship after STT Engine Selector UI (above) is restored, since the selector UI is how users would choose between methods.
+---
+
+## V5 Platform Migration Prep From Windows v4.1.12 (Added 2026-04-29)
+
+- [x] **Windows Behavior-Preserving Large File Split Gate**: Windows V5 prep
+  split `script_editor_screen.dart` and `teleprompter_screen.dart` into Dart
+  `part` files on 2026-04-29. All Windows split files are under 750 lines, and
+  targeted analyzer found no compile errors. This is a mechanical extraction
+  only; no in-app behavior was intentionally changed.
+- [ ] **Cross-Platform Behavior-Preserving Large File Split Gate**: Before adding major V5
+  features, split oversized editor/presenter screens into MVP-owned files. The
+  first targets are `script_editor_screen.dart` and `teleprompter_screen.dart`
+  on every platform. Keep each extracted file ideally under 500-1000 lines.
+  Required extraction candidates: search/bookmarks, presentation controls,
+  debug console/sound bar, scroll controller, STT controls, editor block list,
+  editor shortcut/search, style metadata synchronization, import/export
+  orchestration, and project action toolbar. No behavior changes during the
+  split.
+- [ ] **Cross-Platform Bookmark System**: Port the Windows v4.1.12 bookmark
+  baseline to iOS, Android, and macOS: multiple anchors, visible markers,
+  add/remove in editor and presenter, previous/next buttons, active-STT jumps,
+  direct jump behavior, and shared persistence between modes.
+- [ ] **Cross-Platform Presenter Search**: Port visible-text search with raw
+  markup offset mapping and presenter resume-point updates.
+- [ ] **Cross-Platform STT Resume/Stop Contract**: Stop tears down recognition
+  without resetting the script; start resumes from the current index; Restart is
+  the only reset-to-zero action.
+- [ ] **Cross-Platform Presenter Scroll Contract**: Active STT locks manual
+  scrolling and uses row-progress follow; stopped mode allows browsing and
+  resume-point selection; bookmark/search/restart commands jump immediately.
+- [ ] **Cross-Platform Typography Contract**: One font-size metadata value must
+  drive editor controls, presenter controls, style tags, save metadata, and
+  export. Any editor/presenter visual scale must be display-only.
+- [ ] **Cross-Platform Export Hygiene**: RTF/DOCX/Pages exporters must convert
+  app-private markup into document styling or visible text, never leak raw
+  `[color]`, `[size]`, bold, alignment, or display-only tags.
+- [ ] **Present-Mode Script Editing Button**: Add a presenter control that opens
+  editing at the current bookmark/reading position. It must stop STT first,
+  preserve the resume point, and return to presenter without resetting.

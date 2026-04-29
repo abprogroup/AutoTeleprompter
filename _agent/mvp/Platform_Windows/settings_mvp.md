@@ -2,7 +2,7 @@
 name: Settings MVP
 type: component
 platform: Windows
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 # Settings MVP - Windows
@@ -21,6 +21,9 @@ the settings/profile UI.
 | `Platform_Windows/lib/features/settings/widgets/app_settings_screen.dart` | Settings/profile UI and display-name editing |
 | `Platform_Windows/lib/features/settings/widgets/cloud_sync_screen.dart` | Dormant cloud-sync UI placeholder for V5 |
 | `Platform_Windows/lib/core/widgets/global_color_picker.dart` | Shared color picker used by editor and presentation settings |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.settings_panel.dart` | Extracted presenter settings panel after V5 file split |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.settings_widgets.dart` | Extracted presenter settings helper widgets, including mic selector and preset/color helpers |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Reads settings for presenter render, debug console, font scale, spacing, colors, and scroll physics |
 
 ---
 
@@ -296,3 +299,26 @@ Governs the persistence of user UI defaults, scrolling preferences, typography s
 
 - **Race Conditions**: Large payload writes can saturate IO channels causing lag. Guard accordingly.
 ```
+---
+
+## Windows v4.1.12 Final Seal Notes
+
+- `fontSize` is the single persisted typography authority for editor settings,
+  presenter settings, style metadata, and export.
+- Presenter visual scaling must not write a larger value back to `fontSize`.
+- Line, word, and letter spacing ranges must match between editor and presenter.
+- Line spacing default display is offset-based: stored `1.2` displays as `0.0`.
+- External mic preference persists as both `sttInputDeviceId` and
+  `sttInputDeviceLabel`; empty id means System Default.
+- Debug mode exposes diagnostics only. It must not change STT lifecycle, script
+  text, bookmark state, or saved typography values.
+
+---
+
+## V5 File Split Notes
+
+Presenter settings logic was moved into same-library Dart parts during the
+Windows V5 prep split. Settings-owned edits should now target
+`teleprompter_screen.settings_panel.dart` or
+`teleprompter_screen.settings_widgets.dart` when changing presenter controls,
+and should target `settings_provider.dart` only for persisted state changes.

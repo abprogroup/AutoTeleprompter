@@ -2,7 +2,7 @@
 name: Teleprompter Engine MVP
 type: component
 platform: Windows
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 # Teleprompter Engine MVP - Windows
@@ -21,6 +21,16 @@ to STT MVP; this MVP owns what the app does with confirmed words.
 | `Platform_Windows/lib/features/teleprompter/providers/teleprompter_provider.dart` | `TeleprompterNotifier`, `TeleprompterState`, confirmed index, force-skip, fluid advance, reset/stop state |
 | `Platform_Windows/lib/features/teleprompter/models/alignment_result.dart` | `TeleprompterState` model and copy semantics |
 | `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Presentation rendering, manual controls, settings panel, scroll animation, word highlighting |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Extracted presenter build tree and word rendering; behavior-preserving V5 split |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.session_stt.dart` | Extracted session, WebView, keyboard, remote, and STT start/stop UI methods |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart` | Extracted manual scroll, auto-follow target, stopped browsing, and resume sync methods |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.bookmarks_search.dart` | Extracted presenter bookmark and search methods shared with Bookmarks MVP |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.smooth_settings.dart` | Extracted smooth scroll tick and settings-sheet launcher |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.alignment_helpers.dart` | Extracted wrap-alignment helpers |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.audio_debug_widgets.dart` | Extracted sound bar and STT starting indicator widgets |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.control_bar.dart` | Extracted presenter control bar widget |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.settings_panel.dart` | Extracted presenter settings panel |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.settings_widgets.dart` | Extracted presenter settings helper widgets |
 | `Platform_Windows/lib/features/teleprompter/services/word_aligner.dart` | Tokenization/alignment helper shared with STT; advancement thresholds are STT-owned but output drives engine state |
 
 ---
@@ -424,3 +434,45 @@ Governs the rendering architectures and hardware execution flags.
 
 - Stale timers can occasionally cascade. Ensure safe clears.
 ```
+---
+
+## Windows v4.1.12 Final Seal Notes
+
+- Present mode is sealed with STT resume semantics: start resumes from the
+  current confirmed/tapped/searched/bookmarked/scrolled position.
+- Restart is the only command that resets to the beginning.
+- Active STT owns presenter scrolling and user drag scrolling is locked while
+  listening or starting.
+- Stopped STT allows browsing and updates the resume point from the visible
+  reading location.
+- Search, bookmark previous/next, tap, and restart are direct navigation
+  commands. They must not use the smooth STT-follow animation.
+- Active STT follow uses row-progress smoothing to avoid hard row jumps while
+  reading.
+- Presenter controls share one font-size metadata value with editor mode;
+  presenter visual enlargement is display-only and must not persist.
+- Debug output can minimize/expand, and the sound bar remains mounted behind
+  debug-mode opacity.
+
+---
+
+## V5 File Split Contract
+
+The sealed Windows presenter screen was split into Dart `part` files on
+2026-04-29 for surgical V5 development. This was a behavior-preserving move:
+logic was moved into the same library so private state access remains identical.
+
+Line-count ceiling after split:
+
+| File | Lines |
+|------|------:|
+| `teleprompter_screen.dart` | 128 |
+| `teleprompter_screen.build.dart` | 742 |
+| `teleprompter_screen.session_stt.dart` | 415 |
+| `teleprompter_screen.manual_scroll.dart` | 243 |
+| `teleprompter_screen.bookmarks_search.dart` | 266 |
+| `teleprompter_screen.settings_panel.dart` | 421 |
+| Remaining teleprompter parts | Under 200 each |
+
+Do not recombine these files. Future changes must edit the smallest owning part
+file and the matching MVP docs.

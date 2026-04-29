@@ -2,7 +2,7 @@
 name: Editor Suites MVP
 type: component
 platform: Windows
-last_updated: 2026-04-27
+last_updated: 2026-04-29
 ---
 
 # Editor Suites MVP - Windows
@@ -25,6 +25,11 @@ and File I/O MVPs.
 | `Platform_Windows/lib/features/script/widgets/editor/suites/history_suite_mvp.dart` | Undo/redo buttons and history popup |
 | `Platform_Windows/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Back/delete/save/import/present/rename project action surface |
 | `Platform_Windows/lib/features/script/widgets/editor/components/editor_primitives.dart` | Shared editor button, slider, popup primitives |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | Main build method wires `FormattingToolbarMVP` and `ProjectActionsSuite` callbacks after V5 split |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.styling_commands.dart` | Callback implementations for style suite commands |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.dialogs_history.dart` | Callback implementations for history suite commands |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.file_present.dart` | Callback implementations for project action save/import/present/clear |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.debug_bookmarks_search.dart` | Callback implementations for project action bookmark/search commands |
 
 ---
 
@@ -115,3 +120,12 @@ and File I/O MVPs.
 Editor Suites owns widget composition only. Styling Engine owns what style
 callbacks do; History owns undo/redo semantics; Settings owns spacing/color
 persistence; File I/O owns project save/import callbacks.
+
+---
+
+## V5 File Split Notes
+
+The editor build method still instantiates suite widgets, but their callback
+implementations now live in smaller part files. Future suite work must identify
+whether the change is UI-only (`*_mvp.dart`) or behavior-owned by Script Editor,
+Styling, History, Bookmarks, File I/O, or Settings.

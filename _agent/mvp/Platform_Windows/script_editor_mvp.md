@@ -2,7 +2,7 @@
 name: Script Editor MVP
 type: component
 platform: Windows
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 # Script Editor MVP - Windows
@@ -19,6 +19,12 @@ settings.
 | File | Role |
 |------|------|
 | `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart` | Editor orchestration, block lifecycle, editor actions, suite wiring, load/save/import coordination |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.load_blocks.dart` | Extracted load, controller/block lifecycle, bookmark loading, cursor/style detection, and dispose-adjacent helpers |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.dialogs_history.dart` | Extracted rename dialog, refined text, clear-style helpers, history and state-restore logic |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.styling_commands.dart` | Extracted style, inline style, alignment, direction, font, color, and selection restore commands |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.file_present.dart` | Extracted import, save, clear, and present-mode handoff methods |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.debug_bookmarks_search.dart` | Extracted debug sentry, editor bookmarks, copy, search, select-all, and global selection resync |
+| `Platform_Windows/lib/features/script/widgets/script_editor_screen.editor_block.dart` | Extracted `_EditorBlock` widget |
 | `Platform_Windows/lib/features/script/widgets/script_gallery_screen.dart` | Recent-script gallery, script open/delete/rename entry points, history metadata handoff |
 | `Platform_Windows/lib/features/script/widgets/teleprompt_selector_sheet.dart` | Script source selection UI |
 | `Platform_Windows/lib/features/script/providers/script_provider.dart` | `ScriptNotifier`, active `Script`, `loadText`, `importFile`, `parseFile`, `clear` |
@@ -343,3 +349,42 @@ Governs the underlying tokenization pipeline, the robust multi-extension parser 
 
 - **Heavy XML bounds**: Parsing large formats can consume main isolate memory loops. Use carefully.
 ```
+---
+
+## Windows v4.1.12 Final Seal Notes
+
+- Editor search must search visible text and map matches back to raw markup
+  offsets only after the visible match is known.
+- Editor bookmark markers are UI markers only; they must never be inserted into
+  script text.
+- Editor bookmarks must share the same script/session scope as present mode so
+  anchors created in either mode appear in both modes.
+- Bookmark deletion must be possible from the visible marker and from an
+  explicit remove button.
+- Editor font-size controls must read/write the same script metadata value used
+  by present mode, not a cursor-local fallback such as `18.0`.
+- Intentional empty blocks and repeated blank lines are valid script structure
+  and must not be trimmed by editor save/refresh paths.
+
+---
+
+## V5 File Split Contract
+
+The sealed Windows script editor screen was split into Dart `part` files on
+2026-04-29 for surgical V5 development. This was a behavior-preserving move:
+logic was moved into the same library so private state access remains identical.
+
+Line-count ceiling after split:
+
+| File | Lines |
+|------|------:|
+| `script_editor_screen.dart` | 608 |
+| `script_editor_screen.load_blocks.dart` | 609 |
+| `script_editor_screen.debug_bookmarks_search.dart` | 541 |
+| `script_editor_screen.styling_commands.dart` | 457 |
+| `script_editor_screen.dialogs_history.dart` | 439 |
+| `script_editor_screen.editor_block.dart` | 231 |
+| `script_editor_screen.file_present.dart` | 198 |
+
+Do not recombine these files. Future changes must edit the smallest owning part
+file and the matching MVP docs.

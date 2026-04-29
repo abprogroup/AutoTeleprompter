@@ -205,3 +205,91 @@
     - **Windows Branding**: Native metadata updated in `windows/` folder.
 - **Protocol**: Aligned with the AI Protocol for platform-specific isolation to prevent cross-platform regressions.
 - **Status**: Windows build pipeline fixed and isolated. First successful release incoming.
+
+### ✅ 2026-04-26 — v4.1.19 [WINDOWS_NATIVE_SAPI_PIVOT]
+- **Session Goals**: Transition from the unstable `SttBrowserAdapter` (WebView2 + WebSocket server) to `SttDesktopAdapter` (Native Windows SAPI).
+- **Achievements**:
+    - **Surgical Backups**: Created isolated backups of `pubspec.yaml`, `stt_service_factory.dart`, and `teleprompter_screen.dart` in `backups/surgical/`.
+    - **Dependency Pruning**: Safely stripped out legacy WebView/WebSocket dependencies from the `pubspec.yaml`.
+    - **Native Groundwork**: Setup parameters for returning `SttDesktopAdapter()` for Windows.
+- **Status**: Paused due to system history interruption. Ready to execute code generation.
+---
+
+### 2026-04-29 - Windows v4.1.12 FINAL SEAL
+
+- **Session Goal**: Seal Windows v4, create final backup, and append migration
+  documentation so the verified Windows behavior can be safely ported to iOS,
+  Android, and macOS.
+- **Final Version**: Windows `4.1.12+12`.
+- **Workflow Title**: `Build Windows EXE (v4.1.12)`.
+- **Final Backup**: `backups/final_windows_v4/20260429_103357`.
+- **Release README**: `releases/Windows/v4.1.12 (FINAL)/README.md`.
+- **Core STT Result**: Windows STT stop/start now behaves as pause/resume. Stop
+  tears down recognition without resetting the script. Start resumes from the
+  current word. Restart is the only reset-to-beginning action.
+- **External Mic Result**: Windows presenter settings can enumerate WebView2
+  audio input devices, persist `sttInputDeviceId` and label, switch devices
+  without resetting the script, and fall back to system default if a saved
+  external mic is missing.
+- **Debug Result**: Debug mode has a compact sound bar and collapsible output
+  window. Recurring volume debug rows were removed because the sound bar owns
+  that visual signal.
+- **Search Result**: Editor and presenter search use visible text locations and
+  avoid treating hidden markup tags as searchable display characters.
+- **Bookmarks Result**: Bookmarks are shared between editor and present mode,
+  support multiple anchors, visible markers, explicit add/remove controls, and
+  previous/next jumps while STT is active. Bookmark jumps are direct commands,
+  not smooth STT-follow animations.
+- **Presenter Scroll Result**: Active STT owns scrolling and uses row-progress
+  follow. Stopped mode allows browsing and updates the resume point. Direct
+  commands such as bookmark/search/restart jump immediately.
+- **Typography Result**: Font size now has one source of truth across editor
+  controls, presenter controls, script metadata, style tags, and export.
+  Presenter visual scaling is display-only and must not be persisted as the
+  saved font number.
+- **Spacing Result**: Line, word, and letter spacing ranges are synchronized
+  between editor and presenter settings and persist through script metadata.
+- **Text Structure Result**: Standalone symbols, quotes, punctuation, and
+  intentional blank lines are preserved in editor, presenter, import, and export
+  paths.
+- **Export Result**: RTF/DOCX export converts app-private markup into document
+  styling. Plain formats export visible text only. Default teleprompter white is
+  display metadata and must not become white body text in exported documents.
+- **MVP Documentation Result**: Windows MVP docs now include dedicated
+  Bookmarks and Scrolling contracts plus updated STT, Teleprompter, Script
+  Editor, Settings, and File I/O rules for the sealed behavior. iOS, Android,
+  and macOS now also have planned Bookmarks and Scrolling MVP contracts so the
+  migration lanes exist before implementation begins.
+- **Refactor Recommendation**: Do not split large files during the Windows v4
+  seal. Before V5 expansion, split oversized editor/presenter files by MVP
+  ownership as behavior-preserving refactors. Current over-1000-line files:
+  Windows editor 2885, Windows presenter 2528, iOS editor 2135, iOS presenter
+  1356, Android editor 1842, Android presenter 1341, Android legacy editor
+  1290, macOS editor 2011, macOS presenter 1338.
+- **Status**: Windows v4 is sealed. Future work should move to cross-platform
+  migration and V5 preparation unless the user explicitly reopens Windows v4.
+
+### 2026-04-29 - Windows V5 Prep: Screen File Split
+
+- **Session Goal**: Prepare Windows for safer V5 development by splitting the
+  two oversized screen files without changing in-app behavior.
+- **Method**: Used Dart `part` files in the same library so private fields,
+  private methods, and existing logic remain library-local. The split is
+  mechanical extraction plus import/part wiring, not a feature change.
+- **Teleprompter Result**: `teleprompter_screen.dart` reduced to 128 lines.
+  Extracted presenter build, STT/session UI, manual scroll, bookmarks/search,
+  smooth settings, alignment helpers, sound/debug widgets, control bar, settings
+  panel, and settings helper widgets. Largest teleprompter part is
+  `teleprompter_screen.build.dart` at 742 lines.
+- **Script Editor Result**: `script_editor_screen.dart` reduced to 608 lines.
+  Extracted load/block lifecycle, dialogs/history, styling commands,
+  import/save/present handoff, debug/bookmarks/search/global selection, and
+  `_EditorBlock`. Largest editor part is `script_editor_screen.load_blocks.dart`
+  at 609 lines.
+- **Line Ceiling**: All extracted Windows screen files are under 750 lines.
+- **Behavior Contract**: No in-app behavior was intentionally changed. Future
+  V5 changes must edit the smallest owning part file and update the relevant
+  MVP doc.
+- **Validation**: `dart format` completed on the split files. Targeted
+  `flutter analyze` on the Windows teleprompter and script editor entrypoints
+  reported no compile errors; it still reports existing warning/info lint noise.

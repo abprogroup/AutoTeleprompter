@@ -2,7 +2,7 @@
 name: STT MVP
 type: component
 platform: Windows
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 # STT MVP - Windows
@@ -29,6 +29,10 @@ owns how confirmed indices are rendered after STT produces results.
 | `Platform_Windows/lib/features/teleprompter/services/whisper_speech_service_native.dart` | Dormant Whisper path; build-sensitive on Windows |
 | `Platform_Windows/lib/features/teleprompter/services/word_aligner.dart` | Alignment helper consuming STT transcripts and script words |
 | `Platform_Windows/lib/features/teleprompter/providers/teleprompter_provider.dart` | `_sttService`, `_setupSttCallbacks`, `_setupWhisperCallbacks`, `startSession`, `stopSession`, locale switching, callback guards |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.session_stt.dart` | Extracted presenter STT start/stop, WebView loading, keyboard shortcut, remote session UI, and teardown methods after V5 file split |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.audio_debug_widgets.dart` | Extracted sound bar and STT starting indicator widgets after V5 file split |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.settings_panel.dart` | Presenter settings section that exposes Windows speech input selector |
+| `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.settings_widgets.dart` | Windows mic selector helper widget |
 
 ---
 
@@ -242,3 +246,31 @@ owns how confirmed indices are rendered after STT produces results.
 STT owns speech lifecycle and callback sections in `teleprompter_provider.dart`.
 Teleprompter Engine owns confirmed index, force-skip, fluid advance, and visual
 rendering. Settings owns `sttEngine` persistence; STT only consumes it.
+---
+
+## Windows v4.1.12 Final Seal Notes
+
+- STT stop/start is a pause/resume lifecycle, not a reset lifecycle.
+- `stopSession()` must tear down the recognizer/WebView session without
+  resetting `confirmedWordIndex`.
+- The next mic start must create a fresh recognizer path at the current
+  provider index.
+- Restart/reset is the only allowed path back to word `0`.
+- External mic selection is part of the sealed Windows contract: WebView2 audio
+  input enumeration, persisted device id/label, System Default fallback, and no
+  script-position reset when the input changes.
+- Stale WebView socket messages must be ignored so old connect/disconnect events
+  cannot poison a new STT session.
+- Volume-level state may feed the debug sound bar, but recurring volume-bar text
+  rows must not return to the debug log.
+
+---
+
+## V5 File Split Notes
+
+STT-owned presenter UI logic was moved out of the monolithic
+`teleprompter_screen.dart` into same-library Dart parts. This is a mechanical
+split only: `teleprompter_screen.session_stt.dart`,
+`teleprompter_screen.audio_debug_widgets.dart`, and the mic sections inside the
+settings parts must preserve the same lifecycle, callback guards, WebView
+reload behavior, and external mic fallback semantics.

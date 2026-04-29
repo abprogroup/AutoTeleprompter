@@ -454,3 +454,24 @@
   spacing ranges; symbol/quote/blank-line preservation audit; markup-safe
   export; and platform-specific external microphone policy.
 
+### 2026-04-29 - iOS Multi-Block Cut/Paste Investigation Fix
+
+- **Session Goal**: Revisit the iOS multi-block Select All -> Cut -> Paste bug
+  from the stable `f23d56e` baseline, after failed attempts showed the in-app
+  paste path restored only the originally touched paragraph block.
+- **Root-Cause Direction**: The previous `_blockClipboard` design mixed
+  "current global selection snapshot" with "actual paste clipboard." That let
+  iOS context-menu/native-selection timing downgrade the paste payload to a
+  one-block list before paste.
+- **Fix Result**: `_selectAllBlocks()` now arms a short-lived raw-markup global
+  selection snapshot only. Cut/Copy are the only paths allowed to write
+  `_blockClipboard`, and they write one raw-markup string per paragraph block.
+  Paste adds missing controllers before restoring `TextEditingValue(text:
+  rawMarkup)` so per-block styling survives.
+- **Diagnostics Result**: Editor debug mode now shows clipboard state such as
+  armed/stored/restored block count, so the next iOS test can verify whether the
+  clipboard remains multi-block.
+- **Validation Result**: Targeted `flutter analyze --no-pub` on the iOS script
+  editor found no compile errors; remaining warnings/infos are pre-existing
+  root-file analyzer noise.
+

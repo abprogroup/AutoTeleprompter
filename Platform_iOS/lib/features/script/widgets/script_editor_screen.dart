@@ -114,7 +114,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isCommandExecuting = false;
   bool _isDirty = false;
   bool _isLoading = false;
-  List<String>? _blockClipboard; // raw markup per block, pre-set at Select All
+  List<String>? _blockClipboard; // raw markup per block, written by Cut/Copy
+  List<String>? _globalSelectionSnapshot;
+  DateTime? _globalSelectionSnapshotAt;
+  String _selectionClipboardDebug = 'idle';
   Timer? _blockClipboardTimer;
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;

@@ -339,6 +339,11 @@
   `Platform_iOS/lib` is below 800 lines. The old oversized
   `script_editor_screen.dart` and `teleprompter_screen.dart` are now shell files
   with MVP-owned `part` files documented in `_agent/mvp/Platform_iOS/`.
+- [P] **iOS Multi-Block Cut/Paste Verification**: Re-test Select All -> Cut ->
+  Paste across two differently styled paragraph blocks after the clipboard
+  snapshot fix. Expected result: Cut removes both blocks, Paste restores both
+  blocks with raw-markup styling intact, regardless of which block was
+  originally double-tapped. Debug mode should show stored/restored block count.
 - [ ] **iOS Windows-Parity Feature Gap List**: Implement after the split, in
   iOS-native terms: STT stop/resume without reset, default 5-word local
   recovery, opt-in visible viewport skip with nearby phrase priority,

@@ -650,6 +650,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     _autoSaveTimer?.cancel();
     _typingBulkTimer?.cancel();
     _suiteAutoSaveTimer?.cancel();
+    _blockClipboardTimer?.cancel();
     _clearControllers();
   }
 }

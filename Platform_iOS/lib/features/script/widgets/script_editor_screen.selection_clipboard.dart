@@ -1,19 +1,65 @@
 part of 'script_editor_screen.dart';
 
 extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
+  static const Duration _globalSelectionSnapshotTtl = Duration(seconds: 20);
+
+  List<String> _snapshotAllControllerMarkup() =>
+      _controllers.map((c) => c.text).toList(growable: false);
+
+  void _captureGlobalSelectionSnapshot(String reason) {
+    final blocks = _snapshotAllControllerMarkup();
+    if (blocks.isEmpty || blocks.every((b) => b.isEmpty)) {
+      _selectionClipboardDebug = '$reason: ignored empty snapshot';
+      return;
+    }
+    _globalSelectionSnapshot = blocks;
+    _globalSelectionSnapshotAt = DateTime.now();
+    _selectionClipboardDebug = '$reason: armed ${blocks.length} blocks';
+  }
+
+  bool get _hasRecentGlobalSelectionSnapshot {
+    final capturedAt = _globalSelectionSnapshotAt;
+    return _globalSelectionSnapshot != null &&
+        capturedAt != null &&
+        DateTime.now().difference(capturedAt) < _globalSelectionSnapshotTtl;
+  }
+
+  List<String>? _globalBlocksForCommand(String reason) {
+    final allBlocksSelected = _controllers.isNotEmpty &&
+        _controllers.every((c) => c.isGlobalSelected);
+    if (_isGlobalSelection || allBlocksSelected) {
+      _captureGlobalSelectionSnapshot(reason);
+      return _globalSelectionSnapshot;
+    }
+    if (_hasRecentGlobalSelectionSnapshot) {
+      _selectionClipboardDebug =
+          '$reason: using armed ${_globalSelectionSnapshot!.length} blocks';
+      return List<String>.of(_globalSelectionSnapshot!);
+    }
+    return null;
+  }
+
+  void _storeBlockClipboard(List<String> blocks, String reason) {
+    _blockClipboard = List<String>.of(blocks);
+    _blockClipboardTimer?.cancel();
+    _blockClipboardTimer =
+        Timer(const Duration(seconds: 60), () => _blockClipboard = null);
+    _selectionClipboardDebug = '$reason: stored ${blocks.length} blocks';
+  }
+
+  void _writePlainClipboardForBlocks(List<String> blocks) {
+    final plain = blocks
+        .map((t) => StylingService.stripTags(t).replaceAll('\n', ' ').trim())
+        .where((t) => t.isNotEmpty)
+        .join(' ');
+    Clipboard.setData(ClipboardData(text: plain));
+  }
+
   void _onCutClean() {
-    final snap = _blockClipboard;
-    if (snap != null) {
-      // Global cut — use blocks pre-captured at Select-All time.
-      // Immune to iOS timing: _blockClipboard is set before any events fire.
-      _blockClipboardTimer?.cancel();
-      _blockClipboardTimer =
-          Timer(const Duration(seconds: 60), () => _blockClipboard = null);
-      final plain = snap
-          .map((t) => StylingService.stripTags(t).replaceAll('\n', ' ').trim())
-          .where((t) => t.isNotEmpty)
-          .join(' ');
-      Clipboard.setData(ClipboardData(text: plain));
+    final globalBlocks = _globalBlocksForCommand('cut');
+    if (globalBlocks != null && globalBlocks.isNotEmpty) {
+      _storeBlockClipboard(globalBlocks, 'cut');
+      _writePlainClipboardForBlocks(globalBlocks);
       _isCommandExecuting = true;
       for (final c in _controllers) {
         c.text = '';
@@ -24,8 +70,26 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       setState(() {});
       return;
     }
-    // Single-block native cut — no global selection was active.
+
     _onCopyClean();
+    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+    if (hasOverlay) {
+      _isCommandExecuting = true;
+      for (final c in _controllers) {
+        final sel = c.externalSelection;
+        if (sel == null || !sel.isValid || sel.isCollapsed) continue;
+        c.value = TextEditingValue(
+          text: c.text.substring(0, sel.start) + c.text.substring(sel.end),
+          selection: TextSelection.collapsed(offset: sel.start),
+        );
+      }
+      _clearGlobalSelection();
+      _isCommandExecuting = false;
+      _saveHistory(description: 'Cut');
+      setState(() {});
+      return;
+    }
+
     final c = _activeController;
     if (c == null) return;
     final sel = c.selection;
@@ -38,8 +102,25 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   }
 
   void _onCopyClean() {
+    final globalBlocks = _globalBlocksForCommand('copy');
+    if (globalBlocks != null && globalBlocks.isNotEmpty) {
+      _storeBlockClipboard(globalBlocks, 'copy');
+      final plainBuf = StringBuffer();
+      final htmlBuf = StringBuffer();
+      for (final slice in globalBlocks) {
+        if (slice.isEmpty) continue;
+        if (plainBuf.isNotEmpty) plainBuf.write('\n');
+        plainBuf.write(StylingService.stripTags(slice));
+        htmlBuf.write(StylingService.markupToHtml(slice));
+      }
+      if (plainBuf.isEmpty) return;
+      RichClipboard.setHtml(
+          plain: plainBuf.toString(), html: htmlBuf.toString());
+      return;
+    }
+
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
-    if (_isGlobalSelection || hasOverlay) {
+    if (hasOverlay) {
       final plainBuf = StringBuffer();
       final htmlBuf = StringBuffer();
       for (int i = 0; i < _controllers.length; i++) {
@@ -63,6 +144,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
           plain: plainBuf.toString(), html: htmlBuf.toString());
       return;
     }
+
     final controller = _activeController;
     if (controller == null) return;
     final slice = controller.selection.textInside(controller.text);
@@ -76,6 +158,8 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   void _pasteFromGlobalClipboard() {
     final blocks = _blockClipboard;
     if (blocks == null || blocks.isEmpty || _controllers.isEmpty) return;
+    _selectionClipboardDebug =
+        'paste: restoring ${blocks.length} blocks into ${_controllers.length} controllers';
     _isCommandExecuting = true;
     while (_controllers.length < blocks.length) {
       _addBlock(_controllers.length);
@@ -93,6 +177,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
+    _selectionClipboardDebug = 'paste: restored ${blocks.length} blocks';
   }
 
   void _selectAllBlocks() {
@@ -115,17 +200,10 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       c.externalSelection =
           TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
-    // Pre-capture raw markup NOW — before any iOS events can clear _isGlobalSelection.
-    // Never downgrade to fewer entries: a spurious second call (via escalation after
-    // _isGlobalSelection is cleared) could have fewer controllers and would overwrite
-    // the correct full-script clipboard with a single-block version.
-    final _snap = _controllers.map((c) => c.text).toList();
-    if (_blockClipboard == null || _snap.length >= _blockClipboard!.length) {
-      _blockClipboard = _snap;
-      _blockClipboardTimer?.cancel();
-      _blockClipboardTimer =
-          Timer(const Duration(seconds: 60), () => _blockClipboard = null);
-    }
+
+    // Arm a protected raw-markup selection snapshot for iOS context-menu timing.
+    // Do not write the paste clipboard here; only Cut/Copy may do that.
+    _captureGlobalSelectionSnapshot('select-all');
     _isCommandExecuting = false;
     setState(() {});
     // Refresh after setState so TextFields repaint with new flags.

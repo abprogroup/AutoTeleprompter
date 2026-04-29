@@ -2,7 +2,7 @@
 name: Selection MVP
 type: component
 platform: iOS
-last_updated: 2026-04-27
+last_updated: 2026-04-29
 ---
 
 # Selection MVP — iOS
@@ -19,6 +19,9 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 | `Platform_iOS/lib/features/script/widgets/editor/components/ghost_selection_controls.dart` | Hides native iOS circle handles |
 | `Platform_iOS/lib/features/script/widgets/editor/markup_controller.dart` | `externalSelection`, `isGlobalSelected`, `refresh()` fields |
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.dart` | `_selectAllBlocks`, `_clearGlobalSelection`, `_deleteGlobalSelection`, `_resyncGlobalSelection`, `_onCopyClean`, `_onCutClean`, `_EditorBlock` context menu, `onTap` handler, `_isGlobalSelection` flag, `_isCommandExecuting` flag |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.selection_clipboard.dart` | Split owner for selection/cut/copy/paste helpers and multi-block clipboard snapshots |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.editor_block.dart` | Split owner for iOS context menu interception, custom Cut/Copy/Paste/Select All routing, and `GhostSelectionControls` usage |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.build.dart` | Split owner for block callback wiring and debug-mode clipboard diagnostics |
 
 ---
 
@@ -67,6 +70,17 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 
 7. **Overlay `_isSelecting`**: Must be `true` whenever any `externalSelection` is set. `clearSelection()` must reset all controller fields as well as its own state.
 
+8. **Global selection snapshot is not the paste clipboard**: `_selectAllBlocks()`
+   may arm a short-lived raw-markup global selection snapshot for iOS
+   context-menu timing, but only Cut/Copy may write `_blockClipboard`.
+   This prevents a later one-block native selection event from downgrading the
+   multi-block paste payload.
+
+9. **Multi-block paste restores block structure**: Global Cut/Copy stores one
+   raw-markup string per paragraph block. `_pasteFromGlobalClipboard()` must add
+   missing controllers before restoration and assign `TextEditingValue(text:
+   rawMarkup)` so styling tags remain intact.
+
 ---
 
 ## Forbidden Changes
@@ -81,6 +95,19 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 
 ## Known Fragilities
 
+Additional clipboard prohibitions:
+
+- Do not write `_blockClipboard` inside `_selectAllBlocks()`. Select All arms
+  selection state only; Cut/Copy owns clipboard persistence.
+- Do not collapse multi-block clipboard data into one plain-text string. Plain
+  system clipboard text is allowed as a companion, but in-app paste must keep the
+  raw markup block list.
+
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.
 - **`_resyncGlobalSelection` + postFrameCallback**: The `overlay.selectAll()` in the postFrameCallback fires after layout, which fires `c.refresh()` again. Verify escalation is blocked (`_isGlobalSelection=true` and `_overlayKey.currentState?.hasSelection=true`) before adding any code near that path.
+- **iOS context-menu timing**: Native iOS may reset the active `TextField`
+  selection or fire a tap-through before the menu action reaches Flutter. The
+  short-lived global selection snapshot exists only to let Cut/Copy recover the
+  intended multi-block selection; it must not become a permanent hidden
+  selection state.

@@ -314,6 +314,8 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                 style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('Global Selection: $_isGlobalSelection',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Clipboard: $_selectionClipboardDebug',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('History States: ${_history.length}',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
         ],

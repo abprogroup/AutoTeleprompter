@@ -134,3 +134,30 @@ Path: `test/`
 
 ---
 *Failure to follow this consultative WAV-protected protocol will result in a hard session reset.*
+
+---
+
+## 2026-04-29 Windows v4 Final Handoff Protocol
+
+Windows v4.1.12 is user verified and is now the behavioral migration source for
+iOS and future V5 work. The latest verified Windows behavior commit is
+`160d137`, with successful workflow run `25110648732`.
+
+Mandatory handoff rules:
+
+- Keep platform isolation strict. Next active implementation target is
+  `Platform_iOS/`; do not edit Android, macOS, or Windows runtime code unless
+  explicitly requested.
+- Before touching iOS files, read the matching
+  `_agent/mvp/Platform_iOS/*.md` documents.
+- Port product behavior, not Windows implementation details. Windows WebView2
+  and desktop-specific STT internals must not be copied blindly into iOS.
+- Preserve the final Windows contracts during migration planning: STT
+  pause/resume, 5-word default local recovery, opt-in visible skip bounded to
+  rendered viewport, nearby phrase priority, cross-mode bookmarks, visible-text
+  search, active-STT scroll lock, stopped browsing, one font-size metadata
+  source, spacing sync, symbol/blank-line preservation, external mic policy,
+  and markup-safe export.
+- Windows source files are now split below 800 lines. Future large-feature work
+  must keep files small by editing the smallest owning MVP file and updating the
+  matching MVP doc in the same change.

@@ -355,3 +355,53 @@
   recovery remains unchanged.
 - **MVP Documentation Result**: Updated Windows STT and Teleprompter Engine MVP
   docs to define visible skip as fallback-only after nearby phrase priority.
+
+### 2026-04-29 - Windows v4 Final User Verification and iOS Handoff
+
+- **Session Goal**: Close Windows version 4 after user testing confirmed the
+  final v4.1.12 behavior, then update project documentation so development can
+  move safely to the iOS platform and later V5 work.
+- **Final Windows Version**: `4.1.12+12`, workflow title
+  `Build Windows EXE (v4.1.12)`.
+- **Final Verified Commit**: `160d137` (`Prioritize nearby Windows STT
+  phrases`) is the latest Windows v4 behavior commit verified by the user.
+- **Workflow Verification**: GitHub Actions run `25110648732` completed
+  successfully and uploaded the Windows EXE artifact.
+- **Source Size Result**: Windows V5-prep file split is complete. Every Dart
+  file under `Platform_Windows/lib` is below 800 lines; the largest current
+  files are `teleprompter_screen.build.dart` at 720 lines,
+  `script_provider.dart` at 717 lines, `settings_provider.dart` at 700 lines,
+  `word_aligner.dart` at 660 lines, `teleprompter_provider.dart` at 641 lines,
+  and `script_editor_screen.dart` at 579 lines.
+- **Final STT Contract**: Default alignment may recover locally within the next
+  5 words for missed recognizer output. Longer visible text skips are opt-in
+  through `Allow visible text skip`, bounded to the rendered viewport, and
+  fallback-only after nearby 3+ word phrase priority fails.
+- **Final Presenter Contract**: Active STT owns scrolling and normal user scroll
+  is locked. Stopped STT allows browsing and resume-point selection. Direct
+  navigation commands such as bookmarks, search, restart, and active-STT
+  bookmark jumps are immediate.
+- **Final Editor/Presenter Contract**: Bookmarks sync between editor and
+  presenter, can be added/removed in both modes, display visible markers, and
+  survive mode changes. Search uses visible text and maps back to raw markup
+  only after matching.
+- **Final Formatting Contract**: One font-size metadata value is shared across
+  editor controls, presenter controls, style tags, settings, and export.
+  Presenter visual enlargement is display-only. Spacing controls match between
+  editor and presenter. Symbols, quotes, punctuation, and intentional blank
+  lines are preserved.
+- **Final Export Contract**: RTF/DOCX export converts app-private markup into
+  document styling; plain formats write visible text only and must not leak raw
+  `[color]`, `[size]`, bold, alignment, or display-only tags.
+- **Final Audio Contract**: Windows external microphone selection is implemented
+  through WebView2 audio input enumeration with system-default fallback. Other
+  platforms must document whether they support in-app device selection or only
+  OS routing.
+- **Documentation Result**: Root README, platform READMEs, MVP root README,
+  V4/V5 TODOs, platform-structure notes, and Windows release README now carry
+  the final Windows v4 migration capsule.
+- **Next Platform**: iOS becomes the next active development platform. Before
+  touching iOS code, read `_agent/mvp/Platform_iOS/*.md`, especially STT,
+  Teleprompter Engine, Script Editor, Bookmarks, Scrolling, Settings, File I/O,
+  Selection, History, and Styling Engine. Port behavior surgically; do not copy
+  Windows implementation details blindly.

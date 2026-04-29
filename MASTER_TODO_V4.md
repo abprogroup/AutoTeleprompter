@@ -214,8 +214,8 @@
 - [U] **Windows Branding**: Updated `BINARY_NAME` and `Runner.rc` metadata. (2026-04-18)
 - [U] **Isolated Build Pipeline**: Created `.github/workflows/build-windows.yml` with dynamic hot-patching. (2026-04-18)
 - [U] **Platform Separation**: Verified `build-ios.yml` ignores Windows folder changes. (2026-04-18)
-- [ ] **Trigger & Test**: Download the first `.exe` from GitHub Actions, place in `releases/`, and verify performance.
-- [ ] **Infrastructure Check**: Verify `SttDesktopAdapter` and `PlatformFileImport` for Windows.
+- [U] **Trigger & Test**: Download the first `.exe` from GitHub Actions, place in `releases/`, and verify performance. Windows v4.1.12 final artifact was user verified after workflow run `25110648732`.
+- [U] **Infrastructure Check**: Verify Windows STT/file infrastructure. Final Windows baseline uses WebView2/browser STT for external mic routing and verified import/export hygiene for Windows v4.1.12.
 
 ### 💤 Windows — Deferred (v4.1+ / v5.0)
 - [-] **Whisper Offline STT (Backup Solution)**: Currently disabled for Windows build to prevent native plugin conflicts. To be revisited as a premium desktop feature. (Moved to V5 Tracker)
@@ -224,8 +224,8 @@
 - [-] **Upcoming Text Highlight**: Add a toggle in settings similar to "Upcoming text color" that resets the highlight background of read text. (Moved to V5 Tracker)
 - [-] **Spacing Synchronization**: Ensure line spacing, word spacing, and letter spacing values perfectly sync between the editor and presentation mode. Allow negative scales (down to -1.0) in presentation mode to match the editor's default limit constraints. (Moved to V5 Tracker)
 - [ ] **Cross-Platform Presentation Resume Point**: Port the verified Windows v4.1.9 behavior to iOS, Android, and macOS so stopping STT pauses the current script position instead of resetting to the beginning. Starting STT must resume from the current confirmed/tapped word; only the existing Restart control is allowed to reset to word `0`. Method proven on Windows: remove automatic `resetPosition()` / scroll-to-top from presentation `initState`; make `startSession(script)` preserve `state.confirmedWordIndex` when the same script is reused and clamp it as the STT start index; add a provider method like `jumpToPosition(index, script: script)` that clears transient STT transcript/no-progress state, updates `confirmedWordIndex`, scrolls to the target word, and syncs STT locale for that position; wrap rendered presentation words with a tap handler that calls the jump method; document the future full bookmark/chapter system in `MASTER_TODO_V5.md` while keeping this v4 task limited to lightweight tap-to-resume parity across platforms. (Windows baseline USER VERIFIED 2026-04-27)
-- [ ] **Windows Debug/Search/Resume QA**: Verify the Windows debug output window can minimize and re-expand in debug mode, `Ctrl+Shift+F` opens script search in both editor mode and present mode, present-mode search jumps to the matching word/resume point, and mic STT can be stopped and started again inside the same presentation session without resetting or failing to reinitialize. (IMPLEMENTED 2026-04-28, awaiting user verification)
-- [x] **Windows External Microphone Selection**: Add explicit support for an outer connected microphone instead of relying only on the Windows default input device. Implemented by keeping Windows on the WebView2/browser STT adapter, enumerating `navigator.mediaDevices` `audioinput` devices after mic permission, persisting `sttInputDeviceId` + `sttInputDeviceLabel`, adding a presenter settings dropdown with System Default fallback, forwarding live mic changes through `TeleprompterNotifier.setSttInputDevice(...)`, and reopening the browser audio capture stream without resetting `confirmedWordIndex`. Web Speech routing remains Chromium-owned, so the implementation logs and falls back to Windows system default if the saved USB/Bluetooth/interface device is unavailable. (REQUESTED 2026-04-28; IMPLEMENTED 2026-04-28)
+- [U] **Windows Debug/Search/Resume QA**: Verify the Windows debug output window can minimize and re-expand in debug mode, `Ctrl+Shift+F` opens script search in both editor mode and present mode, present-mode search jumps to the matching word/resume point, and mic STT can be stopped and started again inside the same presentation session without resetting or failing to reinitialize. (IMPLEMENTED 2026-04-28; USER VERIFIED in final Windows v4.1.12 testing 2026-04-29)
+- [U] **Windows External Microphone Selection**: Add explicit support for an outer connected microphone instead of relying only on the Windows default input device. Implemented by keeping Windows on the WebView2/browser STT adapter, enumerating `navigator.mediaDevices` `audioinput` devices after mic permission, persisting `sttInputDeviceId` + `sttInputDeviceLabel`, adding a presenter settings dropdown with System Default fallback, forwarding live mic changes through `TeleprompterNotifier.setSttInputDevice(...)`, and reopening the browser audio capture stream without resetting `confirmedWordIndex`. Web Speech routing remains Chromium-owned, so the implementation logs and falls back to Windows system default if the saved USB/Bluetooth/interface device is unavailable. (REQUESTED 2026-04-28; IMPLEMENTED 2026-04-28; USER VERIFIED 2026-04-29)
 
 ---
 *Last Updated: 2026-04-18 (v4.1.4 4-Way Splitting / Windows MVP Initialization)*
@@ -243,3 +243,91 @@
 ## 🍎 iOS v4.1.6 — Selection Delete Parity (2026-04-26)
 - [P] **BUG: Select All Delete Not Working (iOS)**: Same root cause as Android — native selection from double-tap persisted, so backspace only deleted the tapped word. Fixed: `_selectAllBlocks()` now sets full-block native selection + `_isCommandExecuting` guard; cascade delete via listener; `_deleteGlobalSelection()` clears all blocks. (PENDING USER VERIFICATION)
 - [P] **BUG: Overlay Handles Stale After Style (iOS)**: `_resyncGlobalSelection()` now schedules `overlay.selectAll()` in a postFrameCallback to recalculate handle positions after text-length changes. (PENDING USER VERIFICATION)
+---
+
+## Windows v4.1.12 FINAL SEALED (2026-04-29)
+
+- [U] **Windows v4 Complete**: Windows v4 is sealed at `4.1.12+12` with
+  workflow title `Build Windows EXE (v4.1.12)`. Final backup:
+  `backups/final_windows_v4/20260429_103357`.
+- [U] **STT Resume Contract**: Stop/start preserves the current reading point;
+  only Restart resets to word `0`.
+- [U] **Bookmarks Baseline**: Editor and present mode share bookmarks, show
+  visible markers, support multiple anchors, expose add/remove controls, and
+  allow previous/next bookmark jumps while STT is active.
+- [U] **Search Baseline**: Editor and presenter search jump by visible text, not
+  hidden markup offsets.
+- [U] **Presenter Scroll Baseline**: Active STT controls row-progress follow;
+  stopped STT allows browsing and resume-point selection; bookmark/search jumps
+  are immediate.
+- [U] **External Mic Baseline**: Windows presenter settings enumerate WebView2
+  audio input devices, persist the selected device id/label, and fall back to
+  system default.
+- [U] **Typography/Spacing Baseline**: Editor and presenter share one font-size
+  metadata value, and spacing ranges persist consistently between modes.
+- [U] **Structure/Export Baseline**: Symbols, quotes, punctuation, and
+  intentional blank lines are preserved; RTF/DOCX export converts internal
+  markup to document styling instead of leaking app-private tags.
+
+### Cross-Platform V4 Migration Targets From Windows
+
+- [ ] **Port Windows STT resume contract** to iOS, Android, and macOS.
+- [ ] **Port Windows bookmark UX** to iOS, Android, and macOS with
+  platform-specific persistence and accessibility. Planned target MVP docs now
+  exist for each platform.
+- [ ] **Port visible-text search jump behavior** to all platforms.
+- [ ] **Port active-STT scroll lock and stopped browsing behavior** to all
+  platforms. Planned target Scrolling MVP docs now exist for each platform.
+- [ ] **Port one-font-size source-of-truth and spacing synchronization** to all
+  platforms.
+- [ ] **Port markup-safe export and symbol/blank-line preservation checks** to
+  all platforms.
+- [ ] **Define platform-specific external mic behavior** for iOS, Android, and
+  macOS. If a platform cannot select an input device in-app, document the OS
+  routing limitation in that platform's STT MVP.
+
+### Refactor Gate Before New V5 Features
+
+- [ ] **Split oversized editor/presenter files behavior-preservingly** before
+  large new feature work. Current files above 1000 lines:
+  `Platform_Windows/lib/features/script/widgets/script_editor_screen.dart`
+  (2885), `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.dart`
+  (2528), `Platform_iOS/.../script_editor_screen.dart` (2135),
+  `Platform_iOS/.../teleprompter_screen.dart` (1356),
+  `Platform_Android/.../script_editor_screen.dart` (1842),
+  `Platform_Android/.../teleprompter_screen.dart` (1341),
+  `Platform_Android/.../v3.9.5.1_script_editor_screen.dart` (1290),
+  `Platform_macOS/.../script_editor_screen.dart` (2011), and
+  `Platform_macOS/.../teleprompter_screen.dart` (1338). Split by MVP ownership
+  only after reading the relevant platform docs; do not mix splitting with new
+  behavior.
+
+### Windows v4.1.12 FINAL USER VERIFIED - Handoff to iOS (2026-04-29)
+
+- [U] **Windows v4 Final User Verification**: User confirmed Windows version 4
+  is complete after testing the final `v4.1.12` artifact. Latest verified
+  Windows behavior commit: `160d137` (`Prioritize nearby Windows STT phrases`).
+  Workflow `Build Windows EXE (v4.1.12)` run `25110648732` passed.
+- [U] **Windows File Split Gate Complete**: Windows has already completed the
+  behavior-preserving V5-prep screen split. Every Dart file under
+  `Platform_Windows/lib` is below 800 lines. Largest current files:
+  `teleprompter_screen.build.dart` (720), `script_provider.dart` (717),
+  `settings_provider.dart` (700), `word_aligner.dart` (660),
+  `teleprompter_provider.dart` (641), and `script_editor_screen.dart` (579).
+  The older pre-split 2885/2528 line counts above are preserved as historical
+  context only and no longer describe Windows.
+- [U] **Windows Final STT Skip Contract**: Default STT may recover locally up to
+  5 words for missed recognizer output. Longer skip behavior is opt-in through
+  `Allow visible text skip`, must be bounded to the rendered viewport, and must
+  remain fallback-only after nearby 3+ word phrase priority fails.
+- [U] **Windows Final Migration Source**: The Windows baseline to port to iOS,
+  Android, and macOS includes STT pause/resume, direct Restart reset,
+  cross-mode bookmarks, visible-text search, active-STT bookmark jumps,
+  active-STT scroll lock, stopped browsing/resume selection, one font-size
+  metadata source, synchronized spacing, external mic selection/fallback,
+  preserved symbols/blank lines, and markup-safe export.
+- [ ] **Next Active Platform - iOS**: Continue development in
+  `Platform_iOS/` only. Before implementation, read the matching
+  `_agent/mvp/Platform_iOS/*.md` contracts and port the Windows behavior
+  surgically without copying Windows-specific WebView2/STT implementation
+  details blindly.

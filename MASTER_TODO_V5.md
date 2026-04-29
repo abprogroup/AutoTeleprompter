@@ -248,3 +248,39 @@
 - [ ] **Present-Mode Script Editing Button**: Add a presenter control that opens
   editing at the current bookmark/reading position. It must stop STT first,
   preserve the resume point, and return to presenter without resetting.
+
+## V5/iOS Handoff From Final Windows v4.1.12 (Finalized 2026-04-29)
+
+- [x] **Windows v4 Source Baseline Locked**: Windows v4.1.12 is user verified
+  and ready as the migration source for iOS and future V5 work. Latest verified
+  behavior commit is `160d137`; Windows workflow run `25110648732` passed.
+- [x] **Windows Maintainability Gate Passed**: All Dart files under
+  `Platform_Windows/lib` are below 800 lines after the behavior-preserving
+  split. Future Windows V5 work must keep edits in the smallest owning part
+  file and update the matching MVP document in the same change.
+- [ ] **iOS Large File Split Gate**: Before adding large iOS features, split
+  iOS editor/presenter screens by MVP ownership using the Windows Dart `part`
+  pattern only if it preserves private state and behavior. This is a refactor
+  gate, not a feature task.
+- [ ] **iOS STT Resume + Visible Skip Migration**: Port the final Windows STT
+  behavior to iOS with platform-appropriate Apple STT implementation:
+  stop/start preserves position, default local recovery allows up to 5 missed
+  words, longer skip requires an opt-in visible-viewport setting, and visible
+  skipping remains fallback-only after nearby 3+ word phrase priority.
+- [ ] **iOS Presenter Viewport Contract**: Presenter must publish the rendered
+  visible word window for skip decisions, lock manual scroll while STT is
+  active, allow stopped browsing/resume selection, and keep bookmark/search
+  direct jumps immediate.
+- [ ] **iOS Bookmarks/Search Migration**: Port Windows cross-mode bookmarks and
+  visible-text search: multiple anchors, visible markers, explicit add/remove
+  controls, active-STT previous/next bookmark jumps, editor/presenter sync, and
+  raw-markup offset mapping only after visible-text matching.
+- [ ] **iOS Typography/Export Migration**: Enforce one font-size metadata value
+  across editor, presenter, style tags, settings, and export; keep any
+  presenter visual scale display-only; sync spacing ranges; preserve symbols,
+  quotes, punctuation, and blank lines; prevent app-private markup from leaking
+  into RTF/DOCX/Pages/plain exports.
+- [ ] **Cross-Platform External Mic Policy**: Windows supports WebView2 audio
+  input enumeration with system-default fallback. For iOS, Android, and macOS,
+  document whether the platform supports in-app input device selection or only
+  OS-level routing before implementation.

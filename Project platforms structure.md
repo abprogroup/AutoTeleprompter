@@ -116,3 +116,52 @@ AutoTeleprompter/                        ← project root
 | Android | `flutter build apk` or GitHub Actions | `.apk` |
 | macOS | `flutter build macos` on a Mac | `.app` |
 | Windows | `flutter build windows` on Windows | `.exe` |
+---
+
+## Current Platform Separation Note (Added 2026-04-29)
+
+This document contains older shared-codebase language. The active repository
+protocol is the root `README.md`, `AI_PROTOCOL.md`, and `_agent/mvp/README.md`:
+each `Platform_*` folder is an isolated Flutter project, and platform changes
+must stay inside the active platform unless the user explicitly requests a port.
+
+Windows v4 is sealed at `4.1.12+12`. Its behavior is now the migration source
+for the remaining platforms:
+
+- STT stop/start resumes from current position; only Restart resets to the
+  beginning.
+- Bookmarks sync between editor and presenter and work while STT is active.
+- Search jumps to visible text locations, not hidden markup offsets.
+- Active STT controls presenter scrolling; stopped STT allows browsing and
+  resume point selection.
+- One font-size metadata value is shared across editor, presenter, style tags,
+  and export.
+- Spacing controls, blank-line preservation, symbol preservation, external mic
+  handling, debug UI, and markup-safe export are now Windows baseline behavior.
+
+Refactor gate before V5 expansion: every platform has editor/presenter screens
+above the preferred 1000-line limit. Split them only as behavior-preserving,
+platform-local refactors after reading the relevant MVP docs.
+
+## Windows v4 Final Handoff Update (Added 2026-04-29)
+
+Windows v4.1.12 is user verified and complete. The active Windows baseline is
+commit `160d137`, with successful workflow run `25110648732`.
+
+Windows has already completed the behavior-preserving editor/presenter split
+that the earlier note described as future work. Every Dart file under
+`Platform_Windows/lib` is below 800 lines. The remaining split/refactor gate now
+applies to iOS, Android, and macOS before major V5 feature work.
+
+The Windows behavior to migrate is platform behavior, not shared source code:
+
+- STT stop/start resumes current position; Restart is the only reset.
+- Default STT local recovery allows up to 5 missed words.
+- Longer STT skips require the opt-in visible-skip setting, must remain inside
+  the rendered viewport, and must prefer nearby 3+ word phrase matches first.
+- Bookmarks, search, scroll behavior, font metadata, spacing, blank-line/symbol
+  preservation, external mic policy, and markup-safe export must each be ported
+  through the target platform's MVP docs.
+
+Next active platform is iOS. Keep all implementation inside `Platform_iOS/`
+unless the user explicitly requests a cross-platform port.

@@ -337,15 +337,15 @@ class WordAligner {
       return AlignmentResult(lastConfirmedIndex, 0.0, 'AT_END');
     }
 
-    // Default is no skip: only align from the next expected word, while still
-    // allowing one STT result to confirm several consecutive spoken words.
-    // When visible skipping is enabled, the provider caps this at the last
-    // visible word in the presentation viewport.
+    // Default allows small local recovery for missed STT words. Larger
+    // paragraph/section skips remain opt-in and viewport-bound.
     final visibleMaxSkipTargetIndex = maxSkipTargetIndex;
     final visibleSkipEnabled = visibleMaxSkipTargetIndex != null;
     final strictEnd = searchStart + 1;
+    final defaultLocalRecoveryEnd =
+        (searchStart + _maxSingleJump).clamp(strictEnd, script.length);
     final allowedEnd = visibleMaxSkipTargetIndex == null
-        ? strictEnd
+        ? defaultLocalRecoveryEnd
         : (visibleMaxSkipTargetIndex + 1).clamp(strictEnd, script.length);
     final scanEnd =
         visibleSkipEnabled ? allowedEnd : searchStart + _searchWindowSize;

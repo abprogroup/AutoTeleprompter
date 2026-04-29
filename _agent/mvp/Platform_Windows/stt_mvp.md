@@ -245,8 +245,8 @@ owns how confirmed indices are rendered after STT produces results.
 
 | State | Contract |
 |-------|----------|
-| Default | `AppSettings.sttVisibleSkipEnabled` is false. STT alignment must not jump to later script text just because the later phrase was spoken. |
-| Strict progress | With visible skipping disabled, `WordAligner.align(...)` may only align from the next expected speakable word, while still allowing a single STT result to confirm several consecutive words that were actually read in order. |
+| Default | `AppSettings.sttVisibleSkipEnabled` is false. STT alignment may recover locally up to 5 words for missed recognizer output, but must not jump to a later paragraph/section just because that phrase was spoken. |
+| Strict progress | With visible skipping disabled, `WordAligner.align(...)` may scan only the next local 5-word recovery window. This preserves normal teleprompter flow when STT misses one or two words. |
 | Visible skip enabled | When enabled, the presenter supplies the current rendered visible word window. STT may scan the full visible viewport, not just the old 1-2 row / 30-word safety window. |
 | Safety cap | The visible window is an upper bound, not permission for unrestricted jumps. Single-word matches stay near-range only; longer visible jumps require multi-word sequence confirmation and aligner confidence checks. |
 | Display-only tokens | Newlines, punctuation-only markers, and unspeakable display symbols must not expand the skip window or become skip targets. |

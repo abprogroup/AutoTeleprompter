@@ -238,6 +238,11 @@ earlier Windows MVP file and remain part of the engine contract:
     Safety comes from the rendered viewport bound plus multi-word confirmation,
     not from a fixed distance limit.
 
+31. **Local STT recovery is always allowed**: Even when visible skipping is off,
+    the aligner may recover within the next 5-word local window so missed STT
+    words do not stall the presenter. This is not considered paragraph skipping;
+    longer jumps still require the visible-skip setting.
+
 ---
 
 ## Forbidden Changes

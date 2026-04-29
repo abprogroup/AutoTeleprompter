@@ -329,3 +329,15 @@
   jumps require multi-word confirmation and still cannot target offscreen text.
 - **MVP Documentation Result**: Updated Windows STT, Teleprompter Engine, and
   Scrolling MVP docs to define visible skip as viewport-bounded, not row-bounded.
+
+### 2026-04-29 - Windows Default STT Local Recovery
+
+- **Session Goal**: Preserve normal STT flow when the recognizer misses one or
+  two words, without enabling paragraph/section skipping by default.
+- **STT Result**: With `Allow visible text skip` off, the aligner may now scan
+  only the next 5-word local recovery window. With the setting on, it still uses
+  the full visible viewport for confirmed multi-word jumps.
+- **Safety Result**: Local 5-word recovery is default behavior; long visible
+  paragraph jumps remain opt-in and viewport-bounded.
+- **MVP Documentation Result**: Updated Windows STT and Teleprompter Engine MVP
+  docs to separate default local recovery from explicit visible skipping.

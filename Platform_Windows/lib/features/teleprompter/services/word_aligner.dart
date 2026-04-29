@@ -302,6 +302,7 @@ class WordAligner {
     required List<ScriptWord> script,
     required String transcript,
     required int lastConfirmedIndex,
+    int? maxSkipTargetIndex,
   }) {
     if (script.isEmpty || transcript.trim().isEmpty) {
       return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY');
@@ -336,8 +337,16 @@ class WordAligner {
       return AlignmentResult(lastConfirmedIndex, 0.0, 'AT_END');
     }
 
-    // Use a wider window to look past clusters of numbers/dates and allow jumping
-    final windowEnd = (searchStart + _searchWindowSize).clamp(0, script.length);
+    // Default is no skip: only align from the next expected word, while still
+    // allowing one STT result to confirm several consecutive spoken words.
+    // When visible skipping is enabled, the provider caps this at the last
+    // visible word in the presentation viewport.
+    final strictEnd = searchStart + 1;
+    final allowedEnd = maxSkipTargetIndex == null
+        ? strictEnd
+        : (maxSkipTargetIndex + 1).clamp(strictEnd, script.length);
+    final windowEnd =
+        (searchStart + _searchWindowSize).clamp(0, allowedEnd).toInt();
 
     // ── STEP 1: NEXT-WORD PRIORITY ──────────────────────────────────────────
     // The most common case: user said the very next word. Check it first with

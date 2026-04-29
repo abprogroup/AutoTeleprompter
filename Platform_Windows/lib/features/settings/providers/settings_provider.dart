@@ -41,6 +41,8 @@ class AppSettings {
       sttInputDeviceId; // Windows: WebView2 audioinput deviceId, empty = system default
   final String
       sttInputDeviceLabel; // Windows: display label for the selected mic
+  final bool
+      sttVisibleSkipEnabled; // Windows: allow STT to skip only to visible words
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -77,6 +79,7 @@ class AppSettings {
     this.readFadeIntensity = 1.0,
     this.sttInputDeviceId = '',
     this.sttInputDeviceLabel = 'System default microphone',
+    this.sttVisibleSkipEnabled = false,
   });
 
   AppSettings copyWith({
@@ -114,6 +117,7 @@ class AppSettings {
     double? readFadeIntensity,
     String? sttInputDeviceId,
     String? sttInputDeviceLabel,
+    bool? sttVisibleSkipEnabled,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -153,6 +157,8 @@ class AppSettings {
       readFadeIntensity: readFadeIntensity ?? this.readFadeIntensity,
       sttInputDeviceId: sttInputDeviceId ?? this.sttInputDeviceId,
       sttInputDeviceLabel: sttInputDeviceLabel ?? this.sttInputDeviceLabel,
+      sttVisibleSkipEnabled:
+          sttVisibleSkipEnabled ?? this.sttVisibleSkipEnabled,
     );
   }
 }
@@ -191,6 +197,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _readFadeIntensityKey = 'readFadeIntensity';
   static const _sttInputDeviceIdKey = 'sttInputDeviceId';
   static const _sttInputDeviceLabelKey = 'sttInputDeviceLabel';
+  static const _sttVisibleSkipEnabledKey = 'sttVisibleSkipEnabled';
 
   @override
   AppSettings build() {
@@ -292,6 +299,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       sttInputDeviceId: prefs.getString(_sttInputDeviceIdKey) ?? '',
       sttInputDeviceLabel: prefs.getString(_sttInputDeviceLabelKey) ??
           'System default microphone',
+      sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
     );
   }
 
@@ -747,6 +755,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sttInputDeviceIdKey, deviceId);
     await prefs.setString(_sttInputDeviceLabelKey, normalizedLabel);
+  }
+
+  Future<void> setSttVisibleSkipEnabled(bool enabled) async {
+    state = state.copyWith(sttVisibleSkipEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sttVisibleSkipEnabledKey, enabled);
   }
 }
 

@@ -37,6 +37,8 @@ and smooth motion rules for the presentation viewport.
 | `_smoothScrollTick(Timer timer)` | Smooth scroll timer only |
 | `_handleStoppedBrowsingScroll(ScrollNotification)` | Presentation `NotificationListener` |
 | `_syncResumePointToReadingLine()` | Stopped-session scroll end only |
+| `_syncVisibleWordWindow()` | Presenter viewport reporting for visible-only STT skip |
+| `_scheduleVisibleWordWindowSync()` | Post-frame visible-window refresh after layout/build |
 | `TeleprompterNotifier.jumpToPosition(int index, {Script? script})` | Search, bookmark, word tap, stopped scroll sync |
 | `AppSettings.scrollLead` | Reading-line target |
 | `AppSettings.scrollMode` | Auto/manual scroll branch |
@@ -81,6 +83,12 @@ Anything not listed here is private implementation detail.
    explicit resume sync.
 8. **Reading line remains the anchor**: Scroll calculations must continue to use
    `scrollLead` as the viewport anchor.
+9. **Visible window is render-derived**: The skip window published to STT must
+   come from actual rendered word boxes that overlap the presenter viewport, not
+   from estimated line counts or font-size guesses.
+10. **Visible skip does not change scroll ownership**: Publishing the visible
+   window is informational. It must not move the scroll controller, mutate the
+   transcript, or reset the provider index.
 
 ---
 
@@ -97,6 +105,8 @@ Anything not listed here is private implementation detail.
   rhythm and visual structure.
 - Do not soft-scroll present-mode previous/next bookmark jumps. Bookmark
   navigation is a direct chapter/anchor jump, not active-STT follow.
+- Do not calculate the STT skip window from raw indices alone. The window must
+  be based on words the presenter is actually showing.
 
 ---
 
@@ -133,3 +143,5 @@ but must not move transcript or recognizer lifecycle state into the widget.
 - Blank-line markers affect scroll rhythm and must keep real height.
 - Future refactors must keep scroll ownership separated from STT recognizer
   lifecycle state.
+- Visible-only skipping depends on the scrolling MVP publishing the current
+  rendered viewport to STT; it remains disabled unless the user turns it on.

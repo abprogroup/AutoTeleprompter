@@ -10,7 +10,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         _wordKeys.add(GlobalKey());
       }
       unawaited(_loadBookmarksForScript(script));
-      _scheduleVisibleWordWindowSync();
     }
 
     // Auto-scroll on speech recognition

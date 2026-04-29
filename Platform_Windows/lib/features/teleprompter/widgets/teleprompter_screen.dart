@@ -70,8 +70,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
   List<ScriptBookmark> _bookmarks = const [];
-  bool _visibleWindowSyncScheduled = false;
-  DateTime? _lastVisibleWindowSync;
 
   @override
   void initState() {

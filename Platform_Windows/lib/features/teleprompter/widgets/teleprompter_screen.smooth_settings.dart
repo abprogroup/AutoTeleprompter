@@ -25,7 +25,6 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
     final next = current + step;
     _scrollController
         .jumpTo(next.clamp(0.0, _scrollController.position.maxScrollExtent));
-    _syncVisibleWordWindow();
   }
 
   void _showSettings() {

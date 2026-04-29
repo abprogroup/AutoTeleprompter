@@ -1973,9 +1973,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       );
     }
     _isCommandExecuting = false;
-    setState(() {
-      _currentTitle = 'PASTED: ${blocks!.length} blocks';
-    });
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
   }
@@ -2004,9 +2001,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     _blockClipboardTimer?.cancel();
     _blockClipboardTimer = Timer(const Duration(seconds: 60), () => _blockClipboard = null);
     _isCommandExecuting = false;
-    setState(() {
-      _currentTitle = 'SEL-ALL: ${_blockClipboard!.length} blocks captured';
-    });
+    setState(() {});
     // Refresh after setState so TextFields repaint with new flags.
     for (final c in _controllers) {
       c.refresh();

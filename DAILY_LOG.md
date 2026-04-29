@@ -397,11 +397,14 @@
   through WebView2 audio input enumeration with system-default fallback. Other
   platforms must document whether they support in-app device selection or only
   OS routing.
-- **Documentation Result**: Root README, platform READMEs, MVP root README,
-  V4/V5 TODOs, platform-structure notes, and Windows release README now carry
-  the final Windows v4 migration capsule.
+- **Documentation Result**: Root README, MVP root README, V4/V5 TODOs,
+  platform-structure notes, and Windows release README carry the final Windows
+  v4 migration capsule. Correction: platform-folder README files are
+  workflow-sensitive and should not be used for cross-platform handoff notes.
+  They were removed from git tracking in follow-up commit `5b7dd28`.
 - **Next Platform**: iOS becomes the next active development platform. Before
   touching iOS code, read `_agent/mvp/Platform_iOS/*.md`, especially STT,
   Teleprompter Engine, Script Editor, Bookmarks, Scrolling, Settings, File I/O,
   Selection, History, and Styling Engine. Port behavior surgically; do not copy
   Windows implementation details blindly.
+

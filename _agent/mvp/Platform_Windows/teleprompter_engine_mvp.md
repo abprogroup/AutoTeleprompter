@@ -243,6 +243,12 @@ earlier Windows MVP file and remain part of the engine contract:
     words do not stall the presenter. This is not considered paragraph skipping;
     longer jumps still require the visible-skip setting.
 
+32. **Visible skip is fallback-only**: When visible skipping is enabled, the
+    aligner must still prefer a strong nearby phrase match before jumping to a
+    farther visible phrase. Similar text later in the viewport, such as another
+    "at the well" phrase, must not steal focus from the current local sentence
+    when the spoken words also match nearby.
+
 ---
 
 ## Forbidden Changes
@@ -293,6 +299,8 @@ earlier Windows MVP file and remain part of the engine contract:
   state.
 - Do not allow STT alignment to jump to offscreen text. Visible skipping is
   opt-in, and its maximum target must come from the presenter viewport.
+- Do not let visible skipping bypass nearby phrase priority. Full-viewport
+  skipping is allowed only after the local phrase-priority pass fails.
 
 ---
 

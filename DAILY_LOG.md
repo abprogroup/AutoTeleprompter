@@ -341,3 +341,17 @@
   paragraph jumps remain opt-in and viewport-bounded.
 - **MVP Documentation Result**: Updated Windows STT and Teleprompter Engine MVP
   docs to separate default local recovery from explicit visible skipping.
+
+### 2026-04-29 - Windows Visible Skip Nearby Phrase Priority
+
+- **Session Goal**: Prevent visible-skip mode from jumping to farther similar
+  text when the spoken phrase also matches the current local sentence.
+- **STT Result**: Added a nearby 3+ word phrase-priority pass before the
+  full-viewport visible-skip fallback. Strong local phrases such as "Jewish man
+  at a well" now win before the aligner considers later visible text such as
+  "all at the well."
+- **Safety Result**: Visible skip remains available for true paragraph jumps,
+  but only after the nearby phrase-priority pass fails. Default 5-word local
+  recovery remains unchanged.
+- **MVP Documentation Result**: Updated Windows STT and Teleprompter Engine MVP
+  docs to define visible skip as fallback-only after nearby phrase priority.

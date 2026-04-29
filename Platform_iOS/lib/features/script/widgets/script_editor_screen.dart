@@ -1973,6 +1973,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       );
     }
     _isCommandExecuting = false;
+    setState(() {});
+    for (final c in _controllers) { c.refresh(); }
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
   }
@@ -1996,10 +1998,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
     // Pre-capture raw markup NOW — before any iOS events can clear _isGlobalSelection.
-    // Cut reads this regardless of flag state at the time it fires.
-    _blockClipboard = _controllers.map((c) => c.text).toList();
-    _blockClipboardTimer?.cancel();
-    _blockClipboardTimer = Timer(const Duration(seconds: 60), () => _blockClipboard = null);
+    // Never downgrade to fewer entries: a spurious second call (via escalation after
+    // _isGlobalSelection is cleared) could have fewer controllers and would overwrite
+    // the correct full-script clipboard with a single-block version.
+    final _snap = _controllers.map((c) => c.text).toList();
+    if (_blockClipboard == null || _snap.length >= _blockClipboard!.length) {
+      _blockClipboard = _snap;
+      _blockClipboardTimer?.cancel();
+      _blockClipboardTimer = Timer(const Duration(seconds: 60), () => _blockClipboard = null);
+    }
     _isCommandExecuting = false;
     setState(() {});
     // Refresh after setState so TextFields repaint with new flags.

@@ -144,9 +144,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     });
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  void _didChangeDependenciesScriptEditorBody() {
     if (!_isInit) {
       final script = ref.read(scriptProvider);
       String initialText = '';

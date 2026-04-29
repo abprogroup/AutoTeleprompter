@@ -150,6 +150,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _didChangeDependenciesScriptEditorBody();
+  }
+
   MarkupController? get _activeController {
     for (var i = 0; i < _focusNodes.length; i++)
       if (_focusNodes[i].hasFocus) return _controllers[i];

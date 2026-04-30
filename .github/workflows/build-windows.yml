@@ -1,4 +1,4 @@
-name: Build Windows EXE (v4.1.12)
+name: Build Windows EXE (v5.0.0)
 
 on:
   push:

@@ -732,7 +732,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     final span = controller.buildTextSpan(
       context: context ?? this.context,
       style: style,
-      withLiveStyling: true,
+      withComposing: false,
     );
     final painter = TextPainter(
       text: span,

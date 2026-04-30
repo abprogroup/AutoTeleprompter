@@ -210,58 +210,99 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }
-        final isArrow = event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-            event.logicalKey == LogicalKeyboardKey.arrowRight ||
-            event.logicalKey == LogicalKeyboardKey.arrowUp ||
-            event.logicalKey == LogicalKeyboardKey.arrowDown;
-
-        if (isArrow) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
           if (_isGlobalSelection) {
             _clearGlobalSelection();
             if (_controllers.isNotEmpty) {
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                  event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                _focusNodes[0].requestFocus();
-                _controllers[0].selection =
-                    const TextSelection.collapsed(offset: 0);
-              } else {
-                final last = _controllers.length - 1;
-                _focusNodes[last].requestFocus();
-                _controllers[last].selection = TextSelection.collapsed(
-                    offset: _controllers[last].text.length);
-              }
+              _focusNodes[0].requestFocus();
+              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
             }
             return KeyEventResult.handled;
           }
-
-          final oldSel = controller.selection;
-          final key = event.logicalKey;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || !node.hasFocus) return;
-            if (controller.selection == oldSel) {
-              // The cursor hit a wall (start, end, top, or bottom of this block)
-              final idx = _controllers.indexOf(controller);
-              if (key == LogicalKeyboardKey.arrowLeft ||
-                  key == LogicalKeyboardKey.arrowUp) {
-                if (idx > 0) {
-                  _focusNodes[idx - 1].requestFocus();
-                  final prev = _controllers[idx - 1];
-                  prev.selection =
-                      TextSelection.collapsed(offset: prev.text.length);
-                  _scrollEditorBlockIntoView(idx - 1);
-                }
-              } else if (key == LogicalKeyboardKey.arrowRight ||
-                  key == LogicalKeyboardKey.arrowDown) {
-                if (idx < _controllers.length - 1) {
-                  _focusNodes[idx + 1].requestFocus();
-                  _controllers[idx + 1].selection =
-                      const TextSelection.collapsed(offset: 0);
-                  _scrollEditorBlockIntoView(idx + 1);
-                }
-              }
+          final idx = _controllers.indexOf(controller);
+          if (idx > 0) {
+            final layout = _getVerticalLayout(idx);
+            if (layout.isAtTop) {
+              final prevIdx = idx - 1;
+              final prevLayout = _getVerticalLayout(prevIdx);
+              _focusNodes[prevIdx].requestFocus();
+              _controllers[prevIdx].selection = TextSelection.collapsed(
+                offset: prevLayout.getPositionAtX(layout.currentX, fromBottom: true),
+              );
+              _scrollEditorBlockIntoView(prevIdx);
+              return KeyEventResult.handled;
             }
-          });
-          return KeyEventResult.ignored; // Let the TextField try to move first
+          }
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              final last = _controllers.length - 1;
+              _focusNodes[last].requestFocus();
+              _controllers[last].selection = TextSelection.collapsed(
+                  offset: _controllers[last].text.length);
+            }
+            return KeyEventResult.handled;
+          }
+          final idx = _controllers.indexOf(controller);
+          if (idx < _controllers.length - 1) {
+            final layout = _getVerticalLayout(idx);
+            if (layout.isAtBottom) {
+              final nextIdx = idx + 1;
+              final nextLayout = _getVerticalLayout(nextIdx);
+              _focusNodes[nextIdx].requestFocus();
+              _controllers[nextIdx].selection = TextSelection.collapsed(
+                offset: nextLayout.getPositionAtX(layout.currentX, fromBottom: false),
+              );
+              _scrollEditorBlockIntoView(nextIdx);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              _focusNodes[0].requestFocus();
+              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
+            }
+            return KeyEventResult.handled;
+          }
+          if (controller.selection.isCollapsed && controller.selection.baseOffset == 0) {
+            final idx = _controllers.indexOf(controller);
+            if (idx > 0) {
+              _focusNodes[idx - 1].requestFocus();
+              final prev = _controllers[idx - 1];
+              prev.selection = TextSelection.collapsed(offset: prev.text.length);
+              _scrollEditorBlockIntoView(idx - 1);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              final last = _controllers.length - 1;
+              _focusNodes[last].requestFocus();
+              _controllers[last].selection = TextSelection.collapsed(
+                  offset: _controllers[last].text.length);
+            }
+            return KeyEventResult.handled;
+          }
+          if (controller.selection.isCollapsed && controller.selection.baseOffset == controller.text.length) {
+            final idx = _controllers.indexOf(controller);
+            if (idx < _controllers.length - 1) {
+              _focusNodes[idx + 1].requestFocus();
+              _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+              _scrollEditorBlockIntoView(idx + 1);
+              return KeyEventResult.handled;
+            }
+          }
         }
         if (event.logicalKey == LogicalKeyboardKey.backspace &&
             controller.text.isEmpty) {
@@ -655,5 +696,82 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       }
     }
     return defaultValue;
+  }
+  _VerticalLayoutInfo _getVerticalLayout(int index) {
+    final controller = _controllers[index];
+    final settings = ref.read(settingsProvider);
+    final isRtl = controller.text.isHebrew;
+
+    // 1. Determine alignment
+    TextAlign textAlign = isRtl ? TextAlign.right : TextAlign.left;
+    if (RegExp(r'\[(?:align=)?center\]').hasMatch(controller.text)) {
+      textAlign = TextAlign.center;
+    } else if (RegExp(r'\[(?:align=)?right\]').hasMatch(controller.text)) {
+      textAlign = TextAlign.right;
+    } else if (RegExp(r'\[(?:align=)?left\]').hasMatch(controller.text)) {
+      textAlign = TextAlign.left;
+    }
+
+    // 2. Build style
+    final style = TextStyle(
+      fontSize: settings.fontSize,
+      height: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+    );
+
+    // 3. Get width
+    double width = 800; // fallback
+    final context = _blockKeys[index].currentContext;
+    if (context != null) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null) width = box.size.width - 30; // Accounting for Padding(left: 30) in _EditorBlock
+    }
+
+    // 4. Paint
+    final span = controller.buildTextSpan(
+      context: context ?? this.context,
+      style: style,
+      withLiveStyling: true,
+    );
+    final painter = TextPainter(
+      text: span,
+      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+      textAlign: textAlign,
+    );
+    painter.layout(maxWidth: width > 0 ? width : 800);
+
+    return _VerticalLayoutInfo(painter, controller.selection);
+  }
+}
+
+class _VerticalLayoutInfo {
+  final TextPainter painter;
+  final TextSelection selection;
+
+  _VerticalLayoutInfo(this.painter, this.selection);
+
+  bool get isAtTop {
+    if (!selection.isCollapsed) return false;
+    final pos = TextPosition(offset: selection.baseOffset);
+    final line = painter.getLineBoundary(pos);
+    return line.start == 0;
+  }
+
+  bool get isAtBottom {
+    if (!selection.isCollapsed) return false;
+    final pos = TextPosition(offset: selection.baseOffset);
+    final line = painter.getLineBoundary(pos);
+    return line.end == painter.text!.toPlainText().length;
+  }
+
+  double get currentX {
+    final pos = TextPosition(offset: selection.baseOffset);
+    return painter.getOffsetForCaret(pos, Rect.zero).dx;
+  }
+
+  int getPositionAtX(double x, {required bool fromBottom}) {
+    final y = fromBottom ? painter.height - 1 : 0.0;
+    return painter.getPositionForOffset(Offset(x, y)).offset;
   }
 }

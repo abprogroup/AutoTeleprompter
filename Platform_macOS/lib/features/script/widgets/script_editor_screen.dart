@@ -351,7 +351,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+            event.logicalKey == LogicalKeyboardKey.arrowUp) {
           if (_isGlobalSelection) {
             _clearGlobalSelection();
             if (_controllers.isNotEmpty) {
@@ -371,7 +372,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             }
           }
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+            event.logicalKey == LogicalKeyboardKey.arrowDown) {
           if (_isGlobalSelection) {
             _clearGlobalSelection();
             if (_controllers.isNotEmpty) {

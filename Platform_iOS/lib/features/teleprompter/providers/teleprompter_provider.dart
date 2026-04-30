@@ -201,6 +201,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog('🎤 [$platform] STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
+        // Item 4: clear startup gate as soon as the first real status arrives
+        isStarting: false,
         statusMessage: '',
         hasError: false,
       ));
@@ -217,6 +219,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         statusMessage: isFatal ? error : '',
         hasError: isFatal,
         isListening: isFatal ? false : s.isListening,
+        // Item 4: a fatal error means startup failed — release scroll-lock
+        isStarting: isFatal ? false : s.isStarting,
       ));
     };
 
@@ -230,6 +234,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         missingLanguage: langName,
         hasError: true,
         isListening: false,
+        isStarting: false, // Item 4: language failure ends startup
         statusMessage: 'Speech recognition language not installed on this device',
       ));
     };
@@ -243,6 +248,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _safeSetState((s) => s.copyWith(
         hasError: true,
         isListening: false,
+        isStarting: false, // Item 4: pack-missing failure ends startup
         statusMessage: '$langName speech recognition requires an internet connection. '
             'This language is not available offline on your device. '
             'Please connect to WiFi or mobile data and try again.',
@@ -261,6 +267,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog('🤖 WHISPER STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
+        // Item 4: clear startup gate as soon as the first real status arrives
+        isStarting: false,
         statusMessage: '',
         hasError: false,
       ));
@@ -275,6 +283,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           statusMessage: error,
           hasError: true,
           isListening: false,
+          isStarting: false, // Item 4: whisper init failure ends startup
         ));
       }
     };
@@ -472,7 +481,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       script.words.isEmpty ? 0 : script.words.length - 1,
     );
     state = state.copyWith(
-        confirmedWordIndex: startIndex, isListening: false, hasError: false,
+        confirmedWordIndex: startIndex,
+        isListening: false,
+        isStarting: true, // Item 4: scroll-lock from the moment startSession runs
+        hasError: false,
         statusMessage: '', debugLogs: [], missingLanguage: null);
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
@@ -568,6 +580,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       try {
         state = state.copyWith(
           isListening: false,
+          isStarting: false, // Item 4: stop unlocks the scroll
           hasError: false,
           statusMessage: '',
         );
@@ -617,6 +630,48 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (_disposed) return;
     _visibleWordStart = startIndex;
     _visibleWordEnd = endIndex;
+  }
+
+  /// Item 4 / 5 / 7: move the reading position without restarting STT.
+  /// Used by stopped-browsing resume-point selection and active-STT bookmark
+  /// jumps. Clears transient transcript/no-progress state so the next STT
+  /// result aligns from the new position. If listening, also resyncs the
+  /// expected locale at the new index (does NOT call `_checkAndSwitchLocale`,
+  /// which is restricted to natural advances per Invariant 12).
+  void jumpToPosition(int index, {Script? script}) {
+    if (_disposed) return;
+    if (script != null) _currentScript = script;
+    final activeScript = _currentScript;
+    if (activeScript == null || activeScript.words.isEmpty) return;
+    final target = index.clamp(0, activeScript.words.length - 1);
+    _accumulatedTranscript = '';
+    _noProgressCount = 0;
+    _addDebugLog(
+        '📍 POSITION JUMP → #$target "${activeScript.words[target].raw}"');
+    try {
+      state = state.copyWith(confirmedWordIndex: target);
+    } catch (_) {
+      _disposed = true;
+      return;
+    }
+    if (!_sessionStopped && state.isListening) {
+      _syncLocaleForPosition(target, reason: 'manual jump');
+    }
+  }
+
+  /// Item 7: resync STT locale to the section that contains [index] without
+  /// disturbing the natural-advance contract owned by `_checkAndSwitchLocale`.
+  void _syncLocaleForPosition(int index, {String reason = ''}) {
+    if (_useWhisper || _disposed || _sessionStopped) return;
+    if (_sectionLocales.isEmpty) return;
+    final lookIdx = index.clamp(0, _sectionLocales.length - 1);
+    final needed = _sectionLocales[lookIdx];
+    if (needed == _activeLocale) return;
+    _addDebugLog(
+        '🌐 POSITION-SYNC: ${_activeLocale ?? "?"} → $needed (${reason.isEmpty ? "jump" : reason})');
+    _activeLocale = needed;
+    _scriptLanguageLocale = needed;
+    _sttService.setLocale(needed);
   }
 }
 

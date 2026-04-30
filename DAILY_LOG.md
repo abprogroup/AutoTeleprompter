@@ -597,3 +597,40 @@
 - **Documentation Result**: Updated iOS STT MVP doc with a new
   "iOS Opt-In Visible Viewport Skip - 2026-04-30" section, and marked the V4
   TODO item `[P]` pending user IPA verification.
+
+## 2026-04-30 - iOS Parity Items 4 & 5: Active-STT Scroll Lock + Stopped Browsing
+
+- **Session Goal**: Port Windows v4 active-STT scroll-lock, row-progress
+  smooth follow, and stopped-state browsing/resume-point selection. Bundled
+  as one local commit because both items share `_handleStoppedBrowsingScroll`,
+  `jumpToPosition`, and the resume-point sync helper.
+- **Windows Reference Checked**: Read
+  `Platform_Windows/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart`
+  (`_handleStoppedBrowsingScroll`, `_syncResumePointToReadingLine`,
+  `_visualRowProgress`, `_boxForWordIndex`, scroll-target row-progress
+  augmentation in `_scrollToWordIndex`) and
+  `teleprompter_provider.dart` (`jumpToPosition`, `_syncLocaleForPosition`,
+  `isStarting` field on the state).
+- **State Result**: Added `isStarting` to iOS `TeleprompterState`. Provider
+  sets it true in `startSession()`, clears it on first STT/Whisper status
+  callback, on `stopSession()`, and on fatal/language/pack error paths.
+- **Provider Result**: Added `jumpToPosition(int, {Script?})` and
+  `_syncLocaleForPosition(int, {String reason})`. Manual jumps clear
+  transient transcript/no-progress state and update the active locale
+  without going through `_checkAndSwitchLocale` (Invariant 12 protected).
+- **Presenter Result**: Added `_userBrowsingWhileStopped` field;
+  `_handleStoppedBrowsingScroll`, `_visualRowProgress`, `_boxForWordIndex`,
+  and `_syncResumePointToReadingLine` in the manual_scroll part. Build wires
+  a `NotificationListener<ScrollNotification>` and switches physics to
+  `NeverScrollableScrollPhysics` while STT is listening or starting.
+  `_scrollToWordIndex` now applies `rowProgress * lineAdvance` so the auto
+  scroll glides smoothly inside each row.
+- **Backup**: Surgical mirrors at
+  `backups/ios_parity_item4_2026-04-30/` covering provider, state model,
+  manual_scroll part, build part, and the host screen file.
+- **Verification**: Manual review only this session. Touch-points are
+  narrow and follow the verified Windows shapes. IPA test pending.
+- **Documentation Result**: Updated iOS STT MVP and Scrolling MVP with new
+  2026-04-30 sections describing the active-STT lock, row-progress follow,
+  and stopped browsing/resume-point pipeline. MASTER_TODO_V4 entries marked
+  `[P]` pending user IPA verification.

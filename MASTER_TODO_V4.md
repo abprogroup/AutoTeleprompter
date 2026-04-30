@@ -379,3 +379,19 @@
   when the toggle is on AND a visible window is reported. Presenter
   `_syncVisibleWordWindow` walks `_wordKeys` against the viewport, throttled
   to 150 ms, scheduled from build. Awaiting user IPA verification.
+- [P] **iOS Active-STT Scroll Lock & Row-Progress Follow**: Added
+  `TeleprompterState.isStarting` (set true at `startSession()` entry,
+  cleared on first status callback / stop / fatal error). Presenter
+  `SingleChildScrollView` uses `NeverScrollableScrollPhysics` while
+  `isListening || isStarting`. `_handleStoppedBrowsingScroll` is a no-op in
+  that window. `_scrollToWordIndex` adds `rowProgress * lineAdvance` from
+  `_visualRowProgress` for smooth row-internal glide. Awaiting user IPA
+  verification.
+- [P] **iOS Stopped Browsing & Resume-Point Selection**: Added
+  `_userBrowsingWhileStopped`, `_handleStoppedBrowsingScroll` (drag-end
+  triggers `_syncResumePointToReadingLine`), and
+  `TeleprompterNotifier.jumpToPosition(int, {Script?})` with
+  `_syncLocaleForPosition` helper that doesn't violate Invariant 12. Stop
+  is now pause-and-browse; the next mic start resumes from the synced
+  point. Restart remains the only path to word 0. Awaiting user IPA
+  verification.

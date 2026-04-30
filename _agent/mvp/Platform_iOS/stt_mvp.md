@@ -205,3 +205,48 @@ alternative.
 - Forbidden regression: do not pass `maxSkipTargetIndex` from outside the
   visible-skip path. The aligner's strict 5-word default protects the user
   from false jumps when the toggle is off.
+
+---
+
+## iOS Active-STT Scroll Lock & Row-Progress Follow - 2026-04-30
+
+- `TeleprompterState` now exposes `isStarting` (default false). The provider
+  sets it true at `startSession()` entry and clears it on the first real STT
+  status callback, on stop, and on fatal/language/pack errors. The legacy
+  private `_startingSession` guard (Invariant 7) is preserved.
+- `_handleStoppedBrowsingScroll(ScrollNotification)` short-circuits while
+  `isListening || isStarting` is true. The `SingleChildScrollView` physics
+  switches to `NeverScrollableScrollPhysics` during that window, so manual
+  drag scroll is impossible. Bookmark jumps and explicit controls still work
+  because they call `jumpToPosition`/`_scrollToWordIndex` directly, not the
+  user gesture path.
+- `_scrollToWordIndex(index)` now adds a fractional row-progress offset
+  computed by `_visualRowProgress` (uses `_boxForWordIndex` and a
+  Y-tolerance walk). The auto-scroll glides smoothly across each row instead
+  of snapping at line boundaries.
+- Forbidden regression: do not gate the scroll lock on `isListening` alone —
+  startup and recovery windows must also lock to prevent the active reading
+  position from drifting off-screen.
+
+---
+
+## iOS Stopped Browsing & Resume-Point Selection - 2026-04-30
+
+- `_handleStoppedBrowsingScroll` flips `_userBrowsingWhileStopped` true on
+  user drag start/update events while STT is stopped, cancels in-flight
+  smooth scroll/manual-scroll timers, and on `ScrollEndNotification` calls
+  `_syncVisibleWordWindow(force: true)` and `_syncResumePointToReadingLine`.
+- `_syncResumePointToReadingLine` walks `_wordKeys` for the non-newline word
+  closest to the reading line (`scrollLead * viewportH`) and routes it
+  through `TeleprompterNotifier.jumpToPosition(index, script: script)`.
+- `jumpToPosition` clears `_accumulatedTranscript` and `_noProgressCount`,
+  updates `state.confirmedWordIndex`, and — only when listening — calls
+  `_syncLocaleForPosition` (a non-Invariant-12 helper that swaps
+  `_activeLocale` to match the section at the new index without going
+  through `_checkAndSwitchLocale`).
+- Restart remains the only owner of `confirmedWordIndex = 0`. Stop is now
+  pause-and-browse: position state survives, the next mic start resumes
+  from the synced point.
+- Forbidden regression: do not call `_checkAndSwitchLocale` from any manual
+  jump path — Invariant 12 reserves it for natural advances inside
+  `_handleSttResult`.

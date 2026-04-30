@@ -238,10 +238,19 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
           child: Stack(
             children: [
               // Scrollable script
-              SingleChildScrollView(
-                controller: _scrollController,
-                physics: const ClampingScrollPhysics(),
-                child: wordList,
+              // Item 4: while STT is listening or starting, the active reading
+              // position must stay on screen — drag-scroll is disabled. While
+              // STT is stopped, the user may scroll freely; on scroll-end the
+              // resume point snaps to the reading line (Item 5).
+              NotificationListener<ScrollNotification>(
+                onNotification: _handleStoppedBrowsingScroll,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: (tState.isListening || tState.isStarting)
+                      ? const NeverScrollableScrollPhysics()
+                      : const ClampingScrollPhysics(),
+                  child: wordList,
+                ),
               ),
               // Reading fade overlay: gradient that dims already-read text above the reading line
               if (settings.readFadeIntensity > 0)

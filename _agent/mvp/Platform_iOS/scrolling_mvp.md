@@ -91,3 +91,26 @@ target:
   word window; hidden/offscreen text must not become a speech skip target.
 - The visible-skip window is the viewport bound, but matching must still prefer
   nearby 3+ word phrase matches before farther similar text.
+
+---
+
+## iOS Active-STT Scroll Lock + Row-Progress Follow + Stopped Browsing - 2026-04-30
+
+- The presenter `SingleChildScrollView` flips its physics to
+  `NeverScrollableScrollPhysics` whenever `tState.isListening || isStarting`.
+  The wrapping `NotificationListener` calls `_handleStoppedBrowsingScroll`,
+  which is a no-op during that window. Result: the active reading position
+  never leaves the screen while STT is live or starting.
+- `_scrollToWordIndex(index)` adds `rowProgress * lineAdvance` to the scroll
+  target. `_visualRowProgress` computes the fractional position of `index`
+  inside its visual row using a Y-tolerance walk over `_wordKeys`. Result:
+  the auto-scroll glides smoothly across each row, no row-end snapping.
+- Stopped state: drag-scroll is allowed. On `ScrollEndNotification`, the
+  presenter syncs the visible word window (`_syncVisibleWordWindow`) and the
+  resume point (`_syncResumePointToReadingLine`), which routes the chosen
+  word index through `jumpToPosition` so `state.confirmedWordIndex` reflects
+  where the user landed. Mic start then resumes from there.
+- Restart remains the only owner of `confirmedWordIndex = 0`.
+- Forbidden regression: do not allow drag-scroll while `isStarting` is true.
+  Startup is part of the active-STT window — releasing the lock too early
+  lets the reading position drift before the first STT status arrives.

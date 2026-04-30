@@ -156,7 +156,16 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
     final wordPos =
         box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
-    final rawTarget = _scrollController.offset + wordPos.dy - targetY;
+    // Item 4: row-progress follow. Add a fractional advance based on how far
+    // through its row the focused word is, so the scroll glide stays smooth
+    // and continuous instead of snapping at row ends.
+    final rowProgress = _visualRowProgress(index, box);
+    final lineAdvance =
+        (box.size.height * settings.lineSpacing).clamp(0.0, screenH * 0.22);
+    final rawTarget = _scrollController.offset +
+        wordPos.dy -
+        targetY +
+        rowProgress * lineAdvance;
     _scrollTarget =
         rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
 
@@ -167,6 +176,107 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       _smoothScrollTimer =
           Timer.periodic(const Duration(milliseconds: 16), _smoothScrollTick);
     }
+  }
+
+  /// Item 4: how far through its current row the focused word is (0.0 .. 1.0).
+  /// Walks neighbours by Y-tolerance to find row start and end, returns the
+  /// position of `index` within that row.
+  double _visualRowProgress(int index, RenderBox currentBox) {
+    if (index < 0 || index >= _wordKeys.length) return 0.0;
+    final currentDy = currentBox.localToGlobal(Offset.zero).dy;
+    final tolerance = (currentBox.size.height * 0.7).clamp(10.0, 90.0);
+
+    var rowStart = index;
+    for (var i = index - 1; i >= 0; i--) {
+      final box = _boxForWordIndex(i);
+      if (box == null) break;
+      final dy = box.localToGlobal(Offset.zero).dy;
+      if ((dy - currentDy).abs() > tolerance) break;
+      rowStart = i;
+    }
+
+    var rowEnd = index;
+    for (var i = index + 1; i < _wordKeys.length; i++) {
+      final box = _boxForWordIndex(i);
+      if (box == null) break;
+      final dy = box.localToGlobal(Offset.zero).dy;
+      if ((dy - currentDy).abs() > tolerance) break;
+      rowEnd = i;
+    }
+
+    final span = rowEnd - rowStart;
+    if (span <= 0) return 0.0;
+    return ((index - rowStart) / span).clamp(0.0, 1.0).toDouble();
+  }
+
+  RenderBox? _boxForWordIndex(int index) {
+    if (index < 0 || index >= _wordKeys.length) return null;
+    final ctx = _wordKeys[index].currentContext;
+    if (ctx == null) return null;
+    return ctx.findRenderObject() as RenderBox?;
+  }
+
+  /// Item 4 (scroll lock) + Item 5 (stopped browsing/resume-point sync).
+  /// While STT is listening or starting, drop user drag-scroll attempts so
+  /// the active reading position stays on screen. While STT is stopped, the
+  /// user may drag freely; on scroll-end we snap the resume point to the
+  /// reading line so the next mic start picks up there.
+  bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
+    final sttState = ref.read(teleprompterProvider);
+    if (sttState.isListening || sttState.isStarting) {
+      _userBrowsingWhileStopped = false;
+      return false;
+    }
+    final isUserScrollStart = notification is ScrollStartNotification &&
+        notification.dragDetails != null;
+    final isUserScrollUpdate = notification is UserScrollNotification &&
+        notification.direction != ScrollDirection.idle;
+    if (isUserScrollStart || isUserScrollUpdate) {
+      _userBrowsingWhileStopped = true;
+      _smoothScrollTimer?.cancel();
+      _smoothScrollActive = false;
+      _stopManualScroll();
+    }
+    if (notification is ScrollEndNotification && _userBrowsingWhileStopped) {
+      _userBrowsingWhileStopped = false;
+      _syncVisibleWordWindow(force: true);
+      _syncResumePointToReadingLine();
+    }
+    return false;
+  }
+
+  /// Item 5: pick the word nearest the reading line and store it as the
+  /// resume point so the next `startSession()` continues from there.
+  void _syncResumePointToReadingLine() {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty || !_scrollController.hasClients) {
+      return;
+    }
+    final settings = ref.read(settingsProvider);
+    final targetScreenY =
+        MediaQuery.of(context).size.height * settings.scrollLead;
+
+    int? bestIndex;
+    double bestDist = double.infinity;
+    for (var i = 0; i < _wordKeys.length && i < script.words.length; i++) {
+      if (script.words[i].isNewline) continue;
+      final ctx = _wordKeys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final posY = box.localToGlobal(Offset.zero).dy;
+      final dist = (posY - targetScreenY).abs();
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIndex = i;
+      }
+    }
+    final targetIndex = bestIndex;
+    if (targetIndex == null) return;
+    setState(() => _manualWordIndex = targetIndex);
+    ref
+        .read(teleprompterProvider.notifier)
+        .jumpToPosition(targetIndex, script: script);
   }
 
   /// 60fps smooth scroll — glides toward _scrollTarget using lerp.

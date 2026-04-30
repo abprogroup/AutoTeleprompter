@@ -453,6 +453,14 @@
   search with raw-offset mapping; one font-size metadata authority; synced
   spacing ranges; symbol/quote/blank-line preservation audit; markup-safe
   export; and platform-specific external microphone policy.
+- **Windows Reference Protocol for iOS Porting**: For each Windows-parity item,
+  the next agent must inspect the verified `Platform_Windows` implementation and
+  the matching `_agent/mvp/Platform_Windows/*.md` contract before coding the iOS
+  equivalent. Windows is the behavior reference, not a copy-paste source. For
+  example, the STT skip feature must preserve the Windows rule that local
+  5-word recovery is always available, while `Allow visible text skip` is an
+  opt-in setting that defaults off and only enables larger viewport-bounded
+  fallback skips after nearby phrase priority fails.
 
 ### 2026-04-29 - iOS Multi-Block Cut/Paste Investigation Fix
 
@@ -499,4 +507,26 @@
   through the system plain-text companion. The listener now detects native
   insertion of that plain companion while `_blockClipboard` exists and
   immediately replaces it with the rich `_pasteFromGlobalClipboard()` restore.
+
+### 2026-04-30 - iOS Windows-Parity Task 1: STT Stop/Resume Without Reset
+
+- **Session Goal**: Start the Windows-to-iOS parity list with the first verified
+  Windows behavior: stopping STT pauses the recognizer without resetting the
+  script, and starting STT again resumes from the current position.
+- **Windows Reference Checked**: Compared iOS `teleprompter_provider.dart` and
+  presenter entry flow against the verified Windows provider/screen behavior.
+  Windows resumes the same `Script` from the current `confirmedWordIndex`,
+  serializes stop/start, and keeps Restart as the only word-zero reset owner.
+- **Implementation Result**: iOS `startSession()` now waits for any in-flight
+  stop, uses a `_sessionToken` to ignore stale recognizer completions, and
+  resumes the same active script from current `confirmedWordIndex`. A different
+  script still starts at `0`.
+- **Stop Result**: iOS `stopSession()` now clears transient transcript and
+  no-progress state while preserving `confirmedWordIndex`. It serializes
+  recognizer teardown through `_stopInFlight`.
+- **Presenter Result**: iOS present-mode entry no longer calls
+  `resetPosition()` or scrolls to top. It may still stop a lingering recognizer,
+  then scrolls back to any saved non-zero `confirmedWordIndex` after layout.
+- **Documentation Result**: Updated iOS STT and Teleprompter Engine MVP docs and
+  marked the V4 TODO item `[P]` pending user IPA verification.
 

@@ -119,3 +119,16 @@ fragilities above and port these final Windows product contracts:
   presenter visual enlargement is display-only and must not be written back.
 - Blank lines, quotes, standalone symbols, and punctuation are display content
   and must not be dropped during rendering or tokenization.
+
+---
+
+## iOS Stop/Resume Parity - 2026-04-30
+
+- Presentation entry no longer resets the provider position. It may stop a
+  lingering recognizer for safety, but it must preserve `confirmedWordIndex`.
+- If the provider already holds a non-zero `confirmedWordIndex`, the presenter
+  scrolls back to that word after layout instead of jumping to the top.
+- Restart remains the only present-mode control that resets the provider to word
+  `0` and scrolls to the beginning.
+- Future stopped-browsing and bookmark/search work must reuse this same
+  position-preservation contract rather than adding separate reset paths.

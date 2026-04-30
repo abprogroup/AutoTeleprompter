@@ -62,8 +62,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         // async STT teardown may not have fully completed before this
         // screen's initState fires, leaving the recognizer active.
         ref.read(teleprompterProvider.notifier).stopSession();
-        ref.read(teleprompterProvider.notifier).resetPosition();
-        _scrollController.jumpTo(0);
         _initRemoteListener();
         // Listen for missing language notifications
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage),
@@ -72,6 +70,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             _showMissingLanguageDialog(next);
           }
         });
+        final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
+        if (currentIndex > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _scrollToWordIndex(currentIndex);
+          });
+        }
       }
     });
   }

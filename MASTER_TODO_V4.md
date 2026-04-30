@@ -326,6 +326,14 @@
   active-STT scroll lock, stopped browsing/resume selection, one font-size
   metadata source, synchronized spacing, external mic selection/fallback,
   preserved symbols/blank lines, and markup-safe export.
+- [U] **Windows Reference Protocol for Future Ports**: Before implementing any
+  Windows-parity item in iOS, Android, or macOS, inspect the verified Windows
+  implementation and its matching `_agent/mvp/Platform_Windows/*.md` contract.
+  Use Windows as the behavior reference and pattern source, especially for
+  details like `Allow visible text skip` defaulting to off, local 5-word STT
+  recovery staying always available, and visible-skip fallback rules. Do not
+  copy Windows-specific platform mechanisms blindly; translate the behavior into
+  the target platform's native services and document any unavoidable difference.
 - [ ] **Next Active Platform - iOS**: Continue development in
   `Platform_iOS/` only. Before implementation, read the matching
   `_agent/mvp/Platform_iOS/*.md` contracts and port the Windows behavior
@@ -352,3 +360,8 @@
   search, one font-size metadata authority, synced spacing, preservation of
   symbols/quotes/blank lines, markup-safe export, and external microphone
   routing policy.
+- [P] **iOS STT Stop/Resume Without Reset**: Ported the verified Windows
+  pause/resume contract into iOS. `startSession()` now resumes the same active
+  script from current `confirmedWordIndex`; `stopSession()` stops recognizers
+  without resetting position; quick stop/start is serialized; and presentation
+  entry no longer calls Restart implicitly. Awaiting user IPA verification.

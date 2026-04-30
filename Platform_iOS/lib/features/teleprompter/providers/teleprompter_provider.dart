@@ -25,6 +25,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _scriptLanguageLocale;
   String? _activeLocale;          // locale the STT is currently using
   List<String> _sectionLocales = []; // per-word locale map, pre-computed at session start
+  Future<void>? _stopInFlight;
+  int _sessionToken = 0;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
@@ -433,6 +435,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   Future<void> startSession(Script script) async {
+    final pendingStop = _stopInFlight;
+    if (pendingStop != null) await pendingStop;
+    if (_disposed) return;
+
+    final token = ++_sessionToken;
+    final sameScript = identical(_currentScript, script);
     _currentScript = script;
     _accumulatedTranscript = '';
     _noProgressCount = 0;
@@ -440,8 +448,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _precomputeSectionLocales(script);
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
+    final resumeIndex = sameScript ? state.confirmedWordIndex : 0;
+    final startIndex = resumeIndex.clamp(
+      0,
+      script.words.isEmpty ? 0 : script.words.length - 1,
+    );
     state = state.copyWith(
-        confirmedWordIndex: 0, isListening: false, hasError: false,
+        confirmedWordIndex: startIndex, isListening: false, hasError: false,
         statusMessage: '', debugLogs: [], missingLanguage: null);
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
@@ -449,7 +462,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     // Starting locale comes from the pre-computed section map (word 0).
     // This is exact: if the script opens in English but has a Hebrew section
     // later, we start in English — not skewed by the whole-script ratio.
-    final localeId = _sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US';
+    final localeId = startIndex < _sectionLocales.length
+        ? _sectionLocales[startIndex]
+        : (_sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US');
     _scriptLanguageLocale = localeId;
     _activeLocale = localeId;
     _addDebugLog('🌐 START LOCALE: $localeId | ${_sectionLocales.toSet().length} distinct section(s)');
@@ -472,10 +487,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       final model = whisperModelFromEngine(sttEngine);
       _addDebugLog('🤖 Starting Whisper STT ($sttEngine) offline...');
       await _whisperService.start(localeId: localeId, model: model);
+      if (_disposed || _sessionStopped || token != _sessionToken) {
+        await _whisperService.stop();
+        return;
+      }
     } else {
       final platform = _sttService.platformName;
       _addDebugLog('🎤 [$platform] Starting STT locale=$localeId...');
       final result = await _sttService.start(localeId: localeId);
+      if (_disposed || _sessionStopped || token != _sessionToken) {
+        await _sttService.stop();
+        return;
+      }
 
       if (!result.success) {
         _addDebugLog('🎤 [$platform] STT FAILED: ${result.message}');
@@ -494,7 +517,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _startingSession = true;
         _safeSetState((s) => s.copyWith(isListening: true));
         // Auto-clear the guard after 1.5 s in case listening status never fires
-        Future.delayed(const Duration(milliseconds: 1500), () => _startingSession = false);
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (token == _sessionToken) _startingSession = false;
+        });
       }
 
       if (result.languageMissing && result.missingLanguageName != null) {
@@ -507,10 +532,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   Future<void> stopSession() async {
+    if (_stopInFlight != null) {
+      await _stopInFlight;
+      return;
+    }
+    _sessionToken++;
     _sessionStopped = true;
     _startingSession = false;
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
+    _accumulatedTranscript = '';
+    _noProgressCount = 0;
 
     // Update UI synchronously before the async stop so re-entry never sees
     // a stale isListening=true if the user exits and returns quickly.
@@ -525,8 +557,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
 
     // Stop all engines — Whisper may have been auto-started via fallback
-    await _sttService.stop();
-    await _whisperService.stop();
+    final stopFuture = Future.wait([
+      _sttService.stop(),
+      _whisperService.stop(),
+    ]);
+    _stopInFlight = stopFuture.then((_) {});
+    try {
+      await _stopInFlight;
+    } finally {
+      _stopInFlight = null;
+    }
   }
 
   void resetPosition() {

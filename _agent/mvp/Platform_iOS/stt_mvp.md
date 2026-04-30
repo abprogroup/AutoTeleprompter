@@ -127,3 +127,25 @@ and port only the product behavior proven on Windows:
 Do not copy Windows WebView2/browser STT internals into iOS. Use
 `SttAppleAdapter`, the iOS audio-buffer design, or a documented iOS-native
 alternative.
+
+---
+
+## iOS Stop/Resume Parity - 2026-04-30
+
+- `stopSession()` is pause/resume-safe: it stops recognizers and clears
+  transient transcript/no-progress state, but it does not reset
+  `confirmedWordIndex`.
+- `startSession()` resumes from the current `confirmedWordIndex` when the same
+  `Script` instance is active. A different script still starts at `0`.
+- `_stopInFlight` serializes quick stop/start taps so a new iOS recognizer does
+  not start before the previous stop finishes.
+- `_sessionToken` invalidates stale async start/stop completions. If an old
+  Apple STT start finishes after a newer stop/start, it must stop itself and
+  return without mutating state.
+- Presentation screen entry may defensively stop a lingering recognizer, but it
+  must not call `resetPosition()` or scroll to the top. If a saved
+  `confirmedWordIndex` exists, the screen scrolls back to that word after the
+  first layout frame.
+- Forbidden regression: do not reset `confirmedWordIndex` from `startSession()`,
+  `stopSession()`, or presentation screen entry. Only the explicit Restart
+  control owns `resetPosition()`.

@@ -479,4 +479,14 @@
   from either `_blockClipboard` or the recent protected global snapshot, and
   paste restores the largest available protected block list instead of accepting
   a downgraded one-block payload.
+- **Second Follow-Up Finding**: User testing with three paragraph blocks showed
+  the result was not simply "one block only"; the paste restored `N-1` visible
+  blocks with the first selected block missing. This points to native iOS
+  clearing the focused block before the protected snapshot/restore path finishes.
+- **Second Follow-Up Fix**: The controller listener now repairs the protected
+  global selection snapshot at the exact block index from the listener's
+  previous raw-markup text when iOS empties a focused block during global
+  selection. Clipboard debug output now prints block `index:length` shape for
+  armed/stored/restored snapshots so the next test can identify whether any slot
+  is empty or absent.
 

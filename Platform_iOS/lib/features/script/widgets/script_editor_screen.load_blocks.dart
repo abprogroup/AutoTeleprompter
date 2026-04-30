@@ -294,12 +294,21 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           }
           return;
         }
+        final previousText = lastText;
         lastText = controller.text;
         // Cascade global delete: focused block cleared via backspace on its
         // full-block native selection (set by _selectAllBlocks). Clear all blocks.
         if (_isGlobalSelection &&
             !_isCommandExecuting &&
             controller.text.isEmpty) {
+          final blockIndex = _controllers.indexOf(controller);
+          if (blockIndex >= 0 && previousText.isNotEmpty) {
+            _repairGlobalSelectionSnapshotBlock(
+              blockIndex,
+              previousText,
+              'native-empty',
+            );
+          }
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _isGlobalSelection) _deleteGlobalSelection();
           });

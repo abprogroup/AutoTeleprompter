@@ -85,6 +85,18 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     expose the custom in-app Paste action when either `_blockClipboard` exists or
     a recent protected global selection snapshot exists.
 
+11. **Native destructive cut must repair its slot**: If iOS clears one focused
+    `TextField` while global selection is still active, the controller listener
+    must repair the protected snapshot at the same block index using the
+    listener's previous raw markup before `_deleteGlobalSelection()` reduces the
+    controller list. This prevents the `N -> N-1` paste symptom where the first
+    selected block becomes an empty restored slot.
+
+12. **Clipboard diagnostics must show shape**: Debug-mode clipboard diagnostics
+    must include the block count and `index:length` shape for armed, stored, and
+    restored snapshots. Do not remove this while the iOS context-menu path is
+    under verification.
+
 ---
 
 ## Forbidden Changes
@@ -106,6 +118,9 @@ Additional clipboard prohibitions:
 - Do not collapse multi-block clipboard data into one plain-text string. Plain
   system clipboard text is allowed as a companion, but in-app paste must keep the
   raw markup block list.
+- Do not treat a same-length snapshot as safe if the leading slot changed from
+  non-empty to empty. Native iOS cut can clear the touched block before Flutter's
+  global command finishes; preserve that slot from the previous listener text.
 
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.

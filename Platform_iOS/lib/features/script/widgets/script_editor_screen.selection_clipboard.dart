@@ -9,6 +9,15 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   int _nonEmptyBlockCount(List<String> blocks) =>
       blocks.where((b) => b.trim().isNotEmpty).length;
 
+  String _blockDebugShape(List<String>? blocks) {
+    if (blocks == null) return 'none';
+    return blocks
+        .asMap()
+        .entries
+        .map((e) => '${e.key}:${e.value.length}')
+        .join(',');
+  }
+
   bool _isBetterBlockSnapshot(List<String> candidate, List<String>? current) {
     if (current == null) return true;
     final candidateNonEmpty = _nonEmptyBlockCount(candidate);
@@ -27,11 +36,40 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (_isBetterBlockSnapshot(blocks, _globalSelectionSnapshot)) {
       _globalSelectionSnapshot = blocks;
       _globalSelectionSnapshotAt = DateTime.now();
-      _selectionClipboardDebug = '$reason: armed ${blocks.length} blocks';
+      _selectionClipboardDebug =
+          '$reason: armed ${blocks.length} blocks [${_blockDebugShape(blocks)}]';
     } else {
       _selectionClipboardDebug =
-          '$reason: kept armed ${_globalSelectionSnapshot!.length} blocks';
+          '$reason: kept armed ${_globalSelectionSnapshot!.length} blocks [${_blockDebugShape(_globalSelectionSnapshot)}]';
     }
+  }
+
+  void _repairGlobalSelectionSnapshotBlock(
+    int blockIndex,
+    String rawMarkup,
+    String reason,
+  ) {
+    if (blockIndex < 0 || rawMarkup.isEmpty) return;
+
+    final repaired = _globalSelectionSnapshot != null
+        ? List<String>.of(_globalSelectionSnapshot!)
+        : _snapshotAllControllerMarkup();
+    while (repaired.length <= blockIndex) {
+      repaired.add('');
+    }
+
+    if (repaired[blockIndex].trim().isNotEmpty &&
+        repaired[blockIndex].length >= rawMarkup.length) {
+      _selectionClipboardDebug =
+          '$reason: kept block $blockIndex [${_blockDebugShape(repaired)}]';
+      return;
+    }
+
+    repaired[blockIndex] = rawMarkup;
+    _globalSelectionSnapshot = repaired;
+    _globalSelectionSnapshotAt = DateTime.now();
+    _selectionClipboardDebug =
+        '$reason: repaired block $blockIndex [${_blockDebugShape(repaired)}]';
   }
 
   bool get _hasRecentGlobalSelectionSnapshot {
@@ -64,7 +102,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
     if (_hasRecentGlobalSelectionSnapshot) {
       _selectionClipboardDebug =
-          '$reason: using armed ${_globalSelectionSnapshot!.length} blocks';
+          '$reason: using armed ${_globalSelectionSnapshot!.length} blocks [${_blockDebugShape(_globalSelectionSnapshot)}]';
       return List<String>.of(_globalSelectionSnapshot!);
     }
     return null;
@@ -82,7 +120,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     _blockClipboardTimer =
         Timer(const Duration(seconds: 60), () => _blockClipboard = null);
     _selectionClipboardDebug =
-        '$reason: stored ${selectedBlocks.length} blocks';
+        '$reason: stored ${selectedBlocks.length} blocks [${_blockDebugShape(selectedBlocks)}]';
   }
 
   void _writePlainClipboardForBlocks(List<String> blocks) {
@@ -204,7 +242,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
     if (blocks == null || blocks.isEmpty || _controllers.isEmpty) return;
     _selectionClipboardDebug =
-        'paste: restoring ${blocks.length} blocks into ${_controllers.length} controllers';
+        'paste: restoring ${blocks.length} blocks into ${_controllers.length} controllers [${_blockDebugShape(blocks)}]';
     _isCommandExecuting = true;
     while (_controllers.length < blocks.length) {
       _addBlock(_controllers.length);
@@ -222,7 +260,8 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
-    _selectionClipboardDebug = 'paste: restored ${blocks.length} blocks';
+    _selectionClipboardDebug =
+        'paste: restored ${blocks.length} blocks [${_blockDebugShape(blocks)}]';
   }
 
   void _selectAllBlocks() {

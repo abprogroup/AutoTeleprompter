@@ -373,10 +373,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                     LogicalKeyboardKey.keyF): const _SearchIntent(),
                 LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
                     LogicalKeyboardKey.keyF): const _SearchIntent(),
-                LogicalKeySet(LogicalKeyboardKey.arrowLeft):
-                    const _MoveLeftIntent(),
-                LogicalKeySet(LogicalKeyboardKey.arrowRight):
-                    const _MoveRightIntent(),
               },
               child: Actions(
                 actions: {
@@ -393,33 +389,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                       CallbackAction<_SearchIntent>(onInvoke: (intent) {
                     _showSearchDialog();
                     return null;
-                  }),
-                  _MoveLeftIntent:
-                      CallbackAction<_MoveLeftIntent>(onInvoke: (intent) {
-                    if (_isGlobalSelection) {
-                      _clearGlobalSelection();
-                      if (_controllers.isNotEmpty) {
-                        _focusNodes[0].requestFocus();
-                        _controllers[0].selection =
-                            const TextSelection.collapsed(offset: 0);
-                      }
-                      return null;
-                    }
-                    return null; // Let it bubble to FocusNode
-                  }),
-                  _MoveRightIntent:
-                      CallbackAction<_MoveRightIntent>(onInvoke: (intent) {
-                    if (_isGlobalSelection) {
-                      _clearGlobalSelection();
-                      if (_controllers.isNotEmpty) {
-                        final last = _controllers.length - 1;
-                        _focusNodes[last].requestFocus();
-                        _controllers[last].selection = TextSelection.collapsed(
-                            offset: _controllers[last].text.length);
-                      }
-                      return null;
-                    }
-                    return null; // Let it bubble to FocusNode
                   }),
                 },
                 child: Column(

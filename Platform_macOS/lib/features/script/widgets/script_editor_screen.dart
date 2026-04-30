@@ -44,6 +44,14 @@ class _CopyIntent extends Intent {
   const _CopyIntent();
 }
 
+class _MoveLeftIntent extends Intent {
+  const _MoveLeftIntent();
+}
+
+class _MoveRightIntent extends Intent {
+  const _MoveRightIntent();
+}
+
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
@@ -321,28 +329,67 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       
       final node = FocusNode(onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
-          final currentText = controller.text;
+
+        if (event.logicalKey == LogicalKeyboardKey.enter &&
+            !HardwareKeyboard.instance.isShiftPressed) {
+          final idx = _controllers.indexOf(controller);
+          final text = controller.text;
           final sel = controller.selection;
-          String p1 = currentText, p2 = '';
           if (sel.isValid) {
-            final splits = StylingService.splitBlock(currentText, sel.start);
-            p1 = splits[0];
-            p2 = splits[1];
-            controller.text = p1;
-          }
-          setState(() {
-            final idx = _controllers.indexOf(controller);
-            _addBlock(idx + 1, text: p2);
+            final before = text.substring(0, sel.start);
+            final after = text.substring(sel.start);
+            controller.text = before;
+            _addBlock(idx + 1, text: after);
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && idx + 1 < _focusNodes.length) {
                 _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                _controllers[idx + 1].selection =
+                    const TextSelection.collapsed(offset: 0);
               }
             });
-          });
+          }
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              _focusNodes[0].requestFocus();
+              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
+            }
+            return KeyEventResult.handled;
+          }
+          if (controller.selection.isCollapsed && controller.selection.baseOffset == 0) {
+            final idx = _controllers.indexOf(controller);
+            if (idx > 0) {
+              _focusNodes[idx - 1].requestFocus();
+              final prev = _controllers[idx - 1];
+              prev.selection = TextSelection.collapsed(offset: prev.text.length);
+              _scrollEditorBlockIntoView(idx - 1);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              final last = _controllers.length - 1;
+              _focusNodes[last].requestFocus();
+              _controllers[last].selection = TextSelection.collapsed(offset: _controllers[last].text.length);
+            }
+            return KeyEventResult.handled;
+          }
+          if (controller.selection.isCollapsed && controller.selection.baseOffset == controller.text.length) {
+            final idx = _controllers.indexOf(controller);
+            if (idx < _controllers.length - 1) {
+              _focusNodes[idx + 1].requestFocus();
+              _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+              _scrollEditorBlockIntoView(idx + 1);
+              return KeyEventResult.handled;
+            }
+          }
         }
         if (event.logicalKey == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
@@ -1967,6 +2014,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     for (final c in _controllers) {
       c.refresh();
     }
+  }
+
+  void _scrollEditorBlockIntoView(int block, {double alignment = 0.25}) {
+    if (block < 0 || block >= _blockKeys.length) return;
+    void ensure({Duration duration = const Duration(milliseconds: 260)}) {
+      final ctx = _blockKeys[block].currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: duration,
+        curve: Curves.easeOutCubic,
+        alignment: alignment,
+      );
+    }
+
+    final ctx = _blockKeys[block].currentContext;
+    if (ctx != null) {
+      ensure();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => ensure());
   }
 
 }

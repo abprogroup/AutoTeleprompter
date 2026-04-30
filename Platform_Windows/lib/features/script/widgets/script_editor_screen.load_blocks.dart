@@ -188,20 +188,17 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
       final node = FocusNode(onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
-          final currentText = controller.text;
+          final idx = _controllers.indexOf(controller);
+          final text = controller.text;
           final sel = controller.selection;
-          String p1 = currentText, p2 = '';
           if (sel.isValid) {
-            final splits = StylingService.splitBlock(currentText, sel.start);
-            p1 = splits[0];
-            p2 = splits[1];
-            controller.text = p1;
-          }
-          setState(() {
-            final idx = _controllers.indexOf(controller);
-            _addBlock(idx + 1, text: p2);
+            final before = text.substring(0, sel.start);
+            final after = text.substring(sel.start);
+            controller.text = before;
+            _addBlock(idx + 1, text: after);
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && idx + 1 < _focusNodes.length) {
                 _focusNodes[idx + 1].requestFocus();
@@ -209,7 +206,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
                     const TextSelection.collapsed(offset: 0);
               }
             });
-          });
+          }
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }

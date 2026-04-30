@@ -99,6 +99,13 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     restored snapshots. Do not remove this while the iOS context-menu path is
     under verification.
 
+13. **Native plain paste must be intercepted**: When a rich multi-block
+    `_blockClipboard` exists, iOS may still route the toolbar Paste through the
+    system plain-text clipboard. The controller listener must detect insertion
+    of the plain companion text and immediately replace it with
+    `_pasteFromGlobalClipboard()` so styles and paragraph block boundaries are
+    restored from raw markup.
+
 ---
 
 ## Forbidden Changes
@@ -123,6 +130,9 @@ Additional clipboard prohibitions:
 - Do not treat a same-length snapshot as safe if the leading slot changed from
   non-empty to empty. Native iOS cut can clear the touched block before Flutter's
   global command finishes; preserve that slot from the previous listener text.
+- Do not rely on the system clipboard for in-app multi-block paste. It is only
+  a companion to make the native toolbar expose Paste; the app-private
+  `_blockClipboard` is the source of truth for styled block restoration.
 
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.

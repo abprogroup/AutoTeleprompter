@@ -494,4 +494,9 @@
   command. That path now promotes the kept/repaired full snapshot directly into
   `_blockClipboard` and writes the plain system clipboard companion immediately,
   so Paste no longer depends on the short-lived protected snapshot alone.
+- **Fourth Follow-Up Finding/Fix**: User testing then showed all text pasted but
+  with styling and paragraph newlines stripped. That means iOS routed Paste
+  through the system plain-text companion. The listener now detects native
+  insertion of that plain companion while `_blockClipboard` exists and
+  immediately replaces it with the rich `_pasteFromGlobalClipboard()` restore.
 

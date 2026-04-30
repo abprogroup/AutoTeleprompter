@@ -296,6 +296,9 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         }
         final previousText = lastText;
         lastText = controller.text;
+        if (_consumeNativePlainBlockPasteIfNeeded(controller, previousText)) {
+          return;
+        }
         // Cascade global delete: focused block cleared via backspace on its
         // full-block native selection (set by _selectAllBlocks). Clear all blocks.
         if (_isGlobalSelection &&

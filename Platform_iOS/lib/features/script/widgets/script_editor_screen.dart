@@ -115,6 +115,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isDirty = false;
   bool _isLoading = false;
   List<String>? _blockClipboard; // raw markup per block, written by Cut/Copy
+  String? _plainBlockClipboardText;
   List<String>? _globalSelectionSnapshot;
   DateTime? _globalSelectionSnapshotAt;
   String _selectionClipboardDebug = 'idle';

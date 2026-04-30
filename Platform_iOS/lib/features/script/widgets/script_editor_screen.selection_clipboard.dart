@@ -81,10 +81,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     String reason,
   ) {
     if (blocks.isEmpty || blocks.every((b) => b.isEmpty)) return;
-    _blockClipboard = List<String>.of(blocks);
-    _blockClipboardTimer?.cancel();
-    _blockClipboardTimer =
-        Timer(const Duration(seconds: 60), () => _blockClipboard = null);
+    _setBlockClipboard(blocks);
     _writePlainClipboardForBlocks(blocks);
   }
 
@@ -131,20 +128,67 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
             _isBetterBlockSnapshot(protectedBlocks, blocks)
         ? protectedBlocks
         : blocks;
-    _blockClipboard = List<String>.of(selectedBlocks);
-    _blockClipboardTimer?.cancel();
-    _blockClipboardTimer =
-        Timer(const Duration(seconds: 60), () => _blockClipboard = null);
+    _setBlockClipboard(selectedBlocks);
     _selectionClipboardDebug =
         '$reason: stored ${selectedBlocks.length} blocks [${_blockDebugShape(selectedBlocks)}]';
   }
 
+  void _setBlockClipboard(List<String> blocks) {
+    _blockClipboard = List<String>.of(blocks);
+    _plainBlockClipboardText = _plainTextForBlocks(blocks);
+    _blockClipboardTimer?.cancel();
+    _blockClipboardTimer = Timer(const Duration(seconds: 60), () {
+      _blockClipboard = null;
+      _plainBlockClipboardText = null;
+    });
+  }
+
+  String _plainTextForBlocks(List<String> blocks) => blocks
+      .map((t) => StylingService.stripTags(t))
+      .where((t) => t.isNotEmpty)
+      .join('\n');
+
+  String _normalizePlainClipboardText(String text) =>
+      text.replaceAll(RegExp(r'\s+'), ' ').trim();
+
   void _writePlainClipboardForBlocks(List<String> blocks) {
-    final plain = blocks
-        .map((t) => StylingService.stripTags(t).replaceAll('\n', ' ').trim())
-        .where((t) => t.isNotEmpty)
-        .join(' ');
+    final plain = _plainTextForBlocks(blocks);
     Clipboard.setData(ClipboardData(text: plain));
+  }
+
+  bool _consumeNativePlainBlockPasteIfNeeded(
+    MarkupController controller,
+    String previousText,
+  ) {
+    final blocks = _blockClipboard;
+    final plain = _plainBlockClipboardText;
+    if (_isCommandExecuting ||
+        blocks == null ||
+        blocks.isEmpty ||
+        plain == null ||
+        plain.isEmpty ||
+        controller.text == previousText) {
+      return false;
+    }
+
+    final normalizedCurrent = _normalizePlainClipboardText(controller.text);
+    final normalizedPlain = _normalizePlainClipboardText(plain);
+    final normalizedInserted =
+        previousText.isNotEmpty && controller.text.startsWith(previousText)
+            ? _normalizePlainClipboardText(
+                controller.text.substring(previousText.length),
+              )
+            : normalizedCurrent;
+
+    if (normalizedCurrent != normalizedPlain &&
+        normalizedInserted != normalizedPlain) {
+      return false;
+    }
+
+    _selectionClipboardDebug =
+        'native-paste: intercepted plain text; restoring ${blocks.length} blocks [${_blockDebugShape(blocks)}]';
+    _pasteFromGlobalClipboard();
+    return true;
   }
 
   void _onCutClean() {

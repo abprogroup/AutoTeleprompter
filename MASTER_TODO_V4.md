@@ -365,3 +365,10 @@
   script from current `confirmedWordIndex`; `stopSession()` stops recognizers
   without resetting position; quick stop/start is serialized; and presentation
   entry no longer calls Restart implicitly. Awaiting user IPA verification.
+- [P] **iOS Default 5-Word Local Recovery**: `WordAligner.align(...)` now
+  accepts optional `maxSkipTargetIndex`; with no argument it uses a strict
+  5-word default local recovery window and refuses paragraph/section skips.
+  When the value is supplied (Item 3 future work), the aligner runs the
+  visible-skip path with nearby phrase priority and capped sequence jump.
+  Provider call site is unchanged so the new default is active immediately.
+  Awaiting user IPA verification.

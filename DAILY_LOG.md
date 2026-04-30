@@ -530,3 +530,34 @@
 - **Documentation Result**: Updated iOS STT and Teleprompter Engine MVP docs and
   marked the V4 TODO item `[P]` pending user IPA verification.
 
+
+## 2026-04-30 - iOS Parity Item 2: Default 5-Word Local Recovery
+
+- **Session Goal**: Continue the Windows-to-iOS parity list with item 2 from
+  the handoff. Default STT alignment must tolerate normal recognizer misses
+  through up to about 5 words ahead, but must NOT jump to later
+  paragraphs/sections just because that text was spoken. Larger skipping is
+  reserved for the opt-in visible viewport feature (item 3).
+- **Windows Reference Checked**: Read
+  `Platform_Windows/lib/features/teleprompter/services/word_aligner.dart` and
+  matching `_agent/mvp/Platform_Windows/stt_mvp.md`. Windows aligner takes an
+  optional `maxSkipTargetIndex`. With it null, the scan is strict 5-word
+  recovery. With it supplied, the scan walks the visible window with nearby
+  3+ word phrase priority and a per-distance penalty cap.
+- **Implementation Result**: Ported the same parameter into iOS
+  `WordAligner.align(...)`. When `maxSkipTargetIndex` is null, the iOS aligner
+  uses `searchStart + _maxSingleJump` as both the single-word and sequence
+  scan upper bound. The default 5-word local recovery is now the active
+  behavior because the iOS provider call site does not pass the parameter.
+- **Phrase Priority**: Added `_nearbyPhrasePriorityMatch` helper and the
+  visible-skip-only sequence tightening (`sequenceEnd = windowEnd`,
+  capped distance penalty, capped `_maxSeqJump`). These activate only when
+  the future visible-skip caller (item 3) supplies `maxSkipTargetIndex`.
+- **Backup**: Surgical mirror at
+  `backups/ios_parity_item2_2026-04-30/word_aligner.dart.bak`.
+- **Verification**: `flutter analyze --no-pub` on the touched file reports
+  only pre-existing lints (`_crossLangThreshold` unused, `withOpacity`
+  deprecated, brace-in-string-interp). No new errors.
+- **Documentation Result**: Updated iOS STT MVP doc with a new
+  "iOS Default 5-Word Local Recovery - 2026-04-30" section, and marked the V4
+  TODO item `[P]` pending user IPA verification.

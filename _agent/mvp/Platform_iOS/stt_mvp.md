@@ -149,3 +149,31 @@ alternative.
 - Forbidden regression: do not reset `confirmedWordIndex` from `startSession()`,
   `stopSession()`, or presentation screen entry. Only the explicit Restart
   control owns `resetPosition()`.
+
+---
+
+## iOS Default 5-Word Local Recovery - 2026-04-30
+
+- `WordAligner.align(...)` now accepts an optional `int? maxSkipTargetIndex`
+  parameter. When `null` (current iOS default), the aligner runs in strict
+  local-recovery mode bounded by `_maxSingleJump = 5` non-newline words.
+- The default scan window for both single-word and multi-word sequence matches
+  is `searchStart + 5` when `maxSkipTargetIndex` is null. This permits normal
+  recognizer omissions of one or two words to advance through up to five script
+  words ahead, but it must NEVER jump to a later paragraph or section just
+  because that text was spoken.
+- The provider call site in `teleprompter_provider.dart` does not yet pass
+  `maxSkipTargetIndex`, so the default 5-word recovery is the active behavior
+  for v4.1.7. Item 3 (opt-in visible viewport skip) will introduce the
+  provider/setting wiring that supplies the visible-window upper bound.
+- Nearby phrase priority (`_nearPhrasePriorityMatch`) is implemented but only
+  activates when `maxSkipTargetIndex` is supplied. It must always run before a
+  visible-skip sequence fallback to keep recognized 3+ word phrases close to the
+  current position from being lost to a farther similar phrase.
+- The sequence loop tightens to the visible window (`sequenceEnd = windowEnd`)
+  when visible skip is enabled, and `_maxSeqJump` is capped to
+  `maxSkipTargetIndex - lastConfirmedIndex` so visible jumps cannot exceed the
+  rendered window.
+- Forbidden regression: do not widen the iOS default scan window beyond
+  `_maxSingleJump` without the explicit `Allow visible text skip` opt-in. The
+  legacy 50-word default window broke the strict-progress contract.

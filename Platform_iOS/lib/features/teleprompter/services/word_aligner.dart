@@ -14,7 +14,12 @@ class WordAligner {
   // Window size to search ahead (in non-newline words).
   static const int _searchWindowSize = 50;
   // Max words for a SINGLE-word match (prevents false jumps on common words).
+  // Default local recovery: alignment may advance up to 5 missed words so
+  // brief STT omissions do not stall the presenter.
   static const int _maxSingleJump = 5;
+  // Nearby phrase window checked before the visible-skip fallback.
+  static const int _nearPhrasePriorityWindow = 50;
+  static const int _nearPhraseMaxWords = 8;
   // Max words for a MULTI-WORD sequence match (reliable — multiple words confirmed).
   static const int _maxSeqJump = 30;
   // Minimum similarity for a word to be considered a match
@@ -281,6 +286,7 @@ class WordAligner {
     required List<ScriptWord> script,
     required String transcript,
     required int lastConfirmedIndex,
+    int? maxSkipTargetIndex,
   }) {
     if (script.isEmpty || transcript.trim().isEmpty) {
       return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY');
@@ -304,7 +310,7 @@ class WordAligner {
     // Find the search start: skip over newlines AND unspeakable tokens
     // (numbers, dates, punctuation that STT won't produce reliably)
     int searchStart = lastConfirmedIndex + 1;
-    while (searchStart < script.length && 
+    while (searchStart < script.length &&
            (script[searchStart].isNewline || _isUnspeakable(script[searchStart]))) {
       searchStart++;
     }
@@ -312,8 +318,20 @@ class WordAligner {
       return AlignmentResult(lastConfirmedIndex, 0.0, 'AT_END');
     }
 
-    // Use a wider window to look past clusters of numbers/dates and allow jumping
-    final windowEnd = (searchStart + _searchWindowSize).clamp(0, script.length);
+    // Default allows small local recovery for missed STT words. Larger
+    // paragraph/section skips remain opt-in and viewport-bound — see
+    // _agent/mvp/Platform_iOS/stt_mvp.md "Visible Skip Contract".
+    final visibleMaxSkipTargetIndex = maxSkipTargetIndex;
+    final visibleSkipEnabled = visibleMaxSkipTargetIndex != null;
+    final strictEnd = searchStart + 1;
+    final defaultLocalRecoveryEnd =
+        (searchStart + _maxSingleJump).clamp(strictEnd, script.length);
+    final allowedEnd = visibleMaxSkipTargetIndex == null
+        ? defaultLocalRecoveryEnd
+        : (visibleMaxSkipTargetIndex + 1).clamp(strictEnd, script.length);
+    final scanEnd =
+        visibleSkipEnabled ? allowedEnd : searchStart + _searchWindowSize;
+    final windowEnd = scanEnd.clamp(0, allowedEnd).toInt();
 
     // ── STEP 1: NEXT-WORD PRIORITY ──────────────────────────────────────────
     // The most common case: user said the very next word. Check it first with
@@ -370,6 +388,17 @@ class WordAligner {
       }
     }
 
+    if (visibleSkipEnabled) {
+      final nearbyPhrase = _nearbyPhrasePriorityMatch(
+        script: script,
+        transcriptWords: transcriptWords,
+        searchStart: searchStart,
+        windowEnd: windowEnd,
+        lastConfirmedIndex: lastConfirmedIndex,
+      );
+      if (nearbyPhrase != null) return nearbyPhrase;
+    }
+
     // ── STEP 3: MULTI-WORD SEQUENCE CONFIRMATION ────────────────────────────
     // Use the last K spoken words to find a matching sequence in the script.
     // This helps confirm position when single words are ambiguous.
@@ -387,15 +416,18 @@ class WordAligner {
       int matchCount = 0;
       double seqScore = 0.0;
       int si = i;
+      final sequenceEnd = visibleSkipEnabled ? windowEnd : script.length;
 
-      for (int j = 0; j < recentWords.length && si < script.length; si++) {
+      for (int j = 0; j < recentWords.length && si < sequenceEnd; si++) {
         if (script[si].isNewline) continue;
         final scriptWord = script[si].normalized;
         if (scriptWord.isEmpty) { j++; continue; }
         final spokenWord = recentWords[j];
 
         final sim = _wordSimilarity(spokenWord, scriptWord, script[si].isRtl);
-        if (sim >= _matchThreshold) {
+        final threshold =
+            script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
+        if (sim >= threshold) {
           seqScore += sim;
           matchCount++;
         }
@@ -403,15 +435,22 @@ class WordAligner {
       }
 
       final distance = i - searchStart;
-      final distPenalty = distance * _distancePenaltyPerWord;
+      final distPenalty = visibleSkipEnabled
+          ? (distance * _distancePenaltyPerWord).clamp(0.0, 0.20)
+          : distance * _distancePenaltyPerWord;
       final available = recentWords.length;
       final normalizedScore = available > 0 ? (seqScore / available) - distPenalty : 0.0;
 
       if (normalizedScore > bestSeqScore && matchCount >= 1) {
         final seqJump = (si - 1) - lastConfirmedIndex;
+        final maxSeqJump = visibleMaxSkipTargetIndex == null
+            ? _maxSeqJump
+            : (visibleMaxSkipTargetIndex - lastConfirmedIndex)
+                .clamp(0, script.length)
+                .toInt();
         // For large jumps, require at least 2 matching words for confidence
         final minMatches = seqJump > _maxSingleJump ? 2 : 1;
-        if (matchCount >= minMatches && seqJump <= _maxSeqJump) {
+        if (matchCount >= minMatches && seqJump <= maxSeqJump) {
           bestSeqScore = normalizedScore;
           bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
           bestSeqDebug = 'SEQ@$i: matched=$matchCount/$available score=${normalizedScore.toStringAsFixed(2)} end=$bestSeqEndIdx jump=$seqJump';
@@ -430,6 +469,80 @@ class WordAligner {
     final nextExpected = searchStart < script.length ? script[searchStart].normalized : '?';
     return AlignmentResult(lastConfirmedIndex, bestSingleSim.clamp(0.0, 1.0),
         'NO_MATCH: heard="${lastSpoken}" expected="${nextExpected}" bestSim=${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
+  }
+
+  static AlignmentResult? _nearbyPhrasePriorityMatch({
+    required List<ScriptWord> script,
+    required List<String> transcriptWords,
+    required int searchStart,
+    required int windowEnd,
+    required int lastConfirmedIndex,
+  }) {
+    if (transcriptWords.length < 3) return null;
+
+    final phraseWindowEnd = (searchStart + _nearPhrasePriorityWindow)
+        .clamp(searchStart, windowEnd)
+        .toInt();
+    if (phraseWindowEnd <= searchStart) return null;
+
+    final longestPhrase = transcriptWords.length < _nearPhraseMaxWords
+        ? transcriptWords.length
+        : _nearPhraseMaxWords;
+
+    for (int phraseLen = longestPhrase; phraseLen >= 3; phraseLen--) {
+      final spokenPhrase =
+          transcriptWords.sublist(transcriptWords.length - phraseLen);
+      double bestScore = 0.0;
+      int bestStart = -1;
+      int bestEnd = -1;
+
+      for (int i = searchStart; i < phraseWindowEnd; i++) {
+        if (script[i].isNewline || script[i].normalized.isEmpty) continue;
+
+        int si = i;
+        int matched = 0;
+        double score = 0.0;
+        int endIdx = i;
+
+        for (int j = 0; j < spokenPhrase.length && si < phraseWindowEnd; si++) {
+          if (script[si].isNewline || script[si].normalized.isEmpty) {
+            continue;
+          }
+
+          final sim = _wordSimilarity(
+              spokenPhrase[j], script[si].normalized, script[si].isRtl);
+          final threshold =
+              script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
+          if (sim < threshold) break;
+
+          matched++;
+          score += sim;
+          endIdx = si;
+          j++;
+        }
+
+        if (matched != spokenPhrase.length) continue;
+
+        final distance = i - searchStart;
+        final adjustedScore =
+            (score / spokenPhrase.length) - (distance * 0.006);
+        if (adjustedScore > bestScore ||
+            (adjustedScore == bestScore && i < bestStart)) {
+          bestScore = adjustedScore;
+          bestStart = i;
+          bestEnd = endIdx;
+        }
+      }
+
+      if (bestStart >= 0 &&
+          bestEnd > lastConfirmedIndex &&
+          bestScore >= _matchThreshold) {
+        return AlignmentResult(bestEnd, bestScore,
+            'NEAR_PHRASE_PRIORITY@$bestStart: words=$phraseLen end=$bestEnd score=${bestScore.toStringAsFixed(2)}');
+      }
+    }
+
+    return null;
   }
 
   // ── Word similarity helper ─────────────────────────────────────────────────

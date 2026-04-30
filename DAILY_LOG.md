@@ -489,4 +489,9 @@
   selection. Clipboard debug output now prints block `index:length` shape for
   armed/stored/restored snapshots so the next test can identify whether any slot
   is empty or absent.
+- **Third Follow-Up Fix**: User debug output showed `native-empty: kept block 0`,
+  proving the native iOS destructive path was firing before the custom Cut
+  command. That path now promotes the kept/repaired full snapshot directly into
+  `_blockClipboard` and writes the plain system clipboard companion immediately,
+  so Paste no longer depends on the short-lived protected snapshot alone.
 

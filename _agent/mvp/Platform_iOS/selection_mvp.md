@@ -89,8 +89,10 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     `TextField` while global selection is still active, the controller listener
     must repair the protected snapshot at the same block index using the
     listener's previous raw markup before `_deleteGlobalSelection()` reduces the
-    controller list. This prevents the `N -> N-1` paste symptom where the first
-    selected block becomes an empty restored slot.
+    controller list, then promote the repaired/kept snapshot into
+    `_blockClipboard`. This prevents the `N -> N-1` paste symptom where the
+    first selected block becomes an empty restored slot or Paste sees only the
+    system clipboard path.
 
 12. **Clipboard diagnostics must show shape**: Debug-mode clipboard diagnostics
     must include the block count and `index:length` shape for armed, stored, and

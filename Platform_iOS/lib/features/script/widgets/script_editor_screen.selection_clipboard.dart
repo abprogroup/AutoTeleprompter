@@ -60,16 +60,32 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
     if (repaired[blockIndex].trim().isNotEmpty &&
         repaired[blockIndex].length >= rawMarkup.length) {
+      _globalSelectionSnapshot = repaired;
+      _globalSelectionSnapshotAt = DateTime.now();
+      _promoteNativeCutSnapshotToClipboard(repaired, reason);
       _selectionClipboardDebug =
-          '$reason: kept block $blockIndex [${_blockDebugShape(repaired)}]';
+          '$reason: kept block $blockIndex; clipboard ${repaired.length} blocks [${_blockDebugShape(repaired)}]';
       return;
     }
 
     repaired[blockIndex] = rawMarkup;
     _globalSelectionSnapshot = repaired;
     _globalSelectionSnapshotAt = DateTime.now();
+    _promoteNativeCutSnapshotToClipboard(repaired, reason);
     _selectionClipboardDebug =
-        '$reason: repaired block $blockIndex [${_blockDebugShape(repaired)}]';
+        '$reason: repaired block $blockIndex; clipboard ${repaired.length} blocks [${_blockDebugShape(repaired)}]';
+  }
+
+  void _promoteNativeCutSnapshotToClipboard(
+    List<String> blocks,
+    String reason,
+  ) {
+    if (blocks.isEmpty || blocks.every((b) => b.isEmpty)) return;
+    _blockClipboard = List<String>.of(blocks);
+    _blockClipboardTimer?.cancel();
+    _blockClipboardTimer =
+        Timer(const Duration(seconds: 60), () => _blockClipboard = null);
+    _writePlainClipboardForBlocks(blocks);
   }
 
   bool get _hasRecentGlobalSelectionSnapshot {

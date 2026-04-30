@@ -634,3 +634,22 @@
   2026-04-30 sections describing the active-STT lock, row-progress follow,
   and stopped browsing/resume-point pipeline. MASTER_TODO_V4 entries marked
   `[P]` pending user IPA verification.
+
+### ✅ 2026-04-30 — v5.0 [FEATURE_PIPELINE_EXPANSION]
+- **Session Goals**: Append new V5 feature requests to the master TODO list: Keyboard arrow navigation, Windows Monitor Mode, and Cross-Platform Screen Casting.
+- **Achievements**:
+    - **Keyboard Navigation**: Added task for standard arrow navigation (cursor between letters) on Windows/Mac, including "Select All -> Left Arrow" behavior.
+    - **Windows Monitor Mode**: Added task for dual-window presentation/editor mode with synchronized real-time scrolling.
+    - **Cross-Platform Casting**: Added task for remote control/screen casting between devices (Windows/Mac/iOS/Android).
+    - **Multi-Language Skip Fix**: Added task for proactive STT language switching to allow long skips to distant text in different languages (e.g. Hebrew to English).
+- **Status**: V5 roadmap expanded. Ready for implementation planning.
+
+### ✅ 2026-04-30 — v5.0 [IMPLEMENTATION]
+- **Session Goals**: Implement native-like keyboard arrow navigation for Windows and macOS.
+- **Achievements**:
+    - **Block Boundaries**: Implemented logic to move the cursor between paragraphs (blocks) when reaching the beginning/end of a block via arrow keys.
+    - **Global Selection Collapse**: Implemented "Select All -> Arrow" behavior. Left arrow collapses to the start of the first block; Right arrow collapses to the end of the last block.
+    - **Scrolling support**: Integrated `_scrollEditorBlockIntoView` in both Windows (existing) and macOS (new helper) to ensure smooth navigation between paragraphs.
+- **Status**: Arrow navigation fully implemented for desktop platforms.
+
+

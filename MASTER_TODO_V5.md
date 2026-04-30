@@ -299,3 +299,29 @@
   input enumeration with system-default fallback. For iOS, Android, and macOS,
   document whether the platform supports in-app input device selection or only
   OS-level routing before implementation.
+
+---
+
+## 🆕 V5 New Feature Requests (Added 2026-04-30)
+
+### Keyboard & Desktop Interaction
+- [P] **Windows/Mac: Standard Keyboard Arrow Navigation**: Enable arrow keys to move the cursor between letters in the script editor.
+  - *Selection Behavior*: If 'Select All' is active, pressing the Left arrow should move the cursor to the beginning (leftmost character) of the previous selection, matching standard laptop text editor behavior.
+  - *Platforms*: Windows and macOS.
+
+### Advanced Display & Synchronization (Premium)
+- [ ] **Windows: Dual-Window Monitor Mode**: Allow a separate window for Presentation mode while the Editor mode remains open on the primary screen.
+  - *Sync Scroll*: Both windows must scroll together in real-time during presentation to keep the editor view aligned with the presenter view, allowing live editing while presenting.
+  - *Target*: Windows (Premium Feature).
+
+### Remote Control & Screen Casting (Premium)
+- [ ] **Cross-Platform Device Casting**: Enable screen/script casting from one device to another (Controlling vs. Controlled).
+  - *Flow*: Seamlessly link two devices where one controls the flow and the other displays the prompter content.
+  - *Platforms*: Windows, macOS, iOS, Android (Premium Feature).
+
+### Multi-Language & Skip Hardening
+- [ ] **Proactive Multi-Language STT Switching for Long Skips**: Resolve the limitation where users cannot skip to a distant sentence in a different language because the STT engine only switches locales a few words before the transition.
+  - *Problem*: If a Hebrew script has an English sentence visible at the bottom, the STT (currently in Hebrew) won't recognize English speech for that distant target until the user reads through the Hebrew text immediately preceding it.
+  - *Solution*: The visible viewport skip logic should account for language transitions. If a strong multi-word match is detected in any language present in the visible viewport, the engine should proactively switch locales to complete the jump.
+
+

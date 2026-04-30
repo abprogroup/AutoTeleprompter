@@ -177,3 +177,31 @@ alternative.
 - Forbidden regression: do not widen the iOS default scan window beyond
   `_maxSingleJump` without the explicit `Allow visible text skip` opt-in. The
   legacy 50-word default window broke the strict-progress contract.
+
+---
+
+## iOS Opt-In Visible Viewport Skip - 2026-04-30
+
+- `AppSettings.sttVisibleSkipEnabled` (default `false`) gates the visible-skip
+  pathway. While disabled, alignment runs the strict 5-word default local
+  recovery from Item 2 and refuses paragraph/section jumps.
+- The provider stores the rendered visible word range in `_visibleWordStart`
+  and `_visibleWordEnd`. The presenter pushes updates via the new public
+  `setVisibleWordWindow(int? start, int? end)` method.
+- `_handleSttResult()` builds `maxSkipTargetIndex` only when both
+  `sttVisibleSkipEnabled` is true AND a visible window is reported. The value
+  is `_visibleWordEnd`, capping the aligner's scan to currently rendered text.
+- `startSession()` clears `_visibleWordStart`/`_visibleWordEnd` so the first
+  STT result of a new session never uses a cached window from a previous
+  presenter mount.
+- The presenter calls `_scheduleVisibleWordWindowSync()` from build, which
+  defers a `_syncVisibleWordWindow(force: true)` to the next frame. The sync
+  walks `_wordKeys` against the viewport, skips newlines and unspeakable
+  display tokens, and pushes the first/last visible indices to the provider.
+  Throttled to ~150 ms unless forced.
+- Default contract: with the toggle off, alignment must never jump to text
+  below the rendered window. With it on, nearby phrase priority (3+ words,
+  see Item 2) must always win before a farther visible match.
+- Forbidden regression: do not pass `maxSkipTargetIndex` from outside the
+  visible-skip path. The aligner's strict 5-word default protects the user
+  from false jumps when the toggle is off.

@@ -35,6 +35,7 @@ class AppSettings {
   final bool showAlignmentOverride;   // v3.9.8 toggle for presentation alignment override
   final String sttEngine;          // v4.0: 'google', 'whisper_base', 'whisper_small'
   final double readFadeIntensity;  // v4.1: gradient fade for read text (0.0=off, 1.0=full)
+  final bool sttVisibleSkipEnabled; // v4.1.7: opt-in viewport skip; default false
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -69,6 +70,7 @@ class AppSettings {
     this.showAlignmentOverride = false,
     this.sttEngine = 'google',
     this.readFadeIntensity = 1.0,
+    this.sttVisibleSkipEnabled = false,
   });
 
   AppSettings copyWith({
@@ -104,6 +106,7 @@ class AppSettings {
     bool? showAlignmentOverride,
     String? sttEngine,
     double? readFadeIntensity,
+    bool? sttVisibleSkipEnabled,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -138,6 +141,8 @@ class AppSettings {
       showAlignmentOverride: showAlignmentOverride ?? this.showAlignmentOverride,
       sttEngine: sttEngine ?? this.sttEngine,
       readFadeIntensity: readFadeIntensity ?? this.readFadeIntensity,
+      sttVisibleSkipEnabled:
+          sttVisibleSkipEnabled ?? this.sttVisibleSkipEnabled,
     );
   }
 }
@@ -174,6 +179,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _showAlignmentOverrideKey = 'showAlignmentOverride';
   static const _sttEngineKey = 'sttEngine';
   static const _readFadeIntensityKey = 'readFadeIntensity';
+  static const _sttVisibleSkipEnabledKey = 'sttVisibleSkipEnabled';
 
   @override
   AppSettings build() {
@@ -266,6 +272,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
       showAlignmentOverride: prefs.getBool(_showAlignmentOverrideKey) ?? false,
       sttEngine: prefs.getString(_sttEngineKey) ?? 'google',
       readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
+      sttVisibleSkipEnabled:
+          prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
     );
   }
 
@@ -688,6 +696,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(readFadeIntensity: intensity);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_readFadeIntensityKey, intensity);
+  }
+
+  Future<void> setSttVisibleSkipEnabled(bool enabled) async {
+    state = state.copyWith(sttVisibleSkipEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sttVisibleSkipEnabledKey, enabled);
   }
 }
 

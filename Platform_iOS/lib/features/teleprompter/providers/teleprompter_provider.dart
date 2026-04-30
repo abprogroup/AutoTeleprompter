@@ -27,6 +27,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   List<String> _sectionLocales = []; // per-word locale map, pre-computed at session start
   Future<void>? _stopInFlight;
   int _sessionToken = 0;
+  // Item 3: rendered visible word window pushed by the presenter; consumed by
+  // the aligner only when sttVisibleSkipEnabled is true.
+  int? _visibleWordStart;
+  int? _visibleWordEnd;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
@@ -114,11 +118,21 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _accumulatedTranscript = result.words;
     final script = _currentScript!;
+    final settings = ref.read(settingsProvider);
+    // Item 3: visible-skip is opt-in and viewport-bounded. The presenter
+    // pushes the rendered word range via setVisibleWordWindow(); the aligner
+    // is allowed to scan the visible window only when both the user setting
+    // is enabled and the presenter has reported a window.
+    final maxSkipTargetIndex =
+        settings.sttVisibleSkipEnabled && _visibleWordStart != null
+            ? _visibleWordEnd
+            : null;
 
     final aligned = WordAligner.align(
       script: script.words,
       transcript: _accumulatedTranscript,
       lastConfirmedIndex: state.confirmedWordIndex,
+      maxSkipTargetIndex: maxSkipTargetIndex,
     );
 
     final currentIdx = state.confirmedWordIndex;
@@ -445,6 +459,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sessionStopped = false;
+    // Item 3: clear stale visible-window so the first STT result of the new
+    // session cannot use a cached window from the previous presenter mount.
+    _visibleWordStart = null;
+    _visibleWordEnd = null;
     _precomputeSectionLocales(script);
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
@@ -588,6 +606,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _sttService.setLocale(startLocale);
       }
     }
+  }
+
+  /// Item 3: presenter pushes the rendered visible word range here. The
+  /// aligner consumes it as `maxSkipTargetIndex` only when the user setting
+  /// `sttVisibleSkipEnabled` is true. Empty/null means no visible window
+  /// information; the aligner falls back to its strict 5-word default
+  /// recovery.
+  void setVisibleWordWindow(int? startIndex, int? endIndex) {
+    if (_disposed) return;
+    _visibleWordStart = startIndex;
+    _visibleWordEnd = endIndex;
   }
 }
 

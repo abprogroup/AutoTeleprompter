@@ -48,6 +48,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _manualScrolling = false;
   bool _scrollingBackward = false;
   StreamSubscription? _remoteCmdSub;
+  // Item 3: visible-word-window sync state for opt-in visible-skip aligner.
+  DateTime? _lastVisibleWindowSync;
+  bool _visibleWindowSyncScheduled = false;
 
   @override
   void initState() {

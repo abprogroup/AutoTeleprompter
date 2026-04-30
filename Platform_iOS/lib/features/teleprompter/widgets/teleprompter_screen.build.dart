@@ -19,6 +19,11 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       }
     });
 
+    // Item 3: keep the provider's visible word window in sync with what is
+    // actually rendered, so the aligner can use it for opt-in visible-skip.
+    // Throttled inside the helper to ~150 ms.
+    _scheduleVisibleWordWindowSync();
+
     if (script == null || script.isEmpty) {
       return Scaffold(
         backgroundColor: Color(settings.scriptBgColor),

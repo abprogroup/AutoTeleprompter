@@ -561,3 +561,39 @@
 - **Documentation Result**: Updated iOS STT MVP doc with a new
   "iOS Default 5-Word Local Recovery - 2026-04-30" section, and marked the V4
   TODO item `[P]` pending user IPA verification.
+
+## 2026-04-30 - iOS Parity Item 3: Opt-In Visible Viewport Skip
+
+- **Session Goal**: Add the opt-in visible viewport skip + nearby phrase
+  priority paths on iOS. Default off; when on, alignment may jump to text
+  currently rendered on the presenter screen, never below the viewport.
+- **Windows Reference Checked**: Read
+  `Platform_Windows/lib/features/settings/providers/settings_provider.dart`,
+  `teleprompter_provider.dart` (`_visibleWordStart/_visibleWordEnd`,
+  `setVisibleWordWindow`, `_handleSttResult` `maxSkipTargetIndex` wiring),
+  and `teleprompter_screen.manual_scroll.dart` (`_syncVisibleWordWindow` /
+  `_scheduleVisibleWordWindowSync`).
+- **Settings Result**: Added `sttVisibleSkipEnabled` to iOS `AppSettings`
+  (default false) with prefs key, copyWith, _load, and
+  `setSttVisibleSkipEnabled` setter — mirrors Windows exactly.
+- **Provider Result**: Added `_visibleWordStart`, `_visibleWordEnd` fields
+  and `setVisibleWordWindow(int?, int?)` to iOS `TeleprompterNotifier`.
+  `_handleSttResult` reads the user setting and only passes
+  `maxSkipTargetIndex = _visibleWordEnd` when both the toggle is on and a
+  window has been reported. `startSession` resets the window to null so
+  stale data from a previous presenter mount can never leak.
+- **Presenter Result**: Added `_syncVisibleWordWindow({bool force = false})`
+  and `_scheduleVisibleWordWindowSync()` to iOS
+  `teleprompter_screen.manual_scroll.dart`. Walks `_wordKeys` and skips
+  newlines/unspeakable tokens, throttled to ~150 ms. Build hooks the
+  scheduler so every frame keeps the provider window fresh.
+- **Default Contract**: Toggle off → strict 5-word recovery wins (Item 2),
+  no visible skip. Toggle on → aligner uses visible window, nearby 3+ word
+  phrase priority always wins before farther visible matches.
+- **Backup**: Surgical mirrors at
+  `backups/ios_parity_item3_2026-04-30/`.
+- **Verification**: `flutter analyze --no-pub` on touched iOS files reports
+  only pre-existing lints. No new errors.
+- **Documentation Result**: Updated iOS STT MVP doc with a new
+  "iOS Opt-In Visible Viewport Skip - 2026-04-30" section, and marked the V4
+  TODO item `[P]` pending user IPA verification.

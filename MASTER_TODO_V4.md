@@ -372,3 +372,10 @@
   visible-skip path with nearby phrase priority and capped sequence jump.
   Provider call site is unchanged so the new default is active immediately.
   Awaiting user IPA verification.
+- [P] **iOS Opt-In Visible Viewport Skip**: Added `sttVisibleSkipEnabled`
+  setting (default off) with persistence and setter. Provider stores
+  `_visibleWordStart`/`_visibleWordEnd` and exposes `setVisibleWordWindow`.
+  `_handleSttResult` passes `_visibleWordEnd` as `maxSkipTargetIndex` only
+  when the toggle is on AND a visible window is reported. Presenter
+  `_syncVisibleWordWindow` walks `_wordKeys` against the viewport, throttled
+  to 150 ms, scheduled from build. Awaiting user IPA verification.

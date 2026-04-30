@@ -82,6 +82,56 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (mounted) setState(() => _manualScrolling = false);
   }
 
+  /// Item 3: compute and push the rendered visible word range to the
+  /// teleprompter provider so the aligner can use it as the upper bound for
+  /// opt-in visible-skip jumps. Skips newlines and unspeakable display tokens.
+  /// Throttled to ~150 ms unless `force` is true.
+  void _syncVisibleWordWindow({bool force = false}) {
+    if (!mounted || !_scrollController.hasClients) return;
+    final now = DateTime.now();
+    final previous = _lastVisibleWindowSync;
+    if (!force &&
+        previous != null &&
+        now.difference(previous).inMilliseconds < 150) {
+      return;
+    }
+    _lastVisibleWindowSync = now;
+
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+
+    final viewportH = MediaQuery.of(context).size.height;
+    int? firstVisible;
+    int? lastVisible;
+
+    for (var i = 0; i < _wordKeys.length && i < script.words.length; i++) {
+      final word = script.words[i];
+      if (word.isNewline || word.normalized.isEmpty) continue;
+      final ctx = _wordKeys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final top = box.localToGlobal(Offset.zero).dy;
+      final bottom = top + box.size.height;
+      if (bottom < 0 || top > viewportH) continue;
+      firstVisible ??= i;
+      lastVisible = i;
+    }
+
+    ref
+        .read(teleprompterProvider.notifier)
+        .setVisibleWordWindow(firstVisible, lastVisible);
+  }
+
+  void _scheduleVisibleWordWindowSync() {
+    if (_visibleWindowSyncScheduled) return;
+    _visibleWindowSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _visibleWindowSyncScheduled = false;
+      if (mounted) _syncVisibleWordWindow(force: true);
+    });
+  }
+
   void _resetManual() {
     _stopManualScroll();
     _manualWordIndex = 0;

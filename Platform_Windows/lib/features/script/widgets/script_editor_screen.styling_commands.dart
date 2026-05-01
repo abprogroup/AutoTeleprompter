@@ -454,4 +454,33 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     _onSelectionChanged();
     setState(() => _isCommandExecuting = false);
   }
+
+  /// v4.1.7: Deletes the currently selected content across all targeted blocks.
+  /// Used for the "Cut" (Ctrl+X) operation.
+  void _clearGlobalSelectionContent() {
+    setState(() => _isCommandExecuting = true);
+    if (_isGlobalSelection) {
+      _clearScript();
+    } else {
+      final targets = _styleTargets();
+      for (final c in targets) {
+        final sel = (c.externalSelection != null &&
+                c.externalSelection!.isValid &&
+                !c.externalSelection!.isCollapsed)
+            ? c.externalSelection!
+            : c.selection;
+        if (!sel.isCollapsed) {
+          final before = c.text.substring(0, sel.start);
+          final after = c.text.substring(sel.end);
+          c.value = TextEditingValue(
+            text: before + after,
+            selection: TextSelection.collapsed(offset: sel.start),
+          );
+        }
+      }
+    }
+    _clearGlobalSelection();
+    _saveHistory(description: 'Cut Content');
+    setState(() => _isCommandExecuting = false);
+  }
 }

@@ -44,6 +44,14 @@ class _CopyIntent extends Intent {
   const _CopyIntent();
 }
 
+class _CutIntent extends Intent {
+  const _CutIntent();
+}
+
+class _SearchIntent extends Intent {
+  const _SearchIntent();
+}
+
 class _MoveLeftIntent extends Intent {
   const _MoveLeftIntent();
 }
@@ -450,6 +458,129 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             }
           }
         }
+    void _addBlock(int index, {String text = ''}) {
+    setState(() {
+      final controller = MarkupController(text: text);
+      final blockKey = GlobalKey(); // v3.9.5.66
+      
+      final node = FocusNode(onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+
+        if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
+          final idx = _controllers.indexOf(controller);
+          final text = controller.text;
+          final sel = controller.selection;
+          if (sel.isValid) {
+            final before = text.substring(0, sel.start);
+            final after = text.substring(sel.start);
+            controller.text = before;
+            _addBlock(idx + 1, text: after);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && idx + 1 < _focusNodes.length) {
+                _focusNodes[idx + 1].requestFocus();
+                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+              }
+            });
+          }
+          _saveHistory(description: 'Split Paragraph');
+          return KeyEventResult.handled;
+        }
+        
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              _focusNodes[0].requestFocus();
+              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
+            }
+            return KeyEventResult.handled;
+          }
+          final idx = _controllers.indexOf(controller);
+          if (idx > 0) {
+            final layout = _getVerticalLayout(idx);
+            if (layout.isAtTop) {
+              final prevIdx = idx - 1;
+              final prevLayout = _getVerticalLayout(prevIdx);
+              _focusNodes[prevIdx].requestFocus();
+              _controllers[prevIdx].selection = TextSelection.collapsed(
+                offset: prevLayout.getPositionAtX(layout.currentX, fromBottom: true),
+              );
+              _scrollEditorBlockIntoView(prevIdx);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              final last = _controllers.length - 1;
+              _focusNodes[last].requestFocus();
+              _controllers[last].selection = TextSelection.collapsed(
+                  offset: _controllers[last].text.length);
+            }
+            return KeyEventResult.handled;
+          }
+          final idx = _controllers.indexOf(controller);
+          if (idx < _controllers.length - 1) {
+            final layout = _getVerticalLayout(idx);
+            if (layout.isAtBottom) {
+              final nextIdx = idx + 1;
+              final nextLayout = _getVerticalLayout(nextIdx);
+              _focusNodes[nextIdx].requestFocus();
+              _controllers[nextIdx].selection = TextSelection.collapsed(
+                offset: nextLayout.getPositionAtX(layout.currentX, fromBottom: false),
+              );
+              _scrollEditorBlockIntoView(nextIdx);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              _focusNodes[0].requestFocus();
+              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
+            }
+            return KeyEventResult.handled;
+          }
+          if (controller.selection.isCollapsed && controller.selection.baseOffset == 0) {
+            final idx = _controllers.indexOf(controller);
+            if (idx > 0) {
+              _focusNodes[idx - 1].requestFocus();
+              final prev = _controllers[idx - 1];
+              prev.selection = TextSelection.collapsed(offset: prev.text.length);
+              _scrollEditorBlockIntoView(idx - 1);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (_isGlobalSelection) {
+            _clearGlobalSelection();
+            if (_controllers.isNotEmpty) {
+              final last = _controllers.length - 1;
+              _focusNodes[last].requestFocus();
+              _controllers[last].selection = TextSelection.collapsed(
+                  offset: _controllers[last].text.length);
+            }
+            return KeyEventResult.handled;
+          }
+          if (controller.selection.isCollapsed && controller.selection.baseOffset == controller.text.length) {
+            final idx = _controllers.indexOf(controller);
+            if (idx < _controllers.length - 1) {
+              _focusNodes[idx + 1].requestFocus();
+              _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+              _scrollEditorBlockIntoView(idx + 1);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+
         if (event.logicalKey == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
           if (_controllers.length > 1 && idx != -1) {
@@ -463,12 +594,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
-      });
-      
+
       node.addListener(() {
-        if (node.hasFocus) { _lastFocusedController = controller; _onSelectionChanged(); }
-        else if (_isDirty && !_isCommandExecuting) {
-          // Flush any pending typing bulk on focus loss
+        if (node.hasFocus) {
+          _lastFocusedController = controller;
+          _onSelectionChanged();
+        } else if (_isDirty && !_isCommandExecuting) {
           if (_typingCharCount > 0) {
             _commitHistory('Edit Text');
           }
@@ -486,11 +617,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               _preservedSelection = controller.selection;
             }
             _onSelectionChanged();
-            // Escalate native full-block select to global Select All.
-            // Catches all paths: context menu, keyboard, platform menu.
-            // Skip when overlay has active handles (refine mode) to avoid
-            // infinite loop: refine clears isGlobal → escalation re-selects → loop.
-            final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
+            final overlayActive =
+                _overlayKey.currentState?.hasSelection ?? false;
             if (!_isGlobalSelection &&
                 !_isCommandExecuting &&
                 !overlayActive &&
@@ -504,8 +632,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
         lastText = controller.text;
         _isDirty = true;
-        // v4.1.2: When the user edits text (not inside a style command), clear
-        // any pinned externalSelection so stale amber doesn't linger after typing.
         if (!_isCommandExecuting && controller.externalSelection != null) {
           controller.externalSelection = null;
           controller.refresh();
@@ -517,7 +643,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _focusNodes.insert(index, node);
       _blockKeys.insert(index, blockKey);
     });
-    
+
     if (text.isEmpty) {
       Future.delayed(Duration.zero, () => _focusNodes[index].requestFocus());
     }
@@ -1772,25 +1898,68 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         ),
       ),
       bottomNavigationBar: _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        behavior: HitTestBehavior.translucent,
-        child: Stack(
-        children: [
-          Shortcuts(
+      body: Shortcuts(
         shortcuts: {
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
+              const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
+              const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
+              const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
+              const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyX):
+              const _CutIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
+              const _CutIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift,
+              LogicalKeyboardKey.keyF): const _SearchIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
+              LogicalKeyboardKey.keyF): const _SearchIntent(),
         },
         child: Actions(
           actions: {
-            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-              _selectAllBlocks(); return null;
+            _SelectAllIntent:
+                CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
+              _selectAllBlocks();
+              return null;
             }),
             _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
-              _onCopyClean(); return null;
+              _onCopyClean();
+              return null;
+            }),
+            _CutIntent: CallbackAction<_CutIntent>(onInvoke: (intent) {
+              _onCopyClean();
+              _clearGlobalSelectionContent();
+              return null;
+            }),
+            _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (intent) {
+              _showSearchDialog();
+              return null;
+            }),
+            CopySelectionTextIntent:
+                CallbackAction<CopySelectionTextIntent>(onInvoke: (_) {
+              _onCopyClean();
+              return null;
+            }),
+            CutSelectionTextIntent:
+                CallbackAction<CutSelectionTextIntent>(onInvoke: (_) {
+              _onCopyClean();
+              _clearGlobalSelectionContent();
+              return null;
+            }),
+            PasteSelectionTextIntent:
+                CallbackAction<PasteSelectionTextIntent>(onInvoke: (_) {
+              if (_isGlobalSelection ||
+                  (_overlayKey.currentState?.hasSelection ?? false)) {
+                _clearGlobalSelectionContent();
+              }
+              return null;
+            }),
+            SelectAllTextIntent:
+                CallbackAction<SelectAllTextIntent>(onInvoke: (_) {
+              _selectAllBlocks();
+              return null;
             }),
           },
           child: Column(
@@ -1873,14 +2042,26 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               Expanded(
                 child: Container(
                   color: Color(settings.scriptBgColor),
-                  child: GlobalSelectionOverlay(
-                    key: _overlayKey,
-                    controllers: _controllers,
-                    blockKeys: _blockKeys,
-                    onSelectionChanged: () => setState(() {
-                      _isGlobalSelection = _controllers.isNotEmpty &&
-                          _controllers.every((c) => c.isGlobalSelected);
-                    }),
+                  child: Stack(
+                    children: [
+                      // v4.1.7 Fix: Background tap listener behind the overlay
+                      Positioned.fill(
+                        child: GestureDetector(
+                          onTap: () {
+                            FocusScope.of(context).unfocus();
+                            _clearGlobalSelection();
+                          },
+                          behavior: HitTestBehavior.translucent,
+                        ),
+                      ),
+                      GlobalSelectionOverlay(
+                        key: _overlayKey,
+                        controllers: _controllers,
+                        blockKeys: _blockKeys,
+                        onSelectionChanged: () => setState(() {
+                          _isGlobalSelection = _controllers.isNotEmpty &&
+                              _controllers.every((c) => c.isGlobalSelected);
+                        }),
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
                       itemCount: _controllers.length,
@@ -1901,8 +2082,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         },
                         onSelectAll: _selectAllBlocks,
                         onCopy: _onCopyClean,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -2063,16 +2245,38 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     });
   }
 
-  /// Re-sync externalSelection after a global style operation changes text lengths.
-  void _resyncGlobalSelection() {
-    for (final c in _controllers) {
-      c.isGlobalSelected = true;
-      c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
-    }
-    setState(() {});
     for (final c in _controllers) {
       c.refresh();
     }
+  }
+
+  /// v4.1.7: Deletes the currently selected content across all targeted blocks.
+  /// Used for Cut (Ctrl+X) and Paste-over-selection operations.
+  void _clearGlobalSelectionContent() {
+    setState(() => _isCommandExecuting = true);
+    if (_isGlobalSelection) {
+      _loadText(''); // Clear all
+    } else {
+      final targets = _styleTargets();
+      for (final c in targets) {
+        final sel = (c.externalSelection != null &&
+                c.externalSelection!.isValid &&
+                !c.externalSelection!.isCollapsed)
+            ? c.externalSelection!
+            : c.selection;
+        if (!sel.isCollapsed) {
+          final before = c.text.substring(0, sel.start);
+          final after = c.text.substring(sel.end);
+          c.value = TextEditingValue(
+            text: before + after,
+            selection: TextSelection.collapsed(offset: sel.start),
+          );
+        }
+      }
+    }
+    _clearGlobalSelection();
+    _saveHistory(description: 'Delete Selection');
+    setState(() => _isCommandExecuting = false);
   }
 
   void _scrollEditorBlockIntoView(int block, {double alignment = 0.25}) {
@@ -2229,52 +2433,13 @@ class _EditorBlock extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Shortcuts(
-          shortcuts: const {
-            SingleActivator(LogicalKeyboardKey.keyA, control: true): _SelectAllIntent(),
-            SingleActivator(LogicalKeyboardKey.keyA, meta: true): _SelectAllIntent(),
-            SingleActivator(LogicalKeyboardKey.keyC, control: true): _CopyIntent(),
-            SingleActivator(LogicalKeyboardKey.keyC, meta: true): _CopyIntent(),
-          },
-          child: Actions(
-            actions: {
-              _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (_) {
-                onSelectAll();
-                return null;
-              }),
-              _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
-                onCopy();
-                return null;
-              }),
-              // Override the internal EditableText intents too. These are
-              // marked Action.overridable inside EditableText, so placing
-              // our own handlers at this ancestor wins — catching both the
-              // keyboard Cmd+C and Flutter's internal copy dispatch paths.
-              CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
-                onInvoke: (_) {
-                  onCopy();
-                  return null;
-                },
-              ),
-              SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
-                onInvoke: (_) {
-                  onSelectAll();
-                  return null;
-                },
-              ),
-            },
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              textSelectionTheme: TextSelectionThemeData(
-                // Always transparent: all amber selection rendering is handled
-                // by MarkupController.buildTextSpan via externalSelection /
-                // isGlobalSelected. Native RenderEditable must never paint its
-                // own amber highlight or it leaks through when _isGlobalSelection
-                // flips to false during a handle drag (Bug 2 fix v4.0.6).
-                selectionColor: Colors.transparent,
-              ),
-            ),
-          child: TextField(
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          textSelectionTheme: TextSelectionThemeData(
+            selectionColor: Colors.transparent,
+          ),
+        ),
+        child: TextField(
             selectionControls: GhostSelectionControls(),
             controller: controller,
             focusNode: focusNode,
@@ -2346,7 +2511,6 @@ class _EditorBlock extends StatelessWidget {
             },
           ),
         ),
-      ),
       ),
     );
   }

@@ -187,7 +187,8 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       final blockKey = GlobalKey(); // v3.9.5.66
 
       final node = FocusNode(onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent)
+          return KeyEventResult.ignored;
 
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {

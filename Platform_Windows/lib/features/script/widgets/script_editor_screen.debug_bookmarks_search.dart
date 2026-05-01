@@ -590,46 +590,6 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     }
   }
 
-  void _clearGlobalSelection() {
-    _overlayKey.currentState?.clearSelection();
-    _isGlobalSelection = false;
-    for (final c in _controllers) {
-      c.isGlobalSelected = false;
-      c.externalSelection = null;
-      // Collapse native selection to prevent residual highlight in buildTextSpan.
-      // For RTL text, use baseOffset (cursor stays at visual tap position).
-      if (!c.selection.isCollapsed) {
-        final collapseAt = c.selection.baseOffset.clamp(0, c.text.length);
-        c.selection = TextSelection.collapsed(offset: collapseAt);
-      }
-    }
-    setState(() {});
-    for (final c in _controllers) {
-      c.refresh();
-    }
-    // Safety net: re-clear after Flutter's TextField processes the tap gesture,
-    // which can re-establish selection in RTL blocks.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      bool needsRefresh = false;
-      for (final c in _controllers) {
-        if (c.externalSelection != null) {
-          c.externalSelection = null;
-          needsRefresh = true;
-        }
-        if (c.isGlobalSelected) {
-          c.isGlobalSelected = false;
-          needsRefresh = true;
-        }
-      }
-      if (needsRefresh) {
-        for (final c in _controllers) {
-          c.refresh();
-        }
-        setState(() {});
-      }
-    });
-  }
 
   /// Re-sync externalSelection after a global style operation changes text lengths.
   void _resyncGlobalSelection() {

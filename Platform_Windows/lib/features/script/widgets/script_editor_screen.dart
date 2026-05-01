@@ -611,14 +611,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                             child: Column(
                               children: List.generate(
                                 _controllers.length,
-                                (index) => _EditorBlock(
-                                  key: _blockKeys[index],
-                                  controller: _controllers[index],
-                                  focusNode: _focusNodes[index],
-                                  settings: settings,
-                                  isGlobalSelected: _isGlobalSelection,
-                                  onSubmitted: () => _addBlock(index + 1),
-                                  onTap: () {
+                                (index) => Listener(
+                                  onPointerDown: (event) {
                                     if (_isGlobalSelection ||
                                         _controllers
                                             .any((c) => c.isGlobalSelected) ||
@@ -630,14 +624,28 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                       _clearGlobalSelection();
                                     }
                                   },
-                                  onSelectAll: _selectAllBlocks,
-                                  onCopy: _onCopyClean,
-                                  onCut: _onCut,
-                                  onPaste: _onPaste,
-                                  onSearch: _showSearchDialog,
-                                  hasBookmark: _hasBookmarkInEditorBlock(index),
-                                  onBookmarkTap: () =>
-                                      _deleteEditorBookmarksForBlock(index),
+                                  child: _EditorBlock(
+                                    key: _blockKeys[index],
+                                    controller: _controllers[index],
+                                    focusNode: _focusNodes[index],
+                                    settings: settings,
+                                    isGlobalSelected: _isGlobalSelection,
+                                    onSubmitted: () => _addBlock(index + 1),
+                                    onTap: () {
+                                      // Secondary safety, though Listener should handle it
+                                      if (_isGlobalSelection) {
+                                        _clearGlobalSelection();
+                                      }
+                                    },
+                                    onSelectAll: _selectAllBlocks,
+                                    onCopy: _onCopyClean,
+                                    onCut: _onCut,
+                                    onPaste: _onPaste,
+                                    onSearch: _showSearchDialog,
+                                    hasBookmark: _hasBookmarkInEditorBlock(index),
+                                    onBookmarkTap: () =>
+                                        _deleteEditorBookmarksForBlock(index),
+                                  ),
                                 ),
                               ),
                             ),

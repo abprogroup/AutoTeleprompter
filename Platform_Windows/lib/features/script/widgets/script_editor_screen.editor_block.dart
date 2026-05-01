@@ -9,6 +9,8 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
+  final VoidCallback onCut;
+  final VoidCallback onPaste;
   final VoidCallback onSearch;
   final bool hasBookmark;
   final VoidCallback onBookmarkTap;
@@ -23,6 +25,8 @@ class _EditorBlock extends StatelessWidget {
     required this.onTap,
     required this.onSelectAll,
     required this.onCopy,
+    required this.onCut,
+    required this.onPaste,
     required this.onSearch,
     required this.hasBookmark,
     required this.onBookmarkTap,
@@ -142,16 +146,11 @@ class _EditorBlock extends StatelessWidget {
                       return null;
                     },
                   ),
-                  CutSelectionTextIntent:
-                      CallbackAction<CutSelectionTextIntent>(
+                  // Override internal EditableText intents
+                  CopySelectionTextIntent:
+                      CallbackAction<CopySelectionTextIntent>(
                     onInvoke: (_) {
-                      onCut();
-                      return null;
-                    },
-                  ),
-                  PasteTextIntent: CallbackAction<PasteTextIntent>(
-                    onInvoke: (_) {
-                      onPaste();
+                      onCopy();
                       return null;
                     },
                   ),

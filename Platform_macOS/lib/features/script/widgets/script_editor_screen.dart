@@ -1950,6 +1950,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             }),
             PasteSelectionTextIntent:
                 CallbackAction<PasteSelectionTextIntent>(onInvoke: (_) {
+              // v4.1.0: Ensure multi-block selection is cleared before pasting
               if (_isGlobalSelection ||
                   (_overlayKey.currentState?.hasSelection ?? false)) {
                 _clearGlobalSelectionContent();
@@ -2044,7 +2045,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                   color: Color(settings.scriptBgColor),
                   child: Stack(
                     children: [
-                      // v4.1.7 Fix: Background tap listener behind the overlay
+                      // v4.1.0 Fix: Background tap listener behind the overlay
                       Positioned.fill(
                         child: GestureDetector(
                           onTap: () {
@@ -2250,7 +2251,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     }
   }
 
-  /// v4.1.7: Deletes the currently selected content across all targeted blocks.
+  /// v4.1.0: Deletes the currently selected content across all targeted blocks.
   /// Used for Cut (Ctrl+X) and Paste-over-selection operations.
   void _clearGlobalSelectionContent() {
     setState(() => _isCommandExecuting = true);

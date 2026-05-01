@@ -546,7 +546,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                         color: Color(settings.scriptBgColor),
                         child: Stack(
                           children: [
-                            // v4.1.7 Fix: Background tap listener for unfocusing.
+                            // v5.0.0 Fix: Background tap listener for unfocusing.
                             // Placed inside the stack and behind the overlay to ensure
                             // it doesn't absorb drag events meant for multi-block selection.
                             Positioned.fill(

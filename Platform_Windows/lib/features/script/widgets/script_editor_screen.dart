@@ -59,6 +59,10 @@ class _CutIntent extends Intent {
   const _CutIntent();
 }
 
+class _PasteIntent extends Intent {
+  const _PasteIntent();
+}
+
 class _SearchIntent extends Intent {
   const _SearchIntent();
 }
@@ -153,6 +157,19 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _suiteSection; // current function section within a suite (e.g. 'Bold', 'Font Size')
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
+
+  void _clearGlobalSelection() {
+    if (!mounted) return;
+    setState(() {
+      _isGlobalSelection = false;
+      _overlayKey.currentState?.clearSelection();
+      for (final c in _controllers) {
+        c.isGlobalSelected = false;
+        c.externalSelection = null;
+        c.refresh();
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -354,66 +371,77 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       ),
       bottomNavigationBar:
           _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: Shortcuts(
-        shortcuts: {
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
-              const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
-              const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
-              const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
-              const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyX):
-              const _CutIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
-              const _CutIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift,
-              LogicalKeyboardKey.keyF): const _SearchIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
-              LogicalKeyboardKey.keyF): const _SearchIntent(),
+      body: GestureDetector(
+        onTap: () => _clearGlobalSelection(),
+        onPanStart: (details) {
+          _overlayKey.currentState?.startDragging(details.globalPosition);
         },
-        child: Actions(
-          actions: {
-            _SelectAllIntent:
-                CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-              _selectAllBlocks();
-              return null;
-            }),
-            _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
-              _onCopyClean();
-              return null;
-            }),
-            _CutIntent: CallbackAction<_CutIntent>(onInvoke: (intent) {
-              _onCopyClean(); // Copy first
-              _clearGlobalSelectionContent(); // Then delete selected content
-              return null;
-            }),
-            _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (intent) {
-              _showSearchDialog();
-              return null;
-            }),
-            // Map native intents to our custom handlers to ensure platform consistency
-            CopySelectionTextIntent:
-                CallbackAction<CopySelectionTextIntent>(onInvoke: (_) {
-              _onCopyClean();
-              return null;
-            }),
-            CutSelectionTextIntent:
-                CallbackAction<CutSelectionTextIntent>(onInvoke: (_) {
-              _onCopyClean();
-              _clearGlobalSelectionContent();
-              return null;
-            }),
-            SelectAllTextIntent:
-                CallbackAction<SelectAllTextIntent>(onInvoke: (_) {
-              _selectAllBlocks();
-              return null;
-            }),
-          },
-          child: Column(
-            children: [
-              FormattingToolbarMVP(
+        onPanUpdate: (details) {
+          _overlayKey.currentState?.updateDragging(details.globalPosition);
+        },
+        onPanEnd: (_) {
+          _overlayKey.currentState?.endDragging();
+        },
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+          children: [
+            Shortcuts(
+                shortcuts: {
+                  LogicalKeySet(
+                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
+                      const _SelectAllIntent(),
+                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
+                      const _SelectAllIntent(),
+                  LogicalKeySet(
+                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
+                      const _CopyIntent(),
+                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
+                      const _CopyIntent(),
+                  LogicalKeySet(
+                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyX):
+                      const _CutIntent(),
+                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
+                      const _CutIntent(),
+                  LogicalKeySet(
+                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyV):
+                      const _PasteIntent(),
+                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV):
+                      const _PasteIntent(),
+                  LogicalKeySet(
+                      LogicalKeyboardKey.control,
+                      LogicalKeyboardKey.shift,
+                      LogicalKeyboardKey.keyF): const _SearchIntent(),
+                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
+                      LogicalKeyboardKey.keyF): const _SearchIntent(),
+                },
+                child: Actions(
+                  actions: {
+                    _SelectAllIntent:
+                        CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
+                      _selectAllBlocks();
+                      return null;
+                    }),
+                    _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
+                      _onCopyClean();
+                      return null;
+                    }),
+                    _CutIntent: CallbackAction<_CutIntent>(onInvoke: (intent) {
+                      _onCut();
+                      return null;
+                    }),
+                    _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (intent) {
+                      _onPaste();
+                      return null;
+                    }),
+                    _SearchIntent:
+                        CallbackAction<_SearchIntent>(onInvoke: (intent) {
+                      _showSearchDialog();
+                      return null;
+                    }),
+                  },
+                child: Column(
+                  children: [
+                    FormattingToolbarMVP(
                       onBold: _onBold,
                       onUnderline: _onUnderline,
                       onItalic: _onItalic,
@@ -544,68 +572,51 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                     Expanded(
                       child: Container(
                         color: Color(settings.scriptBgColor),
-                        child: Stack(
-                          children: [
-                            // v5.0.0 Fix: Background tap listener for unfocusing.
-                            // Placed inside the stack and behind the overlay to ensure
-                            // it doesn't absorb drag events meant for multi-block selection.
-                            Positioned.fill(
-                              child: GestureDetector(
-                                onTap: () {
-                                  FocusScope.of(context).unfocus();
-                                  _clearGlobalSelection();
-                                },
-                                behavior: HitTestBehavior.translucent,
-                              ),
-                            ),
-                            GlobalSelectionOverlay(
-                              key: _overlayKey,
-                              controllers: _controllers,
-                              blockKeys: _blockKeys,
-                              onSelectionChanged: () => setState(() {
-                                _isGlobalSelection = _controllers.isNotEmpty &&
-                                    _controllers
-                                        .every((c) => c.isGlobalSelected);
-                              }),
-                              child: SingleChildScrollView(
-                                controller: _editorScrollController,
-                                padding:
-                                    const EdgeInsets.fromLTRB(24, 24, 24, 250),
-                                child: Column(
-                                  children: List.generate(
-                                    _controllers.length,
-                                    (index) => _EditorBlock(
-                                      key: _blockKeys[index],
-                                      controller: _controllers[index],
-                                      focusNode: _focusNodes[index],
-                                      settings: settings,
-                                      isGlobalSelected: _isGlobalSelection,
-                                      onSubmitted: () => _addBlock(index + 1),
-                                      onTap: () {
-                                        if (_isGlobalSelection ||
-                                            _controllers.any(
-                                                (c) => c.isGlobalSelected) ||
-                                            (_overlayKey.currentState
-                                                    ?.hasSelection ??
-                                                false) ||
-                                            _controllers.any((c) =>
-                                                c.externalSelection != null)) {
-                                          _clearGlobalSelection();
-                                        }
-                                      },
-                                      onSelectAll: _selectAllBlocks,
-                                      onCopy: _onCopyClean,
-                                      onSearch: _showSearchDialog,
-                                      hasBookmark:
-                                          _hasBookmarkInEditorBlock(index),
-                                      onBookmarkTap: () =>
-                                          _deleteEditorBookmarksForBlock(index),
-                                    ),
-                                  ),
+                        child: GlobalSelectionOverlay(
+                          key: _overlayKey,
+                          controllers: _controllers,
+                          blockKeys: _blockKeys,
+                          onSelectionChanged: () => setState(() {
+                            _isGlobalSelection = _controllers.isNotEmpty &&
+                                _controllers.every((c) => c.isGlobalSelected);
+                          }),
+                          child: SingleChildScrollView(
+                            controller: _editorScrollController,
+                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
+                            child: Column(
+                              children: List.generate(
+                                _controllers.length,
+                                (index) => _EditorBlock(
+                                  key: _blockKeys[index],
+                                  controller: _controllers[index],
+                                  focusNode: _focusNodes[index],
+                                  settings: settings,
+                                  isGlobalSelected: _isGlobalSelection,
+                                  onSubmitted: () => _addBlock(index + 1),
+                                  onTap: () {
+                                    if (_isGlobalSelection ||
+                                        _controllers
+                                            .any((c) => c.isGlobalSelected) ||
+                                        (_overlayKey
+                                                .currentState?.hasSelection ??
+                                            false) ||
+                                        _controllers.any((c) =>
+                                            c.externalSelection != null)) {
+                                      _clearGlobalSelection();
+                                    }
+                                  },
+                                  onSelectAll: _selectAllBlocks,
+                                  onCopy: _onCopyClean,
+                                  onCut: _onCut,
+                                  onPaste: _onPaste,
+                                  onSearch: _showSearchDialog,
+                                  hasBookmark: _hasBookmarkInEditorBlock(index),
+                                  onBookmarkTap: () =>
+                                      _deleteEditorBookmarksForBlock(index),
                                 ),
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),

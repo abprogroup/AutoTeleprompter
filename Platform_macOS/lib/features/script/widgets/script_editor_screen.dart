@@ -48,6 +48,10 @@ class _CutIntent extends Intent {
   const _CutIntent();
 }
 
+class _PasteIntent extends Intent {
+  const _PasteIntent();
+}
+
 class _SearchIntent extends Intent {
   const _SearchIntent();
 }
@@ -333,12 +337,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   void _addBlock(int index, {String text = ''}) {
     setState(() {
       final controller = MarkupController(text: text);
-      final blockKey = GlobalKey();
+      final blockKey = GlobalKey(); // v3.9.5.66
       
       final node = FocusNode(onKeyEvent: (node, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
+        if (event.logicalKey == LogicalKeyboardKey.enter &&
+            !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);
           final text = controller.text;
           final sel = controller.selection;
@@ -350,14 +355,19 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && idx + 1 < _focusNodes.length) {
                 _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                _controllers[idx + 1].selection =
+                    const TextSelection.collapsed(offset: 0);
               }
             });
           }
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }
-        
+        final isArrow = event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+            event.logicalKey == LogicalKeyboardKey.arrowRight ||
+            event.logicalKey == LogicalKeyboardKey.arrowUp ||
+            event.logicalKey == LogicalKeyboardKey.arrowDown;
+
         if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
           if (_isGlobalSelection) {
             _clearGlobalSelection();
@@ -452,7 +462,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             }
           }
         }
-
         if (event.logicalKey == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
           if (_controllers.length > 1 && idx != -1) {
@@ -467,12 +476,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
         return KeyEventResult.ignored;
       });
-
+      
       node.addListener(() {
-        if (node.hasFocus) {
-          _lastFocusedController = controller;
-          _onSelectionChanged();
-        } else if (_isDirty && !_isCommandExecuting) {
+        if (node.hasFocus) { _lastFocusedController = controller; _onSelectionChanged(); }
+        else if (_isDirty && !_isCommandExecuting) {
+          // Flush any pending typing bulk on focus loss
           if (_typingCharCount > 0) {
             _commitHistory('Edit Text');
           }
@@ -490,6 +498,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               _preservedSelection = controller.selection;
             }
             _onSelectionChanged();
+            // Escalate native full-block select to global Select All.
+            // Catches all paths: context menu, keyboard, platform menu.
+            // Skip when overlay has active handles (refine mode) to avoid
+            // infinite loop: refine clears isGlobal → escalation re-selects → loop.
             final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
             if (!_isGlobalSelection &&
                 !_isCommandExecuting &&
@@ -504,6 +516,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         }
         lastText = controller.text;
         _isDirty = true;
+        // v4.1.2: When the user edits text (not inside a style command), clear
+        // any pinned externalSelection so stale amber doesn't linger after typing.
         if (!_isCommandExecuting && controller.externalSelection != null) {
           controller.externalSelection = null;
           controller.refresh();
@@ -515,7 +529,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _focusNodes.insert(index, node);
       _blockKeys.insert(index, blockKey);
     });
-
+    
     if (text.isEmpty) {
       Future.delayed(Duration.zero, () => _focusNodes[index].requestFocus());
     }
@@ -1770,69 +1784,35 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         ),
       ),
       bottomNavigationBar: _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: Shortcuts(
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+        children: [
+          Shortcuts(
         shortcuts: {
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
-              const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
-              const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
-              const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
-              const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyX):
-              const _CutIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
-              const _CutIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift,
-              LogicalKeyboardKey.keyF): const _SearchIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
-              LogicalKeyboardKey.keyF): const _SearchIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyX): const _CutIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX): const _CutIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyV): const _PasteIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV): const _PasteIntent(),
         },
         child: Actions(
           actions: {
-            _SelectAllIntent:
-                CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-              _selectAllBlocks();
-              return null;
+            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
+              _selectAllBlocks(); return null;
             }),
             _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
-              _onCopyClean();
-              return null;
+              _onCopyClean(); return null;
             }),
             _CutIntent: CallbackAction<_CutIntent>(onInvoke: (intent) {
-              _onCopyClean();
-              _clearGlobalSelectionContent();
-              return null;
+              _onCut(); return null;
             }),
-            _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (intent) {
-              _showSearchDialog();
-              return null;
-            }),
-            CopySelectionTextIntent:
-                CallbackAction<CopySelectionTextIntent>(onInvoke: (_) {
-              _onCopyClean();
-              return null;
-            }),
-            CutSelectionTextIntent:
-                CallbackAction<CutSelectionTextIntent>(onInvoke: (_) {
-              _onCopyClean();
-              _clearGlobalSelectionContent();
-              return null;
-            }),
-            PasteSelectionTextIntent:
-                CallbackAction<PasteSelectionTextIntent>(onInvoke: (_) {
-              // v4.1.0: Ensure multi-block selection is cleared before pasting
-              if (_isGlobalSelection ||
-                  (_overlayKey.currentState?.hasSelection ?? false)) {
-                _clearGlobalSelectionContent();
-              }
-              return null;
-            }),
-            SelectAllTextIntent:
-                CallbackAction<SelectAllTextIntent>(onInvoke: (_) {
-              _selectAllBlocks();
-              return null;
+            _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (intent) {
+              _onPaste(); return null;
             }),
           },
           child: Column(
@@ -1915,26 +1895,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               Expanded(
                 child: Container(
                   color: Color(settings.scriptBgColor),
-                  child: Stack(
-                    children: [
-                      // v4.1.0 Fix: Background tap listener behind the overlay
-                      Positioned.fill(
-                        child: GestureDetector(
-                          onTap: () {
-                            FocusScope.of(context).unfocus();
-                            _clearGlobalSelection();
-                          },
-                          behavior: HitTestBehavior.translucent,
-                        ),
-                      ),
-                      GlobalSelectionOverlay(
-                        key: _overlayKey,
-                        controllers: _controllers,
-                        blockKeys: _blockKeys,
-                        onSelectionChanged: () => setState(() {
-                          _isGlobalSelection = _controllers.isNotEmpty &&
-                              _controllers.every((c) => c.isGlobalSelected);
-                        }),
+                  child: GlobalSelectionOverlay(
+                    key: _overlayKey,
+                    controllers: _controllers,
+                    blockKeys: _blockKeys,
+                    onSelectionChanged: () => setState(() {
+                      _isGlobalSelection = _controllers.isNotEmpty &&
+                          _controllers.every((c) => c.isGlobalSelected);
+                    }),
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
                       itemCount: _controllers.length,
@@ -1955,9 +1923,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         },
                         onSelectAll: _selectAllBlocks,
                         onCopy: _onCopyClean,
-                        ),
+                        onCut: _onCut,
+                        onPaste: _onPaste,
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -2036,21 +2005,23 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       for (int i = 0; i < _controllers.length; i++) {
         final c = _controllers[i];
         final sel = c.externalSelection;
-        String slice;
-        if (c.isGlobalSelected || sel == null || !sel.isValid) {
-          slice = c.text;
-        } else if (sel.isCollapsed) {
-          continue;
-        } else {
-          slice = c.text.substring(sel.start, sel.end);
+        if (c.isGlobalSelected ||
+            (sel != null && sel.isValid && !sel.isCollapsed)) {
+          String slice;
+          if (c.isGlobalSelected || sel == null || !sel.isValid) {
+            slice = c.text;
+          } else {
+            slice = c.text.substring(sel.start, sel.end);
+          }
+          if (slice.isEmpty) continue;
+          if (plainBuf.isNotEmpty) plainBuf.write('\n');
+          plainBuf.write(StylingService.stripTags(slice));
+          htmlBuf.write(StylingService.markupToHtml(slice));
         }
-        if (slice.isEmpty) continue;
-        if (plainBuf.isNotEmpty) plainBuf.write('\n');
-        plainBuf.write(StylingService.stripTags(slice));
-        htmlBuf.write(StylingService.markupToHtml(slice));
       }
       if (plainBuf.isEmpty) return;
-      RichClipboard.setHtml(plain: plainBuf.toString(), html: htmlBuf.toString());
+      RichClipboard.setHtml(
+          plain: plainBuf.toString(), html: htmlBuf.toString());
       return;
     }
     final controller = _activeController;
@@ -2061,6 +2032,117 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       plain: StylingService.stripTags(slice),
       html: StylingService.markupToHtml(slice),
     );
+  }
+
+  void _onCut() {
+    _onCopyClean();
+    _deleteSelection();
+  }
+
+  void _deleteSelection() {
+    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+    if (_isGlobalSelection || hasOverlay) {
+      setState(() => _isCommandExecuting = true);
+      final List<int> toRemove = [];
+      for (int i = 0; i < _controllers.length; i++) {
+        final c = _controllers[i];
+        final sel = c.externalSelection;
+        if (c.isGlobalSelected) {
+          toRemove.add(i);
+        } else if (sel != null && sel.isValid && !sel.isCollapsed) {
+          final before = c.text.substring(0, sel.start);
+          final after = c.text.substring(sel.end);
+          c.text = before + after;
+          c.externalSelection = null;
+          c.refresh();
+        }
+      }
+      // Remove blocks that were fully selected
+      if (toRemove.isNotEmpty && _controllers.length > toRemove.length) {
+        for (final idx in toRemove.reversed) {
+          _removeBlock(idx);
+        }
+      } else if (toRemove.length == _controllers.length) {
+        // Clear all but first
+        for (int i = _controllers.length - 1; i > 0; i--) _removeBlock(i);
+        _controllers.first.clear();
+        _controllers.first.refresh();
+      }
+      _clearGlobalSelection();
+      setState(() => _isCommandExecuting = false);
+      _saveHistory(description: 'Delete Selection');
+    } else {
+      final c = _activeController;
+      if (c != null && !c.selection.isCollapsed) {
+        final sel = c.selection;
+        final before = c.text.substring(0, sel.start);
+        final after = c.text.substring(sel.end);
+        c.value = TextEditingValue(
+          text: before + after,
+          selection: TextSelection.collapsed(offset: sel.start),
+        );
+        _saveHistory(description: 'Delete');
+      }
+    }
+  }
+
+  Future<void> _onPaste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text == null) return;
+    final text = data!.text!;
+
+    // 1. Delete selection if any
+    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+    if (_isGlobalSelection ||
+        hasOverlay ||
+        (_activeController != null &&
+            !_activeController!.selection.isCollapsed)) {
+      _deleteSelection();
+    }
+
+    // 2. Insert text
+    final c = _activeController;
+    if (c != null) {
+      final sel = c.selection;
+      final oldText = c.text;
+      final before = oldText.substring(0, sel.start);
+      final after = oldText.substring(sel.end);
+
+      if (text.contains('\n')) {
+        // Multi-line paste: split into blocks
+        final lines = text.split('\n');
+        final currentIdx = _controllers.indexOf(c);
+        if (currentIdx != -1) {
+          setState(() {
+            // Update first block
+            c.text = before + lines[0];
+            // Insert intermediate blocks
+            for (int i = 1; i < lines.length - 1; i++) {
+              _addBlock(currentIdx + i, text: lines[i]);
+            }
+            // Insert last block with remainder of original block
+            final lastLine = lines.last + after;
+            _addBlock(currentIdx + lines.length - 1, text: lastLine);
+
+            // Focus end of paste
+            final targetIdx = currentIdx + lines.length - 1;
+            Future.delayed(Duration.zero, () {
+              if (mounted) {
+                _focusNodes[targetIdx].requestFocus();
+                _controllers[targetIdx].selection =
+                    TextSelection.collapsed(offset: lines.last.length);
+              }
+            });
+          });
+        }
+      } else {
+        c.value = TextEditingValue(
+          text: before + text + after,
+          selection: TextSelection.collapsed(offset: sel.start + text.length),
+        );
+      }
+      _saveHistory(description: 'Paste');
+    }
   }
 
   void _selectAllBlocks() {
@@ -2118,38 +2200,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     });
   }
 
+  /// Re-sync externalSelection after a global style operation changes text lengths.
+  void _resyncGlobalSelection() {
+    for (final c in _controllers) {
+      c.isGlobalSelected = true;
+      c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+    }
+    setState(() {});
     for (final c in _controllers) {
       c.refresh();
     }
-  }
-
-  /// v4.1.0: Deletes the currently selected content across all targeted blocks.
-  /// Used for Cut (Ctrl+X) and Paste-over-selection operations.
-  void _clearGlobalSelectionContent() {
-    setState(() => _isCommandExecuting = true);
-    if (_isGlobalSelection) {
-      _loadText(''); // Clear all
-    } else {
-      final targets = _styleTargets();
-      for (final c in targets) {
-        final sel = (c.externalSelection != null &&
-                c.externalSelection!.isValid &&
-                !c.externalSelection!.isCollapsed)
-            ? c.externalSelection!
-            : c.selection;
-        if (!sel.isCollapsed) {
-          final before = c.text.substring(0, sel.start);
-          final after = c.text.substring(sel.end);
-          c.value = TextEditingValue(
-            text: before + after,
-            selection: TextSelection.collapsed(offset: sel.start),
-          );
-        }
-      }
-    }
-    _clearGlobalSelection();
-    _saveHistory(description: 'Delete Selection');
-    setState(() => _isCommandExecuting = false);
   }
 
   void _scrollEditorBlockIntoView(int block, {double alignment = 0.25}) {
@@ -2267,12 +2327,21 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
+  final VoidCallback onCut;
+  final VoidCallback onPaste;
 
   const _EditorBlock({
     super.key,
-    required this.controller, required this.focusNode, required this.settings,
-    required this.isGlobalSelected, required this.onSubmitted, required this.onTap,
-    required this.onSelectAll, required this.onCopy,
+    required this.controller,
+    required this.focusNode,
+    required this.settings,
+    required this.isGlobalSelected,
+    required this.onSubmitted,
+    required this.onTap,
+    required this.onSelectAll,
+    required this.onCopy,
+    required this.onCut,
+    required this.onPaste,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2306,47 +2375,130 @@ class _EditorBlock extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          textSelectionTheme: TextSelectionThemeData(
-            selectionColor: Colors.transparent,
-          ),
-        ),
-        child: TextField(
-            selectionControls: GhostSelectionControls(),
-            controller: controller,
-            focusNode: focusNode,
-            maxLines: null,
-            onSubmitted: (_) => onSubmitted(),
-            onTap: onTap,
-            textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-            textAlign: textAlign,
-            cursorColor: Colors.amber,
-            cursorHeight: maxFontSize,
-            strutStyle: StrutStyle(
-              fontSize: maxFontSize,
-              height: settings.lineSpacing,
-              forceStrutHeight: true,
+      child: Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.keyA, control: true):
+              _SelectAllIntent(),
+          SingleActivator(LogicalKeyboardKey.keyA, meta: true):
+              _SelectAllIntent(),
+          SingleActivator(LogicalKeyboardKey.keyC, control: true): _CopyIntent(),
+          SingleActivator(LogicalKeyboardKey.keyC, meta: true): _CopyIntent(),
+          SingleActivator(LogicalKeyboardKey.keyX, control: true): _CutIntent(),
+          SingleActivator(LogicalKeyboardKey.keyX, meta: true): _CutIntent(),
+          SingleActivator(LogicalKeyboardKey.keyV, control: true):
+              _PasteIntent(),
+          SingleActivator(LogicalKeyboardKey.keyV, meta: true): _PasteIntent(),
+        },
+        child: Actions(
+          actions: {
+            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (_) {
+              onSelectAll();
+              return null;
+            }),
+            _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
+              onCopy();
+              return null;
+            }),
+            _CutIntent: CallbackAction<_CutIntent>(onInvoke: (_) {
+              onCut();
+              return null;
+            }),
+            _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (_) {
+              onPaste();
+              return null;
+            }),
+            // Override internal EditableText intents
+            CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
+              onInvoke: (_) {
+                onCopy();
+                return null;
+              },
             ),
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: settings.fontSize,
-              height: settings.lineSpacing,
-              letterSpacing: settings.letterSpacing,
-              wordSpacing: settings.wordSpacing,
+            SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
+              onInvoke: (_) {
+                onSelectAll();
+                return null;
+              },
             ),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(vertical: 2),
+          },
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              textSelectionTheme: TextSelectionThemeData(
+                selectionColor: Colors.transparent,
+              ),
             ),
-            contextMenuBuilder: (context, editableTextState) {
-              final List<ContextMenuButtonItem> items = editableTextState.contextMenuButtonItems;
-              final List<ContextMenuButtonItem> customItems = [];
-              bool hasSelectAll = false;
-              for (final item in items) {
-                if (item.type == ContextMenuButtonType.selectAll) {
-                  hasSelectAll = true;
+            child: TextField(
+              selectionControls: GhostSelectionControls(),
+              controller: controller,
+              focusNode: focusNode,
+              maxLines: null,
+              onSubmitted: (_) => onSubmitted(),
+              onTap: onTap,
+              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+              textAlign: textAlign,
+              cursorColor: Colors.amber,
+              cursorHeight: maxFontSize,
+              strutStyle: StrutStyle(
+                fontSize: maxFontSize,
+                height: settings.lineSpacing,
+                forceStrutHeight: true,
+              ),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: settings.fontSize,
+                height: settings.lineSpacing,
+                letterSpacing: settings.letterSpacing,
+                wordSpacing: settings.wordSpacing,
+              ),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 2),
+              ),
+              contextMenuBuilder: (context, editableTextState) {
+                final List<ContextMenuButtonItem> items =
+                    editableTextState.contextMenuButtonItems;
+                final List<ContextMenuButtonItem> customItems = [];
+                bool hasSelectAll = false;
+                for (final item in items) {
+                  if (item.type == ContextMenuButtonType.selectAll) {
+                    hasSelectAll = true;
+                    customItems.add(ContextMenuButtonItem(
+                      onPressed: () {
+                        ContextMenuController.removeAny();
+                        onSelectAll();
+                      },
+                      type: ContextMenuButtonType.selectAll,
+                    ));
+                  } else if (item.type == ContextMenuButtonType.copy) {
+                    customItems.add(ContextMenuButtonItem(
+                      onPressed: () {
+                        ContextMenuController.removeAny();
+                        onCopy();
+                      },
+                      type: ContextMenuButtonType.copy,
+                    ));
+                  } else if (item.type == ContextMenuButtonType.cut) {
+                    customItems.add(ContextMenuButtonItem(
+                      onPressed: () {
+                        ContextMenuController.removeAny();
+                        onCut();
+                      },
+                      type: ContextMenuButtonType.cut,
+                    ));
+                  } else if (item.type == ContextMenuButtonType.paste) {
+                    customItems.add(ContextMenuButtonItem(
+                      onPressed: () {
+                        ContextMenuController.removeAny();
+                        onPaste();
+                      },
+                      type: ContextMenuButtonType.paste,
+                    ));
+                  } else {
+                    customItems.add(item);
+                  }
+                }
+                if (!hasSelectAll) {
                   customItems.add(ContextMenuButtonItem(
                     onPressed: () {
                       ContextMenuController.removeAny();
@@ -2354,37 +2506,17 @@ class _EditorBlock extends StatelessWidget {
                     },
                     type: ContextMenuButtonType.selectAll,
                   ));
-                } else if (item.type == ContextMenuButtonType.copy) {
-                  customItems.add(ContextMenuButtonItem(
-                    onPressed: () {
-                      ContextMenuController.removeAny();
-                      onCopy();
-                    },
-                    type: ContextMenuButtonType.copy,
-                  ));
-                } else {
-                  customItems.add(item);
                 }
-              }
-              // Force-inject a global Select All even when the native menu
-              // omits it (e.g. the block is already fully selected).
-              if (!hasSelectAll) {
-                customItems.add(ContextMenuButtonItem(
-                  onPressed: () {
-                    ContextMenuController.removeAny();
-                    onSelectAll();
-                  },
-                  type: ContextMenuButtonType.selectAll,
-                ));
-              }
-              return AdaptiveTextSelectionToolbar.buttonItems(
-                anchors: editableTextState.contextMenuAnchors,
-                buttonItems: customItems,
-              );
-            },
+                return AdaptiveTextSelectionToolbar.buttonItems(
+                  anchors: editableTextState.contextMenuAnchors,
+                  buttonItems: customItems,
+                );
+              },
+            ),
           ),
         ),
-      );
+      ),
+    );
   }
 }
 

@@ -98,6 +98,14 @@ class _EditorBlock extends StatelessWidget {
                     _CopyIntent(),
                 SingleActivator(LogicalKeyboardKey.keyC, meta: true):
                     _CopyIntent(),
+                SingleActivator(LogicalKeyboardKey.keyX, control: true):
+                    _CutIntent(),
+                SingleActivator(LogicalKeyboardKey.keyX, meta: true):
+                    _CutIntent(),
+                SingleActivator(LogicalKeyboardKey.keyV, control: true):
+                    _PasteIntent(),
+                SingleActivator(LogicalKeyboardKey.keyV, meta: true):
+                    _PasteIntent(),
                 SingleActivator(LogicalKeyboardKey.keyF,
                     control: true, shift: true): _SearchIntent(),
                 SingleActivator(LogicalKeyboardKey.keyF,
@@ -114,18 +122,36 @@ class _EditorBlock extends StatelessWidget {
                     onCopy();
                     return null;
                   }),
+                  _CutIntent: CallbackAction<_CutIntent>(onInvoke: (_) {
+                    onCut();
+                    return null;
+                  }),
+                  _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (_) {
+                    onPaste();
+                    return null;
+                  }),
                   _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) {
                     onSearch();
                     return null;
                   }),
-                  // Override the internal EditableText intents too. These are
-                  // marked Action.overridable inside EditableText, so placing
-                  // our own handlers at this ancestor wins — catching both the
-                  // keyboard Cmd+C and Flutter's internal copy dispatch paths.
+                  // Override internal EditableText intents
                   CopySelectionTextIntent:
                       CallbackAction<CopySelectionTextIntent>(
                     onInvoke: (_) {
                       onCopy();
+                      return null;
+                    },
+                  ),
+                  CutSelectionTextIntent:
+                      CallbackAction<CutSelectionTextIntent>(
+                    onInvoke: (_) {
+                      onCut();
+                      return null;
+                    },
+                  ),
+                  PasteTextIntent: CallbackAction<PasteTextIntent>(
+                    onInvoke: (_) {
+                      onPaste();
                       return null;
                     },
                   ),
@@ -139,11 +165,6 @@ class _EditorBlock extends StatelessWidget {
                 child: Theme(
                   data: Theme.of(context).copyWith(
                     textSelectionTheme: TextSelectionThemeData(
-                      // Always transparent: all amber selection rendering is handled
-                      // by MarkupController.buildTextSpan via externalSelection /
-                      // isGlobalSelected. Native RenderEditable must never paint its
-                      // own amber highlight or it leaks through when _isGlobalSelection
-                      // flips to false during a handle drag (Bug 2 fix v4.0.6).
                       selectionColor: Colors.transparent,
                     ),
                   ),
@@ -199,12 +220,26 @@ class _EditorBlock extends StatelessWidget {
                             },
                             type: ContextMenuButtonType.copy,
                           ));
+                        } else if (item.type == ContextMenuButtonType.cut) {
+                          customItems.add(ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onCut();
+                            },
+                            type: ContextMenuButtonType.cut,
+                          ));
+                        } else if (item.type == ContextMenuButtonType.paste) {
+                          customItems.add(ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onPaste();
+                            },
+                            type: ContextMenuButtonType.paste,
+                          ));
                         } else {
                           customItems.add(item);
                         }
                       }
-                      // Force-inject a global Select All even when the native menu
-                      // omits it (e.g. the block is already fully selected).
                       if (!hasSelectAll) {
                         customItems.add(ContextMenuButtonItem(
                           onPressed: () {

@@ -310,17 +310,17 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
         final c = _controllers[i];
         final sel = c.externalSelection;
         String slice;
-        if (c.isGlobalSelected || sel == null || !sel.isValid) {
-          slice = c.text;
-        } else if (sel.isCollapsed) {
-          continue;
-        } else {
-          slice = c.text.substring(sel.start, sel.end);
+        if (c.isGlobalSelected || (sel != null && sel.isValid && !sel.isCollapsed)) {
+          if (c.isGlobalSelected || sel == null || !sel.isValid) {
+            slice = c.text;
+          } else {
+            slice = c.text.substring(sel.start, sel.end);
+          }
+          if (slice.isEmpty) continue;
+          if (plainBuf.isNotEmpty) plainBuf.write('\n');
+          plainBuf.write(StylingService.stripTags(slice));
+          htmlBuf.write(StylingService.markupToHtml(slice));
         }
-        if (slice.isEmpty) continue;
-        if (plainBuf.isNotEmpty) plainBuf.write('\n');
-        plainBuf.write(StylingService.stripTags(slice));
-        htmlBuf.write(StylingService.markupToHtml(slice));
       }
       if (plainBuf.isEmpty) return;
       RichClipboard.setHtml(
@@ -335,6 +335,116 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
       plain: StylingService.stripTags(slice),
       html: StylingService.markupToHtml(slice),
     );
+  }
+
+  void _onCut() {
+    _onCopyClean();
+    _deleteSelection();
+  }
+
+  void _deleteSelection() {
+    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+    if (_isGlobalSelection || hasOverlay) {
+      setState(() => _isCommandExecuting = true);
+      final List<int> toRemove = [];
+      for (int i = 0; i < _controllers.length; i++) {
+        final c = _controllers[i];
+        final sel = c.externalSelection;
+        if (c.isGlobalSelected) {
+          toRemove.add(i);
+        } else if (sel != null && sel.isValid && !sel.isCollapsed) {
+          final before = c.text.substring(0, sel.start);
+          final after = c.text.substring(sel.end);
+          c.text = before + after;
+          c.externalSelection = null;
+          c.refresh();
+        }
+      }
+      // Remove blocks that were fully selected
+      if (toRemove.isNotEmpty && _controllers.length > toRemove.length) {
+        for (final idx in toRemove.reversed) {
+          _removeBlock(idx);
+        }
+      } else if (toRemove.length == _controllers.length) {
+        // Clear all but first
+        for (int i = _controllers.length - 1; i > 0; i--) _removeBlock(i);
+        _controllers.first.clear();
+        _controllers.first.refresh();
+      }
+      _clearGlobalSelection();
+      setState(() => _isCommandExecuting = false);
+      _saveHistory(description: 'Delete Selection');
+    } else {
+      final c = _activeController;
+      if (c != null && !c.selection.isCollapsed) {
+        final sel = c.selection;
+        final before = c.text.substring(0, sel.start);
+        final after = c.text.substring(sel.end);
+        c.value = TextEditingValue(
+          text: before + after,
+          selection: TextSelection.collapsed(offset: sel.start),
+        );
+        _saveHistory(description: 'Delete');
+      }
+    }
+  }
+
+  Future<void> _onPaste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text == null) return;
+    final text = data!.text!;
+
+    // 1. Delete selection if any
+    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+    if (_isGlobalSelection ||
+        hasOverlay ||
+        (_activeController != null && !_activeController!.selection.isCollapsed)) {
+      _deleteSelection();
+    }
+
+    // 2. Insert text
+    final c = _activeController;
+    if (c != null) {
+      final sel = c.selection;
+      final oldText = c.text;
+      final before = oldText.substring(0, sel.start);
+      final after = oldText.substring(sel.end);
+
+      if (text.contains('\n')) {
+        // Multi-line paste: split into blocks
+        final lines = text.split('\n');
+        final currentIdx = _controllers.indexOf(c);
+        if (currentIdx != -1) {
+          setState(() {
+            // Update first block
+            c.text = before + lines[0];
+            // Insert intermediate blocks
+            for (int i = 1; i < lines.length - 1; i++) {
+              _addBlock(currentIdx + i, text: lines[i]);
+            }
+            // Insert last block with remainder of original block
+            final lastLine = lines.last + after;
+            _addBlock(currentIdx + lines.length - 1, text: lastLine);
+
+            // Focus end of paste
+            final targetIdx = currentIdx + lines.length - 1;
+            Future.delayed(Duration.zero, () {
+              if (mounted) {
+                _focusNodes[targetIdx].requestFocus();
+                _controllers[targetIdx].selection =
+                    TextSelection.collapsed(offset: lines.last.length);
+              }
+            });
+          });
+        }
+      } else {
+        c.value = TextEditingValue(
+          text: before + text + after,
+          selection: TextSelection.collapsed(offset: sel.start + text.length),
+        );
+      }
+      _saveHistory(description: 'Paste');
+    }
   }
 
   Future<void> _showSearchDialog() async {

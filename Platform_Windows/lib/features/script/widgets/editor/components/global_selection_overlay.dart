@@ -101,6 +101,23 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get hasSelection => _isSelecting && _startBlock != null && _endBlock != null;
 
+  void startDragging(Offset globalPos) {
+    _enterRefineMode();
+    setState(() {
+      _isSelecting = true;
+      _handleUpdate(globalPos, true); // set start
+      _handleUpdate(globalPos, false); // set end
+    });
+  }
+
+  void updateDragging(Offset globalPos) {
+    _handleUpdate(globalPos, false); // move end
+  }
+
+  void endDragging() {
+    // Selection persists after drag
+  }
+
   /// Recalculates handle positions after an external layout change (e.g. alignment
   /// applied to selected text). Must be called after the next frame so the
   /// RenderEditable has been laid out with the new textAlign/textDirection.

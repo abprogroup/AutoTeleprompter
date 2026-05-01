@@ -2384,8 +2384,7 @@ class _EditorBlock extends StatelessWidget {
             },
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

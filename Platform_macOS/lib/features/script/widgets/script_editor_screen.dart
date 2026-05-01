@@ -333,135 +333,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   void _addBlock(int index, {String text = ''}) {
     setState(() {
       final controller = MarkupController(text: text);
-      final blockKey = GlobalKey(); // v3.9.5.66
-      
-      final node = FocusNode(onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-        if (event.logicalKey == LogicalKeyboardKey.enter &&
-            !HardwareKeyboard.instance.isShiftPressed) {
-          final idx = _controllers.indexOf(controller);
-          final text = controller.text;
-          final sel = controller.selection;
-          if (sel.isValid) {
-            final before = text.substring(0, sel.start);
-            final after = text.substring(sel.start);
-            controller.text = before;
-            _addBlock(idx + 1, text: after);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && idx + 1 < _focusNodes.length) {
-                _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection =
-                    const TextSelection.collapsed(offset: 0);
-              }
-            });
-          }
-          _saveHistory(description: 'Split Paragraph');
-          return KeyEventResult.handled;
-        }
-        final isArrow = event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-            event.logicalKey == LogicalKeyboardKey.arrowRight ||
-            event.logicalKey == LogicalKeyboardKey.arrowUp ||
-            event.logicalKey == LogicalKeyboardKey.arrowDown;
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          if (_isGlobalSelection) {
-            _clearGlobalSelection();
-            if (_controllers.isNotEmpty) {
-              _focusNodes[0].requestFocus();
-              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
-            }
-            return KeyEventResult.handled;
-          }
-          final idx = _controllers.indexOf(controller);
-          if (idx > 0) {
-            final layout = _getVerticalLayout(idx);
-            if (layout.isAtTop) {
-              final prevIdx = idx - 1;
-              final prevLayout = _getVerticalLayout(prevIdx);
-              _focusNodes[prevIdx].requestFocus();
-              _controllers[prevIdx].selection = TextSelection.collapsed(
-                offset: prevLayout.getPositionAtX(layout.currentX, fromBottom: true),
-              );
-              _scrollEditorBlockIntoView(prevIdx);
-              return KeyEventResult.handled;
-            }
-          }
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          if (_isGlobalSelection) {
-            _clearGlobalSelection();
-            if (_controllers.isNotEmpty) {
-              final last = _controllers.length - 1;
-              _focusNodes[last].requestFocus();
-              _controllers[last].selection = TextSelection.collapsed(
-                  offset: _controllers[last].text.length);
-            }
-            return KeyEventResult.handled;
-          }
-          final idx = _controllers.indexOf(controller);
-          if (idx < _controllers.length - 1) {
-            final layout = _getVerticalLayout(idx);
-            if (layout.isAtBottom) {
-              final nextIdx = idx + 1;
-              final nextLayout = _getVerticalLayout(nextIdx);
-              _focusNodes[nextIdx].requestFocus();
-              _controllers[nextIdx].selection = TextSelection.collapsed(
-                offset: nextLayout.getPositionAtX(layout.currentX, fromBottom: false),
-              );
-              _scrollEditorBlockIntoView(nextIdx);
-              return KeyEventResult.handled;
-            }
-          }
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          if (_isGlobalSelection) {
-            _clearGlobalSelection();
-            if (_controllers.isNotEmpty) {
-              _focusNodes[0].requestFocus();
-              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
-            }
-            return KeyEventResult.handled;
-          }
-          if (controller.selection.isCollapsed && controller.selection.baseOffset == 0) {
-            final idx = _controllers.indexOf(controller);
-            if (idx > 0) {
-              _focusNodes[idx - 1].requestFocus();
-              final prev = _controllers[idx - 1];
-              prev.selection = TextSelection.collapsed(offset: prev.text.length);
-              _scrollEditorBlockIntoView(idx - 1);
-              return KeyEventResult.handled;
-            }
-          }
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          if (_isGlobalSelection) {
-            _clearGlobalSelection();
-            if (_controllers.isNotEmpty) {
-              final last = _controllers.length - 1;
-              _focusNodes[last].requestFocus();
-              _controllers[last].selection = TextSelection.collapsed(
-                  offset: _controllers[last].text.length);
-            }
-            return KeyEventResult.handled;
-          }
-          if (controller.selection.isCollapsed && controller.selection.baseOffset == controller.text.length) {
-            final idx = _controllers.indexOf(controller);
-            if (idx < _controllers.length - 1) {
-              _focusNodes[idx + 1].requestFocus();
-              _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
-              _scrollEditorBlockIntoView(idx + 1);
-              return KeyEventResult.handled;
-            }
-          }
-        }
-    void _addBlock(int index, {String text = ''}) {
-    setState(() {
-      final controller = MarkupController(text: text);
-      final blockKey = GlobalKey(); // v3.9.5.66
+      final blockKey = GlobalKey();
       
       final node = FocusNode(onKeyEvent: (node, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
@@ -594,6 +466,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
+      });
 
       node.addListener(() {
         if (node.hasFocus) {
@@ -617,8 +490,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               _preservedSelection = controller.selection;
             }
             _onSelectionChanged();
-            final overlayActive =
-                _overlayKey.currentState?.hasSelection ?? false;
+            final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
             if (!_isGlobalSelection &&
                 !_isCommandExecuting &&
                 !overlayActive &&

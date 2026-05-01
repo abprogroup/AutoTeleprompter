@@ -729,11 +729,13 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     }
 
     // 4. Paint
-    final span = controller.buildTextSpan(
-      context: context ?? this.context,
-      style: style,
-      withComposing: false,
-    );
+    final span = controller.text.isEmpty
+        ? TextSpan(text: ' ', style: style)
+        : controller.buildTextSpan(
+            context: context ?? this.context,
+            style: style,
+            withComposing: false,
+          );
     final painter = TextPainter(
       text: span,
       textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
@@ -753,6 +755,7 @@ class _VerticalLayoutInfo {
 
   bool get isAtTop {
     if (!selection.isCollapsed) return false;
+    if (painter.text?.toPlainText().isEmpty ?? true) return true;
     final pos = TextPosition(offset: selection.baseOffset);
     final line = painter.getLineBoundary(pos);
     return line.start == 0;
@@ -760,18 +763,21 @@ class _VerticalLayoutInfo {
 
   bool get isAtBottom {
     if (!selection.isCollapsed) return false;
+    if (painter.text?.toPlainText().isEmpty ?? true) return true;
     final pos = TextPosition(offset: selection.baseOffset);
     final line = painter.getLineBoundary(pos);
     return line.end == painter.text!.toPlainText().length;
   }
 
   double get currentX {
+    if (selection.baseOffset < 0) return 0;
     final pos = TextPosition(offset: selection.baseOffset);
     return painter.getOffsetForCaret(pos, Rect.zero).dx;
   }
 
   int getPositionAtX(double x, {required bool fromBottom}) {
-    final y = fromBottom ? painter.height - 1 : 0.0;
+    if (painter.text?.toPlainText().isEmpty ?? true) return 0;
+    final y = fromBottom ? (painter.height > 0 ? painter.height - 1 : 0.0) : 0.0;
     return painter.getPositionForOffset(Offset(x, y)).offset;
   }
 }

@@ -166,7 +166,29 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       for (final c in _controllers) {
         c.isGlobalSelected = false;
         c.externalSelection = null;
+        // Collapse native selection to prevent residual highlight in buildTextSpan.
+        if (!c.selection.isCollapsed) {
+          final collapseAt = c.selection.baseOffset.clamp(0, c.text.length);
+          c.selection = TextSelection.collapsed(offset: collapseAt);
+        }
         c.refresh();
+      }
+    });
+
+    // Safety net: re-clear after Flutter's TextField processes any lingering gestures.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      bool needsRefresh = false;
+      for (final c in _controllers) {
+        if (c.externalSelection != null || c.isGlobalSelected) {
+          c.externalSelection = null;
+          c.isGlobalSelected = false;
+          needsRefresh = true;
+        }
+      }
+      if (needsRefresh) {
+        for (final c in _controllers) c.refresh();
+        setState(() {});
       }
     });
   }
@@ -371,15 +393,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       ),
       bottomNavigationBar:
           _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: GestureDetector(
-        onTap: () => _clearGlobalSelection(),
-        onPanStart: (details) {
-          _overlayKey.currentState?.startDragging(details.globalPosition);
+      body: Listener(
+        onPointerDown: (event) {
+          if (event.buttons == kPrimaryButton) {
+            _overlayKey.currentState?.startDragging(event.position);
+          }
         },
-        onPanUpdate: (details) {
-          _overlayKey.currentState?.updateDragging(details.globalPosition);
+        onPointerMove: (event) {
+          if (event.buttons == kPrimaryButton) {
+            _overlayKey.currentState?.updateDragging(event.position);
+          }
         },
-        onPanEnd: (_) {
+        onPointerUp: (_) {
           _overlayKey.currentState?.endDragging();
         },
         behavior: HitTestBehavior.translucent,

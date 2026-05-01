@@ -263,23 +263,32 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           }
         }
 
+        final isRtl = controller.text.isHebrew;
+
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
           if (_isGlobalSelection) {
             _clearGlobalSelection();
-            if (_controllers.isNotEmpty) {
-              _focusNodes[0].requestFocus();
-              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
-            }
             return KeyEventResult.handled;
           }
-          if (controller.selection.isCollapsed && controller.selection.baseOffset == 0) {
-            final idx = _controllers.indexOf(controller);
-            if (idx > 0) {
-              _focusNodes[idx - 1].requestFocus();
-              final prev = _controllers[idx - 1];
-              prev.selection = TextSelection.collapsed(offset: prev.text.length);
-              _scrollEditorBlockIntoView(idx - 1);
-              return KeyEventResult.handled;
+          final sel = controller.selection;
+          if (sel.isCollapsed) {
+            // Jump blocks only when moving OUT of the current block
+            if (!isRtl && sel.baseOffset == 0) {
+              final idx = _controllers.indexOf(controller);
+              if (idx > 0) {
+                _focusNodes[idx - 1].requestFocus();
+                _controllers[idx - 1].selection = TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
+                _scrollEditorBlockIntoView(idx - 1);
+                return KeyEventResult.handled;
+              }
+            } else if (isRtl && sel.baseOffset == controller.text.length) {
+              final idx = _controllers.indexOf(controller);
+              if (idx < _controllers.length - 1) {
+                _focusNodes[idx + 1].requestFocus();
+                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                _scrollEditorBlockIntoView(idx + 1);
+                return KeyEventResult.handled;
+              }
             }
           }
         }
@@ -287,21 +296,26 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
           if (_isGlobalSelection) {
             _clearGlobalSelection();
-            if (_controllers.isNotEmpty) {
-              final last = _controllers.length - 1;
-              _focusNodes[last].requestFocus();
-              _controllers[last].selection = TextSelection.collapsed(
-                  offset: _controllers[last].text.length);
-            }
             return KeyEventResult.handled;
           }
-          if (controller.selection.isCollapsed && controller.selection.baseOffset == controller.text.length) {
-            final idx = _controllers.indexOf(controller);
-            if (idx < _controllers.length - 1) {
-              _focusNodes[idx + 1].requestFocus();
-              _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
-              _scrollEditorBlockIntoView(idx + 1);
-              return KeyEventResult.handled;
+          final sel = controller.selection;
+          if (sel.isCollapsed) {
+            if (!isRtl && sel.baseOffset == controller.text.length) {
+              final idx = _controllers.indexOf(controller);
+              if (idx < _controllers.length - 1) {
+                _focusNodes[idx + 1].requestFocus();
+                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                _scrollEditorBlockIntoView(idx + 1);
+                return KeyEventResult.handled;
+              }
+            } else if (isRtl && sel.baseOffset == 0) {
+              final idx = _controllers.indexOf(controller);
+              if (idx > 0) {
+                _focusNodes[idx - 1].requestFocus();
+                _controllers[idx - 1].selection = TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
+                _scrollEditorBlockIntoView(idx - 1);
+                return KeyEventResult.handled;
+              }
             }
           }
         }

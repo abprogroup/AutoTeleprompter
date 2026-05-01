@@ -118,6 +118,98 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     // Selection persists after drag
   }
 
+  void _handleUpdate(Offset globalPos, bool isStart) {
+    final RenderBox? overlayBox =
+        context.findRenderObject() as RenderBox?;
+    if (overlayBox == null) return;
+    final localPos = overlayBox.globalToLocal(globalPos);
+
+    int? bestBlock;
+    double minDistance = double.infinity;
+
+    for (int i = 0; i < widget.blockKeys.length; i++) {
+      final key = widget.blockKeys[i];
+      final RenderBox? box =
+          key.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null) continue;
+
+      final blockOffset = box.localToGlobal(Offset.zero);
+      final localInOverlay = overlayBox.globalToLocal(blockOffset);
+      final rect = localInOverlay & box.size;
+
+      if (rect.contains(localPos)) {
+        bestBlock = i;
+        break;
+      }
+
+      // Fallback to nearest block if outside
+      final dist = (rect.center - localPos).distance;
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestBlock = i;
+      }
+    }
+
+    if (bestBlock != null) {
+      final key = widget.blockKeys[bestBlock];
+      final RenderEditable? editable = _findRenderEditable(key.currentContext);
+      if (editable != null) {
+        final blockGlobalPos = editable.localToGlobal(Offset.zero);
+        final pos = editable.getPositionForPoint(globalPos - blockGlobalPos);
+        
+        setState(() {
+          if (isStart) {
+            _startBlock = bestBlock;
+            _startOffset = pos.offset;
+          } else {
+            _endBlock = bestBlock;
+            _endOffset = pos.offset;
+          }
+          _updateControllers();
+        });
+        widget.onSelectionChanged();
+      }
+    }
+  }
+
+  void _updateControllers() {
+    if (_startBlock == null || _endBlock == null) return;
+
+    final low = _startBlock! < _endBlock! ? _startBlock! : _endBlock!;
+    final high = _startBlock! > _endBlock! ? _startBlock! : _endBlock!;
+    final lowOffset =
+        _startBlock! < _endBlock! ? _startOffset : _endOffset;
+    final highOffset =
+        _startBlock! > _endBlock! ? _startOffset : _endOffset;
+
+    for (int i = 0; i < widget.controllers.length; i++) {
+      final c = widget.controllers[i];
+      if (i < low || i > high) {
+        c.isGlobalSelected = false;
+        c.externalSelection = null;
+      } else if (i > low && i < high) {
+        c.isGlobalSelected = true;
+        c.externalSelection =
+            TextSelection(baseOffset: 0, extentOffset: c.text.length);
+      } else if (i == low && i == high) {
+        c.isGlobalSelected = false;
+        final start = lowOffset < highOffset ? lowOffset : highOffset;
+        final end = lowOffset > highOffset ? lowOffset : highOffset;
+        c.externalSelection =
+            TextSelection(baseOffset: start, extentOffset: end);
+      } else if (i == low) {
+        c.isGlobalSelected = false;
+        c.externalSelection = TextSelection(
+            baseOffset: lowOffset, extentOffset: c.text.length);
+      } else if (i == high) {
+        c.isGlobalSelected = false;
+        c.externalSelection =
+            TextSelection(baseOffset: 0, extentOffset: highOffset);
+      }
+      c.refresh();
+    }
+  }
+
   /// Recalculates handle positions after an external layout change (e.g. alignment
   /// applied to selected text). Must be called after the next frame so the
   /// RenderEditable has been laid out with the new textAlign/textDirection.

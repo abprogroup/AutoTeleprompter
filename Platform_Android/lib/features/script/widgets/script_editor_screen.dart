@@ -30,6 +30,7 @@ import '../services/styling_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
 import './editor/mvp/file_save_mvp.dart';
+import './editor/mvp/selection_system_mvp.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // ── Switchboard Orchestrator ──────────────────────────────────────────────────
@@ -318,7 +319,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final blockKey = GlobalKey(); // v3.9.5.66
       
       final node = FocusNode(onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+        
         if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
           final currentText = controller.text;
           final sel = controller.selection;
@@ -1523,25 +1525,61 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         ),
       ),
       bottomNavigationBar: _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        behavior: HitTestBehavior.translucent,
-        child: Stack(
-        children: [
-          Shortcuts(
+      body: Shortcuts(
         shortcuts: {
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
+              const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
+              const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
+              const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
+              const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyX):
+              const _CutIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
+              const _CutIntent(),
         },
         child: Actions(
           actions: {
-            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-              _selectAllBlocks(); return null;
+            _SelectAllIntent:
+                CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
+              _selectAllBlocks();
+              return null;
             }),
             _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
-              _onCopyClean(); return null;
+              _onCopyClean();
+              return null;
+            }),
+            _CutIntent: CallbackAction<_CutIntent>(onInvoke: (intent) {
+              _onCopyClean();
+              _clearGlobalSelectionContent();
+              return null;
+            }),
+            // Bridge native platform intents
+            CopySelectionTextIntent:
+                CallbackAction<CopySelectionTextIntent>(onInvoke: (_) {
+              _onCopyClean();
+              return null;
+            }),
+            CutSelectionTextIntent:
+                CallbackAction<CutSelectionTextIntent>(onInvoke: (_) {
+              _onCopyClean();
+              _clearGlobalSelectionContent();
+              return null;
+            }),
+            PasteSelectionTextIntent:
+                CallbackAction<PasteSelectionTextIntent>(onInvoke: (_) {
+              if (_isGlobalSelection ||
+                  (_overlayKey.currentState?.hasSelection ?? false)) {
+                _clearGlobalSelectionContent();
+              }
+              return null;
+            }),
+            SelectAllTextIntent:
+                CallbackAction<SelectAllTextIntent>(onInvoke: (_) {
+              _selectAllBlocks();
+              return null;
             }),
           },
           child: Column(
@@ -1624,14 +1662,25 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               Expanded(
                 child: Container(
                   color: Color(settings.scriptBgColor),
-                  child: GlobalSelectionOverlay(
-                    key: _overlayKey,
-                    controllers: _controllers,
-                    blockKeys: _blockKeys,
-                    onSelectionChanged: () => setState(() {
-                      _isGlobalSelection = _controllers.isNotEmpty &&
-                          _controllers.every((c) => c.isGlobalSelected);
-                    }),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: GestureDetector(
+                          onTap: () {
+                            FocusScope.of(context).unfocus();
+                            _clearGlobalSelection();
+                          },
+                          behavior: HitTestBehavior.translucent,
+                        ),
+                      ),
+                      GlobalSelectionOverlay(
+                        key: _overlayKey,
+                        controllers: _controllers,
+                        blockKeys: _blockKeys,
+                        onSelectionChanged: () => setState(() {
+                          _isGlobalSelection = _controllers.isNotEmpty &&
+                              _controllers.every((c) => c.isGlobalSelected);
+                        }),
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
                       itemCount: _controllers.length,
@@ -1645,8 +1694,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onTap: () {
                           if (_isGlobalSelection ||
                               _controllers.any((c) => c.isGlobalSelected) ||
-                              (_overlayKey.currentState?.hasSelection ?? false) ||
-                              _controllers.any((c) => c.externalSelection != null)) {
+                              (_overlayKey.currentState?.hasSelection ??
+                                  false) ||
+                              _controllers.any(
+                                  (c) => c.externalSelection != null)) {
                             _clearGlobalSelection();
                           }
                         },
@@ -1655,6 +1706,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onCut: _onCutClean,
                       ),
                     ),
+                  ),
+                    ],
                   ),
                 ),
               ),
@@ -1727,180 +1780,98 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   void _onCopyClean() {
-    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
-    if (_isGlobalSelection || hasOverlay) {
-      final plainBuf = StringBuffer();
-      final htmlBuf = StringBuffer();
-      for (int i = 0; i < _controllers.length; i++) {
-        final c = _controllers[i];
-        final sel = c.externalSelection;
-        String slice;
-        if (c.isGlobalSelected || sel == null || !sel.isValid) {
-          slice = c.text;
-        } else if (sel.isCollapsed) {
-          continue;
-        } else {
-          slice = c.text.substring(sel.start, sel.end);
-        }
-        if (slice.isEmpty) continue;
-        if (plainBuf.isNotEmpty) plainBuf.write('\n');
-        plainBuf.write(StylingService.stripTags(slice));
-        htmlBuf.write(StylingService.markupToHtml(slice));
-      }
-      if (plainBuf.isEmpty) return;
-      RichClipboard.setHtml(plain: plainBuf.toString(), html: htmlBuf.toString());
-      return;
-    }
-    final controller = _activeController;
-    if (controller == null) return;
-    final slice = controller.selection.textInside(controller.text);
-    if (slice.isEmpty) return;
-    RichClipboard.setHtml(
-      plain: StylingService.stripTags(slice),
-      html: StylingService.markupToHtml(slice),
+    SelectionSystemMvp.copyClean(
+      controllers: _controllers,
+      overlayKey: _overlayKey,
+      isGlobalSelection: _isGlobalSelection,
+      activeController: _activeController,
     );
   }
 
   void _onCutClean() {
-    _onCopyClean();
-    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
-    if (_isGlobalSelection || hasOverlay) {
-      _isCommandExecuting = true;
-      if (_isGlobalSelection) {
-        for (final c in _controllers) { c.text = ''; }
-      } else {
-        for (final c in _controllers) {
-          final sel = c.externalSelection;
-          if (sel == null || !sel.isValid || sel.isCollapsed) continue;
-          final s = sel.start.clamp(0, c.text.length);
-          final e = sel.end.clamp(0, c.text.length);
-          c.text = c.text.substring(0, s) + c.text.substring(e);
-        }
-      }
-      _clearGlobalSelection();
-      _isCommandExecuting = false;
-      _saveHistory(description: 'Cut');
-      setState(() {});
-    } else {
-      final c = _activeController;
-      if (c == null) return;
-      final sel = c.selection;
-      if (!sel.isValid || sel.isCollapsed) return;
-      c.value = TextEditingValue(
-        text: c.text.substring(0, sel.start) + c.text.substring(sel.end),
-        selection: TextSelection.collapsed(offset: sel.start),
-      );
-      _saveHistory(description: 'Cut');
-    }
+    SelectionSystemMvp.cutClean(
+      controllers: _controllers,
+      overlayKey: _overlayKey,
+      isGlobalSelection: _isGlobalSelection,
+      activeController: _activeController,
+      setCommandExecuting: (v) => _isCommandExecuting = v,
+      clearGlobalSelection: _clearGlobalSelection,
+      saveHistory: (desc) => _saveHistory(description: desc),
+      rebuild: () => setState(() {}),
+    );
   }
 
   void _selectAllBlocks() {
-    _isCommandExecuting = true;
-
-    // Keep full-block native selection on the focused block so the soft keyboard
-    // can delete via backspace (platform sees a selection → backspace clears it).
-    // GhostSelectionControls already hides the native teardrop handles, so there
-    // is no need to collapse to suppress them.
-    final active = _activeController;
-    if (active != null) {
-      active.selection = TextSelection(baseOffset: 0, extentOffset: active.text.length);
-    }
-
-    _overlayKey.currentState?.selectAll();
+    SelectionSystemMvp.selectAll(
+      controllers: _controllers,
+      overlayKey: _overlayKey,
+      setCommandExecuting: (v) => _isCommandExecuting = v,
+      rebuild: () => setState(() {}),
+    );
     _isGlobalSelection = true;
-    for (final c in _controllers) {
-      c.isGlobalSelected = true;
-      c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+  }
+
+  /// v4.1.7: Deletes the currently selected content across all targeted blocks.
+  /// Used for Cut (Ctrl+X) and Paste-over-selection operations.
+  void _clearGlobalSelectionContent() {
+    setState(() => _isCommandExecuting = true);
+    if (_isGlobalSelection) {
+      _loadText(''); // Clear all
+    } else {
+      final targets = _styleTargets();
+      for (final c in targets) {
+        final sel = (c.externalSelection != null &&
+                c.externalSelection!.isValid &&
+                !c.externalSelection!.isCollapsed)
+            ? c.externalSelection!
+            : c.selection;
+        if (!sel.isCollapsed) {
+          final before = c.text.substring(0, sel.start);
+          final after = c.text.substring(sel.end);
+          c.value = TextEditingValue(
+            text: before + after,
+            selection: TextSelection.collapsed(offset: sel.start),
+          );
+        }
+      }
     }
-    _isCommandExecuting = false;
-    setState(() {});
-    // Refresh after setState so TextFields repaint with new flags.
-    for (final c in _controllers) {
-      c.refresh();
-    }
+    _clearGlobalSelection();
+    _saveHistory(description: 'Delete Selection');
+    setState(() => _isCommandExecuting = false);
   }
 
   void _deleteGlobalSelection() {
-    _isCommandExecuting = true;
-    _overlayKey.currentState?.clearSelection();
+    SelectionSystemMvp.deleteGlobalSelection(
+      controllers: _controllers,
+      focusNodes: _focusNodes,
+      blockKeys: _blockKeys,
+      overlayKey: _overlayKey,
+      setCommandExecuting: (v) => _isCommandExecuting = v,
+      setDirty: (v) => _isDirty = v,
+      saveHistory: (desc) => _saveHistory(description: desc),
+      setStateCallback: (fn) => setState(fn),
+    );
     _isGlobalSelection = false;
-    for (final c in _controllers) {
-      c.isGlobalSelected = false;
-      c.externalSelection = null;
-      c.text = '';
-    }
-    setState(() {
-      while (_controllers.length > 1) {
-        _controllers.last.dispose();
-        _focusNodes.last.dispose();
-        _blockKeys.removeLast();
-        _controllers.removeLast();
-        _focusNodes.removeLast();
-      }
-    });
-    if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
-    _isCommandExecuting = false;
-    _isDirty = false;
-    _saveHistory(description: 'Delete Selection');
   }
 
   void _clearGlobalSelection() {
-    _overlayKey.currentState?.clearSelection();
+    SelectionSystemMvp.clearGlobalSelection(
+      controllers: _controllers,
+      overlayKey: _overlayKey,
+      mounted: mounted,
+      rebuild: () => setState(() {}),
+    );
     _isGlobalSelection = false;
-    for (final c in _controllers) {
-      c.isGlobalSelected = false;
-      c.externalSelection = null;
-      // Collapse native selection to prevent residual highlight in buildTextSpan.
-      // For RTL text, use baseOffset (cursor stays at visual tap position).
-      if (!c.selection.isCollapsed) {
-        final collapseAt = c.selection.baseOffset.clamp(0, c.text.length);
-        c.selection = TextSelection.collapsed(offset: collapseAt);
-      }
-    }
-    setState(() {});
-    for (final c in _controllers) {
-      c.refresh();
-    }
-    // Safety net: re-clear after Flutter's TextField processes the tap gesture,
-    // which can re-establish selection in RTL blocks.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      bool needsRefresh = false;
-      for (final c in _controllers) {
-        if (c.externalSelection != null) {
-          c.externalSelection = null;
-          needsRefresh = true;
-        }
-        if (c.isGlobalSelected) {
-          c.isGlobalSelected = false;
-          needsRefresh = true;
-        }
-      }
-      if (needsRefresh) {
-        for (final c in _controllers) {
-          c.refresh();
-        }
-        setState(() {});
-      }
-    });
   }
 
   /// Re-sync externalSelection after a global style operation changes text lengths.
   void _resyncGlobalSelection() {
-    for (final c in _controllers) {
-      c.isGlobalSelected = true;
-      c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
-    }
-    setState(() {});
-    for (final c in _controllers) {
-      c.refresh();
-    }
-    // Recalculate overlay handle positions after layout updates with new text.
-    // Text length may have changed (e.g. align tags inserted), so the old
-    // _handleEndPos is stale until the RenderEditable is re-measured.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _overlayKey.currentState?.selectAll();
-    });
+    SelectionSystemMvp.resyncGlobalSelection(
+      controllers: _controllers,
+      overlayKey: _overlayKey,
+      mounted: mounted,
+      rebuild: () => setState(() {}),
+    );
   }
 
 }

@@ -152,22 +152,28 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
     if (bestBlock != null) {
       final key = widget.blockKeys[bestBlock];
-      final RenderEditable? editable = _findRenderEditable(key.currentContext);
-      if (editable != null) {
-        final blockGlobalPos = editable.localToGlobal(Offset.zero);
-        final pos = editable.getPositionForPoint(globalPos - blockGlobalPos);
-        
-        setState(() {
-          if (isStart) {
-            _startBlock = bestBlock;
-            _startOffset = pos.offset;
-          } else {
-            _endBlock = bestBlock;
-            _endOffset = pos.offset;
+      final context = key.currentContext;
+      if (context != null) {
+        final RenderObject? renderObj = context.findRenderObject();
+        if (renderObj != null) {
+          final RenderEditable? editable = _findRenderEditable(renderObj);
+          if (editable != null) {
+            final blockGlobalPos = editable.localToGlobal(Offset.zero);
+            final pos = editable.getPositionForPoint(globalPos - blockGlobalPos);
+
+            setState(() {
+              if (isStart) {
+                _startBlock = bestBlock;
+                _startOffset = pos.offset;
+              } else {
+                _endBlock = bestBlock;
+                _endOffset = pos.offset;
+              }
+              _updateControllers();
+            });
+            widget.onSelectionChanged();
           }
-          _updateControllers();
-        });
-        widget.onSelectionChanged();
+        }
       }
     }
   }
@@ -178,9 +184,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     final low = _startBlock! < _endBlock! ? _startBlock! : _endBlock!;
     final high = _startBlock! > _endBlock! ? _startBlock! : _endBlock!;
     final lowOffset =
-        _startBlock! < _endBlock! ? _startOffset : _endOffset;
+        (_startBlock! < _endBlock! ? _startOffset : _endOffset) ?? 0;
     final highOffset =
-        _startBlock! > _endBlock! ? _startOffset : _endOffset;
+        (_startBlock! > _endBlock! ? _startOffset : _endOffset) ?? 0;
 
     for (int i = 0; i < widget.controllers.length; i++) {
       final c = widget.controllers[i];
@@ -333,57 +339,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     // positions on the second visual line of wrapped text blocks (multi-line drag bug).
   }
 
-  void _handleUpdate(Offset globalPos, bool isStart) {
-    _enterRefineMode();
-
-    for (int i = 0; i < widget.blockKeys.length; i++) {
-        final renderObj = widget.blockKeys[i].currentContext?.findRenderObject();
-        if (renderObj == null) continue;
-        final box = renderObj as RenderBox;
-
-        final boxLocal = box.globalToLocal(globalPos);
-        // Allow a bit of vertical margin for easier dragging
-        if (boxLocal.dy >= -20 && boxLocal.dy <= box.size.height + 20) {
-            // Use the actual RenderEditable for accurate hit-testing
-            final editable = _findRenderEditable(renderObj);
-            TextPosition pos;
-            if (editable != null) {
-              // v4.1.1: Pass globalPos directly — getPositionForPoint expects a
-              // GLOBAL coordinate and converts internally with globalToLocal().
-              // The previous code converted to local first, causing a second
-              // globalToLocal() call inside getPositionForPoint that shifted y
-              // by the widget's screen offset, always returning a line-1 result.
-              pos = editable.getPositionForPoint(globalPos);
-            } else {
-              // Fallback: beginning or end of block
-              pos = TextPosition(offset: boxLocal.dx < box.size.width / 2 ? 0 : widget.controllers[i].text.length);
-            }
-            setState(() {
-              _isSelecting = true;
-              if (isStart) {
-                if (_startBlock != i) HapticFeedback.selectionClick();
-                _startBlock = i;
-                _startOffset = pos.offset;
-              } else {
-                if (_endBlock != i) HapticFeedback.selectionClick();
-                _endBlock = i;
-                _endOffset = pos.offset;
-              }
-              _updateBlockHighlights();
-              for (final c in widget.controllers) {
-                c.refresh();
-              }
-            });
-            // Recalculate handle positions after the frame so caret coords
-            // reflect the new selection highlight layout.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              setState(() => _calculateHandlePositions());
-            });
-            return;
-        }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

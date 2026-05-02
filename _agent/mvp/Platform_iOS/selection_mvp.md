@@ -146,6 +146,24 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     handle system. This is intentionally not the rejected app-toolbar/autoscroll
     patch.
 
+20. **Partial native selections may be adopted into overlay handles only**:
+    Because each paragraph block is a separate iOS `TextField`, native iOS
+    selection handles cannot cross a newline/block boundary. A partial,
+    non-full-block native selection may therefore be adopted into
+    `GlobalSelectionOverlay` so the existing gold handles can cross blocks.
+    This adoption is forbidden during `_isGlobalSelection`, command execution,
+    full-block Select All, or any already-active overlay selection. It must not
+    add an app-owned Cut/Copy/Paste toolbar, edge-scroll timer, or alternate
+    clipboard command path.
+
+21. **Handle drag hit-testing must include block boundaries**: Overlay handle
+    dragging must let endpoints reach offset `0` and `text.length` for the
+    current block, including the small visual corridor above/below a paragraph.
+    Once the pointer is inside the next rendered block, that next block must win
+    hit-testing so the handle can continue crossing blocks instead of sticking
+    near a newline. This is boundary snapping only; it is not timer-based
+    autoscroll.
+
 ---
 
 ## Forbidden Changes
@@ -158,6 +176,13 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 - Do not let a native one-block iOS selection event overwrite a protected
   multi-block snapshot. Select All + Cut/Copy must keep all selected blocks
   unless the user actually refines the overlay handles.
+- Do not reintroduce the rejected custom app toolbar or timer-based edge
+  autoscroll while adopting native partial selections into overlay handles.
+  Cross-block dragging must reuse the existing overlay handle and clipboard
+  paths only.
+- Do not shrink the handle drag boundary back to the exact `RenderBox` height.
+  That recreates the dead zone where handles stop before the selected text can
+  reach the start/end of a paragraph block.
 
 ---
 
@@ -187,6 +212,10 @@ Additional clipboard prohibitions:
 - Do not restore the old viewport-edge fallback for selection handles. Hidden
   offscreen endpoints are less misleading than handles floating at an unrelated
   edge of the screen.
+- Do not adopt a full-block native selection into the partial overlay path.
+  Full-block native selection is the iOS Select All bridge and must continue to
+  route through `_selectAllBlocks()` so protected multi-block snapshots stay
+  intact.
 
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.

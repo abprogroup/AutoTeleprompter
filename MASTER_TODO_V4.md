@@ -438,6 +438,15 @@
   selection and no app overlay selection are active. Global Select All and
   overlay selection still force `GhostSelectionControls`, with no app-owned
   toolbar and no timer autoscroll. Awaiting IPA/device verification.
+- [P] **iOS Cross-Block Handle Adoption Safety Pass**: Native iOS handles cannot
+  cross paragraph boundaries because each block is a separate `TextField`.
+  Partial, non-full-block native selections now adopt into the existing
+  `GlobalSelectionOverlay` so the gold overlay handles can cross blocks, while
+  full-block Select All, protected multi-block clipboard snapshots, native
+  toolbar ownership, and the no-autoscroll/no-app-toolbar rejection rule remain
+  unchanged. Handle hit-testing also keeps a small boundary corridor so
+  endpoints can reach paragraph start/end offsets without sticking near
+  newlines. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

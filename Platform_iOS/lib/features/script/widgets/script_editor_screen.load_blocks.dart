@@ -398,6 +398,8 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         }
       }
 
+      _adoptNativeSelectionForCrossBlockHandles(controller);
+
       // Defer provider update to avoid "modified during build" errors
       // when _onSelectionChanged is triggered from controller listeners
       // during setState callbacks.
@@ -417,6 +419,42 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         ref.read(cursorStyleProvider.notifier).state = styles;
       });
     }
+  }
+
+  void _adoptNativeSelectionForCrossBlockHandles(MarkupController controller) {
+    final blockIndex = _controllers.indexOf(controller);
+    if (blockIndex < 0) return;
+    if (_isGlobalSelection || _isCommandExecuting) return;
+    if (_overlayKey.currentState?.hasSelection ?? false) return;
+
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) return;
+    final textLength = controller.text.length;
+    final start = selection.start.clamp(0, textLength).toInt();
+    final end = selection.end.clamp(0, textLength).toInt();
+    if (start == end) return;
+    if (start == 0 && end == textLength) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_isGlobalSelection || _isCommandExecuting) return;
+      if (_overlayKey.currentState?.hasSelection ?? false) return;
+      if (blockIndex >= _controllers.length ||
+          !identical(_controllers[blockIndex], controller)) return;
+
+      final current = controller.selection;
+      if (!current.isValid || current.isCollapsed) return;
+      final currentStart =
+          current.start.clamp(0, controller.text.length).toInt();
+      final currentEnd = current.end.clamp(0, controller.text.length).toInt();
+      if (currentStart == currentEnd) return;
+      if (currentStart == 0 && currentEnd == controller.text.length) return;
+
+      _overlayKey.currentState?.adoptNativeBlockSelection(
+        blockIndex,
+        TextSelection(baseOffset: currentStart, extentOffset: currentEnd),
+      );
+    });
   }
 
   void _scheduleRecentUpdate() {

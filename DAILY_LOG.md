@@ -947,3 +947,21 @@
   ordinary one-block selection.
 - **Documentation Result**: Updated the iOS Selection MVP and
   `MASTER_TODO_V4.md`. Awaiting IPA/device verification.
+
+## 2026-05-02 - iOS Cross-Block Handle Adoption Safety Pass
+
+- **Session Goal**: Fix device QA showing that native iOS handle dragging stops
+  at the initially touched paragraph/newline because each editor paragraph is a
+  separate `TextField`.
+- **Fix Result**: Partial, non-full-block native selections now adopt into the
+  existing `GlobalSelectionOverlay`, so the gold overlay handles can drag
+  across paragraph blocks. Full-block native Select All remains owned by
+  `_selectAllBlocks()`. Handle hit-testing also includes a small paragraph
+  boundary corridor so endpoints can reach offset `0` / `text.length` instead
+  of sticking near a newline.
+- **Safety Result**: No app-owned Cut/Copy/Paste toolbar was added, no
+  timer-based edge autoscroll was added, and no clipboard command path was
+  changed. The adoption path is disabled during global selection, command
+  execution, full-block Select All, or any already-active overlay selection.
+- **Documentation Result**: Updated the iOS Selection MVP and
+  `MASTER_TODO_V4.md`. Awaiting IPA/device verification.

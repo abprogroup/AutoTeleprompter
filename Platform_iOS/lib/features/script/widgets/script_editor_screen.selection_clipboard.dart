@@ -180,6 +180,9 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       }
       return after == null ? null : List<String>.of(after);
     }
+    if (_overlayKey.currentState?.hasSelection ?? false) {
+      return null;
+    }
     if (_hasRecentGlobalSelectionSnapshot) {
       _selectionClipboardDebug =
           '$reason: using armed ${_globalSelectionSnapshot!.length} blocks [${_blockDebugShape(_globalSelectionSnapshot)}]';

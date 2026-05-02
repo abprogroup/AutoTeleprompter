@@ -108,6 +108,42 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get isRefinedSelection => _hasHandleRefinedSelection;
 
+  /// Promote a normal native one-block selection into the app overlay handle
+  /// system. This is intentionally partial-selection only: full-block native
+  /// Select All still belongs to _selectAllBlocks(), and this method must not
+  /// create an app-owned toolbar or edge-scroll behavior.
+  void adoptNativeBlockSelection(int blockIndex, TextSelection selection) {
+    if (blockIndex < 0 || blockIndex >= widget.controllers.length) return;
+    if (!selection.isValid || selection.isCollapsed) return;
+
+    final controller = widget.controllers[blockIndex];
+    final start = selection.start.clamp(0, controller.text.length).toInt();
+    final end = selection.end.clamp(0, controller.text.length).toInt();
+    if (start == end) return;
+    if (start == 0 && end == controller.text.length) return;
+
+    setState(() {
+      _isSelecting = true;
+      _hasHandleRefinedSelection = true;
+      _startBlock = blockIndex;
+      _endBlock = blockIndex;
+      _startOffset = start;
+      _endOffset = end;
+      for (final c in widget.controllers) {
+        c.isGlobalSelected = false;
+      }
+      _updateBlockHighlights();
+      for (final c in widget.controllers) {
+        c.refresh();
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _calculateHandlePositions());
+    });
+    widget.onSelectionChanged();
+  }
+
   /// Recalculates handle positions after an external layout change (e.g. alignment
   /// applied to selected text). Must be called after the next frame so the
   /// RenderEditable has been laid out with the new textAlign/textDirection.
@@ -256,12 +292,25 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       final box = renderObj as RenderBox;
 
       final boxLocal = box.globalToLocal(globalPos);
-      // Allow a bit of vertical margin for easier dragging
-      if (boxLocal.dy >= -20 && boxLocal.dy <= box.size.height + 20) {
+      if (boxLocal.dy > box.size.height && i + 1 < widget.blockKeys.length) {
+        final nextRender =
+            widget.blockKeys[i + 1].currentContext?.findRenderObject();
+        if (nextRender is RenderBox) {
+          final nextLocal = nextRender.globalToLocal(globalPos);
+          if (nextLocal.dy >= 0) continue;
+        }
+      }
+      // Allow a boundary corridor so handles can reach the real start/end of a
+      // block and cross paragraph seams without dead-zoning near newlines.
+      if (boxLocal.dy >= -96 && boxLocal.dy <= box.size.height + 96) {
         // Use the actual RenderEditable for accurate hit-testing
         final editable = _findRenderEditable(renderObj);
         TextPosition pos;
-        if (editable != null) {
+        if (boxLocal.dy < 0) {
+          pos = const TextPosition(offset: 0);
+        } else if (boxLocal.dy > box.size.height) {
+          pos = TextPosition(offset: widget.controllers[i].text.length);
+        } else if (editable != null) {
           // v4.1.1: Pass globalPos directly — getPositionForPoint expects a
           // GLOBAL coordinate and converts internally with globalToLocal().
           // The previous code converted to local first, causing a second
@@ -281,11 +330,13 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           if (isStart) {
             if (_startBlock != i) HapticFeedback.selectionClick();
             _startBlock = i;
-            _startOffset = pos.offset;
+            _startOffset =
+                pos.offset.clamp(0, widget.controllers[i].text.length).toInt();
           } else {
             if (_endBlock != i) HapticFeedback.selectionClick();
             _endBlock = i;
-            _endOffset = pos.offset;
+            _endOffset =
+                pos.offset.clamp(0, widget.controllers[i].text.length).toInt();
           }
           _updateBlockHighlights();
           for (final c in widget.controllers) {

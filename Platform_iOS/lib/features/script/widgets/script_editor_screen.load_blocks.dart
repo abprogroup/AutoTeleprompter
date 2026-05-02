@@ -398,6 +398,23 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         }
       }
 
+      if (!_isGlobalSelection && !_isCommandExecuting) {
+        final selection = controller.selection;
+        final blockIndex = _controllers.indexOf(controller);
+        if (blockIndex >= 0 &&
+            selection.isValid &&
+            !selection.isCollapsed &&
+            !(_overlayKey.currentState
+                    ?.hasSameBlockSelection(blockIndex, selection) ??
+                false)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _overlayKey.currentState
+                ?.selectBlockSelection(blockIndex, selection);
+          });
+        }
+      }
+
       // Defer provider update to avoid "modified during build" errors
       // when _onSelectionChanged is triggered from controller listeners
       // during setState callbacks.
@@ -663,6 +680,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     _typingBulkTimer?.cancel();
     _suiteAutoSaveTimer?.cancel();
     _blockClipboardTimer?.cancel();
+    _editorScrollController.dispose();
     _clearControllers();
   }
 }

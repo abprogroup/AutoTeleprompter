@@ -221,6 +221,12 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                             key: _overlayKey,
                             controllers: _controllers,
                             blockKeys: _blockKeys,
+                            scrollController: _editorScrollController,
+                            onCut: _onCutClean,
+                            onCopy: _onCopyClean,
+                            onPaste: _hasPasteableBlockClipboard
+                                ? _pasteFromGlobalClipboard
+                                : null,
                             onSelectionChanged: () => setState(() {
                               final overlayState = _overlayKey.currentState;
                               _isGlobalSelection = _controllers.isNotEmpty &&
@@ -237,6 +243,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 return false;
                               },
                               child: ListView.builder(
+                                controller: _editorScrollController,
                                 padding:
                                     const EdgeInsets.fromLTRB(24, 24, 24, 250),
                                 itemCount: _controllers.length,

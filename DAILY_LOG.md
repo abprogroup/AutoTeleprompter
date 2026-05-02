@@ -892,3 +892,23 @@
   dragging remains visible.
 - **Documentation Result**: Updated the iOS Selection MVP and
   `MASTER_TODO_V4.md`. Awaiting IPA/device verification.
+
+## 2026-05-02 - iOS Selection Handles Toolbar And Edge Scroll
+
+- **Session Goal**: Fix iOS editor selection usability after device testing:
+  double-tap word selection needed custom drag handles, handle movement needed
+  an app-owned Cut/Copy/Paste command surface, and dragging handles to the top
+  or bottom of the editor needed to scroll for long selections.
+- **Native Word Selection Result**: Non-collapsed native `TextField`
+  selections now promote into `GlobalSelectionOverlay.selectBlockSelection`,
+  showing the same gold handles and amber markup selection used by global
+  selection refine mode.
+- **Toolbar Result**: The overlay now owns a compact Cut/Copy/Paste toolbar
+  after word selection or handle refinement, wired to the existing clean
+  selection clipboard paths instead of relying on iOS to reopen the native
+  toolbar after custom handle movement.
+- **Edge Scroll Result**: Handle dragging near the editor viewport top/bottom
+  now auto-scrolls the editor `ListView` and refreshes handle positions so
+  selections can extend beyond the initially visible screen.
+- **Documentation Result**: Updated the iOS Selection MVP and
+  `MASTER_TODO_V4.md`. Awaiting IPA/device verification.

@@ -426,6 +426,13 @@
   snapshot; native one-block events must keep the armed full-block snapshot.
   Offscreen selection handles now hide instead of clamping to unrelated viewport
   edges. Awaiting IPA/device verification.
+- [P] **iOS Selection Handles Toolbar / Edge Scroll Follow-Up**: After QA found
+  that double-tap word selection did not show custom drag handles, moved handles
+  did not reopen Cut/Copy/Paste, and handle dragging at the viewport edge did
+  not scroll for long selections, native word selections now promote into the
+  custom overlay, the overlay owns a compact Cut/Copy/Paste toolbar, and
+  top/bottom handle drags auto-scroll the editor list. Awaiting IPA/device
+  verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

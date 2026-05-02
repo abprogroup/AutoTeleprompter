@@ -385,6 +385,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                 return KeyEventResult.handled;
               }
             }
+          }
+        }
+
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);

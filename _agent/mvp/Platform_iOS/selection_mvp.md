@@ -2,7 +2,7 @@
 name: Selection MVP
 type: component
 platform: iOS
-last_updated: 2026-04-29
+last_updated: 2026-05-02
 ---
 
 # Selection MVP — iOS
@@ -125,6 +125,19 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     overlays; their coordinates must be recalculated after the underlying
     `ListView` scrolls.
 
+17. **Offscreen handles must hide, not clamp**: If a selection endpoint scrolls
+    outside the editor viewport, its handle must disappear until the endpoint is
+    visible again. Handles may remain visible only while the user is actively
+    dragging that handle. Never clamp an offscreen handle to the top/bottom edge
+    because that visually lies about the selected text location.
+
+18. **Only handle-refined overlay snapshots may shrink protected snapshots**:
+    Native iOS selection/menu events are allowed to report only the originally
+    touched `TextField`. Those events must not downgrade a recent multi-block
+    `_globalSelectionSnapshot` to one block. A smaller snapshot is valid only
+    after real overlay handle refinement, where the visible dragged range is the
+    intended clipboard range.
+
 ---
 
 ## Forbidden Changes
@@ -134,6 +147,9 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 - Do not remove `selectionControls: GhostSelectionControls()` from `_EditorBlock` — native iOS circle handles will reappear and interfere with the overlay handle system.
 - Do not call `_clearGlobalSelection()` inside `_onSelectionChanged()` for a collapsed cursor — that cursor was placed by `_selectAllBlocks()` to enable keyboard delete and must not trigger a clear.
 - Do not call `c.refresh()` after setting `_isCommandExecuting = true` without immediately setting it back to `false` — the guard only suppresses listener reactions during a brief synchronous window.
+- Do not let a native one-block iOS selection event overwrite a protected
+  multi-block snapshot. Select All + Cut/Copy must keep all selected blocks
+  unless the user actually refines the overlay handles.
 
 ---
 
@@ -160,6 +176,9 @@ Additional clipboard prohibitions:
   Handle-drag selections may span part of one or more blocks; Cut must remove
   only each selected external range while storing those selected raw slices in
   the app-private clipboard.
+- Do not restore the old viewport-edge fallback for selection handles. Hidden
+  offscreen endpoints are less misleading than handles floating at an unrelated
+  edge of the screen.
 
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.

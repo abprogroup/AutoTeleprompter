@@ -118,9 +118,19 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return blocks.isEmpty ? null : blocks;
   }
 
-  void _syncSelectionSnapshotFromOverlay(String reason) {
+  void _syncSelectionSnapshotFromOverlay(
+    String reason, {
+    required bool allowShrink,
+  }) {
     final blocks = _overlaySelectedMarkupBlocks();
     if (blocks == null || blocks.isEmpty) return;
+    if (!allowShrink &&
+        _globalSelectionSnapshot != null &&
+        !_isBetterBlockSnapshot(blocks, _globalSelectionSnapshot)) {
+      _selectionClipboardDebug =
+          '$reason: kept armed ${_globalSelectionSnapshot!.length} blocks [${_blockDebugShape(_globalSelectionSnapshot)}]';
+      return;
+    }
     _globalSelectionSnapshot = List<String>.of(blocks);
     _globalSelectionSnapshotAt = DateTime.now();
     _selectionClipboardDebug =

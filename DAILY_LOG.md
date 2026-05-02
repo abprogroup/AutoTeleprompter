@@ -875,3 +875,20 @@
   editor bookmarks so presenter-created anchors appear in editor mode.
 - **Documentation Result**: Updated iOS Selection and Bookmarks MVP docs plus
   `MASTER_TODO_V4.md`. Awaiting IPA/device verification.
+
+## 2026-05-02 - iOS Selection Snapshot Downgrade Follow-Up
+
+- **Session Goal**: Fix the returned iOS selection bug where Select All/Cut
+  could again paste only the originally touched block after double-tap native
+  menu timing, while preserving the newer handle-drag clipboard behavior.
+- **Selection Result**: `GlobalSelectionOverlay` now records whether the
+  selection was truly refined by dragging a handle. The editor may shrink the
+  protected multi-block snapshot only after such a handle-refined selection.
+  Native one-block iOS menu events can no longer downgrade the protected
+  Select All snapshot to the originally touched `TextField`.
+- **Handle Visibility Result**: Offscreen selection endpoints no longer clamp
+  their handles to the viewport edge. If selected text scrolls out of view, the
+  matching handle hides until the endpoint is visible again, while active handle
+  dragging remains visible.
+- **Documentation Result**: Updated the iOS Selection MVP and
+  `MASTER_TODO_V4.md`. Awaiting IPA/device verification.

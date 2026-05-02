@@ -222,10 +222,14 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                             controllers: _controllers,
                             blockKeys: _blockKeys,
                             onSelectionChanged: () => setState(() {
+                              final overlayState = _overlayKey.currentState;
                               _isGlobalSelection = _controllers.isNotEmpty &&
                                   _controllers.every((c) => c.isGlobalSelected);
                               _syncSelectionSnapshotFromOverlay(
-                                  'overlay-selection');
+                                'overlay-selection',
+                                allowShrink:
+                                    overlayState?.isRefinedSelection ?? false,
+                              );
                             }),
                             child: NotificationListener<ScrollNotification>(
                               onNotification: (_) {

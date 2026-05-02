@@ -419,6 +419,13 @@
   marker side, presenter-created bookmarks save editor block/offset coordinates,
   and returning from present mode force-reloads editor bookmarks. Awaiting
   IPA/device verification.
+- [P] **iOS Selection Snapshot Downgrade Follow-Up**: After QA found that
+  Select All/Cut could again paste only the originally touched block, the iOS
+  overlay now distinguishes true handle-refined selections from native one-block
+  menu timing. Only handle-refined selections may shrink a protected multi-block
+  snapshot; native one-block events must keep the armed full-block snapshot.
+  Offscreen selection handles now hide instead of clamping to unrelated viewport
+  edges. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

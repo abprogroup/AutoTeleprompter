@@ -44,6 +44,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Offset? _handleStartPos, _handleEndPos;
   bool _draggingStart = false;
   bool _draggingEnd = false;
+  bool _hasHandleRefinedSelection = false;
   Size _stackSize = Size.zero;
 
   // Delta-drag state: track finger start (global) and the handle's caret start
@@ -62,6 +63,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (!_isSelecting) return;
     setState(() {
       _isSelecting = false;
+      _hasHandleRefinedSelection = false;
       _startBlock = _endBlock = null;
       _startOffset = _endOffset = null;
       for (final c in widget.controllers) {
@@ -77,6 +79,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (widget.controllers.isEmpty) return;
     setState(() {
       _isSelecting = true;
+      _hasHandleRefinedSelection = false;
       _startBlock = 0;
       _startOffset = 0;
       _endBlock = widget.controllers.length - 1;
@@ -102,6 +105,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get hasSelection =>
       _isSelecting && _startBlock != null && _endBlock != null;
+
+  bool get isRefinedSelection => _hasHandleRefinedSelection;
 
   /// Recalculates handle positions after an external layout change (e.g. alignment
   /// applied to selected text). Must be called after the next frame so the
@@ -272,6 +277,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         }
         setState(() {
           _isSelecting = true;
+          _hasHandleRefinedSelection = true;
           if (isStart) {
             if (_startBlock != i) HapticFeedback.selectionClick();
             _startBlock = i;
@@ -303,23 +309,30 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     return LayoutBuilder(
       builder: (context, constraints) {
         _stackSize = Size(constraints.maxWidth, constraints.maxHeight);
-        // Fall back to viewport edges so handles are always reachable,
-        // even if the first/last block isn't currently rendered.
-        final start =
-            hasSelection ? (_handleStartPos ?? const Offset(12, 12)) : null;
-        final end = hasSelection
-            ? (_handleEndPos ?? Offset(12, constraints.maxHeight - 48))
-            : null;
+        final start = hasSelection ? _handleStartPos : null;
+        final end = hasSelection ? _handleEndPos : null;
         return Stack(
           key: _stackKey,
           children: [
             widget.child,
-            if (start != null) _buildHandle(start, true),
-            if (end != null) _buildHandle(end, false),
+            if (start != null &&
+                (_draggingStart || _isHandleVisibleInViewport(start)))
+              _buildHandle(start, true),
+            if (end != null &&
+                (_draggingEnd || _isHandleVisibleInViewport(end)))
+              _buildHandle(end, false),
           ],
         );
       },
     );
+  }
+
+  bool _isHandleVisibleInViewport(Offset pos) {
+    const margin = 18.0;
+    return pos.dy >= -margin &&
+        pos.dy <= _stackSize.height + margin &&
+        pos.dx >= -40 &&
+        pos.dx <= _stackSize.width + 40;
   }
 
   Widget _buildHandle(Offset pos, bool isStart) {

@@ -5,6 +5,7 @@ class _EditorBlock extends StatelessWidget {
   final FocusNode focusNode;
   final AppSettings settings;
   final bool isGlobalSelected;
+  final bool hasOverlaySelection;
   final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
@@ -20,6 +21,7 @@ class _EditorBlock extends StatelessWidget {
     required this.focusNode,
     required this.settings,
     required this.isGlobalSelected,
+    required this.hasOverlaySelection,
     required this.onSubmitted,
     required this.onTap,
     required this.onSelectAll,
@@ -56,6 +58,7 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+    final useGhostSelectionControls = isGlobalSelected || hasOverlaySelection;
 
     return Container(
       decoration: BoxDecoration(
@@ -140,17 +143,17 @@ class _EditorBlock extends StatelessWidget {
                 },
                 child: Theme(
                   data: Theme.of(context).copyWith(
-                    textSelectionTheme: TextSelectionThemeData(
-                      // Always transparent: all amber selection rendering is handled
-                      // by MarkupController.buildTextSpan via externalSelection /
-                      // isGlobalSelected. Native RenderEditable must never paint its
-                      // own amber highlight or it leaks through when _isGlobalSelection
-                      // flips to false during a handle drag (Bug 2 fix v4.0.6).
+                    textSelectionTheme: const TextSelectionThemeData(
+                      // Transparent selection keeps markup-aware amber painting
+                      // inside MarkupController. Native single-block handles may
+                      // still appear when no global/overlay selection is active.
                       selectionColor: Colors.transparent,
                     ),
                   ),
                   child: TextField(
-                    selectionControls: GhostSelectionControls(),
+                    selectionControls: useGhostSelectionControls
+                        ? GhostSelectionControls()
+                        : null,
                     controller: controller,
                     focusNode: focusNode,
                     maxLines: null,

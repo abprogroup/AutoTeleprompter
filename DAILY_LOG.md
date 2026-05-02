@@ -930,3 +930,20 @@
   warning and marked the V4 TODO item as failed/reverted. Future selection work
   must isolate one behavior at a time and avoid mixing native menu recovery,
   custom overlay handles, app toolbars, and autoscroll in one broad patch.
+
+## 2026-05-02 - iOS Native One-Block Selection Handle Safety Pass
+
+- **Session Goal**: Apply only the smallest safe follow-up after the rejected
+  selection-toolbar/autoscroll patch: restore normal native handles for
+  ordinary one-block double-tap selection without touching global Select All,
+  app overlay handles, clipboard snapshots, or autoscroll.
+- **Fix Result**: `_EditorBlock` now uses native iOS selection controls only
+  when no global selection and no app overlay selection are active. Global or
+  overlay selection still uses `GhostSelectionControls`, preserving the
+  carefully crafted multi-block selection system.
+- **Safety Result**: No app-owned Cut/Copy/Paste toolbar was added, no
+  timer-based edge autoscroll was added, and no native selection is promoted
+  into app overlay selection. The native toolbar remains the only toolbar for
+  ordinary one-block selection.
+- **Documentation Result**: Updated the iOS Selection MVP and
+  `MASTER_TODO_V4.md`. Awaiting IPA/device verification.

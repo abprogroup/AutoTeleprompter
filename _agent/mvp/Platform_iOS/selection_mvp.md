@@ -62,7 +62,7 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 
 3. **Refresh after mutation**: After any change to `externalSelection` or `isGlobalSelected`, `c.refresh()` must be called. These fields live outside `TextEditingValue` so Flutter won't repaint otherwise.
 
-4. **`selectionColor` always transparent**: `_EditorBlock` on iOS hardcodes `selectionColor: Colors.transparent`. The native selection highlight is never visible — all amber rendering is done exclusively by `MarkupController.buildTextSpan` via `externalSelection`. Do NOT make this conditional.
+4. **`selectionColor` always transparent**: `_EditorBlock` on iOS hardcodes `selectionColor: Colors.transparent`. Native selection paint is never visible — amber rendering is done by `MarkupController.buildTextSpan` from native `controller.selection`, `externalSelection`, or `isGlobalSelected`. Do NOT make this conditional.
 
 5. **`_enterRefineMode` must NOT collapse native selection**: Collapsing `controller.selection` inside `_enterRefineMode()` corrupts `RenderEditable`'s internal state and breaks `getPositionForPoint()` on the second+ visual line of wrapped text (v4.0.7 fix). Because `selectionColor` is always transparent, there is no amber flash to suppress — leave native selection untouched.
 
@@ -138,13 +138,21 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     after real overlay handle refinement, where the visible dragged range is the
     intended clipboard range.
 
+19. **Native handles are allowed only for ordinary one-block selection**:
+    `_EditorBlock` may let Flutter/iOS use default native selection controls
+    only when neither global selection nor overlay selection is active. As soon
+    as the app is in Select All/global/overlay mode, `GhostSelectionControls`
+    must hide native handles so the app overlay remains the single visible
+    handle system. This is intentionally not the rejected app-toolbar/autoscroll
+    patch.
+
 ---
 
 ## Forbidden Changes
 
 - Do not make `selectionColor` conditional on `isGlobalSelected` — it must always be `Colors.transparent` on iOS. Adding a condition breaks the multi-line drag and creates spurious amber flashes.
 - Do not collapse `controller.selection` in `_enterRefineMode()` — this is the v4.0.7 multi-line drag fix. The transparent `selectionColor` already ensures the native selection is invisible.
-- Do not remove `selectionControls: GhostSelectionControls()` from `_EditorBlock` — native iOS circle handles will reappear and interfere with the overlay handle system.
+- Do not remove `GhostSelectionControls` from global/overlay selection mode — native iOS circle handles will reappear and interfere with the overlay handle system. Ordinary one-block native selection may use native controls only while the overlay/global system is inactive.
 - Do not call `_clearGlobalSelection()` inside `_onSelectionChanged()` for a collapsed cursor — that cursor was placed by `_selectAllBlocks()` to enable keyboard delete and must not trigger a clear.
 - Do not call `c.refresh()` after setting `_isCommandExecuting = true` without immediately setting it back to `false` — the guard only suppresses listener reactions during a brief synchronous window.
 - Do not let a native one-block iOS selection event overwrite a protected

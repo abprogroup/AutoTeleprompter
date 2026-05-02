@@ -240,28 +240,35 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 padding:
                                     const EdgeInsets.fromLTRB(24, 24, 24, 250),
                                 itemCount: _controllers.length,
-                                itemBuilder: (context, index) => _EditorBlock(
-                                  key: _blockKeys[index],
-                                  controller: _controllers[index],
-                                  focusNode: _focusNodes[index],
-                                  settings: settings,
-                                  isGlobalSelected: _isGlobalSelection,
-                                  onSubmitted: () => _addBlock(index + 1),
-                                  onTap: () {
-                                    _dismissEditorSelectionForUserNavigation(
-                                        'block-tap');
-                                  },
-                                  onSelectAll: _selectAllBlocks,
-                                  onCopy: _onCopyClean,
-                                  onCut: _onCutClean,
-                                  onPaste: _hasPasteableBlockClipboard
-                                      ? _pasteFromGlobalClipboard
-                                      : null,
-                                  hasBookmark: _hasBookmarkInEditorBlock(index),
-                                  onBookmarkTap: () => unawaited(
-                                    _deleteEditorBookmarksForBlock(index),
-                                  ),
-                                ),
+                                itemBuilder: (context, index) {
+                                  final overlayHasSelection =
+                                      _overlayKey.currentState?.hasSelection ??
+                                          false;
+                                  return _EditorBlock(
+                                    key: _blockKeys[index],
+                                    controller: _controllers[index],
+                                    focusNode: _focusNodes[index],
+                                    settings: settings,
+                                    isGlobalSelected: _isGlobalSelection,
+                                    hasOverlaySelection: overlayHasSelection,
+                                    onSubmitted: () => _addBlock(index + 1),
+                                    onTap: () {
+                                      _dismissEditorSelectionForUserNavigation(
+                                          'block-tap');
+                                    },
+                                    onSelectAll: _selectAllBlocks,
+                                    onCopy: _onCopyClean,
+                                    onCut: _onCutClean,
+                                    onPaste: _hasPasteableBlockClipboard
+                                        ? _pasteFromGlobalClipboard
+                                        : null,
+                                    hasBookmark:
+                                        _hasBookmarkInEditorBlock(index),
+                                    onBookmarkTap: () => unawaited(
+                                      _deleteEditorBookmarksForBlock(index),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ),

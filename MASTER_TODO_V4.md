@@ -433,6 +433,11 @@
   the useful script range. Runtime was restored to the prior safe selection
   state. Future work must isolate double-tap handles, toolbar recovery, and
   drag autoscroll as separate fixes instead of mixing them in one patch.
+- [P] **iOS Native One-Block Selection Handle Safety Pass**: Reintroduced
+  native iOS handles only for ordinary one-block selection when no global
+  selection and no app overlay selection are active. Global Select All and
+  overlay selection still force `GhostSelectionControls`, with no app-owned
+  toolbar and no timer autoscroll. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

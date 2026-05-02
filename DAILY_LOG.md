@@ -1005,3 +1005,14 @@
 - **Handle Result**: Overlay handle dragging now chooses the nearest rendered
   block/caret target while dragging, so app-owned handles are not stuck at the
   initial block boundary when moving toward another visible paragraph.
+
+## 2026-05-02 - iOS Overlay Selection Command Bar
+
+- **Session Goal**: Fix device QA showing that after choosing `Extend`, the app
+  gold handles could cross blocks but no Cut/Copy toolbar was available.
+- **Fix Result**: Added a compact app command bar that appears only while
+  `GlobalSelectionOverlay.hasSelection=true`. It exposes Cut, Copy, Select All,
+  Paste, and Clear for explicit overlay/global selection.
+- **Safety Result**: Ordinary one-block native selection still uses the native
+  iOS toolbar. The app command bar is not shown for native-only selection, does
+  not use passive native-selection adoption, and does not add timer autoscroll.

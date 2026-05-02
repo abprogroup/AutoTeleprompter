@@ -188,6 +188,14 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     immediately Cut/Copy/Paste the global selection. Do not close the user into
     a selected state with no visible command path.
 
+25. **Overlay selection owns exactly one app command bar**: Once the user has
+    intentionally entered app overlay selection through `Extend` or global
+    Select All, native iOS handles/toolbars are no longer the command owner.
+    The editor may show one compact app command bar with Cut, Copy, Select All,
+    Paste, and Clear while `GlobalSelectionOverlay.hasSelection=true`. This bar
+    must not appear during ordinary one-block native selection, must not be
+    paired with passive native adoption, and must not include timer autoscroll.
+
 ---
 
 ## Forbidden Changes
@@ -200,11 +208,12 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 - Do not let a native one-block iOS selection event overwrite a protected
   multi-block snapshot. Select All + Cut/Copy must keep all selected blocks
   unless the user actually refines the overlay handles.
-- Do not reintroduce passive listener-based native selection adoption, the
-  rejected custom app toolbar, or timer-based edge autoscroll while extending
-  native partial selections into overlay handles.
-  Cross-block dragging must reuse the existing overlay handle and clipboard
-  paths only.
+- Do not reintroduce passive listener-based native selection adoption or
+  timer-based edge autoscroll while extending native partial selections into
+  overlay handles. Cross-block dragging must reuse the existing overlay handle
+  and clipboard paths only. The only allowed app toolbar is the compact
+  overlay-selection command bar described in invariant 25, and it must be
+  hidden for ordinary native one-block selection.
 - Do not shrink the handle drag boundary back to the exact `RenderBox` height.
   That recreates the dead zone where handles stop before the selected text can
   reach the start/end of a paragraph block.
@@ -219,6 +228,9 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
   see the bridge into cross-block overlay handles.
 - Do not let context-menu Select All hide Cut/Copy afterward. It must reopen or
   rebuild into the global command menu.
+- Do not show both the native iOS toolbar and the app overlay command bar for
+  the same selection mode. Native owns ordinary one-block selection; the app
+  command bar owns explicit overlay/global selection.
 
 ---
 

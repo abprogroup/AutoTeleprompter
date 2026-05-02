@@ -259,6 +259,8 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                     onSelectAll: _selectAllBlocks,
                                     onCopy: _onCopyClean,
                                     onCut: _onCutClean,
+                                    onExtendSelection: () =>
+                                        _extendNativeSelectionToOverlay(index),
                                     onPaste: _hasPasteableBlockClipboard
                                         ? _pasteFromGlobalClipboard
                                         : null,

@@ -11,6 +11,7 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
   final VoidCallback onCut;
+  final VoidCallback onExtendSelection;
   final VoidCallback? onPaste;
   final bool hasBookmark;
   final VoidCallback onBookmarkTap;
@@ -27,6 +28,7 @@ class _EditorBlock extends StatelessWidget {
     required this.onSelectAll,
     required this.onCopy,
     required this.onCut,
+    required this.onExtendSelection,
     required this.hasBookmark,
     required this.onBookmarkTap,
     this.onPaste,
@@ -104,10 +106,6 @@ class _EditorBlock extends StatelessWidget {
                     _CopyIntent(),
                 SingleActivator(LogicalKeyboardKey.keyC, meta: true):
                     _CopyIntent(),
-                SingleActivator(LogicalKeyboardKey.keyX, control: true):
-                    _CutIntent(),
-                SingleActivator(LogicalKeyboardKey.keyX, meta: true):
-                    _CutIntent(),
               },
               child: Actions(
                 actions: {
@@ -118,10 +116,6 @@ class _EditorBlock extends StatelessWidget {
                   }),
                   _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
                     onCopy();
-                    return null;
-                  }),
-                  _CutIntent: CallbackAction<_CutIntent>(onInvoke: (_) {
-                    onCut();
                     return null;
                   }),
                   // Override the internal EditableText intents too. These are
@@ -190,6 +184,12 @@ class _EditorBlock extends StatelessWidget {
                       contentPadding: EdgeInsets.symmetric(vertical: 2),
                     ),
                     contextMenuBuilder: (context, editableTextState) {
+                      final selection = controller.selection;
+                      final hasPartialNativeSelection = selection.isValid &&
+                          !selection.isCollapsed &&
+                          !(selection.start == 0 &&
+                              selection.end == controller.text.length);
+
                       // When the block is globally selected, bypass editableTextState
                       // entirely. iOS asynchronously resets the native selection back
                       // to the original double-tapped word after Select All, so
@@ -276,6 +276,17 @@ class _EditorBlock extends StatelessWidget {
                         } else {
                           customItems.add(item);
                         }
+                      }
+                      if (hasPartialNativeSelection &&
+                          !customItems.any((i) => i.label == 'Extend')) {
+                        customItems.add(ContextMenuButtonItem(
+                          onPressed: () {
+                            ContextMenuController.removeAny();
+                            onExtendSelection();
+                          },
+                          type: ContextMenuButtonType.custom,
+                          label: 'Extend',
+                        ));
                       }
                       // Force-inject Select All even when the native menu omits it.
                       if (!hasSelectAll) {

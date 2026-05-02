@@ -440,15 +440,14 @@
   toolbar and no timer autoscroll. Awaiting IPA/device verification.
 - [P] **iOS Cross-Block Handle Adoption Safety Pass**: Native iOS handles cannot
   cross paragraph boundaries because each block is a separate `TextField`.
-  Partial, non-full-block native selections now adopt into the existing
-  `GlobalSelectionOverlay` so the gold overlay handles can cross blocks, while
-  full-block Select All, protected multi-block clipboard snapshots, native
-  toolbar ownership, and the no-autoscroll/no-app-toolbar rejection rule remain
-  unchanged. Handle hit-testing also keeps a small boundary corridor so
-  endpoints can reach paragraph start/end offsets without sticking near
-  newlines. Overlay Cut/Copy now dismisses stale native one-block toolbars,
-  intercepts cut/copy intents, and stores exactly the visible overlay slices
-  instead of an older full-script snapshot. Awaiting IPA/device verification.
+  The automatic adoption attempt was rejected after QA because it broke Select
+  All and stale native Cut/Copy still hit only the touched block. Replacement
+  approach: a partial, non-full-block native selection exposes an explicit
+  `Extend` menu item; only that command converts to `GlobalSelectionOverlay`
+  handles. Overlay Cut/Copy stores exactly the visible overlay slices, while
+  full-block Select All, protected multi-block snapshots, native toolbar
+  ownership, and the no-autoscroll/no-floating-toolbar rule remain unchanged.
+  Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

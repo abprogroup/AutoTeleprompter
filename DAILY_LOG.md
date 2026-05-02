@@ -969,3 +969,24 @@
   promoting an older protected full-script snapshot.
 - **Documentation Result**: Updated the iOS Selection MVP and
   `MASTER_TODO_V4.md`. Awaiting IPA/device verification.
+
+## 2026-05-02 - iOS Explicit Extend Selection Recovery
+
+- **Session Goal**: Repair QA regressions from the automatic native-to-overlay
+  adoption attempt: Select All stopped working, cross-block handle Cut/Copy
+  still affected only the originally touched block, and Cut history could lag
+  until deselection.
+- **Rollback Result**: Runtime selection files were restored to the last safer
+  native-menu baseline before automatic adoption, preserving Select All and the
+  protected multi-block clipboard recovery path.
+- **Replacement Result**: Ordinary native word selection now remains native
+  unless the user chooses a new explicit `Extend` context-menu action. Extend
+  converts only that confirmed partial selection into `GlobalSelectionOverlay`
+  handles, allowing cross-block drag without passive listener adoption.
+- **Clipboard Result**: Overlay Cut/Copy stores the visible overlay-selected
+  raw slices and does not promote an older protected Select All snapshot for
+  `cut-overlay` / `copy-overlay`.
+- **Safety Result**: No floating app Cut/Copy/Paste toolbar, no timer
+  autoscroll, no `CutSelectionTextIntent` dependency, and no passive
+  `_onSelectionChanged()` adoption path were added. Awaiting IPA/device
+  verification.

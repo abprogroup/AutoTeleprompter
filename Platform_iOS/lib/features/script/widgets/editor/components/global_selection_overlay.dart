@@ -108,11 +108,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get isRefinedSelection => _hasHandleRefinedSelection;
 
-  /// Promote a normal native one-block selection into the app overlay handle
-  /// system. This is intentionally partial-selection only: full-block native
-  /// Select All still belongs to _selectAllBlocks(), and this method must not
-  /// create an app-owned toolbar or edge-scroll behavior.
-  void adoptNativeBlockSelection(int blockIndex, TextSelection selection) {
+  /// Explicitly converts a user-confirmed native partial selection into the app
+  /// overlay handles. This must only be called from an intentional UI command
+  /// (the editor context menu Extend action), never from passive selection
+  /// listener events.
+  void extendNativeBlockSelection(int blockIndex, TextSelection selection) {
     if (blockIndex < 0 || blockIndex >= widget.controllers.length) return;
     if (!selection.isValid || selection.isCollapsed) return;
 
@@ -122,7 +122,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (start == end) return;
     if (start == 0 && end == controller.text.length) return;
 
-    ContextMenuController.removeAny();
     setState(() {
       _isSelecting = true;
       _hasHandleRefinedSelection = true;
@@ -301,9 +300,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           if (nextLocal.dy >= 0) continue;
         }
       }
-      // Allow a boundary corridor so handles can reach the real start/end of a
-      // block and cross paragraph seams without dead-zoning near newlines.
-      if (boxLocal.dy >= -96 && boxLocal.dy <= box.size.height + 96) {
+      // Allow a boundary corridor so handles can reach true paragraph
+      // start/end offsets without sticking near newline seams.
+      if (boxLocal.dy >= -72 && boxLocal.dy <= box.size.height + 72) {
         // Use the actual RenderEditable for accurate hit-testing
         final editable = _findRenderEditable(renderObj);
         TextPosition pos;

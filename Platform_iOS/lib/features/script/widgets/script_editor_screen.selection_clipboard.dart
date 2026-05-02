@@ -98,6 +98,26 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
           _globalSelectionSnapshot != null &&
           _globalSelectionSnapshot!.isNotEmpty);
 
+  void _extendNativeSelectionToOverlay(int blockIndex) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return;
+    if (_isGlobalSelection || _isCommandExecuting) return;
+    if (_overlayKey.currentState?.hasSelection ?? false) return;
+
+    final controller = _controllers[blockIndex];
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) return;
+    final start = selection.start.clamp(0, controller.text.length).toInt();
+    final end = selection.end.clamp(0, controller.text.length).toInt();
+    if (start == end) return;
+    if (start == 0 && end == controller.text.length) return;
+
+    _lastFocusedController = controller;
+    _overlayKey.currentState?.extendNativeBlockSelection(
+      blockIndex,
+      TextSelection(baseOffset: start, extentOffset: end),
+    );
+  }
+
   List<String>? _overlaySelectedMarkupBlocks() {
     if (!(_overlayKey.currentState?.hasSelection ?? false)) return null;
     final blocks = <String>[];

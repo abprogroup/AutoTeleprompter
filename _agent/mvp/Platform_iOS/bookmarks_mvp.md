@@ -24,7 +24,8 @@ active-STT jumps without resetting the session.
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.file_present.dart` | Presenter handoff identity: passes title/source/session id and saves bookmarks before present mode |
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.build.dart` | Editor toolbar/button wiring and bookmark marker coordination |
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.editor_block.dart` | Visible `»` marker hit target and deletion affordance inside editor blocks |
-| `Platform_iOS/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Editor add/remove/previous/next bookmark buttons |
+| `Platform_iOS/lib/features/script/widgets/editor/suites/formatting_toolbar_mvp.dart` | Editor bookmark suite popup between History and Clear Styles |
+| `Platform_iOS/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Editor project/search/save/import actions; bookmark buttons must not live here |
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Presenter bookmark state fields, service import, bookmark part registration |
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.bookmarks.dart` | Presenter load/save/add/remove/previous/next commands and direct jump execution |
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Presenter marker rendering and control wiring |
@@ -103,6 +104,10 @@ shell/delegate files.
 
 - iOS now mirrors the Windows shared bookmark persistence contract with
   `ScriptBookmarkService` under `Platform_iOS/lib/features/script/services/`.
+- Editor bookmark actions are grouped into one bookmark suite popup in
+  `FormattingToolbarMVP`, positioned between History and Clear Styles. Do not
+  restore the four separate bookmark buttons to the project action row; that
+  causes compact iOS toolbar overflow.
 - Editor bookmarks are created from the current focused block and raw cursor
   offset. They also save an approximate `wordIndex` for presenter handoff.
 - Presenter bookmarks are created from `confirmedWordIndex`; when they lack

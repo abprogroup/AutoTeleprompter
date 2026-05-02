@@ -43,13 +43,14 @@ class RtfService {
 
     for (final paragraph in paragraphs) {
       if (paragraph.isEmpty) {
-        buf.write('\\par\n');
+        buf.write('\\pard\\plain\\cf0\\par\n');
         continue;
       }
-      buf.write('\\pard ${_rtfAlign(paragraph.align)} ');
+      buf.write('\\pard\\plain\\cf0 ${_rtfAlign(paragraph.align)} ');
       for (final run in paragraph.runs) {
         _writeRun(run, colorTable, buf);
       }
+      buf.write(r'\cf0\b0\i0\ulnone ');
       buf.write('\\par\n');
     }
 
@@ -83,6 +84,7 @@ class RtfService {
     buf.write('{${controls.join()} ');
     _writeChars(run.text, buf);
     buf.write('}');
+    buf.write(r'\cf0\b0\i0\ulnone ');
   }
 
   static String _rtfAlign(String align) {

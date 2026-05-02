@@ -40,11 +40,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
             onSave: _saveScript,
             onImport: _importFile,
             onRename: _showRenameDialog,
-            onAddBookmark: () => unawaited(_addEditorBookmark()),
-            onRemoveBookmark: () =>
-                unawaited(_deleteEditorBookmarkAtCurrentPosition()),
-            onPreviousBookmark: () => unawaited(_jumpEditorBookmark(-1)),
-            onNextBookmark: () => unawaited(_jumpEditorBookmark(1)),
             onSearch: () => unawaited(_showEditorSearchDialog()),
           ),
         ),
@@ -173,6 +168,12 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                         onBgColor: onBgColorSelected,
                         onFontFamily: onFontFamily,
                         onBgColorChange: handleBgColorChange,
+                        onAddBookmark: () => unawaited(_addEditorBookmark()),
+                        onRemoveBookmark: () =>
+                            unawaited(_deleteEditorBookmarkAtCurrentPosition()),
+                        onPreviousBookmark: () =>
+                            unawaited(_jumpEditorBookmark(-1)),
+                        onNextBookmark: () => unawaited(_jumpEditorBookmark(1)),
                         lastTextColor: _lastChosenTextColor,
                         lastHighlightColor: _lastChosenHighlightColor,
                         onUndo: _undo,

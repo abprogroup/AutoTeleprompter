@@ -464,12 +464,14 @@ class ScriptNotifier extends Notifier<Script?> {
     int i = 0;
     int depth = 0;
     final skipDepths = <int>[];
+    final styleStack = <_RtfStyle>[];
 
     while (i < raw.length) {
       final c = raw[i];
 
       if (c == '{') {
         depth++;
+        styleStack.add(_RtfStyle(bold, cfIndex));
         if (skipDepths.isEmpty) {
           // Ignorable destination {\*...}
           if (i + 2 < raw.length && raw[i + 1] == '\\' && raw[i + 2] == '*') {
@@ -492,8 +494,14 @@ class ScriptNotifier extends Notifier<Script?> {
       }
 
       if (c == '}') {
+        flushRun();
         if (skipDepths.isNotEmpty && skipDepths.last == depth) {
           skipDepths.removeLast();
+        }
+        if (styleStack.isNotEmpty) {
+          final previous = styleStack.removeLast();
+          bold = previous.bold;
+          cfIndex = previous.cfIndex;
         }
         depth--;
         i++;
@@ -685,4 +693,10 @@ class _RtfRun {
   final bool bold;
   final int cfIndex;
   _RtfRun(this.text, this.bold, this.cfIndex);
+}
+
+class _RtfStyle {
+  final bool bold;
+  final int cfIndex;
+  const _RtfStyle(this.bold, this.cfIndex);
 }

@@ -122,3 +122,22 @@ contract in iOS-native terms:
   written as white body text in normal exported documents.
 - Export services must preserve visible text, symbols, punctuation, and blank
   paragraph structure while keeping internal markup out of user-facing files.
+
+---
+
+## iOS RTF Style Scope Repair - 2026-05-02
+
+- RTF import must treat `{ ... }` groups as formatting scopes. When a group
+  closes, importer state such as color index and bold must restore to the
+  previous group state before later blocks are parsed.
+- RTF export must start each paragraph with default character formatting and
+  write explicit reset controls after styled runs/paragraphs.
+- A saved file where only the first line or first block is red must reload with
+  only that line/block red. Later unstyled blocks must not inherit the red
+  color through stale `\cfN` state.
+- This rule applies specifically to files loaded back into the app after save;
+  style metadata may travel through export/import, but it must remain scoped to
+  the original text range and must never dirty unrelated blocks.
+- If similar bleed appears in DOCX, Pages, or plain import/export, audit the
+  same boundary: style state must close/reset at run, paragraph, and block
+  boundaries instead of becoming global script metadata by accident.

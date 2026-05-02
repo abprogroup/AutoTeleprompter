@@ -52,6 +52,9 @@ history, formatting, and project actions to the script editor.
    directly.
 4. Project actions must route through Script Editor/File I/O ownership.
 5. Suite controls must be stable on mobile-sized iOS viewports.
+6. Bookmark controls must be grouped under the toolbar bookmark suite button
+   between History and Clear Styles; they must not expand the first project
+   action row.
 
 ## Forbidden Changes
 
@@ -59,12 +62,28 @@ history, formatting, and project actions to the script editor.
 - Do not write directly to history stacks from suite widgets.
 - Do not bypass settings/style callbacks with local-only state.
 - Do not add platform behavior in shared suite controls without a platform MVP note.
+- Do not place previous/add/remove/next bookmark controls as separate first-row
+  AppBar buttons; use the bookmark suite popup to prevent overflow.
 
 ## Known Fragilities
 
 - Suite callbacks cross several MVP ownership boundaries.
 - Toolbar state can drift from active selection/cursor style.
 - Compact iOS screens can overflow if controls grow dynamically.
+- Bookmark controls are high-risk for overflow because they add four commands;
+  keep them collapsed into the suite button unless the toolbar is redesigned.
+
+---
+
+## iOS Bookmark Suite Placement - 2026-05-02
+
+- `FormattingToolbarMVP` owns the editor bookmark suite button.
+- The button sits immediately after `HistorySuite` and before `CLEAR`, matching
+  the editor workflow: history, bookmarks, clear styles, text/layout/color.
+- The popup exposes previous bookmark, add bookmark, remove bookmark, and next
+  bookmark.
+- `ProjectActionsSuite` must remain limited to project-level actions such as
+  back/search/clear script/save/import/title rename.
 
 ## Shared-File Ownership Notes
 

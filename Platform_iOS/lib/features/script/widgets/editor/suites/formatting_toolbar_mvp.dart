@@ -9,6 +9,7 @@ import 'history_suite_mvp.dart';
 // v3.9.5.59: Sovereign Formatting Toolbar (Orchestrator MVP)
 class FormattingToolbarMVP extends StatelessWidget {
   final VoidCallback onBold, onUnderline, onItalic, onClear, onUndo, onRedo;
+  final VoidCallback onAddBookmark, onRemoveBookmark, onPreviousBookmark, onNextBookmark;
   final ValueChanged<int> onFontSize;
   final ValueChanged<String> onAlign, onDirection, onTextColor, onBgColor, onFontFamily;
   final ValueChanged<int> onBgColorChange;
@@ -27,6 +28,8 @@ class FormattingToolbarMVP extends StatelessWidget {
     required this.onClear, required this.onFontSize, required this.onAlign,
     required this.onDirection, required this.onTextColor, required this.onBgColor,
     required this.onFontFamily, required this.onBgColorChange,
+    required this.onAddBookmark, required this.onRemoveBookmark,
+    required this.onPreviousBookmark, required this.onNextBookmark,
     required this.lastTextColor, required this.lastHighlightColor,
     required this.onUndo, required this.onRedo,
     required this.canUndo, required this.canRedo,
@@ -56,6 +59,13 @@ class FormattingToolbarMVP extends StatelessWidget {
                       canUndo: canUndo, canRedo: canRedo,
                       history: history, historyIndex: historyIndex,
                       onHistorySelected: onHistorySelected
+                    ),
+                    const SizedBox(width: 8),
+                    _BookmarkSuiteButton(
+                      onPreviousBookmark: onPreviousBookmark,
+                      onAddBookmark: onAddBookmark,
+                      onRemoveBookmark: onRemoveBookmark,
+                      onNextBookmark: onNextBookmark,
                     ),
                     const SizedBox(width: 8),
                     Tooltip(
@@ -113,3 +123,81 @@ class FormattingToolbarMVP extends StatelessWidget {
     }
   }
 }
+
+class _BookmarkSuiteButton extends StatelessWidget {
+  final VoidCallback onAddBookmark;
+  final VoidCallback onRemoveBookmark;
+  final VoidCallback onPreviousBookmark;
+  final VoidCallback onNextBookmark;
+
+  const _BookmarkSuiteButton({
+    required this.onAddBookmark,
+    required this.onRemoveBookmark,
+    required this.onPreviousBookmark,
+    required this.onNextBookmark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_BookmarkAction>(
+      tooltip: 'Bookmarks',
+      color: kEditorSurface,
+      icon: const Icon(Icons.bookmarks_rounded, color: kEditorAmber, size: 22),
+      onSelected: (action) {
+        switch (action) {
+          case _BookmarkAction.previous:
+            onPreviousBookmark();
+            break;
+          case _BookmarkAction.add:
+            onAddBookmark();
+            break;
+          case _BookmarkAction.remove:
+            onRemoveBookmark();
+            break;
+          case _BookmarkAction.next:
+            onNextBookmark();
+            break;
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: _BookmarkAction.previous,
+          child: _BookmarkMenuItem(Icons.skip_previous, 'Previous Bookmark'),
+        ),
+        PopupMenuItem(
+          value: _BookmarkAction.add,
+          child: _BookmarkMenuItem(Icons.bookmark_add_outlined, 'Add Bookmark'),
+        ),
+        PopupMenuItem(
+          value: _BookmarkAction.remove,
+          child: _BookmarkMenuItem(Icons.bookmark_remove_outlined, 'Remove Bookmark'),
+        ),
+        PopupMenuItem(
+          value: _BookmarkAction.next,
+          child: _BookmarkMenuItem(Icons.skip_next, 'Next Bookmark'),
+        ),
+      ],
+    );
+  }
+}
+
+class _BookmarkMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _BookmarkMenuItem(this.icon, this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: kEditorAmber, size: 18),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(color: Colors.white70)),
+      ],
+    );
+  }
+}
+
+enum _BookmarkAction { previous, add, remove, next }

@@ -142,3 +142,33 @@ When iOS editor work resumes, port these verified Windows editor contracts:
   highlight ownership does not leak from selection MVP into search behavior.
 - Search result scrolling must use the block key / `Scrollable.ensureVisible`
   path and must not rebuild the editor into a monolith.
+
+---
+
+## iOS One Font-Size Authority Port - 2026-05-02
+
+- Editor font-size controls must read the same persisted
+  `settingsProvider.fontSize` / `Script.fontSize` metadata value used by
+  present mode.
+- Cursor inline `[size=...]` detection may still describe selected inline
+  styling, but it must not become the global script font-size number shown by
+  the Text Suite.
+- `script_editor_screen.styling_commands.dart` owns the editor command that
+  updates the global font-size metadata. It must call both
+  `SettingsNotifier.setFontSize(...)` and
+  `ScriptNotifier.updateStyleMetadata(fontSize: ...)`.
+- `script_provider.dart` must not rebuild scripts with an old hardcoded
+  `18.0` fallback when settings metadata is already available.
+- Any visual scale difference between editor and presenter is render-only.
+  It must not create a second saved font-size number.
+
+---
+
+## iOS Loaded-File Preservation Port - 2026-05-02
+
+- `_getRefinedFullText()` must join editor blocks exactly with `\n`; it must
+  not `trim()` the full script and remove intentional empty first/last blocks.
+- Editor save/recent paths must preserve loaded-file blank lines, quotes,
+  standalone punctuation, and symbols.
+- Empty blocks can be meaningful file structure and must not be treated as
+  cleanup noise.

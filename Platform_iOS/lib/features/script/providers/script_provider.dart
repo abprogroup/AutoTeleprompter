@@ -106,7 +106,7 @@ class ScriptNotifier extends Notifier<Script?> {
       sessionId: sessionId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       historyJson: historyJson,
       historyIndex: historyIndex ?? -1,
-      fontSize: fontSize ?? 18.0,
+      fontSize: fontSize ?? settings.fontSize,
       fontFamily: fontFamily ?? 'Inter',
       lineSpacing: lineSpacing ?? settings.lineSpacing,
       letterSpacing: letterSpacing ?? settings.letterSpacing,
@@ -167,6 +167,50 @@ class ScriptNotifier extends Notifier<Script?> {
     );
   }
 
+  Future<void> updateStyleMetadata({
+    double? fontSize,
+    String? fontFamily,
+    double? lineSpacing,
+    double? letterSpacing,
+    double? wordSpacing,
+    String? textAlign,
+    int? scriptBgColor,
+    int? currentWordColor,
+    int? futureWordColor,
+  }) async {
+    final current = state;
+    if (current == null) return;
+    final next = current.copyWith(
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      lineSpacing: lineSpacing,
+      letterSpacing: letterSpacing,
+      wordSpacing: wordSpacing,
+      textAlign: textAlign,
+      scriptBgColor: scriptBgColor,
+      currentWordColor: currentWordColor,
+      futureWordColor: futureWordColor,
+    );
+    state = next;
+    await ref.read(settingsProvider.notifier).saveScript(
+      next.rawText,
+      title: next.title,
+      type: next.sourceType,
+      historyIndex: next.historyIndex,
+      sessionId: next.sessionId,
+      fontSize: next.fontSize,
+      fontFamily: next.fontFamily,
+      lineSpacing: next.lineSpacing,
+      letterSpacing: next.letterSpacing,
+      wordSpacing: next.wordSpacing,
+      textAlign: next.textAlign,
+      scriptBgColor: next.scriptBgColor,
+      currentWordColor: next.currentWordColor,
+      futureWordColor: next.futureWordColor,
+      historyJson: next.historyJson,
+    );
+  }
+
   /// Keep the in-memory script state in sync with the editor's current undo
   /// position. Without this, re-entering the editor reads the stale historyIndex
   /// that was set when the script was first loaded, ignoring any undo/redo.
@@ -192,14 +236,12 @@ class ScriptNotifier extends Notifier<Script?> {
           result = _parseRtf(raw);
         } else if (lower.endsWith('.rtf')) {
           // Non-RTF content in a .rtf file (e.g. saved before the fix) — treat as UTF-8
-          result = _ParsedFile(raw.trim());
+          result = _ParsedFile(raw);
         } else {
           // Legacy .doc binary files — strip non-printable bytes
           final content = String.fromCharCodes(
             rawBytes.where((b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
-          ).replaceAll(RegExp(r'[ \t]{3,}'), '  ')
-           .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-           .trim();
+          ).replaceAll(RegExp(r'[ \t]{3,}'), '  ');
           result = _ParsedFile(content);
         }
       } else {
@@ -311,7 +353,7 @@ class ScriptNotifier extends Notifier<Script?> {
       }
     } catch (_) {}
 
-    return _ParsedFile(buf.toString().trim(), fontSize: detectedFontSize);
+    return _ParsedFile(buf.toString(), fontSize: detectedFontSize);
   }
 
   /// Parses Apple Pages files (.pages) — a ZIP archive.
@@ -330,10 +372,10 @@ class ScriptNotifier extends Notifier<Script?> {
       for (final m in paraMatches) {
         final inner = m.group(1) ?? '';
         // Strip any nested XML tags to get raw text
-        final text = inner.replaceAll(RegExp(r'<[^>]+>'), '').trim();
-        if (text.isNotEmpty) buf.writeln(text);
+        final text = inner.replaceAll(RegExp(r'<[^>]+>'), '');
+        buf.writeln(text);
       }
-      if (buf.isNotEmpty) return _ParsedFile(buf.toString().trim());
+      if (buf.isNotEmpty) return _ParsedFile(buf.toString());
     }
 
     // Newer Pages format: scan all XML files in the archive for text content
@@ -346,14 +388,14 @@ class ScriptNotifier extends Notifier<Script?> {
         // Extract anything that looks like readable paragraph text
         final matches = RegExp(r'<[^>]*p[^>]*>(.*?)</[^>]*p[^>]*>', dotAll: true).allMatches(content);
         for (final m in matches) {
-          final text = (m.group(1) ?? '').replaceAll(RegExp(r'<[^>]+>'), '').trim();
-          if (text.length > 2) buf.writeln(text);
+          final text = (m.group(1) ?? '').replaceAll(RegExp(r'<[^>]+>'), '');
+          buf.writeln(text);
         }
       } catch (_) {}
     }
 
-    final result = buf.toString().trim();
-    if (result.isEmpty) {
+    final result = buf.toString();
+    if (result.trim().isEmpty) {
       return _ParsedFile('Could not extract text from this Pages file. '
           'Please open it in Pages and export as DOCX or TXT first.');
     }
@@ -580,9 +622,8 @@ class ScriptNotifier extends Notifier<Script?> {
       buf.write(text);
     }
 
-    String result = buf.toString();
-    result = result.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-    return _ParsedFile(result.trim(), fontSize: detectedFontSize);
+    final result = buf.toString();
+    return _ParsedFile(result, fontSize: detectedFontSize);
   }
 
   static bool _isAlpha(int codeUnit) =>

@@ -36,6 +36,8 @@ class AppSettings {
   final String sttEngine;          // v4.0: 'google', 'whisper_base', 'whisper_small'
   final double readFadeIntensity;  // v4.1: gradient fade for read text (0.0=off, 1.0=full)
   final bool sttVisibleSkipEnabled; // v4.1.7: opt-in viewport skip; default false
+  final String sttInputDeviceId; // iOS: AVAudioSession input UID, empty = system default
+  final String sttInputDeviceLabel;
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -71,6 +73,8 @@ class AppSettings {
     this.sttEngine = 'google',
     this.readFadeIntensity = 1.0,
     this.sttVisibleSkipEnabled = false,
+    this.sttInputDeviceId = '',
+    this.sttInputDeviceLabel = 'System default microphone',
   });
 
   AppSettings copyWith({
@@ -107,6 +111,8 @@ class AppSettings {
     String? sttEngine,
     double? readFadeIntensity,
     bool? sttVisibleSkipEnabled,
+    String? sttInputDeviceId,
+    String? sttInputDeviceLabel,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -143,6 +149,8 @@ class AppSettings {
       readFadeIntensity: readFadeIntensity ?? this.readFadeIntensity,
       sttVisibleSkipEnabled:
           sttVisibleSkipEnabled ?? this.sttVisibleSkipEnabled,
+      sttInputDeviceId: sttInputDeviceId ?? this.sttInputDeviceId,
+      sttInputDeviceLabel: sttInputDeviceLabel ?? this.sttInputDeviceLabel,
     );
   }
 }
@@ -180,6 +188,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _sttEngineKey = 'sttEngine';
   static const _readFadeIntensityKey = 'readFadeIntensity';
   static const _sttVisibleSkipEnabledKey = 'sttVisibleSkipEnabled';
+  static const _sttInputDeviceIdKey = 'sttInputDeviceId';
+  static const _sttInputDeviceLabelKey = 'sttInputDeviceLabel';
 
   @override
   AppSettings build() {
@@ -274,6 +284,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
       readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
       sttVisibleSkipEnabled:
           prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
+      sttInputDeviceId: prefs.getString(_sttInputDeviceIdKey) ?? '',
+      sttInputDeviceLabel: prefs.getString(_sttInputDeviceLabelKey) ??
+          'System default microphone',
     );
   }
 
@@ -455,23 +468,24 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setLineSpacing(double spacing) async {
-    // v3.9.5.69: Allow ultra-tight spacing but clamp at 0.1 to avoid layout crashes
-    final clamped = spacing < 0.1 ? 0.1 : spacing;
+    final clamped = spacing.clamp(0.5, 3.0).toDouble();
     state = state.copyWith(lineSpacing: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_lineSpacingKey, clamped);
   }
 
   Future<void> setWordSpacing(double spacing) async {
-    state = state.copyWith(wordSpacing: spacing);
+    final clamped = spacing.clamp(-5.0, 20.0).toDouble();
+    state = state.copyWith(wordSpacing: clamped);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_wordSpacingKey, spacing);
+    await prefs.setDouble(_wordSpacingKey, clamped);
   }
 
   Future<void> setLetterSpacing(double spacing) async {
-    state = state.copyWith(letterSpacing: spacing);
+    final clamped = spacing.clamp(-2.0, 5.0).toDouble();
+    state = state.copyWith(letterSpacing: clamped);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_letterSpacingKey, spacing);
+    await prefs.setDouble(_letterSpacingKey, clamped);
   }
 
   Future<void> setScriptBgColor(int color) async {
@@ -702,6 +716,19 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(sttVisibleSkipEnabled: enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_sttVisibleSkipEnabledKey, enabled);
+  }
+
+  Future<void> setSttInputDevice(String deviceId, String label) async {
+    final normalizedLabel = label.trim().isEmpty
+        ? 'System default microphone'
+        : label.trim();
+    state = state.copyWith(
+      sttInputDeviceId: deviceId,
+      sttInputDeviceLabel: normalizedLabel,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sttInputDeviceIdKey, deviceId);
+    await prefs.setString(_sttInputDeviceLabelKey, normalizedLabel);
   }
 }
 

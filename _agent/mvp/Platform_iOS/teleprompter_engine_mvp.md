@@ -154,3 +154,60 @@ fragilities above and port these final Windows product contracts:
   row-follow animation that is reserved for normal live reading progress.
 - Search must skip newline/display-empty tokens as match anchors while still
   preserving those tokens in rendering.
+
+---
+
+## iOS One Font-Size Authority Port - 2026-05-02
+
+- Presenter settings and A-/A+ controls must update the same
+  `settingsProvider.fontSize` / `Script.fontSize` metadata value shown by the
+  editor Text Suite.
+- `teleprompter_screen.settings_panel.dart` must label font size with the raw
+  saved metadata number, not `fontSize * 2`.
+- `teleprompter_screen.control_bar.dart` must persist font-size button changes
+  through both `SettingsNotifier.setFontSize(...)` and
+  `ScriptNotifier.updateStyleMetadata(fontSize: ...)`.
+- Presenter rendering may still multiply the saved value for readable display,
+  but that multiplier is display-only and must never be written back to script
+  metadata.
+
+---
+
+## iOS Synced Spacing Ranges Port - 2026-05-02
+
+- `teleprompter_screen.settings_panel.dart` owns present-mode spacing controls.
+- Presenter spacing controls must use the same ranges as the editor Layout
+  Suite: line `0.5..3.0`, word `-5.0..20.0`, letter `-2.0..5.0`.
+- Present-mode spacing changes must call both the Settings setter and
+  `ScriptNotifier.updateStyleMetadata(...)` so returning to the editor shows
+  the same script metadata values.
+- Line spacing labels must show default-relative values, where saved `1.2`
+  appears as `0.0`.
+
+---
+
+## iOS Loaded-File Preservation Port - 2026-05-02
+
+- Presenter tokenization must preserve punctuation-only display tokens such as
+  `"`, `»`, section marks, and other visible symbols even when their STT
+  normalized text is empty.
+- Such display-only tokens remain unspeakable for alignment, but they must stay
+  in `Script.words` so present mode can render the same visible file content
+  the user loaded.
+- Newline tokens remain renderable layout structure and must not be dropped to
+  make STT matching simpler.
+
+---
+
+## iOS Present-Mode Speech Input Selector - 2026-05-02
+
+- `teleprompter_screen.settings_panel.dart` owns the visible Speech Input
+  selector in present settings.
+- The selector shows System Default plus routes reported by
+  `TeleprompterState.audioInputDevices`.
+- Selecting a route calls `TeleprompterNotifier.setSttInputDevice(...)` and
+  `SettingsNotifier.setSttInputDevice(...)`.
+- Mic route changes must not reset `confirmedWordIndex`, bookmarks, search
+  state, or presenter scroll position.
+- The selector is an iOS `AVAudioSession` route selector, not a Windows WebView
+  media-device picker.

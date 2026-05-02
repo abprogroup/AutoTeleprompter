@@ -67,6 +67,7 @@ class SpeechService {
   void Function(SpeechResult)? onResult;
   void Function(SpeechStatus)? onStatusChange;
   void Function(String)? onError;
+  Future<void> Function()? beforeListen;
   /// Fires when the language is confirmed unavailable (after retries exhausted).
   /// The string is the original requested locale ID.
   void Function(String requestedLocale)? onLanguageUnavailable;
@@ -273,6 +274,7 @@ class SpeechService {
       // no special modes. Let the device's speech recognizer decide everything.
       // Only specify locale if explicitly set (non-empty).
       final useLocale = _localeId.isEmpty ? null : _localeId;
+      await beforeListen?.call();
       await _stt.listen(
         onResult: (SpeechRecognitionResult result) {
           _consecutiveErrors = 0;

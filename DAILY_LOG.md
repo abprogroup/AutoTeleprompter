@@ -703,3 +703,95 @@
 - **Documentation Result**: Appended explicit ownership notes to the iOS Script
   Editor and Teleprompter Engine MVP docs so future agents keep task protocol in
   MVP files and code comments implementation-local.
+
+## 2026-05-02 - iOS One Font-Size Metadata Authority
+
+- **Session Goal**: Continue Windows-to-iOS parity locally without pushing, and
+  implement Task 9 so editor and present mode display/edit one font-size number.
+- **Code Result**: `ScriptNotifier` now rebuilds scripts from current settings
+  when no import metadata exists and exposes `updateStyleMetadata(...)` for
+  script-level style persistence. The editor Text Suite reads the global
+  settings font size instead of cursor inline `[size]` detection for the
+  script-wide dropdown. Editor and presenter font-size controls now update both
+  `SettingsNotifier.setFontSize(...)` and
+  `ScriptNotifier.updateStyleMetadata(fontSize: ...)`.
+- **Presenter Result**: Present settings labels show the raw metadata number
+  instead of `fontSize * 2`. Presentation rendering may still enlarge text as a
+  display-only effect, but that enlarged value is not saved as metadata.
+- **Documentation Result**: Updated iOS Script Editor, Settings, Styling Engine,
+  and Teleprompter Engine MVP docs, plus `MASTER_TODO_V4.md` and the
+  Windows-parity handoff/status file. IPA/device verification is still pending.
+
+## 2026-05-02 - iOS Synced Spacing Ranges
+
+- **Session Goal**: Continue Windows-to-iOS parity locally without pushing, and
+  implement Task 10 so editor and present mode expose the same spacing controls.
+- **Editor Result**: `LayoutSuite` now uses the shared spacing ranges: line
+  `0.5..3.0`, word `-5.0..20.0`, and letter `-2.0..5.0`. Line spacing uses
+  default-relative display, so saved `1.2` appears as `0.0`.
+- **Presenter Result**: `TeleprompterSettingsPanel` now uses the same ranges and
+  default-relative line-spacing label. Presenter spacing edits update both
+  settings and script metadata instead of staying presenter-only.
+- **Settings Result**: Settings setters clamp to the shared ranges so future UI
+  surfaces cannot silently diverge.
+- **Documentation Result**: Updated iOS Editor Suites, Settings, and
+  Teleprompter Engine MVP docs, plus `MASTER_TODO_V4.md` and the
+  Windows-parity handoff/status file. IPA/device verification is still pending.
+
+## 2026-05-02 - iOS Loaded-File Structure Preservation
+
+- **Session Goal**: Continue Windows-to-iOS parity locally without pushing, and
+  implement Task 11 so loaded files keep visible signs and blank-line structure.
+- **Import Result**: Removed generic trimming/newline-collapse behavior from the
+  active iOS import parsing paths for non-RTF `.rtf`, legacy `.doc`, DOCX,
+  Pages, and parsed RTF content. Parsers still strip unsupported control data,
+  but visible file structure is not treated as cleanup noise.
+- **Editor Result**: `_getRefinedFullText()` now joins editor blocks without
+  trimming the full result, preserving intentional leading/trailing empty
+  blocks from loaded files.
+- **Presenter Result**: `WordAligner.tokenize(...)` now keeps punctuation-only
+  display tokens such as `"`, `»`, and section markers in `Script.words` even
+  when their normalized STT text is empty. STT can ignore them; present mode
+  still renders them.
+- **Documentation Result**: Updated iOS File I/O, Script Editor, and
+  Teleprompter Engine MVP docs, plus `MASTER_TODO_V4.md` and the
+  Windows-parity handoff/status file. IPA/device verification is still pending.
+
+## 2026-05-02 - iOS Markup-Safe Export
+
+- **Session Goal**: Continue Windows-to-iOS parity locally without pushing, and
+  implement Task 12 so exported files do not expose app-private style tags.
+- **Export Parser Result**: Added
+  `Platform_iOS/lib/features/script/services/markup_export_service.dart` as the
+  shared export parser for internal markup.
+- **DOCX/RTF Result**: DOCX and RTF export now convert `[color]`, `[size]`,
+  `[font]`, bold, italic, underline, alignment, and shorthand color tags into
+  real document styling controls. Default teleprompter white is not emitted as
+  white body text.
+- **Pages Result**: Pages export now writes visible text through
+  `MarkupExportService.toPlainText(...)`, preserving blank paragraph structure
+  while stripping raw app-private bracket tags from `index.xml`.
+- **Documentation Result**: Updated iOS File I/O MVP, `MASTER_TODO_V4.md`, and
+  the Windows-parity handoff/status file. IPA/device verification is still
+  pending.
+
+## 2026-05-02 - iOS External Microphone Selection
+
+- **Session Goal**: Finish the remaining Windows-to-iOS parity handoff item
+  without pushing by implementing the iOS-native external microphone route
+  selector instead of stopping at documentation.
+- **Native Result**: Added an iOS MethodChannel
+  (`autoteleprompter/ios_audio_input`) in `AppDelegate.swift` that lists
+  `AVAudioSession.availableInputs` and applies `setPreferredInput(...)`.
+- **Dart Result**: Added `IosAudioInputService`, extended the STT service
+  contract with audio input devices, and wired `SttAppleAdapter` so the selected
+  route is applied before Apple STT starts.
+- **UI/Settings Result**: Present-mode settings now show a Speech Input
+  selector with System Default plus available iOS routes. The selected route is
+  persisted as `sttInputDeviceId` and `sttInputDeviceLabel`.
+- **Boundary Result**: This is iOS-native route preference, not a Windows
+  WebView2 `navigator.mediaDevices` picker. If iOS refuses or loses a route,
+  the app falls back to System Default and stop/start resume preserves position.
+- **Documentation Result**: Updated iOS STT, Settings, Platform Shell, and
+  Audio Buffer MVP docs, plus `MASTER_TODO_V4.md` and the Windows-parity
+  handoff/status file. IPA/device verification is still pending.

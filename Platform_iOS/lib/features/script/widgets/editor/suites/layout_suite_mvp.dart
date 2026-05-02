@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../components/editor_primitives.dart';
 import '../../../models/cursor_style.dart';
+import '../../../providers/script_provider.dart';
 import '../../../../settings/providers/settings_provider.dart';
 
 // v3.9.5.60: Sovereign Layout MVP
@@ -10,6 +11,7 @@ import '../../../../settings/providers/settings_provider.dart';
 class LayoutSuite extends ConsumerWidget {
   final ValueChanged<String> onAlign, onDirection;
   final ValueChanged<String> onInteraction;
+  static const double _defaultLineSpacing = 1.2;
 
   const LayoutSuite({
     super.key,
@@ -23,6 +25,29 @@ class LayoutSuite extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final style = ref.watch(cursorStyleProvider);
+    void applyLineSpacing(double spacing) {
+      notifier.setLineSpacing(spacing);
+      ref.read(scriptProvider.notifier).updateStyleMetadata(
+            lineSpacing: spacing,
+          );
+      onInteraction('Line Spacing');
+    }
+
+    void applyLetterSpacing(double spacing) {
+      notifier.setLetterSpacing(spacing);
+      ref.read(scriptProvider.notifier).updateStyleMetadata(
+            letterSpacing: spacing,
+          );
+      onInteraction('Letter Spacing');
+    }
+
+    void applyWordSpacing(double spacing) {
+      notifier.setWordSpacing(spacing);
+      ref.read(scriptProvider.notifier).updateStyleMetadata(
+            wordSpacing: spacing,
+          );
+      onInteraction('Word Spacing');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,13 +83,16 @@ class LayoutSuite extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         // ── Row 2: Line spacing ─────────────────────────────────────────
-        // Slider displays a delta from the 1.2× default. 0 = default.
         SliderRow(
           label: 'Line Spacing',
-          value: (settings.lineSpacing - 1.2).clamp(-1.0, 1.0),
-          min: -1.0,
-          max: 1.0,
-          onChanged: (v) { notifier.setLineSpacing(1.2 + v); onInteraction('Line Spacing'); },
+          value: settings.lineSpacing.clamp(0.5, 3.0),
+          min: 0.5,
+          max: 3.0,
+          displayValue: _formatDefaultOffset(
+            settings.lineSpacing,
+            _defaultLineSpacing,
+          ),
+          onChanged: applyLineSpacing,
         ),
         // ── Row 3: Letter spacing ───────────────────────────────────────
         SliderRow(
@@ -72,7 +100,7 @@ class LayoutSuite extends ConsumerWidget {
           value: settings.letterSpacing.clamp(-2.0, 5.0),
           min: -2.0,
           max: 5.0,
-          onChanged: (v) { notifier.setLetterSpacing(v); onInteraction('Letter Spacing'); },
+          onChanged: applyLetterSpacing,
         ),
         // ── Row 4: Word spacing ─────────────────────────────────────────
         SliderRow(
@@ -80,10 +108,17 @@ class LayoutSuite extends ConsumerWidget {
           value: settings.wordSpacing.toDouble().clamp(-5.0, 20.0),
           min: -5,
           max: 20,
-          onChanged: (v) { notifier.setWordSpacing(v); onInteraction('Word Spacing'); },
+          onChanged: applyWordSpacing,
         ),
       ],
     );
+  }
+
+  String _formatDefaultOffset(double value, double defaultValue) {
+    final delta = value - defaultValue;
+    if (delta.abs() < 0.05) return '0.0';
+    final sign = delta > 0 ? '+' : '';
+    return '$sign${delta.toStringAsFixed(1)}';
   }
 }
 

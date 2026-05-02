@@ -2,7 +2,7 @@
 name: Settings MVP
 type: component
 platform: iOS
-last_updated: 2026-04-29
+last_updated: 2026-05-02
 ---
 
 # Settings MVP - iOS
@@ -29,6 +29,7 @@ placeholder UI, and profile/settings screens.
 | `AppSettings.lastScript` / `lastScriptTitle` | Startup/active script persistence |
 | `AppSettings.sttEngine` | Teleprompter session start |
 | `AppSettings.debugMode` | Debug logs and hidden gestures |
+| `AppSettings.sttInputDeviceId` / `sttInputDeviceLabel` | iOS presenter mic route selector |
 | `SettingsNotifier.saveScript(...)` | Editor/provider persistence |
 | `SettingsNotifier.addToRecent(...)` / `removeFromRecent(...)` | Gallery/recent management |
 | `SettingsNotifier.applySessionStyles(...)` | Restore flows |
@@ -85,7 +86,45 @@ where the platform supports them:
   presenter controls.
 - Line, word, and letter spacing ranges must match between editor and presenter.
 - Visible text skip must default off.
-- External microphone selection must be documented before implementation. If
-  iOS only supports OS-routed input selection, store no fake in-app device ID.
+- External microphone selection stores native iOS route IDs only. Empty ID
+  means System Default; do not store fake Windows/WebView device IDs.
 - Debug settings must expose diagnostics without resetting STT state, scroll
   targets, bookmarks, or confirmed word indices.
+
+---
+
+## iOS One Font-Size Authority Port - 2026-05-02
+
+- `AppSettings.fontSize` is the live settings value that editor and presenter
+  controls display.
+- Script-specific changes must also be persisted into recent-script style
+  metadata through `ScriptNotifier.updateStyleMetadata(fontSize: ...)`.
+- Present mode may render larger for readability, but presenter settings
+  labels and sliders must show/edit the raw metadata value, not the enlarged
+  render value.
+- Do not add a second presenter-only font-size preference.
+
+---
+
+## iOS Synced Spacing Ranges Port - 2026-05-02
+
+- Settings setters enforce the shared editor/presenter spacing ranges:
+  `lineSpacing 0.5..3.0`, `wordSpacing -5.0..20.0`, and
+  `letterSpacing -2.0..5.0`.
+- Line spacing default display is default-relative: saved `1.2` is shown as
+  `0.0` in editor and present controls.
+- Spacing changes must persist to settings preferences and script metadata.
+- Do not keep a presenter-only spacing range that differs from the editor
+  Layout Suite.
+
+---
+
+## iOS External Microphone Settings Port - 2026-05-02
+
+- iOS persists `sttInputDeviceId` and `sttInputDeviceLabel` for the presenter
+  Speech Input selector.
+- Empty `sttInputDeviceId` means System Default microphone.
+- iOS device IDs are `AVAudioSessionPortDescription.uid` values from the native
+  route list. They must not be shared with Windows WebView2 device IDs.
+- If a saved route is unavailable, the STT adapter must fall back to the active
+  iOS/system route without resetting script position.

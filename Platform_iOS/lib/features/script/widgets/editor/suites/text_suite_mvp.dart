@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../components/editor_primitives.dart';
 import '../../../models/cursor_style.dart';
+import '../../../../settings/providers/settings_provider.dart';
 
 // v3.9.5.60: Sovereign Text Styling MVP — Column layout, synced dropdowns
 class TextSuite extends ConsumerWidget {
@@ -21,18 +22,6 @@ class TextSuite extends ConsumerWidget {
     required this.onFontFamily,
   });
 
-  /// Snap to nearest valid dropdown value
-  static int _snapFontSize(int detected) {
-    if (_fontSizes.contains(detected)) return detected;
-    int closest = _fontSizes.first;
-    int minDiff = (detected - closest).abs();
-    for (final s in _fontSizes) {
-      final diff = (detected - s).abs();
-      if (diff < minDiff) { minDiff = diff; closest = s; }
-    }
-    return closest;
-  }
-
   static String _snapFontFamily(String detected) {
     if (_fontFamilies.contains(detected)) return detected;
     return 'Inter';
@@ -41,7 +30,9 @@ class TextSuite extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final style = ref.watch(cursorStyleProvider);
-    final safeFontSize = _snapFontSize(style.fontSize);
+    final settings = ref.watch(settingsProvider);
+    final safeFontSize = settings.fontSize.round();
+    final fontSizeItems = {..._fontSizes, safeFontSize}.toList()..sort();
     final safeFontFamily = _snapFontFamily(style.fontFamily);
 
     return Column(
@@ -87,7 +78,7 @@ class TextSuite extends ConsumerWidget {
                   icon: const Icon(Icons.format_size_rounded, color: Colors.white54, size: 14),
                   style: const TextStyle(color: kEditorAmber, fontWeight: FontWeight.bold, fontSize: 12),
                   onChanged: (v) { if (v != null) onFontSize(v); },
-                  items: _fontSizes
+                  items: fontSizeItems
                       .map((s) => DropdownMenuItem(value: s, child: Text('${s}px')))
                       .toList(),
                 ),

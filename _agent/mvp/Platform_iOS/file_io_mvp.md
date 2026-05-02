@@ -2,7 +2,7 @@
 name: File I/O MVP
 type: component
 platform: iOS
-last_updated: 2026-04-29
+last_updated: 2026-05-02
 ---
 
 # File I/O MVP - iOS
@@ -19,6 +19,7 @@ text, and platform file-format lists.
 | `Platform_iOS/lib/features/script/services/docx_service.dart` | DOCX export generation |
 | `Platform_iOS/lib/features/script/services/rtf_service.dart` | RTF export generation |
 | `Platform_iOS/lib/features/script/services/pages_service.dart` | Apple Pages export generation |
+| `Platform_iOS/lib/features/script/services/markup_export_service.dart` | Shared internal-markup export parser for rich/plain output |
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.dart` | Save/export/import UI orchestration |
 | `Platform_iOS/lib/features/script/widgets/teleprompt_selector_sheet.dart` | Importable extension list and source selection |
 
@@ -33,6 +34,8 @@ text, and platform file-format lists.
 | `DocxService.buildDocx(...)` | Export/save path |
 | `RtfService.buildRtf(...)` | Export/save path |
 | `PagesService.buildPages(...)` | iOS Pages export path |
+| `MarkupExportService.parse(String)` | DOCX/RTF/Pages export services |
+| `MarkupExportService.toPlainText(String)` | Plain/Pages export paths |
 
 ## All Callers
 
@@ -89,3 +92,33 @@ contract in iOS-native terms:
   exported documents.
 - Intentional blank lines, quotes, punctuation, and standalone symbols must
   survive import/export round trips.
+
+---
+
+## iOS Loaded-File Preservation Port - 2026-05-02
+
+- Loaded/imported file content must not be normalized with generic
+  `trim()`/newline-collapse cleanup.
+- Non-RTF `.rtf`, legacy `.doc`, DOCX extraction, Pages extraction, and RTF
+  parsing must preserve intentional leading/trailing text, multiple blank
+  lines, quotes, standalone punctuation, and symbols.
+- Parsers may strip unsupported binary/control metadata, but visible text
+  structure from the loaded file must survive into `Script.rawText`.
+- Editor save/recent serialization must not trim the joined block text after a
+  file has been loaded.
+
+---
+
+## iOS Markup-Safe Export Port - 2026-05-02
+
+- `markup_export_service.dart` is the shared export parser for app-private
+  markup.
+- DOCX and RTF export must convert internal tags (`[color]`, `[size]`, `[font]`,
+  `**`, underline, italic, alignment, and shorthand color tags) into document
+  styling controls.
+- Pages export must write visible text only. It must not leak raw app-private
+  bracket tags into `index.xml`.
+- Default teleprompter white (`#FFFFFF`) is display metadata and must not be
+  written as white body text in normal exported documents.
+- Export services must preserve visible text, symbols, punctuation, and blank
+  paragraph structure while keeping internal markup out of user-facing files.

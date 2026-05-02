@@ -44,6 +44,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _setupRemoteCallbacks();
     _setupSttCallbacks();
     _setupWhisperCallbacks();
+    Future.microtask(refreshAudioInputDevices);
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
@@ -245,6 +246,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             'This language is not available offline on your device. '
             'Please connect to WiFi or mobile data and try again.',
       ));
+    };
+
+    _sttService.onAudioInputDevicesChanged = (devices) {
+      if (_disposed) return;
+      try {
+        state = state.copyWith(audioInputDevices: devices);
+      } catch (_) {
+        _disposed = true;
+      }
     };
   }
 
@@ -512,6 +522,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
     } else {
       final platform = _sttService.platformName;
+      final selectedMicId = settings.sttInputDeviceId.trim();
+      final selectedMicLabel = settings.sttInputDeviceLabel.trim();
+      await _sttService.setAudioInputDevice(
+        selectedMicId.isEmpty ? null : selectedMicId,
+        label: selectedMicLabel.isEmpty
+            ? 'System default microphone'
+            : selectedMicLabel,
+      );
       _addDebugLog('🎤 [$platform] Starting STT locale=$localeId...');
       final result = await _sttService.start(localeId: localeId);
       if (_disposed || _sessionStopped || token != _sessionToken) {
@@ -608,6 +626,33 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _sttService.setLocale(startLocale);
       }
     }
+  }
+
+  Future<void> refreshAudioInputDevices() async {
+    if (_disposed) return;
+    final devices = await _sttService.refreshAudioInputDevices();
+    if (_disposed) return;
+    try {
+      state = state.copyWith(audioInputDevices: devices);
+    } catch (_) {
+      _disposed = true;
+    }
+  }
+
+  Future<void> setSttInputDevice(String deviceId, String label) async {
+    final normalizedLabel = label.trim().isEmpty
+        ? 'System default microphone'
+        : label.trim();
+    await _sttService.setAudioInputDevice(
+      deviceId.trim().isEmpty ? null : deviceId.trim(),
+      label: normalizedLabel,
+    );
+    await refreshAudioInputDevices();
+    _addDebugLog(
+      deviceId.trim().isEmpty
+          ? '🎙️ [Apple] Using system default microphone'
+          : '🎙️ [Apple] Requested microphone: $normalizedLabel',
+    );
   }
 
   /// Presenter pushes the rendered visible word range here.

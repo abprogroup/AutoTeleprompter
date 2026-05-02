@@ -55,8 +55,9 @@ class FormatPopup extends StatelessWidget {
 class SliderRow extends StatelessWidget {
   final String label;
   final double value, min, max;
+  final String? displayValue;
   final ValueChanged<double> onChanged;
-  const SliderRow({super.key, required this.label, required this.value, required this.min, required this.max, required this.onChanged});
+  const SliderRow({super.key, required this.label, required this.value, required this.min, required this.max, required this.onChanged, this.displayValue});
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch, 
@@ -65,7 +66,7 @@ class SliderRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween, 
         children: [
           Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)), 
-          Text(value.toStringAsFixed(1), style: const TextStyle(color: kEditorAmber, fontSize: 13, fontWeight: FontWeight.bold))
+          Text(displayValue ?? value.toStringAsFixed(1), style: const TextStyle(color: kEditorAmber, fontSize: 13, fontWeight: FontWeight.bold))
         ]
       ), 
       SliderTheme(

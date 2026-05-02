@@ -1,47 +1,32 @@
 import 'dart:convert';
 
+import 'markup_export_service.dart';
+
 /// Generates minimal but valid RTF files from the app's internal markup.
 ///
-/// Output is compatible with [ScriptProvider._parseRtf] so files can
-/// round-trip: save as RTF → import RTF → same text + formatting.
-///
-/// Handles: plain text, Unicode (Hebrew/Arabic), bold (**...**),
-/// custom hex colors ([color=#HEX]...[/color]), and named color shorthands
-/// ([yc], [rc], [gc], [bc], [oc], [pc], [cc], [pkc]).
+/// Exported RTF must never expose bracket markup such as `[color=#ffffff]`.
+/// Internal tags are converted into RTF controls, while teleprompter-default
+/// white text is treated as display metadata and omitted so documents remain
+/// readable on normal white paper.
 class RtfService {
   RtfService._();
 
-  // Shorthand color tags → hex values (must match word_aligner.dart)
-  static const _shorthands = <String, String>{
-    'yc':  'FFD700',
-    'rc':  'FF4444',
-    'gc':  '44DD44',
-    'bc':  '4488FF',
-    'oc':  'FFA500',
-    'pc':  'AA44FF',
-    'cc':  '44DDDD',
-    'pkc': 'FF44AA',
-  };
-
   /// Converts internal-markup text to RTF bytes.
   static List<int> generate(String text) {
-    // ── Pass 1: collect unique colors needed for the color table ──────────
-    final colorTable = <String>[]; // hex strings, 1-indexed in RTF
+    final paragraphs = MarkupExportService.parse(text);
+    final colorTable = <String>[];
 
-    void _addHex(String hex) {
-      final h = hex.toUpperCase();
-      if (!colorTable.contains(h)) colorTable.add(h);
+    void addColor(String? hex) {
+      if (hex == null || _isDefaultDisplayWhite(hex)) return;
+      if (!colorTable.contains(hex)) colorTable.add(hex);
     }
 
-    final hexTagRe = RegExp(r'\[color=#([0-9A-Fa-f]{6})\]');
-    for (final m in hexTagRe.allMatches(text)) {
-      _addHex(m.group(1)!);
-    }
-    for (final entry in _shorthands.entries) {
-      if (text.contains('[${entry.key}]')) _addHex(entry.value);
+    for (final paragraph in paragraphs) {
+      for (final run in paragraph.runs) {
+        addColor(run.color);
+      }
     }
 
-    // ── Build RTF document ─────────────────────────────────────────────────
     final buf = StringBuffer();
     buf.write('{\\rtf1\\ansi\\deff0\n');
 
@@ -56,13 +41,15 @@ class RtfService {
       buf.write('}\n');
     }
 
-    for (final line in text.split('\n')) {
-      if (line.trim().isEmpty) {
+    for (final paragraph in paragraphs) {
+      if (paragraph.isEmpty) {
         buf.write('\\par\n');
         continue;
       }
-      buf.write('\\pard ');
-      _writeLine(line, colorTable, buf);
+      buf.write('\\pard ${_rtfAlign(paragraph.align)} ');
+      for (final run in paragraph.runs) {
+        _writeRun(run, colorTable, buf);
+      }
       buf.write('\\par\n');
     }
 
@@ -70,95 +57,47 @@ class RtfService {
     return utf8.encode(buf.toString());
   }
 
-  static void _writeLine(String line, List<String> colorTable, StringBuffer buf) {
-    // Strip alignment / direction wrapper tags (not needed for round-trip)
-    final stripped = line.replaceAll(
-      RegExp(r'\[\/?(center|left|right|rtl|ltr|align=[^\]]+)\]'), '');
+  static void _writeRun(
+    ExportTextRun run,
+    List<String> colorTable,
+    StringBuffer buf,
+  ) {
+    if (run.text.isEmpty) return;
+    final controls = <String>[];
+    if (run.isBold) controls.add(r'\b');
+    if (run.isItalic) controls.add(r'\i');
+    if (run.isUnderline) controls.add(r'\ul');
+    if (run.fontSize != null) {
+      controls.add('\\fs${(run.fontSize! * 2).round()}');
+    }
+    if (run.color != null && !_isDefaultDisplayWhite(run.color)) {
+      final colorIndex = colorTable.indexOf(run.color!) + 1;
+      if (colorIndex > 0) controls.add('\\cf$colorIndex');
+    }
 
-    int i = 0;
-    final len = stripped.length;
+    if (controls.isEmpty) {
+      _writeChars(run.text, buf);
+      return;
+    }
 
-    while (i < len) {
-      // ── Bold ──────────────────────────────────────────────────────────
-      if (stripped.startsWith('**', i)) {
-        // We don't track bold state — just emit \b … \b0 pairs from the
-        // parser's perspective: every ** toggles bold, so opening = \b ,
-        // closing = \b0 . Use a simple odd/even scan to decide which.
-        buf.write('{\\b ');
-        i += 2;
-        // Find matching **
-        final close = stripped.indexOf('**', i);
-        if (close != -1) {
-          _writeChars(stripped.substring(i, close), buf);
-          buf.write('}');
-          i = close + 2;
-        } else {
-          // No closing ** — write rest as bold
-          _writeChars(stripped.substring(i), buf);
-          buf.write('}');
-          i = len;
-        }
-        continue;
-      }
+    buf.write('{${controls.join()} ');
+    _writeChars(run.text, buf);
+    buf.write('}');
+  }
 
-      // ── [color=#HEX] ─────────────────────────────────────────────────
-      final hexM = RegExp(r'^\[color=#([0-9A-Fa-f]{6})\]')
-          .firstMatch(stripped.substring(i));
-      if (hexM != null) {
-        final hex = hexM.group(1)!.toUpperCase();
-        final cfIdx = colorTable.indexOf(hex) + 1;
-        buf.write('{\\cf$cfIdx ');
-        i += hexM.group(0)!.length;
-        final close = stripped.indexOf('[/color]', i);
-        if (close != -1) {
-          _writeChars(stripped.substring(i, close), buf);
-          buf.write('}');
-          i = close + 8;
-        } else {
-          _writeChars(stripped.substring(i), buf);
-          buf.write('}');
-          i = len;
-        }
-        continue;
-      }
-
-      // ── Named color shorthands [yc], [rc], etc. ───────────────────────
-      bool matched = false;
-      for (final entry in _shorthands.entries) {
-        final openTag  = '[${entry.key}]';
-        final closeTag = '[/${entry.key}]';
-        if (stripped.startsWith(openTag, i)) {
-          final hex = entry.value.toUpperCase();
-          final cfIdx = colorTable.indexOf(hex) + 1;
-          buf.write('{\\cf$cfIdx ');
-          i += openTag.length;
-          final close = stripped.indexOf(closeTag, i);
-          if (close != -1) {
-            _writeChars(stripped.substring(i, close), buf);
-            buf.write('}');
-            i = close + closeTag.length;
-          } else {
-            _writeChars(stripped.substring(i), buf);
-            buf.write('}');
-            i = len;
-          }
-          matched = true;
-          break;
-        }
-      }
-      if (matched) continue;
-
-      // ── Skip any other unrecognised [tag] ─────────────────────────────
-      if (stripped[i] == '[') {
-        final close = stripped.indexOf(']', i);
-        if (close != -1) { i = close + 1; continue; }
-      }
-
-      // ── Regular character ─────────────────────────────────────────────
-      _writeChar(stripped.codeUnitAt(i), buf);
-      i++;
+  static String _rtfAlign(String align) {
+    switch (align) {
+      case 'center':
+        return r'\qc';
+      case 'right':
+        return r'\qr';
+      default:
+        return r'\ql';
     }
   }
+
+  static bool _isDefaultDisplayWhite(String? hex) =>
+      hex != null && hex.toUpperCase() == 'FFFFFF';
 
   static void _writeChars(String s, StringBuffer buf) {
     for (int i = 0; i < s.length; i++) {
@@ -167,13 +106,15 @@ class RtfService {
   }
 
   static void _writeChar(int ch, StringBuffer buf) {
-    if (ch == 0x7B)      buf.write(r'\{');
-    else if (ch == 0x7D) buf.write(r'\}');
-    else if (ch == 0x5C) buf.write(r'\\');
-    else if (ch < 128)   buf.writeCharCode(ch);
-    else {
-      // Non-ASCII (Hebrew, Arabic, accented chars…) → RTF Unicode escape
-      // RTF uses signed 16-bit; values > 32767 become negative
+    if (ch == 0x7B) {
+      buf.write(r'\{');
+    } else if (ch == 0x7D) {
+      buf.write(r'\}');
+    } else if (ch == 0x5C) {
+      buf.write(r'\\');
+    } else if (ch < 128) {
+      buf.writeCharCode(ch);
+    } else {
       final code = ch > 32767 ? ch - 65536 : ch;
       buf.write('\\u$code?');
     }

@@ -6,7 +6,54 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    final tState = ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    void applyPresenterFontSize(double size) {
+      final clamped = size.clamp(14.0, 120.0).toDouble();
+      unawaited(notifier.setFontSize(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              fontSize: clamped,
+          ),
+      );
+    }
+
+    void applyPresenterLineSpacing(double spacing) {
+      final clamped = spacing.clamp(0.5, 3.0).toDouble();
+      unawaited(notifier.setLineSpacing(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              lineSpacing: clamped,
+            ),
+      );
+    }
+
+    void applyPresenterWordSpacing(double spacing) {
+      final clamped = spacing.clamp(-5.0, 20.0).toDouble();
+      unawaited(notifier.setWordSpacing(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              wordSpacing: clamped,
+            ),
+      );
+    }
+
+    void applyPresenterLetterSpacing(double spacing) {
+      final clamped = spacing.clamp(-2.0, 5.0).toDouble();
+      unawaited(notifier.setLetterSpacing(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              letterSpacing: clamped,
+            ),
+      );
+    }
+
+    String formatDefaultOffset(double value, double defaultValue) {
+      final delta = value - defaultValue;
+      if (delta.abs() < 0.05) return '0.0';
+      final sign = delta > 0 ? '+' : '';
+      return '$sign${delta.toStringAsFixed(1)}';
+    }
 
     const labelStyle = TextStyle(color: Colors.white70, fontSize: 14);
     const sectionStyle = TextStyle(
@@ -75,6 +122,27 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const SizedBox(height: 8),
 
           // ── Text ───────────────────────────────────────────────────────────
+          const Text('Speech Input', style: sectionStyle),
+          const SizedBox(height: 8),
+          _IosMicSelector(
+            selectedDeviceId: settings.sttInputDeviceId,
+            selectedLabel: settings.sttInputDeviceLabel,
+            devices: tState.audioInputDevices,
+            accentColor: Color(settings.currentWordColor),
+            onRefresh: () =>
+                ref.read(teleprompterProvider.notifier).refreshAudioInputDevices(),
+            onSelected: (deviceId, label) async {
+              await ref
+                  .read(teleprompterProvider.notifier)
+                  .setSttInputDevice(deviceId, label);
+              await notifier.setSttInputDevice(deviceId, label);
+            },
+          ),
+          const SizedBox(height: 16),
+
+          const Divider(color: Colors.white12),
+          const SizedBox(height: 8),
+
           Row(children: [
             const Text('Override Text Alignment', style: sectionStyle),
             const Spacer(),
@@ -139,33 +207,32 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           Row(children: [
             const Text('Font Size', style: labelStyle),
             const Spacer(),
-            Text('${(settings.fontSize * 2).round()}px',
+            Text('${settings.fontSize.round()}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.fontSize.clamp(10.0, 80.0),
-            min: 10,
-            max: 80,
-            divisions: 35,
+            value: settings.fontSize.clamp(14.0, 120.0),
+            min: 14,
+            max: 120,
+            divisions: 53,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setFontSize(v),
+            onChanged: applyPresenterFontSize,
           ),
 
           Row(children: [
             const Text('Line Spacing', style: labelStyle),
             const Spacer(),
-            Text(settings.lineSpacing.toStringAsFixed(1),
+            Text(formatDefaultOffset(settings.lineSpacing, 1.2),
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.lineSpacing,
-            min: 1.0,
+            value: settings.lineSpacing.clamp(0.5, 3.0).toDouble(),
+            min: 0.5,
             max: 3.0,
-            divisions: 20,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setLineSpacing(v),
+            onChanged: applyPresenterLineSpacing,
           ),
 
           Row(children: [
@@ -175,13 +242,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.wordSpacing,
-            min: 0.0,
+            value: settings.wordSpacing.clamp(-5.0, 20.0).toDouble(),
+            min: -5.0,
             max: 20.0,
-            divisions: 20,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setWordSpacing(v),
+            onChanged: applyPresenterWordSpacing,
           ),
 
           Row(children: [
@@ -191,13 +257,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           Slider(
-            value: settings.letterSpacing,
-            min: -1.0,
+            value: settings.letterSpacing.clamp(-2.0, 5.0).toDouble(),
+            min: -2.0,
             max: 5.0,
-            divisions: 24,
             activeColor: Color(settings.currentWordColor),
             inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setLetterSpacing(v),
+            onChanged: applyPresenterLetterSpacing,
           ),
 
           Row(children: [
@@ -355,6 +420,111 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
         if (states.contains(WidgetState.selected)) return Colors.black;
         return Colors.white70;
       }),
+    );
+  }
+}
+
+class _IosMicSelector extends StatelessWidget {
+  final String selectedDeviceId;
+  final String selectedLabel;
+  final List<SttAudioInputDevice> devices;
+  final Color accentColor;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(String deviceId, String label) onSelected;
+
+  const _IosMicSelector({
+    required this.selectedDeviceId,
+    required this.selectedLabel,
+    required this.devices,
+    required this.accentColor,
+    required this.onRefresh,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final knownIds = devices.map((device) => device.id).toSet();
+    final value = knownIds.contains(selectedDeviceId) ? selectedDeviceId : '';
+    final entries = <DropdownMenuItem<String>>[
+      const DropdownMenuItem(
+        value: '',
+        child: Text('System default microphone'),
+      ),
+      ...devices.map(
+        (device) => DropdownMenuItem(
+          value: device.id,
+          child: Text(device.label, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          value: value,
+          dropdownColor: const Color(0xFF1A1A1A),
+          iconEnabledColor: accentColor,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.mic_external_on, color: accentColor),
+            helperText: devices.isEmpty
+                ? 'Connect a mic, then refresh or start STT once.'
+                : 'Uses iOS current/preferred audio input route.',
+            helperStyle: const TextStyle(color: Colors.white38, fontSize: 11),
+            filled: true,
+            fillColor: const Color(0xFF111111),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.white12),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: accentColor),
+            ),
+          ),
+          items: entries,
+          selectedItemBuilder: (_) => entries
+              .map(
+                (entry) => Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    entry.value == ''
+                        ? 'System default microphone'
+                        : selectedLabel,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: (deviceId) {
+            if (deviceId == null) return;
+            final label = deviceId.isEmpty
+                ? 'System default microphone'
+                : devices
+                    .firstWhere(
+                      (device) => device.id == deviceId,
+                      orElse: () => SttAudioInputDevice(
+                        id: deviceId,
+                        label: selectedLabel,
+                      ),
+                    )
+                    .label;
+            unawaited(onSelected(deviceId, label));
+          },
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            icon: const Icon(Icons.refresh, size: 17),
+            label: const Text('Refresh iOS audio inputs'),
+            style: TextButton.styleFrom(foregroundColor: accentColor),
+            onPressed: () => unawaited(onRefresh()),
+          ),
+        ),
+      ],
     );
   }
 }

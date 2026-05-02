@@ -16,6 +16,7 @@ import '../../script/services/script_bookmark_service.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
+import '../../../platform/stt/abstract_stt_service.dart';
 
 part 'teleprompter_screen.session_stt.dart';
 part 'teleprompter_screen.manual_scroll.dart';

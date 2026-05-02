@@ -68,7 +68,7 @@ class WordAligner {
               RegExp(r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr)(?:=[^\]]+)?\]|\*\*'), '');
             final isRtl = cleanPart.isHebrew;
             final normalized = cleanPart.normalizeForMatching();
-            if (normalized.isEmpty) continue;
+            if (normalized.isEmpty && cleanPart.trim().isEmpty) continue;
             words.add(ScriptWord(
               raw: part,
               normalized: normalized,

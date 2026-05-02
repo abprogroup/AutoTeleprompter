@@ -1,3 +1,5 @@
+import '../../../platform/stt/abstract_stt_service.dart';
+
 /// Sentinel to explicitly clear a nullable field via copyWith
 const _clearSentinel = '\x00__CLEAR__';
 
@@ -9,6 +11,7 @@ class TeleprompterState {
   final String statusMessage;
   final bool hasError;
   final List<String> debugLogs;
+  final List<SttAudioInputDevice> audioInputDevices;
   /// Non-null when the script's language isn't available for Google STT.
   /// The UI should show a dialog prompting the user to download it.
   final String? missingLanguage;
@@ -20,6 +23,7 @@ class TeleprompterState {
     this.statusMessage = '',
     this.hasError = false,
     this.debugLogs = const [],
+    this.audioInputDevices = const [],
     this.missingLanguage,
   });
 
@@ -30,6 +34,7 @@ class TeleprompterState {
     String? statusMessage,
     bool? hasError,
     List<String>? debugLogs,
+    List<SttAudioInputDevice>? audioInputDevices,
     String? missingLanguage = _clearSentinel,
   }) {
     return TeleprompterState(
@@ -39,6 +44,7 @@ class TeleprompterState {
       statusMessage: statusMessage ?? this.statusMessage,
       hasError: hasError ?? this.hasError,
       debugLogs: debugLogs ?? this.debugLogs,
+      audioInputDevices: audioInputDevices ?? this.audioInputDevices,
       missingLanguage: missingLanguage == _clearSentinel
           ? this.missingLanguage
           : missingLanguage,

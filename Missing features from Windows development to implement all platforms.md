@@ -36,10 +36,23 @@ Current iOS implementation status as of 2026-05-02:
 - Implemented now: Task 8, visible-text search with raw-offset mapping. Editor
   search maps visible text matches back to raw markup offsets; presenter search
   maps visible phrase matches to word indexes and direct presenter jumps.
-- Still left after search: Task 7 active-STT bookmark jumps verification,
-  Task 9 one font-size metadata authority, Task 10 synced spacing ranges,
-  Task 11 loaded-file symbol/quote/blank-line preservation audit, Task 12
-  markup-safe export, and Task 13 iOS external microphone routing policy.
+- Implemented now: Task 9, one font-size metadata authority. iOS editor and
+  presenter controls now display/edit the same raw `settingsProvider.fontSize`
+  / `Script.fontSize` value, while any presenter enlargement stays render-only.
+- Implemented now: Task 10, synced spacing ranges. iOS editor and presenter
+  now use the same spacing ranges, default-relative line-spacing display, and
+  script metadata persistence path.
+- Implemented now: Task 11, loaded-file symbol/quote/blank-line preservation
+  audit. iOS import/save/tokenization paths now preserve punctuation-only
+  display tokens and avoid generic trimming/newline collapse of loaded content.
+- Implemented now: Task 12, markup-safe export. iOS DOCX/RTF export now converts
+  internal markup to document styling through a shared export parser, and Pages
+  export writes visible text instead of raw bracket tags.
+- Still left after task 13: Task 7 active-STT bookmark jumps verification.
+- Implemented now: Task 13, iOS external microphone selection. iOS v4 lists
+  native `AVAudioSession.availableInputs`, persists the preferred route, applies
+  `setPreferredInput(...)` before Apple STT start, and falls back to System
+  Default if the route disappears.
 
 1. STT stop/resume without reset
 
@@ -104,11 +117,27 @@ Behavior: Editor and present mode must show the same font-size number. There sho
 
 Implementation insight: inspect Windows font sync fix and MVP docs. Audit iOS editor font suite, cursor style detection, script metadata, settings provider, present settings, and export. Do not let cursor inline [size] detection become the global font-size authority. Both editor and presenter controls should read/write the same metadata/settings value. Any scale difference must be render-only.
 
+iOS implementation note 2026-05-02: editor Text Suite now reads
+`settingsProvider.fontSize` instead of cursor inline size detection for its
+global font-size dropdown. Editor font-size changes call
+`SettingsNotifier.setFontSize(...)` and
+`ScriptNotifier.updateStyleMetadata(fontSize: ...)`. Presenter settings and
+A-/A+ controls use the same persistence path. Presenter labels show the raw
+metadata number; any enlarged presentation rendering remains display-only.
+
 10. Synced spacing ranges
 
 Behavior: Line spacing, word spacing, and letter spacing should have the same ranges, defaults, labels, and persistence behavior in editor and present mode. A spacing change made in one mode should be reflected in the other mode and saved into script metadata.
 
 Implementation insight: compare iOS editor Layout Suite sliders/steppers with present-mode settings controls. Match the editor’s correct ranges. Persist changes through one script metadata/settings path rather than temporary presenter-only state. If a label displays default-relative values, such as default 1.2 shown as 0.0, use the same rule in both places.
+
+iOS implementation note 2026-05-02: editor `LayoutSuite` and presenter
+`TeleprompterSettingsPanel` now share line spacing `0.5..3.0`, word spacing
+`-5.0..20.0`, and letter spacing `-2.0..5.0`. Line spacing displays as an
+offset from default `1.2`, so `1.2` reads `0.0`. Both editor and presenter
+spacing controls update the settings provider and
+`ScriptNotifier.updateStyleMetadata(...)` so the values persist across mode
+switches.
 
 11. Loaded-file symbol/quote/blank-line preservation audit
 
@@ -116,17 +145,43 @@ Behavior: When the user loads/imports a script file into the app, the editor and
 
 Implementation insight: audit the full loaded-file pipeline: file import parsing → editor block creation → editor serialization/save/recent storage → script tokenization → present mode rendering → export. Punctuation-only tokens may be display-only/unspeakable for STT, but must render. Never trim() or collapse repeated newlines in loaded script content unless the user explicitly chooses a normalized/plain export format.
 
+iOS implementation note 2026-05-02: file parsing no longer uses generic
+`trim()`/`\n{3,}` collapse in the active DOCX/RTF/Pages/plain fallback import
+paths. `_getRefinedFullText()` now preserves leading/trailing empty editor
+blocks. `WordAligner.tokenize(...)` keeps punctuation-only display tokens such
+as `"`, `»`, and section markers in `Script.words` with empty normalized text
+so STT can ignore them while present mode still renders them.
+
 12. Markup-safe export
 
 Behavior: Exported files must not leak internal app markup tags as visible text. Tags like [color=#...], [size=...], [font=...], alignment tags, and markdown-like style markers should be converted to real document styling for rich formats. Plain formats should export clean visible text.
 
 Implementation insight: inspect Windows export parser and file I/O MVP. Avoid blind regex stripping if style should survive. For RTF/DOCX, parse markup into spans and emit actual document styling. For TXT/MD/Pages/plain-ish paths, emit visible text without app-private tags. Default teleprompter white should not become white invisible text in exported documents.
 
-13. iOS external microphone routing policy
+iOS implementation note 2026-05-02: added
+`Platform_iOS/lib/features/script/services/markup_export_service.dart`.
+`DocxService` and `RtfService` now emit document styling from parsed export
+runs instead of leaking `[color]`, `[size]`, `[font]`, `**`, underline, italic,
+alignment, or shorthand color tags. `PagesService` writes
+`MarkupExportService.toPlainText(...)` into `index.xml`, preserving visible
+text and blank paragraphs while stripping app-private markup.
+
+13. iOS external microphone selection
 
 Behavior: Define exactly how iOS handles external microphones. If the app can support Bluetooth, USB, or headset microphones through iOS audio routing, it should do so without breaking STT. If explicit in-app mic selection is not possible, document that iOS uses the system/current audio input route.
 
 Implementation insight: investigate iOS AVAudioSession, speech recognition plugin behavior, Bluetooth route options, USB audio input behavior, and permission flow. Do not copy Windows WebView2 mic picker logic. The deliverable may be implementation plus docs, or a documented platform limitation if iOS does not expose safe explicit input-device selection.
+
+iOS implementation note 2026-05-02: the active iOS runtime path is
+`SttAppleAdapter` -> `SpeechService` -> `speech_to_text` -> Apple
+`SFSpeechRecognizer`. A native MethodChannel in `AppDelegate.swift` exposes
+`AVAudioSession.availableInputs` and `setPreferredInput(...)`. Presenter
+settings show System Default plus available iOS input routes, persist
+`sttInputDeviceId`/`sttInputDeviceLabel`, and the provider applies the selected
+route before STT start. This is iOS-native route preference, not Windows
+WebView2 `navigator.mediaDevices`. If iOS refuses or loses a route, the app
+falls back to System Default and stop/start resume preserves the script
+position.
 
 14. Surgical file separation for safe iOS development
 

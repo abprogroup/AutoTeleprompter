@@ -321,8 +321,31 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     setState(() => _isCommandExecuting = false);
   }
 
-  void onFontSize(int size) =>
-      _applyInlineCmd('size', '[size=$size]', '[/size]', 'Font Size');
+  void onFontSize(int size) {
+    _applyGlobalFontSize(size.toDouble());
+  }
+
+  Future<void> _applyGlobalFontSize(double size) async {
+    final clamped = size.clamp(14.0, 120.0).toDouble();
+    final inSuite = _activeSuite != EditorSuite.none;
+    if (inSuite) {
+      _trackSuiteSection('Font Size');
+      _isSuiteDirty = true;
+    }
+    await ref.read(settingsProvider.notifier).setFontSize(clamped);
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          fontSize: clamped,
+        );
+    if (!mounted) return;
+    ref.read(cursorStyleProvider.notifier).state =
+        ref.read(cursorStyleProvider).copyWith(fontSize: clamped.round());
+    if (inSuite) {
+      _scheduleRecentUpdate();
+    } else {
+      _commitHistory('Font Size');
+    }
+    _onSelectionChanged();
+  }
 
   void onFontFamily(String family) =>
       _applyInlineCmd('font', '[font=$family]', '[/font]', 'Font Family');

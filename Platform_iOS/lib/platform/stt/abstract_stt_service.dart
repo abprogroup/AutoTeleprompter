@@ -1,5 +1,15 @@
 import '../../features/teleprompter/services/speech_service.dart';
 
+class SttAudioInputDevice {
+  final String id;
+  final String label;
+
+  const SttAudioInputDevice({
+    required this.id,
+    required this.label,
+  });
+}
+
 /// Platform-agnostic contract for Speech-to-Text services.
 ///
 /// All platform-specific adapters extend this class.
@@ -23,6 +33,9 @@ abstract class AbstractSttService {
   /// On iOS, macOS, and Windows this callback will NEVER fire.
   void Function(String locale)? onNeedLanguagePack;
 
+  /// Fired when adapters discover/select available audio input routes.
+  void Function(List<SttAudioInputDevice> devices)? onAudioInputDevicesChanged;
+
   /// Starts speech recognition.
   Future<SpeechStartResult> start({String? localeId});
 
@@ -34,6 +47,14 @@ abstract class AbstractSttService {
 
   /// Human-readable platform identifier used in debug logs.
   String get platformName;
+
+  /// Refresh available input devices/routes for adapters that can expose them.
+  Future<List<SttAudioInputDevice>> refreshAudioInputDevices() async =>
+      const [];
+
+  /// Select the preferred audio input device/route.
+  /// Empty/null means system default.
+  Future<void> setAudioInputDevice(String? deviceId, {String? label}) async {}
 
   /// Switch the recognition locale without stopping the session.
   /// The new locale takes effect on the next recognition restart.

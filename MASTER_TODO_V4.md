@@ -280,11 +280,30 @@
   platforms. Planned target Scrolling MVP docs now exist for each platform.
 - [ ] **Port one-font-size source-of-truth and spacing synchronization** to all
   platforms.
+  - [P] iOS one-font-size source-of-truth implemented locally on 2026-05-02:
+    editor and presenter controls now share the same raw font-size metadata
+    value. Awaiting user/device verification before marking `[U]`.
+  - [P] iOS spacing synchronization implemented locally on 2026-05-02:
+    editor and presenter now share line, word, and letter spacing ranges and
+    persist spacing through script metadata. Awaiting user/device verification.
 - [ ] **Port markup-safe export and symbol/blank-line preservation checks** to
   all platforms.
+  - [P] iOS loaded-file symbol/quote/blank-line preservation implemented
+    locally on 2026-05-02: import/save/tokenization paths preserve display-only
+    punctuation and intentional blank-line structure. Awaiting user/device
+    verification.
+  - [P] iOS markup-safe export implemented locally on 2026-05-02: DOCX/RTF
+    convert internal markup to document styling, and Pages exports visible text
+    without raw app-private tags. Awaiting user/device verification.
 - [ ] **Define platform-specific external mic behavior** for iOS, Android, and
   macOS. If a platform cannot select an input device in-app, document the OS
-  routing limitation in that platform's STT MVP.
+  routing limitation in that platform's STT MVP; when it can, implement a
+  native selector without copying Windows-specific mechanisms.
+  - [P] iOS external microphone selection implemented locally on 2026-05-02:
+    presenter settings list `AVAudioSession.availableInputs`, persist
+    `sttInputDeviceId` + `sttInputDeviceLabel`, apply `setPreferredInput(...)`
+    before Apple STT start, and fall back to System Default when the route is
+    missing. Awaiting iOS device verification.
 
 ### Refactor Gate Before New V5 Features
 
@@ -372,6 +391,32 @@
   visible-skip path with nearby phrase priority and capped sequence jump.
   Provider call site is unchanged so the new default is active immediately.
   Awaiting user IPA verification.
+
+### iOS Windows-Parity Local Implementation Status (2026-05-02)
+
+- [P] **iOS Active-STT Bookmark Jumps**: Bookmark previous/next is wired through
+  the presenter/provider jump path so it can move position without treating mic
+  stop/start as reset. Awaiting IPA/device verification, especially while STT
+  is actively listening.
+- [P] **iOS One Font-Size Metadata Authority**: Editor and presenter controls
+  now read/write the same raw settings/script metadata font-size value.
+  Presenter visual enlargement remains render-only and must not become a saved
+  second number. Awaiting user IPA verification.
+- [P] **iOS Synced Spacing Ranges**: Editor Layout Suite and present settings
+  now share line `0.5..3.0`, word `-5.0..20.0`, and letter `-2.0..5.0`
+  ranges; line spacing displays as default-relative `0.0` at saved `1.2`.
+  Awaiting user IPA verification.
+- [P] **iOS Loaded-File Structure Preservation**: Import/save/tokenization paths
+  now preserve loaded-file punctuation-only signs, quotes, section markers, and
+  intentional blank-line structure instead of trimming or collapsing it.
+  Awaiting user IPA verification.
+- [P] **iOS Markup-Safe Export**: Added an iOS markup export parser. DOCX/RTF
+  convert app-private tags to document styling; Pages exports visible text
+  without leaking raw tags. Awaiting user IPA verification.
+- [P] **iOS External Microphone Selection**: iOS presenter settings now list
+  native `AVAudioSession.availableInputs`, persist the chosen route, and apply
+  `setPreferredInput(...)` before Apple STT start. System Default remains the
+  fallback. Awaiting iOS device verification.
 - [P] **iOS Visible-Text Search With Raw-Offset Mapping**: Ported the Windows
   search baseline into iOS. Editor search opens from the action bar and
   `Ctrl/Meta+Shift+F`, searches stripped visible text, maps the match back to

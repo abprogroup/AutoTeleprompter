@@ -44,6 +44,15 @@ class _ControlBar extends ConsumerWidget {
     final isActive = isManualMode
         ? (isManualScrolling && settings.scrollSpeed != 0)
         : isListening;
+    void applyPresenterFontSize(double size) {
+      final clamped = size.clamp(14.0, 120.0).toDouble();
+      unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
+      unawaited(
+        ref.read(scriptProvider.notifier).updateStyleMetadata(
+              fontSize: clamped,
+            ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -72,8 +81,7 @@ class _ControlBar extends ConsumerWidget {
                   style: TextStyle(color: Colors.white70, fontSize: 16)),
               onPressed: () {
                 FocusManager.instance.primaryFocus?.unfocus();
-                final newSize = (settings.fontSize - 4).clamp(10.0, 80.0);
-                ref.read(settingsProvider.notifier).setFontSize(newSize);
+                applyPresenterFontSize(settings.fontSize - 4);
               },
             ),
             // Backward button removed in favor of bidirectional slider
@@ -105,8 +113,7 @@ class _ControlBar extends ConsumerWidget {
                       fontWeight: FontWeight.bold)),
               onPressed: () {
                 FocusManager.instance.primaryFocus?.unfocus();
-                final newSize = (settings.fontSize + 4).clamp(10.0, 80.0);
-                ref.read(settingsProvider.notifier).setFontSize(newSize);
+                applyPresenterFontSize(settings.fontSize + 4);
               },
             ),
             IconButton(

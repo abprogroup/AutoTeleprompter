@@ -33,7 +33,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   }
 
   String _getRefinedFullText() =>
-      _controllers.map((c) => c.text).join('\n').trim();
+      _controllers.map((c) => c.text).join('\n');
 
   /// Clear style at cursor: find the word at cursor, then strip all tags from
   /// just that word — surgically splitting any enclosing styled regions so the

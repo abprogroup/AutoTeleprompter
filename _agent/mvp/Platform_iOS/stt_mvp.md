@@ -2,7 +2,7 @@
 name: STT MVP
 type: component
 platform: iOS
-last_updated: 2026-04-29
+last_updated: 2026-05-02
 ---
 
 # STT MVP — iOS
@@ -18,6 +18,7 @@ Governs the full iOS speech-recognition pipeline: session lifecycle, bilingual s
 | `Platform_iOS/lib/platform/stt/abstract_stt_service.dart` | Platform-agnostic interface: `start()`, `stop()`, `setLocale()`, all callbacks |
 | `Platform_iOS/lib/platform/stt/stt_service_factory.dart` | Creates `SttAppleAdapter` — the ONLY place the adapter is instantiated |
 | `Platform_iOS/lib/platform/stt/stt_apple_adapter.dart` | Wraps `SpeechService` for iOS; sets `requiresImmediateListeningFlag=true` |
+| `Platform_iOS/lib/platform/stt/ios_audio_input_service.dart` | MethodChannel wrapper for iOS `AVAudioSession` input route listing/selection |
 | `Platform_iOS/lib/platform/stt/stt_desktop_adapter.dart` | Source-present desktop adapter; not the iOS runtime path |
 | `Platform_iOS/lib/platform/stt/stt_android_adapter.dart` | Source-present Android adapter; not the iOS runtime path |
 | `Platform_iOS/lib/features/teleprompter/services/speech_service.dart` | `speech_to_text` plugin wrapper: 4-stage error recovery, locale retries, `setLocale()` |
@@ -121,12 +122,52 @@ and port only the product behavior proven on Windows:
 - Visible skip must never target offscreen text.
 - Active-STT bookmark jumps are allowed and must resync transcript/no-progress
   state without restarting from the beginning.
-- If iOS cannot select an external microphone in-app, document the OS routing
-  limitation here before implementing any UI.
+- iOS external microphone selection must use native `AVAudioSession` route
+  preference, not Windows WebView2 browser-device APIs.
 
 Do not copy Windows WebView2/browser STT internals into iOS. Use
 `SttAppleAdapter`, the iOS audio-buffer design, or a documented iOS-native
 alternative.
+
+---
+
+## iOS External Microphone Selection - 2026-05-02
+
+- Current iOS STT runtime path is `SttAppleAdapter` -> `SpeechService` ->
+  `speech_to_text` -> Apple's `SFSpeechRecognizer`/system audio route.
+- iOS exposes a best-effort in-app microphone route selector through
+  `AVAudioSession.availableInputs` and `setPreferredInput(...)`.
+- External microphones are selectable when iOS exposes them as available input
+  routes: wired headset mics, USB audio interfaces, and Bluetooth/HFP input.
+  Empty selection means System Default.
+- If the active iOS route changes while STT is running and the plugin does not
+  pick it up, the supported v4 recovery is stop/start resume: `stopSession()`
+  tears down the recognizer without resetting `confirmedWordIndex`, and the
+  next `startSession()` resumes from the same position on the selected/current
+  route.
+- A future SpeechBridge may own deeper `AVAudioSession`/`AVAudioEngine`
+  verification, but the current v4 selector already applies route preference
+  before `speech_to_text` starts.
+- Forbidden regression: do not copy the Windows WebView2
+  `navigator.mediaDevices` picker into iOS. iOS persists Apple
+  `AVAudioSessionPortDescription.uid` values, not Chromium device IDs.
+
+### 2026-05-02 implementation update
+
+- The limitation above is now narrowed: iOS does have a native best-effort
+  route selector through `AVAudioSession.availableInputs` and
+  `setPreferredInput(...)`, so the app exposes that instead of waiting for the
+  future SpeechBridge.
+- `SttAppleAdapter.refreshAudioInputDevices()` lists available Apple input
+  routes through `IosAudioInputService`. `setAudioInputDevice(...)` applies the
+  selected route before `SpeechService.start(...)`.
+- Empty input means System Default and calls `setPreferredInput(nil)`.
+- iOS route IDs are `AVAudioSessionPortDescription.uid` values. They are not
+  Windows WebView2/Chromium device IDs.
+- Route selection remains Apple-owned and best-effort: if a saved route is
+  disconnected or iOS refuses it, STT falls back to the active/current route.
+  Stop/start resume remains the recovery path and must preserve
+  `confirmedWordIndex`.
 
 ---
 

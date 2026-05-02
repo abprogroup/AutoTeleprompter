@@ -27,8 +27,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   List<String> _sectionLocales = []; // per-word locale map, pre-computed at session start
   Future<void>? _stopInFlight;
   int _sessionToken = 0;
-  // Item 3: rendered visible word window pushed by the presenter; consumed by
-  // the aligner only when sttVisibleSkipEnabled is true.
   int? _visibleWordStart;
   int? _visibleWordEnd;
 
@@ -119,10 +117,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = result.words;
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
-    // Item 3: visible-skip is opt-in and viewport-bounded. The presenter
-    // pushes the rendered word range via setVisibleWordWindow(); the aligner
-    // is allowed to scan the visible window only when both the user setting
-    // is enabled and the presenter has reported a window.
     final maxSkipTargetIndex =
         settings.sttVisibleSkipEnabled && _visibleWordStart != null
             ? _visibleWordEnd
@@ -201,7 +195,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog('🎤 [$platform] STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
-        // Item 4: clear startup gate as soon as the first real status arrives
         isStarting: false,
         statusMessage: '',
         hasError: false,
@@ -219,7 +212,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         statusMessage: isFatal ? error : '',
         hasError: isFatal,
         isListening: isFatal ? false : s.isListening,
-        // Item 4: a fatal error means startup failed — release scroll-lock
         isStarting: isFatal ? false : s.isStarting,
       ));
     };
@@ -234,7 +226,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         missingLanguage: langName,
         hasError: true,
         isListening: false,
-        isStarting: false, // Item 4: language failure ends startup
+        isStarting: false,
         statusMessage: 'Speech recognition language not installed on this device',
       ));
     };
@@ -248,7 +240,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _safeSetState((s) => s.copyWith(
         hasError: true,
         isListening: false,
-        isStarting: false, // Item 4: pack-missing failure ends startup
+        isStarting: false,
         statusMessage: '$langName speech recognition requires an internet connection. '
             'This language is not available offline on your device. '
             'Please connect to WiFi or mobile data and try again.',
@@ -267,7 +259,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog('🤖 WHISPER STATUS: $status');
       _safeSetState((s) => s.copyWith(
         isListening: status == SpeechStatus.listening,
-        // Item 4: clear startup gate as soon as the first real status arrives
         isStarting: false,
         statusMessage: '',
         hasError: false,
@@ -283,7 +274,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           statusMessage: error,
           hasError: true,
           isListening: false,
-          isStarting: false, // Item 4: whisper init failure ends startup
+          isStarting: false,
         ));
       }
     };
@@ -468,8 +459,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sessionStopped = false;
-    // Item 3: clear stale visible-window so the first STT result of the new
-    // session cannot use a cached window from the previous presenter mount.
     _visibleWordStart = null;
     _visibleWordEnd = null;
     _precomputeSectionLocales(script);
@@ -483,7 +472,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     state = state.copyWith(
         confirmedWordIndex: startIndex,
         isListening: false,
-        isStarting: true, // Item 4: scroll-lock from the moment startSession runs
+        isStarting: true,
         hasError: false,
         statusMessage: '', debugLogs: [], missingLanguage: null);
 
@@ -580,7 +569,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       try {
         state = state.copyWith(
           isListening: false,
-          isStarting: false, // Item 4: stop unlocks the scroll
+          isStarting: false,
           hasError: false,
           statusMessage: '',
         );
@@ -621,23 +610,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
   }
 
-  /// Item 3: presenter pushes the rendered visible word range here. The
-  /// aligner consumes it as `maxSkipTargetIndex` only when the user setting
-  /// `sttVisibleSkipEnabled` is true. Empty/null means no visible window
-  /// information; the aligner falls back to its strict 5-word default
-  /// recovery.
+  /// Presenter pushes the rendered visible word range here.
   void setVisibleWordWindow(int? startIndex, int? endIndex) {
     if (_disposed) return;
     _visibleWordStart = startIndex;
     _visibleWordEnd = endIndex;
   }
 
-  /// Item 4 / 5 / 7: move the reading position without restarting STT.
-  /// Used by stopped-browsing resume-point selection and active-STT bookmark
-  /// jumps. Clears transient transcript/no-progress state so the next STT
-  /// result aligns from the new position. If listening, also resyncs the
-  /// expected locale at the new index (does NOT call `_checkAndSwitchLocale`,
-  /// which is restricted to natural advances per Invariant 12).
+  /// Move the reading position without restarting STT.
   void jumpToPosition(int index, {Script? script}) {
     if (_disposed) return;
     if (script != null) _currentScript = script;
@@ -659,8 +639,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
   }
 
-  /// Item 7: resync STT locale to the section that contains [index] without
-  /// disturbing the natural-advance contract owned by `_checkAndSwitchLocale`.
+  /// Resync STT locale to the section that contains [index].
   void _syncLocaleForPosition(int index, {String reason = ''}) {
     if (_useWhisper || _disposed || _sessionStopped) return;
     if (_sectionLocales.isEmpty) return;

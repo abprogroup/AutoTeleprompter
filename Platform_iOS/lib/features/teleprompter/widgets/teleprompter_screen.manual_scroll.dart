@@ -82,9 +82,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (mounted) setState(() => _manualScrolling = false);
   }
 
-  /// Item 3: compute and push the rendered visible word range to the
-  /// teleprompter provider so the aligner can use it as the upper bound for
-  /// opt-in visible-skip jumps. Skips newlines and unspeakable display tokens.
+  /// Compute and push the rendered visible word range to the provider.
   /// Throttled to ~150 ms unless `force` is true.
   void _syncVisibleWordWindow({bool force = false}) {
     if (!mounted || !_scrollController.hasClients) return;
@@ -156,9 +154,6 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
     final wordPos =
         box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
-    // Item 4: row-progress follow. Add a fractional advance based on how far
-    // through its row the focused word is, so the scroll glide stays smooth
-    // and continuous instead of snapping at row ends.
     final rowProgress = _visualRowProgress(index, box);
     final lineAdvance =
         (box.size.height * settings.lineSpacing).clamp(0.0, screenH * 0.22);
@@ -178,9 +173,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
   }
 
-  /// Item 4: how far through its current row the focused word is (0.0 .. 1.0).
-  /// Walks neighbours by Y-tolerance to find row start and end, returns the
-  /// position of `index` within that row.
+  /// How far through its current row the focused word is (0.0 .. 1.0).
   double _visualRowProgress(int index, RenderBox currentBox) {
     if (index < 0 || index >= _wordKeys.length) return 0.0;
     final currentDy = currentBox.localToGlobal(Offset.zero).dy;
@@ -216,11 +209,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     return ctx.findRenderObject() as RenderBox?;
   }
 
-  /// Item 4 (scroll lock) + Item 5 (stopped browsing/resume-point sync).
-  /// While STT is listening or starting, drop user drag-scroll attempts so
-  /// the active reading position stays on screen. While STT is stopped, the
-  /// user may drag freely; on scroll-end we snap the resume point to the
-  /// reading line so the next mic start picks up there.
+  /// While STT is stopped, drag scrolling can update the resume point.
   bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
     final sttState = ref.read(teleprompterProvider);
     if (sttState.isListening || sttState.isStarting) {
@@ -245,11 +234,12 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     return false;
   }
 
-  /// Item 5: pick the word nearest the reading line and store it as the
-  /// resume point so the next `startSession()` continues from there.
+  /// Pick the word nearest the reading line and store it as the resume point.
   void _syncResumePointToReadingLine() {
     final script = ref.read(scriptProvider);
-    if (script == null || script.words.isEmpty || !_scrollController.hasClients) {
+    if (script == null ||
+        script.words.isEmpty ||
+        !_scrollController.hasClients) {
       return;
     }
     final settings = ref.read(settingsProvider);

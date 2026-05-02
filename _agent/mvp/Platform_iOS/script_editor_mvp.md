@@ -129,6 +129,8 @@ When iOS editor work resumes, port these verified Windows editor contracts:
 
 - Editor search is owned by
   `Platform_iOS/lib/features/script/widgets/script_editor_screen.search.dart`.
+- Search protocol details belong in this MVP document, not as task-list
+  narrative inside root editor code files.
 - Search opens from the editor action bar and from `Ctrl/Meta+Shift+F`.
 - Search must match visible text after markup stripping, not raw tag text.
 - Match offsets must be translated back through

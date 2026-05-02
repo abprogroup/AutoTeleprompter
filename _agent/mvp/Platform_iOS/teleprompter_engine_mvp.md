@@ -140,6 +140,9 @@ fragilities above and port these final Windows product contracts:
 
 - Presenter search is owned by
   `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.search.dart`.
+- Windows-parity task labels and behavioral protocol belong in MVP documents,
+  not in presenter root/build/provider comments. Code comments should stay
+  implementation-local and concise.
 - Search opens from the control bar and from `Ctrl/Meta+Shift+F` when a
   hardware keyboard can focus the presentation screen.
 - Search must build its phrase map from visible word text, after stripping

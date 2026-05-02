@@ -54,12 +54,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _manualScrolling = false;
   bool _scrollingBackward = false;
   StreamSubscription? _remoteCmdSub;
-  // Item 3: visible-word-window sync state for opt-in visible-skip aligner.
   DateTime? _lastVisibleWindowSync;
   bool _visibleWindowSyncScheduled = false;
-  // Item 5: tracks user drag-scroll while STT is stopped so a scroll-end can
-  // sync the resume point. Must stay false while STT is listening or starting
-  // (Item 4 scroll-lock contract).
   bool _userBrowsingWhileStopped = false;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;

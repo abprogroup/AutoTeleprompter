@@ -20,9 +20,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       }
     });
 
-    // Item 3: keep the provider's visible word window in sync with what is
-    // actually rendered, so the aligner can use it for opt-in visible-skip.
-    // Throttled inside the helper to ~150 ms.
     _scheduleVisibleWordWindowSync();
 
     if (script == null || script.isEmpty) {
@@ -271,10 +268,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
             child: Stack(
               children: [
                 // Scrollable script
-                // Item 4: while STT is listening or starting, the active reading
-                // position must stay on screen — drag-scroll is disabled. While
-                // STT is stopped, the user may scroll freely; on scroll-end the
-                // resume point snaps to the reading line (Item 5).
                 NotificationListener<ScrollNotification>(
                   onNotification: _handleStoppedBrowsingScroll,
                   child: SingleChildScrollView(

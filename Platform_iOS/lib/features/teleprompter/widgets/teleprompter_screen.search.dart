@@ -1,6 +1,19 @@
 part of 'teleprompter_screen.dart';
 
 extension _TeleprompterSearchParts on _TeleprompterScreenState {
+  bool _handlePresentationKey(KeyEvent event) {
+    if (event is! KeyDownEvent || _searchDialogOpen || !mounted) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    final isSearchShortcut = event.logicalKey == LogicalKeyboardKey.keyF &&
+        keyboard.isShiftPressed &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed);
+    if (!isSearchShortcut) return false;
+    Future.microtask(_showPresenterSearchDialog);
+    return true;
+  }
+
   Future<void> _showPresenterSearchDialog() async {
     if (_searchDialogOpen) return;
     _searchDialogOpen = true;

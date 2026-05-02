@@ -690,3 +690,16 @@
 - **Documentation Result**: Updated iOS Script Editor and Teleprompter Engine
   MVP docs, `MASTER_TODO_V4.md`, and the Windows-parity handoff file. iOS Task
   8 is now implemented and awaiting IPA/device verification.
+
+## 2026-05-02 - iOS MVP Documentation Boundary Cleanup
+
+- **Session Goal**: Correct the documentation/code boundary after the iOS
+  parity ports. Windows-parity task labels and behavioral protocol belong in
+  `_agent/mvp/Platform_iOS/*.md`, not as task-list prose inside iOS source
+  files.
+- **Code Result**: Removed `Item`/task migration labels from iOS source comments
+  and moved the present-mode search hardware-key handler from the STT session
+  part into `teleprompter_screen.search.dart`, the search-owned part file.
+- **Documentation Result**: Appended explicit ownership notes to the iOS Script
+  Editor and Teleprompter Engine MVP docs so future agents keep task protocol in
+  MVP files and code comments implementation-local.

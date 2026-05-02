@@ -1,9 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../markup_controller.dart';
+import '../../../../../core/extensions/string_extensions.dart';
 
 /// Walk a render tree to find the first RenderEditable.
 RenderEditable? _findRenderEditable(RenderObject obj) {
@@ -22,10 +21,6 @@ class GlobalSelectionOverlay extends StatefulWidget {
   final List<GlobalKey> blockKeys;
   final Widget child;
   final VoidCallback onSelectionChanged;
-  final VoidCallback onCut;
-  final VoidCallback onCopy;
-  final VoidCallback? onPaste;
-  final ScrollController? scrollController;
 
   const GlobalSelectionOverlay({
     super.key,
@@ -33,10 +28,6 @@ class GlobalSelectionOverlay extends StatefulWidget {
     required this.blockKeys,
     required this.child,
     required this.onSelectionChanged,
-    required this.onCut,
-    required this.onCopy,
-    this.onPaste,
-    this.scrollController,
   });
 
   @override
@@ -61,9 +52,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Offset? _panStartGlobal;
   Offset?
       _panStartHandleGlobal; // caret global position at the moment of pan start
-  Offset? _lastDragGlobal;
-  bool? _lastDragIsStart;
-  Timer? _edgeScrollTimer;
   final GlobalKey _stackKey = GlobalKey();
 
   /// True when every block is wholly selected (post Select All, pre refine).
@@ -119,47 +107,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       _isSelecting && _startBlock != null && _endBlock != null;
 
   bool get isRefinedSelection => _hasHandleRefinedSelection;
-
-  bool hasSameBlockSelection(int blockIndex, TextSelection selection) {
-    if (!hasSelection || selection.isCollapsed || !selection.isValid) {
-      return false;
-    }
-    return _startBlock == blockIndex &&
-        _endBlock == blockIndex &&
-        _startOffset == selection.start &&
-        _endOffset == selection.end;
-  }
-
-  void selectBlockSelection(int blockIndex, TextSelection selection) {
-    if (blockIndex < 0 ||
-        blockIndex >= widget.controllers.length ||
-        !selection.isValid ||
-        selection.isCollapsed ||
-        hasSameBlockSelection(blockIndex, selection)) {
-      return;
-    }
-
-    setState(() {
-      _isSelecting = true;
-      _hasHandleRefinedSelection = true;
-      _startBlock = blockIndex;
-      _endBlock = blockIndex;
-      _startOffset = selection.start;
-      _endOffset = selection.end;
-      for (final c in widget.controllers) {
-        c.isGlobalSelected = false;
-      }
-      _updateBlockHighlights();
-      for (final c in widget.controllers) {
-        c.refresh();
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _calculateHandlePositions());
-    });
-    widget.onSelectionChanged();
-  }
 
   /// Recalculates handle positions after an external layout change (e.g. alignment
   /// applied to selected text). Must be called after the next frame so the
@@ -357,55 +304,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     }
   }
 
-  void _updateEdgeAutoScroll(Offset globalPos, bool isStart) {
-    _lastDragGlobal = globalPos;
-    _lastDragIsStart = isStart;
-    _edgeScrollTimer ??= Timer.periodic(const Duration(milliseconds: 50), (_) {
-      _runEdgeAutoScrollTick();
-    });
-    _runEdgeAutoScrollTick();
-  }
-
-  void _runEdgeAutoScrollTick() {
-    final controller = widget.scrollController;
-    final dragGlobal = _lastDragGlobal;
-    final isStart = _lastDragIsStart;
-    final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
-    if (controller == null ||
-        !controller.hasClients ||
-        dragGlobal == null ||
-        isStart == null ||
-        stackBox == null) {
-      return;
-    }
-
-    final local = stackBox.globalToLocal(dragGlobal);
-    const edge = 72.0;
-    double delta = 0;
-    if (local.dy < edge) {
-      delta = -22;
-    } else if (local.dy > _stackSize.height - edge) {
-      delta = 22;
-    }
-    if (delta == 0) return;
-
-    final next = (controller.offset + delta)
-        .clamp(controller.position.minScrollExtent,
-            controller.position.maxScrollExtent)
-        .toDouble();
-    if (next == controller.offset) return;
-    controller.jumpTo(next);
-    refreshPositions();
-    _handleUpdate(dragGlobal, isStart);
-  }
-
-  void _stopEdgeAutoScroll() {
-    _edgeScrollTimer?.cancel();
-    _edgeScrollTimer = null;
-    _lastDragGlobal = null;
-    _lastDragIsStart = null;
-  }
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -423,69 +321,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             if (end != null &&
                 (_draggingEnd || _isHandleVisibleInViewport(end)))
               _buildHandle(end, false),
-            if (start != null &&
-                end != null &&
-                !_draggingStart &&
-                !_draggingEnd)
-              _buildSelectionToolbar(start, end),
           ],
         );
       },
-    );
-  }
-
-  Widget _buildSelectionToolbar(Offset start, Offset end) {
-    const width = 188.0;
-    final anchorX = ((start.dx + end.dx) / 2).clamp(0.0, _stackSize.width);
-    final anchorY = [start.dy, end.dy].reduce((a, b) => a < b ? a : b);
-    final top = (anchorY < 56 ? anchorY + 42 : anchorY - 48)
-        .clamp(8.0, _stackSize.height > 56 ? _stackSize.height - 56 : 8.0);
-    final left = (anchorX - width / 2).clamp(8.0,
-        _stackSize.width > width + 16 ? _stackSize.width - width - 8 : 8.0);
-
-    Widget action(String label, VoidCallback? action) {
-      return TextButton(
-        onPressed: action,
-        style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFFFFBF00),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          minimumSize: const Size(42, 34),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        child: Text(label, style: const TextStyle(fontSize: 12)),
-      );
-    }
-
-    return Positioned(
-      left: left,
-      top: top,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: width,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xEE111111),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFFFBF00), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.35),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              action('Cut', widget.onCut),
-              action('Copy', widget.onCopy),
-              if (widget.onPaste != null) action('Paste', widget.onPaste),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -535,10 +373,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           if (caretStart != null && panStart != null) {
             final delta = details.globalPosition - panStart;
             _handleUpdate(caretStart + delta, isStart);
-            _updateEdgeAutoScroll(caretStart + delta, isStart);
           } else {
             _handleUpdate(details.globalPosition, isStart);
-            _updateEdgeAutoScroll(details.globalPosition, isStart);
           }
         },
         onPanEnd: (_) => setState(() {
@@ -548,7 +384,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             _draggingEnd = false;
           _panStartGlobal = null;
           _panStartHandleGlobal = null;
-          _stopEdgeAutoScroll();
         }),
         child: Container(
           width: 40,
@@ -573,11 +408,5 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _stopEdgeAutoScroll();
-    super.dispose();
   }
 }

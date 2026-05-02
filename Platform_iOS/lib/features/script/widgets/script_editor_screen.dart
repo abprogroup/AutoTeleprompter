@@ -136,7 +136,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
-  final ScrollController _editorScrollController = ScrollController();
 
   // v3.9.6: Professional History Bulking
   int _typingCharCount = 0; // chars typed since last history commit

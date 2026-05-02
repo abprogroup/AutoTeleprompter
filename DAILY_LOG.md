@@ -912,3 +912,21 @@
   selections can extend beyond the initially visible screen.
 - **Documentation Result**: Updated the iOS Selection MVP and
   `MASTER_TODO_V4.md`. Awaiting IPA/device verification.
+
+## 2026-05-02 - iOS Selection Toolbar Patch Reverted
+
+- **Session Goal**: Respond to device QA showing that the previous
+  selection-toolbar/autoscroll patch was not surgical enough and caused major
+  collisions between native iOS selection and the app overlay selection system.
+- **Regression Confirmed By User**: Select All became unstable and selected
+  only one block, dragging handles could scroll indefinitely even when no useful
+  text remained, and both the native iOS toolbar and app Cut/Copy/Paste toolbar
+  appeared together.
+- **Rollback Result**: Restored the iOS runtime selection files to the last
+  passing state before commit `3fd2d4b`, preserving the safer
+  `c94c55f` behavior that protects multi-block snapshots without adding the
+  duplicate toolbar/autoscroll collision.
+- **Protocol Result**: Updated the iOS Selection MVP with a rejected-approach
+  warning and marked the V4 TODO item as failed/reverted. Future selection work
+  must isolate one behavior at a time and avoid mixing native menu recovery,
+  custom overlay handles, app toolbars, and autoscroll in one broad patch.

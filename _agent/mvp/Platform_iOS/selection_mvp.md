@@ -38,7 +38,6 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 | `_isGlobalSelection` | Read by style commands (`_applyStyleCmd`, `_applyInlineCmd`, `onAlign`, `onDirection`) to decide whether to apply globally |
 | `_overlayKey.currentState?.hasSelection` | Read by `_onSelectionChanged`, `_styleTargets`, `_applyStyleCmd` |
 | `_overlayKey.currentState?.selectAll()` | Called by `_selectAllBlocks` and `_resyncGlobalSelection` postFrameCallback |
-| `_overlayKey.currentState?.selectBlockSelection(blockIndex, selection)` | Called by `_onSelectionChanged()` to mirror native double-tap word selections into the custom overlay handles |
 | `_overlayKey.currentState?.clearSelection()` | Called by `_clearGlobalSelection`, `_deleteGlobalSelection` |
 | `_styleTargets()` | Returns list of controllers to apply style to; reads `_isGlobalSelection` and `hasOverlay` |
 
@@ -139,29 +138,6 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     after real overlay handle refinement, where the visible dragged range is the
     intended clipboard range.
 
-19. **Native word selection must promote into overlay handles**: Double-tap or
-    native word selection inside one `TextField` must call
-    `selectBlockSelection(...)` so the app shows its gold handles and amber
-    markup highlight. `GhostSelectionControls` hides native handles, so the
-    overlay is the only visible refine mechanism.
-
-20. **Overlay selection toolbar is the command owner after handle refinement**:
-    After a word selection or handle drag, the overlay must expose a compact
-    Cut/Copy/Paste toolbar wired to `_onCutClean`, `_onCopyClean`, and
-    `_pasteFromGlobalClipboard`. Do not rely on the native iOS toolbar to reopen
-    after custom handle movement.
-
-21. **Edge drag autoscroll is required for long selections**: Dragging a
-    selection handle near the top or bottom of the editor viewport must scroll
-    the `ListView` and continue hit-testing the handle against newly visible
-    blocks. Long selections must not be limited to the initially visible screen.
-
-22. **Partial overlay commands bypass global snapshot fallback**: When
-    `GlobalSelectionOverlay.hasSelection` is true but `_isGlobalSelection` is
-    false, Cut/Copy must use the overlay-selected raw slices. The recent
-    `_globalSelectionSnapshot` fallback is only for native-menu recovery, not a
-    license to empty all controllers during partial word/handle selection.
-
 ---
 
 ## Forbidden Changes
@@ -174,10 +150,6 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 - Do not let a native one-block iOS selection event overwrite a protected
   multi-block snapshot. Select All + Cut/Copy must keep all selected blocks
   unless the user actually refines the overlay handles.
-- Do not make double-tap word selection depend on native iOS handles. Native
-  handles are hidden by design; the custom overlay handles must appear.
-- Do not remove the overlay-owned Cut/Copy/Paste toolbar after handle
-  refinement unless an equivalent app-owned command surface replaces it.
 
 ---
 
@@ -207,10 +179,6 @@ Additional clipboard prohibitions:
 - Do not restore the old viewport-edge fallback for selection handles. Hidden
   offscreen endpoints are less misleading than handles floating at an unrelated
   edge of the screen.
-- Do not remove drag-edge autoscroll. Without it, multi-screen selections can
-  only be made by Select All, which breaks surgical partial selection.
-- Do not let `_globalBlocksForCommand(...)` claim a partial overlay selection.
-  Partial overlay Cut must never empty all controllers.
 
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.
@@ -221,3 +189,14 @@ Additional clipboard prohibitions:
   intended multi-block selection; it must not become a permanent hidden
   selection state. Paste may also use it as a fallback when native Cut bypassed
   the in-app Cut command but Select All was captured correctly.
+
+## Rejected Approach Log
+
+- **2026-05-02 rejected selection-toolbar/autoscroll patch**: Do not reapply the
+  attempted approach that promoted every native double-tap word selection into
+  app overlay handles, added an overlay-owned Cut/Copy/Paste toolbar, and ran
+  timer-based edge autoscroll from handle drag updates. Device QA showed this
+  created native/app selection collisions: Select All degraded to one block,
+  duplicate native + app toolbars appeared, and handle dragging could scroll
+  indefinitely. Future selection work must isolate one behavior at a time and
+  preserve the carefully crafted iOS native-menu recovery path.

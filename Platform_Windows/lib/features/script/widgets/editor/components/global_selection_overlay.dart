@@ -152,18 +152,19 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       _bodyDragActive = true;
       _enterRefineMode();
 
-      // Resolve the anchor ONCE at the moment of activation
       final originBlock = _candidateBlock;
       if (originBlock != null) {
         final key = widget.blockKeys[originBlock];
-        final context = key.currentContext;
-        final editable = _findRenderEditable(context?.findRenderObject());
-        if (editable != null) {
-          final blockGlobalPos = editable.localToGlobal(Offset.zero);
-          final pos =
-              editable.getPositionForPoint(_candidatePos! - blockGlobalPos);
-          _anchorBlock = originBlock;
-          _anchorOffset = pos.offset;
+        final renderObj = key.currentContext?.findRenderObject();
+        if (renderObj != null) {
+          final editable = _findRenderEditable(renderObj);
+          if (editable != null) {
+            final blockGlobalPos = editable.localToGlobal(Offset.zero);
+            final pos =
+                editable.getPositionForPoint(_candidatePos! - blockGlobalPos);
+            _anchorBlock = originBlock;
+            _anchorOffset = pos.offset;
+          }
         }
       }
 

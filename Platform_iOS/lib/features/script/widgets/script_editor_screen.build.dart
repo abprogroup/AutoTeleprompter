@@ -23,7 +23,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
     });
 
     final settings = ref.watch(settingsProvider);
-    final hasOverlaySelection = _overlayKey.currentState?.hasSelection ?? false;
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
@@ -281,12 +280,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                   ),
                 ),
               ),
-              if (hasOverlaySelection)
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: _buildOverlaySelectionCommandBar(),
-                ),
               if (_isPendingLoad)
                 Positioned.fill(
                   child: Container(
@@ -366,76 +359,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
           Text('History States: ${_history.length}',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
         ],
-      ),
-    );
-  }
-
-  Widget _buildOverlaySelectionCommandBar() {
-    Widget command({
-      required IconData icon,
-      required String tooltip,
-      required VoidCallback? onPressed,
-      Color color = Colors.white,
-    }) {
-      return Tooltip(
-        message: tooltip,
-        child: IconButton(
-          icon: Icon(icon, color: onPressed == null ? Colors.white30 : color),
-          tooltip: tooltip,
-          onPressed: onPressed,
-          visualDensity: VisualDensity.compact,
-          splashRadius: 20,
-        ),
-      );
-    }
-
-    return SafeArea(
-      bottom: false,
-      child: Material(
-        color: const Color(0xEE151515),
-        borderRadius: BorderRadius.circular(8),
-        elevation: 6,
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFFFBF00), width: 1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              command(
-                icon: Icons.content_cut,
-                tooltip: 'Cut selection',
-                onPressed: _onCutClean,
-                color: const Color(0xFFFFBF00),
-              ),
-              command(
-                icon: Icons.content_copy,
-                tooltip: 'Copy selection',
-                onPressed: _onCopyClean,
-                color: const Color(0xFFFFBF00),
-              ),
-              command(
-                icon: Icons.select_all,
-                tooltip: 'Select all',
-                onPressed: _selectAllBlocks,
-              ),
-              command(
-                icon: Icons.content_paste,
-                tooltip: 'Paste',
-                onPressed: _hasPasteableBlockClipboard
-                    ? _pasteFromGlobalClipboard
-                    : null,
-              ),
-              command(
-                icon: Icons.close,
-                tooltip: 'Clear selection',
-                onPressed: _clearGlobalSelection,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

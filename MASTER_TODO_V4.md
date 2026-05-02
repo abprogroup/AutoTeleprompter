@@ -454,10 +454,6 @@
   toolbar into the global Cut/Copy state. Overlay handle dragging now targets
   the nearest rendered block/caret while crossing visible paragraph boundaries.
   Awaiting IPA/device verification.
-- [P] **iOS Overlay Selection Command Bar**: Explicit overlay/global selection
-  now shows a compact app command bar with Cut, Copy, Select All, Paste, and
-  Clear. Ordinary one-block native selection remains native-toolbar owned.
-  Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

@@ -189,9 +189,17 @@ class _EditorBlock extends StatelessWidget {
                           !selection.isCollapsed &&
                           !(selection.start == 0 &&
                               selection.end == controller.text.length);
-                      void selectAllFromMenu() {
+                      void selectAllAndReopenToolbar() {
                         ContextMenuController.removeAny();
                         onSelectAll();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          Future<void>.delayed(const Duration(milliseconds: 80),
+                              () {
+                            if (editableTextState.mounted) {
+                              editableTextState.showToolbar();
+                            }
+                          });
+                        });
                       }
 
                       // When the block is globally selected, bypass editableTextState
@@ -268,7 +276,7 @@ class _EditorBlock extends StatelessWidget {
                               label: 'Extend',
                             ),
                             ContextMenuButtonItem(
-                              onPressed: selectAllFromMenu,
+                              onPressed: selectAllAndReopenToolbar,
                               type: ContextMenuButtonType.selectAll,
                             ),
                             if (onPaste != null)
@@ -292,7 +300,7 @@ class _EditorBlock extends StatelessWidget {
                         if (item.type == ContextMenuButtonType.selectAll) {
                           hasSelectAll = true;
                           customItems.add(ContextMenuButtonItem(
-                            onPressed: selectAllFromMenu,
+                            onPressed: selectAllAndReopenToolbar,
                             type: ContextMenuButtonType.selectAll,
                           ));
                         } else if (item.type == ContextMenuButtonType.cut) {
@@ -339,7 +347,7 @@ class _EditorBlock extends StatelessWidget {
                       // Force-inject Select All even when the native menu omits it.
                       if (!hasSelectAll) {
                         customItems.add(ContextMenuButtonItem(
-                          onPressed: selectAllFromMenu,
+                          onPressed: selectAllAndReopenToolbar,
                           type: ContextMenuButtonType.selectAll,
                         ));
                       }

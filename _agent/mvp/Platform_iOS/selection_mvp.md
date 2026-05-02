@@ -167,10 +167,12 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 22. **Overlay Cut/Copy must use overlay slices, not stale native actions**:
     After a native partial selection adopts into overlay handles, any stale
     native one-block toolbar must be dismissed. When an overlay selection is
-    active, the iOS context menu and `CutSelectionTextIntent` /
-    `CopySelectionTextIntent` must route to `_onCutClean()` / `_onCopyClean()`.
-    Overlay clipboard storage must prefer the visible overlay-selected raw
-    slices and must not be replaced by an older protected full-script snapshot.
+    active, the iOS context menu plus the app's keyboard Cut/Copy shortcuts
+    must route to `_onCutClean()` / `_onCopyClean()`. Overlay clipboard storage
+    must prefer the visible overlay-selected raw slices and must not be replaced
+    by an older protected full-script snapshot. Flutter 3.24.3 does not expose
+    `CutSelectionTextIntent`, so do not depend on that symbol in iOS workflow
+    builds.
 
 ---
 

@@ -135,13 +135,6 @@ class _EditorBlock extends StatelessWidget {
                       return null;
                     },
                   ),
-                  CutSelectionTextIntent:
-                      CallbackAction<CutSelectionTextIntent>(
-                    onInvoke: (_) {
-                      onCut();
-                      return null;
-                    },
-                  ),
                   SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
                     onInvoke: (_) {
                       onSelectAll();

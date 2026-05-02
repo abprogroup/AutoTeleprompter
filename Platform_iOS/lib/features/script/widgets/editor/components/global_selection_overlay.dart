@@ -286,73 +286,88 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   void _handleUpdate(Offset globalPos, bool isStart) {
     _enterRefineMode();
 
+    int? targetBlock;
+    TextPosition? targetPosition;
+    double? targetDistance;
+    bool targetIsInside = false;
+
     for (int i = 0; i < widget.blockKeys.length; i++) {
       final renderObj = widget.blockKeys[i].currentContext?.findRenderObject();
       if (renderObj == null) continue;
       final box = renderObj as RenderBox;
 
       final boxLocal = box.globalToLocal(globalPos);
-      if (boxLocal.dy > box.size.height && i + 1 < widget.blockKeys.length) {
-        final nextRender =
-            widget.blockKeys[i + 1].currentContext?.findRenderObject();
-        if (nextRender is RenderBox) {
-          final nextLocal = nextRender.globalToLocal(globalPos);
-          if (nextLocal.dy >= 0) continue;
-        }
+      final inside = boxLocal.dy >= 0 && boxLocal.dy <= box.size.height;
+      final distance = inside
+          ? 0.0
+          : boxLocal.dy < 0
+              ? -boxLocal.dy
+              : boxLocal.dy - box.size.height;
+      if (targetDistance != null &&
+          (targetIsInside || !inside) &&
+          distance >= targetDistance) {
+        continue;
       }
-      // Allow a boundary corridor so handles can reach true paragraph
-      // start/end offsets without sticking near newline seams.
-      if (boxLocal.dy >= -72 && boxLocal.dy <= box.size.height + 72) {
-        // Use the actual RenderEditable for accurate hit-testing
-        final editable = _findRenderEditable(renderObj);
-        TextPosition pos;
-        if (boxLocal.dy < 0) {
-          pos = const TextPosition(offset: 0);
-        } else if (boxLocal.dy > box.size.height) {
-          pos = TextPosition(offset: widget.controllers[i].text.length);
-        } else if (editable != null) {
-          // v4.1.1: Pass globalPos directly — getPositionForPoint expects a
-          // GLOBAL coordinate and converts internally with globalToLocal().
-          // The previous code converted to local first, causing a second
-          // globalToLocal() call inside getPositionForPoint that shifted y
-          // by the widget's screen offset, always returning a line-1 result.
-          pos = editable.getPositionForPoint(globalPos);
-        } else {
-          // Fallback: beginning or end of block
-          pos = TextPosition(
-              offset: boxLocal.dx < box.size.width / 2
-                  ? 0
-                  : widget.controllers[i].text.length);
-        }
-        setState(() {
-          _isSelecting = true;
-          _hasHandleRefinedSelection = true;
-          if (isStart) {
-            if (_startBlock != i) HapticFeedback.selectionClick();
-            _startBlock = i;
-            _startOffset =
-                pos.offset.clamp(0, widget.controllers[i].text.length).toInt();
-          } else {
-            if (_endBlock != i) HapticFeedback.selectionClick();
-            _endBlock = i;
-            _endOffset =
-                pos.offset.clamp(0, widget.controllers[i].text.length).toInt();
-          }
-          _updateBlockHighlights();
-          for (final c in widget.controllers) {
-            c.refresh();
-          }
-        });
-        // Recalculate handle positions after the frame so caret coords
-        // reflect the new selection highlight layout.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          setState(() => _calculateHandlePositions());
-        });
-        widget.onSelectionChanged();
-        return;
+
+      // Use the actual RenderEditable for accurate hit-testing
+      final editable = _findRenderEditable(renderObj);
+      TextPosition pos;
+      if (boxLocal.dy < 0) {
+        pos = const TextPosition(offset: 0);
+      } else if (boxLocal.dy > box.size.height) {
+        pos = TextPosition(offset: widget.controllers[i].text.length);
+      } else if (editable != null) {
+        // v4.1.1: Pass globalPos directly — getPositionForPoint expects a
+        // GLOBAL coordinate and converts internally with globalToLocal().
+        // The previous code converted to local first, causing a second
+        // globalToLocal() call inside getPositionForPoint that shifted y
+        // by the widget's screen offset, always returning a line-1 result.
+        pos = editable.getPositionForPoint(globalPos);
+      } else {
+        // Fallback: beginning or end of block
+        pos = TextPosition(
+            offset: boxLocal.dx < box.size.width / 2
+                ? 0
+                : widget.controllers[i].text.length);
       }
+      targetBlock = i;
+      targetPosition = pos;
+      targetDistance = distance;
+      targetIsInside = inside;
+      if (inside) break;
+      continue;
     }
+
+    final block = targetBlock;
+    final pos = targetPosition;
+    if (block == null || pos == null) return;
+
+    setState(() {
+      _isSelecting = true;
+      _hasHandleRefinedSelection = true;
+      if (isStart) {
+        if (_startBlock != block) HapticFeedback.selectionClick();
+        _startBlock = block;
+        _startOffset =
+            pos.offset.clamp(0, widget.controllers[block].text.length).toInt();
+      } else {
+        if (_endBlock != block) HapticFeedback.selectionClick();
+        _endBlock = block;
+        _endOffset =
+            pos.offset.clamp(0, widget.controllers[block].text.length).toInt();
+      }
+      _updateBlockHighlights();
+      for (final c in widget.controllers) {
+        c.refresh();
+      }
+    });
+    // Recalculate handle positions after the frame so caret coords
+    // reflect the new selection highlight layout.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _calculateHandlePositions());
+    });
+    widget.onSelectionChanged();
   }
 
   @override

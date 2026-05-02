@@ -189,6 +189,18 @@ class _EditorBlock extends StatelessWidget {
                           !selection.isCollapsed &&
                           !(selection.start == 0 &&
                               selection.end == controller.text.length);
+                      void selectAllAndReopenToolbar() {
+                        ContextMenuController.removeAny();
+                        onSelectAll();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          Future<void>.delayed(const Duration(milliseconds: 80),
+                              () {
+                            if (editableTextState.mounted) {
+                              editableTextState.showToolbar();
+                            }
+                          });
+                        });
+                      }
 
                       // When the block is globally selected, bypass editableTextState
                       // entirely. iOS asynchronously resets the native selection back
@@ -233,6 +245,53 @@ class _EditorBlock extends StatelessWidget {
                         );
                       }
 
+                      // Partial native iOS selection cannot cross paragraph
+                      // TextFields. Keep the native handles, but make the app
+                      // bridge explicit and visible instead of burying Extend
+                      // behind Lookup/Search Web native-only actions.
+                      if (hasPartialNativeSelection) {
+                        return AdaptiveTextSelectionToolbar.buttonItems(
+                          anchors: editableTextState.contextMenuAnchors,
+                          buttonItems: [
+                            ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onCut();
+                              },
+                              type: ContextMenuButtonType.cut,
+                            ),
+                            ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onCopy();
+                              },
+                              type: ContextMenuButtonType.copy,
+                            ),
+                            ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onExtendSelection();
+                              },
+                              type: ContextMenuButtonType.custom,
+                              label: 'Extend',
+                            ),
+                            ContextMenuButtonItem(
+                              onPressed: selectAllAndReopenToolbar,
+                              type: ContextMenuButtonType.selectAll,
+                            ),
+                            if (onPaste != null)
+                              ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onPaste!();
+                                },
+                                type: ContextMenuButtonType.custom,
+                                label: 'Paste',
+                              ),
+                          ],
+                        );
+                      }
+
                       final List<ContextMenuButtonItem> items =
                           editableTextState.contextMenuButtonItems;
                       final List<ContextMenuButtonItem> customItems = [];
@@ -241,10 +300,7 @@ class _EditorBlock extends StatelessWidget {
                         if (item.type == ContextMenuButtonType.selectAll) {
                           hasSelectAll = true;
                           customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onSelectAll();
-                            },
+                            onPressed: selectAllAndReopenToolbar,
                             type: ContextMenuButtonType.selectAll,
                           ));
                         } else if (item.type == ContextMenuButtonType.cut) {
@@ -291,10 +347,7 @@ class _EditorBlock extends StatelessWidget {
                       // Force-inject Select All even when the native menu omits it.
                       if (!hasSelectAll) {
                         customItems.add(ContextMenuButtonItem(
-                          onPressed: () {
-                            ContextMenuController.removeAny();
-                            onSelectAll();
-                          },
+                          onPressed: selectAllAndReopenToolbar,
                           type: ContextMenuButtonType.selectAll,
                         ));
                       }

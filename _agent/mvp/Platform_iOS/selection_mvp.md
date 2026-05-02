@@ -175,6 +175,19 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     3.24.3 does not expose `CutSelectionTextIntent`, so do not depend on that
     symbol in iOS workflow builds.
 
+23. **Partial native menu must expose the app bridge directly**: A partial
+    native iOS selection is still limited to one `TextField`, so its context
+    menu must show app-owned `Cut`, `Copy`, `Extend`, `Select All`, and
+    optional `Paste` actions instead of burying the user in native-only
+    `Lookup` / `Search Web` actions. `Extend` remains explicit; this does not
+    reintroduce passive adoption.
+
+24. **Select All must leave a Cut/Copy affordance**: When a native context-menu
+    `Select All` command routes through `_selectAllBlocks()`, the toolbar must
+    reopen/rebuild into the global selection command state so the user can
+    immediately Cut/Copy/Paste the global selection. Do not close the user into
+    a selected state with no visible command path.
+
 ---
 
 ## Forbidden Changes
@@ -201,6 +214,11 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 - Do not call `extendNativeBlockSelection` from `_onSelectionChanged()` or any
   passive native selection listener. It is allowed only from the explicit
   context-menu `Extend` action.
+- Do not let the partial native selection menu fall back to native-only
+  Lookup/Search Web actions when the app needs to expose `Extend`; users must
+  see the bridge into cross-block overlay handles.
+- Do not let context-menu Select All hide Cut/Copy afterward. It must reopen or
+  rebuild into the global command menu.
 
 ---
 

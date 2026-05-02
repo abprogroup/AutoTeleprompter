@@ -990,3 +990,18 @@
   autoscroll, no `CutSelectionTextIntent` dependency, and no passive
   `_onSelectionChanged()` adoption path were added. Awaiting IPA/device
   verification.
+
+## 2026-05-02 - iOS Selection Menu Bridge Follow-Up
+
+- **Session Goal**: Fix device QA showing that partial native iOS handles still
+  felt trapped inside one paragraph block and that native Select All could leave
+  the user without visible Cut/Copy actions.
+- **Menu Result**: Partial native selections now show app-owned `Cut`, `Copy`,
+  `Extend`, `Select All`, and optional `Paste` directly instead of native-only
+  Lookup/Search Web actions. `Extend` is still explicit and is still the only
+  bridge into cross-block overlay handles.
+- **Select All Result**: Native-menu Select All now reopens/rebuilds the toolbar
+  after `_selectAllBlocks()` so the global selected state can expose Cut/Copy.
+- **Handle Result**: Overlay handle dragging now chooses the nearest rendered
+  block/caret target while dragging, so app-owned handles are not stuck at the
+  initial block boundary when moving toward another visible paragraph.

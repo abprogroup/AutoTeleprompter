@@ -448,6 +448,12 @@
   full-block Select All, protected multi-block snapshots, native toolbar
   ownership, and the no-autoscroll/no-floating-toolbar rule remain unchanged.
   Awaiting IPA/device verification.
+- [P] **iOS Selection Menu Bridge Follow-Up**: Partial native selections now
+  show app-owned Cut/Copy/Extend/Select All/Paste actions directly instead of
+  native-only Lookup/Search Web actions, and native-menu Select All reopens the
+  toolbar into the global Cut/Copy state. Overlay handle dragging now targets
+  the nearest rendered block/caret while crossing visible paragraph boundaries.
+  Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

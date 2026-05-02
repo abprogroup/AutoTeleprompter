@@ -191,9 +191,14 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return null;
   }
 
-  void _storeBlockClipboard(List<String> blocks, String reason) {
+  void _storeBlockClipboard(
+    List<String> blocks,
+    String reason, {
+    bool preferProtectedSnapshot = true,
+  }) {
     final protectedBlocks = _globalSelectionSnapshot;
-    final selectedBlocks = protectedBlocks != null &&
+    final selectedBlocks = preferProtectedSnapshot &&
+            protectedBlocks != null &&
             _hasRecentGlobalSelectionSnapshot &&
             _isBetterBlockSnapshot(protectedBlocks, blocks)
         ? protectedBlocks
@@ -282,7 +287,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (hasOverlay) {
       final overlayBlocks = _overlaySelectedMarkupBlocks();
       if (overlayBlocks != null && overlayBlocks.isNotEmpty) {
-        _storeBlockClipboard(overlayBlocks, 'cut-overlay');
+        _storeBlockClipboard(
+          overlayBlocks,
+          'cut-overlay',
+          preferProtectedSnapshot: false,
+        );
         _writePlainClipboardForBlocks(_blockClipboard ?? overlayBlocks);
       }
       _isCommandExecuting = true;
@@ -335,7 +344,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (hasOverlay) {
       final overlayBlocks = _overlaySelectedMarkupBlocks();
       if (overlayBlocks != null && overlayBlocks.isNotEmpty) {
-        _storeBlockClipboard(overlayBlocks, 'copy-overlay');
+        _storeBlockClipboard(
+          overlayBlocks,
+          'copy-overlay',
+          preferProtectedSnapshot: false,
+        );
       }
       final plainBuf = StringBuffer();
       final htmlBuf = StringBuffer();

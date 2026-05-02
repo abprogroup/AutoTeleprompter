@@ -104,6 +104,10 @@ class _EditorBlock extends StatelessWidget {
                     _CopyIntent(),
                 SingleActivator(LogicalKeyboardKey.keyC, meta: true):
                     _CopyIntent(),
+                SingleActivator(LogicalKeyboardKey.keyX, control: true):
+                    _CutIntent(),
+                SingleActivator(LogicalKeyboardKey.keyX, meta: true):
+                    _CutIntent(),
               },
               child: Actions(
                 actions: {
@@ -116,6 +120,10 @@ class _EditorBlock extends StatelessWidget {
                     onCopy();
                     return null;
                   }),
+                  _CutIntent: CallbackAction<_CutIntent>(onInvoke: (_) {
+                    onCut();
+                    return null;
+                  }),
                   // Override the internal EditableText intents too. These are
                   // marked Action.overridable inside EditableText, so placing
                   // our own handlers at this ancestor wins — catching both the
@@ -124,6 +132,13 @@ class _EditorBlock extends StatelessWidget {
                       CallbackAction<CopySelectionTextIntent>(
                     onInvoke: (_) {
                       onCopy();
+                      return null;
+                    },
+                  ),
+                  CutSelectionTextIntent:
+                      CallbackAction<CutSelectionTextIntent>(
+                    onInvoke: (_) {
+                      onCut();
                       return null;
                     },
                   ),
@@ -187,7 +202,7 @@ class _EditorBlock extends StatelessWidget {
                       // to the original double-tapped word after Select All, so
                       // iterating contextMenuButtonItems would serve word-scoped
                       // Cut/Copy actions instead of our global ones.
-                      if (isGlobalSelected) {
+                      if (isGlobalSelected || hasOverlaySelection) {
                         return AdaptiveTextSelectionToolbar.buttonItems(
                           anchors: editableTextState.contextMenuAnchors,
                           buttonItems: [
@@ -212,6 +227,15 @@ class _EditorBlock extends StatelessWidget {
                               },
                               type: ContextMenuButtonType.selectAll,
                             ),
+                            if (onPaste != null)
+                              ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onPaste!();
+                                },
+                                type: ContextMenuButtonType.custom,
+                                label: 'Paste',
+                              ),
                           ],
                         );
                       }

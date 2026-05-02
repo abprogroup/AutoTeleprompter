@@ -963,5 +963,9 @@
   timer-based edge autoscroll was added, and no clipboard command path was
   changed. The adoption path is disabled during global selection, command
   execution, full-block Select All, or any already-active overlay selection.
+- **Clipboard Result**: Overlay selection now dismisses stale native one-block
+  toolbars, routes iOS cut/copy intents through `_onCutClean()` /
+  `_onCopyClean()`, and stores the visible overlay-selected slices instead of
+  promoting an older protected full-script snapshot.
 - **Documentation Result**: Updated the iOS Selection MVP and
   `MASTER_TODO_V4.md`. Awaiting IPA/device verification.

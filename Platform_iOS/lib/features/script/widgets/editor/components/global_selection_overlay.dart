@@ -122,6 +122,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (start == end) return;
     if (start == 0 && end == controller.text.length) return;
 
+    ContextMenuController.removeAny();
     setState(() {
       _isSelecting = true;
       _hasHandleRefinedSelection = true;

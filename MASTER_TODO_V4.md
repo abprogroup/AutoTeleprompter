@@ -446,7 +446,9 @@
   toolbar ownership, and the no-autoscroll/no-app-toolbar rejection rule remain
   unchanged. Handle hit-testing also keeps a small boundary corridor so
   endpoints can reach paragraph start/end offsets without sticking near
-  newlines. Awaiting IPA/device verification.
+  newlines. Overlay Cut/Copy now dismisses stale native one-block toolbars,
+  intercepts cut/copy intents, and stores exactly the visible overlay slices
+  instead of an older full-script snapshot. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

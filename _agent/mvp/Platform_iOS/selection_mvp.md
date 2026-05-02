@@ -164,6 +164,14 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     near a newline. This is boundary snapping only; it is not timer-based
     autoscroll.
 
+22. **Overlay Cut/Copy must use overlay slices, not stale native actions**:
+    After a native partial selection adopts into overlay handles, any stale
+    native one-block toolbar must be dismissed. When an overlay selection is
+    active, the iOS context menu and `CutSelectionTextIntent` /
+    `CopySelectionTextIntent` must route to `_onCutClean()` / `_onCopyClean()`.
+    Overlay clipboard storage must prefer the visible overlay-selected raw
+    slices and must not be replaced by an older protected full-script snapshot.
+
 ---
 
 ## Forbidden Changes
@@ -183,6 +191,9 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 - Do not shrink the handle drag boundary back to the exact `RenderBox` height.
   That recreates the dead zone where handles stop before the selected text can
   reach the start/end of a paragraph block.
+- Do not let overlay Cut/Copy call the active `TextField` native command after
+  handles have crossed blocks. That cuts only the originally touched block while
+  the overlay highlight spans more text.
 
 ---
 
@@ -216,6 +227,9 @@ Additional clipboard prohibitions:
   Full-block native selection is the iOS Select All bridge and must continue to
   route through `_selectAllBlocks()` so protected multi-block snapshots stay
   intact.
+- Do not let `_storeBlockClipboard()` promote an old protected Select All
+  snapshot while handling `copy-overlay` or `cut-overlay`. Overlay commands
+  must store exactly the visible handle-selected slices.
 
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.

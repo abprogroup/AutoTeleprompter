@@ -56,6 +56,10 @@ class _CopyIntent extends Intent {
   const _CopyIntent();
 }
 
+class _CutIntent extends Intent {
+  const _CutIntent();
+}
+
 class _SearchIntent extends Intent {
   const _SearchIntent();
 }

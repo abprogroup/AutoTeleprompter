@@ -102,6 +102,7 @@ The iOS platform currently has these MVP contracts:
 | STT | `Platform_iOS/stt_mvp.md` | iOS speech-recognition session lifecycle, bilingual section switching, error handling, and word-alignment feedback loop |
 | History | `Platform_iOS/history_mvp.md` | Undo/redo stack, history persistence, typing-bulk and suite-sectioned auto-save logic |
 | Selection | `Platform_iOS/selection_mvp.md` | Multi-block text selection, overlay drag handles, cut/copy, and native TextField selection interplay |
+| Block Selection Recognition | `Platform_iOS/block_selection_recognition_mvp.md` | iOS block-aware partial selection recognition layer for safer cross-block cut/copy |
 | Styling Engine | `Platform_iOS/styling_engine_mvp.md` | Markup transforms, hidden tags, style detection/rendering |
 | Editor Suites | `Platform_iOS/editor_suites_mvp.md` | Toolbar and suite widgets named `*_mvp.dart` |
 | File I/O | `Platform_iOS/file_io_mvp.md` | Import/export, DOCX/RTF/Pages/TXT paths |

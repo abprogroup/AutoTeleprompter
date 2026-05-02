@@ -1,5 +1,27 @@
 part of 'script_editor_screen.dart';
 
+class _BlockSelectionPoint {
+  final int blockIndex;
+  final int rawOffset;
+
+  const _BlockSelectionPoint({
+    required this.blockIndex,
+    required this.rawOffset,
+  });
+}
+
+class _BlockSelectionRange {
+  final _BlockSelectionPoint start;
+  final _BlockSelectionPoint end;
+  final String source;
+
+  const _BlockSelectionRange({
+    required this.start,
+    required this.end,
+    required this.source,
+  });
+}
+
 extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   static const Duration _globalSelectionSnapshotTtl = Duration(seconds: 20);
 
@@ -25,6 +47,169 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return candidate.length > current.length ||
         (candidate.length == current.length &&
             candidateNonEmpty >= currentNonEmpty);
+  }
+
+  _BlockSelectionRange? _normalizeBlockRange(
+    _BlockSelectionPoint a,
+    _BlockSelectionPoint b,
+    String source,
+  ) {
+    if (a.blockIndex < 0 ||
+        b.blockIndex < 0 ||
+        a.blockIndex >= _controllers.length ||
+        b.blockIndex >= _controllers.length) {
+      return null;
+    }
+
+    final aOffset =
+        a.rawOffset.clamp(0, _controllers[a.blockIndex].text.length).toInt();
+    final bOffset =
+        b.rawOffset.clamp(0, _controllers[b.blockIndex].text.length).toInt();
+    var start = _BlockSelectionPoint(
+      blockIndex: a.blockIndex,
+      rawOffset: aOffset,
+    );
+    var end = _BlockSelectionPoint(
+      blockIndex: b.blockIndex,
+      rawOffset: bOffset,
+    );
+
+    if (start.blockIndex > end.blockIndex ||
+        (start.blockIndex == end.blockIndex &&
+            start.rawOffset > end.rawOffset)) {
+      final t = start;
+      start = end;
+      end = t;
+    }
+
+    if (start.blockIndex == end.blockIndex &&
+        start.rawOffset == end.rawOffset) {
+      return null;
+    }
+
+    return _BlockSelectionRange(start: start, end: end, source: source);
+  }
+
+  List<String>? _rawMarkupSlicesForRange(_BlockSelectionRange range) {
+    final normalized =
+        _normalizeBlockRange(range.start, range.end, range.source);
+    if (normalized == null) return null;
+
+    final start = normalized.start;
+    final end = normalized.end;
+    if (start.blockIndex == end.blockIndex) {
+      final text = _controllers[start.blockIndex].text;
+      return [text.substring(start.rawOffset, end.rawOffset)];
+    }
+
+    final slices = <String>[];
+    final startText = _controllers[start.blockIndex].text;
+    slices.add(startText.substring(start.rawOffset));
+    for (var i = start.blockIndex + 1; i < end.blockIndex; i++) {
+      slices.add(_controllers[i].text);
+    }
+    final endText = _controllers[end.blockIndex].text;
+    slices.add(endText.substring(0, end.rawOffset));
+    return slices;
+  }
+
+  String _recognizedRangeShape(_BlockSelectionRange? range) {
+    if (range == null) return 'none';
+    final blocks = _rawMarkupSlicesForRange(range);
+    final blockShape = _blockDebugShape(blocks);
+    return '${range.start.blockIndex}:${range.start.rawOffset}-'
+        '${range.end.blockIndex}:${range.end.rawOffset} [$blockShape]';
+  }
+
+  void _setRecognizedBlockRange(
+    _BlockSelectionRange? range,
+    String reason,
+  ) {
+    _recognizedBlockRange = range;
+    _recognizedBlockRangeDebug =
+        '$reason: ${_recognizedRangeShape(_recognizedBlockRange)}';
+  }
+
+  void _clearRecognizedBlockRange(String reason) {
+    if (_recognizedBlockRange == null && _recognizedBlockRangeDebug == 'idle') {
+      return;
+    }
+    _recognizedBlockRange = null;
+    _recognizedBlockRangeDebug = '$reason: cleared';
+  }
+
+  bool _rangeMatchesOverlay(_BlockSelectionRange range) {
+    final raw = _overlayKey.currentState?.currentRawRange;
+    if (raw == null) return false;
+    final current = _normalizeBlockRange(
+      _BlockSelectionPoint(
+        blockIndex: raw.startBlock,
+        rawOffset: raw.startOffset,
+      ),
+      _BlockSelectionPoint(
+        blockIndex: raw.endBlock,
+        rawOffset: raw.endOffset,
+      ),
+      range.source,
+    );
+    if (current == null) return false;
+    return current.start.blockIndex == range.start.blockIndex &&
+        current.start.rawOffset == range.start.rawOffset &&
+        current.end.blockIndex == range.end.blockIndex &&
+        current.end.rawOffset == range.end.rawOffset;
+  }
+
+  List<String>? _recognizedBlocksForCommand(String reason) {
+    final range = _recognizedBlockRange;
+    if (range == null) return null;
+    if (!_rangeMatchesOverlay(range)) {
+      _clearRecognizedBlockRange('$reason-stale-range');
+      return null;
+    }
+    final blocks = _rawMarkupSlicesForRange(range);
+    if (blocks == null || blocks.isEmpty) return null;
+    _selectionClipboardDebug =
+        '$reason-recognized: ${blocks.length} slices [${_blockDebugShape(blocks)}]';
+    return blocks;
+  }
+
+  void _deleteRecognizedRange(_BlockSelectionRange range) {
+    final normalized =
+        _normalizeBlockRange(range.start, range.end, range.source);
+    if (normalized == null) return;
+
+    final start = normalized.start;
+    final end = normalized.end;
+    _isCommandExecuting = true;
+    if (start.blockIndex == end.blockIndex) {
+      final controller = _controllers[start.blockIndex];
+      controller.value = TextEditingValue(
+        text: controller.text.substring(0, start.rawOffset) +
+            controller.text.substring(end.rawOffset),
+        selection: TextSelection.collapsed(offset: start.rawOffset),
+      );
+    } else {
+      final startController = _controllers[start.blockIndex];
+      startController.value = TextEditingValue(
+        text: startController.text.substring(0, start.rawOffset),
+        selection: TextSelection.collapsed(offset: start.rawOffset),
+      );
+      for (var i = start.blockIndex + 1; i < end.blockIndex; i++) {
+        _controllers[i].value = const TextEditingValue(
+          text: '',
+          selection: TextSelection.collapsed(offset: 0),
+        );
+      }
+      final endController = _controllers[end.blockIndex];
+      endController.value = TextEditingValue(
+        text: endController.text.substring(end.rawOffset),
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    }
+    _clearGlobalSelection();
+    _isCommandExecuting = false;
+    _saveHistory(description: 'Cut');
+    setState(() {});
   }
 
   void _captureGlobalSelectionSnapshot(String reason) {
@@ -175,9 +360,12 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   }
 
   void _dismissEditorSelectionForUserNavigation(String reason) {
-    if (!_hasAnyActiveEditorSelection && !_hasRecentGlobalSelectionSnapshot) {
+    if (!_hasAnyActiveEditorSelection &&
+        !_hasRecentGlobalSelectionSnapshot &&
+        _recognizedBlockRange == null) {
       return;
     }
+    _clearRecognizedBlockRange(reason);
     _globalSelectionSnapshot = null;
     _globalSelectionSnapshotAt = null;
     _selectionClipboardDebug =
@@ -251,6 +439,22 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     Clipboard.setData(ClipboardData(text: plain));
   }
 
+  void _writeRichClipboardForBlocks(List<String> blocks) {
+    final plainBuf = StringBuffer();
+    final htmlBuf = StringBuffer();
+    for (final slice in blocks) {
+      if (slice.isEmpty) continue;
+      if (plainBuf.isNotEmpty) plainBuf.write('\n');
+      plainBuf.write(StylingService.stripTags(slice));
+      htmlBuf.write(StylingService.markupToHtml(slice));
+    }
+    if (plainBuf.isEmpty) return;
+    RichClipboard.setHtml(
+      plain: plainBuf.toString(),
+      html: htmlBuf.toString(),
+    );
+  }
+
   bool _consumeNativePlainBlockPasteIfNeeded(
     MarkupController controller,
     String previousText,
@@ -299,6 +503,20 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       _isCommandExecuting = false;
       _saveHistory(description: 'Cut');
       setState(() {});
+      return;
+    }
+
+    final recognizedBlocks = _recognizedBlocksForCommand('cut');
+    final recognizedRange = _recognizedBlockRange;
+    if (recognizedBlocks != null && recognizedRange != null) {
+      _storeBlockClipboard(
+        recognizedBlocks,
+        'cut-recognized',
+        preferProtectedSnapshot: false,
+      );
+      _writePlainClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
+      _writeRichClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
+      _deleteRecognizedRange(recognizedRange);
       return;
     }
 
@@ -357,6 +575,17 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       if (plainBuf.isEmpty) return;
       RichClipboard.setHtml(
           plain: plainBuf.toString(), html: htmlBuf.toString());
+      return;
+    }
+
+    final recognizedBlocks = _recognizedBlocksForCommand('copy');
+    if (recognizedBlocks != null) {
+      _storeBlockClipboard(
+        recognizedBlocks,
+        'copy-recognized',
+        preferProtectedSnapshot: false,
+      );
+      _writeRichClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
       return;
     }
 
@@ -461,6 +690,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
   void _deleteGlobalSelection() {
     _isCommandExecuting = true;
+    _clearRecognizedBlockRange('delete-global-selection');
     _overlayKey.currentState?.clearSelection();
     _isGlobalSelection = false;
     for (final c in _controllers) {
@@ -484,6 +714,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   }
 
   void _clearGlobalSelection() {
+    _clearRecognizedBlockRange('clear-global-selection');
     _overlayKey.currentState?.clearSelection();
     _isGlobalSelection = false;
     for (final c in _controllers) {

@@ -1007,3 +1007,40 @@
 - **Handle Result**: Overlay handle dragging now chooses the nearest rendered
   block/caret target while dragging, so app-owned handles are not stuck at the
   initial block boundary when moving toward another visible paragraph.
+
+## 2026-05-02 - iOS Block Selection Recognition MVP Planning
+
+- **Session Goal**: Document a safer future path for partial cross-block
+  selection without changing runtime code.
+- **Documentation Result**: Added
+  `_agent/mvp/Platform_iOS/block_selection_recognition_mvp.md`, defining a
+  block-aware recognition layer that can track start/end block endpoints, build
+  raw-markup clipboard slices, and preserve native one-block selection plus
+  Select All recovery.
+- **Safety Result**: No Dart runtime files were changed. The MVP explicitly
+  forbids a second app toolbar, passive listener adoption, timer autoscroll,
+  shared-platform edits, or collapsing multi-block clipboard data into plain
+  text.
+
+## 2026-05-02 - iOS Block Selection Recognition Runtime Implementation
+
+- **Session Goal**: Implement the documented block-aware partial selection
+  recognition layer so refined overlay handles can Cut/Copy the exact visible
+  cross-block raw-markup range instead of falling back to the originally
+  touched native `TextField`.
+- **Runtime Result**: Added transient `_recognizedBlockRange` state, private
+  block endpoint/range helpers, raw-markup slice conversion, read-only overlay
+  endpoint reporting, recognized Cut/Copy command routing, and safe recognized
+  range deletion that preserves block count for partial cuts.
+- **Invalidation Result**: Recognized ranges now clear on user navigation,
+  clear/delete selection, load/remove/split block flows, undo/redo/history
+  jumps, search jumps, bookmark jumps, import, and clear-script. The real
+  `_blockClipboard` is not cleared by those transient invalidations.
+- **Safety Result**: No app-owned floating toolbar, product-facing `Extend`
+  button, passive listener adoption, timer autoscroll, or non-iOS runtime edit
+  was added. Native one-block selection and Select All recovery remain separate
+  command paths.
+- **Verification Result**: `dart format` completed for touched iOS files,
+  `git diff --check` passed, and targeted `flutter analyze --no-pub` reported
+  no new compile errors, only existing warning/info noise in the large editor
+  files. Awaiting IPA/device verification.

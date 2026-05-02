@@ -201,6 +201,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   }
 
   void _clearControllers() {
+    _clearRecognizedBlockRange('clear-controllers');
     for (final c in _controllers) c.dispose();
     for (final f in _focusNodes) f.dispose();
     _controllers.clear();
@@ -217,6 +218,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
+          _clearRecognizedBlockRange('split-paragraph');
           final currentText = controller.text;
           final sel = controller.selection;
           String p1 = currentText, p2 = '';
@@ -244,6 +246,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
           if (_controllers.length > 1 && idx != -1) {
+            _clearRecognizedBlockRange('remove-empty-block');
             setState(() {
               _controllers.removeAt(idx).dispose();
               _focusNodes.removeAt(idx).dispose();
@@ -341,6 +344,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
   void _removeBlock(int index) {
     if (_controllers.length <= 1) return;
+    _clearRecognizedBlockRange('remove-block');
     setState(() {
       _controllers[index].dispose();
       _focusNodes[index].dispose();
@@ -352,6 +356,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
   void _loadText(String text) {
     _isLoading = true;
+    _clearRecognizedBlockRange('load-text');
     try {
       _clearControllers();
       final paragraphs = text.split('\n');

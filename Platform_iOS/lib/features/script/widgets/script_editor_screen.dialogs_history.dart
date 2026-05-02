@@ -32,8 +32,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
             ));
   }
 
-  String _getRefinedFullText() =>
-      _controllers.map((c) => c.text).join('\n');
+  String _getRefinedFullText() => _controllers.map((c) => c.text).join('\n');
 
   /// Clear style at cursor: find the word at cursor, then strip all tags from
   /// just that word — surgically splitting any enclosing styled regions so the
@@ -337,6 +336,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
 
   void _undo() {
     if (_historyIndex > 0) {
+      _clearRecognizedBlockRange('undo');
       _isCommandExecuting = true;
       _isDirty = false;
       setState(() {
@@ -360,6 +360,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
 
   void _redo() {
     if (_historyIndex < _history.length - 1) {
+      _clearRecognizedBlockRange('redo');
       _isCommandExecuting = true;
       _isDirty = false;
       setState(() {
@@ -381,6 +382,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
 
   void _jumpToHistory(int idx) {
     if (idx < 0 || idx >= _history.length || idx == _historyIndex) return;
+    _clearRecognizedBlockRange('history-jump');
     _isCommandExecuting = true;
     _isDirty = false;
     setState(() {

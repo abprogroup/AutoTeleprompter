@@ -108,6 +108,27 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get isRefinedSelection => _hasHandleRefinedSelection;
 
+  ({
+    int startBlock,
+    int startOffset,
+    int endBlock,
+    int endOffset,
+  })? get currentRawRange {
+    if (!hasSelection ||
+        _startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) {
+      return null;
+    }
+    return (
+      startBlock: _startBlock!,
+      startOffset: _startOffset!,
+      endBlock: _endBlock!,
+      endOffset: _endOffset!,
+    );
+  }
+
   /// Explicitly converts a user-confirmed native partial selection into the app
   /// overlay handles. This must only be called from an intentional UI command
   /// path (the editor native/adaptive context-menu build path), never from

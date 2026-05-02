@@ -230,6 +230,28 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 allowShrink:
                                     overlayState?.isRefinedSelection ?? false,
                               );
+                              final rawRange = overlayState?.currentRawRange;
+                              if ((overlayState?.isRefinedSelection ?? false) &&
+                                  rawRange != null) {
+                                _setRecognizedBlockRange(
+                                  _normalizeBlockRange(
+                                    _BlockSelectionPoint(
+                                      blockIndex: rawRange.startBlock,
+                                      rawOffset: rawRange.startOffset,
+                                    ),
+                                    _BlockSelectionPoint(
+                                      blockIndex: rawRange.endBlock,
+                                      rawOffset: rawRange.endOffset,
+                                    ),
+                                    'overlay-selection',
+                                  ),
+                                  'overlay-selection',
+                                );
+                              } else if (!(overlayState?.hasSelection ??
+                                  false)) {
+                                _clearRecognizedBlockRange(
+                                    'overlay-selection-empty');
+                              }
                             }),
                             child: NotificationListener<ScrollNotification>(
                               onNotification: (_) {
@@ -355,6 +377,8 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
           Text('Global Selection: $_isGlobalSelection',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('Clipboard: $_selectionClipboardDebug',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Range: $_recognizedBlockRangeDebug',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('History States: ${_history.length}',
               style: const TextStyle(color: Colors.white, fontSize: 10)),

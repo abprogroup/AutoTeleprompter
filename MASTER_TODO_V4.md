@@ -454,6 +454,15 @@
   toolbar into the global Cut/Copy state. Overlay handle dragging now targets
   the nearest rendered block/caret while crossing visible paragraph boundaries.
   Awaiting IPA/device verification.
+- [P] **iOS Block-Aware Partial Selection Recognition MVP**:
+  Runtime implementation added behind the existing overlay handle system and
+  documented in `_agent/mvp/Platform_iOS/block_selection_recognition_mvp.md`.
+  The implementation keeps native one-block selection and Select All recovery
+  intact, adds transient raw block-range recognition for refined overlay
+  handles, routes Cut/Copy through raw-markup slices, preserves block count on
+  partial cross-block Cut, and clears the transient range on navigation,
+  search/bookmark jumps, load/split/remove, undo/redo, import, and clear.
+  Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

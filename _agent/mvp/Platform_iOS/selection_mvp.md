@@ -22,6 +22,7 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.selection_clipboard.dart` | Split owner for selection/cut/copy/paste helpers and multi-block clipboard snapshots |
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.editor_block.dart` | Split owner for iOS context menu interception, custom Cut/Copy/Paste/Select All routing, and `GhostSelectionControls` usage |
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.build.dart` | Split owner for block callback wiring and debug-mode clipboard diagnostics |
+| `_agent/mvp/Platform_iOS/block_selection_recognition_mvp.md` | Planned companion MVP for block-aware partial selection recognition without replacing native one-block selection |
 
 ---
 
@@ -190,6 +191,22 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     immediately Cut/Copy/Paste the global selection. Do not close the user into
     a selected state with no visible command path.
 
+25. **Block recognition is the safe extension point**: Partial cross-block
+    selection is improved through
+    `_agent/mvp/Platform_iOS/block_selection_recognition_mvp.md`, not by adding
+    another toolbar, replacing Select All, or passively adopting every native
+    selection event. The app may learn block endpoints and build raw-markup
+    clipboard slices, but native one-block selection and Select All recovery
+    must stay intact.
+
+26. **Recognized partial ranges are transient command metadata**:
+    `_recognizedBlockRange` may mirror the current refined overlay handle
+    range so Cut/Copy can consume the exact visible cross-block selection. It
+    is not persisted, not a styling authority, not a bookmark state, and not a
+    replacement for `externalSelection`. Any script reload, block mutation,
+    search/bookmark jump, undo/redo, clear, or user navigation must clear it
+    without clearing the real `_blockClipboard`.
+
 ---
 
 ## Forbidden Changes
@@ -221,6 +238,8 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
   for the cross-block overlay bridge.
 - Do not let context-menu Select All hide Cut/Copy afterward. It must reopen or
   rebuild into the global command menu.
+- Do not implement partial block recognition without first following
+  `_agent/mvp/Platform_iOS/block_selection_recognition_mvp.md`.
 
 ---
 

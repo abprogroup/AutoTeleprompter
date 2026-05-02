@@ -101,6 +101,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       return;
     }
 
+    _clearRecognizedBlockRange('search');
     _overlayKey.currentState?.clearSelection();
     _isGlobalSelection = false;
     for (final controller in _controllers) {

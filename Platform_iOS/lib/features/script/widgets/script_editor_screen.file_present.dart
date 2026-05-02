@@ -2,6 +2,7 @@ part of 'script_editor_screen.dart';
 
 extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   Future<void> _importFile() async {
+    _clearRecognizedBlockRange('import-file');
     final supportedExts = PlatformFileImport.supportedExtensions;
     final result = await FilePicker.platform
         .pickFiles(type: FileType.any, allowMultiple: false);
@@ -125,6 +126,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   void _clearScript() {
+    _clearRecognizedBlockRange('clear-script');
     setState(() {
       _loadText('');
       _saveHistory(description: 'Clear');

@@ -174,6 +174,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     if (position.block < 0 || position.block >= _controllers.length) return;
     final controller = _controllers[position.block];
     final selection = TextSelection.collapsed(offset: position.offset);
+    _clearRecognizedBlockRange('bookmark-jump');
     _overlayKey.currentState?.clearSelection();
     for (final c in _controllers) {
       c.externalSelection = null;

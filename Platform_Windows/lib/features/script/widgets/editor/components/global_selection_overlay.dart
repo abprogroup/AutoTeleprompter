@@ -52,6 +52,15 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Offset? _panStartHandleGlobal; // caret global position at the moment of pan start
   final GlobalKey _stackKey = GlobalKey();
 
+  // Body-pointer candidate state: pointer-down does NOT immediately start a
+  // global selection. We record the origin and the block it landed in, then
+  // only activate global selection if the pointer drags into a DIFFERENT
+  // block. This lets click + in-block drag stay native (TextField handles it),
+  // and only cross-block drags become multi-paragraph selections.
+  Offset? _candidatePos;
+  int? _candidateBlock;
+  bool _bodyDragActive = false;
+
   /// True when every block is wholly selected (post Select All, pre refine).
   bool get _isWholeScriptSelected =>
       widget.controllers.isNotEmpty &&
@@ -101,20 +110,61 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get hasSelection => _isSelecting && _startBlock != null && _endBlock != null;
 
-  void startDragging(Offset globalPos) {
-    _enterRefineMode();
-    setState(() {
-      _isSelecting = true;
-      _handleUpdate(globalPos, true); // set start
-      _handleUpdate(globalPos, false); // set end
-    });
+  /// Returns the block index whose render box contains [globalPos], or null.
+  int? _blockAtPosition(Offset globalPos) {
+    for (int i = 0; i < widget.blockKeys.length; i++) {
+      final box = widget.blockKeys[i].currentContext?.findRenderObject() as RenderBox?;
+      if (box == null) continue;
+      final local = box.globalToLocal(globalPos);
+      if (local.dx >= 0 &&
+          local.dx <= box.size.width &&
+          local.dy >= 0 &&
+          local.dy <= box.size.height) {
+        return i;
+      }
+    }
+    return null;
   }
 
+  /// Body pointer-down: just record the candidate. Do NOT activate global
+  /// selection — that happens only when the pointer leaves the starting block.
+  void startDragging(Offset globalPos) {
+    _candidatePos = globalPos;
+    _candidateBlock = _blockAtPosition(globalPos);
+    _bodyDragActive = false;
+  }
+
+  /// Body pointer-move: activate global selection iff the pointer has crossed
+  /// into a different block than where the gesture started. Once active,
+  /// extend the selection from the original origin to the current position.
   void updateDragging(Offset globalPos) {
-    _handleUpdate(globalPos, false); // move end
+    if (_candidatePos == null) return;
+    if (!_bodyDragActive) {
+      final currentBlock = _blockAtPosition(globalPos);
+      // Activate only when:
+      //  - both origin and current land on a block AND they differ, or
+      //  - the origin had no block (empty area) and pointer now hits a block.
+      final crossed = currentBlock != null &&
+          _candidateBlock != null &&
+          currentBlock != _candidateBlock;
+      final emptyToBlock = _candidateBlock == null && currentBlock != null;
+      if (!crossed && !emptyToBlock) return;
+      _bodyDragActive = true;
+      _enterRefineMode();
+      setState(() {
+        _isSelecting = true;
+        _handleUpdate(_candidatePos!, true); // anchor at the original origin
+        _handleUpdate(globalPos, false);
+      });
+      return;
+    }
+    _handleUpdate(globalPos, false);
   }
 
   void endDragging() {
+    _candidatePos = null;
+    _candidateBlock = null;
+    _bodyDragActive = false;
     // Selection persists after drag
   }
 

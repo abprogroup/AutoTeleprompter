@@ -211,114 +211,11 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          if (_isGlobalSelection) {
-            _clearGlobalSelection();
-            if (_controllers.isNotEmpty) {
-              _focusNodes[0].requestFocus();
-              _controllers[0].selection = const TextSelection.collapsed(offset: 0);
-            }
-            return KeyEventResult.handled;
-          }
-          final idx = _controllers.indexOf(controller);
-          if (idx > 0) {
-            final layout = _getVerticalLayout(idx);
-            if (layout.isAtTop) {
-              final prevIdx = idx - 1;
-              final prevLayout = _getVerticalLayout(prevIdx);
-              _focusNodes[prevIdx].requestFocus();
-              _controllers[prevIdx].selection = TextSelection.collapsed(
-                offset: prevLayout.getPositionAtX(layout.currentX, fromBottom: true),
-              );
-              _scrollEditorBlockIntoView(prevIdx);
-              return KeyEventResult.handled;
-            }
-          }
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          if (_isGlobalSelection) {
-            _clearGlobalSelection();
-            if (_controllers.isNotEmpty) {
-              final last = _controllers.length - 1;
-              _focusNodes[last].requestFocus();
-              _controllers[last].selection = TextSelection.collapsed(
-                  offset: _controllers[last].text.length);
-            }
-            return KeyEventResult.handled;
-          }
-          final idx = _controllers.indexOf(controller);
-          if (idx < _controllers.length - 1) {
-            final layout = _getVerticalLayout(idx);
-            if (layout.isAtBottom) {
-              final nextIdx = idx + 1;
-              final nextLayout = _getVerticalLayout(nextIdx);
-              _focusNodes[nextIdx].requestFocus();
-              _controllers[nextIdx].selection = TextSelection.collapsed(
-                offset: nextLayout.getPositionAtX(layout.currentX, fromBottom: false),
-              );
-              _scrollEditorBlockIntoView(nextIdx);
-              return KeyEventResult.handled;
-            }
-          }
-        }
-
-        final isRtl = controller.text.isHebrew;
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          if (_isGlobalSelection) {
-            _clearGlobalSelection();
-            return KeyEventResult.handled;
-          }
-          final sel = controller.selection;
-          if (sel.isCollapsed) {
-            // Jump blocks only when moving OUT of the current block
-            if (!isRtl && sel.baseOffset == 0) {
-              final idx = _controllers.indexOf(controller);
-              if (idx > 0) {
-                _focusNodes[idx - 1].requestFocus();
-                _controllers[idx - 1].selection = TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
-                _scrollEditorBlockIntoView(idx - 1);
-                return KeyEventResult.handled;
-              }
-            } else if (isRtl && sel.baseOffset == controller.text.length) {
-              final idx = _controllers.indexOf(controller);
-              if (idx < _controllers.length - 1) {
-                _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
-                _scrollEditorBlockIntoView(idx + 1);
-                return KeyEventResult.handled;
-              }
-            }
-          }
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          if (_isGlobalSelection) {
-            _clearGlobalSelection();
-            return KeyEventResult.handled;
-          }
-          final sel = controller.selection;
-          if (sel.isCollapsed) {
-            if (!isRtl && sel.baseOffset == controller.text.length) {
-              final idx = _controllers.indexOf(controller);
-              if (idx < _controllers.length - 1) {
-                _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
-                _scrollEditorBlockIntoView(idx + 1);
-                return KeyEventResult.handled;
-              }
-            } else if (isRtl && sel.baseOffset == 0) {
-              final idx = _controllers.indexOf(controller);
-              if (idx > 0) {
-                _focusNodes[idx - 1].requestFocus();
-                _controllers[idx - 1].selection = TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
-                _scrollEditorBlockIntoView(idx - 1);
-                return KeyEventResult.handled;
-              }
-            }
-          }
-        }
+        // Arrow-key cross-block navigation is handled by a screen-level Focus
+        // (see _handleEditorArrowKey in script_editor_screen.dart). Keeping it
+        // off the per-block FocusNode means the same handler stays in scope
+        // across focus transitions — OS key-repeats keep flowing without
+        // stalling when the cursor crosses a paragraph boundary.
         if (event.logicalKey == LogicalKeyboardKey.backspace &&
             controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
@@ -338,13 +235,39 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       node.addListener(() {
         if (node.hasFocus) {
           _lastFocusedController = controller;
-          _onSelectionChanged();
-        } else if (_isDirty && !_isCommandExecuting) {
-          // Flush any pending typing bulk on focus loss
-          if (_typingCharCount > 0) {
-            _commitHistory('Edit Text');
+          // Restore native-selection rendering on focus regain by clearing
+          // any externalSelection sentinel set during focus loss.
+          if (controller.externalSelection != null &&
+              !_isGlobalSelection &&
+              !(_overlayKey.currentState?.hasSelection ?? false)) {
+            controller.externalSelection = null;
+            controller.refresh();
           }
-          _isDirty = false;
+          _onSelectionChanged();
+        } else {
+          if (_isDirty && !_isCommandExecuting) {
+            // Flush any pending typing bulk on focus loss
+            if (_typingCharCount > 0) {
+              _commitHistory('Edit Text');
+            }
+            _isDirty = false;
+          }
+          // On focus loss, suppress any lingering native selection highlight
+          // (set via TextField drag-select). MarkupController otherwise falls
+          // through to controller.selection and renders amber on the now-
+          // unfocused block — which is the "two highlights at once" bug.
+          // Skip while a global multi-block selection or overlay drag is active
+          // (their externalSelection values must not be overwritten here).
+          final overlayActive =
+              _overlayKey.currentState?.hasSelection ?? false;
+          if (!_isGlobalSelection &&
+              !overlayActive &&
+              !controller.isGlobalSelected &&
+              !controller.selection.isCollapsed) {
+            controller.externalSelection =
+                const TextSelection.collapsed(offset: 0);
+            controller.refresh();
+          }
         }
       });
 

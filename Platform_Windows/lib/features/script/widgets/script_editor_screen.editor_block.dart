@@ -138,19 +138,25 @@ class _EditorBlock extends StatelessWidget {
                     onSearch();
                     return null;
                   }),
-                  // Override internal EditableText intents
+                  // Override internal EditableText intents so Cmd/Ctrl+C/X/V/A
+                  // route through our markup-aware handlers. CopySelectionTextIntent
+                  // covers BOTH copy and cut: cut is built via the `.cut(...)`
+                  // factory which sets collapseSelection=true. Branch on that
+                  // so context-menu "Cut" actually deletes the selection.
                   CopySelectionTextIntent:
                       CallbackAction<CopySelectionTextIntent>(
-                    onInvoke: (_) {
-                      onCopy();
+                    onInvoke: (intent) {
+                      if (intent.collapseSelection) {
+                        onCut();
+                      } else {
+                        onCopy();
+                      }
                       return null;
                     },
                   ),
-                  // Override internal EditableText intents
-                  CopySelectionTextIntent:
-                      CallbackAction<CopySelectionTextIntent>(
+                  PasteTextIntent: CallbackAction<PasteTextIntent>(
                     onInvoke: (_) {
-                      onCopy();
+                      onPaste();
                       return null;
                     },
                   ),

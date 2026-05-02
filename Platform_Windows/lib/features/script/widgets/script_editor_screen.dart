@@ -409,7 +409,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           _overlayKey.currentState?.endDragging();
         },
         behavior: HitTestBehavior.translucent,
-        child: Stack(
+        // Screen-level Focus that handles arrow-key cross-block navigation.
+        // Hosting the handler here (above per-block FocusNodes) keeps the same
+        // handler in scope across focus transitions, so OS key-repeats keep
+        // firing without stalling when the cursor crosses paragraph boundaries.
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _handleEditorArrowKey,
+          child: Stack(
           children: [
             Shortcuts(
                 shortcuts: {
@@ -694,7 +702,127 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
               ),
           ],
         ),
+        ),
       ),
     );
+  }
+
+  // ── Screen-level arrow-key cross-block navigation ──────────────────────────
+  // Runs ABOVE per-block FocusNodes so that key-repeat events aren't dropped
+  // when a paragraph boundary causes a focus transition between blocks. The
+  // handler returns `ignored` for in-block movement so EditableText's default
+  // cursor handling stays intact.
+  KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown &&
+        key != LogicalKeyboardKey.arrowLeft &&
+        key != LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.ignored;
+    }
+
+    // Global selection short-circuit: any arrow collapses + repositions cursor.
+    if (_isGlobalSelection) {
+      _clearGlobalSelection();
+      if (_controllers.isEmpty) return KeyEventResult.handled;
+      if (key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowLeft) {
+        _focusNodes[0].requestFocus();
+        _controllers[0].selection = const TextSelection.collapsed(offset: 0);
+      } else {
+        final last = _controllers.length - 1;
+        _focusNodes[last].requestFocus();
+        _controllers[last].selection =
+            TextSelection.collapsed(offset: _controllers[last].text.length);
+      }
+      return KeyEventResult.handled;
+    }
+
+    final controller = _lastFocusedController;
+    if (controller == null) return KeyEventResult.ignored;
+    final idx = _controllers.indexOf(controller);
+    if (idx < 0) return KeyEventResult.ignored;
+
+    if (key == LogicalKeyboardKey.arrowUp && idx > 0) {
+      final layout = _getVerticalLayout(idx);
+      if (layout.isAtTop) {
+        final prevIdx = idx - 1;
+        final prevLayout = _getVerticalLayout(prevIdx);
+        _focusNodes[prevIdx].requestFocus();
+        _controllers[prevIdx].selection = TextSelection.collapsed(
+          offset: prevLayout.getPositionAtX(layout.currentX, fromBottom: true),
+        );
+        _scrollEditorBlockIntoView(prevIdx);
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (key == LogicalKeyboardKey.arrowDown && idx < _controllers.length - 1) {
+      final layout = _getVerticalLayout(idx);
+      if (layout.isAtBottom) {
+        final nextIdx = idx + 1;
+        final nextLayout = _getVerticalLayout(nextIdx);
+        _focusNodes[nextIdx].requestFocus();
+        _controllers[nextIdx].selection = TextSelection.collapsed(
+          offset:
+              nextLayout.getPositionAtX(layout.currentX, fromBottom: false),
+        );
+        _scrollEditorBlockIntoView(nextIdx);
+        return KeyEventResult.handled;
+      }
+    }
+
+    final isRtl = controller.text.isHebrew;
+
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      final sel = controller.selection;
+      if (sel.isCollapsed) {
+        // LTR: leaving start of block goes to previous.
+        // RTL: leaving end of block goes to next.
+        if (!isRtl && sel.baseOffset == 0 && idx > 0) {
+          _focusNodes[idx - 1].requestFocus();
+          _controllers[idx - 1].selection = TextSelection.collapsed(
+              offset: _controllers[idx - 1].text.length);
+          _scrollEditorBlockIntoView(idx - 1);
+          return KeyEventResult.handled;
+        }
+        if (isRtl &&
+            sel.baseOffset == controller.text.length &&
+            idx < _controllers.length - 1) {
+          _focusNodes[idx + 1].requestFocus();
+          _controllers[idx + 1].selection =
+              const TextSelection.collapsed(offset: 0);
+          _scrollEditorBlockIntoView(idx + 1);
+          return KeyEventResult.handled;
+        }
+      }
+    }
+
+    if (key == LogicalKeyboardKey.arrowRight) {
+      final sel = controller.selection;
+      if (sel.isCollapsed) {
+        if (!isRtl &&
+            sel.baseOffset == controller.text.length &&
+            idx < _controllers.length - 1) {
+          _focusNodes[idx + 1].requestFocus();
+          _controllers[idx + 1].selection =
+              const TextSelection.collapsed(offset: 0);
+          _scrollEditorBlockIntoView(idx + 1);
+          return KeyEventResult.handled;
+        }
+        if (isRtl && sel.baseOffset == 0 && idx > 0) {
+          _focusNodes[idx - 1].requestFocus();
+          _controllers[idx - 1].selection = TextSelection.collapsed(
+              offset: _controllers[idx - 1].text.length);
+          _scrollEditorBlockIntoView(idx - 1);
+          return KeyEventResult.handled;
+        }
+      }
+    }
+
+    return KeyEventResult.ignored;
   }
 }

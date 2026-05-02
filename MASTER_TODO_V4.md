@@ -395,3 +395,9 @@
   is now pause-and-browse; the next mic start resumes from the synced
   point. Restart remains the only path to word 0. Awaiting user IPA
   verification.
+- [P] **iOS Cross-Mode Bookmarks**: Ported the Windows bookmark baseline into
+  iOS. Added shared script-scoped bookmark persistence, editor add/remove/
+  previous/next controls, presenter add/remove/previous/next controls, visible
+  `»` markers in editor and present mode, marker deletion, and editor-to-
+  presenter session/title handoff so both modes load the same bookmark scope.
+  Awaiting user IPA verification.

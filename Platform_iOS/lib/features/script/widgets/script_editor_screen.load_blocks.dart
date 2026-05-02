@@ -125,6 +125,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         _saveHistory(description: 'Import');
       }
       _forceRecentUpdate();
+      unawaited(_loadBookmarksForCurrentScript(force: true));
     } finally {
       if (mounted) setState(() => _isPendingLoad = false);
     }
@@ -195,6 +196,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         _saveHistory(description: 'Initial Load');
       }
       _forceRecentUpdate();
+      unawaited(_loadBookmarksForCurrentScript(force: true));
     }
   }
 

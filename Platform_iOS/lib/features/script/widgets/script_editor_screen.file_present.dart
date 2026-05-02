@@ -134,7 +134,13 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   void _startPresenting() {
     FocusManager.instance.primaryFocus?.unfocus();
     try {
-      ref.read(scriptProvider.notifier).loadText(_getRefinedFullText());
+      unawaited(_saveBookmarks());
+      ref.read(scriptProvider.notifier).loadText(
+            _getRefinedFullText(),
+            title: _currentTitle,
+            sourceType: _sourceType,
+            sessionId: _currentSessionId,
+          );
     } catch (_) {}
     if (mounted) {
       Navigator.of(context)

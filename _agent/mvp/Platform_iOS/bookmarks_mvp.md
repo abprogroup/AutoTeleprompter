@@ -1,15 +1,15 @@
 ---
 name: Bookmarks MVP
-type: planned-feature
+type: mvp
 platform: iOS
-last_updated: 2026-04-29
+last_updated: 2026-05-02
 ---
 
 # Bookmarks MVP - iOS
 
 ## Scope
 
-Planned iOS migration target for Windows v4.1.12 bookmark behavior. Bookmarks
+Implemented iOS migration target for Windows v4.1.12 bookmark behavior. Bookmarks
 allow multiple script anchors that sync between editor and present mode, support
 visible markers, explicit add/remove controls, previous/next navigation, and
 active-STT jumps without resetting the session.
@@ -18,15 +18,18 @@ active-STT jumps without resetting the session.
 
 | File | Role |
 |------|------|
-| `Platform_iOS/lib/features/script/widgets/script_editor_screen.dart` | Planned editor bookmark marker rendering, add/remove/previous/next controls, visible-text coordinate mapping, presenter handoff identity |
-| `Platform_iOS/lib/features/script/widgets/script_editor_screen.file_present.dart` | Planned editor bookmark persistence and presenter handoff identity when launching present mode |
-| `Platform_iOS/lib/features/script/widgets/script_editor_screen.build.dart` | Planned editor toolbar/button placement and bookmark marker rendering coordination |
-| `Platform_iOS/lib/features/script/widgets/script_editor_screen.editor_block.dart` | Planned visible bookmark marker hit target and deletion affordance inside editor blocks |
-| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Planned presenter bookmark controls, marker rendering, direct jump behavior, active-STT bookmark jumps |
-| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Planned presenter bookmark marker rendering and visible word coordinate mapping |
-| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.control_bar.dart` | Planned add/remove/previous/next bookmark controls in present mode |
-| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart` | Planned direct jump execution and stopped/active scroll coordination |
-| `Platform_iOS/lib/features/script/services/script_bookmark_service.dart` | Planned shared persistence service mirroring the Windows baseline |
+| `Platform_iOS/lib/features/script/services/script_bookmark_service.dart` | Bookmark model, SharedPreferences scope key, load/save/upsert persistence |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.dart` | Editor bookmark state fields, service import, bookmark part registration |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.bookmarks.dart` | Editor add/remove/previous/next commands, bookmark persistence, editor coordinate mapping, editor scroll-to-bookmark |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.file_present.dart` | Presenter handoff identity: passes title/source/session id and saves bookmarks before present mode |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.build.dart` | Editor toolbar/button wiring and bookmark marker coordination |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.editor_block.dart` | Visible `»` marker hit target and deletion affordance inside editor blocks |
+| `Platform_iOS/lib/features/script/widgets/editor/suites/project_actions_mvp.dart` | Editor add/remove/previous/next bookmark buttons |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.dart` | Presenter bookmark state fields, service import, bookmark part registration |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.bookmarks.dart` | Presenter load/save/add/remove/previous/next commands and direct jump execution |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Presenter marker rendering and control wiring |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.control_bar.dart` | Add/remove/previous/next bookmark controls in present mode |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart` | Existing direct-jump/scroll helper surface used by bookmark navigation |
 | `_agent/mvp/Platform_iOS/script_editor_mvp.md` | Must document editor shared-file ownership before implementation |
 | `_agent/mvp/Platform_iOS/teleprompter_engine_mvp.md` | Must document presenter shared-file ownership before implementation |
 
@@ -34,11 +37,13 @@ active-STT jumps without resetting the session.
 
 | API | Allowed callers |
 |-----|-----------------|
-| `ScriptBookmarkService.scopeKey(...)` | Planned editor/presenter bookmark loaders |
-| `ScriptBookmarkService.load(...)` | Planned editor/presenter screen state |
-| `ScriptBookmarkService.save(...)` | Planned editor/presenter screen state |
-| `ScriptBookmarkService.upsert(...)` | Planned add-bookmark commands |
-| `TeleprompterNotifier.jumpToPosition(...)` | Planned presenter bookmark jumps while STT is stopped or active |
+| `ScriptBookmarkService.scopeKey(String? sessionId, String title)` | Editor/presenter bookmark loaders |
+| `ScriptBookmarkService.load(String key)` | Editor/presenter screen state |
+| `ScriptBookmarkService.save(String key, List<ScriptBookmark> bookmarks)` | Editor/presenter screen state |
+| `ScriptBookmarkService.upsert(List<ScriptBookmark>, ScriptBookmark)` | Add-bookmark commands |
+| `ScriptBookmark.wordIndex` | Presenter jumps and editor approximate cross-mode mapping |
+| `ScriptBookmark.blockIndex` / `offset` | Editor-native exact jumps |
+| `TeleprompterNotifier.jumpToPosition(...)` | Presenter bookmark jumps while STT is stopped or active |
 
 ## All Callers
 
@@ -91,6 +96,27 @@ loading/saving, and jump calls.
 After the 2026-04-29 iOS split, bookmark implementation must target the listed
 part files rather than re-expanding the root screen files. Root files remain
 shell/delegate files.
+
+---
+
+## iOS Implementation Notes - 2026-05-02
+
+- iOS now mirrors the Windows shared bookmark persistence contract with
+  `ScriptBookmarkService` under `Platform_iOS/lib/features/script/services/`.
+- Editor bookmarks are created from the current focused block and raw cursor
+  offset. They also save an approximate `wordIndex` for presenter handoff.
+- Presenter bookmarks are created from `confirmedWordIndex`; when they lack
+  editor coordinates, the editor maps them back from `wordIndex` as a best
+  effort.
+- Entering present mode from the editor now preserves `_currentTitle`,
+  `_sourceType`, and `_currentSessionId` in `scriptProvider.loadText(...)`, so
+  editor and presenter use the same bookmark scope.
+- Visible `»` markers are UI-only. Tapping the marker deletes the bookmark;
+  marker characters must never be inserted into script text.
+- Previous/next presenter bookmark navigation routes through
+  `TeleprompterNotifier.jumpToPosition(...)`, so active-STT bookmark jumps are
+  structurally supported and must be verified on device.
+- All implementation files remain below the 800-line split gate.
 
 ---
 

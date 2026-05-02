@@ -11,6 +11,8 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onCut;
   final VoidCallback? onPaste;
+  final bool hasBookmark;
+  final VoidCallback onBookmarkTap;
 
   const _EditorBlock({
     super.key,
@@ -23,6 +25,8 @@ class _EditorBlock extends StatelessWidget {
     required this.onSelectAll,
     required this.onCopy,
     required this.onCut,
+    required this.hasBookmark,
+    required this.onBookmarkTap,
     this.onPaste,
   });
 
@@ -58,200 +62,236 @@ class _EditorBlock extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Shortcuts(
-        shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.keyA, control: true):
-              _SelectAllIntent(),
-          SingleActivator(LogicalKeyboardKey.keyA, meta: true):
-              _SelectAllIntent(),
-          SingleActivator(LogicalKeyboardKey.keyC, control: true):
-              _CopyIntent(),
-          SingleActivator(LogicalKeyboardKey.keyC, meta: true): _CopyIntent(),
-        },
-        child: Actions(
-          actions: {
-            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (_) {
-              onSelectAll();
-              return null;
-            }),
-            _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
-              onCopy();
-              return null;
-            }),
-            // Override the internal EditableText intents too. These are
-            // marked Action.overridable inside EditableText, so placing
-            // our own handlers at this ancestor wins — catching both the
-            // keyboard Cmd+C and Flutter's internal copy dispatch paths.
-            CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
-              onInvoke: (_) {
-                onCopy();
-                return null;
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        textDirection: TextDirection.ltr,
+        children: [
+          SizedBox(
+            width: 28,
+            child: hasBookmark
+                ? Tooltip(
+                    message: 'Delete bookmark',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onBookmarkTap,
+                      child: const Padding(
+                        padding: EdgeInsets.only(top: 3),
+                        child: Text(
+                          '»',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFFFFBF00),
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+          Expanded(
+            child: Shortcuts(
+              shortcuts: const {
+                SingleActivator(LogicalKeyboardKey.keyA, control: true):
+                    _SelectAllIntent(),
+                SingleActivator(LogicalKeyboardKey.keyA, meta: true):
+                    _SelectAllIntent(),
+                SingleActivator(LogicalKeyboardKey.keyC, control: true):
+                    _CopyIntent(),
+                SingleActivator(LogicalKeyboardKey.keyC, meta: true):
+                    _CopyIntent(),
               },
-            ),
-            SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
-              onInvoke: (_) {
-                onSelectAll();
-                return null;
-              },
-            ),
-            if (onPaste != null)
-              PasteTextIntent: CallbackAction<PasteTextIntent>(
-                onInvoke: (_) {
-                  onPaste!();
-                  return null;
-                },
-              ),
-          },
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              textSelectionTheme: TextSelectionThemeData(
-                // Always transparent: all amber selection rendering is handled
-                // by MarkupController.buildTextSpan via externalSelection /
-                // isGlobalSelected. Native RenderEditable must never paint its
-                // own amber highlight or it leaks through when _isGlobalSelection
-                // flips to false during a handle drag (Bug 2 fix v4.0.6).
-                selectionColor: Colors.transparent,
-              ),
-            ),
-            child: TextField(
-              selectionControls: GhostSelectionControls(),
-              controller: controller,
-              focusNode: focusNode,
-              maxLines: null,
-              onSubmitted: (_) => onSubmitted(),
-              onTap: onTap,
-              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-              textAlign: textAlign,
-              cursorColor: Colors.amber,
-              cursorHeight: maxFontSize,
-              strutStyle: StrutStyle(
-                fontSize: maxFontSize,
-                height: settings.lineSpacing,
-                forceStrutHeight: true,
-              ),
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: settings.fontSize,
-                height: settings.lineSpacing,
-                letterSpacing: settings.letterSpacing,
-                wordSpacing: settings.wordSpacing,
-              ),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 2),
-              ),
-              contextMenuBuilder: (context, editableTextState) {
-                // When the block is globally selected, bypass editableTextState
-                // entirely. iOS asynchronously resets the native selection back
-                // to the original double-tapped word after Select All, so
-                // iterating contextMenuButtonItems would serve word-scoped
-                // Cut/Copy actions instead of our global ones.
-                if (isGlobalSelected) {
-                  return AdaptiveTextSelectionToolbar.buttonItems(
-                    anchors: editableTextState.contextMenuAnchors,
-                    buttonItems: [
-                      ContextMenuButtonItem(
-                        onPressed: () {
-                          ContextMenuController.removeAny();
-                          onCut();
-                        },
-                        type: ContextMenuButtonType.cut,
-                      ),
-                      ContextMenuButtonItem(
-                        onPressed: () {
-                          ContextMenuController.removeAny();
-                          onCopy();
-                        },
-                        type: ContextMenuButtonType.copy,
-                      ),
-                      ContextMenuButtonItem(
-                        onPressed: () {
-                          ContextMenuController.removeAny();
-                          onSelectAll();
-                        },
-                        type: ContextMenuButtonType.selectAll,
-                      ),
-                    ],
-                  );
-                }
-
-                final List<ContextMenuButtonItem> items =
-                    editableTextState.contextMenuButtonItems;
-                final List<ContextMenuButtonItem> customItems = [];
-                bool hasSelectAll = false;
-                for (final item in items) {
-                  if (item.type == ContextMenuButtonType.selectAll) {
-                    hasSelectAll = true;
-                    customItems.add(ContextMenuButtonItem(
-                      onPressed: () {
-                        ContextMenuController.removeAny();
-                        onSelectAll();
-                      },
-                      type: ContextMenuButtonType.selectAll,
-                    ));
-                  } else if (item.type == ContextMenuButtonType.cut) {
-                    customItems.add(ContextMenuButtonItem(
-                      onPressed: () {
-                        ContextMenuController.removeAny();
-                        onCut();
-                      },
-                      type: ContextMenuButtonType.cut,
-                    ));
-                  } else if (item.type == ContextMenuButtonType.copy) {
-                    customItems.add(ContextMenuButtonItem(
-                      onPressed: () {
-                        ContextMenuController.removeAny();
-                        onCopy();
-                      },
-                      type: ContextMenuButtonType.copy,
-                    ));
-                  } else if (item.type == ContextMenuButtonType.paste &&
-                      onPaste != null) {
-                    customItems.add(ContextMenuButtonItem(
-                      onPressed: () {
-                        ContextMenuController.removeAny();
-                        onPaste!();
-                      },
-                      type: ContextMenuButtonType.custom,
-                      label: 'Paste',
-                    ));
-                  } else {
-                    customItems.add(item);
-                  }
-                }
-                // Force-inject Select All even when the native menu omits it.
-                if (!hasSelectAll) {
-                  customItems.add(ContextMenuButtonItem(
-                    onPressed: () {
-                      ContextMenuController.removeAny();
+              child: Actions(
+                actions: {
+                  _SelectAllIntent:
+                      CallbackAction<_SelectAllIntent>(onInvoke: (_) {
+                    onSelectAll();
+                    return null;
+                  }),
+                  _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (_) {
+                    onCopy();
+                    return null;
+                  }),
+                  // Override the internal EditableText intents too. These are
+                  // marked Action.overridable inside EditableText, so placing
+                  // our own handlers at this ancestor wins — catching both the
+                  // keyboard Cmd+C and Flutter's internal copy dispatch paths.
+                  CopySelectionTextIntent:
+                      CallbackAction<CopySelectionTextIntent>(
+                    onInvoke: (_) {
+                      onCopy();
+                      return null;
+                    },
+                  ),
+                  SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
+                    onInvoke: (_) {
                       onSelectAll();
+                      return null;
                     },
-                    type: ContextMenuButtonType.selectAll,
-                  ));
-                }
-                // Force-inject Paste when _blockClipboard is set but menu omits it.
-                if (onPaste != null &&
-                    !customItems.any((i) =>
-                        i.label == 'Paste' ||
-                        i.type == ContextMenuButtonType.paste)) {
-                  customItems.add(ContextMenuButtonItem(
-                    onPressed: () {
-                      ContextMenuController.removeAny();
-                      onPaste!();
+                  ),
+                  if (onPaste != null)
+                    PasteTextIntent: CallbackAction<PasteTextIntent>(
+                      onInvoke: (_) {
+                        onPaste!();
+                        return null;
+                      },
+                    ),
+                },
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    textSelectionTheme: TextSelectionThemeData(
+                      // Always transparent: all amber selection rendering is handled
+                      // by MarkupController.buildTextSpan via externalSelection /
+                      // isGlobalSelected. Native RenderEditable must never paint its
+                      // own amber highlight or it leaks through when _isGlobalSelection
+                      // flips to false during a handle drag (Bug 2 fix v4.0.6).
+                      selectionColor: Colors.transparent,
+                    ),
+                  ),
+                  child: TextField(
+                    selectionControls: GhostSelectionControls(),
+                    controller: controller,
+                    focusNode: focusNode,
+                    maxLines: null,
+                    onSubmitted: (_) => onSubmitted(),
+                    onTap: onTap,
+                    textDirection:
+                        isRtl ? TextDirection.rtl : TextDirection.ltr,
+                    textAlign: textAlign,
+                    cursorColor: Colors.amber,
+                    cursorHeight: maxFontSize,
+                    strutStyle: StrutStyle(
+                      fontSize: maxFontSize,
+                      height: settings.lineSpacing,
+                      forceStrutHeight: true,
+                    ),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: settings.fontSize,
+                      height: settings.lineSpacing,
+                      letterSpacing: settings.letterSpacing,
+                      wordSpacing: settings.wordSpacing,
+                    ),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 2),
+                    ),
+                    contextMenuBuilder: (context, editableTextState) {
+                      // When the block is globally selected, bypass editableTextState
+                      // entirely. iOS asynchronously resets the native selection back
+                      // to the original double-tapped word after Select All, so
+                      // iterating contextMenuButtonItems would serve word-scoped
+                      // Cut/Copy actions instead of our global ones.
+                      if (isGlobalSelected) {
+                        return AdaptiveTextSelectionToolbar.buttonItems(
+                          anchors: editableTextState.contextMenuAnchors,
+                          buttonItems: [
+                            ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onCut();
+                              },
+                              type: ContextMenuButtonType.cut,
+                            ),
+                            ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onCopy();
+                              },
+                              type: ContextMenuButtonType.copy,
+                            ),
+                            ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onSelectAll();
+                              },
+                              type: ContextMenuButtonType.selectAll,
+                            ),
+                          ],
+                        );
+                      }
+
+                      final List<ContextMenuButtonItem> items =
+                          editableTextState.contextMenuButtonItems;
+                      final List<ContextMenuButtonItem> customItems = [];
+                      bool hasSelectAll = false;
+                      for (final item in items) {
+                        if (item.type == ContextMenuButtonType.selectAll) {
+                          hasSelectAll = true;
+                          customItems.add(ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onSelectAll();
+                            },
+                            type: ContextMenuButtonType.selectAll,
+                          ));
+                        } else if (item.type == ContextMenuButtonType.cut) {
+                          customItems.add(ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onCut();
+                            },
+                            type: ContextMenuButtonType.cut,
+                          ));
+                        } else if (item.type == ContextMenuButtonType.copy) {
+                          customItems.add(ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onCopy();
+                            },
+                            type: ContextMenuButtonType.copy,
+                          ));
+                        } else if (item.type == ContextMenuButtonType.paste &&
+                            onPaste != null) {
+                          customItems.add(ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onPaste!();
+                            },
+                            type: ContextMenuButtonType.custom,
+                            label: 'Paste',
+                          ));
+                        } else {
+                          customItems.add(item);
+                        }
+                      }
+                      // Force-inject Select All even when the native menu omits it.
+                      if (!hasSelectAll) {
+                        customItems.add(ContextMenuButtonItem(
+                          onPressed: () {
+                            ContextMenuController.removeAny();
+                            onSelectAll();
+                          },
+                          type: ContextMenuButtonType.selectAll,
+                        ));
+                      }
+                      // Force-inject Paste when _blockClipboard is set but menu omits it.
+                      if (onPaste != null &&
+                          !customItems.any((i) =>
+                              i.label == 'Paste' ||
+                              i.type == ContextMenuButtonType.paste)) {
+                        customItems.add(ContextMenuButtonItem(
+                          onPressed: () {
+                            ContextMenuController.removeAny();
+                            onPaste!();
+                          },
+                          type: ContextMenuButtonType.custom,
+                          label: 'Paste',
+                        ));
+                      }
+                      return AdaptiveTextSelectionToolbar.buttonItems(
+                        anchors: editableTextState.contextMenuAnchors,
+                        buttonItems: customItems,
+                      );
                     },
-                    type: ContextMenuButtonType.custom,
-                    label: 'Paste',
-                  ));
-                }
-                return AdaptiveTextSelectionToolbar.buttonItems(
-                  anchors: editableTextState.contextMenuAnchors,
-                  buttonItems: customItems,
-                );
-              },
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

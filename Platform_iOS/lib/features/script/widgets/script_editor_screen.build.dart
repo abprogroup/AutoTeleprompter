@@ -40,6 +40,11 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
             onSave: _saveScript,
             onImport: _importFile,
             onRename: _showRenameDialog,
+            onAddBookmark: () => unawaited(_addEditorBookmark()),
+            onRemoveBookmark: () =>
+                unawaited(_deleteEditorBookmarkAtCurrentPosition()),
+            onPreviousBookmark: () => unawaited(_jumpEditorBookmark(-1)),
+            onNextBookmark: () => unawaited(_jumpEditorBookmark(1)),
           ),
         ),
         bottomNavigationBar:
@@ -231,6 +236,10 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 onPaste: _hasPasteableBlockClipboard
                                     ? _pasteFromGlobalClipboard
                                     : null,
+                                hasBookmark: _hasBookmarkInEditorBlock(index),
+                                onBookmarkTap: () => unawaited(
+                                  _deleteEditorBookmarksForBlock(index),
+                                ),
                               ),
                             ),
                           ),

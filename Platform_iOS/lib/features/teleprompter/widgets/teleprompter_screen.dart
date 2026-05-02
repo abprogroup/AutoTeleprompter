@@ -12,6 +12,7 @@ import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
+import '../../script/services/script_bookmark_service.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
@@ -19,6 +20,7 @@ import '../../../platform/permissions/platform_permissions.dart';
 part 'teleprompter_screen.session_stt.dart';
 part 'teleprompter_screen.manual_scroll.dart';
 part 'teleprompter_screen.build.dart';
+part 'teleprompter_screen.bookmarks.dart';
 part 'teleprompter_screen.control_bar.dart';
 part 'teleprompter_screen.settings_panel.dart';
 
@@ -56,6 +58,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   // sync the resume point. Must stay false while STT is listening or starting
   // (Item 4 scroll-lock contract).
   bool _userBrowsingWhileStopped = false;
+  String? _bookmarkScopeKey;
+  String? _bookmarkLoadingKey;
+  bool _bookmarksLoaded = false;
+  List<ScriptBookmark> _bookmarks = const [];
 
   @override
   void initState() {

@@ -26,10 +26,12 @@ import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
+import '../services/script_bookmark_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
 import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
+import '../../teleprompter/services/word_aligner.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
@@ -40,6 +42,7 @@ part 'script_editor_screen.file_present.dart';
 part 'script_editor_screen.build.dart';
 part 'script_editor_screen.selection_clipboard.dart';
 part 'script_editor_screen.editor_block.dart';
+part 'script_editor_screen.bookmarks.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // ── Switchboard Orchestrator ──────────────────────────────────────────────────
@@ -120,6 +123,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   DateTime? _globalSelectionSnapshotAt;
   String _selectionClipboardDebug = 'idle';
   Timer? _blockClipboardTimer;
+  String? _bookmarkScopeKey;
+  String? _bookmarkLoadingKey;
+  bool _bookmarksLoaded = false;
+  List<ScriptBookmark> _bookmarks = const [];
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;

@@ -9,6 +9,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       while (_wordKeys.length < script.words.length) {
         _wordKeys.add(GlobalKey());
       }
+      unawaited(_loadBookmarksForScript(script));
     }
 
     // Auto-scroll on speech recognition
@@ -32,6 +33,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 style: TextStyle(color: Colors.white))),
       );
     }
+    final bookmarkWordIndexes = _bookmarks.map((b) => b.wordIndex).toSet();
 
     final paragraphs = <List<ScriptWord>>[];
     List<ScriptWord> currentParagraph = [];
@@ -116,6 +118,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   final displayText = word.raw
                       .replaceAll(_tagStripRe, '')
                       .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
+                  final hasBookmark = bookmarkWordIndexes.contains(i);
 
                   final effectiveFontSize = word.fontSize != null
                       ? presentationFontSize * (word.fontSize! / 17.0)
@@ -169,7 +172,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   // Use Container padding instead of trailing space for word gaps.
                   // Container.color covers padding area → continuous highlight blocks.
                   final wordGap = effectiveFontSize * 0.28;
-                  return Directionality(
+                  final wordWidget = Directionality(
                     textDirection: word.effectiveRtl
                         ? TextDirection.rtl
                         : TextDirection.ltr,
@@ -199,6 +202,32 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         ),
                       ),
                     ),
+                  );
+                  if (!hasBookmark) return wordWidget;
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    textDirection: TextDirection.ltr,
+                    children: [
+                      Tooltip(
+                        message: 'Delete bookmark',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => unawaited(_deletePresenterBookmark(i)),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              '»',
+                              style: TextStyle(
+                                color: Color(0xFFFFBF00),
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      wordWidget,
+                    ],
                   );
                 }).toList(),
               ),
@@ -559,6 +588,11 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                           },
                           onBack: () => Navigator.of(context).pop(),
                           onSettings: _showSettings,
+                          onAddBookmark: _addPresenterBookmark,
+                          onRemoveBookmark:
+                              _deletePresenterBookmarkAtCurrentPosition,
+                          onPreviousBookmark: () => _jumpPresenterBookmark(-1),
+                          onNextBookmark: () => _jumpPresenterBookmark(1),
                         ),
                       ],
                     ),

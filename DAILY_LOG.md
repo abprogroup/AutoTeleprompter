@@ -652,4 +652,23 @@
     - **Scrolling support**: Integrated `_scrollEditorBlockIntoView` in both Windows (existing) and macOS (new helper) to ensure smooth navigation between paragraphs.
 - **Status**: Arrow navigation fully implemented for desktop platforms.
 
+## 2026-05-02 - iOS Cross-Mode Bookmarks Port
+
+- **Session Goal**: Continue the Windows-to-iOS parity work after another agent
+  completed iOS tasks 1-5. Record the current done/remaining list, then begin
+  the next missing feature: cross-mode bookmarks.
+- **Status Record Result**: Updated
+  `Missing features from Windows development to implement all platforms.md`
+  with the current iOS status: file split and multi-block cut/paste are done,
+  tasks 1-5 are implemented by the later iOS agent, task 6 is now implemented,
+  and tasks 7-13 still require implementation/verification.
+- **Bookmark Result**: Added iOS shared script-scoped bookmark persistence via
+  `ScriptBookmarkService`, editor add/remove/previous/next controls, presenter
+  add/remove/previous/next controls, visible `»` bookmark markers in both modes,
+  marker deletion, and editor-to-presenter title/session handoff so editor and
+  present mode load the same bookmark scope.
+- **Validation Result**: All Dart files under `Platform_iOS/lib` remain below
+  800 lines after the bookmark port. Targeted `flutter analyze --no-pub` on the
+  iOS editor/presenter roots reported no compile errors; remaining output is
+  existing warning/info noise in the split root files.
 

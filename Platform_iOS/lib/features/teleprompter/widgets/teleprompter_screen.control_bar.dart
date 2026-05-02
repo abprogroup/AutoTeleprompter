@@ -12,6 +12,10 @@ class _ControlBar extends ConsumerWidget {
   final VoidCallback onReset;
   final VoidCallback onBack;
   final VoidCallback onSettings;
+  final VoidCallback onAddBookmark;
+  final VoidCallback onRemoveBookmark;
+  final VoidCallback onPreviousBookmark;
+  final VoidCallback onNextBookmark;
 
   const _ControlBar({
     required this.isListening,
@@ -25,6 +29,10 @@ class _ControlBar extends ConsumerWidget {
     required this.onReset,
     required this.onBack,
     required this.onSettings,
+    required this.onAddBookmark,
+    required this.onRemoveBookmark,
+    required this.onPreviousBookmark,
+    required this.onNextBookmark,
   });
 
   @override
@@ -51,6 +59,11 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white70),
               onPressed: onBack,
+            ),
+            IconButton(
+              icon: const Icon(Icons.skip_previous, color: Colors.white70),
+              onPressed: onPreviousBookmark,
+              tooltip: 'Previous bookmark',
             ),
             IconButton(
               icon: const Text('A',
@@ -100,6 +113,23 @@ class _ControlBar extends ConsumerWidget {
                 FocusManager.instance.primaryFocus?.unfocus();
                 onSettings();
               },
+            ),
+            IconButton(
+              icon: const Icon(Icons.bookmark_add_outlined,
+                  color: Colors.white70),
+              onPressed: onAddBookmark,
+              tooltip: 'Add bookmark',
+            ),
+            IconButton(
+              icon: const Icon(Icons.bookmark_remove_outlined,
+                  color: Colors.white70),
+              onPressed: onRemoveBookmark,
+              tooltip: 'Remove bookmark',
+            ),
+            IconButton(
+              icon: const Icon(Icons.skip_next, color: Colors.white70),
+              onPressed: onNextBookmark,
+              tooltip: 'Next bookmark',
             ),
             IconButton(
               icon: const Icon(Icons.replay, color: Colors.white70),

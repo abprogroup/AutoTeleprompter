@@ -1738,7 +1738,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         child: Focus(
           canRequestFocus: false,
           skipTraversal: true,
-          onKeyEvent: _handleEditorArrowKey,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent && event is! KeyRepeatEvent)
+              return KeyEventResult.ignored;
+            return _handleEditorArrowKey(event.logicalKey);
+          },
           child: Stack(
         children: [
           Shortcuts(
@@ -1877,6 +1881,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onCopy: _onCopyClean,
                         onCut: _onCut,
                         onPaste: _onPaste,
+                        onNavigate: (key) => _handleEditorArrowKey(key, blockIndex: index),
                       ),
                     ),
                   ),
@@ -1926,18 +1931,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   // Runs ABOVE per-block FocusNodes so key-repeat events don't drop when a
   // paragraph boundary causes a focus transition. Returns `ignored` for
   // in-block movement so EditableText's default cursor handling stays intact.
-  KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key != LogicalKeyboardKey.arrowUp &&
-        key != LogicalKeyboardKey.arrowDown &&
-        key != LogicalKeyboardKey.arrowLeft &&
-        key != LogicalKeyboardKey.arrowRight) {
-      return KeyEventResult.ignored;
-    }
-
+  KeyEventResult _handleEditorArrowKey(LogicalKeyboardKey key,
+      {int? blockIndex}) {
+    // Global selection short-circuit: any arrow collapses + repositions cursor.
     if (_isGlobalSelection) {
       _clearGlobalSelection();
       if (_controllers.isEmpty) return KeyEventResult.handled;
@@ -1954,10 +1950,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       return KeyEventResult.handled;
     }
 
-    final controller = _lastFocusedController;
-    if (controller == null) return KeyEventResult.ignored;
-    final idx = _controllers.indexOf(controller);
+    int idx = blockIndex ?? -1;
+    if (idx == -1) {
+      final controller = _lastFocusedController;
+      if (controller == null) return KeyEventResult.ignored;
+      idx = _controllers.indexOf(controller);
+    }
     if (idx < 0) return KeyEventResult.ignored;
+
+    final controller = _controllers[idx];
 
     if (key == LogicalKeyboardKey.arrowUp && idx > 0) {
       final layout = _getVerticalLayout(idx);
@@ -2084,7 +2085,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           }
           if (slice.isEmpty) continue;
           if (plainBuf.isNotEmpty) plainBuf.write('\n');
-          plainBuf.write(StylingService.stripTags(slice));
+          plainBuf.write(slice);
           htmlBuf.write(StylingService.markupToHtml(slice));
         }
       }
@@ -2098,7 +2099,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final slice = controller.selection.textInside(controller.text);
     if (slice.isEmpty) return;
     RichClipboard.setHtml(
-      plain: StylingService.stripTags(slice),
+      plain: slice,
       html: StylingService.markupToHtml(slice),
     );
   }
@@ -2398,6 +2399,7 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onCut;
   final VoidCallback onPaste;
+  final Function(LogicalKeyboardKey) onNavigate;
 
   const _EditorBlock({
     super.key,
@@ -2411,6 +2413,7 @@ class _EditorBlock extends StatelessWidget {
     required this.onCopy,
     required this.onCut,
     required this.onPaste,
+    required this.onNavigate,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2505,13 +2508,49 @@ class _EditorBlock extends StatelessWidget {
               },
             ),
           },
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              textSelectionTheme: TextSelectionThemeData(
-                selectionColor: Colors.transparent,
+          child: Focus(
+            onKeyEvent: (node, event) {
+              if (event is! KeyDownEvent && event is! KeyRepeatEvent)
+                return KeyEventResult.ignored;
+              final key = event.logicalKey;
+              if (key != LogicalKeyboardKey.arrowLeft &&
+                  key != LogicalKeyboardKey.arrowRight &&
+                  key != LogicalKeyboardKey.arrowUp &&
+                  key != LogicalKeyboardKey.arrowDown) {
+                return KeyEventResult.ignored;
+              }
+
+              final sel = controller.selection;
+              if (!sel.isCollapsed) return KeyEventResult.ignored;
+
+              bool atStart = sel.baseOffset == 0;
+              bool atEnd = sel.baseOffset == controller.text.length;
+              final isRtl = controller.text.isHebrew;
+
+              if (key == LogicalKeyboardKey.arrowUp ||
+                  key == LogicalKeyboardKey.arrowDown) {
+                return onNavigate(key);
+              }
+
+              if (key == LogicalKeyboardKey.arrowLeft) {
+                if ((!isRtl && atStart) || (isRtl && atEnd)) {
+                  return onNavigate(key);
+                }
+              } else if (key == LogicalKeyboardKey.arrowRight) {
+                if ((!isRtl && atEnd) || (isRtl && atStart)) {
+                  return onNavigate(key);
+                }
+              }
+
+              return KeyEventResult.ignored;
+            },
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                textSelectionTheme: TextSelectionThemeData(
+                  selectionColor: Colors.transparent,
+                ),
               ),
-            ),
-            child: TextField(
+              child: TextField(
               selectionControls: GhostSelectionControls(),
               controller: controller,
               focusNode: focusNode,
@@ -2597,6 +2636,7 @@ class _EditorBlock extends StatelessWidget {
                 );
               },
             ),
+          ),
           ),
         ),
       ),

@@ -59,6 +59,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   // and only cross-block drags become multi-paragraph selections.
   Offset? _candidatePos;
   int? _candidateBlock;
+  int? _anchorBlock;
+  int? _anchorOffset;
   bool _bodyDragActive = false;
 
   /// True when every block is wholly selected (post Select All, pre refine).
@@ -141,19 +143,38 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (_candidatePos == null) return;
     if (!_bodyDragActive) {
       final currentBlock = _blockAtPosition(globalPos);
-      // Activate only when:
-      //  - both origin and current land on a block AND they differ, or
-      //  - the origin had no block (empty area) and pointer now hits a block.
       final crossed = currentBlock != null &&
           _candidateBlock != null &&
           currentBlock != _candidateBlock;
       final emptyToBlock = _candidateBlock == null && currentBlock != null;
       if (!crossed && !emptyToBlock) return;
+
       _bodyDragActive = true;
       _enterRefineMode();
+
+      // Resolve the anchor ONCE at the moment of activation
+      final originBlock = _candidateBlock;
+      if (originBlock != null) {
+        final key = widget.blockKeys[originBlock];
+        final context = key.currentContext;
+        final editable = _findRenderEditable(context?.findRenderObject());
+        if (editable != null) {
+          final blockGlobalPos = editable.localToGlobal(Offset.zero);
+          final pos =
+              editable.getPositionForPoint(_candidatePos! - blockGlobalPos);
+          _anchorBlock = originBlock;
+          _anchorOffset = pos.offset;
+        }
+      }
+
       setState(() {
         _isSelecting = true;
-        _handleUpdate(_candidatePos!, true); // anchor at the original origin
+        if (_anchorBlock != null) {
+          _startBlock = _anchorBlock;
+          _startOffset = _anchorOffset;
+        } else {
+          _handleUpdate(_candidatePos!, true);
+        }
         _handleUpdate(globalPos, false);
       });
       return;
@@ -398,10 +419,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         // Fall back to viewport edges so handles are always reachable,
         // even if the first/last block isn't currently rendered.
         final start = hasSelection
-            ? (_handleStartPos ?? const Offset(12, 12))
+            ? (_handleStartPos ?? Offset(12, _startBlock! < (_endBlock ?? 0) ? -20 : constraints.maxHeight + 20))
             : null;
         final end = hasSelection
-            ? (_handleEndPos ?? Offset(12, constraints.maxHeight - 48))
+            ? (_handleEndPos ?? Offset(12, _endBlock! < (_startBlock ?? 0) ? -20 : constraints.maxHeight + 20))
             : null;
         return Stack(
           key: _stackKey,

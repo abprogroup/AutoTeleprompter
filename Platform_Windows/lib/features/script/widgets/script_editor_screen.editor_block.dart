@@ -14,6 +14,7 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onSearch;
   final bool hasBookmark;
   final VoidCallback onBookmarkTap;
+  final Function(LogicalKeyboardKey) onNavigate;
 
   const _EditorBlock({
     super.key,
@@ -30,6 +31,7 @@ class _EditorBlock extends StatelessWidget {
     required this.onSearch,
     required this.hasBookmark,
     required this.onBookmarkTap,
+    required this.onNavigate,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -167,13 +169,52 @@ class _EditorBlock extends StatelessWidget {
                     },
                   ),
                 },
-                child: Theme(
-                  data: Theme.of(context).copyWith(
-                    textSelectionTheme: TextSelectionThemeData(
-                      selectionColor: Colors.transparent,
+                child: Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is! KeyDownEvent && event is! KeyRepeatEvent)
+                      return KeyEventResult.ignored;
+                    final key = event.logicalKey;
+                    if (key != LogicalKeyboardKey.arrowLeft &&
+                        key != LogicalKeyboardKey.arrowRight &&
+                        key != LogicalKeyboardKey.arrowUp &&
+                        key != LogicalKeyboardKey.arrowDown) {
+                      return KeyEventResult.ignored;
+                    }
+
+                    // Intercept only when at boundaries
+                    final sel = controller.selection;
+                    if (!sel.isCollapsed) return KeyEventResult.ignored;
+
+                    bool atStart = sel.baseOffset == 0;
+                    bool atEnd = sel.baseOffset == controller.text.length;
+                    final isRtl = controller.text.isHebrew;
+
+                    if (key == LogicalKeyboardKey.arrowUp ||
+                        key == LogicalKeyboardKey.arrowDown) {
+                      // Up/Down navigation is handled by screen logic (which checks isAtTop/isAtBottom)
+                      // We call it here to ensure it intercepts BEFORE TextField.
+                      return onNavigate(key);
+                    }
+
+                    if (key == LogicalKeyboardKey.arrowLeft) {
+                      if ((!isRtl && atStart) || (isRtl && atEnd)) {
+                        return onNavigate(key);
+                      }
+                    } else if (key == LogicalKeyboardKey.arrowRight) {
+                      if ((!isRtl && atEnd) || (isRtl && atStart)) {
+                        return onNavigate(key);
+                      }
+                    }
+
+                    return KeyEventResult.ignored;
+                  },
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      textSelectionTheme: TextSelectionThemeData(
+                        selectionColor: Colors.transparent,
+                      ),
                     ),
-                  ),
-                  child: TextField(
+                    child: TextField(
                     selectionControls: GhostSelectionControls(),
                     controller: controller,
                     focusNode: focusNode,
@@ -264,8 +305,9 @@ class _EditorBlock extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 }

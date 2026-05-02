@@ -318,7 +318,7 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
           }
           if (slice.isEmpty) continue;
           if (plainBuf.isNotEmpty) plainBuf.write('\n');
-          plainBuf.write(StylingService.stripTags(slice));
+          plainBuf.write(slice);
           htmlBuf.write(StylingService.markupToHtml(slice));
         }
       }
@@ -332,7 +332,7 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     final slice = controller.selection.textInside(controller.text);
     if (slice.isEmpty) return;
     RichClipboard.setHtml(
-      plain: StylingService.stripTags(slice),
+      plain: slice,
       html: StylingService.markupToHtml(slice),
     );
   }

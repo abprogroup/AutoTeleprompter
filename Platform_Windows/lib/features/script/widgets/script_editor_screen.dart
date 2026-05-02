@@ -416,7 +416,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         child: Focus(
           canRequestFocus: false,
           skipTraversal: true,
-          onKeyEvent: _handleEditorArrowKey,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent && event is! KeyRepeatEvent)
+              return KeyEventResult.ignored;
+            return _handleEditorArrowKey(event.logicalKey);
+          },
           child: Stack(
           children: [
             Shortcuts(
@@ -654,6 +658,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                     hasBookmark: _hasBookmarkInEditorBlock(index),
                                     onBookmarkTap: () =>
                                         _deleteEditorBookmarksForBlock(index),
+                                    onNavigate: (key) =>
+                                        _handleEditorArrowKey(key,
+                                            blockIndex: index),
                                   ),
                                 ),
                               ),
@@ -712,18 +719,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   // when a paragraph boundary causes a focus transition between blocks. The
   // handler returns `ignored` for in-block movement so EditableText's default
   // cursor handling stays intact.
-  KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key != LogicalKeyboardKey.arrowUp &&
-        key != LogicalKeyboardKey.arrowDown &&
-        key != LogicalKeyboardKey.arrowLeft &&
-        key != LogicalKeyboardKey.arrowRight) {
-      return KeyEventResult.ignored;
-    }
-
+  KeyEventResult _handleEditorArrowKey(LogicalKeyboardKey key, {int? blockIndex}) {
     // Global selection short-circuit: any arrow collapses + repositions cursor.
     if (_isGlobalSelection) {
       _clearGlobalSelection();
@@ -741,10 +737,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return KeyEventResult.handled;
     }
 
-    final controller = _lastFocusedController;
-    if (controller == null) return KeyEventResult.ignored;
-    final idx = _controllers.indexOf(controller);
+    int idx = blockIndex ?? -1;
+    if (idx == -1) {
+      final controller = _lastFocusedController;
+      if (controller == null) return KeyEventResult.ignored;
+      idx = _controllers.indexOf(controller);
+    }
     if (idx < 0) return KeyEventResult.ignored;
+
+    final controller = _controllers[idx];
 
     if (key == LogicalKeyboardKey.arrowUp && idx > 0) {
       final layout = _getVerticalLayout(idx);

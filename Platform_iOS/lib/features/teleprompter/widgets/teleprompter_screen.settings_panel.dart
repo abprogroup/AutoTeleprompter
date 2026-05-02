@@ -14,7 +14,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
       unawaited(
         ref.read(scriptProvider.notifier).updateStyleMetadata(
               fontSize: clamped,
-          ),
+            ),
       );
     }
 
@@ -98,6 +98,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
+          Row(children: [
+            const Text('Allow visible text skip', style: sectionStyle),
+            const Spacer(),
+            Switch.adaptive(
+              value: settings.sttVisibleSkipEnabled,
+              activeColor: Color(settings.currentWordColor),
+              onChanged: (v) => notifier.setSttVisibleSkipEnabled(v),
+            ),
+          ]),
+          const SizedBox(height: 16),
+
           if (settings.scrollMode == 'manual') ...[
             Row(children: [
               const Text('Manual Scroll Speed', style: labelStyle),
@@ -129,8 +140,9 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             selectedLabel: settings.sttInputDeviceLabel,
             devices: tState.audioInputDevices,
             accentColor: Color(settings.currentWordColor),
-            onRefresh: () =>
-                ref.read(teleprompterProvider.notifier).refreshAudioInputDevices(),
+            onRefresh: () => ref
+                .read(teleprompterProvider.notifier)
+                .refreshAudioInputDevices(),
             onSelected: (deviceId, label) async {
               await ref
                   .read(teleprompterProvider.notifier)

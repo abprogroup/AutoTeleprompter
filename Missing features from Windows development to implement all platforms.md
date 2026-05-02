@@ -201,3 +201,40 @@ Run targeted flutter analyze --no-pub for touched iOS files.
 Push to main only with narrow staged files.
 Confirm GitHub Build iOS IPA workflow passes.
 Give the user the Actions run link and exact artifact name.
+
+---
+
+Windows Follow-Up Handoff From iOS QA - 2026-05-02
+
+These are not replacements for the cross-platform task list above. They are
+new improvements discovered while testing the iOS parity port and should be
+handled by the correct Windows agent in a future Windows-only pass.
+
+W1. Resume/restart choice when re-entering present mode
+
+Behavior: If the user leaves present mode in the middle of a long script,
+edits something, and returns to present mode, the app should explicitly offer
+to continue from the previous reading point or restart from the beginning.
+Starting STT after choosing Continue must resume from the same confirmed/tapped
+/scrolled/bookmarked position. Restart remains the only path that resets to
+word 0.
+
+Implementation insight: inspect the final Windows provider and presenter
+resume logic first. If Windows already preserves `confirmedWordIndex` across
+same-session re-entry, add only the dialog/choice layer. Compare stable script
+identity, not widget/object identity. Same session should be based on stable
+script/session metadata, not only the in-memory `Script` object instance.
+
+W2. Search result navigation toolbar
+
+Behavior: Search currently works, but when the same text appears many times,
+the user should be able to move next/previous between results before closing
+the search session. The UI should be compact and must not hide half the screen.
+
+Implementation insight: inspect Windows and iOS presenter/editor search code.
+Build a reusable result list from visible-text matches. Keep the search field
+compact, with previous/next result buttons and a small result counter. Editor
+mode must continue mapping visible matches back to raw markup offsets.
+Presenter mode must continue jumping through the provider position path so
+resume point, locale/alignment, bookmarks, and active STT state stay synced.
+Do not implement this by showing a large modal that blocks the reading area.

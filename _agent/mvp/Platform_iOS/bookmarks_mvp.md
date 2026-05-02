@@ -118,6 +118,9 @@ shell/delegate files.
   editor and presenter use the same bookmark scope.
 - Visible `»` markers are UI-only. Tapping the marker deletes the bookmark;
   marker characters must never be inserted into script text.
+- Present-mode bookmark markers are floating UI anchored to the bookmarked
+  word. They must not consume text-flow space or push script words around
+  inside the row.
 - Previous/next presenter bookmark navigation routes through
   `TeleprompterNotifier.jumpToPosition(...)`, so active-STT bookmark jumps are
   structurally supported and must be verified on device.

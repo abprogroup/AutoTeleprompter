@@ -64,6 +64,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<ScriptBookmark> _bookmarks = const [];
   bool _searchDialogOpen = false;
   String _lastSearchQuery = '';
+  bool _resumePromptShown = false;
 
   @override
   void initState() {
@@ -89,7 +90,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
         if (currentIndex > 0) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _scrollToWordIndex(currentIndex);
+            if (mounted) _offerResumeOrRestart(currentIndex);
           });
         }
       }

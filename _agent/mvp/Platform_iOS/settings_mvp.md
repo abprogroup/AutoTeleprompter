@@ -29,6 +29,7 @@ placeholder UI, and profile/settings screens.
 | `AppSettings.lastScript` / `lastScriptTitle` | Startup/active script persistence |
 | `AppSettings.sttEngine` | Teleprompter session start |
 | `AppSettings.debugMode` | Debug logs and hidden gestures |
+| `AppSettings.sttVisibleSkipEnabled` | Presenter visible-skip setting; default off |
 | `AppSettings.sttInputDeviceId` / `sttInputDeviceLabel` | iOS presenter mic route selector |
 | `SettingsNotifier.saveScript(...)` | Editor/provider persistence |
 | `SettingsNotifier.addToRecent(...)` / `removeFromRecent(...)` | Gallery/recent management |
@@ -128,3 +129,16 @@ where the platform supports them:
   route list. They must not be shared with Windows WebView2 device IDs.
 - If a saved route is unavailable, the STT adapter must fall back to the active
   iOS/system route without resetting script position.
+
+---
+
+## iOS Visible Skip Settings Port - 2026-05-02
+
+- `AppSettings.sttVisibleSkipEnabled` remains default `false`.
+- `TeleprompterSettingsPanel` exposes the present-mode
+  `Allow visible text skip` switch.
+- When the switch is off, STT may use only the default local recovery window.
+- When the switch is on, the provider may pass the currently rendered visible
+  word window to the aligner; visible skip must remain bounded to that window.
+- Do not enable visible skip automatically during STT start, resume, search,
+  bookmark jumps, or settings restore.

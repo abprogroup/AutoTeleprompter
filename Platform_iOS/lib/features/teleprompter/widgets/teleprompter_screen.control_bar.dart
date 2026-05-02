@@ -55,7 +55,7 @@ class _ControlBar extends ConsumerWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.bottomCenter,
@@ -64,90 +64,101 @@ class _ControlBar extends ConsumerWidget {
         ),
       ),
       child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white70),
-              onPressed: onBack,
-            ),
-            IconButton(
-              icon: const Icon(Icons.skip_previous, color: Colors.white70),
-              onPressed: onPreviousBookmark,
-              tooltip: 'Previous bookmark',
-            ),
-            IconButton(
-              icon: const Text('A',
-                  style: TextStyle(color: Colors.white70, fontSize: 16)),
-              onPressed: () {
-                FocusManager.instance.primaryFocus?.unfocus();
-                applyPresenterFontSize(settings.fontSize - 4);
-              },
-            ),
-            // Backward button removed in favor of bidirectional slider
-            GestureDetector(
-              onTap: isActive ? onStop : onStart,
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive ? Colors.red : accentColor,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                  onPressed: onBack,
                 ),
-                child: Icon(
-                  isManualMode
-                      ? (isManualScrolling && settings.scrollSpeed != 0
-                          ? Icons.pause
-                          : Icons.play_arrow)
-                      : (isListening ? Icons.stop : Icons.mic),
-                  color: isActive ? Colors.white : Colors.black,
-                  size: 30,
+                IconButton(
+                  icon: const Icon(Icons.skip_previous, color: Colors.white70),
+                  onPressed: onPreviousBookmark,
+                  tooltip: 'Previous bookmark',
                 ),
-              ),
+                IconButton(
+                  icon: const Icon(Icons.bookmark_add_outlined,
+                      color: Colors.white70),
+                  onPressed: onAddBookmark,
+                  tooltip: 'Add bookmark',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.bookmark_remove_outlined,
+                      color: Colors.white70),
+                  onPressed: onRemoveBookmark,
+                  tooltip: 'Remove bookmark',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.skip_next, color: Colors.white70),
+                  onPressed: onNextBookmark,
+                  tooltip: 'Next bookmark',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.search, color: Colors.white70),
+                  onPressed: onSearch,
+                  tooltip: 'Search script',
+                ),
+              ],
             ),
-            IconButton(
-              icon: const Text('A',
-                  style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold)),
-              onPressed: () {
-                FocusManager.instance.primaryFocus?.unfocus();
-                applyPresenterFontSize(settings.fontSize + 4);
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.tune, color: Colors.white70),
-              onPressed: () {
-                FocusManager.instance.primaryFocus?.unfocus();
-                onSettings();
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.bookmark_add_outlined,
-                  color: Colors.white70),
-              onPressed: onAddBookmark,
-              tooltip: 'Add bookmark',
-            ),
-            IconButton(
-              icon: const Icon(Icons.bookmark_remove_outlined,
-                  color: Colors.white70),
-              onPressed: onRemoveBookmark,
-              tooltip: 'Remove bookmark',
-            ),
-            IconButton(
-              icon: const Icon(Icons.skip_next, color: Colors.white70),
-              onPressed: onNextBookmark,
-              tooltip: 'Next bookmark',
-            ),
-            IconButton(
-              icon: const Icon(Icons.search, color: Colors.white70),
-              onPressed: onSearch,
-              tooltip: 'Search script',
-            ),
-            IconButton(
-              icon: const Icon(Icons.replay, color: Colors.white70),
-              onPressed: onReset,
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: const Text('A',
+                      style: TextStyle(color: Colors.white70, fontSize: 16)),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    applyPresenterFontSize(settings.fontSize - 4);
+                  },
+                ),
+                // Backward button removed in favor of bidirectional slider
+                GestureDetector(
+                  onTap: isActive ? onStop : onStart,
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isActive ? Colors.red : accentColor,
+                    ),
+                    child: Icon(
+                      isManualMode
+                          ? (isManualScrolling && settings.scrollSpeed != 0
+                              ? Icons.pause
+                              : Icons.play_arrow)
+                          : (isListening ? Icons.stop : Icons.mic),
+                      color: isActive ? Colors.white : Colors.black,
+                      size: 30,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Text('A',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    applyPresenterFontSize(settings.fontSize + 4);
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.tune, color: Colors.white70),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    onSettings();
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.replay, color: Colors.white70),
+                  onPressed: onReset,
+                ),
+              ],
             ),
           ],
         ),

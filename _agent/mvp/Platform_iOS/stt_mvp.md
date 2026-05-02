@@ -221,6 +221,20 @@ alternative.
 
 ---
 
+## iOS Resume Identity Repair - 2026-05-02
+
+- `startSession(Script script)` must compare stable script identity, not only
+  Dart object identity.
+- Same-session resume is true when the previous and incoming scripts share a
+  non-empty `sessionId`, or when title and raw text still match.
+- This protects the editor -> present -> editor -> present flow where the same
+  script may be rebuilt as a new `Script` object after editing.
+- Starting STT from a reopened same-session presenter must preserve the current
+  `confirmedWordIndex`; it must not silently reset to `0`.
+- A genuinely different script may still start from `0`.
+
+---
+
 ## iOS Opt-In Visible Viewport Skip - 2026-04-30
 
 - `AppSettings.sttVisibleSkipEnabled` (default `false`) gates the visible-skip

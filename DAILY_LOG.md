@@ -795,3 +795,26 @@
 - **Documentation Result**: Updated iOS STT, Settings, Platform Shell, and
   Audio Buffer MVP docs, plus `MASTER_TODO_V4.md` and the Windows-parity
   handoff/status file. IPA/device verification is still pending.
+
+## 2026-05-02 - iOS QA Follow-Up: Resume, Visible Skip, Bookmarks
+
+- **Session Goal**: Apply user test feedback after the iOS parity IPA: fix
+  same-session STT resume after returning from editor mode, expose the missing
+  visible skip switch, prevent present bookmark markers from occupying text
+  flow, and reduce present-mode control overflow.
+- **Resume Result**: `TeleprompterNotifier.startSession(...)` now compares
+  stable script/session identity rather than only Dart object identity, so a
+  rebuilt same-session script can still resume from the current
+  `confirmedWordIndex`. Re-entering present mode at a non-zero position now
+  offers Continue or Restart; only Restart resets to word `0`.
+- **Visible Skip Result**: Present settings now expose the
+  `Allow visible text skip` switch backed by the existing
+  `sttVisibleSkipEnabled` setting. It remains off by default.
+- **Bookmark/UI Result**: Present-mode bookmark markers now float as UI
+  anchored to the bookmarked word instead of consuming row text space. The
+  present control bar is split into two rows so bookmark/search controls do not
+  overflow the mic/font/settings row.
+- **Migration Result**: Added a Windows follow-up handoff for the new
+  Resume/Restart re-entry choice and compact multi-result search navigation
+  idea in `Missing features from Windows development to implement all
+  platforms.md`. No Windows runtime code was touched in this iOS pass.

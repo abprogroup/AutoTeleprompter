@@ -172,6 +172,47 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     _scheduleHideControls();
   }
 
+  Future<void> _offerResumeOrRestart(int currentIndex) async {
+    if (_resumePromptShown || currentIndex <= 0 || !mounted) return;
+    _resumePromptShown = true;
+    _scrollToWordIndex(currentIndex);
+
+    final shouldRestart = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('Resume presentation?',
+            style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Continue from the last reading point, or restart this script from the beginning?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Continue',
+                style: TextStyle(color: Color(0xFFFFBF00))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child:
+                const Text('Restart', style: TextStyle(color: Colors.white54)),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (shouldRestart == true) {
+      ref.read(teleprompterProvider.notifier).resetPosition();
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    } else {
+      _scrollToWordIndex(ref.read(teleprompterProvider).confirmedWordIndex);
+    }
+  }
+
   Future<void> _requestAndStart() async {
     // Check current status first
     var micStatus = await Permission.microphone.status;

@@ -201,29 +201,35 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     ),
                   );
                   if (!hasBookmark) return wordWidget;
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    textDirection: TextDirection.ltr,
+                  return Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      Tooltip(
-                        message: 'Delete bookmark',
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => unawaited(_deletePresenterBookmark(i)),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 2),
-                            child: Text(
-                              '»',
-                              style: TextStyle(
-                                color: Color(0xFFFFBF00),
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
+                      wordWidget,
+                      Positioned(
+                        left: word.effectiveRtl ? null : -18,
+                        right: word.effectiveRtl ? -18 : null,
+                        top: -8,
+                        child: Tooltip(
+                          message: 'Delete bookmark',
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => unawaited(_deletePresenterBookmark(i)),
+                            child: const SizedBox(
+                              width: 24,
+                              height: 28,
+                              child: Text(
+                                '»',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Color(0xFFFFBF00),
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                      wordWidget,
                     ],
                   );
                 }).toList(),

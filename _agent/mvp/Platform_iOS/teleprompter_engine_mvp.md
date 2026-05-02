@@ -134,6 +134,16 @@ fragilities above and port these final Windows product contracts:
 - Future stopped-browsing and bookmark/search work must reuse this same
   position-preservation contract rather than adding separate reset paths.
 
+### 2026-05-02 resume prompt update
+
+- Re-entering present mode at a non-zero `confirmedWordIndex` shows a
+  resume/restart choice.
+- Continue keeps the current position and scrolls to it.
+- Restart is the only dialog action that calls `resetPosition()` and scrolls
+  to the beginning.
+- Mic start after re-entry must use the same resume point selected by this
+  prompt; it must not reset internally to word `0`.
+
 ---
 
 ## iOS Presenter Search Port - 2026-05-02
@@ -211,3 +221,26 @@ fragilities above and port these final Windows product contracts:
   state, or presenter scroll position.
 - The selector is an iOS `AVAudioSession` route selector, not a Windows WebView
   media-device picker.
+
+---
+
+## iOS Present Toolbar Layout - 2026-05-02
+
+- `teleprompter_screen.control_bar.dart` owns present-mode control layout.
+- The control bar uses two rows to avoid overflow on compact iOS screens.
+- Top row owns back, previous bookmark, add bookmark, remove bookmark, next
+  bookmark, and search.
+- Bottom row owns font decrease, mic/play/stop, font increase, settings, and
+  restart.
+- Do not restore all controls into one horizontal row unless the control set is
+  redesigned for responsive wrapping.
+
+---
+
+## iOS Visible Skip Toggle - 2026-05-02
+
+- Present settings expose `Allow visible text skip`.
+- The setting remains off by default and may only widen STT matching to the
+  currently rendered visible word window when explicitly enabled.
+- Default local recovery remains separate from visible skip and must stay
+  active even when the visible skip switch is off.

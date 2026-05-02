@@ -458,13 +458,24 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     return null;
   }
 
+  bool _isSameScriptSession(Script? previous, Script next) {
+    if (previous == null) return false;
+    if (identical(previous, next)) return true;
+    final previousSession = previous.sessionId.trim();
+    final nextSession = next.sessionId.trim();
+    if (previousSession.isNotEmpty && previousSession == nextSession) {
+      return true;
+    }
+    return previous.title == next.title && previous.rawText == next.rawText;
+  }
+
   Future<void> startSession(Script script) async {
     final pendingStop = _stopInFlight;
     if (pendingStop != null) await pendingStop;
     if (_disposed) return;
 
     final token = ++_sessionToken;
-    final sameScript = identical(_currentScript, script);
+    final sameScript = _isSameScriptSession(_currentScript, script);
     _currentScript = script;
     _accumulatedTranscript = '';
     _noProgressCount = 0;

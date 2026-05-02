@@ -391,6 +391,17 @@
   visible-skip path with nearby phrase priority and capped sequence jump.
   Provider call site is unchanged so the new default is active immediately.
   Awaiting user IPA verification.
+- [P] **iOS QA Follow-Up - Resume/Skip/Bookmark Toolbar**: After user testing,
+  repaired same-session STT resume after editor round-trip by comparing stable
+  script/session identity instead of Dart object identity; added a re-entry
+  Resume/Restart prompt; exposed the missing present-mode `Allow visible text
+  skip` switch; changed present bookmark markers to floating UI so they do not
+  consume text-flow space; and split the present control bar into two rows to
+  prevent bookmark-button overflow. Awaiting IPA/device verification.
+- [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
+  choice and compact multi-result search navigation UX to Windows in a future
+  Windows-only pass. Details are appended in
+  `Missing features from Windows development to implement all platforms.md`.
 
 ### iOS Windows-Parity Local Implementation Status (2026-05-02)
 

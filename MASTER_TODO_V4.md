@@ -442,14 +442,14 @@
   cross paragraph boundaries because each block is a separate `TextField`.
   The automatic adoption attempt was rejected after QA because it broke Select
   All and stale native Cut/Copy still hit only the touched block. Replacement
-  approach: a partial, non-full-block native selection exposes an explicit
-  `Extend` menu item; only that command converts to `GlobalSelectionOverlay`
-  handles. Overlay Cut/Copy stores exactly the visible overlay slices, while
-  full-block Select All, protected multi-block snapshots, native toolbar
+  approach: a partial, non-full-block native menu promotes the confirmed range
+  into `GlobalSelectionOverlay` handles without exposing a vague `Extend`
+  product action. Overlay Cut/Copy stores exactly the visible overlay slices,
+  while full-block Select All, protected multi-block snapshots, native toolbar
   ownership, and the no-autoscroll/no-floating-toolbar rule remain unchanged.
   Awaiting IPA/device verification.
 - [P] **iOS Selection Menu Bridge Follow-Up**: Partial native selections now
-  show app-owned Cut/Copy/Extend/Select All/Paste actions directly instead of
+  show app-owned Cut/Copy/Select All/Paste actions directly instead of
   native-only Lookup/Search Web actions, and native-menu Select All reopens the
   toolbar into the global Cut/Copy state. Overlay handle dragging now targets
   the nearest rendered block/caret while crossing visible paragraph boundaries.

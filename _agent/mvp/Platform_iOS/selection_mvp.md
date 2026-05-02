@@ -146,17 +146,18 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     handle system. This is intentionally not the rejected app-toolbar/autoscroll
     patch.
 
-20. **Partial native selections may enter overlay handles only by explicit Extend**:
+20. **Partial native selections enter overlay handles only from the native menu**:
     Because each paragraph block is a separate iOS `TextField`, native iOS
     selection handles cannot cross a newline/block boundary. A partial,
-    non-full-block native selection may therefore expose an explicit context
-    menu `Extend` action. Only that user command may convert the native
-    selection into `GlobalSelectionOverlay` so the existing gold handles can
-    cross blocks. Passive listener-based automatic adoption is forbidden.
-    Extend is also forbidden during `_isGlobalSelection`, command execution,
-    full-block Select All, or any already-active overlay selection. It must not
-    add an app-owned floating Cut/Copy/Paste toolbar, edge-scroll timer, or
-    alternate clipboard command path.
+    non-full-block native selection may therefore be promoted into
+    `GlobalSelectionOverlay` only while the native/adaptive context menu is
+    being built for that confirmed user selection. Do not expose a vague
+    product-facing `Extend` button. Do not promote from passive
+    `_onSelectionChanged()` listener events. Promotion is forbidden during
+    `_isGlobalSelection`, command execution, full-block Select All, or any
+    already-active overlay selection. It must not add an app-owned floating
+    Cut/Copy/Paste toolbar, edge-scroll timer, or alternate clipboard command
+    path.
 
 21. **Handle drag hit-testing must include block boundaries**: Overlay handle
     dragging must let endpoints reach offset `0` and `text.length` for the
@@ -167,7 +168,7 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     autoscroll.
 
 22. **Overlay Cut/Copy must use overlay slices, not stale native actions**:
-    After explicit Extend converts a native partial selection into overlay
+    After native-menu promotion converts a native partial selection into overlay
     handles, overlay-mode context-menu Cut/Copy and the app's keyboard Copy
     shortcut must route to `_onCutClean()` / `_onCopyClean()`. Overlay
     clipboard storage must prefer the visible overlay-selected raw slices and
@@ -175,12 +176,13 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     3.24.3 does not expose `CutSelectionTextIntent`, so do not depend on that
     symbol in iOS workflow builds.
 
-23. **Partial native menu must expose the app bridge directly**: A partial
+23. **Partial native menu must remain the command surface**: A partial
     native iOS selection is still limited to one `TextField`, so its context
-    menu must show app-owned `Cut`, `Copy`, `Extend`, `Select All`, and
-    optional `Paste` actions instead of burying the user in native-only
-    `Lookup` / `Search Web` actions. `Extend` remains explicit; this does not
-    reintroduce passive adoption.
+    menu must show app-owned `Cut`, `Copy`, `Select All`, and optional `Paste`
+    actions instead of burying the user in native-only `Lookup` / `Search Web`
+    actions. The app may promote the confirmed partial selection into overlay
+    handles behind that menu, but it must not add an `Extend` product action or
+    a separate app command bar.
 
 24. **Select All must leave a Cut/Copy affordance**: When a native context-menu
     `Select All` command routes through `_selectAllBlocks()`, the toolbar must
@@ -212,11 +214,11 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
   handles have crossed blocks. That cuts only the originally touched block while
   the overlay highlight spans more text.
 - Do not call `extendNativeBlockSelection` from `_onSelectionChanged()` or any
-  passive native selection listener. It is allowed only from the explicit
-  context-menu `Extend` action.
+  passive native selection listener. It is allowed only from the partial native
+  context-menu build path for a confirmed user selection.
 - Do not let the partial native selection menu fall back to native-only
-  Lookup/Search Web actions when the app needs to expose `Extend`; users must
-  see the bridge into cross-block overlay handles.
+  Lookup/Search Web actions when the app needs to expose Cut/Copy/Select All
+  for the cross-block overlay bridge.
 - Do not let context-menu Select All hide Cut/Copy afterward. It must reopen or
   rebuild into the global command menu.
 
@@ -281,6 +283,6 @@ Additional clipboard prohibitions:
   into overlay mode and broadened overlay menu interception. Device QA showed
   Select All stopped working, cross-block overlay Cut/Copy still used only the
   originally touched block, and history did not commit the cut until later
-  deselection. The safe replacement is explicit `Extend` only: the user first
-  selects a word, then chooses Extend from the native context menu to enter
-  overlay handles.
+  deselection. The safer replacement avoids passive listener adoption and
+  limits promotion to the partial native context-menu build path, with the
+  native/adaptive toolbar remaining the visible command surface.

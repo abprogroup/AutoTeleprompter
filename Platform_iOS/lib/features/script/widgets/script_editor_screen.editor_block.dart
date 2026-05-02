@@ -189,6 +189,18 @@ class _EditorBlock extends StatelessWidget {
                           !selection.isCollapsed &&
                           !(selection.start == 0 &&
                               selection.end == controller.text.length);
+                      void promotePartialSelectionForCrossBlockHandles() {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          onExtendSelection();
+                          Future<void>.delayed(const Duration(milliseconds: 80),
+                              () {
+                            if (editableTextState.mounted) {
+                              editableTextState.showToolbar();
+                            }
+                          });
+                        });
+                      }
+
                       void selectAllAndReopenToolbar() {
                         ContextMenuController.removeAny();
                         onSelectAll();
@@ -246,10 +258,12 @@ class _EditorBlock extends StatelessWidget {
                       }
 
                       // Partial native iOS selection cannot cross paragraph
-                      // TextFields. Keep the native handles, but make the app
-                      // bridge explicit and visible instead of burying Extend
-                      // behind Lookup/Search Web native-only actions.
+                      // TextFields. Keep the adaptive/native toolbar as the
+                      // command surface, but promote the confirmed native range
+                      // into the existing app handles so dragging can cross
+                      // blocks without a vague extra "Extend" product action.
                       if (hasPartialNativeSelection) {
+                        promotePartialSelectionForCrossBlockHandles();
                         return AdaptiveTextSelectionToolbar.buttonItems(
                           anchors: editableTextState.contextMenuAnchors,
                           buttonItems: [
@@ -266,14 +280,6 @@ class _EditorBlock extends StatelessWidget {
                                 onCopy();
                               },
                               type: ContextMenuButtonType.copy,
-                            ),
-                            ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onExtendSelection();
-                              },
-                              type: ContextMenuButtonType.custom,
-                              label: 'Extend',
                             ),
                             ContextMenuButtonItem(
                               onPressed: selectAllAndReopenToolbar,
@@ -332,17 +338,6 @@ class _EditorBlock extends StatelessWidget {
                         } else {
                           customItems.add(item);
                         }
-                      }
-                      if (hasPartialNativeSelection &&
-                          !customItems.any((i) => i.label == 'Extend')) {
-                        customItems.add(ContextMenuButtonItem(
-                          onPressed: () {
-                            ContextMenuController.removeAny();
-                            onExtendSelection();
-                          },
-                          type: ContextMenuButtonType.custom,
-                          label: 'Extend',
-                        ));
                       }
                       // Force-inject Select All even when the native menu omits it.
                       if (!hasSelectAll) {

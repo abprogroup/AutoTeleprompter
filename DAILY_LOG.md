@@ -980,9 +980,10 @@
   native-menu baseline before automatic adoption, preserving Select All and the
   protected multi-block clipboard recovery path.
 - **Replacement Result**: Ordinary native word selection now remains native
-  unless the user chooses a new explicit `Extend` context-menu action. Extend
-  converts only that confirmed partial selection into `GlobalSelectionOverlay`
-  handles, allowing cross-block drag without passive listener adoption.
+  until its native/adaptive context menu is built. That confirmed partial
+  selection is then promoted into `GlobalSelectionOverlay` handles without a
+  product-facing `Extend` button, allowing cross-block drag without passive
+  listener adoption.
 - **Clipboard Result**: Overlay Cut/Copy stores the visible overlay-selected
   raw slices and does not promote an older protected Select All snapshot for
   `cut-overlay` / `copy-overlay`.
@@ -997,9 +998,10 @@
   felt trapped inside one paragraph block and that native Select All could leave
   the user without visible Cut/Copy actions.
 - **Menu Result**: Partial native selections now show app-owned `Cut`, `Copy`,
-  `Extend`, `Select All`, and optional `Paste` directly instead of native-only
-  Lookup/Search Web actions. `Extend` is still explicit and is still the only
-  bridge into cross-block overlay handles.
+  `Select All`, and optional `Paste` directly instead of native-only
+  Lookup/Search Web actions. The confirmed native menu selection promotes into
+  cross-block overlay handles behind that same toolbar; no vague `Extend`
+  product action is exposed.
 - **Select All Result**: Native-menu Select All now reopens/rebuilds the toolbar
   after `_selectAllBlocks()` so the global selected state can expose Cut/Copy.
 - **Handle Result**: Overlay handle dragging now chooses the nearest rendered

@@ -110,8 +110,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   /// Explicitly converts a user-confirmed native partial selection into the app
   /// overlay handles. This must only be called from an intentional UI command
-  /// (the editor context menu Extend action), never from passive selection
-  /// listener events.
+  /// path (the editor native/adaptive context-menu build path), never from
+  /// passive selection listener events.
   void extendNativeBlockSelection(int blockIndex, TextSelection selection) {
     if (blockIndex < 0 || blockIndex >= widget.controllers.length) return;
     if (!selection.isValid || selection.isCollapsed) return;

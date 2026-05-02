@@ -55,8 +55,22 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
     _scrollController.dispose();
+    _presentationFocusNode.dispose();
     _remoteCmdSub?.cancel();
     ref.read(teleprompterProvider.notifier).stopSession();
+  }
+
+  bool _handlePresentationKey(KeyEvent event) {
+    if (event is! KeyDownEvent || _searchDialogOpen || !mounted) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    final isSearchShortcut = event.logicalKey == LogicalKeyboardKey.keyF &&
+        keyboard.isShiftPressed &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed);
+    if (!isSearchShortcut) return false;
+    Future.microtask(_showPresenterSearchDialog);
+    return true;
   }
 
   void _scheduleHideControls() {

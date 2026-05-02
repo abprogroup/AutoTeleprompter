@@ -33,12 +33,13 @@ Current iOS implementation status as of 2026-05-02:
   ScriptBookmarkService, editor bookmark controls/markers, presenter bookmark
   controls/markers, and editor-to-present session/title handoff so both modes
   load the same bookmark scope.
-- Still left after bookmarks: Task 7 active-STT bookmark jumps verification,
-  Task 8
-  visible-text search with raw-offset mapping, Task 9 one font-size metadata
-  authority, Task 10 synced spacing ranges, Task 11 loaded-file symbol/quote/
-  blank-line preservation audit, Task 12 markup-safe export, and Task 13 iOS
-  external microphone routing policy.
+- Implemented now: Task 8, visible-text search with raw-offset mapping. Editor
+  search maps visible text matches back to raw markup offsets; presenter search
+  maps visible phrase matches to word indexes and direct presenter jumps.
+- Still left after search: Task 7 active-STT bookmark jumps verification,
+  Task 9 one font-size metadata authority, Task 10 synced spacing ranges,
+  Task 11 loaded-file symbol/quote/blank-line preservation audit, Task 12
+  markup-safe export, and Task 13 iOS external microphone routing policy.
 
 1. STT stop/resume without reset
 
@@ -87,6 +88,15 @@ Implementation insight: do not block bookmark controls during listening. Route b
 Behavior: Search should match the text the user sees, not internal markup. If visible text is wrapped in tags such as [color=#...]hello[/color], searching hello should find and select hello, not land inside the raw tag text. Search should work in both editor and present mode.
 
 Implementation insight: inspect Windows search implementation. For editor mode, build a visible-text to raw-offset map for each MarkupController. Search the stripped/visible text, then translate the match start/end back to raw markup offsets before selecting. For lazy lists, pre-scroll/build the target block and then call exact ensureVisible. Present-mode search should jump to a word index and update resume point.
+
+iOS implementation note 2026-05-02: editor search now lives in
+`script_editor_screen.search.dart`, opens from the action bar and
+`Ctrl/Meta+Shift+F`, searches `StylingService.stripTags(...)`, then maps the
+match to raw offsets through `MarkupController.visualToRawOffset(...)`.
+Presenter search now lives in `teleprompter_screen.search.dart`, opens from the
+control bar and hardware-key shortcut, builds a visible phrase map from
+rendered script words, and jumps through the same provider position path used
+by bookmarks. Awaiting IPA/device verification.
 
 9. One font-size metadata authority
 

@@ -43,6 +43,7 @@ part 'script_editor_screen.build.dart';
 part 'script_editor_screen.selection_clipboard.dart';
 part 'script_editor_screen.editor_block.dart';
 part 'script_editor_screen.bookmarks.dart';
+part 'script_editor_screen.search.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // ── Switchboard Orchestrator ──────────────────────────────────────────────────
@@ -53,6 +54,10 @@ class _SelectAllIntent extends Intent {
 
 class _CopyIntent extends Intent {
   const _CopyIntent();
+}
+
+class _SearchIntent extends Intent {
+  const _SearchIntent();
 }
 
 class ScriptEditorScreen extends ConsumerStatefulWidget {
@@ -127,6 +132,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
   List<ScriptBookmark> _bookmarks = const [];
+  String _lastSearchQuery = '';
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;

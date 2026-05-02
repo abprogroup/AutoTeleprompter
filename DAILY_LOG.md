@@ -672,3 +672,21 @@
   iOS editor/presenter roots reported no compile errors; remaining output is
   existing warning/info noise in the split root files.
 
+## 2026-05-02 - iOS Visible-Text Search Port
+
+- **Session Goal**: Continue Windows-to-iOS parity after the bookmark port by
+  implementing Task 8: visible-text search with raw-offset mapping.
+- **Editor Result**: Added `script_editor_screen.search.dart`. Editor search
+  opens from the action bar and `Ctrl/Meta+Shift+F`, searches stripped visible
+  text, maps the match back to raw markup offsets through
+  `MarkupController.visualToRawOffset(...)`, clears stale global-selection
+  overlay state, selects the real visible match, and scrolls the owning editor
+  block into view.
+- **Presenter Result**: Added `teleprompter_screen.search.dart`. Presenter
+  search opens from the control bar and hardware-key shortcut, builds a visible
+  phrase map from rendered script words, skips newline/display-empty tokens as
+  anchors, and jumps through the provider position path used by bookmarks so
+  resume point and scroll target stay synchronized.
+- **Documentation Result**: Updated iOS Script Editor and Teleprompter Engine
+  MVP docs, `MASTER_TODO_V4.md`, and the Windows-parity handoff file. iOS Task
+  8 is now implemented and awaiting IPA/device verification.

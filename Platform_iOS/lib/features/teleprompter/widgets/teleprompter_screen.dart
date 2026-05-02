@@ -21,6 +21,7 @@ part 'teleprompter_screen.session_stt.dart';
 part 'teleprompter_screen.manual_scroll.dart';
 part 'teleprompter_screen.build.dart';
 part 'teleprompter_screen.bookmarks.dart';
+part 'teleprompter_screen.search.dart';
 part 'teleprompter_screen.control_bar.dart';
 part 'teleprompter_screen.settings_panel.dart';
 
@@ -39,6 +40,8 @@ class TeleprompterScreen extends ConsumerStatefulWidget {
 
 class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _presentationFocusNode =
+      FocusNode(debugLabel: 'iOS presentation shortcuts');
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
   Timer? _manualScrollTimer;
@@ -62,6 +65,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
   List<ScriptBookmark> _bookmarks = const [];
+  bool _searchDialogOpen = false;
+  String _lastSearchQuery = '';
 
   @override
   void initState() {

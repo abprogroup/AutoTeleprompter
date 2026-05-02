@@ -2,7 +2,7 @@
 name: Script Editor MVP
 type: component
 platform: iOS
-last_updated: 2026-04-29
+last_updated: 2026-05-02
 ---
 
 # Script Editor MVP - iOS
@@ -97,6 +97,7 @@ mechanical only: all private helpers remain in the same Dart library through
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.build.dart` | Main editor build tree and debug sentry rendering |
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.selection_clipboard.dart` | Clean selection, copy/cut/paste/select-all/delete, overlay resync |
 | `Platform_iOS/lib/features/script/widgets/script_editor_screen.editor_block.dart` | `_EditorBlock` widget and block-level editing surface |
+| `Platform_iOS/lib/features/script/widgets/script_editor_screen.search.dart` | Editor visible-text search, raw-offset mapping, search selection/jump behavior |
 
 Split invariants:
 
@@ -121,3 +122,21 @@ When iOS editor work resumes, port these verified Windows editor contracts:
   mode; editor visual scale must not create a second saved font number.
 - Intentional blank lines, quotes, punctuation, and standalone symbols must be
   preserved while editing and when handing off to present mode.
+
+---
+
+## iOS Visible-Text Search Port - 2026-05-02
+
+- Editor search is owned by
+  `Platform_iOS/lib/features/script/widgets/script_editor_screen.search.dart`.
+- Search opens from the editor action bar and from `Ctrl/Meta+Shift+F`.
+- Search must match visible text after markup stripping, not raw tag text.
+- Match offsets must be translated back through
+  `MarkupController.visualToRawOffset(...)` before setting the editor
+  selection.
+- Search must never place the cursor or selection inside `[color]`, `[size]`,
+  `[font]`, alignment tags, `**`, or any other invisible markup token.
+- Search clears global-selection overlay state before applying the match so
+  highlight ownership does not leak from selection MVP into search behavior.
+- Search result scrolling must use the block key / `Scrollable.ensureVisible`
+  path and must not rebuild the editor into a monolith.

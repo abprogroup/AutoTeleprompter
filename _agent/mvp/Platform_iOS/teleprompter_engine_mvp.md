@@ -2,7 +2,7 @@
 name: Teleprompter Engine MVP
 type: component
 platform: iOS
-last_updated: 2026-04-29
+last_updated: 2026-05-02
 ---
 
 # Teleprompter Engine MVP - iOS
@@ -83,6 +83,7 @@ mechanical only: all private helpers remain in the same Dart library through
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.session_stt.dart` | Remote listener lifecycle, STT start request, missing-language dialog, error text, control visibility timer, cleanup body |
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.manual_scroll.dart` | Manual scroll helpers, smooth scroll loop, runtime settings launch/update helpers |
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.build.dart` | Main presenter build tree, highlighted word rendering, overlay structure |
+| `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.search.dart` | Presenter search dialog, visible text phrase mapping, direct jump to word index |
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.control_bar.dart` | `_ControlBar` presentation controls |
 | `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.settings_panel.dart` | `TeleprompterSettingsPanel`, presets, color grid, runtime display settings |
 
@@ -132,3 +133,21 @@ fragilities above and port these final Windows product contracts:
   `0` and scrolls to the beginning.
 - Future stopped-browsing and bookmark/search work must reuse this same
   position-preservation contract rather than adding separate reset paths.
+
+---
+
+## iOS Presenter Search Port - 2026-05-02
+
+- Presenter search is owned by
+  `Platform_iOS/lib/features/teleprompter/widgets/teleprompter_screen.search.dart`.
+- Search opens from the control bar and from `Ctrl/Meta+Shift+F` when a
+  hardware keyboard can focus the presentation screen.
+- Search must build its phrase map from visible word text, after stripping
+  internal markup and alignment tags.
+- Search jumps through the provider position path used by bookmarks so
+  `confirmedWordIndex`, resume point, locale/alignment state, and scroll target
+  stay synchronized.
+- Presenter search is direct navigation. It must not reuse the smooth STT
+  row-follow animation that is reserved for normal live reading progress.
+- Search must skip newline/display-empty tokens as match anchors while still
+  preserving those tokens in rendering.

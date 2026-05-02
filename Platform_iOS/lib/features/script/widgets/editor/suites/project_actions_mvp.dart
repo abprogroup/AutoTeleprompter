@@ -8,6 +8,7 @@ class ProjectActionsSuite extends StatelessWidget {
   final VoidCallback onRemoveBookmark;
   final VoidCallback onPreviousBookmark;
   final VoidCallback onNextBookmark;
+  final VoidCallback onSearch;
   final String title;
 
   const ProjectActionsSuite({
@@ -22,6 +23,7 @@ class ProjectActionsSuite extends StatelessWidget {
     required this.onRemoveBookmark,
     required this.onPreviousBookmark,
     required this.onNextBookmark,
+    required this.onSearch,
     required this.title,
   });
 
@@ -46,6 +48,7 @@ class ProjectActionsSuite extends StatelessWidget {
                 onPressed: onRemoveBookmark),
             IconButton(
                 icon: const Icon(Icons.skip_next), onPressed: onNextBookmark),
+            IconButton(icon: const Icon(Icons.search), onPressed: onSearch),
             IconButton(
                 icon: const Icon(Icons.delete_outline), onPressed: onClear),
             IconButton(icon: const Icon(Icons.save_alt), onPressed: onSave),

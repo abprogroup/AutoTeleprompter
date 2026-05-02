@@ -372,6 +372,14 @@
   visible-skip path with nearby phrase priority and capped sequence jump.
   Provider call site is unchanged so the new default is active immediately.
   Awaiting user IPA verification.
+- [P] **iOS Visible-Text Search With Raw-Offset Mapping**: Ported the Windows
+  search baseline into iOS. Editor search opens from the action bar and
+  `Ctrl/Meta+Shift+F`, searches stripped visible text, maps the match back to
+  raw markup offsets via `MarkupController.visualToRawOffset(...)`, and selects
+  the real visible characters without landing inside hidden tags. Presenter
+  search opens from the control bar and hardware-key shortcut, searches visible
+  phrase text, and jumps through the provider position path so resume point and
+  scroll target stay synchronized. Awaiting user IPA verification.
 - [P] **iOS Opt-In Visible Viewport Skip**: Added `sttVisibleSkipEnabled`
   setting (default off) with persistence and setter. Provider stores
   `_visibleWordStart`/`_visibleWordEnd` and exposes `setVisibleWordWindow`.

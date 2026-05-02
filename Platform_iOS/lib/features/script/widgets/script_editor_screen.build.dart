@@ -45,6 +45,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                 unawaited(_deleteEditorBookmarkAtCurrentPosition()),
             onPreviousBookmark: () => unawaited(_jumpEditorBookmark(-1)),
             onNextBookmark: () => unawaited(_jumpEditorBookmark(1)),
+            onSearch: () => unawaited(_showEditorSearchDialog()),
           ),
         ),
         bottomNavigationBar:
@@ -68,6 +69,14 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                   LogicalKeySet(
                           LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
                       const _CopyIntent(),
+                  LogicalKeySet(
+                      LogicalKeyboardKey.control,
+                      LogicalKeyboardKey.shift,
+                      LogicalKeyboardKey.keyF): const _SearchIntent(),
+                  LogicalKeySet(
+                      LogicalKeyboardKey.meta,
+                      LogicalKeyboardKey.shift,
+                      LogicalKeyboardKey.keyF): const _SearchIntent(),
                 },
                 child: Actions(
                   actions: {
@@ -79,6 +88,11 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                     _CopyIntent:
                         CallbackAction<_CopyIntent>(onInvoke: (intent) {
                       _onCopyClean();
+                      return null;
+                    }),
+                    _SearchIntent:
+                        CallbackAction<_SearchIntent>(onInvoke: (intent) {
+                      unawaited(_showEditorSearchDialog());
                       return null;
                     }),
                   },

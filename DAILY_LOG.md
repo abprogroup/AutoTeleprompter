@@ -818,3 +818,23 @@
   Resume/Restart re-entry choice and compact multi-result search navigation
   idea in `Missing features from Windows development to implement all
   platforms.md`. No Windows runtime code was touched in this iOS pass.
+
+## 2026-05-02 - iOS Presenter Search Toolbar And Control Fade
+
+- **Session Goal**: Apply the next iOS presenter QA feedback without changing
+  platform version: search needed reusable result navigation, the two-row
+  controls needed the mic visually centered again, and script text was hiding
+  transparent buttons.
+- **Search Result**: Presenter search now stores all visible-text matches for a
+  query and shows a compact toolbar with previous result, next result, search
+  new text, and close actions. Users no longer need to reopen the search dialog
+  repeatedly to walk through the same query results.
+- **Toolbar Result**: The search button remains available in the upper
+  presenter toolbar row. The lower row now places Settings at the left edge,
+  then font decrease, mic/play/stop, font increase, and Restart, restoring the
+  mic button to the center.
+- **Visibility Result**: The presenter controls now sit on a stronger dark
+  bottom fade, and the search-result toolbar has its own dark backing so script
+  text cannot visually cover the active buttons.
+- **Documentation Result**: Updated the iOS Teleprompter Engine MVP and
+  `MASTER_TODO_V4.md`. No Windows runtime code was touched.

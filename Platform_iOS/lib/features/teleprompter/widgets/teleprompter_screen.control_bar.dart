@@ -60,7 +60,12 @@ class _ControlBar extends ConsumerWidget {
         gradient: LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
-          colors: [Colors.black.withOpacity(0.95), Colors.transparent],
+          colors: [
+            Colors.black.withOpacity(0.98),
+            Colors.black.withOpacity(0.88),
+            Colors.black.withOpacity(0.36),
+          ],
+          stops: const [0.0, 0.62, 1.0],
         ),
       ),
       child: SafeArea(
@@ -108,6 +113,13 @@ class _ControlBar extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 IconButton(
+                  icon: const Icon(Icons.tune, color: Colors.white70),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    onSettings();
+                  },
+                ),
+                IconButton(
                   icon: const Text('A',
                       style: TextStyle(color: Colors.white70, fontSize: 16)),
                   onPressed: () {
@@ -145,13 +157,6 @@ class _ControlBar extends ConsumerWidget {
                   onPressed: () {
                     FocusManager.instance.primaryFocus?.unfocus();
                     applyPresenterFontSize(settings.fontSize + 4);
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.tune, color: Colors.white70),
-                  onPressed: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    onSettings();
                   },
                 ),
                 IconButton(

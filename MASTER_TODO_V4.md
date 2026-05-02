@@ -398,6 +398,13 @@
   skip` switch; changed present bookmark markers to floating UI so they do not
   consume text-flow space; and split the present control bar into two rows to
   prevent bookmark-button overflow. Awaiting IPA/device verification.
+- [P] **iOS Presenter Search Toolbar / Control Fade Follow-Up**: Added compact
+  present-mode search-result toolbar so one query can move previous/next across
+  matches without reopening search, kept the search-new-text and close actions
+  inside that toolbar, moved present settings to the left edge of the lower
+  toolbar so the mic button is centered again, and strengthened the bottom fade
+  behind the two-row controls so script text cannot hide buttons. Awaiting
+  IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

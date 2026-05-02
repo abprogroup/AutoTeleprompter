@@ -244,3 +244,33 @@ fragilities above and port these final Windows product contracts:
   currently rendered visible word window when explicitly enabled.
 - Default local recovery remains separate from visible skip and must stay
   active even when the visible skip switch is off.
+
+---
+
+## iOS Presenter Search Toolbar - 2026-05-02
+
+- `teleprompter_screen.search.dart` owns presenter search state, result
+  collection, and result navigation.
+- A presenter search must build all visible-text matches for the submitted
+  query, show a compact in-present toolbar, and let the user move previous/next
+  through that same result set without reopening the search dialog.
+- The toolbar must expose four small actions: previous result, next result,
+  search new text, and close toolbar.
+- Search-result jumps remain direct navigation through the same provider
+  position path used by bookmarks so the resume point and scroll target stay
+  synchronized.
+- Closing the toolbar clears only transient result navigation state; it must not
+  alter the last script position, bookmarks, STT session, or loaded script.
+
+---
+
+## iOS Presenter Bottom Controls Fade - 2026-05-02
+
+- `teleprompter_screen.build.dart` owns the control-overlay backing fade.
+- The two-row presenter controls and search toolbar must sit on a dark
+  bottom-to-top fade so script text cannot visually hide icon buttons.
+- `teleprompter_screen.control_bar.dart` keeps the mic/start control centered
+  in the lower row by placing settings at the left edge, then font decrease,
+  mic/play/stop, font increase, and restart.
+- The upper control row must continue to expose the search button alongside
+  back and bookmark controls.

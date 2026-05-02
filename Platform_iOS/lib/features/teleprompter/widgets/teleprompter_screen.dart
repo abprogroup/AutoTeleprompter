@@ -64,6 +64,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<ScriptBookmark> _bookmarks = const [];
   bool _searchDialogOpen = false;
   String _lastSearchQuery = '';
+  bool _presenterSearchToolbarVisible = false;
+  List<_PresenterSearchMatch> _presenterSearchMatches = const [];
+  int _presenterSearchMatchIndex = -1;
   bool _resumePromptShown = false;
 
   @override
@@ -105,6 +108,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   @override
   Widget build(BuildContext context) => _buildTeleprompterScreen(context);
+
+  void _updatePresenterSearchState(VoidCallback update) {
+    if (!mounted) return;
+    setState(update);
+  }
 
   // ── Smooth pixel-based manual scroll ───────────────────────────────────────
 

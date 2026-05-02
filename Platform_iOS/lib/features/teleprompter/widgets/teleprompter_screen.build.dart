@@ -515,97 +515,113 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     duration: const Duration(milliseconds: 400),
                     child: IgnorePointer(
                       ignoring: !_controlsVisible,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Speed slider — sits just above the control bar, always visible in manual mode
-                          if (settings.scrollMode == 'manual')
-                            Container(
-                              color: Colors.black.withOpacity(0.75),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 4),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.speed,
-                                      color: Colors.white54, size: 18),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Slider(
-                                      value: settings.scrollSpeed,
-                                      min: -300,
-                                      max: 300,
-                                      divisions: 120, // 5wpm steps
-                                      activeColor:
-                                          Color(settings.currentWordColor),
-                                      inactiveColor: Colors.white24,
-                                      onChanged: (v) {
-                                        ref
-                                            .read(settingsProvider.notifier)
-                                            .setScrollSpeed(v);
-                                        if (_manualScrolling && v != 0) {
-                                          // If already scrolling, update will happen in next tick of timer
-                                          // No need to restart timer if we handle speed dynamically
-                                        } else if (v != 0 &&
-                                            !_manualScrolling) {
-                                          _startManualScroll();
-                                        } else if (v == 0) {
-                                          _stopManualScroll();
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: 62,
-                                    child: Text(
-                                        '${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
-                                        style: const TextStyle(
-                                            color: Colors.white54,
-                                            fontSize: 11)),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          // Control bar
-                          _ControlBar(
-                            isListening: tState.isListening,
-                            isManualMode: settings.scrollMode == 'manual',
-                            isManualScrolling: _manualScrolling,
-                            isScrollingBackward: _scrollingBackward,
-                            accentColor: Color(settings.currentWordColor),
-                            onStart: settings.scrollMode == 'manual'
-                                ? _startManualScroll
-                                : _requestAndStart,
-                            onStartBackward: () =>
-                                _startManualScroll(backward: true),
-                            onStop: settings.scrollMode == 'manual'
-                                ? _stopManualScroll
-                                : () => ref
-                                    .read(teleprompterProvider.notifier)
-                                    .stopSession(),
-                            onReset: () {
-                              if (settings.scrollMode == 'manual') {
-                                _resetManual();
-                              } else {
-                                ref
-                                    .read(teleprompterProvider.notifier)
-                                    .resetPosition();
-                                _scrollController.animateTo(0,
-                                    duration: const Duration(milliseconds: 400),
-                                    curve: Curves.easeOutCubic);
-                              }
-                            },
-                            onBack: () => Navigator.of(context).pop(),
-                            onSettings: _showSettings,
-                            onAddBookmark: _addPresenterBookmark,
-                            onRemoveBookmark:
-                                _deletePresenterBookmarkAtCurrentPosition,
-                            onPreviousBookmark: () =>
-                                _jumpPresenterBookmark(-1),
-                            onNextBookmark: () => _jumpPresenterBookmark(1),
-                            onSearch: _showPresenterSearchDialog,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.92),
+                              Colors.black.withOpacity(0.58),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.55, 1.0],
                           ),
-                        ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildPresenterSearchToolbar(),
+                            // Speed slider — sits just above the control bar, always visible in manual mode
+                            if (settings.scrollMode == 'manual')
+                              Container(
+                                color: Colors.black.withOpacity(0.75),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 4),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.speed,
+                                        color: Colors.white54, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Slider(
+                                        value: settings.scrollSpeed,
+                                        min: -300,
+                                        max: 300,
+                                        divisions: 120, // 5wpm steps
+                                        activeColor:
+                                            Color(settings.currentWordColor),
+                                        inactiveColor: Colors.white24,
+                                        onChanged: (v) {
+                                          ref
+                                              .read(settingsProvider.notifier)
+                                              .setScrollSpeed(v);
+                                          if (_manualScrolling && v != 0) {
+                                            // If already scrolling, update will happen in next tick of timer
+                                            // No need to restart timer if we handle speed dynamically
+                                          } else if (v != 0 &&
+                                              !_manualScrolling) {
+                                            _startManualScroll();
+                                          } else if (v == 0) {
+                                            _stopManualScroll();
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 62,
+                                      child: Text(
+                                          '${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
+                                          style: const TextStyle(
+                                              color: Colors.white54,
+                                              fontSize: 11)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            // Control bar
+                            _ControlBar(
+                              isListening: tState.isListening,
+                              isManualMode: settings.scrollMode == 'manual',
+                              isManualScrolling: _manualScrolling,
+                              isScrollingBackward: _scrollingBackward,
+                              accentColor: Color(settings.currentWordColor),
+                              onStart: settings.scrollMode == 'manual'
+                                  ? _startManualScroll
+                                  : _requestAndStart,
+                              onStartBackward: () =>
+                                  _startManualScroll(backward: true),
+                              onStop: settings.scrollMode == 'manual'
+                                  ? _stopManualScroll
+                                  : () => ref
+                                      .read(teleprompterProvider.notifier)
+                                      .stopSession(),
+                              onReset: () {
+                                if (settings.scrollMode == 'manual') {
+                                  _resetManual();
+                                } else {
+                                  ref
+                                      .read(teleprompterProvider.notifier)
+                                      .resetPosition();
+                                  _scrollController.animateTo(0,
+                                      duration:
+                                          const Duration(milliseconds: 400),
+                                      curve: Curves.easeOutCubic);
+                                }
+                              },
+                              onBack: () => Navigator.of(context).pop(),
+                              onSettings: _showSettings,
+                              onAddBookmark: _addPresenterBookmark,
+                              onRemoveBookmark:
+                                  _deletePresenterBookmarkAtCurrentPosition,
+                              onPreviousBookmark: () =>
+                                  _jumpPresenterBookmark(-1),
+                              onNextBookmark: () => _jumpPresenterBookmark(1),
+                              onSearch: _showPresenterSearchDialog,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

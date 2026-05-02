@@ -14,6 +14,85 @@ extension _TeleprompterSearchParts on _TeleprompterScreenState {
     return true;
   }
 
+  Widget _buildPresenterSearchToolbar() {
+    if (!_presenterSearchToolbarVisible || _lastSearchQuery.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final hasMatches = _presenterSearchMatches.isNotEmpty;
+    final label = hasMatches
+        ? '${_presenterSearchMatchIndex + 1}/${_presenterSearchMatches.length}'
+        : '0/0';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.88),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0x66FFBF00), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.45),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              _SearchToolbarButton(
+                icon: Icons.keyboard_arrow_left,
+                tooltip: 'Previous result',
+                onPressed:
+                    hasMatches ? () => _jumpPresenterSearchResult(-1) : null,
+              ),
+              SizedBox(
+                width: 86,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              _SearchToolbarButton(
+                icon: Icons.keyboard_arrow_right,
+                tooltip: 'Next result',
+                onPressed:
+                    hasMatches ? () => _jumpPresenterSearchResult(1) : null,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  _lastSearchQuery,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 6),
+              _SearchToolbarButton(
+                icon: Icons.search,
+                tooltip: 'Search new text',
+                onPressed: _showPresenterSearchDialog,
+              ),
+              _SearchToolbarButton(
+                icon: Icons.close,
+                tooltip: 'Close search toolbar',
+                onPressed: _closePresenterSearchToolbar,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showPresenterSearchDialog() async {
     if (_searchDialogOpen) return;
     _searchDialogOpen = true;
@@ -61,28 +140,38 @@ extension _TeleprompterSearchParts on _TeleprompterScreenState {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
     _lastSearchQuery = trimmed;
-    _jumpToPresenterSearchMatch(trimmed);
+    _setPresenterSearchQuery(trimmed);
   }
 
-  void _jumpToPresenterSearchMatch(String query) {
+  void _setPresenterSearchQuery(String query) {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     final search = _buildPresenterSearchText(script);
     if (search.visibleText.isEmpty) return;
 
     final needle = query.toLowerCase();
-    final current = ref
-        .read(teleprompterProvider)
-        .confirmedWordIndex
-        .clamp(0, script.words.length - 1)
-        .toInt();
-    final startChar = search.charStartAfterWord(current);
-
-    var match = search.visibleText.indexOf(needle, startChar);
-    if (match < 0) {
-      match = search.visibleText.indexOf(needle);
+    final matches = <_PresenterSearchMatch>[];
+    var from = 0;
+    while (from < search.visibleText.length) {
+      final match = search.visibleText.indexOf(needle, from);
+      if (match < 0) break;
+      final wordIndex = search.wordIndexForChar(match);
+      if (wordIndex != null) {
+        matches.add(_PresenterSearchMatch(
+          wordIndex: wordIndex.clamp(0, script.words.length - 1).toInt(),
+          charStart: match,
+          charEnd: match + needle.length,
+        ));
+      }
+      from = match + needle.length;
     }
-    if (match < 0) {
+
+    if (matches.isEmpty) {
+      _updatePresenterSearchState(() {
+        _presenterSearchToolbarVisible = false;
+        _presenterSearchMatches = const [];
+        _presenterSearchMatchIndex = -1;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No match for "$query"'),
@@ -93,12 +182,54 @@ extension _TeleprompterSearchParts on _TeleprompterScreenState {
       return;
     }
 
-    final wordIndex = search.wordIndexForChar(match);
-    if (wordIndex == null) return;
+    final current = ref
+        .read(teleprompterProvider)
+        .confirmedWordIndex
+        .clamp(0, script.words.length - 1)
+        .toInt();
+    final nextIndex = matches.indexWhere((m) => m.wordIndex > current);
+    final initialIndex = nextIndex >= 0 ? nextIndex : 0;
+    _updatePresenterSearchState(() {
+      _presenterSearchToolbarVisible = true;
+      _presenterSearchMatches = matches;
+      _presenterSearchMatchIndex = initialIndex;
+    });
+    _jumpToPresenterSearchMatchAt(initialIndex);
+  }
+
+  void _jumpPresenterSearchResult(int delta) {
+    if (_presenterSearchMatches.isEmpty) return;
+    final count = _presenterSearchMatches.length;
+    final next = (_presenterSearchMatchIndex + delta) % count;
+    final normalized = next < 0 ? next + count : next;
+    _updatePresenterSearchState(() {
+      _presenterSearchMatchIndex = normalized;
+      _presenterSearchToolbarVisible = true;
+    });
+    _jumpToPresenterSearchMatchAt(normalized);
+  }
+
+  void _jumpToPresenterSearchMatchAt(int matchIndex) {
+    final script = ref.read(scriptProvider);
+    if (script == null ||
+        _presenterSearchMatches.isEmpty ||
+        matchIndex < 0 ||
+        matchIndex >= _presenterSearchMatches.length) {
+      return;
+    }
+    final wordIndex = _presenterSearchMatches[matchIndex].wordIndex;
     _jumpPresenterToWordIndex(
       wordIndex.clamp(0, script.words.length - 1).toInt(),
       script,
     );
+  }
+
+  void _closePresenterSearchToolbar() {
+    _updatePresenterSearchState(() {
+      _presenterSearchToolbarVisible = false;
+      _presenterSearchMatches = const [];
+      _presenterSearchMatchIndex = -1;
+    });
   }
 
   _PresenterSearchText _buildPresenterSearchText(Script script) {
@@ -123,6 +254,46 @@ extension _TeleprompterSearchParts on _TeleprompterScreenState {
     }
 
     return _PresenterSearchText(buffer.toString(), spans);
+  }
+}
+
+class _PresenterSearchMatch {
+  final int wordIndex;
+  final int charStart;
+  final int charEnd;
+
+  const _PresenterSearchMatch({
+    required this.wordIndex,
+    required this.charStart,
+    required this.charEnd,
+  });
+}
+
+class _SearchToolbarButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  const _SearchToolbarButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      visualDensity: VisualDensity.compact,
+      iconSize: 20,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      padding: EdgeInsets.zero,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(
+        icon,
+        color: onPressed == null ? Colors.white24 : Colors.white70,
+      ),
+    );
   }
 }
 

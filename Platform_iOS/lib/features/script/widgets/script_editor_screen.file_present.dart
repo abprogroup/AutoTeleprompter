@@ -144,7 +144,12 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     } catch (_) {}
     if (mounted) {
       Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
+          .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()))
+          .then((_) {
+        if (mounted) {
+          unawaited(_loadBookmarksForCurrentScript(force: true));
+        }
+      });
     }
   }
 

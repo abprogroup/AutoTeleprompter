@@ -49,7 +49,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   // Delta-drag state: track finger start (global) and the handle's caret start
   // position (also global, converted at pan-start while layout is valid).
   Offset? _panStartGlobal;
-  Offset? _panStartHandleGlobal; // caret global position at the moment of pan start
+  Offset?
+      _panStartHandleGlobal; // caret global position at the moment of pan start
   final GlobalKey _stackKey = GlobalKey();
 
   /// True when every block is wholly selected (post Select All, pre refine).
@@ -99,7 +100,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     widget.onSelectionChanged();
   }
 
-  bool get hasSelection => _isSelecting && _startBlock != null && _endBlock != null;
+  bool get hasSelection =>
+      _isSelecting && _startBlock != null && _endBlock != null;
 
   /// Recalculates handle positions after an external layout change (e.g. alignment
   /// applied to selected text). Must be called after the next frame so the
@@ -120,13 +122,17 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (_startBlock == null || _endBlock == null) return;
     if (_startBlock! < controllers.length) {
       final c = controllers[_startBlock!];
-      if (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) {
+      if (c.externalSelection != null &&
+          c.externalSelection!.isValid &&
+          !c.externalSelection!.isCollapsed) {
         _startOffset = c.externalSelection!.start;
       }
     }
     if (_endBlock! < controllers.length) {
       final c = controllers[_endBlock!];
-      if (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) {
+      if (c.externalSelection != null &&
+          c.externalSelection!.isValid &&
+          !c.externalSelection!.isCollapsed) {
         _endOffset = c.externalSelection!.end;
       }
     }
@@ -137,14 +143,21 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   void _updateBlockHighlights() {
-    if (_startBlock == null || _endBlock == null || _startOffset == null || _endOffset == null) return;
+    if (_startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) return;
 
     // Ensure start is before end
     int sB = _startBlock!, eB = _endBlock!;
     int sO = _startOffset!, eO = _endOffset!;
     if (sB > eB || (sB == eB && sO > eO)) {
-      final tB = sB; sB = eB; eB = tB;
-      final tO = sO; sO = eO; eO = tO;
+      final tB = sB;
+      sB = eB;
+      eB = tB;
+      final tO = sO;
+      sO = eO;
+      eO = tO;
     }
 
     for (int i = 0; i < widget.controllers.length; i++) {
@@ -158,19 +171,24 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       } else if (i == sB && i == eB) {
         c.externalSelection = TextSelection(baseOffset: sO, extentOffset: eO);
       } else if (i == sB) {
-        c.externalSelection = TextSelection(baseOffset: sO, extentOffset: c.text.length);
+        c.externalSelection =
+            TextSelection(baseOffset: sO, extentOffset: c.text.length);
       } else if (i == eB) {
         c.externalSelection = TextSelection(baseOffset: 0, extentOffset: eO);
       } else {
-        c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+        c.externalSelection =
+            TextSelection(baseOffset: 0, extentOffset: c.text.length);
       }
     }
     _calculateHandlePositions();
   }
 
   void _calculateHandlePositions() {
-    if (_startBlock == null || _endBlock == null || _startOffset == null || _endOffset == null) return;
-    
+    if (_startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) return;
+
     _handleStartPos = _getOffsetForPosition(_startBlock!, _startOffset!);
     _handleEndPos = _getOffsetForPosition(_endBlock!, _endOffset!);
   }
@@ -228,51 +246,55 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     _enterRefineMode();
 
     for (int i = 0; i < widget.blockKeys.length; i++) {
-        final renderObj = widget.blockKeys[i].currentContext?.findRenderObject();
-        if (renderObj == null) continue;
-        final box = renderObj as RenderBox;
+      final renderObj = widget.blockKeys[i].currentContext?.findRenderObject();
+      if (renderObj == null) continue;
+      final box = renderObj as RenderBox;
 
-        final boxLocal = box.globalToLocal(globalPos);
-        // Allow a bit of vertical margin for easier dragging
-        if (boxLocal.dy >= -20 && boxLocal.dy <= box.size.height + 20) {
-            // Use the actual RenderEditable for accurate hit-testing
-            final editable = _findRenderEditable(renderObj);
-            TextPosition pos;
-            if (editable != null) {
-              // v4.1.1: Pass globalPos directly — getPositionForPoint expects a
-              // GLOBAL coordinate and converts internally with globalToLocal().
-              // The previous code converted to local first, causing a second
-              // globalToLocal() call inside getPositionForPoint that shifted y
-              // by the widget's screen offset, always returning a line-1 result.
-              pos = editable.getPositionForPoint(globalPos);
-            } else {
-              // Fallback: beginning or end of block
-              pos = TextPosition(offset: boxLocal.dx < box.size.width / 2 ? 0 : widget.controllers[i].text.length);
-            }
-            setState(() {
-              _isSelecting = true;
-              if (isStart) {
-                if (_startBlock != i) HapticFeedback.selectionClick();
-                _startBlock = i;
-                _startOffset = pos.offset;
-              } else {
-                if (_endBlock != i) HapticFeedback.selectionClick();
-                _endBlock = i;
-                _endOffset = pos.offset;
-              }
-              _updateBlockHighlights();
-              for (final c in widget.controllers) {
-                c.refresh();
-              }
-            });
-            // Recalculate handle positions after the frame so caret coords
-            // reflect the new selection highlight layout.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              setState(() => _calculateHandlePositions());
-            });
-            return;
+      final boxLocal = box.globalToLocal(globalPos);
+      // Allow a bit of vertical margin for easier dragging
+      if (boxLocal.dy >= -20 && boxLocal.dy <= box.size.height + 20) {
+        // Use the actual RenderEditable for accurate hit-testing
+        final editable = _findRenderEditable(renderObj);
+        TextPosition pos;
+        if (editable != null) {
+          // v4.1.1: Pass globalPos directly — getPositionForPoint expects a
+          // GLOBAL coordinate and converts internally with globalToLocal().
+          // The previous code converted to local first, causing a second
+          // globalToLocal() call inside getPositionForPoint that shifted y
+          // by the widget's screen offset, always returning a line-1 result.
+          pos = editable.getPositionForPoint(globalPos);
+        } else {
+          // Fallback: beginning or end of block
+          pos = TextPosition(
+              offset: boxLocal.dx < box.size.width / 2
+                  ? 0
+                  : widget.controllers[i].text.length);
         }
+        setState(() {
+          _isSelecting = true;
+          if (isStart) {
+            if (_startBlock != i) HapticFeedback.selectionClick();
+            _startBlock = i;
+            _startOffset = pos.offset;
+          } else {
+            if (_endBlock != i) HapticFeedback.selectionClick();
+            _endBlock = i;
+            _endOffset = pos.offset;
+          }
+          _updateBlockHighlights();
+          for (final c in widget.controllers) {
+            c.refresh();
+          }
+        });
+        // Recalculate handle positions after the frame so caret coords
+        // reflect the new selection highlight layout.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() => _calculateHandlePositions());
+        });
+        widget.onSelectionChanged();
+        return;
+      }
     }
   }
 
@@ -283,9 +305,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         _stackSize = Size(constraints.maxWidth, constraints.maxHeight);
         // Fall back to viewport edges so handles are always reachable,
         // even if the first/last block isn't currently rendered.
-        final start = hasSelection
-            ? (_handleStartPos ?? const Offset(12, 12))
-            : null;
+        final start =
+            hasSelection ? (_handleStartPos ?? const Offset(12, 12)) : null;
         final end = hasSelection
             ? (_handleEndPos ?? Offset(12, constraints.maxHeight - 48))
             : null;
@@ -303,8 +324,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   Widget _buildHandle(Offset pos, bool isStart) {
     return Positioned(
-      left: (pos.dx - 16).clamp(0.0, _stackSize.width > 40 ? _stackSize.width - 40 : 0.0),
-      top: (pos.dy - 18).clamp(0.0, _stackSize.height > 56 ? _stackSize.height - 56 : 0.0),
+      left: (pos.dx - 16)
+          .clamp(0.0, _stackSize.width > 40 ? _stackSize.width - 40 : 0.0),
+      top: (pos.dy - 18)
+          .clamp(0.0, _stackSize.height > 56 ? _stackSize.height - 56 : 0.0),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanStart: (details) {
@@ -316,13 +339,17 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           // _handleUpdate.  This eliminates the line-1 snap that occurred when
           // the user's finger landed at the top of the 56-px hit area (18 px
           // above the caret) and the raw touch y was mapped to line 1 instead.
-          final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+          final stackBox =
+              _stackKey.currentContext?.findRenderObject() as RenderBox?;
           final logicalStackLocal = isStart ? _handleStartPos : _handleEndPos;
           final caretGlobal = (stackBox != null && logicalStackLocal != null)
               ? stackBox.localToGlobal(logicalStackLocal)
               : null;
           setState(() {
-            if (isStart) _draggingStart = true; else _draggingEnd = true;
+            if (isStart)
+              _draggingStart = true;
+            else
+              _draggingEnd = true;
             _panStartGlobal = details.globalPosition;
             _panStartHandleGlobal = caretGlobal;
           });
@@ -338,7 +365,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           }
         },
         onPanEnd: (_) => setState(() {
-          if (isStart) _draggingStart = false; else _draggingEnd = false;
+          if (isStart)
+            _draggingStart = false;
+          else
+            _draggingEnd = false;
           _panStartGlobal = null;
           _panStartHandleGlobal = null;
         }),
@@ -354,7 +384,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
                 color: const Color(0xFFFFBF00),
                 borderRadius: BorderRadius.circular(3),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 4, offset: const Offset(0, 2)),
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2)),
                 ],
               ),
             ),

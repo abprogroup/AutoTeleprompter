@@ -121,9 +121,17 @@ shell/delegate files.
 - Present-mode bookmark markers are floating UI anchored to the bookmarked
   word. They must not consume text-flow space or push script words around
   inside the row.
+- Presenter markers use the paragraph direction, not the individual token
+  direction, to choose their side: English/LTR paragraph anchors render outside
+  the left edge of the word, Hebrew/RTL paragraph anchors render outside the
+  right edge.
 - Previous/next presenter bookmark navigation routes through
   `TeleprompterNotifier.jumpToPosition(...)`, so active-STT bookmark jumps are
   structurally supported and must be verified on device.
+- Presenter-created bookmarks must store editor `blockIndex` and raw `offset`
+  as well as `wordIndex`. Returning from present mode must force-reload editor
+  bookmarks so presenter-created anchors appear in the editor without requiring
+  a full app/session reload.
 - All implementation files remain below the 800-line split gate.
 
 ---

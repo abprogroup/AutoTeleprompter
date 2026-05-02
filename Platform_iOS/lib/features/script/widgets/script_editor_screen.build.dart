@@ -224,31 +224,39 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                             onSelectionChanged: () => setState(() {
                               _isGlobalSelection = _controllers.isNotEmpty &&
                                   _controllers.every((c) => c.isGlobalSelected);
+                              _syncSelectionSnapshotFromOverlay(
+                                  'overlay-selection');
                             }),
-                            child: ListView.builder(
-                              padding:
-                                  const EdgeInsets.fromLTRB(24, 24, 24, 250),
-                              itemCount: _controllers.length,
-                              itemBuilder: (context, index) => _EditorBlock(
-                                key: _blockKeys[index],
-                                controller: _controllers[index],
-                                focusNode: _focusNodes[index],
-                                settings: settings,
-                                isGlobalSelected: _isGlobalSelection,
-                                onSubmitted: () => _addBlock(index + 1),
-                                onTap: () {
-                                  _dismissEditorSelectionForUserNavigation(
-                                      'block-tap');
-                                },
-                                onSelectAll: _selectAllBlocks,
-                                onCopy: _onCopyClean,
-                                onCut: _onCutClean,
-                                onPaste: _hasPasteableBlockClipboard
-                                    ? _pasteFromGlobalClipboard
-                                    : null,
-                                hasBookmark: _hasBookmarkInEditorBlock(index),
-                                onBookmarkTap: () => unawaited(
-                                  _deleteEditorBookmarksForBlock(index),
+                            child: NotificationListener<ScrollNotification>(
+                              onNotification: (_) {
+                                _overlayKey.currentState?.refreshPositions();
+                                return false;
+                              },
+                              child: ListView.builder(
+                                padding:
+                                    const EdgeInsets.fromLTRB(24, 24, 24, 250),
+                                itemCount: _controllers.length,
+                                itemBuilder: (context, index) => _EditorBlock(
+                                  key: _blockKeys[index],
+                                  controller: _controllers[index],
+                                  focusNode: _focusNodes[index],
+                                  settings: settings,
+                                  isGlobalSelected: _isGlobalSelection,
+                                  onSubmitted: () => _addBlock(index + 1),
+                                  onTap: () {
+                                    _dismissEditorSelectionForUserNavigation(
+                                        'block-tap');
+                                  },
+                                  onSelectAll: _selectAllBlocks,
+                                  onCopy: _onCopyClean,
+                                  onCut: _onCutClean,
+                                  onPaste: _hasPasteableBlockClipboard
+                                      ? _pasteFromGlobalClipboard
+                                      : null,
+                                  hasBookmark: _hasBookmarkInEditorBlock(index),
+                                  onBookmarkTap: () => unawaited(
+                                    _deleteEditorBookmarksForBlock(index),
+                                  ),
                                 ),
                               ),
                             ),

@@ -855,3 +855,23 @@
   works after a real Cut/Copy.
 - **Documentation Result**: Updated the iOS Selection MVP and
   `MASTER_TODO_V4.md`. Awaiting IPA/device verification.
+
+## 2026-05-02 - iOS Selection Handles And Bookmark Coordinate Follow-Up
+
+- **Session Goal**: Fix QA findings that drag-handle selections did not update
+  the effective clipboard, handle overlays drifted after editor scrolling, and
+  cross-mode bookmarks were not staying attached to the intended side/position.
+- **Selection Result**: Global selection handle drags now notify the editor
+  parent after every range update. The editor snapshots the current
+  overlay-selected raw markup slices so Copy/Cut/Paste and debug shape reflect
+  the visible handle selection rather than a stale Select All snapshot.
+- **Handle Position Result**: The editor ListView now refreshes
+  `GlobalSelectionOverlay` handle positions on scroll, keeping the overlay
+  handles aligned with their rendered text range.
+- **Bookmark Result**: Present-mode bookmark markers choose their outside edge
+  from paragraph direction: English/LTR markers render left of the anchor word,
+  Hebrew/RTL markers render right. Presenter-created bookmarks now store editor
+  block/offset coordinates, and returning from present mode force-reloads
+  editor bookmarks so presenter-created anchors appear in editor mode.
+- **Documentation Result**: Updated iOS Selection and Bookmarks MVP docs plus
+  `MASTER_TODO_V4.md`. Awaiting IPA/device verification.

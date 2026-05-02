@@ -109,6 +109,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 children: para.map<Widget>((wordObj) {
                   final ScriptWord word = wordObj as ScriptWord;
                   final i = word.index;
+                  final markerOnRight = firstWord.effectiveRtl;
                   final isManual = settings.scrollMode == 'manual';
                   final isCurrent = !isManual && i == tState.confirmedWordIndex;
                   final isPast = !isManual && i < tState.confirmedWordIndex;
@@ -206,9 +207,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     children: [
                       wordWidget,
                       Positioned(
-                        left: word.effectiveRtl ? null : -18,
-                        right: word.effectiveRtl ? -18 : null,
-                        top: -8,
+                        left: markerOnRight ? null : -30,
+                        right: markerOnRight ? -30 : null,
+                        top: -10,
                         child: Tooltip(
                           message: 'Delete bookmark',
                           child: GestureDetector(

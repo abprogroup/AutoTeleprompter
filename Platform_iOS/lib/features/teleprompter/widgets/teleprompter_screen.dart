@@ -8,6 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/teleprompter_provider.dart';
+import '../services/word_aligner.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';

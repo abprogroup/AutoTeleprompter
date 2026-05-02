@@ -98,6 +98,35 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
           _globalSelectionSnapshot != null &&
           _globalSelectionSnapshot!.isNotEmpty);
 
+  List<String>? _overlaySelectedMarkupBlocks() {
+    if (!(_overlayKey.currentState?.hasSelection ?? false)) return null;
+    final blocks = <String>[];
+    for (final c in _controllers) {
+      String slice = '';
+      if (c.isGlobalSelected) {
+        slice = c.text;
+      } else {
+        final sel = c.externalSelection;
+        if (sel != null && sel.isValid && !sel.isCollapsed) {
+          final start = sel.start.clamp(0, c.text.length);
+          final end = sel.end.clamp(0, c.text.length);
+          if (start < end) slice = c.text.substring(start, end);
+        }
+      }
+      if (slice.isNotEmpty) blocks.add(slice);
+    }
+    return blocks.isEmpty ? null : blocks;
+  }
+
+  void _syncSelectionSnapshotFromOverlay(String reason) {
+    final blocks = _overlaySelectedMarkupBlocks();
+    if (blocks == null || blocks.isEmpty) return;
+    _globalSelectionSnapshot = List<String>.of(blocks);
+    _globalSelectionSnapshotAt = DateTime.now();
+    _selectionClipboardDebug =
+        '$reason: selected ${blocks.length} blocks [${_blockDebugShape(blocks)}]';
+  }
+
   bool get _hasAnyActiveEditorSelection {
     if (_isGlobalSelection ||
         (_overlayKey.currentState?.hasSelection ?? false)) {
@@ -238,6 +267,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     _onCopyClean();
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (hasOverlay) {
+      final overlayBlocks = _overlaySelectedMarkupBlocks();
+      if (overlayBlocks != null && overlayBlocks.isNotEmpty) {
+        _storeBlockClipboard(overlayBlocks, 'cut-overlay');
+        _writePlainClipboardForBlocks(_blockClipboard ?? overlayBlocks);
+      }
       _isCommandExecuting = true;
       for (final c in _controllers) {
         final sel = c.externalSelection;
@@ -286,19 +320,14 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (hasOverlay) {
+      final overlayBlocks = _overlaySelectedMarkupBlocks();
+      if (overlayBlocks != null && overlayBlocks.isNotEmpty) {
+        _storeBlockClipboard(overlayBlocks, 'copy-overlay');
+      }
       final plainBuf = StringBuffer();
       final htmlBuf = StringBuffer();
-      for (int i = 0; i < _controllers.length; i++) {
-        final c = _controllers[i];
-        final sel = c.externalSelection;
-        String slice;
-        if (c.isGlobalSelected || sel == null || !sel.isValid) {
-          slice = c.text;
-        } else if (sel.isCollapsed) {
-          continue;
-        } else {
-          slice = c.text.substring(sel.start, sel.end);
-        }
+      final copiedBlocks = overlayBlocks;
+      for (final slice in copiedBlocks ?? const <String>[]) {
         if (slice.isEmpty) continue;
         if (plainBuf.isNotEmpty) plainBuf.write('\n');
         plainBuf.write(StylingService.stripTags(slice));

@@ -46,6 +46,34 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
     return label.length <= 44 ? label : '${label.substring(0, 44)}...';
   }
 
+  ({int block, int offset}) _editorPositionForPresenterWord(
+    Script script,
+    int wordIndex,
+  ) {
+    final rawText = script.rawText;
+    if (rawText.isEmpty || wordIndex <= 0) {
+      return (block: 0, offset: 0);
+    }
+    final target = wordIndex.clamp(0, script.words.length - 1).toInt();
+    var bestRawOffset = 0;
+    for (var rawOffset = 0; rawOffset <= rawText.length; rawOffset++) {
+      final prefixCount =
+          WordAligner.tokenize(rawText.substring(0, rawOffset)).length;
+      if (prefixCount >= target) {
+        bestRawOffset = rawOffset;
+        break;
+      }
+      bestRawOffset = rawOffset;
+    }
+
+    final before = rawText.substring(0, bestRawOffset);
+    final block = '\n'.allMatches(before).length;
+    final lastBreak = before.lastIndexOf('\n');
+    final offset =
+        lastBreak < 0 ? bestRawOffset : bestRawOffset - lastBreak - 1;
+    return (block: block, offset: offset);
+  }
+
   Future<void> _addPresenterBookmark() async {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
@@ -55,12 +83,13 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
         .confirmedWordIndex
         .clamp(0, script.words.length - 1)
         .toInt();
+    final editorPosition = _editorPositionForPresenterWord(script, index);
     final bookmark = ScriptBookmark(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       label: _bookmarkLabelForWord(script, index),
       wordIndex: index,
-      blockIndex: -1,
-      offset: 0,
+      blockIndex: editorPosition.block,
+      offset: editorPosition.offset,
       createdAt: DateTime.now(),
     );
     setState(() {

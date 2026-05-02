@@ -114,6 +114,17 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     recent Select All snapshot from poisoning later Cut/Copy after the user has
     visibly moved away and started a new selection.
 
+15. **Handle drags publish the live selected range**: Dragging global selection
+    handles must call the parent selection-change path after every range
+    update. The parent must snapshot the current overlay-selected raw markup
+    slices so debug clipboard shape, Copy, Cut, and Paste all operate on the
+    visible handle range rather than a stale Select All snapshot.
+
+16. **Scroll keeps handles in sync**: Editor scroll notifications must refresh
+    `GlobalSelectionOverlay` handle positions. Selection handles are screen
+    overlays; their coordinates must be recalculated after the underlying
+    `ListView` scrolls.
+
 ---
 
 ## Forbidden Changes
@@ -145,6 +156,10 @@ Additional clipboard prohibitions:
   selection. It is a short-lived native-menu recovery bridge only; once the
   user taps away to navigate/edit elsewhere, it must be discarded without
   discarding `_blockClipboard`.
+- Do not let partial overlay Cut fall through to the full-script delete path.
+  Handle-drag selections may span part of one or more blocks; Cut must remove
+  only each selected external range while storing those selected raw slices in
+  the app-private clipboard.
 
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.

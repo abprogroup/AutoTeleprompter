@@ -411,6 +411,14 @@
   clears global/overlay/native selection plus the temporary Select All recovery
   snapshot while preserving the real `_blockClipboard` for Paste recovery.
   Awaiting IPA/device verification.
+- [P] **iOS Selection Handles / Bookmark Coordinate Follow-Up**: After QA found
+  that drag-handle selections did not update the effective clipboard and that
+  handles drifted during editor scrolling, selection handle drags now publish
+  the live overlay-selected raw slices and editor scroll refreshes overlay
+  handle positions. Presenter bookmark anchors now use paragraph direction for
+  marker side, presenter-created bookmarks save editor block/offset coordinates,
+  and returning from present mode force-reloads editor bookmarks. Awaiting
+  IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

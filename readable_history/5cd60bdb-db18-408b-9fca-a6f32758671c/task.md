@@ -1,0 +1,5 @@
+- [x] Set Git global identity (name/email)
+- [x] Connect local repository to GitHub remote
+- [x] Create/Fix GitHub Actions workflow for iOS build
+- [x] Update README with build instructions
+- [/] Push changes and monitor initial build (Re-pushing now)

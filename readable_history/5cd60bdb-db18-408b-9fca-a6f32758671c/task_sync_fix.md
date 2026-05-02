@@ -1,0 +1,5 @@
+- [x] Remove `AutoTeleprompter/` from `.gitignore`
+- [x] Re-commit `pubspec.yaml` dependency fix
+- [x] Fix `wakelock_plus` plugin bug and add `flutter clean`
+- [x] Push final fixes and monitor build (In Progress)
+- [ ] Verify download via automation script

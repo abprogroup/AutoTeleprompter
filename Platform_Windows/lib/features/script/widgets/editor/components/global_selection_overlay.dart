@@ -108,7 +108,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     // laid out with their selection highlights before we read caret coords.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _calculateHandlePositions());
+      refreshPositions();
     });
     widget.onSelectionChanged();
   }
@@ -155,22 +155,13 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       _bodyDragActive = true;
       _enterRefineMode();
 
-      // v4.1.13: Lock the anchor point exactly once when global selection activates
+      // v4.1.13: Lock the anchor point exactly once using the native selection's baseOffset.
+      // This ensures 100% parity with the moment the drag started, preventing "jumps".
       if (_candidateBlock != null) {
-        final key = widget.blockKeys[_candidateBlock!];
-        final context = key.currentContext;
-        if (context != null) {
-          final renderObj = context.findRenderObject();
-          if (renderObj != null) {
-            final editable = _findRenderEditable(renderObj);
-            if (editable != null) {
-              final blockGlobalPos = editable.localToGlobal(Offset.zero);
-              final pos =
-                  editable.getPositionForPoint(_candidatePos! - blockGlobalPos);
-              _anchorBlock = _candidateBlock;
-              _anchorOffset = pos.offset;
-            }
-          }
+        final controller = widget.controllers[_candidateBlock!];
+        if (controller.selection.isValid) {
+          _anchorBlock = _candidateBlock;
+          _anchorOffset = controller.selection.baseOffset;
         }
       }
 
@@ -249,6 +240,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
               }
               _updateControllers();
             });
+            // v4.1.13: Explicitly refresh handle positions after the frame
+            // so they follow the drag in real-time.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) refreshPositions();
+            });
             widget.onSelectionChanged();
           }
         }
@@ -298,11 +294,42 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   /// applied to selected text). Must be called after the next frame so the
   /// RenderEditable has been laid out with the new textAlign/textDirection.
   void refreshPositions() {
-    if (!hasSelection) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _calculateHandlePositions());
+    if (!hasSelection) {
+      setState(() {
+        _handleStartPos = null;
+        _handleEndPos = null;
+      });
+      return;
+    }
+
+    final startPos = _getPositionInStack(_startBlock!, _startOffset!);
+    final endPos = _getPositionInStack(_endBlock!, _endOffset!);
+
+    setState(() {
+      _handleStartPos = startPos;
+      _handleEndPos = endPos;
     });
+  }
+
+  Offset? _getPositionInStack(int blockIdx, int offset) {
+    if (blockIdx < 0 || blockIdx >= widget.blockKeys.length) return null;
+    final key = widget.blockKeys[blockIdx];
+    final renderObj = key.currentContext?.findRenderObject();
+    if (renderObj == null) return null;
+
+    final editable = _findRenderEditable(renderObj);
+    final ourStack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (ourStack == null) return null;
+
+    if (editable != null) {
+      final caretOffset = editable.getLocalRectForCaret(
+        TextPosition(offset: offset, affinity: TextAffinity.downstream),
+      );
+      return editable.localToGlobal(caretOffset.topLeft, ancestor: ourStack);
+    }
+
+    final box = renderObj as RenderBox;
+    return box.localToGlobal(Offset.zero, ancestor: ourStack);
   }
 
   /// v4.0.8: Called after a style command mutates text so that _startOffset /
@@ -325,7 +352,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _calculateHandlePositions());
+      refreshPositions();
     });
   }
 

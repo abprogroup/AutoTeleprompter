@@ -1,0 +1,26 @@
+- [x] **Phase 1: Component Extraction**
+    - [x] Create `EditorPrimitives` library
+    - [x] Extract `TextSuiteMVP`
+    - [x] Extract `LayoutSuiteMVP`
+    - [x] Extract `ColorSuiteMVP`
+    - [x] Extract `HistorySuiteMVP`
+    - [x] Extract `ProjectActionsSuite`
+- [x] **Phase 2: UI Restoration**
+    - [x] Restore curs START PRESENTATION (PRESENT) button
+    - [x] Implement cancellation fallbacks urs fluid loading
+- [x] **Phase 3: Logic Re-Alignment**
+    - [x] Decouple `onVideo` into `onRecord` and `onPresent` in `ProjectActionsSuite`
+    - [x] Update `ScriptEditorScreen` to handle separate recording and presenting routes
+- [x] **Phase 4: UI Restructuring**
+    - [x] Remove Record/Present triggers from `ProjectActionsSuite` top row
+    - [x] Implement `_buildBottomActions` with 1% / 48.5% percentage-based Row
+- [x] **Phase 5: Regression Repair**
+    - [x] Restore space preservation in `TeleprompterScreen` & `ContentCreatorScreen`
+    - [x] Calibrate tag opacity to `0.05` in `MarkupController`
+    - [x] Fix `_selectAllBlocks()` global synchronization in `ScriptEditorScreen`
+    - [x] Adjust line spacing proportionality in presentation modes
+- [x] **Phase 6: Verification**
+    - [x] Execute production build (`apk --debug`)
+    - [x] Verify space preservation on emulator
+    - [x] Verify tag hiding in Editor and Prompter
+    - [x] Verify global Select All (Control+A) across multiple paragraphs

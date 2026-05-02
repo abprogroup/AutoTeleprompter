@@ -319,8 +319,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final blockKey = GlobalKey(); // v3.9.5.66
       
       final node = FocusNode(onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
-        
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
           final currentText = controller.text;
           final sel = controller.selection;
@@ -1525,61 +1524,25 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         ),
       ),
       bottomNavigationBar: _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: Shortcuts(
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+        children: [
+          Shortcuts(
         shortcuts: {
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
-              const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
-              const _SelectAllIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
-              const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
-              const _CopyIntent(),
-          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyX):
-              const _CutIntent(),
-          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
-              const _CutIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const _CopyIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): const _CopyIntent(),
         },
         child: Actions(
           actions: {
-            _SelectAllIntent:
-                CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-              _selectAllBlocks();
-              return null;
+            _SelectAllIntent: CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
+              _selectAllBlocks(); return null;
             }),
             _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
-              _onCopyClean();
-              return null;
-            }),
-            _CutIntent: CallbackAction<_CutIntent>(onInvoke: (intent) {
-              _onCopyClean();
-              _clearGlobalSelectionContent();
-              return null;
-            }),
-            // Bridge native platform intents
-            CopySelectionTextIntent:
-                CallbackAction<CopySelectionTextIntent>(onInvoke: (_) {
-              _onCopyClean();
-              return null;
-            }),
-            CutSelectionTextIntent:
-                CallbackAction<CutSelectionTextIntent>(onInvoke: (_) {
-              _onCopyClean();
-              _clearGlobalSelectionContent();
-              return null;
-            }),
-            PasteSelectionTextIntent:
-                CallbackAction<PasteSelectionTextIntent>(onInvoke: (_) {
-              if (_isGlobalSelection ||
-                  (_overlayKey.currentState?.hasSelection ?? false)) {
-                _clearGlobalSelectionContent();
-              }
-              return null;
-            }),
-            SelectAllTextIntent:
-                CallbackAction<SelectAllTextIntent>(onInvoke: (_) {
-              _selectAllBlocks();
-              return null;
+              _onCopyClean(); return null;
             }),
           },
           child: Column(
@@ -1662,25 +1625,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               Expanded(
                 child: Container(
                   color: Color(settings.scriptBgColor),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GestureDetector(
-                          onTap: () {
-                            FocusScope.of(context).unfocus();
-                            _clearGlobalSelection();
-                          },
-                          behavior: HitTestBehavior.translucent,
-                        ),
-                      ),
-                      GlobalSelectionOverlay(
-                        key: _overlayKey,
-                        controllers: _controllers,
-                        blockKeys: _blockKeys,
-                        onSelectionChanged: () => setState(() {
-                          _isGlobalSelection = _controllers.isNotEmpty &&
-                              _controllers.every((c) => c.isGlobalSelected);
-                        }),
+                  child: GlobalSelectionOverlay(
+                    key: _overlayKey,
+                    controllers: _controllers,
+                    blockKeys: _blockKeys,
+                    onSelectionChanged: () => setState(() {
+                      _isGlobalSelection = _controllers.isNotEmpty &&
+                          _controllers.every((c) => c.isGlobalSelected);
+                    }),
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
                       itemCount: _controllers.length,
@@ -1694,10 +1646,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onTap: () {
                           if (_isGlobalSelection ||
                               _controllers.any((c) => c.isGlobalSelected) ||
-                              (_overlayKey.currentState?.hasSelection ??
-                                  false) ||
-                              _controllers.any(
-                                  (c) => c.externalSelection != null)) {
+                              (_overlayKey.currentState?.hasSelection ?? false) ||
+                              _controllers.any((c) => c.externalSelection != null)) {
                             _clearGlobalSelection();
                           }
                         },
@@ -1706,8 +1656,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onCut: _onCutClean,
                       ),
                     ),
-                  ),
-                    ],
                   ),
                 ),
               ),
@@ -1809,35 +1757,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       rebuild: () => setState(() {}),
     );
     _isGlobalSelection = true;
-  }
-
-  /// v4.1.7: Deletes the currently selected content across all targeted blocks.
-  /// Used for Cut (Ctrl+X) and Paste-over-selection operations.
-  void _clearGlobalSelectionContent() {
-    setState(() => _isCommandExecuting = true);
-    if (_isGlobalSelection) {
-      _loadText(''); // Clear all
-    } else {
-      final targets = _styleTargets();
-      for (final c in targets) {
-        final sel = (c.externalSelection != null &&
-                c.externalSelection!.isValid &&
-                !c.externalSelection!.isCollapsed)
-            ? c.externalSelection!
-            : c.selection;
-        if (!sel.isCollapsed) {
-          final before = c.text.substring(0, sel.start);
-          final after = c.text.substring(sel.end);
-          c.value = TextEditingValue(
-            text: before + after,
-            selection: TextSelection.collapsed(offset: sel.start),
-          );
-        }
-      }
-    }
-    _clearGlobalSelection();
-    _saveHistory(description: 'Delete Selection');
-    setState(() => _isCommandExecuting = false);
   }
 
   void _deleteGlobalSelection() {

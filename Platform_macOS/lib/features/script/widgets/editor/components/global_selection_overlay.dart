@@ -108,7 +108,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     // laid out with their selection highlights before we read caret coords.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _calculateHandlePositions());
+      refreshPositions();
     });
     widget.onSelectionChanged();
   }
@@ -155,22 +155,13 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       _bodyDragActive = true;
       _enterRefineMode();
 
-      // v4.1.13: Lock the anchor point exactly once when global selection activates
+      // v4.1.13: Lock the anchor point exactly once using the native selection's baseOffset.
+      // This ensures 100% parity with the moment the drag started, preventing "jumps".
       if (_candidateBlock != null) {
-        final key = widget.blockKeys[_candidateBlock!];
-        final context = key.currentContext;
-        if (context != null) {
-          final renderObj = context.findRenderObject();
-          if (renderObj != null) {
-            final editable = _findRenderEditable(renderObj);
-            if (editable != null) {
-              final blockGlobalPos = editable.localToGlobal(Offset.zero);
-              final pos =
-                  editable.getPositionForPoint(_candidatePos!);
-              _anchorBlock = _candidateBlock;
-              _anchorOffset = pos.offset;
-            }
-          }
+        final controller = widget.controllers[_candidateBlock!];
+        if (controller.selection.isValid) {
+          _anchorBlock = _candidateBlock;
+          _anchorOffset = controller.selection.baseOffset;
         }
       }
 
@@ -200,10 +191,20 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   /// applied to selected text). Must be called after the next frame so the
   /// RenderEditable has been laid out with the new textAlign/textDirection.
   void refreshPositions() {
-    if (!hasSelection) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _calculateHandlePositions());
+    if (!hasSelection) {
+      setState(() {
+        _handleStartPos = null;
+        _handleEndPos = null;
+      });
+      return;
+    }
+
+    final startPos = _getOffsetForPosition(_startBlock!, _startOffset!);
+    final endPos = _getOffsetForPosition(_endBlock!, _endOffset!);
+
+    setState(() {
+      _handleStartPos = startPos;
+      _handleEndPos = endPos;
     });
   }
 
@@ -227,7 +228,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _calculateHandlePositions());
+      refreshPositions();
     });
   }
 
@@ -260,15 +261,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
       }
     }
-    _calculateHandlePositions();
+    refreshPositions();
   }
 
-  void _calculateHandlePositions() {
-    if (_startBlock == null || _endBlock == null || _startOffset == null || _endOffset == null) return;
-    
-    _handleStartPos = _getOffsetForPosition(_startBlock!, _startOffset!);
-    _handleEndPos = _getOffsetForPosition(_endBlock!, _endOffset!);
-  }
 
   Offset? _getOffsetForPosition(int blockIdx, int offset) {
     if (blockIdx < 0 || blockIdx >= widget.blockKeys.length) return null;
@@ -335,12 +330,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             final editable = _findRenderEditable(renderObj);
             TextPosition pos;
             if (editable != null) {
-              // v4.1.1: Pass globalPos directly — getPositionForPoint expects a
-              // GLOBAL coordinate and converts internally with globalToLocal().
-              // The previous code converted to local first, causing a second
-              // globalToLocal() call inside getPositionForPoint that shifted y
-              // by the widget's screen offset, always returning a line-1 result.
-              pos = editable.getPositionForPoint(globalPos);
+              // v4.1.13: Use explicit global-to-local conversion. RenderEditable.getPositionForPoint
+              // expects coordinates in its own LOCAL space.
+              final blockGlobalPos = editable.localToGlobal(Offset.zero);
+              pos = editable.getPositionForPoint(globalPos - blockGlobalPos);
             } else {
               // Fallback: beginning or end of block
               pos = TextPosition(offset: boxLocal.dx < box.size.width / 2 ? 0 : widget.controllers[i].text.length);
@@ -365,7 +358,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             // reflect the new selection highlight layout.
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
-              setState(() => _calculateHandlePositions());
+              refreshPositions();
             });
             return;
         }

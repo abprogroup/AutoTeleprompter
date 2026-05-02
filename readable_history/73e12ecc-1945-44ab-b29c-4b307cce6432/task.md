@@ -1,0 +1,19 @@
+- [x] Phase 1: Metadata-Aware Font Sovereignty
+- [x] Phase 1.6: Style-Triggered Persistence
+    - [x] Implement history sentry for styling changes
+    - [x] Harden undo/redo to avoid sentry loops
+    - [x] Perform build and deploy to emulator
+- [/] Phase 2: Advanced Line Spacing
+    - [/] Expand `Line Spacing` slider min to -2.0 in `LayoutSuite`
+    - [ ] Implement 0.1 safety clamp in `SettingsNotifier`
+    - [ ] Perform build and deploy to emulator
+- [ ] Phase 3: Layout Suite Compaction
+    - [ ] Reduce vertical spacing and padding
+    - [ ] Perform build and deploy to emulator
+- [ ] Phase 4: Text Suite Row-Alignment
+    - [ ] Refactor size and font to centered row
+    - [ ] Perform build and deploy to emulator
+- [ ] Phase 5: Global Selection Mastery
+    - [ ] Fix "Select All" spanning
+    - [ ] Prevent scrolling during selection
+    - [ ] Perform final build and deploy to emulator

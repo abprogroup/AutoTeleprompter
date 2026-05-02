@@ -4,8 +4,7 @@ const _clearSentinel = '\x00__CLEAR__';
 class TeleprompterState {
   final int confirmedWordIndex;
   final bool isListening;
-  /// Item 4: STT start is in flight (between `startSession()` returning and
-  /// the first `listening` status callback). Drives scroll-lock + UI.
+  /// STT start is in flight between `startSession()` and first listening status.
   final bool isStarting;
   final String statusMessage;
   final bool hasError;

@@ -46,6 +46,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   bool _draggingEnd = false;
   Size _stackSize = Size.zero;
 
+  // Anchor state for body-drag to prevent jumping
+  int? _anchorBlock;
+  int? _anchorOffset;
+
   // Delta-drag state: track finger start (global) and the handle's caret start
   // position (also global, converted at pan-start while layout is valid).
   Offset? _panStartGlobal;
@@ -59,8 +63,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   // and only cross-block drags become multi-paragraph selections.
   Offset? _candidatePos;
   int? _candidateBlock;
-  int? _anchorBlock;
-  int? _anchorOffset;
   bool _bodyDragActive = false;
 
   /// True when every block is wholly selected (post Select All, pre refine).
@@ -74,6 +76,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       _isSelecting = false;
       _startBlock = _endBlock = null;
       _startOffset = _endOffset = null;
+      _anchorBlock = _anchorOffset = null;
       for (final c in widget.controllers) {
         c.externalSelection = null;
         c.isGlobalSelected = false;
@@ -152,18 +155,21 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       _bodyDragActive = true;
       _enterRefineMode();
 
-      final originBlock = _candidateBlock;
-      if (originBlock != null) {
-        final key = widget.blockKeys[originBlock];
-        final renderObj = key.currentContext?.findRenderObject();
-        if (renderObj != null) {
-          final editable = _findRenderEditable(renderObj);
-          if (editable != null) {
-            final blockGlobalPos = editable.localToGlobal(Offset.zero);
-            final pos =
-                editable.getPositionForPoint(_candidatePos! - blockGlobalPos);
-            _anchorBlock = originBlock;
-            _anchorOffset = pos.offset;
+      // v4.1.13: Lock the anchor point exactly once when global selection activates
+      if (_candidateBlock != null) {
+        final key = widget.blockKeys[_candidateBlock!];
+        final context = key.currentContext;
+        if (context != null) {
+          final renderObj = context.findRenderObject();
+          if (renderObj != null) {
+            final editable = _findRenderEditable(renderObj);
+            if (editable != null) {
+              final blockGlobalPos = editable.localToGlobal(Offset.zero);
+              final pos =
+                  editable.getPositionForPoint(_candidatePos! - blockGlobalPos);
+              _anchorBlock = _candidateBlock;
+              _anchorOffset = pos.offset;
+            }
           }
         }
       }
@@ -385,11 +391,14 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (editable != null) {
       // v4.1.0: Use downstream affinity so a position at a line-wrap boundary
       // resolves to the START of the next line, not the end of the previous line.
-      // Without this, handles at wrap boundaries always snapped back to line 1.
       final caretOffset = editable.getLocalRectForCaret(
         TextPosition(offset: offset, affinity: TextAffinity.downstream),
       );
-      return editable.localToGlobal(caretOffset.topLeft, ancestor: ourStack);
+      // v4.1.13: Ensure caret is within the block's visual bounds.
+      // For RTL blocks at the very start of a line, getLocalRectForCaret
+      // can sometimes return a dx > width or a negative dx.
+      final localTopLeft = caretOffset.topLeft;
+      return editable.localToGlobal(localTopLeft, ancestor: ourStack);
     }
 
     // Fallback: use the block's top-left corner
@@ -419,11 +428,13 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         _stackSize = Size(constraints.maxWidth, constraints.maxHeight);
         // Fall back to viewport edges so handles are always reachable,
         // even if the first/last block isn't currently rendered.
+        // v4.1.13: Clamped handle positions to prevent snapping to (12,12)
+        // when blocks are off-screen. Default to viewport edges if null.
         final start = hasSelection
-            ? (_handleStartPos ?? Offset(12, _startBlock! < (_endBlock ?? 0) ? -20 : constraints.maxHeight + 20))
+            ? (_handleStartPos ?? Offset(constraints.maxWidth - 24, 0))
             : null;
         final end = hasSelection
-            ? (_handleEndPos ?? Offset(12, _endBlock! < (_startBlock ?? 0) ? -20 : constraints.maxHeight + 20))
+            ? (_handleEndPos ?? Offset(24, constraints.maxHeight - 48))
             : null;
         return Stack(
           key: _stackKey,

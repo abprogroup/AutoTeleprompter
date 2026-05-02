@@ -190,6 +190,47 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent)
           return KeyEventResult.ignored;
 
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+            event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          final idx = _controllers.indexOf(controller);
+          final sel = controller.selection;
+          if (idx != -1 && sel.isCollapsed) {
+            final textLen = controller.text.length;
+            final isRtl = controller.text.isHebrew;
+            final isLeft = event.logicalKey == LogicalKeyboardKey.arrowLeft;
+
+            // v4.1.13: Intercept at visual boundaries before TextField consumes it
+            if (isLeft) {
+              if (!isRtl && sel.baseOffset == 0 && idx > 0) {
+                // LTR Left at start -> Prev Block End
+                _focusNodes[idx - 1].requestFocus();
+                _controllers[idx - 1].selection =
+                    TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
+                return KeyEventResult.handled;
+              } else if (isRtl && sel.baseOffset == textLen && idx < _controllers.length - 1) {
+                // RTL Left at end -> Next Block Start
+                _focusNodes[idx + 1].requestFocus();
+                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                return KeyEventResult.handled;
+              }
+            } else {
+              // Right arrow
+              if (!isRtl && sel.baseOffset == textLen && idx < _controllers.length - 1) {
+                // LTR Right at end -> Next Block Start
+                _focusNodes[idx + 1].requestFocus();
+                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                return KeyEventResult.handled;
+              } else if (isRtl && sel.baseOffset == 0 && idx > 0) {
+                // RTL Right at start -> Prev Block End
+                _focusNodes[idx - 1].requestFocus();
+                _controllers[idx - 1].selection =
+                    TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
+                return KeyEventResult.handled;
+              }
+            }
+          }
+        }
+
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);
@@ -211,11 +252,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }
-        // Arrow-key cross-block navigation is handled by a screen-level Focus
-        // (see _handleEditorArrowKey in script_editor_screen.dart). Keeping it
-        // off the per-block FocusNode means the same handler stays in scope
-        // across focus transitions — OS key-repeats keep flowing without
-        // stalling when the cursor crosses a paragraph boundary.
+
         if (event.logicalKey == LogicalKeyboardKey.backspace &&
             controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);

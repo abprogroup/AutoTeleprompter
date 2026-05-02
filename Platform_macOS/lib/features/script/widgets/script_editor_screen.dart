@@ -343,6 +343,48 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final node = FocusNode(onKeyEvent: (node, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
 
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+            event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          final idx = _controllers.indexOf(controller);
+          final sel = controller.selection;
+          if (idx != -1 && sel.isCollapsed) {
+            final textLen = controller.text.length;
+            final isRtl = controller.text.isHebrew;
+            final isLeft = event.logicalKey == LogicalKeyboardKey.arrowLeft;
+
+            // v4.1.13: Intercept at visual boundaries before TextField consumes it
+            if (isLeft) {
+              if (!isRtl && sel.baseOffset == 0 && idx > 0) {
+                // LTR Left at start -> Prev Block End
+                _focusNodes[idx - 1].requestFocus();
+                _controllers[idx - 1].selection =
+                    TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
+                _scrollEditorBlockIntoView(idx - 1);
+                return KeyEventResult.handled;
+              } else if (isRtl && sel.baseOffset == textLen && idx < _controllers.length - 1) {
+                // RTL Left at end -> Next Block Start
+                _focusNodes[idx + 1].requestFocus();
+                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                _scrollEditorBlockIntoView(idx + 1);
+                return KeyEventResult.handled;
+              }
+            } else {
+              // Right arrow
+              if (!isRtl && sel.baseOffset == textLen && idx < _controllers.length - 1) {
+                // LTR Right at end -> Next Block Start
+                _focusNodes[idx + 1].requestFocus();
+                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
+                _scrollEditorBlockIntoView(idx + 1);
+                return KeyEventResult.handled;
+              } else if (isRtl && sel.baseOffset == 0 && idx > 0) {
+                // RTL Right at start -> Prev Block End
+                _focusNodes[idx - 1].requestFocus();
+                _controllers[idx - 1].selection =
+                    TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
+                _scrollEditorBlockIntoView(idx - 1);
+                return KeyEventResult.handled;
+              }
+            }
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);
@@ -364,10 +406,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }
-        // Arrow-key cross-block navigation is handled by the screen-level
-        // Focus widget (_handleEditorArrowKey). Hosting it there keeps the
-        // same handler in scope across focus transitions, so OS key-repeats
-        // keep flowing without stalling at paragraph boundaries.
+
         if (event.logicalKey == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
           if (_controllers.length > 1 && idx != -1) {
@@ -1738,11 +1777,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         child: Focus(
           canRequestFocus: false,
           skipTraversal: true,
-          onKeyEvent: (node, event) {
-            if (event is! KeyDownEvent && event is! KeyRepeatEvent)
-              return KeyEventResult.ignored;
-            return _handleEditorArrowKey(event.logicalKey);
-          },
+          onKeyEvent: _handleEditorArrowKey,
           child: Stack(
         children: [
           Shortcuts(
@@ -1881,7 +1916,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onCopy: _onCopyClean,
                         onCut: _onCut,
                         onPaste: _onPaste,
-                        onNavigate: (key) => _handleEditorArrowKey(key, blockIndex: index),
                       ),
                     ),
                   ),
@@ -1931,9 +1965,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   // Runs ABOVE per-block FocusNodes so key-repeat events don't drop when a
   // paragraph boundary causes a focus transition. Returns `ignored` for
   // in-block movement so EditableText's default cursor handling stays intact.
-  KeyEventResult _handleEditorArrowKey(LogicalKeyboardKey key,
-      {int? blockIndex}) {
-    // Global selection short-circuit: any arrow collapses + repositions cursor.
+  KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown &&
+        key != LogicalKeyboardKey.arrowLeft &&
+        key != LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.ignored;
+    }
+
     if (_isGlobalSelection) {
       _clearGlobalSelection();
       if (_controllers.isEmpty) return KeyEventResult.handled;
@@ -1950,15 +1993,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       return KeyEventResult.handled;
     }
 
-    int idx = blockIndex ?? -1;
-    if (idx == -1) {
-      final controller = _lastFocusedController;
-      if (controller == null) return KeyEventResult.ignored;
-      idx = _controllers.indexOf(controller);
-    }
+    final controller = _lastFocusedController;
+    if (controller == null) return KeyEventResult.ignored;
+    final idx = _controllers.indexOf(controller);
     if (idx < 0) return KeyEventResult.ignored;
-
-    final controller = _controllers[idx];
 
     if (key == LogicalKeyboardKey.arrowUp && idx > 0) {
       final layout = _getVerticalLayout(idx);
@@ -1987,52 +2025,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
         );
         _scrollEditorBlockIntoView(nextIdx);
         return KeyEventResult.handled;
-      }
-    }
-
-    final isRtl = controller.text.isHebrew;
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      final sel = controller.selection;
-      if (sel.isCollapsed) {
-        if (!isRtl && sel.baseOffset == 0 && idx > 0) {
-          _focusNodes[idx - 1].requestFocus();
-          _controllers[idx - 1].selection = TextSelection.collapsed(
-              offset: _controllers[idx - 1].text.length);
-          _scrollEditorBlockIntoView(idx - 1);
-          return KeyEventResult.handled;
-        }
-        if (isRtl &&
-            sel.baseOffset == controller.text.length &&
-            idx < _controllers.length - 1) {
-          _focusNodes[idx + 1].requestFocus();
-          _controllers[idx + 1].selection =
-              const TextSelection.collapsed(offset: 0);
-          _scrollEditorBlockIntoView(idx + 1);
-          return KeyEventResult.handled;
-        }
-      }
-    }
-
-    if (key == LogicalKeyboardKey.arrowRight) {
-      final sel = controller.selection;
-      if (sel.isCollapsed) {
-        if (!isRtl &&
-            sel.baseOffset == controller.text.length &&
-            idx < _controllers.length - 1) {
-          _focusNodes[idx + 1].requestFocus();
-          _controllers[idx + 1].selection =
-              const TextSelection.collapsed(offset: 0);
-          _scrollEditorBlockIntoView(idx + 1);
-          return KeyEventResult.handled;
-        }
-        if (isRtl && sel.baseOffset == 0 && idx > 0) {
-          _focusNodes[idx - 1].requestFocus();
-          _controllers[idx - 1].selection = TextSelection.collapsed(
-              offset: _controllers[idx - 1].text.length);
-          _scrollEditorBlockIntoView(idx - 1);
-          return KeyEventResult.handled;
-        }
       }
     }
 
@@ -2072,6 +2064,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (_isGlobalSelection || hasOverlay) {
       final plainBuf = StringBuffer();
       final htmlBuf = StringBuffer();
+      final markupBuf = StringBuffer();
       for (int i = 0; i < _controllers.length; i++) {
         final c = _controllers[i];
         final sel = c.externalSelection;
@@ -2084,14 +2077,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             slice = c.text.substring(sel.start, sel.end);
           }
           if (slice.isEmpty) continue;
-          if (plainBuf.isNotEmpty) plainBuf.write('\n');
-          plainBuf.write(slice);
+          if (plainBuf.isNotEmpty) {
+            plainBuf.write('\n');
+            markupBuf.write('\n');
+          }
+          plainBuf.write(StylingService.stripTags(slice));
           htmlBuf.write(StylingService.markupToHtml(slice));
+          markupBuf.write(slice);
         }
       }
       if (plainBuf.isEmpty) return;
       RichClipboard.setHtml(
-          plain: plainBuf.toString(), html: htmlBuf.toString());
+        plain: plainBuf.toString(),
+        html: htmlBuf.toString(),
+        markup: markupBuf.toString(),
+      );
       return;
     }
     final controller = _activeController;
@@ -2099,8 +2099,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final slice = controller.selection.textInside(controller.text);
     if (slice.isEmpty) return;
     RichClipboard.setHtml(
-      plain: slice,
+      plain: StylingService.stripTags(slice),
       html: StylingService.markupToHtml(slice),
+      markup: slice,
     );
   }
 
@@ -2159,7 +2160,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   Future<void> _onPaste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text == null) return;
-    final text = data!.text!;
+
+    // v4.1.13: Use internal markup if the system clipboard matches our clean text.
+    // This allows style preservation within the app while keeping system clipboard clean.
+    String text = data!.text!;
+    final internalMarkup = RichClipboard.internalMarkup;
+    if (internalMarkup != null) {
+      final cleanInternal = StylingService.stripTags(internalMarkup);
+      if (cleanInternal == text) {
+        text = internalMarkup;
+      }
+    }
 
     // 1. Delete selection if any
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
@@ -2399,7 +2410,6 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onCut;
   final VoidCallback onPaste;
-  final Function(LogicalKeyboardKey) onNavigate;
 
   const _EditorBlock({
     super.key,
@@ -2413,7 +2423,6 @@ class _EditorBlock extends StatelessWidget {
     required this.onCopy,
     required this.onCut,
     required this.onPaste,
-    required this.onNavigate,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2508,49 +2517,13 @@ class _EditorBlock extends StatelessWidget {
               },
             ),
           },
-          child: Focus(
-            onKeyEvent: (node, event) {
-              if (event is! KeyDownEvent && event is! KeyRepeatEvent)
-                return KeyEventResult.ignored;
-              final key = event.logicalKey;
-              if (key != LogicalKeyboardKey.arrowLeft &&
-                  key != LogicalKeyboardKey.arrowRight &&
-                  key != LogicalKeyboardKey.arrowUp &&
-                  key != LogicalKeyboardKey.arrowDown) {
-                return KeyEventResult.ignored;
-              }
-
-              final sel = controller.selection;
-              if (!sel.isCollapsed) return KeyEventResult.ignored;
-
-              bool atStart = sel.baseOffset == 0;
-              bool atEnd = sel.baseOffset == controller.text.length;
-              final isRtl = controller.text.isHebrew;
-
-              if (key == LogicalKeyboardKey.arrowUp ||
-                  key == LogicalKeyboardKey.arrowDown) {
-                return onNavigate(key);
-              }
-
-              if (key == LogicalKeyboardKey.arrowLeft) {
-                if ((!isRtl && atStart) || (isRtl && atEnd)) {
-                  return onNavigate(key);
-                }
-              } else if (key == LogicalKeyboardKey.arrowRight) {
-                if ((!isRtl && atEnd) || (isRtl && atStart)) {
-                  return onNavigate(key);
-                }
-              }
-
-              return KeyEventResult.ignored;
-            },
-            child: Theme(
-              data: Theme.of(context).copyWith(
-                textSelectionTheme: TextSelectionThemeData(
-                  selectionColor: Colors.transparent,
-                ),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              textSelectionTheme: TextSelectionThemeData(
+                selectionColor: Colors.transparent,
               ),
-              child: TextField(
+            ),
+            child: TextField(
               selectionControls: GhostSelectionControls(),
               controller: controller,
               focusNode: focusNode,
@@ -2636,7 +2609,6 @@ class _EditorBlock extends StatelessWidget {
                 );
               },
             ),
-          ),
           ),
         ),
       ),

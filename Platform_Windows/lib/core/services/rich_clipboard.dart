@@ -8,10 +8,14 @@ class RichClipboard {
   static const MethodChannel _channel =
       MethodChannel('autoteleprompter/clipboard');
 
+  static String? _internalMarkup;
+
   static Future<void> setHtml({
     required String plain,
     required String html,
+    String? markup,
   }) async {
+    _internalMarkup = markup;
     try {
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         final ok = await _channel.invokeMethod<bool>('setHtml', {
@@ -25,4 +29,6 @@ class RichClipboard {
     }
     await Clipboard.setData(ClipboardData(text: plain));
   }
+
+  static String? get internalMarkup => _internalMarkup;
 }

@@ -306,6 +306,7 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     if (_isGlobalSelection || hasOverlay) {
       final plainBuf = StringBuffer();
       final htmlBuf = StringBuffer();
+      final markupBuf = StringBuffer();
       for (int i = 0; i < _controllers.length; i++) {
         final c = _controllers[i];
         final sel = c.externalSelection;
@@ -317,14 +318,21 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
             slice = c.text.substring(sel.start, sel.end);
           }
           if (slice.isEmpty) continue;
-          if (plainBuf.isNotEmpty) plainBuf.write('\n');
-          plainBuf.write(slice);
+          if (plainBuf.isNotEmpty) {
+            plainBuf.write('\n');
+            markupBuf.write('\n');
+          }
+          plainBuf.write(StylingService.stripTags(slice));
           htmlBuf.write(StylingService.markupToHtml(slice));
+          markupBuf.write(slice);
         }
       }
       if (plainBuf.isEmpty) return;
       RichClipboard.setHtml(
-          plain: plainBuf.toString(), html: htmlBuf.toString());
+        plain: plainBuf.toString(),
+        html: htmlBuf.toString(),
+        markup: markupBuf.toString(),
+      );
       return;
     }
     final controller = _activeController;
@@ -332,8 +340,9 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     final slice = controller.selection.textInside(controller.text);
     if (slice.isEmpty) return;
     RichClipboard.setHtml(
-      plain: slice,
+      plain: StylingService.stripTags(slice),
       html: StylingService.markupToHtml(slice),
+      markup: slice,
     );
   }
 
@@ -392,7 +401,17 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
   Future<void> _onPaste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text == null) return;
-    final text = data!.text!;
+
+    // v4.1.13: Use internal markup if the system clipboard matches our clean text.
+    // This allows style preservation within the app while keeping system clipboard clean.
+    String text = data!.text!;
+    final internalMarkup = RichClipboard.internalMarkup;
+    if (internalMarkup != null) {
+      final cleanInternal = StylingService.stripTags(internalMarkup);
+      if (cleanInternal == text) {
+        text = internalMarkup;
+      }
+    }
 
     // 1. Delete selection if any
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;

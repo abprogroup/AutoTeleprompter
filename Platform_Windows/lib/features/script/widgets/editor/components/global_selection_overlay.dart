@@ -258,8 +258,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         if (renderObj != null) {
           final RenderEditable? editable = _findRenderEditable(renderObj);
           if (editable != null) {
-            final blockGlobalPos = editable.localToGlobal(Offset.zero);
-            final pos = editable.getPositionForPoint(globalPos - blockGlobalPos);
+            // getPositionForPoint expects a GLOBAL coordinate and converts
+            // internally. The old code subtracted blockGlobalPos first which
+            // caused a double-conversion and always returned line-1 positions.
+            final pos = editable.getPositionForPoint(globalPos);
 
             setState(() {
               if (isStart) {

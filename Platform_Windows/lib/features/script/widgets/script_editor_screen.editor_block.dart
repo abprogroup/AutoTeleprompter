@@ -11,6 +11,8 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onCut;
   final VoidCallback onPaste;
+  final VoidCallback onUndo;
+  final VoidCallback onRedo;
   final VoidCallback onSearch;
   final bool hasBookmark;
   final VoidCallback onBookmarkTap;
@@ -27,6 +29,8 @@ class _EditorBlock extends StatelessWidget {
     required this.onCopy,
     required this.onCut,
     required this.onPaste,
+    required this.onUndo,
+    required this.onRedo,
     required this.onSearch,
     required this.hasBookmark,
     required this.onBookmarkTap,
@@ -110,6 +114,21 @@ class _EditorBlock extends StatelessWidget {
                     _PasteIntent(),
                 SingleActivator(LogicalKeyboardKey.keyV, meta: true):
                     _PasteIntent(),
+                // Undo/Redo: intercept BEFORE EditableText's internal handler
+                // so Ctrl+Z routes to the global history stack, not the per-
+                // controller undo stack that only knows about the current block.
+                SingleActivator(LogicalKeyboardKey.keyZ, control: true):
+                    _UndoIntent(),
+                SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
+                    _UndoIntent(),
+                SingleActivator(LogicalKeyboardKey.keyY, control: true):
+                    _RedoIntent(),
+                SingleActivator(LogicalKeyboardKey.keyY, meta: true):
+                    _RedoIntent(),
+                SingleActivator(LogicalKeyboardKey.keyZ,
+                    control: true, shift: true): _RedoIntent(),
+                SingleActivator(LogicalKeyboardKey.keyZ,
+                    meta: true, shift: true): _RedoIntent(),
                 SingleActivator(LogicalKeyboardKey.keyF,
                     control: true, shift: true): _SearchIntent(),
                 SingleActivator(LogicalKeyboardKey.keyF,
@@ -132,6 +151,14 @@ class _EditorBlock extends StatelessWidget {
                   }),
                   _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (_) {
                     onPaste();
+                    return null;
+                  }),
+                  _UndoIntent: CallbackAction<_UndoIntent>(onInvoke: (_) {
+                    onUndo();
+                    return null;
+                  }),
+                  _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) {
+                    onRedo();
                     return null;
                   }),
                   _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) {
@@ -163,6 +190,18 @@ class _EditorBlock extends StatelessWidget {
                   SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
                     onInvoke: (_) {
                       onSelectAll();
+                      return null;
+                    },
+                  ),
+                  UndoTextIntent: CallbackAction<UndoTextIntent>(
+                    onInvoke: (_) {
+                      onUndo();
+                      return null;
+                    },
+                  ),
+                  RedoTextIntent: CallbackAction<RedoTextIntent>(
+                    onInvoke: (_) {
+                      onRedo();
                       return null;
                     },
                   ),

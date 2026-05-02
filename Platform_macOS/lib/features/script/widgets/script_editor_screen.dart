@@ -65,6 +65,14 @@ class _MoveRightIntent extends Intent {
   const _MoveRightIntent();
 }
 
+class _UndoIntent extends Intent {
+  const _UndoIntent();
+}
+
+class _RedoIntent extends Intent {
+  const _RedoIntent();
+}
+
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
@@ -1793,6 +1801,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX): const _CutIntent(),
           LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyV): const _PasteIntent(),
           LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV): const _PasteIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ): const _UndoIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyZ): const _UndoIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY): const _RedoIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyY): const _RedoIntent(),
+          LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ): const _RedoIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ): const _RedoIntent(),
         },
         child: Actions(
           actions: {
@@ -1807,6 +1821,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             }),
             _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (intent) {
               _onPaste(); return null;
+            }),
+            _UndoIntent: CallbackAction<_UndoIntent>(onInvoke: (_) {
+              _undo(); return null;
+            }),
+            _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) {
+              _redo(); return null;
             }),
           },
           child: Column(
@@ -1919,6 +1939,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                         onCopy: _onCopyClean,
                         onCut: _onCut,
                         onPaste: _onPaste,
+                        onUndo: _undo,
+                        onRedo: _redo,
                       ),
                     ),
                   ),
@@ -2033,7 +2055,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             _crossToBlock(idx + 1, atOffset: 0);
             return KeyEventResult.handled;
           }
-          return KeyEventResult.handled;
+          return KeyEventResult.ignored; // no next block — let Flutter default run
         }
         controller.selection =
             TextSelection.collapsed(offset: sel.baseOffset + 1);
@@ -2059,7 +2081,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
             _crossToBlock(idx - 1, atOffset: _controllers[idx - 1].text.length);
             return KeyEventResult.handled;
           }
-          return KeyEventResult.handled;
+          return KeyEventResult.ignored; // no previous block — let Flutter default run
         }
         controller.selection =
             TextSelection.collapsed(offset: sel.baseOffset - 1);
@@ -2145,7 +2167,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           } else {
             slice = c.text.substring(sel.start, sel.end);
           }
-          if (slice.isEmpty) continue;
+          // Include empty blocks as empty lines — do NOT skip them.
           if (plainBuf.isNotEmpty) {
             plainBuf.write('\n');
             markupBuf.write('\n');
@@ -2155,7 +2177,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           markupBuf.write(slice);
         }
       }
-      if (plainBuf.isEmpty) return;
+      if (plainBuf.isEmpty && markupBuf.isEmpty) return;
       RichClipboard.setHtml(
         plain: plainBuf.toString(),
         html: htmlBuf.toString(),
@@ -2487,6 +2509,8 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onCut;
   final VoidCallback onPaste;
+  final VoidCallback onUndo;
+  final VoidCallback onRedo;
 
   const _EditorBlock({
     super.key,
@@ -2500,6 +2524,8 @@ class _EditorBlock extends StatelessWidget {
     required this.onCopy,
     required this.onCut,
     required this.onPaste,
+    required this.onUndo,
+    required this.onRedo,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -2546,6 +2572,12 @@ class _EditorBlock extends StatelessWidget {
           SingleActivator(LogicalKeyboardKey.keyV, control: true):
               _PasteIntent(),
           SingleActivator(LogicalKeyboardKey.keyV, meta: true): _PasteIntent(),
+          SingleActivator(LogicalKeyboardKey.keyZ, control: true): _UndoIntent(),
+          SingleActivator(LogicalKeyboardKey.keyZ, meta: true): _UndoIntent(),
+          SingleActivator(LogicalKeyboardKey.keyY, control: true): _RedoIntent(),
+          SingleActivator(LogicalKeyboardKey.keyY, meta: true): _RedoIntent(),
+          SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): _RedoIntent(),
+          SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true): _RedoIntent(),
         },
         child: Actions(
           actions: {
@@ -2563,6 +2595,14 @@ class _EditorBlock extends StatelessWidget {
             }),
             _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (_) {
               onPaste();
+              return null;
+            }),
+            _UndoIntent: CallbackAction<_UndoIntent>(onInvoke: (_) {
+              onUndo();
+              return null;
+            }),
+            _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) {
+              onRedo();
               return null;
             }),
             // Override internal EditableText intents so Cmd/Ctrl + C/X/V/A
@@ -2590,6 +2630,18 @@ class _EditorBlock extends StatelessWidget {
             SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
               onInvoke: (_) {
                 onSelectAll();
+                return null;
+              },
+            ),
+            UndoTextIntent: CallbackAction<UndoTextIntent>(
+              onInvoke: (_) {
+                onUndo();
+                return null;
+              },
+            ),
+            RedoTextIntent: CallbackAction<RedoTextIntent>(
+              onInvoke: (_) {
+                onRedo();
                 return null;
               },
             ),

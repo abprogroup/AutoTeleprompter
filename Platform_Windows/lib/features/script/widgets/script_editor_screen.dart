@@ -76,6 +76,14 @@ class _MoveRightIntent extends Intent {
   const _MoveRightIntent();
 }
 
+class _UndoIntent extends Intent {
+  const _UndoIntent();
+}
+
+class _RedoIntent extends Intent {
+  const _RedoIntent();
+}
+
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
@@ -447,6 +455,23 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                       LogicalKeyboardKey.keyF): const _SearchIntent(),
                   LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
                       LogicalKeyboardKey.keyF): const _SearchIntent(),
+                  LogicalKeySet(
+                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ):
+                      const _UndoIntent(),
+                  LogicalKeySet(
+                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyZ):
+                      const _UndoIntent(),
+                  LogicalKeySet(
+                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyY):
+                      const _RedoIntent(),
+                  LogicalKeySet(
+                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyY):
+                      const _RedoIntent(),
+                  LogicalKeySet(LogicalKeyboardKey.control,
+                      LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ):
+                      const _RedoIntent(),
+                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
+                      LogicalKeyboardKey.keyZ): const _RedoIntent(),
                 },
                 child: Actions(
                   actions: {
@@ -465,6 +490,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                     }),
                     _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (intent) {
                       _onPaste();
+                      return null;
+                    }),
+                    _UndoIntent: CallbackAction<_UndoIntent>(onInvoke: (_) {
+                      _undo();
+                      return null;
+                    }),
+                    _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) {
+                      _redo();
                       return null;
                     }),
                     _SearchIntent:
@@ -650,6 +683,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                     onCopy: _onCopyClean,
                                     onCut: _onCut,
                                     onPaste: _onPaste,
+                                    onUndo: _undo,
+                                    onRedo: _redo,
                                     onSearch: _showSearchDialog,
                                     hasBookmark: _hasBookmarkInEditorBlock(index),
                                     onBookmarkTap: () =>
@@ -780,7 +815,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
             _crossToBlock(idx + 1, atOffset: 0);
             return KeyEventResult.handled;
           }
-          return KeyEventResult.handled; // at last block's left edge
+          // No next block — let Flutter's default run (it will also do nothing,
+          // but returning `ignored` keeps behaviour consistent with the LTR side
+          // and avoids blocking any future platform shortcut dispatch).
+          return KeyEventResult.ignored;
         }
         controller.selection =
             TextSelection.collapsed(offset: sel.baseOffset + 1);
@@ -806,7 +844,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
             _crossToBlock(idx - 1, atOffset: _controllers[idx - 1].text.length);
             return KeyEventResult.handled;
           }
-          return KeyEventResult.handled; // at first block's right edge
+          // No previous block — let Flutter's default run (symmetric with LTR).
+          return KeyEventResult.ignored;
         }
         controller.selection =
             TextSelection.collapsed(offset: sel.baseOffset - 1);

@@ -317,7 +317,9 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
           } else {
             slice = c.text.substring(sel.start, sel.end);
           }
-          if (slice.isEmpty) continue;
+          // Include empty blocks as empty lines — do NOT skip them.
+          // Skipping would collapse "line A\n\nline B" into "line A\nline B",
+          // losing the empty paragraph.
           if (plainBuf.isNotEmpty) {
             plainBuf.write('\n');
             markupBuf.write('\n');
@@ -327,7 +329,8 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
           markupBuf.write(slice);
         }
       }
-      if (plainBuf.isEmpty) return;
+      // Guard: nothing was selected at all (no blocks contributed)
+      if (plainBuf.isEmpty && markupBuf.isEmpty) return;
       RichClipboard.setHtml(
         plain: plainBuf.toString(),
         html: htmlBuf.toString(),

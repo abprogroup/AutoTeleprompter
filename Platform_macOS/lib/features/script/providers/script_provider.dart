@@ -20,6 +20,7 @@ class ScriptNotifier extends Notifier<Script?> {
     String sourceType = 'TEMP';
     String? sessionId;
     int? historyIndex;
+    String? historyJson;
     double? fontSize, lineSpacing, letterSpacing, wordSpacing;
     String? fontFamily, textAlign;
     int? scriptBgColor, currentWordColor, futureWordColor;
@@ -32,6 +33,8 @@ class ScriptNotifier extends Notifier<Script?> {
           sessionId = meta['sessionId'];
           final metaIdx = meta['historyIndex'];
           if (metaIdx != null) historyIndex = metaIdx;
+          final metaHistJson = meta['historyJson'];
+          if (metaHistJson is String) historyJson = metaHistJson;
 
           // v3.9.5.70: Extract styling metadata (Nested for Gallery Compatibility)
           final style = meta['style'] as Map<String, dynamic>?;
@@ -53,11 +56,12 @@ class ScriptNotifier extends Notifier<Script?> {
     }
 
     if (lastText.isNotEmpty) {
-      return _buildScript(lastText, 
-        title: lastTitle.isNotEmpty ? lastTitle : null, 
-        sourceType: sourceType, 
+      return _buildScript(lastText,
+        title: lastTitle.isNotEmpty ? lastTitle : null,
+        sourceType: sourceType,
         sessionId: sessionId,
         historyIndex: historyIndex ?? settings.lastHistoryIndex,
+        historyJson: historyJson,
         fontSize: fontSize,
         fontFamily: fontFamily,
         lineSpacing: lineSpacing,

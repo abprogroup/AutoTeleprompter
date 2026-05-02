@@ -61,8 +61,13 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   // only activate global selection if the pointer drags into a DIFFERENT
   // block. This lets click + in-block drag stay native (TextField handles it),
   // and only cross-block drags become multi-paragraph selections.
+  // We CACHE the raw character offset at pointer-down (anchor-lock). On
+  // cross-block activation we use that cached offset as the start anchor so
+  // the selection's origin doesn't drift if the view scrolled or layout
+  // shifted between pointer-down and the block-cross moment.
   Offset? _candidatePos;
   int? _candidateBlock;
+  int? _candidateOffset; // cached raw char offset at pointer-down
   bool _bodyDragActive = false;
 
   /// True when every block is wholly selected (post Select All, pre refine).
@@ -131,12 +136,30 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     return null;
   }
 
-  /// Body pointer-down: just record the candidate. Do NOT activate global
-  /// selection — that happens only when the pointer leaves the starting block.
+  /// Body pointer-down: record the candidate AND eagerly cache the raw char
+  /// offset at the pointer-down position. Do NOT activate global selection —
+  /// that only happens when the pointer leaves the starting block.
+  ///
+  /// Caching the offset HERE (not at cross-block time) is what prevents the
+  /// "anchor jump" the user reported: by the time the pointer crosses out of
+  /// the starting block, the TextField may have abandoned its drag and the
+  /// scroll view may have moved, so neither `controller.selection.baseOffset`
+  /// nor a fresh `getPositionForPoint(_candidatePos)` is reliable anymore.
   void startDragging(Offset globalPos) {
     _candidatePos = globalPos;
     _candidateBlock = _blockAtPosition(globalPos);
+    _candidateOffset = null;
     _bodyDragActive = false;
+    if (_candidateBlock != null) {
+      final renderObj =
+          widget.blockKeys[_candidateBlock!].currentContext?.findRenderObject();
+      if (renderObj != null) {
+        final editable = _findRenderEditable(renderObj);
+        if (editable != null) {
+          _candidateOffset = editable.getPositionForPoint(globalPos).offset;
+        }
+      }
+    }
   }
 
   /// Body pointer-move: activate global selection iff the pointer has crossed
@@ -155,9 +178,16 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       _bodyDragActive = true;
       _enterRefineMode();
 
-      // v4.1.13: Lock the anchor point exactly once using the native selection's baseOffset.
-      // This ensures 100% parity with the moment the drag started, preventing "jumps".
-      if (_candidateBlock != null) {
+      // Anchor priority for the start of the global selection:
+      //  1. Cached char offset captured at pointer-down (most robust — frozen
+      //     at the visual position the user actually clicked).
+      //  2. The TextField's native selection.baseOffset (only valid if the
+      //     TextField is still tracking the drag).
+      //  3. Re-deriving the offset from the pointer-down GLOBAL position.
+      if (_candidateBlock != null && _candidateOffset != null) {
+        _anchorBlock = _candidateBlock;
+        _anchorOffset = _candidateOffset;
+      } else if (_candidateBlock != null) {
         final controller = widget.controllers[_candidateBlock!];
         if (controller.selection.isValid) {
           _anchorBlock = _candidateBlock;
@@ -183,6 +213,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   void endDragging() {
     _candidatePos = null;
     _candidateBlock = null;
+    _candidateOffset = null;
     _bodyDragActive = false;
     // Selection persists after drag
   }

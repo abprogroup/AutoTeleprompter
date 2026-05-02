@@ -1985,13 +1985,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       if (_controllers.isEmpty) return KeyEventResult.handled;
       if (key == LogicalKeyboardKey.arrowUp ||
           key == LogicalKeyboardKey.arrowLeft) {
-        _focusNodes[0].requestFocus();
-        _controllers[0].selection = const TextSelection.collapsed(offset: 0);
+        _crossToBlock(0, atOffset: 0);
       } else {
         final last = _controllers.length - 1;
-        _focusNodes[last].requestFocus();
-        _controllers[last].selection =
-            TextSelection.collapsed(offset: _controllers[last].text.length);
+        _crossToBlock(last, atOffset: _controllers[last].text.length);
       }
       return KeyEventResult.handled;
     }
@@ -2004,14 +2001,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (key == LogicalKeyboardKey.arrowUp && idx > 0) {
       final layout = _getVerticalLayout(idx);
       if (layout.isAtTop) {
-        final prevIdx = idx - 1;
-        final prevLayout = _getVerticalLayout(prevIdx);
-        _focusNodes[prevIdx].requestFocus();
-        _controllers[prevIdx].selection = TextSelection.collapsed(
-          offset:
-              prevLayout.getPositionAtX(layout.currentX, fromBottom: true),
-        );
-        _scrollEditorBlockIntoView(prevIdx);
+        _crossToBlock(idx - 1, x: layout.currentX, atEnd: true);
         return KeyEventResult.handled;
       }
     }
@@ -2019,19 +2009,95 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (key == LogicalKeyboardKey.arrowDown && idx < _controllers.length - 1) {
       final layout = _getVerticalLayout(idx);
       if (layout.isAtBottom) {
-        final nextIdx = idx + 1;
-        final nextLayout = _getVerticalLayout(nextIdx);
-        _focusNodes[nextIdx].requestFocus();
-        _controllers[nextIdx].selection = TextSelection.collapsed(
-          offset:
-              nextLayout.getPositionAtX(layout.currentX, fromBottom: false),
-        );
-        _scrollEditorBlockIntoView(nextIdx);
+        _crossToBlock(idx + 1, x: layout.currentX, atEnd: false);
         return KeyEventResult.handled;
       }
     }
 
+    // Left/Right: Hebrew RTL needs special handling because Flutter's default
+    // arrow-left maps to "logical backward" (offset--), which in RTL displays
+    // visually RIGHT — opposite of what users expect. For RTL we override and
+    // drive the cursor manually so left=visually-left, right=visually-right.
+    final isRtl = controller.text.isHebrew;
+    final sel = controller.selection;
+    final textLen = controller.text.length;
+
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (isRtl) {
+        if (!sel.isCollapsed) {
+          controller.selection = TextSelection.collapsed(offset: sel.end);
+          return KeyEventResult.handled;
+        }
+        if (sel.baseOffset >= textLen) {
+          if (idx < _controllers.length - 1) {
+            _crossToBlock(idx + 1, atOffset: 0);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.handled;
+        }
+        controller.selection =
+            TextSelection.collapsed(offset: sel.baseOffset + 1);
+        return KeyEventResult.handled;
+      }
+      // LTR: let Flutter default move within the block; only intercept at
+      // the leftmost boundary so a long-press chains across blocks.
+      if (sel.isCollapsed && sel.baseOffset == 0 && idx > 0) {
+        _crossToBlock(idx - 1, atOffset: _controllers[idx - 1].text.length);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (isRtl) {
+        if (!sel.isCollapsed) {
+          controller.selection = TextSelection.collapsed(offset: sel.start);
+          return KeyEventResult.handled;
+        }
+        if (sel.baseOffset <= 0) {
+          if (idx > 0) {
+            _crossToBlock(idx - 1, atOffset: _controllers[idx - 1].text.length);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.handled;
+        }
+        controller.selection =
+            TextSelection.collapsed(offset: sel.baseOffset - 1);
+        return KeyEventResult.handled;
+      }
+      // LTR: let Flutter default handle in-block; intercept at the right edge.
+      if (sel.isCollapsed &&
+          sel.baseOffset == textLen &&
+          idx < _controllers.length - 1) {
+        _crossToBlock(idx + 1, atOffset: 0);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
     return KeyEventResult.ignored;
+  }
+
+  /// Moves focus and the caret to [targetIdx]. Updates `_lastFocusedController`
+  /// SYNCHRONOUSLY before requesting focus so the next KeyRepeatEvent finds
+  /// the right controller — without that sync update, a long-press can stall
+  /// at a paragraph boundary because the FocusNode listener that updates
+  /// `_lastFocusedController` only fires on the next microtask.
+  void _crossToBlock(int targetIdx, {int? atOffset, double? x, bool? atEnd}) {
+    if (targetIdx < 0 || targetIdx >= _controllers.length) return;
+    _lastFocusedController = _controllers[targetIdx];
+    _focusNodes[targetIdx].requestFocus();
+    int offset;
+    if (atOffset != null) {
+      offset = atOffset.clamp(0, _controllers[targetIdx].text.length);
+    } else if (x != null) {
+      final layout = _getVerticalLayout(targetIdx);
+      offset = layout.getPositionAtX(x, fromBottom: atEnd ?? false);
+    } else {
+      offset = atEnd == true ? _controllers[targetIdx].text.length : 0;
+    }
+    _controllers[targetIdx].selection = TextSelection.collapsed(offset: offset);
+    _scrollEditorBlockIntoView(targetIdx);
   }
 
   Widget _buildDebugSentry() {
@@ -2166,13 +2232,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
     // v4.1.13: Use internal markup if the system clipboard matches our clean text.
     // This allows style preservation within the app while keeping system clipboard clean.
+    // Normalize line endings: some clipboards canonicalize to \r\n, but our
+    // internal buffer uses \n. Normalize before comparing so multi-block
+    // pastes don't lose styling because of line-ending mismatches.
     String text = data!.text!;
+    final normalizedClipboard = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     final internalMarkup = RichClipboard.internalMarkup;
     if (internalMarkup != null) {
       final cleanInternal = StylingService.stripTags(internalMarkup);
-      if (cleanInternal == text) {
+      if (cleanInternal == normalizedClipboard) {
         text = internalMarkup;
+      } else {
+        text = normalizedClipboard;
       }
+    } else {
+      text = normalizedClipboard;
     }
 
     // 1. Delete selection if any

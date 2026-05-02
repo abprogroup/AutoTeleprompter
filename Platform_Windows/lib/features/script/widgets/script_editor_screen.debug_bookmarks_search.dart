@@ -404,13 +404,21 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
 
     // v4.1.13: Use internal markup if the system clipboard matches our clean text.
     // This allows style preservation within the app while keeping system clipboard clean.
+    // Normalize line endings: Windows clipboard returns \r\n, but our internal
+    // buffer uses \n. Without normalization, multi-block pastes (and any text
+    // the OS canonicalizes) miss the match and lose styling.
     String text = data!.text!;
+    final normalizedClipboard = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     final internalMarkup = RichClipboard.internalMarkup;
     if (internalMarkup != null) {
       final cleanInternal = StylingService.stripTags(internalMarkup);
-      if (cleanInternal == text) {
+      if (cleanInternal == normalizedClipboard) {
         text = internalMarkup;
+      } else {
+        text = normalizedClipboard;
       }
+    } else {
+      text = normalizedClipboard;
     }
 
     // 1. Delete selection if any

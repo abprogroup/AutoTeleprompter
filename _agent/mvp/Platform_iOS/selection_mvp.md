@@ -106,6 +106,14 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     `_pasteFromGlobalClipboard()` so styles and paragraph block boundaries are
     restored from raw markup.
 
+14. **User navigation dismisses stale selection snapshots**: A real user tap
+    into another block or editor background must clear `_isGlobalSelection`,
+    overlay/external selections, native non-collapsed selections, and the
+    temporary `_globalSelectionSnapshot`. It must NOT clear `_blockClipboard`;
+    Cut/Paste recovery still needs the real paste clipboard. This prevents a
+    recent Select All snapshot from poisoning later Cut/Copy after the user has
+    visibly moved away and started a new selection.
+
 ---
 
 ## Forbidden Changes
@@ -133,6 +141,10 @@ Additional clipboard prohibitions:
 - Do not rely on the system clipboard for in-app multi-block paste. It is only
   a companion to make the native toolbar expose Paste; the app-private
   `_blockClipboard` is the source of truth for styled block restoration.
+- Do not let `_globalSelectionSnapshot` behave like a hidden permanent
+  selection. It is a short-lived native-menu recovery bridge only; once the
+  user taps away to navigate/edit elsewhere, it must be discarded without
+  discarding `_blockClipboard`.
 
 - **`c.refresh()` triggers listener**: Any `c.refresh()` call fires the `addListener` callback. If called when `_isCommandExecuting=false` and `_isGlobalSelection=true`, `_onSelectionChanged()` runs immediately. Always verify the active controller's selection state is full-block (not partial) before calling refresh in that window.
 - **Overlay `_enterRefineMode` timing**: It fires during `onPanStart` of a handle drag. The `onSelectionChanged` callback it triggers causes `_isGlobalSelection` to update in the parent widget. Any code that runs between `_enterRefineMode` and the parent's `setState` sees an inconsistent state.

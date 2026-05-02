@@ -405,6 +405,12 @@
   toolbar so the mic button is centered again, and strengthened the bottom fade
   behind the two-row controls so script text cannot hide buttons. Awaiting
   IPA/device verification.
+- [P] **iOS Selection Dismissal Regression Follow-Up**: After QA found that
+  selected editor text could remain stuck after tapping elsewhere and could
+  confuse later Cut/Copy, added an explicit user-navigation dismiss path that
+  clears global/overlay/native selection plus the temporary Select All recovery
+  snapshot while preserving the real `_blockClipboard` for Paste recovery.
+  Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

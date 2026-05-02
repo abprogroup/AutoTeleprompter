@@ -838,3 +838,20 @@
   text cannot visually cover the active buttons.
 - **Documentation Result**: Updated the iOS Teleprompter Engine MVP and
   `MASTER_TODO_V4.md`. No Windows runtime code was touched.
+
+## 2026-05-02 - iOS Selection Dismissal Regression Follow-Up
+
+- **Session Goal**: Fix a fresh iOS editor selection regression where selected
+  text could remain visually/logically active after tapping elsewhere, blocking
+  clean new selections and confusing Cut/Copy.
+- **Root Cause Direction**: The iOS multi-block clipboard fix intentionally
+  keeps a short-lived `_globalSelectionSnapshot` to survive native context-menu
+  timing. That snapshot must not behave like a hidden permanent selection after
+  the user navigates away from the selection.
+- **Fix Result**: Added `_dismissEditorSelectionForUserNavigation(...)`, used
+  from editor background taps and block taps. It clears global selection,
+  overlay/external selection, non-collapsed native selections, and the temporary
+  protected snapshot, while preserving `_blockClipboard` so Paste recovery still
+  works after a real Cut/Copy.
+- **Documentation Result**: Updated the iOS Selection MVP and
+  `MASTER_TODO_V4.md`. Awaiting IPA/device verification.

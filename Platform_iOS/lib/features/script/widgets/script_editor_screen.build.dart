@@ -46,7 +46,10 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
         bottomNavigationBar:
             _buildBottomActions(keyboardVisible: keyboardVisible),
         body: GestureDetector(
-          onTap: () => FocusScope.of(context).unfocus(),
+          onTap: () {
+            _dismissEditorSelectionForUserNavigation('background-tap');
+            FocusScope.of(context).unfocus();
+          },
           behavior: HitTestBehavior.translucent,
           child: Stack(
             children: [
@@ -234,16 +237,8 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 isGlobalSelected: _isGlobalSelection,
                                 onSubmitted: () => _addBlock(index + 1),
                                 onTap: () {
-                                  // Only clear GLOBAL selection on tap — user may be
-                                  // tapping to bring up the context menu on a refined
-                                  // (handle-drag) selection. Clearing refined selection
-                                  // here would prevent Cut/Copy from ever reaching the
-                                  // overlay-selected range.
-                                  if (_isGlobalSelection ||
-                                      _controllers
-                                          .any((c) => c.isGlobalSelected)) {
-                                    _clearGlobalSelection();
-                                  }
+                                  _dismissEditorSelectionForUserNavigation(
+                                      'block-tap');
                                 },
                                 onSelectAll: _selectAllBlocks,
                                 onCopy: _onCopyClean,

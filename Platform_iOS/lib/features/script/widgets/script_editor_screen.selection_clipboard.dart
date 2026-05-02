@@ -98,6 +98,34 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
           _globalSelectionSnapshot != null &&
           _globalSelectionSnapshot!.isNotEmpty);
 
+  bool get _hasAnyActiveEditorSelection {
+    if (_isGlobalSelection ||
+        (_overlayKey.currentState?.hasSelection ?? false)) {
+      return true;
+    }
+    for (final c in _controllers) {
+      if (c.isGlobalSelected) return true;
+      final external = c.externalSelection;
+      if (external != null && external.isValid && !external.isCollapsed) {
+        return true;
+      }
+      final native = c.selection;
+      if (native.isValid && !native.isCollapsed) return true;
+    }
+    return false;
+  }
+
+  void _dismissEditorSelectionForUserNavigation(String reason) {
+    if (!_hasAnyActiveEditorSelection && !_hasRecentGlobalSelectionSnapshot) {
+      return;
+    }
+    _globalSelectionSnapshot = null;
+    _globalSelectionSnapshotAt = null;
+    _selectionClipboardDebug =
+        '$reason: dismissed selection; paste clipboard ${_blockDebugShape(_blockClipboard)}';
+    _clearGlobalSelection();
+  }
+
   List<String>? _globalBlocksForCommand(String reason) {
     final allBlocksSelected = _controllers.isNotEmpty &&
         _controllers.every((c) => c.isGlobalSelected);

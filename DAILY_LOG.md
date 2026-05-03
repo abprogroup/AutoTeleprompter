@@ -1323,3 +1323,17 @@
 - **Verification Status**: Awaiting targeted analyzer/build and physical iPhone
   QA with visible skip off: skipping one to five words should recover, while
   skipping farther visible text should still require the toggle.
+
+## 2026-05-03 - iOS Editor Bookmark Marker Placement
+
+- **Device QA Input**: User confirmed bookmark metadata and present-mode
+  placement were correct, but editor markers still appeared in the page-side
+  block gutter instead of at the original text location.
+- **Runtime Fix**: Editor blocks now receive exact bookmark anchors and draw the
+  visible `Â»` marker at the resolved raw editor offset using the markup-aware
+  text span. Marker taps delete the exact bookmark id.
+- **Safety Boundary**: Bookmark signs remain UI metadata only. No marker
+  character is inserted into script text, so selection, paste, STT, and export
+  paths are not changed.
+- **Verification Status**: Awaiting iPhone QA for mid-block editor bookmark
+  placement and marker deletion.

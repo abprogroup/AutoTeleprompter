@@ -15,6 +15,8 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback? onPaste;
   final bool hasBookmark;
   final VoidCallback onBookmarkTap;
+  final List<_EditorBookmarkAnchor> bookmarkAnchors;
+  final ValueChanged<String> onInlineBookmarkTap;
 
   const _EditorBlock({
     super.key,
@@ -31,6 +33,8 @@ class _EditorBlock extends StatelessWidget {
     required this.onExtendSelection,
     required this.hasBookmark,
     required this.onBookmarkTap,
+    required this.bookmarkAnchors,
+    required this.onInlineBookmarkTap,
     this.onPaste,
   });
 
@@ -83,7 +87,7 @@ class _EditorBlock extends StatelessWidget {
         children: [
           SizedBox(
             width: 28,
-            child: hasBookmark
+            child: hasBookmark && bookmarkAnchors.isEmpty
                 ? Tooltip(
                     message: 'Delete bookmark',
                     child: GestureDetector(
@@ -162,211 +166,237 @@ class _EditorBlock extends StatelessWidget {
                       selectionColor: Colors.transparent,
                     ),
                   ),
-                  child: TextField(
-                    selectionControls: useGhostSelectionControls
-                        ? GhostSelectionControls()
-                        : null,
-                    controller: controller,
-                    focusNode: focusNode,
-                    maxLines: null,
-                    onSubmitted: (_) => onSubmitted(),
-                    onTap: onTap,
-                    textDirection:
-                        isRtl ? TextDirection.rtl : TextDirection.ltr,
-                    textAlign: textAlign,
-                    cursorColor: Colors.amber,
-                    cursorHeight: maxFontSize,
-                    strutStyle: StrutStyle(
-                      fontSize: maxFontSize,
-                      height: settings.lineSpacing,
-                      forceStrutHeight: true,
-                    ),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: settings.fontSize,
-                      height: settings.lineSpacing,
-                      letterSpacing: settings.letterSpacing,
-                      wordSpacing: settings.wordSpacing,
-                    ),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 2),
-                    ),
-                    contextMenuBuilder: (context, editableTextState) {
-                      final selection = controller.selection;
-                      final hasPartialNativeSelection = selection.isValid &&
-                          !selection.isCollapsed &&
-                          !(selection.start == 0 &&
-                              selection.end == controller.text.length);
-                      void selectAllAndReopenToolbar() {
-                        ContextMenuController.removeAny();
-                        onSelectAll();
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          Future<void>.delayed(
-                              const Duration(milliseconds: 120), () {
-                            if (editableTextState.mounted) {
-                              onSelectAll();
-                            }
-                          });
-                          Future<void>.delayed(
-                              const Duration(milliseconds: 180), () {
-                            if (editableTextState.mounted) {
-                              editableTextState.showToolbar();
-                            }
-                          });
-                        });
-                      }
-
-                      void adoptPartialSelectionAfterMenuBuild() {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          onExtendSelection();
-                        });
-                      }
-
-                      // When the block is globally selected, bypass editableTextState
-                      // entirely. iOS asynchronously resets the native selection back
-                      // to the original double-tapped word after Select All, so
-                      // iterating contextMenuButtonItems would serve word-scoped
-                      // Cut/Copy actions instead of our global ones. The visible
-                      // command surface is the app-owned selection toolbar in the
-                      // parent Stack; native selected-text menus are suppressed
-                      // while app selection is active.
-                      if (isGlobalSelected ||
-                          hasOverlaySelection ||
-                          hasExternalRange) {
-                        ContextMenuController.removeAny();
-                        return const SizedBox.shrink();
-                      }
-
-                      // Native iOS selection detects the user's one-block
-                      // intent, then the app overlay becomes the handle owner.
-                      // The parent guards this handoff during Select All so a
-                      // late word-selection event cannot downgrade full-script
-                      // selection back to the originally double-tapped word.
-                      if (hasPartialNativeSelection) {
-                        adoptPartialSelectionAfterMenuBuild();
-                        ContextMenuController.removeAny();
-                        return const SizedBox.shrink();
-                      }
-
-                      final List<ContextMenuButtonItem> items =
-                          editableTextState.contextMenuButtonItems;
-                      final List<ContextMenuButtonItem> customItems = [];
-                      final hasSelectableRange = isGlobalSelected ||
-                          hasOverlaySelection ||
-                          hasExternalRange ||
-                          hasPartialNativeSelection ||
-                          (selection.isValid && !selection.isCollapsed);
-                      bool hasSelectAll = false;
-                      bool hasCut = false;
-                      bool hasCopy = false;
-                      for (final item in items) {
-                        if (item.type == ContextMenuButtonType.selectAll) {
-                          hasSelectAll = true;
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: selectAllAndReopenToolbar,
-                            type: ContextMenuButtonType.custom,
-                            label: 'Select All',
-                          ));
-                        } else if (item.type == ContextMenuButtonType.cut) {
-                          hasCut = true;
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onExtendSelection();
-                              onCut();
-                            },
-                            type: ContextMenuButtonType.cut,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.copy) {
-                          hasCopy = true;
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onExtendSelection();
-                              onCopy();
-                            },
-                            type: ContextMenuButtonType.copy,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.paste &&
-                            onPaste != null) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onPaste!();
-                            },
-                            type: ContextMenuButtonType.custom,
-                            label: 'Paste',
-                          ));
-                        } else {
-                          customItems.add(item);
-                        }
-                      }
-                      // When a rich in-app clipboard exists, iOS sometimes
-                      // rebuilds the toolbar with only Paste/Select All even
-                      // though the app still has a native or overlay range.
-                      // Force app-owned Cut/Copy so commands keep using the
-                      // visible selection owner instead of falling back to
-                      // stale native menu affordances.
-                      if (hasSelectableRange && !hasCut) {
-                        customItems.insert(
-                          0,
-                          ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onExtendSelection();
-                              onCut();
-                            },
-                            type: ContextMenuButtonType.cut,
-                          ),
-                        );
-                        hasCut = true;
-                      }
-                      if (hasSelectableRange && !hasCopy) {
-                        final copyInsertIndex = customItems.isEmpty
-                            ? 0
-                            : (customItems.length > 1 ? 1 : customItems.length);
-                        customItems.insert(
-                          copyInsertIndex,
-                          ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onExtendSelection();
-                              onCopy();
-                            },
-                            type: ContextMenuButtonType.copy,
-                          ),
-                        );
-                        hasCopy = true;
-                      }
-                      // Force-inject Select All even when the native menu omits it.
-                      if (!hasSelectAll) {
-                        customItems.add(ContextMenuButtonItem(
-                          onPressed: selectAllAndReopenToolbar,
-                          type: ContextMenuButtonType.custom,
-                          label: 'Select All',
-                        ));
-                      }
-                      // Force-inject Paste when _blockClipboard is set but menu omits it.
-                      if (onPaste != null &&
-                          !customItems.any((i) =>
-                              i.label == 'Paste' ||
-                              i.type == ContextMenuButtonType.paste)) {
-                        customItems.add(ContextMenuButtonItem(
-                          onPressed: () {
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      TextField(
+                        selectionControls: useGhostSelectionControls
+                            ? GhostSelectionControls()
+                            : null,
+                        controller: controller,
+                        focusNode: focusNode,
+                        maxLines: null,
+                        onSubmitted: (_) => onSubmitted(),
+                        onTap: onTap,
+                        textDirection:
+                            isRtl ? TextDirection.rtl : TextDirection.ltr,
+                        textAlign: textAlign,
+                        cursorColor: Colors.amber,
+                        cursorHeight: maxFontSize,
+                        strutStyle: StrutStyle(
+                          fontSize: maxFontSize,
+                          height: settings.lineSpacing,
+                          forceStrutHeight: true,
+                        ),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: settings.fontSize,
+                          height: settings.lineSpacing,
+                          letterSpacing: settings.letterSpacing,
+                          wordSpacing: settings.wordSpacing,
+                        ),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 2),
+                        ),
+                        contextMenuBuilder: (context, editableTextState) {
+                          final selection = controller.selection;
+                          final hasPartialNativeSelection = selection.isValid &&
+                              !selection.isCollapsed &&
+                              !(selection.start == 0 &&
+                                  selection.end == controller.text.length);
+                          void selectAllAndReopenToolbar() {
                             ContextMenuController.removeAny();
-                            onPaste!();
+                            onSelectAll();
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              Future<void>.delayed(
+                                  const Duration(milliseconds: 120), () {
+                                if (editableTextState.mounted) {
+                                  onSelectAll();
+                                }
+                              });
+                              Future<void>.delayed(
+                                  const Duration(milliseconds: 180), () {
+                                if (editableTextState.mounted) {
+                                  editableTextState.showToolbar();
+                                }
+                              });
+                            });
+                          }
+
+                          void adoptPartialSelectionAfterMenuBuild() {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              onExtendSelection();
+                            });
+                          }
+
+                          // When the block is globally selected, bypass editableTextState
+                          // entirely. iOS asynchronously resets the native selection back
+                          // to the original double-tapped word after Select All, so
+                          // iterating contextMenuButtonItems would serve word-scoped
+                          // Cut/Copy actions instead of our global ones. The visible
+                          // command surface is the app-owned selection toolbar in the
+                          // parent Stack; native selected-text menus are suppressed
+                          // while app selection is active.
+                          if (isGlobalSelected ||
+                              hasOverlaySelection ||
+                              hasExternalRange) {
+                            ContextMenuController.removeAny();
+                            return const SizedBox.shrink();
+                          }
+
+                          // Native iOS selection detects the user's one-block
+                          // intent, then the app overlay becomes the handle owner.
+                          // The parent guards this handoff during Select All so a
+                          // late word-selection event cannot downgrade full-script
+                          // selection back to the originally double-tapped word.
+                          if (hasPartialNativeSelection) {
+                            adoptPartialSelectionAfterMenuBuild();
+                            ContextMenuController.removeAny();
+                            return const SizedBox.shrink();
+                          }
+
+                          final List<ContextMenuButtonItem> items =
+                              editableTextState.contextMenuButtonItems;
+                          final List<ContextMenuButtonItem> customItems = [];
+                          final hasSelectableRange = isGlobalSelected ||
+                              hasOverlaySelection ||
+                              hasExternalRange ||
+                              hasPartialNativeSelection ||
+                              (selection.isValid && !selection.isCollapsed);
+                          bool hasSelectAll = false;
+                          bool hasCut = false;
+                          bool hasCopy = false;
+                          for (final item in items) {
+                            if (item.type == ContextMenuButtonType.selectAll) {
+                              hasSelectAll = true;
+                              customItems.add(ContextMenuButtonItem(
+                                onPressed: selectAllAndReopenToolbar,
+                                type: ContextMenuButtonType.custom,
+                                label: 'Select All',
+                              ));
+                            } else if (item.type == ContextMenuButtonType.cut) {
+                              hasCut = true;
+                              customItems.add(ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onExtendSelection();
+                                  onCut();
+                                },
+                                type: ContextMenuButtonType.cut,
+                              ));
+                            } else if (item.type ==
+                                ContextMenuButtonType.copy) {
+                              hasCopy = true;
+                              customItems.add(ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onExtendSelection();
+                                  onCopy();
+                                },
+                                type: ContextMenuButtonType.copy,
+                              ));
+                            } else if (item.type ==
+                                    ContextMenuButtonType.paste &&
+                                onPaste != null) {
+                              customItems.add(ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onPaste!();
+                                },
+                                type: ContextMenuButtonType.custom,
+                                label: 'Paste',
+                              ));
+                            } else {
+                              customItems.add(item);
+                            }
+                          }
+                          // When a rich in-app clipboard exists, iOS sometimes
+                          // rebuilds the toolbar with only Paste/Select All even
+                          // though the app still has a native or overlay range.
+                          // Force app-owned Cut/Copy so commands keep using the
+                          // visible selection owner instead of falling back to
+                          // stale native menu affordances.
+                          if (hasSelectableRange && !hasCut) {
+                            customItems.insert(
+                              0,
+                              ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onExtendSelection();
+                                  onCut();
+                                },
+                                type: ContextMenuButtonType.cut,
+                              ),
+                            );
+                            hasCut = true;
+                          }
+                          if (hasSelectableRange && !hasCopy) {
+                            final copyInsertIndex = customItems.isEmpty
+                                ? 0
+                                : (customItems.length > 1
+                                    ? 1
+                                    : customItems.length);
+                            customItems.insert(
+                              copyInsertIndex,
+                              ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onExtendSelection();
+                                  onCopy();
+                                },
+                                type: ContextMenuButtonType.copy,
+                              ),
+                            );
+                            hasCopy = true;
+                          }
+                          // Force-inject Select All even when the native menu omits it.
+                          if (!hasSelectAll) {
+                            customItems.add(ContextMenuButtonItem(
+                              onPressed: selectAllAndReopenToolbar,
+                              type: ContextMenuButtonType.custom,
+                              label: 'Select All',
+                            ));
+                          }
+                          // Force-inject Paste when _blockClipboard is set but menu omits it.
+                          if (onPaste != null &&
+                              !customItems.any((i) =>
+                                  i.label == 'Paste' ||
+                                  i.type == ContextMenuButtonType.paste)) {
+                            customItems.add(ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onPaste!();
+                              },
+                              type: ContextMenuButtonType.custom,
+                              label: 'Paste',
+                            ));
+                          }
+                          return AdaptiveTextSelectionToolbar.buttonItems(
+                            anchors: editableTextState.contextMenuAnchors,
+                            buttonItems: customItems,
+                          );
+                        },
+                      ),
+                      Positioned.fill(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Stack(
+                              clipBehavior: Clip.none,
+                              children: _buildInlineBookmarkMarkers(
+                                context: context,
+                                width: constraints.maxWidth,
+                                textDirection: isRtl
+                                    ? TextDirection.rtl
+                                    : TextDirection.ltr,
+                                textAlign: textAlign,
+                              ),
+                            );
                           },
-                          type: ContextMenuButtonType.custom,
-                          label: 'Paste',
-                        ));
-                      }
-                      return AdaptiveTextSelectionToolbar.buttonItems(
-                        anchors: editableTextState.contextMenuAnchors,
-                        buttonItems: customItems,
-                      );
-                    },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -375,5 +405,71 @@ class _EditorBlock extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  List<Widget> _buildInlineBookmarkMarkers({
+    required BuildContext context,
+    required double width,
+    required TextDirection textDirection,
+    required TextAlign textAlign,
+  }) {
+    if (bookmarkAnchors.isEmpty || width <= 0) return const [];
+    final textStyle = TextStyle(
+      color: Colors.white,
+      fontSize: settings.fontSize,
+      height: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+    );
+    final painter = TextPainter(
+      text: controller.buildTextSpan(
+        context: context,
+        style: textStyle,
+        withComposing: false,
+      ),
+      textAlign: textAlign,
+      textDirection: textDirection,
+      maxLines: null,
+    )..layout(maxWidth: width);
+    const markerSize = 24.0;
+    const markerGap = 2.0;
+    final lineHeight = settings.fontSize * settings.lineSpacing;
+
+    return bookmarkAnchors.map((bookmark) {
+      final safeOffset = bookmark.offset.clamp(0, controller.text.length);
+      final caret = painter.getOffsetForCaret(
+        TextPosition(offset: safeOffset),
+        Rect.zero,
+      );
+      final markerLeft = textDirection == TextDirection.rtl
+          ? caret.dx + markerGap
+          : caret.dx - markerSize - markerGap;
+      final markerTop = caret.dy + ((lineHeight - markerSize) / 2);
+      return Positioned(
+        left: markerLeft.clamp(-markerSize, width).toDouble(),
+        top: markerTop < 0 ? 0 : markerTop,
+        child: Tooltip(
+          message: 'Delete bookmark',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onInlineBookmarkTap(bookmark.id),
+            child: const SizedBox(
+              width: markerSize,
+              height: markerSize,
+              child: Text(
+                'Â»',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFFFFBF00),
+                  fontSize: markerSize,
+                  fontWeight: FontWeight.bold,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }).toList();
   }
 }

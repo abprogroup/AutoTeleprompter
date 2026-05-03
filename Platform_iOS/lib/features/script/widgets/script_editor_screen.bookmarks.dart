@@ -240,6 +240,20 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     });
   }
 
+  List<_EditorBookmarkAnchor> _bookmarkAnchorsForEditorBlock(int block) {
+    final anchors = <_EditorBookmarkAnchor>[];
+    for (final bookmark in _bookmarks) {
+      final position = _editorPositionForBookmark(bookmark);
+      if (position.block != block) continue;
+      anchors.add(_EditorBookmarkAnchor(
+        id: bookmark.id,
+        offset: position.offset,
+      ));
+    }
+    anchors.sort((a, b) => a.offset.compareTo(b.offset));
+    return anchors;
+  }
+
   Future<void> _deleteEditorBookmarkAtCurrentPosition() async {
     await _loadBookmarksForCurrentScript(force: true);
     if (_bookmarks.isEmpty) {
@@ -289,6 +303,10 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     await _deleteEditorBookmarkIds(ids);
   }
 
+  Future<void> _deleteEditorBookmarkById(String id) async {
+    await _deleteEditorBookmarkIds({id});
+  }
+
   Future<void> _deleteEditorBookmarkIds(Set<String> ids) async {
     if (ids.isEmpty) return;
     final before = _bookmarks.length;
@@ -328,4 +346,14 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => ensure());
   }
+}
+
+class _EditorBookmarkAnchor {
+  final String id;
+  final int offset;
+
+  const _EditorBookmarkAnchor({
+    required this.id,
+    required this.offset,
+  });
 }

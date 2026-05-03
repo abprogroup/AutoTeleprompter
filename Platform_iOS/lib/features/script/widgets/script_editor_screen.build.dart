@@ -285,6 +285,12 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                     onBookmarkTap: () => unawaited(
                                       _deleteEditorBookmarksForBlock(index),
                                     ),
+                                    bookmarkAnchors:
+                                        _bookmarkAnchorsForEditorBlock(index),
+                                    onInlineBookmarkTap: (bookmarkId) =>
+                                        unawaited(
+                                      _deleteEditorBookmarkById(bookmarkId),
+                                    ),
                                   );
                                 },
                               ),

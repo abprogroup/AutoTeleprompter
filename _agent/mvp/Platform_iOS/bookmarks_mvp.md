@@ -184,3 +184,18 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
   sit before/right of the word.
   Negative vertical offsets can make a before-word marker look like it belongs
   to the previous line and must be avoided.
+
+---
+
+## iOS Editor Inline Bookmark Marker - 2026-05-03
+
+- Editor bookmark markers must render at the resolved raw editor offset, not as
+  a generic page-side block flag.
+- The marker remains metadata/UI only and must never be inserted into
+  `controller.text`; script text, STT tokenization, copy/paste, export, and
+  present-mode words must not receive a literal bookmark character.
+- When exact editor anchors are available, delete marker taps must remove the
+  exact bookmark id. The older block-level delete fallback may remain only for
+  legacy cases with no resolved inline anchor.
+- The marker is positioned from the same markup-aware `TextPainter` span used
+  by the editor so hidden style tags do not shift the visual anchor.

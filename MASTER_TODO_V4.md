@@ -559,6 +559,10 @@
   `WordAligner` now keeps phrase-aware recovery active inside the five-word
   local window and caps default sequence recovery to five words. Awaiting iPhone
   QA.
+- [P] **iOS Editor Bookmark Marker Placement**: Bookmark metadata already
+  resolves correctly between editor and present mode. Editor markers now render
+  from exact bookmark anchors instead of the page-side block gutter, and marker
+  taps delete the exact bookmark id. Awaiting iPhone QA.
 - [ ] **iOS STT Visible Skip Language Boundary**: Plan and implement visible
   skip across language transitions, e.g. Hebrew block -> English visible block
   -> Hebrew block. Visible skip must be able to trigger locale transition for a

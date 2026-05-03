@@ -261,6 +261,38 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   bool get hasSelection =>
       _isSelecting && _startBlock != null && _endBlock != null;
 
+  void setKeyboardSelection({
+    required int anchorBlock,
+    required int anchorOffset,
+    required int focusBlock,
+    required int focusOffset,
+  }) {
+    if (anchorBlock < 0 ||
+        anchorBlock >= widget.controllers.length ||
+        focusBlock < 0 ||
+        focusBlock >= widget.controllers.length) {
+      return;
+    }
+    _stopAutoScroll();
+    _resetDragState();
+    setState(() {
+      _isSelecting = true;
+      _startBlock = anchorBlock;
+      _startOffset = _clampEndpointOffset(anchorBlock, anchorOffset);
+      _endBlock = focusBlock;
+      _endOffset = _clampEndpointOffset(focusBlock, focusOffset);
+      for (final c in widget.controllers) {
+        c.isGlobalSelected = false;
+      }
+      _updateControllers();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      refreshPositions();
+    });
+    widget.onSelectionChanged();
+  }
+
   String get debugSelectionSummary {
     final range = _normalizedRange();
     final a =

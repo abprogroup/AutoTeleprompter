@@ -1482,3 +1482,18 @@
   history entry.
 - **Verification Status**: Targeted analyzer reports no new compile errors;
   existing Windows warnings/infos remain. Awaiting Windows artifact/device QA.
+
+## 2026-05-03 - Windows v5 Shortcut + Ctrl Arrow Correction
+
+- **Device QA Input**: User found that touching/dragging selection handles could
+  break Ctrl+C/Ctrl+X, and Ctrl+Up/Down still stalled at the start/end of the
+  current block instead of continuing through previous/next blocks.
+- **Runtime Fix**: Screen-level keyboard handling now owns Ctrl/Cmd+C,
+  Ctrl/Cmd+X, and Ctrl/Cmd+V whenever an app-owned overlay/global selection
+  exists, so copy/cut/paste no longer depends on TextField focus after a
+  handle gesture.
+- **Arrow Fix**: Ctrl+Up/Down now use a block-aware editor path. Repeated
+  presses move to current block start/end first, then previous/next blocks.
+  Ctrl+Shift+Up/Down can extend selection to block boundaries and uses the
+  app overlay when the selected range crosses blocks.
+- **Verification Status**: Awaiting Windows workflow/device QA.

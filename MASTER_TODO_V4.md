@@ -694,3 +694,9 @@
   the nearest visible endpoint at pan start, lets modified arrows fall through
   to native `EditableText`, and rebuilds presenter bookmark metadata from live
   `\u00BB` signs before presentation. Awaiting Windows artifact QA.
+- [P] **Windows Shortcut + Ctrl Arrow Correction**: Device QA showed handle
+  gestures could break Ctrl+C/Ctrl+X command routing, and Ctrl+Up/Down still
+  stalled at current-block boundaries. Follow-up routes Ctrl/Cmd+C/X/V through
+  the app command path whenever overlay/global selection exists, and makes
+  Ctrl+Up/Down block-aware so repeated presses cross previous/next script
+  blocks. Awaiting Windows artifact QA.

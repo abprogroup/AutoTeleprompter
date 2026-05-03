@@ -177,3 +177,16 @@ save entries created after selection-based commands.
 - While a handle drag or handle autoscroll is active, body drag updates are
   ignored. Cross-block selection may still extend through `_handleUpdate`, but
   only the active endpoint moves.
+
+## 2026-05-03 V5 Follow-Up: Shortcut Ownership After Handle Touch
+
+- App-owned selections must keep app-owned keyboard command routing even after
+  the user touches or drags a handle. Ctrl/Cmd+C, Ctrl/Cmd+X, and Ctrl/Cmd+V
+  are handled by the screen-level keyboard route whenever overlay/global
+  selection exists, so they do not depend on the focused `TextField`.
+- Ctrl+Up/Down are block-aware editor commands. Native `EditableText` can move
+  only inside one paragraph block, so the editor route must move to the current
+  block start/end first and then to previous/next blocks on repeated presses.
+- Ctrl+Shift+Up/Down may extend selection to a block boundary. Cross-block
+  extension must use the app overlay selection path so copy/cut keeps the
+  selected multi-block range.

@@ -424,3 +424,14 @@ file and the matching MVP docs.
   active and must be cleared first.
 - This preserves system/editor shortcut semantics such as Ctrl+Up/Down and
   Shift-based selection while keeping app-owned overlay deselection explicit.
+
+## 2026-05-03 V5 Correction: Ctrl+Up/Down Are Block-Aware
+
+- Ctrl+Up/Down cannot be left entirely to native `EditableText`, because each
+  script paragraph is a separate field and native movement stalls at the field
+  boundary.
+- Windows editor owns Ctrl+Up/Down for paragraph/block traversal while leaving
+  unrelated modified arrows native.
+- Repeated Ctrl+Up/Down must cross one block at a time after reaching the
+  current block boundary. Ctrl+Shift+Up/Down may extend into the overlay when
+  the selection crosses block boundaries.

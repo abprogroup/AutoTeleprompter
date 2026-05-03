@@ -419,6 +419,12 @@ Additional clipboard prohibitions:
 - Plain and rich clipboard companions must preserve empty selected block slices
   too. Do not filter empty blocks out of `_plainTextForBlocks()` or rich
   clipboard serialization when they are part of the selected range.
+- A stored recognized range may remain authoritative even if the live overlay
+  range cannot be re-read during the toolbar command callback. If a visible app
+  selection exists and the stored recognized range preserves more block slices
+  than the visible fallback, the stored recognized range must win.
+- Debug output must distinguish this path as `copy-recognized-stored` or
+  `cut-recognized-stored` so device QA can prove which command source won.
 - A visible app highlight is command data. If the user can see highlighted text
   from the app selection layer, Cut/Copy must store those raw-markup slices in
   `_blockClipboard` and must not return an empty clipboard or the original

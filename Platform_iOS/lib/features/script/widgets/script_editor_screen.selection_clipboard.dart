@@ -177,9 +177,13 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     );
   }
 
-  List<String>? _recognizedBlocksForCommand(String reason) {
+  List<String>? _recognizedBlocksForCommand(
+    String reason, {
+    bool allowStoredRange = false,
+  }) {
     var range = _recognizedBlockRange;
     final raw = _overlayKey.currentState?.currentRawRange;
+    var usedStoredRange = false;
     if (raw != null) {
       final liveRange = _rangeFromOverlayRaw(raw, '$reason-overlay');
       if (liveRange != null &&
@@ -189,14 +193,20 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       }
     }
     if (range == null) return null;
-    if (!_rangeMatchesOverlay(range)) {
+    if (raw == null) {
+      if (!allowStoredRange) {
+        _clearRecognizedBlockRange('$reason-stale-range');
+        return null;
+      }
+      usedStoredRange = true;
+    } else if (!_rangeMatchesOverlay(range)) {
       _clearRecognizedBlockRange('$reason-stale-range');
       return null;
     }
     final blocks = _rawMarkupSlicesForRange(range);
     if (blocks == null || blocks.isEmpty) return null;
     _selectionClipboardDebug =
-        '$reason-recognized: ${blocks.length} slices [${_blockDebugShape(blocks)}]';
+        '$reason-recognized${usedStoredRange ? "-stored" : ""}: ${blocks.length} slices [${_blockDebugShape(blocks)}]';
     return blocks;
   }
 
@@ -616,7 +626,10 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
 
     final visibleBlocks = _visibleAppSelectedMarkupBlocks('cut');
-    final recognizedBlocks = _recognizedBlocksForCommand('cut');
+    final recognizedBlocks = _recognizedBlocksForCommand(
+      'cut',
+      allowStoredRange: visibleBlocks != null && visibleBlocks.isNotEmpty,
+    );
     final recognizedRange = _recognizedBlockRange;
     if (recognizedBlocks != null &&
         recognizedRange != null &&
@@ -711,7 +724,10 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
 
     final visibleBlocks = _visibleAppSelectedMarkupBlocks('copy');
-    final recognizedBlocks = _recognizedBlocksForCommand('copy');
+    final recognizedBlocks = _recognizedBlocksForCommand(
+      'copy',
+      allowStoredRange: visibleBlocks != null && visibleBlocks.isNotEmpty,
+    );
     if (recognizedBlocks != null &&
         _shouldPreferRecognizedBlocks(recognizedBlocks, visibleBlocks)) {
       _storeBlockClipboard(

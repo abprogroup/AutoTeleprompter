@@ -1217,3 +1217,21 @@
 - **Verification**: Awaiting iOS device QA. The expected clipboard shape for a
   selection spanning text-empty-text-empty-text is five slices, including the
   empty blocks.
+
+## 2026-05-03 - iOS Stored Recognized Range Command Gate
+
+- **QA Follow-Up**: User reported no visible behavior change after the empty
+  block repair. The likely remaining gate was in `_recognizedBlocksForCommand()`:
+  it rejected the stored recognized range unless the live overlay range could
+  still be re-read during the toolbar command callback.
+- **Root Cause Direction**: Device debug showed the stored `Range` was correct.
+  If the live overlay state disappears or becomes unavailable while the native
+  toolbar action is executing, the correct stored range was discarded and the
+  smaller visible fallback still won.
+- **Fix Result**: `_recognizedBlocksForCommand()` now accepts the stored
+  recognized range when a visible app selection exists and the stored range
+  preserves more block slices than that fallback. Debug output marks this as
+  `copy-recognized-stored` / `cut-recognized-stored`.
+- **Verification**: Awaiting iOS device QA. If the same selection is tested,
+  the desired clipboard debug is a recognized/stored five-slice shape, not
+  `copy-visible-app` with only non-empty slices.

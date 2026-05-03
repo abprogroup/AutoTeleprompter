@@ -525,6 +525,10 @@ more regressions than a deliberate app-owned selection engine.
 - The plain and rich clipboard companion paths are part of the same contract:
   selected empty blocks must survive as blank-line structure there too, not only
   inside `_blockClipboard`.
+- Toolbar command timing can make the live overlay range unavailable even when
+  the stored recognized range is correct. When a visible app selection exists
+  and the stored recognized range preserves more block slices than the visible
+  fallback, the stored recognized range remains authoritative.
 - This fallback is not a new selection system. It is a guardrail that keeps the
   clipboard synchronized with what the user sees until `GlobalSelectionOverlay
   v2` is fully mature.

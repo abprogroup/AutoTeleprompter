@@ -525,6 +525,12 @@
   recognized overlay/raw range whenever it preserves more block slices than the
   visible fallback, keeping selected blank lines in `_blockClipboard`. Awaiting
   IPA/device verification.
+- [P] **iOS Stored Recognized Range Command Gate**: QA follow-up showed no
+  behavior change, implying the correct stored range may still be discarded when
+  the live overlay range cannot be re-read during the toolbar command callback.
+  `_recognizedBlocksForCommand()` now allows that stored range to win when a
+  visible app selection exists and the stored shape preserves more block slices.
+  Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

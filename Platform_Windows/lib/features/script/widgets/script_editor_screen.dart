@@ -35,6 +35,7 @@ import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
 import '../services/markup_export_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
+import '../models/script_word.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
@@ -43,6 +44,8 @@ part 'script_editor_screen.dialogs_history.dart';
 part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';
 part 'script_editor_screen.debug_bookmarks_search.dart';
+part 'script_editor_screen.bookmarks.dart';
+part 'script_editor_screen.search.dart';
 part 'script_editor_screen.editor_block.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
@@ -143,6 +146,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   Color _lastChosenTextColor = const Color(0xFFFFBF00);
   Color _lastChosenHighlightColor = const Color(0x4DFFFFFF);
   String _lastSearchQuery = '';
+  bool _searchDialogOpen = false;
+  bool _searchWholeWord = false;
+  bool _editorSearchToolbarVisible = false;
+  List<_EditorSearchMatch> _editorSearchMatches = const [];
+  int _editorSearchMatchIndex = -1;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
@@ -157,7 +165,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isLoading = false;
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
-  Timer? _historyTimer, _recentTimer, _autoSaveTimer;
+  Timer? _historyTimer, _recentTimer, _autoSaveTimer, _clipboardGuardTimer;
   Timer?
       _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
 
@@ -306,12 +314,30 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       }
       _forceRecentUpdate();
       unawaited(_loadBookmarksForCurrentScript());
+      // Migrate old metadata-only bookmarks → insert » signs into text.
+      // Safe to re-run: strips existing signs first, then re-inserts in order.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_reconcileEditorBookmarkSignsFromMetadata());
+      });
     }
+  }
+
+  void _startClipboardGuard(String expectedPlain) {
+    _clipboardGuardTimer?.cancel();
+    _clipboardGuardTimer = Timer(const Duration(seconds: 20), () async {
+      final current = await Clipboard.getData(Clipboard.kTextPlain);
+      final normalized =
+          (current?.text ?? '').replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+      if (normalized.trimRight() != expectedPlain.trimRight()) {
+        RichClipboard.clearInternal();
+      }
+    });
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
+    _clipboardGuardTimer?.cancel();
     _historyTimer?.cancel();
     _recentTimer?.cancel();
     _autoSaveTimer?.cancel();
@@ -422,6 +448,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           onSave: _saveScript,
           onImport: _importFile,
           onRename: _showRenameDialog,
+          onSearch: _showEditorSearchDialog,
           onAddBookmark: _addEditorBookmark,
           onRemoveBookmark: () =>
               unawaited(_deleteEditorBookmarkAtCurrentPosition()),
@@ -531,7 +558,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                     }),
                     _SearchIntent:
                         CallbackAction<_SearchIntent>(onInvoke: (intent) {
-                      _showSearchDialog();
+                      _showEditorSearchDialog();
                       return null;
                     }),
                   },
@@ -715,7 +742,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                     onPaste: _onPaste,
                                     onUndo: _undo,
                                     onRedo: _redo,
-                                    onSearch: _showSearchDialog,
+                                    onSearch: _showEditorSearchDialog,
                                     hasBookmark: _hasBookmarkInEditorBlock(index),
                                     onBookmarkTap: () =>
                                         _deleteEditorBookmarksForBlock(index),
@@ -730,6 +757,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                   ],
                 ),
               ),
+            ),
+            Positioned(
+              top: 0, left: 16, right: 16,
+              child: _buildEditorSearchToolbar(),
             ),
             if (_isPendingLoad)
               Positioned.fill(

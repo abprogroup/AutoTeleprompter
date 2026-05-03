@@ -67,11 +67,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   String _lastSearchQuery = '';
   bool _searchDialogOpen = false;
   bool _resumeDialogShown = false;
-  // Compact search toolbar state
-  List<int> _searchMatches = const [];
-  int _searchMatchIndex = 0;
-  bool _showSearchToolbar = false;
-  bool _searchWholeWord = false; // true = exact word, false = contains
+  // Presenter search state
+  List<_PresenterSearchMatch> _presenterSearchMatches = const [];
+  int _presenterSearchMatchIndex = -1;
+  bool _presenterSearchToolbarVisible = false;
+  bool _searchWholeWord = false;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;

@@ -80,7 +80,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     final format = await EditorDialogs.showSaveFormatDialog(context);
     if (format == null || !mounted) return;
 
-    final text = _getRefinedFullText();
+    final text = _getRefinedFullTextWithoutBookmarkSigns();
 
     // Generate bytes in the correct format for the chosen file type
     final List<int> bytes;
@@ -169,7 +169,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     try {
       final settings = ref.read(settingsProvider);
       ref.read(scriptProvider.notifier).loadText(
-            _getRefinedFullText(),
+            _getRefinedFullTextWithoutBookmarkSigns(),
             title: _currentTitle,
             sourceType: _sourceType,
             sessionId: _currentSessionId,

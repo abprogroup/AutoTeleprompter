@@ -171,6 +171,34 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get hasSelection => _isSelecting && _startBlock != null && _endBlock != null;
 
+  /// Converts a native single-block partial selection (e.g. from double-click
+  /// or drag-to-select inside one TextField) into the app overlay handles.
+  /// Full-block selections are ignored here — Select All owns those.
+  void extendNativeBlockSelection(int blockIndex, TextSelection selection) {
+    if (blockIndex < 0 || blockIndex >= widget.controllers.length) return;
+    if (!selection.isValid || selection.isCollapsed) return;
+    final controller = widget.controllers[blockIndex];
+    final start = selection.start.clamp(0, controller.text.length).toInt();
+    final end   = selection.end  .clamp(0, controller.text.length).toInt();
+    if (start == end) return;
+    if (start == 0 && end == controller.text.length) return;
+    setState(() {
+      _isSelecting = true;
+      _startBlock  = blockIndex;
+      _endBlock    = blockIndex;
+      _startOffset = start;
+      _endOffset   = end;
+      for (final c in widget.controllers) c.isGlobalSelected = false;
+      _updateBlockHighlights();
+      for (final c in widget.controllers) c.refresh();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _calculateHandlePositions());
+    });
+    widget.onSelectionChanged();
+  }
+
   /// Returns the block index whose render box contains [globalPos], or null.
   int? _blockAtPosition(Offset globalPos) {
     for (int i = 0; i < widget.blockKeys.length; i++) {

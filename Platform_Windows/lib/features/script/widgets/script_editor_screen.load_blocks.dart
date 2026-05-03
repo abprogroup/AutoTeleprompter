@@ -137,7 +137,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         timer.cancel();
         return;
       }
-      final text = _getRefinedFullText();
+      final text = _getRefinedFullTextWithoutBookmarkSigns();
       if (text.isEmpty && _currentTitle == 'New Project') return;
       try {
         _forceRecentUpdate();
@@ -151,34 +151,6 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     _controllers.clear();
     _focusNodes.clear();
     _blockKeys.clear();
-  }
-
-  Future<void> _loadBookmarksForCurrentScript({bool force = false}) async {
-    final key =
-        ScriptBookmarkService.scopeKey(_currentSessionId, _currentTitle);
-    if (!force &&
-        _bookmarkScopeKey == key &&
-        (_bookmarksLoaded || _bookmarkLoadingKey == key)) {
-      return;
-    }
-    _bookmarkScopeKey = key;
-    _bookmarkLoadingKey = key;
-    _bookmarksLoaded = false;
-    final loaded = await ScriptBookmarkService.load(key);
-    if (!mounted || _bookmarkScopeKey != key) return;
-    setState(() {
-      _bookmarks = loaded;
-      _bookmarksLoaded = true;
-      _bookmarkLoadingKey = null;
-    });
-  }
-
-  Future<void> _saveBookmarks() async {
-    final key = _bookmarkScopeKey ??
-        ScriptBookmarkService.scopeKey(_currentSessionId, _currentTitle);
-    _bookmarkScopeKey = key;
-    _bookmarksLoaded = true;
-    await ScriptBookmarkService.save(key, _bookmarks);
   }
 
   void _addBlock(int index, {String text = ''}) {
@@ -298,6 +270,20 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
                 controller.selection.baseOffset == 0 &&
                 controller.selection.extentOffset == controller.text.length) {
               _selectAllBlocks();
+            } else if (!_isGlobalSelection &&
+                !_isCommandExecuting &&
+                !overlayActive &&
+                controller.selection.isValid &&
+                !controller.selection.isCollapsed) {
+              // Native partial selection (double-click word, drag-to-select) →
+              // promote to overlay handles so Cut/Copy commands work on it.
+              final blockIndex = _controllers.indexOf(controller);
+              if (blockIndex >= 0) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  _extendNativeSelectionToOverlay(blockIndex);
+                });
+              }
             }
           }
           return;
@@ -412,7 +398,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
   Future<void> _forceRecentUpdate() async {
     _recentTimer?.cancel();
-    final text = _getRefinedFullText();
+    final text = _getRefinedFullTextWithoutBookmarkSigns();
     if (text.trim().isEmpty) return;
     final settings = ref.read(settingsProvider);
     await ref.read(settingsProvider.notifier).saveScript(

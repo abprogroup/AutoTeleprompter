@@ -5,6 +5,7 @@ class ProjectActionsSuite extends StatelessWidget {
   final VoidCallback onBack, onPresent, onClear, onSave, onImport, onRename;
   final VoidCallback onAddBookmark, onRemoveBookmark;
   final VoidCallback onPreviousBookmark, onNextBookmark;
+  final VoidCallback? onSearch;
   final String title;
 
   const ProjectActionsSuite({
@@ -20,6 +21,7 @@ class ProjectActionsSuite extends StatelessWidget {
     required this.onPreviousBookmark,
     required this.onNextBookmark,
     required this.title,
+    this.onSearch,
   });
 
   @override
@@ -32,6 +34,10 @@ class ProjectActionsSuite extends StatelessWidget {
             IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white70),
                 onPressed: onBack),
+            IconButton(
+                icon: const Icon(Icons.search),
+                tooltip: 'Find in script',
+                onPressed: onSearch),
             IconButton(
                 icon: const Icon(Icons.delete_outline), onPressed: onClear),
             IconButton(icon: const Icon(Icons.save_alt), onPressed: onSave),

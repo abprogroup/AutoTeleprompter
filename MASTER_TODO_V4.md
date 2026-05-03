@@ -502,6 +502,11 @@
   then `GlobalSelectionOverlay` owns the handle/range. The handoff is blocked
   during the Select All native-menu guard, and partial Cut/Copy route through
   the handoff before clipboard commands. Awaiting IPA/device verification.
+- [P] **iOS Overlay Handle Command Repair**: After QA showed handle Cut still
+  cutting only the initially tapped word and later selections showing only
+  Paste/Select All, hide native handles for any non-collapsed selection range
+  and force app-owned Cut/Copy toolbar actions whenever native/overlay/global
+  selection exists. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

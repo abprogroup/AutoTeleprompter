@@ -1147,3 +1147,20 @@
 - **Verification Needed**: Device QA must confirm double-tap word -> Select All
   still selects the full script, and double-tap word -> overlay handles can be
   dragged without clipboard falling back to the originally touched word.
+
+## 2026-05-03 - iOS Overlay Handle Command Repair
+
+- **Device QA Input**: After guarded handoff, dragging handles and pressing Cut
+  still cut only the originally double-tapped word. After a Cut created a rich
+  clipboard, later selections could show only Paste/Select All instead of
+  Cut/Copy.
+- **Handle Ownership Result**: `_EditorBlock` now hides native iOS handles for
+  any non-collapsed selection range, not only after the parent has already
+  observed overlay/global selection. This prevents the user from dragging
+  native one-block handles while the app expects overlay ownership.
+- **Toolbar Result**: When the app knows a native, overlay, or global selection
+  range exists, the context menu force-injects app-owned Cut/Copy if iOS omits
+  them because a paste clipboard is available.
+- **Command Result**: Forced Cut/Copy actions call the handoff path before
+  command routing so `_onCutClean()` / `_onCopyClean()` can consume the live
+  app-owned range instead of stale native word selection.

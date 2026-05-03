@@ -392,3 +392,11 @@ Additional clipboard prohibitions:
 - Any overlay/global toolbar `Select All` button must use the same re-armed
   app-owned Select All path as the stable double-tap fix. Do not use a raw
   native `ContextMenuButtonType.selectAll` action.
+- Native handles must be hidden whenever a non-collapsed native range,
+  overlay range, or global selection exists. The native selection can detect
+  the initial word/range, but the user must drag only app-owned overlay
+  handles after handoff.
+- If `_blockClipboard` already exists, iOS may rebuild the toolbar with only
+  Paste/Select All. The editor must force app-owned Cut/Copy actions whenever
+  any selectable native/overlay/global range exists, so a new selection is not
+  trapped behind a stale paste-only menu.

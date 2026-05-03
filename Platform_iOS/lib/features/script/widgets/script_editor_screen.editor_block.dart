@@ -60,7 +60,10 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
-    final useGhostSelectionControls = isGlobalSelected || hasOverlaySelection;
+    final hasNativeRange =
+        controller.selection.isValid && !controller.selection.isCollapsed;
+    final useGhostSelectionControls =
+        isGlobalSelected || hasOverlaySelection || hasNativeRange;
 
     return Container(
       decoration: BoxDecoration(
@@ -304,7 +307,13 @@ class _EditorBlock extends StatelessWidget {
                       final List<ContextMenuButtonItem> items =
                           editableTextState.contextMenuButtonItems;
                       final List<ContextMenuButtonItem> customItems = [];
+                      final hasSelectableRange = isGlobalSelected ||
+                          hasOverlaySelection ||
+                          hasPartialNativeSelection ||
+                          (selection.isValid && !selection.isCollapsed);
                       bool hasSelectAll = false;
+                      bool hasCut = false;
+                      bool hasCopy = false;
                       for (final item in items) {
                         if (item.type == ContextMenuButtonType.selectAll) {
                           hasSelectAll = true;
@@ -314,17 +323,21 @@ class _EditorBlock extends StatelessWidget {
                             label: 'Select All',
                           ));
                         } else if (item.type == ContextMenuButtonType.cut) {
+                          hasCut = true;
                           customItems.add(ContextMenuButtonItem(
                             onPressed: () {
                               ContextMenuController.removeAny();
+                              onExtendSelection();
                               onCut();
                             },
                             type: ContextMenuButtonType.cut,
                           ));
                         } else if (item.type == ContextMenuButtonType.copy) {
+                          hasCopy = true;
                           customItems.add(ContextMenuButtonItem(
                             onPressed: () {
                               ContextMenuController.removeAny();
+                              onExtendSelection();
                               onCopy();
                             },
                             type: ContextMenuButtonType.copy,
@@ -342,6 +355,43 @@ class _EditorBlock extends StatelessWidget {
                         } else {
                           customItems.add(item);
                         }
+                      }
+                      // When a rich in-app clipboard exists, iOS sometimes
+                      // rebuilds the toolbar with only Paste/Select All even
+                      // though the app still has a native or overlay range.
+                      // Force app-owned Cut/Copy so commands keep using the
+                      // visible selection owner instead of falling back to
+                      // stale native menu affordances.
+                      if (hasSelectableRange && !hasCut) {
+                        customItems.insert(
+                          0,
+                          ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onExtendSelection();
+                              onCut();
+                            },
+                            type: ContextMenuButtonType.cut,
+                          ),
+                        );
+                        hasCut = true;
+                      }
+                      if (hasSelectableRange && !hasCopy) {
+                        final copyInsertIndex = customItems.isEmpty
+                            ? 0
+                            : (customItems.length > 1 ? 1 : customItems.length);
+                        customItems.insert(
+                          copyInsertIndex,
+                          ContextMenuButtonItem(
+                            onPressed: () {
+                              ContextMenuController.removeAny();
+                              onExtendSelection();
+                              onCopy();
+                            },
+                            type: ContextMenuButtonType.copy,
+                          ),
+                        );
+                        hasCopy = true;
                       }
                       // Force-inject Select All even when the native menu omits it.
                       if (!hasSelectAll) {

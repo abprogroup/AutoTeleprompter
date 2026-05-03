@@ -495,6 +495,12 @@ more regressions than a deliberate app-owned selection engine.
   clipboard can consume live overlay raw slices. Partial toolbar Select All
   must not call the handoff; it must use the app-owned re-armed Select All
   command.
+- Native handles are hidden for any non-collapsed selection range. This is
+  required so the user does not drag a native one-`TextField` handle while the
+  app expects `GlobalSelectionOverlay` to own the visible range.
+- If the app-private clipboard already has a rich block clipboard, toolbar
+  reconstruction must still expose Cut/Copy when a selectable range exists.
+  Paste being available must not suppress new selection commands.
 - This is a verification step toward `GlobalSelectionOverlay v2`; device QA
   must confirm that Select All still works from a double-tapped word before any
   broader overlay/toolbar work continues.

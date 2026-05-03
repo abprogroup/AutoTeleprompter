@@ -261,6 +261,23 @@ fragilities above and port these final Windows product contracts:
   synchronized.
 - Closing the toolbar clears only transient result navigation state; it must not
   alter the last script position, bookmarks, STT session, or loaded script.
+- Presenter search dialog supports `Match whole word`. Whole-word boundaries
+  treat English letters, Hebrew letters, and digits as word characters while
+  punctuation, whitespace, quotes, and marker symbols are boundaries. This
+  option must not change direct search-result navigation or the existing
+  next/back toolbar.
+
+---
+
+## Deferred STT Visible Skip Language Boundary - 2026-05-03
+
+- The next STT task is visible-skip across language changes. Example: Hebrew
+  block, English block, Hebrew block. When visible skip is enabled, STT must be
+  able to consider visible text in a later language block and trigger the
+  required locale transition before the reader reaches the previous block end.
+- This search/bookmark pass must not edit STT matching or locale-switching
+  logic. The language-boundary skip requires a separate STT MVP update and
+  physical-device test.
 
 ---
 

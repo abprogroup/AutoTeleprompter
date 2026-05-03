@@ -97,49 +97,79 @@ extension _TeleprompterSearchParts on _TeleprompterScreenState {
     if (_searchDialogOpen) return;
     _searchDialogOpen = true;
     final controller = TextEditingController(text: _lastSearchQuery);
-    final query = await showDialog<String>(
+    bool wholeWord = _searchWholeWord;
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title:
-            const Text('Search script', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Word or phrase to find',
-            hintStyle: TextStyle(color: Colors.white38),
-            enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Colors.white24)),
-            focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFFFFBF00))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text('Search script',
+              style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Word or phrase to find',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24)),
+                  focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFFFFBF00))),
+                ),
+                textInputAction: TextInputAction.search,
+                onSubmitted: (value) => Navigator.pop(ctx, {
+                  'query': value,
+                  'wholeWord': wholeWord,
+                }),
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: wholeWord,
+                onChanged: (value) =>
+                    setDialogState(() => wholeWord = value ?? false),
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: const Color(0xFFFFBF00),
+                checkColor: Colors.black,
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'Match whole word',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ),
+            ],
           ),
-          textInputAction: TextInputAction.search,
-          onSubmitted: (value) => Navigator.pop(ctx, value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFFBF00),
-              foregroundColor: Colors.black,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
             ),
-            child: const Text('Find'),
-          ),
-        ],
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, {
+                'query': controller.text,
+                'wholeWord': wholeWord,
+              }),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFBF00),
+                foregroundColor: Colors.black,
+              ),
+              child: const Text('Find'),
+            ),
+          ],
+        ),
       ),
     );
     controller.dispose();
     _searchDialogOpen = false;
-    if (query == null) return;
-    final trimmed = query.trim();
+    if (result == null) return;
+    final trimmed = (result['query'] as String? ?? '').trim();
     if (trimmed.isEmpty) return;
     _lastSearchQuery = trimmed;
+    _searchWholeWord = result['wholeWord'] as bool? ?? false;
     _setPresenterSearchQuery(trimmed);
   }
 
@@ -155,15 +185,19 @@ extension _TeleprompterSearchParts on _TeleprompterScreenState {
     while (from < search.visibleText.length) {
       final match = search.visibleText.indexOf(needle, from);
       if (match < 0) break;
-      final wordIndex = search.wordIndexForChar(match);
-      if (wordIndex != null) {
-        matches.add(_PresenterSearchMatch(
-          wordIndex: wordIndex.clamp(0, script.words.length - 1).toInt(),
-          charStart: match,
-          charEnd: match + needle.length,
-        ));
+      final end = match + needle.length;
+      if (!_searchWholeWord ||
+          _isPresenterWholeWordMatch(search.visibleText, match, end)) {
+        final wordIndex = search.wordIndexForChar(match);
+        if (wordIndex != null) {
+          matches.add(_PresenterSearchMatch(
+            wordIndex: wordIndex.clamp(0, script.words.length - 1).toInt(),
+            charStart: match,
+            charEnd: end,
+          ));
+        }
       }
-      from = match + needle.length;
+      from = end > match ? end : match + 1;
     }
 
     if (matches.isEmpty) {
@@ -254,6 +288,18 @@ extension _TeleprompterSearchParts on _TeleprompterScreenState {
     }
 
     return _PresenterSearchText(buffer.toString(), spans);
+  }
+
+  bool _isPresenterWholeWordMatch(String text, int start, int end) {
+    final before = start <= 0 ? '' : text[start - 1];
+    final after = end >= text.length ? '' : text[end];
+    return !_isPresenterSearchWordChar(before) &&
+        !_isPresenterSearchWordChar(after);
+  }
+
+  bool _isPresenterSearchWordChar(String value) {
+    if (value.isEmpty) return false;
+    return RegExp(r'[A-Za-z0-9\u0590-\u05FF]').hasMatch(value);
   }
 }
 

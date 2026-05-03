@@ -331,6 +331,13 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                 bottom: 24,
                 child: _buildAppSelectionToolbar(),
               ),
+            if (!_isPendingLoad && _editorSearchToolbarVisible)
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: _hasAnyActiveEditorSelection ? 86 : 24,
+                child: _buildEditorSearchToolbar(),
+              ),
             if (settings.debugMode)
               Positioned(
                 bottom: 24,

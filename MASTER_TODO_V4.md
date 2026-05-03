@@ -548,6 +548,16 @@
   round-trips without style loss or style bleed. Formatting-suite taps preserve
   app-owned selection, and keyboard `Done` no longer forces keyboard reopen
   during style/paste commands. Awaiting iPhone QA.
+- [P] **iOS Editor Search Toolbar + Bookmark Anchor Stabilization**: Editor
+  search now keeps a result toolbar with previous/next/new-search/close actions
+  and supports whole-word matching. Presenter search also supports whole-word
+  matching. Bookmark conversion now snaps to readable non-newline words so empty
+  blocks do not steal anchors, and presenter markers align beside the anchor
+  word for LTR/RTL. Awaiting iPhone QA.
+- [ ] **iOS STT Visible Skip Language Boundary**: Plan and implement visible
+  skip across language transitions, e.g. Hebrew block -> English visible block
+  -> Hebrew block. Visible skip must be able to trigger locale transition for a
+  visible target before the previous language block is fully read.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

@@ -164,5 +164,23 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
   authority. The presenter `wordIndex` is only the teleprompter anchor derived
   from those editor coordinates.
 - Present-mode bookmark markers must sit beside the anchor word, not above it.
+
+---
+
+## iOS Real-Word Bookmark Anchor Stabilization - 2026-05-03
+
+- Bookmark anchors must resolve to readable `ScriptWord` entries, never to
+  empty block/newline tokens. Empty editor blocks preserve layout only.
+- Editor-created bookmarks at raw offset `0` of a text block must snap to that
+  same block's first non-newline word in presenter mode.
+- Presenter-created bookmarks must save editor `blockIndex` and raw `offset`
+  for the exact word index when possible, so returning to editor does not place
+  the marker in the previous empty block.
+- The editor-to-presenter and presenter-to-editor mapping walks the actual
+  block order and token cursor. Do not use substring tokenization loops that can
+  drift around soft/hard blank-line tokens.
+- Presenter `»` markers remain UI-only and must be vertically aligned beside
+  the anchor word. LTR markers sit before/left of the word; RTL/Hebrew markers
+  sit before/right of the word.
   Negative vertical offsets can make a before-word marker look like it belongs
   to the previous line and must be avoided.

@@ -44,34 +44,54 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   }
 
   int _wordIndexForEditorPosition(int block, int offset) {
-    final textBefore = StringBuffer();
-    for (var i = 0; i < block && i < _controllers.length; i++) {
-      if (textBefore.isNotEmpty) textBefore.write('\n');
-      textBefore.write(_controllers[i].text);
-    }
-    if (block >= 0 && block < _controllers.length) {
-      if (textBefore.isNotEmpty) textBefore.write('\n');
-      textBefore.write(
-        _controllers[block]
-            .text
-            .substring(0, offset.clamp(0, _controllers[block].text.length)),
-      );
-    }
-    final beforeTokens = WordAligner.tokenize(textBefore.toString());
-    var beforeCount = beforeTokens.length;
-    // Tokenizing a prefix that ends exactly on a block boundary creates a
-    // phantom hard-break token for the empty line after the trailing "\n".
-    // A bookmark placed before the first word of the next block must attach to
-    // that first word, not to the following word.
-    if (textBefore.toString().endsWith('\n') &&
-        beforeTokens.isNotEmpty &&
-        beforeTokens.last.isNewline &&
-        beforeTokens.last.raw == '\n\n') {
-      beforeCount--;
-    }
     final allTokens = WordAligner.tokenize(_getRefinedFullText());
-    final maxIndex = allTokens.isEmpty ? 0 : allTokens.length - 1;
-    return beforeCount.clamp(0, maxIndex).toInt();
+    if (allTokens.isEmpty) return 0;
+    final estimated = _tokenCursorForEditorPosition(block, offset);
+    return _snapToReadableWordIndex(allTokens, estimated);
+  }
+
+  int _tokenCursorForEditorPosition(int block, int offset) {
+    var cursor = 0;
+    final lastBlock = _controllers.length - 1;
+    for (var i = 0; i < block && i < _controllers.length; i++) {
+      cursor += _tokenLengthForEditorBlock(i, includeSoftBreak: i < lastBlock);
+    }
+    if (block < 0 || block >= _controllers.length) return cursor;
+    final text = _controllers[block].text;
+    if (text.trim().isEmpty) return cursor;
+    final safeOffset = offset.clamp(0, text.length).toInt();
+    final localWord = _localWordIndexForRawOffset(text, safeOffset);
+    return cursor + localWord;
+  }
+
+  int _tokenLengthForEditorBlock(int block, {required bool includeSoftBreak}) {
+    if (block < 0 || block >= _controllers.length) return 0;
+    final text = _controllers[block].text;
+    if (text.trim().isEmpty) return 1;
+    final wordCount = RegExp(r'\S+').allMatches(text).length;
+    return wordCount + (includeSoftBreak ? 1 : 0);
+  }
+
+  int _localWordIndexForRawOffset(String text, int offset) {
+    final matches = RegExp(r'\S+').allMatches(text).toList();
+    if (matches.isEmpty) return 0;
+    for (var i = 0; i < matches.length; i++) {
+      if (offset <= matches[i].start) return i;
+      if (offset > matches[i].start && offset < matches[i].end) return i;
+    }
+    return matches.length;
+  }
+
+  int _snapToReadableWordIndex(List<ScriptWord> words, int estimated) {
+    if (words.isEmpty) return 0;
+    final start = estimated.clamp(0, words.length - 1).toInt();
+    for (var i = start; i < words.length; i++) {
+      if (!words[i].isNewline && words[i].normalized.isNotEmpty) return i;
+    }
+    for (var i = start; i >= 0; i--) {
+      if (!words[i].isNewline && words[i].normalized.isNotEmpty) return i;
+    }
+    return start;
   }
 
   String _bookmarkLabelForEditorPosition(int block, int offset) {
@@ -139,6 +159,10 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   ({int block, int offset}) _editorPositionForBookmark(
       ScriptBookmark bookmark) {
     if (bookmark.blockIndex >= 0 && bookmark.blockIndex < _controllers.length) {
+      final bookmarkedBlock = _controllers[bookmark.blockIndex];
+      if (bookmarkedBlock.text.trim().isEmpty) {
+        return _editorPositionForWordIndex(bookmark.wordIndex);
+      }
       return (
         block: bookmark.blockIndex,
         offset: bookmark.offset.clamp(
@@ -148,19 +172,29 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
       );
     }
 
-    var runningTokens = 0;
+    return _editorPositionForWordIndex(bookmark.wordIndex);
+  }
+
+  ({int block, int offset}) _editorPositionForWordIndex(int wordIndex) {
+    var cursor = 0;
+    final lastBlock = _controllers.length - 1;
     for (var block = 0; block < _controllers.length; block++) {
-      final blockTokens = WordAligner.tokenize(_controllers[block].text);
-      if (bookmark.wordIndex < runningTokens + blockTokens.length) {
-        final localToken = (bookmark.wordIndex - runningTokens)
-            .clamp(0, blockTokens.isEmpty ? 0 : blockTokens.length - 1)
-            .toInt();
+      final text = _controllers[block].text;
+      final wordMatches = RegExp(r'\S+').allMatches(text).toList();
+      if (wordMatches.isNotEmpty &&
+          wordIndex >= cursor &&
+          wordIndex < cursor + wordMatches.length) {
+        final localToken =
+            (wordIndex - cursor).clamp(0, wordMatches.length - 1).toInt();
         return (
           block: block,
-          offset: _rawOffsetForTokenIndex(_controllers[block].text, localToken)
+          offset: wordMatches[localToken].start,
         );
       }
-      runningTokens += blockTokens.length + 1;
+      cursor += _tokenLengthForEditorBlock(
+        block,
+        includeSoftBreak: block < lastBlock,
+      );
     }
     final last = _controllers.isEmpty ? -1 : _controllers.length - 1;
     return (
@@ -169,13 +203,6 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
           ? _controllers[last].text.length
           : 0
     );
-  }
-
-  int _rawOffsetForTokenIndex(String text, int tokenIndex) {
-    final matches = RegExp(r'\S+').allMatches(text).toList();
-    if (matches.isEmpty) return 0;
-    final target = tokenIndex.clamp(0, matches.length - 1).toInt();
-    return matches[target].start;
   }
 
   void _goToEditorBookmark(int bookmarkIndex) {

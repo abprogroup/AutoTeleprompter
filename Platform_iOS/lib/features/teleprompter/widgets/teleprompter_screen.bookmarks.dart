@@ -50,39 +50,66 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
     Script script,
     int wordIndex,
   ) {
+    final words = script.words;
     final rawText = script.rawText;
-    if (rawText.isEmpty || wordIndex <= 0) {
+    if (rawText.isEmpty || words.isEmpty) {
       return (block: 0, offset: 0);
     }
-    final target = wordIndex.clamp(0, script.words.length - 1).toInt();
-    var bestRawOffset = 0;
-    for (var rawOffset = 0; rawOffset <= rawText.length; rawOffset++) {
-      final prefixCount =
-          WordAligner.tokenize(rawText.substring(0, rawOffset)).length;
-      if (prefixCount >= target) {
-        bestRawOffset = rawOffset;
-        break;
+    final target = _snapPresenterBookmarkIndex(script, wordIndex);
+    final blocks = rawText.split('\n');
+    var cursor = 0;
+    for (var block = 0; block < blocks.length; block++) {
+      final text = blocks[block];
+      final matches = RegExp(r'\S+').allMatches(text).toList();
+      if (matches.isNotEmpty &&
+          target >= cursor &&
+          target < cursor + matches.length) {
+        final local = (target - cursor).clamp(0, matches.length - 1).toInt();
+        return (block: block, offset: matches[local].start);
       }
-      bestRawOffset = rawOffset;
+      cursor += _presenterBlockTokenLength(
+        text,
+        includeSoftBreak: block < blocks.length - 1,
+      );
     }
+    return (block: 0, offset: 0);
+  }
 
-    final before = rawText.substring(0, bestRawOffset);
-    final block = '\n'.allMatches(before).length;
-    final lastBreak = before.lastIndexOf('\n');
-    final offset =
-        lastBreak < 0 ? bestRawOffset : bestRawOffset - lastBreak - 1;
-    return (block: block, offset: offset);
+  int _presenterBlockTokenLength(
+    String text, {
+    required bool includeSoftBreak,
+  }) {
+    if (text.trim().isEmpty) return 1;
+    final wordCount = RegExp(r'\S+').allMatches(text).length;
+    return wordCount + (includeSoftBreak ? 1 : 0);
+  }
+
+  int _snapPresenterBookmarkIndex(Script script, int index) {
+    if (script.words.isEmpty) return 0;
+    final start = index.clamp(0, script.words.length - 1).toInt();
+    for (var i = start; i < script.words.length; i++) {
+      final word = script.words[i];
+      if (!word.isNewline && word.normalized.isNotEmpty) return i;
+    }
+    for (var i = start; i >= 0; i--) {
+      final word = script.words[i];
+      if (!word.isNewline && word.normalized.isNotEmpty) return i;
+    }
+    return start;
   }
 
   Future<void> _addPresenterBookmark() async {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
-    final index = ref
-        .read(teleprompterProvider)
-        .confirmedWordIndex
-        .clamp(0, script.words.length - 1)
-        .toInt();
+    final index = _snapPresenterBookmarkIndex(
+      script,
+      ref
+          .read(teleprompterProvider)
+          .confirmedWordIndex
+          .clamp(0, script.words.length - 1)
+          .toInt(),
+    );
     final editorPosition = _editorPositionForPresenterWord(script, index);
     final bookmark = ScriptBookmark(
       id: DateTime.now().microsecondsSinceEpoch.toString(),

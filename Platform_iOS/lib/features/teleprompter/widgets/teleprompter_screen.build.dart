@@ -209,7 +209,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       Positioned(
                         left: markerOnRight ? null : -30,
                         right: markerOnRight ? -30 : null,
-                        top: 0,
+                        top: (effectiveFontSize - 24) / 2,
                         child: Tooltip(
                           message: 'Delete bookmark',
                           child: GestureDetector(

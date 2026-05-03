@@ -65,6 +65,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<ScriptBookmark> _bookmarks = const [];
   bool _searchDialogOpen = false;
   String _lastSearchQuery = '';
+  bool _searchWholeWord = false;
   bool _presenterSearchToolbarVisible = false;
   List<_PresenterSearchMatch> _presenterSearchMatches = const [];
   int _presenterSearchMatchIndex = -1;

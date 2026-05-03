@@ -1286,3 +1286,25 @@
 - **Verification Status**: Targeted iOS editor analysis reports no new compile
   errors; only the existing warning/info load remains. Awaiting physical iPhone
   QA for styled partial A + full B + partial C Cut/Paste and post-Done styling.
+
+## 2026-05-03 - iOS Editor Search Toolbar + Bookmark Anchor Stabilization
+
+- **Search Result Toolbar**: Editor search now mirrors the presenter search
+  navigation pattern: it builds all visible-text matches, shows a compact
+  previous/next/new-search/close toolbar, and lets the user cycle results
+  without reopening the search dialog.
+- **Whole-Word Matching**: Editor and presenter search dialogs now include
+  `Match whole word`. Whole-word matching is visible-text only and treats
+  English letters, Hebrew letters, and digits as word characters.
+- **Bookmark Mapping Repair**: Editor/presenter bookmark conversion now walks
+  the actual block token cursor and snaps anchors to readable non-newline
+  words. Empty blocks preserve layout but do not steal bookmark anchors.
+- **Presenter Marker Repair**: Presenter bookmark markers remain side-aware for
+  LTR/RTL and now vertically align beside the anchor word instead of floating
+  above the first word.
+- **Deferred Next Issue**: STT visible skip across language boundaries
+  (Hebrew/English/Hebrew visible text) remains a separate STT task and was not
+  changed in this search/bookmark pass.
+- **Verification Status**: Targeted editor and presenter analysis shows no new
+  compile errors; only existing warning/info load remains. Awaiting physical
+  iPhone QA.

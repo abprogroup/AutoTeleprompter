@@ -143,6 +143,18 @@ When iOS editor work resumes, port these verified Windows editor contracts:
 - Search result scrolling must use the block key / `Scrollable.ensureVisible`
   path and must not rebuild the editor into a monolith.
 
+Additional search toolbar rules:
+
+- Editor search owns a compact result toolbar, matching presenter search: back,
+  next, counter, query label, new search, and close.
+- A search builds all visible-text matches across all editor blocks. Next/back
+  cycles the same result set without reopening the dialog.
+- `Match whole word` is supported in the editor search dialog. Whole-word
+  boundaries treat English letters, Hebrew letters, and digits as word
+  characters; punctuation and whitespace are boundaries.
+- Closing the search toolbar clears search UI state only. It must not clear the
+  app-private cut/copy clipboard.
+
 ---
 
 ## iOS One Font-Size Authority Port - 2026-05-02

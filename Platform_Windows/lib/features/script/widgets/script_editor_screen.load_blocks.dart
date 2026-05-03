@@ -234,8 +234,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           // unfocused block — which is the "two highlights at once" bug.
           // Skip while a global multi-block selection or overlay drag is active
           // (their externalSelection values must not be overwritten here).
-          final overlayActive =
-              _overlayKey.currentState?.hasSelection ?? false;
+          final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
           if (!_isGlobalSelection &&
               !overlayActive &&
               !controller.isGlobalSelected &&
@@ -620,7 +619,11 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     }
     return defaultValue;
   }
-  _VerticalLayoutInfo _getVerticalLayout(int index) {
+
+  _VerticalLayoutInfo _getVerticalLayout(
+    int index, {
+    TextSelection? selection,
+  }) {
     final controller = _controllers[index];
     final settings = ref.read(settingsProvider);
     final isRtl = controller.text.isHebrew;
@@ -648,7 +651,9 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     final context = _blockKeys[index].currentContext;
     if (context != null) {
       final box = context.findRenderObject() as RenderBox?;
-      if (box != null) width = box.size.width - 30; // Accounting for Padding(left: 30) in _EditorBlock
+      if (box != null)
+        width = box.size.width -
+            30; // Accounting for Padding(left: 30) in _EditorBlock
     }
 
     // 4. Paint
@@ -666,7 +671,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     );
     painter.layout(maxWidth: width > 0 ? width : 800);
 
-    return _VerticalLayoutInfo(painter, controller.selection);
+    return _VerticalLayoutInfo(painter, selection ?? controller.selection);
   }
 }
 
@@ -700,7 +705,8 @@ class _VerticalLayoutInfo {
 
   int getPositionAtX(double x, {required bool fromBottom}) {
     if (painter.text?.toPlainText().isEmpty ?? true) return 0;
-    final y = fromBottom ? (painter.height > 0 ? painter.height - 1 : 0.0) : 0.0;
+    final y =
+        fromBottom ? (painter.height > 0 ? painter.height - 1 : 0.0) : 0.0;
     return painter.getPositionForOffset(Offset(x, y)).offset;
   }
 }

@@ -1534,3 +1534,21 @@
 - **Verification Status**: Targeted analyzer reports no new compile errors;
   existing Windows warnings/infos remain. Awaiting Windows workflow artifact
   and local launch smoke test.
+
+## 2026-05-04 - Windows v5 Plain Shift Vertical + Handle Autoscroll Correction
+
+- **Device QA Input**: User confirmed Ctrl/Alt arrows and Ctrl/Alt+Shift
+  arrows now work well, but plain Shift+Up/Down could still select to the
+  script top/bottom around empty rows or select an entire second block, and
+  dragging handles to the editor top/bottom no longer started edge autoscroll.
+- **Shift Fix**: Plain Shift+Up/Down now remains native inside a single block.
+  At a block boundary, or after the selection is already app-owned, the editor
+  moves the focus endpoint by visual line using `TextPainter` geometry instead
+  of paragraph start/end targets. Empty blocks stay one-step selection stops.
+- **Autoscroll Fix**: Mouse exit no longer immediately ends a handle drag while
+  the pointer is still in the edge-scroll zone. The overlay keeps scrolling
+  from the latest pointer/handle position and uses hard-margin/outside checks
+  plus a stale timeout to stop abandoned drags.
+- **Verification Status**: Targeted analyzer reports no new compile errors;
+  existing Windows warnings/infos remain. Awaiting Windows workflow artifact
+  and local launch smoke test.

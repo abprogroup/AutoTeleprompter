@@ -460,7 +460,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       bottomNavigationBar:
           _buildBottomActions(keyboardVisible: keyboardVisible),
       body: MouseRegion(
-        onExit: (_) => _overlayKey.currentState?.handlePointerExitedEditor(),
+        onExit: (event) =>
+            _overlayKey.currentState?.handlePointerExitedEditor(event.position),
         child: Listener(
           onPointerDown: (event) {
             if (event.buttons == kPrimaryButton) {
@@ -1003,15 +1004,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (session == null) return false;
     final anchor = session.anchor;
     final focus = session.focus;
-    final target = _arrowTargetFromPosition(
-      key: key,
-      block: focus.block,
-      offset: focus.offset,
-      keyboard: keyboard,
-      allowInBlockHorizontalStep:
-          !keyboard.isControlPressed && !keyboard.isAltPressed,
-      allowInBlockVerticalStep: true,
-    );
+    final target = _isPlainShiftVerticalArrow(key, keyboard)
+        ? _plainShiftVerticalLineTarget(
+            block: focus.block,
+            offset: focus.offset,
+            key: key,
+          )
+        : _arrowTargetFromPosition(
+            key: key,
+            block: focus.block,
+            offset: focus.offset,
+            keyboard: keyboard,
+            allowInBlockHorizontalStep:
+                !keyboard.isControlPressed && !keyboard.isAltPressed,
+            allowInBlockVerticalStep: true,
+          );
     if (target == null) return true;
     final adjusted = _clampKeyboardTargetAtAnchor(
       anchor: anchor,
@@ -1027,6 +1034,117 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _lastArrowDecision =
         'extend ${key.keyLabel}: ${anchor.block}:${anchor.offset}-${adjusted.block}:${adjusted.offset}';
     return true;
+  }
+
+  bool _isPlainShiftVerticalArrow(
+    LogicalKeyboardKey key,
+    HardwareKeyboard keyboard,
+  ) {
+    return keyboard.isShiftPressed &&
+        !keyboard.isControlPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed &&
+        (key == LogicalKeyboardKey.arrowUp ||
+            key == LogicalKeyboardKey.arrowDown);
+  }
+
+  ({int block, int offset})? _plainShiftVerticalLineTarget({
+    required int block,
+    required int offset,
+    required LogicalKeyboardKey key,
+    bool crossBlockOnly = false,
+  }) {
+    if (block < 0 || block >= _controllers.length) return null;
+    final moveUp = key == LogicalKeyboardKey.arrowUp;
+    final controller = _controllers[block];
+    final safeOffset = offset.clamp(0, controller.text.length).toInt();
+    final layout = _getVerticalLayout(
+      block,
+      selection: TextSelection.collapsed(offset: safeOffset),
+    );
+    final preferredX = layout.currentX;
+    if (controller.text.isEmpty) {
+      return _plainShiftVerticalCrossBlockTarget(
+        fromBlock: block,
+        moveUp: moveUp,
+        preferredX: preferredX,
+      );
+    }
+
+    final plainText = layout.painter.text?.toPlainText() ?? '';
+    if (plainText.isEmpty) {
+      return _plainShiftVerticalCrossBlockTarget(
+        fromBlock: block,
+        moveUp: moveUp,
+        preferredX: preferredX,
+      );
+    }
+
+    final painterOffset = safeOffset.clamp(0, plainText.length).toInt();
+    final line = layout.painter.getLineBoundary(
+      TextPosition(offset: painterOffset),
+    );
+    if (moveUp && line.start <= 0) {
+      return _plainShiftVerticalCrossBlockTarget(
+        fromBlock: block,
+        moveUp: true,
+        preferredX: preferredX,
+      );
+    }
+    if (!moveUp && line.end >= plainText.length) {
+      return _plainShiftVerticalCrossBlockTarget(
+        fromBlock: block,
+        moveUp: false,
+        preferredX: preferredX,
+      );
+    }
+    if (crossBlockOnly) return null;
+
+    final caret = layout.painter.getOffsetForCaret(
+      TextPosition(offset: painterOffset),
+      Rect.zero,
+    );
+    final metrics = layout.painter.computeLineMetrics();
+    final fallbackHeight = (ref.read(settingsProvider).fontSize *
+            ref.read(settingsProvider).lineSpacing)
+        .clamp(16.0, 96.0)
+        .toDouble();
+    final lineHeight = metrics.isEmpty ? fallbackHeight : metrics.first.height;
+    final targetY = moveUp
+        ? (caret.dy - lineHeight).clamp(0.0, layout.painter.height)
+        : (caret.dy + lineHeight).clamp(
+            0.0, (layout.painter.height - 1).clamp(0.0, double.infinity));
+    final targetOffset = layout.painter
+        .getPositionForOffset(Offset(preferredX, targetY))
+        .offset
+        .clamp(0, controller.text.length)
+        .toInt();
+    if (targetOffset == safeOffset) return null;
+    return (block: block, offset: targetOffset);
+  }
+
+  ({int block, int offset})? _plainShiftVerticalCrossBlockTarget({
+    required int fromBlock,
+    required bool moveUp,
+    required double preferredX,
+  }) {
+    final targetBlock = moveUp ? fromBlock - 1 : fromBlock + 1;
+    if (targetBlock < 0 || targetBlock >= _controllers.length) return null;
+    final targetController = _controllers[targetBlock];
+    if (targetController.text.isEmpty) {
+      return (block: targetBlock, offset: 0);
+    }
+    final fallbackOffset =
+        moveUp ? MarkupController.safeEndOffset(targetController.text) : 0;
+    final layout = _getVerticalLayout(
+      targetBlock,
+      selection: TextSelection.collapsed(offset: fallbackOffset),
+    );
+    final offset = layout
+        .getPositionAtX(preferredX, fromBottom: moveUp)
+        .clamp(0, targetController.text.length)
+        .toInt();
+    return (block: targetBlock, offset: offset);
   }
 
   bool _sameEndpoint(SelectionEndpoint a, SelectionEndpoint b) =>
@@ -1352,14 +1470,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (!selection.isValid) return false;
     final focusOffset =
         selection.extentOffset.clamp(0, controller.text.length).toInt();
-    final target = _arrowTargetFromPosition(
-      key: key,
-      block: blockIndex,
-      offset: focusOffset,
-      keyboard: keyboard,
-      allowInBlockHorizontalStep: false,
-      allowInBlockVerticalStep: false,
-    );
+    final target = _isPlainShiftVerticalArrow(key, keyboard)
+        ? _plainShiftVerticalLineTarget(
+            block: blockIndex,
+            offset: focusOffset,
+            key: key,
+            crossBlockOnly: true,
+          )
+        : _arrowTargetFromPosition(
+            key: key,
+            block: blockIndex,
+            offset: focusOffset,
+            keyboard: keyboard,
+            allowInBlockHorizontalStep: false,
+            allowInBlockVerticalStep: false,
+          );
     final anchorOffset =
         selection.baseOffset.clamp(0, controller.text.length).toInt();
     if (target == null) return false;

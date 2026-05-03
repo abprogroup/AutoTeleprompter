@@ -469,3 +469,18 @@ file and the matching MVP docs.
   normal click to deselect.
 - Empty paragraph blocks remain valid stops for every app-owned cross-block
   navigation path.
+
+## 2026-05-04 V5 Shift-Vertical And Edge-Scroll Integration
+
+- The editor keeps Ctrl/Alt arrow behavior separate from plain Shift+Up/Down.
+  Plain Shift+Up/Down uses native editing inside a block, then app-owned
+  visual-line continuation only after crossing a block boundary.
+- Existing app-owned plain Shift+Up/Down selection uses the current focus
+  caret x-position and `TextPainter` line geometry to move one rendered line
+  at a time. This prevents selecting an entire second paragraph when the focus
+  lands at that paragraph's start/end.
+- `_getVerticalLayout` accepts an optional selection for keyboard calculations
+  so the editor can compute line geometry for an app-owned focus endpoint
+  without mutating the live `TextField` selection first.
+- Handle autoscroll allows edge-zone scrolling after a mouse-exit event and
+  relies on stale timeout/hard-margin checks to stop abandoned drags.

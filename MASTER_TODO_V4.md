@@ -714,3 +714,10 @@
   autoscroll, preserve selection, and suppress body-drag promotion until
   pointer-up/clear. Full Select All is gated out of Shift-extension so arrows
   collapse it first. Awaiting Windows workflow artifact QA.
+- [P] **Windows Plain Shift Vertical + Handle Autoscroll Correction**:
+  Device QA confirmed Ctrl/Alt arrows and Ctrl/Alt+Shift arrows work, leaving
+  plain Shift+Up/Down and handle edge-scroll as the remaining regressions.
+  Plain Shift+Up/Down now keeps native in-block selection, then uses
+  app-owned visual-line continuation across block boundaries and empty rows.
+  Handle mouse-exit handling now permits intentional edge-zone autoscroll while
+  retaining a stale-timeout safety stop. Awaiting Windows artifact QA.

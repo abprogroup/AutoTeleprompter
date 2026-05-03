@@ -225,3 +225,20 @@ save entries created after selection-based commands.
 - Full Select All is not a Shift-extension session. Any arrow after full
   Select All collapses/clears first; only non-global overlay selections may
   extend through the app anchor/focus path.
+
+## 2026-05-04 V5 Plain Shift Vertical Correction
+
+- Plain Shift+Up/Down is different from Ctrl/Alt+Shift+Up/Down. Native
+  `EditableText` owns in-block visual-line selection; the app route owns only
+  boundary crossing and existing overlay extension.
+- Once a plain Shift+Up/Down selection becomes app-owned, the focus endpoint
+  must move by visual line using `TextPainter` caret/line geometry. It must
+  not reuse paragraph-start/end targets, because that selects whole blocks
+  when the focus enters a second block.
+- Empty blocks remain real stops. Moving plain Shift+Up/Down from text into an
+  empty block selects to that empty block first; the next keypress may continue
+  to the next text block.
+- Handle edge autoscroll must continue while the pointer is in the top/bottom
+  edge zone. Mouse exit arms a stale timeout safety brake, but should not
+  immediately kill intentional edge scrolling unless the pointer is outside the
+  hard margin.

@@ -128,7 +128,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Offset? _latestAutoScrollHandleGlobal;
   bool? _autoScrollIsStart;
   static const double _hardExitMargin = 80.0;
-  static const Duration _stalePointerTimeout = Duration(milliseconds: 1200);
+  static const Duration _stalePointerTimeout = Duration(milliseconds: 2500);
 
   bool get isHandleInteractionActive =>
       _sessionMode == SelectionSessionMode.handleDrag ||
@@ -292,16 +292,23 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       endHandleGesturePreserveSelection(reason: 'outside-pointer');
       return;
     }
+    _stalePointerTimer?.cancel();
+    _stalePointerTimer = null;
     _latestAutoScrollPointerGlobal = pointerGlobal;
     if (_autoScrollTimer != null && _edgeScrollSpeed(pointerGlobal) == 0) {
       _stopAutoScroll();
     }
-    _armStalePointerTimer();
   }
 
-  void handlePointerExitedEditor() {
+  void handlePointerExitedEditor(Offset pointerGlobal) {
     if (!isHandleInteractionActive) return;
-    endHandleGesturePreserveSelection(reason: 'editor-exit');
+    _pointerState = _pointerStateFor(pointerGlobal);
+    _latestAutoScrollPointerGlobal = pointerGlobal;
+    if (_pointerState == SelectionPointerState.outside) {
+      endHandleGesturePreserveSelection(reason: 'editor-exit');
+      return;
+    }
+    _armStalePointerTimer();
   }
 
   void _armStalePointerTimer() {
@@ -1076,7 +1083,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             handleGlobal: handleGlobal,
             isStart: _activeHandleIsStart ?? activeSide,
           );
-          _armStalePointerTimer();
         },
         onPanEnd: (_) => endHandleGesturePreserveSelection(reason: 'pan-end'),
         onPanCancel: () =>

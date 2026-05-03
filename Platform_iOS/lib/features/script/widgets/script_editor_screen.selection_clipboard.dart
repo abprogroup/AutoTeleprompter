@@ -24,6 +24,8 @@ class _BlockSelectionRange {
 
 extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   static const Duration _globalSelectionSnapshotTtl = Duration(seconds: 20);
+  static const Duration _globalSelectionNativeMenuGuard =
+      Duration(milliseconds: 650);
 
   List<String> _snapshotAllControllerMarkup() =>
       _controllers.map((c) => c.text).toList(growable: false);
@@ -300,6 +302,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return _globalSelectionSnapshot != null &&
         capturedAt != null &&
         DateTime.now().difference(capturedAt) < _globalSelectionSnapshotTtl;
+  }
+
+  bool get _isGlobalSelectionNativeGuardActive {
+    final until = _globalSelectionLockUntil;
+    return until != null && DateTime.now().isBefore(until);
   }
 
   bool get _hasPasteableBlockClipboard =>
@@ -708,6 +715,8 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
   void _selectAllBlocks() {
     _isCommandExecuting = true;
+    _globalSelectionLockUntil =
+        DateTime.now().add(_globalSelectionNativeMenuGuard);
 
     // Set full-block native selection on the focused block so the soft keyboard
     // can delete the selection (backspace on a full-block selection clears it).
@@ -765,6 +774,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
   void _clearGlobalSelection() {
     _clearRecognizedBlockRange('clear-global-selection');
+    _globalSelectionLockUntil = null;
     _overlayKey.currentState?.clearSelection();
     _isGlobalSelection = false;
     for (final c in _controllers) {

@@ -389,6 +389,9 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       // Only reset Global Selection if a manual PARTIAL selection occurs.
       // If the selection is collapsed (cursor) or spans the whole block, keep the flag.
       if (_isGlobalSelection && !_isCommandExecuting) {
+        if (_isGlobalSelectionNativeGuardActive) {
+          return;
+        }
         // Keep global selection only if the active block is still fully selected
         // (i.e. the notification came from our own _selectAllBlocks).
         // Any other selection state (collapsed tap, partial drag) clears it.

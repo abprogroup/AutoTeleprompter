@@ -478,6 +478,12 @@
   ordinary partial native selections, preserved `_blockClipboard` after Paste,
   forced immediate Cut history baselines for Undo, and moved present bookmark
   markers beside the anchor word. Awaiting IPA/device verification.
+- [P] **iOS Native Toolbar Select All Guard**: After QA found toolbar Select All
+  still scoped to the originally double-tapped word, converted app-handled
+  Select All toolbar items to custom app-owned commands, added a short
+  native-menu guard window in `_selectAllBlocks()`, and re-armed global
+  selection once after the native callback window before reopening the global
+  Cut/Copy/Paste toolbar. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

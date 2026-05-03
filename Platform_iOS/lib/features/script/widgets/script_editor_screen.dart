@@ -126,6 +126,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String? _plainBlockClipboardText;
   List<String>? _globalSelectionSnapshot;
   DateTime? _globalSelectionSnapshotAt;
+  DateTime? _globalSelectionLockUntil;
   String _selectionClipboardDebug = 'idle';
   _BlockSelectionRange? _recognizedBlockRange;
   String _recognizedBlockRangeDebug = 'idle';

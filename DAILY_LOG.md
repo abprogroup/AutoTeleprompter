@@ -1085,3 +1085,19 @@
   commands.
 - **Bookmark Result**: Present-mode bookmark marker vertical offset was moved
   from above the word to beside the anchor word.
+
+## 2026-05-03 - iOS Native Toolbar Select All Guard
+
+- **Device QA Input**: Native/adaptive toolbar `Select All` still left only
+  the originally double-tapped word selected, while alternate empty-space paths
+  could still reach full-script selection.
+- **Toolbar Result**: Replaced app-handled toolbar `Select All` items with
+  custom app-owned actions so the command calls `_selectAllBlocks()` directly
+  instead of relying on native one-`TextField` select-all semantics.
+- **Guard Result**: `_selectAllBlocks()` now opens a short native-menu guard
+  window and the selection listener ignores late iOS native word-selection
+  callbacks during that window, preventing immediate collapse back to the
+  originally tapped word.
+- **Rearm Result**: Toolbar Select All re-arms `_selectAllBlocks()` once after
+  the native callback window, then reopens the toolbar into the app-owned
+  global Cut/Copy/Paste menu.

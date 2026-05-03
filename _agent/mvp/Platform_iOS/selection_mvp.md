@@ -334,3 +334,11 @@ Additional clipboard prohibitions:
 - Cut must force an immediate history baseline before destructive mutation and
   then commit the Cut state, so Undo is available immediately after the cut
   without requiring the user to tap elsewhere first.
+- The toolbar `Select All` button must be an app-owned custom toolbar action,
+  not a `ContextMenuButtonType.selectAll` item that can fall through to native
+  one-`TextField` semantics. It must call `_selectAllBlocks()` directly,
+  re-arm once after the native toolbar callback window, and then reopen into
+  the app-owned global Cut/Copy/Paste menu.
+- `_selectAllBlocks()` owns a short native-menu guard window. During that
+  window, late native word-selection callbacks must not clear the app global
+  selection back to the originally double-tapped word.

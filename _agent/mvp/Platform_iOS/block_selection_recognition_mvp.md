@@ -441,3 +441,6 @@ Do not continue implementing if any of these happens:
 - Recent protected Select All snapshots must be ignored while a partial native
   selection is active unless `_isGlobalSelection` or all controllers are
   actually globally selected.
+- The visible toolbar may look native/adaptive, but the `Select All` command
+  must be app-owned. Do not use a native `ContextMenuButtonType.selectAll`
+  action for this bridge; it can remain scoped to the original `TextField`.

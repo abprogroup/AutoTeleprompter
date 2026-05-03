@@ -202,8 +202,14 @@ class _EditorBlock extends StatelessWidget {
                         ContextMenuController.removeAny();
                         onSelectAll();
                         WidgetsBinding.instance.addPostFrameCallback((_) {
-                          Future<void>.delayed(const Duration(milliseconds: 80),
-                              () {
+                          Future<void>.delayed(
+                              const Duration(milliseconds: 120), () {
+                            if (editableTextState.mounted) {
+                              onSelectAll();
+                            }
+                          });
+                          Future<void>.delayed(
+                              const Duration(milliseconds: 180), () {
                             if (editableTextState.mounted) {
                               editableTextState.showToolbar();
                             }
@@ -241,7 +247,8 @@ class _EditorBlock extends StatelessWidget {
                                 ContextMenuController.removeAny();
                                 onSelectAll();
                               },
-                              type: ContextMenuButtonType.selectAll,
+                              type: ContextMenuButtonType.custom,
+                              label: 'Select All',
                             ),
                             if (onPaste != null)
                               ContextMenuButtonItem(
@@ -282,7 +289,8 @@ class _EditorBlock extends StatelessWidget {
                             ),
                             ContextMenuButtonItem(
                               onPressed: selectAllAndReopenToolbar,
-                              type: ContextMenuButtonType.selectAll,
+                              type: ContextMenuButtonType.custom,
+                              label: 'Select All',
                             ),
                             if (onPaste != null)
                               ContextMenuButtonItem(
@@ -306,7 +314,8 @@ class _EditorBlock extends StatelessWidget {
                           hasSelectAll = true;
                           customItems.add(ContextMenuButtonItem(
                             onPressed: selectAllAndReopenToolbar,
-                            type: ContextMenuButtonType.selectAll,
+                            type: ContextMenuButtonType.custom,
+                            label: 'Select All',
                           ));
                         } else if (item.type == ContextMenuButtonType.cut) {
                           customItems.add(ContextMenuButtonItem(
@@ -342,7 +351,8 @@ class _EditorBlock extends StatelessWidget {
                       if (!hasSelectAll) {
                         customItems.add(ContextMenuButtonItem(
                           onPressed: selectAllAndReopenToolbar,
-                          type: ContextMenuButtonType.selectAll,
+                          type: ContextMenuButtonType.custom,
+                          label: 'Select All',
                         ));
                       }
                       // Force-inject Paste when _blockClipboard is set but menu omits it.

@@ -471,6 +471,13 @@
   ranges from live overlay endpoints at command time, and remove the phantom
   boundary token from editor-to-present bookmark word indexes. Awaiting
   IPA/device verification.
+- [P] **iOS Selection Command Router Follow-Up**: After QA found Cut still
+  falling back to the original native word/block and Paste becoming one-shot,
+  split Cut from Copy routing, forced Cut to resolve live recognized/overlay
+  ranges before native fallback, ignored protected Select All snapshots during
+  ordinary partial native selections, preserved `_blockClipboard` after Paste,
+  forced immediate Cut history baselines for Undo, and moved present bookmark
+  markers beside the anchor word. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

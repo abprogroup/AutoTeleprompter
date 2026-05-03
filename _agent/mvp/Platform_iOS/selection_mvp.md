@@ -322,3 +322,15 @@ Additional clipboard prohibitions:
 - The active command order remains unchanged: full Select All first, live
   recognized overlay range second, overlay slices third, native one-block
   selection last.
+- Follow-up QA showed Cut could still call Copy first and let the original
+  native word/block overwrite the intended overlay clipboard. `_onCutClean()`
+  must not call `_onCopyClean()` before evaluating live overlay/recognized
+  ranges.
+- If overlay handles are visible, Cut/Copy must never fall back to a recent
+  protected Select All snapshot or active one-block native selection. Protected
+  snapshots are for full Select All recovery only.
+- Paste must preserve the app-private `_blockClipboard` after restoring blocks
+  so the same styled block clipboard can be pasted more than once.
+- Cut must force an immediate history baseline before destructive mutation and
+  then commit the Cut state, so Undo is available immediately after the cut
+  without requiring the user to tap elsewhere first.

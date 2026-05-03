@@ -163,3 +163,6 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
 - The raw editor coordinates (`blockIndex`, `offset`) remain the exact editor
   authority. The presenter `wordIndex` is only the teleprompter anchor derived
   from those editor coordinates.
+- Present-mode bookmark markers must sit beside the anchor word, not above it.
+  Negative vertical offsets can make a before-word marker look like it belongs
+  to the previous line and must be avoided.

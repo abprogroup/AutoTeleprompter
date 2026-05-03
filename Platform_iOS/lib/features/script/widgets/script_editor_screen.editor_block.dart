@@ -189,19 +189,16 @@ class _EditorBlock extends StatelessWidget {
                           !selection.isCollapsed &&
                           !(selection.start == 0 &&
                               selection.end == controller.text.length);
+                      var selectAllRequested = false;
                       void promotePartialSelectionForCrossBlockHandles() {
                         WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (selectAllRequested) return;
                           onExtendSelection();
-                          Future<void>.delayed(const Duration(milliseconds: 80),
-                              () {
-                            if (editableTextState.mounted) {
-                              editableTextState.showToolbar();
-                            }
-                          });
                         });
                       }
 
                       void selectAllAndReopenToolbar() {
+                        selectAllRequested = true;
                         ContextMenuController.removeAny();
                         onSelectAll();
                         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -226,6 +223,7 @@ class _EditorBlock extends StatelessWidget {
                             ContextMenuButtonItem(
                               onPressed: () {
                                 ContextMenuController.removeAny();
+                                onExtendSelection();
                                 onCut();
                               },
                               type: ContextMenuButtonType.cut,
@@ -233,6 +231,7 @@ class _EditorBlock extends StatelessWidget {
                             ContextMenuButtonItem(
                               onPressed: () {
                                 ContextMenuController.removeAny();
+                                onExtendSelection();
                                 onCopy();
                               },
                               type: ContextMenuButtonType.copy,

@@ -308,6 +308,14 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
           _globalSelectionSnapshot != null &&
           _globalSelectionSnapshot!.isNotEmpty);
 
+  bool get _hasActivePartialNativeSelection {
+    final controller = _activeController;
+    if (controller == null) return false;
+    final selection = controller.selection;
+    if (!selection.isValid || selection.isCollapsed) return false;
+    return !(selection.start == 0 && selection.end == controller.text.length);
+  }
+
   void _extendNativeSelectionToOverlay(int blockIndex) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return;
     if (_isGlobalSelection || _isCommandExecuting) return;
@@ -416,6 +424,9 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (_overlayKey.currentState?.hasSelection ?? false) {
       return null;
     }
+    if (_hasActivePartialNativeSelection) {
+      return null;
+    }
     if (_hasRecentGlobalSelectionSnapshot) {
       _selectionClipboardDebug =
           '$reason: using armed ${_globalSelectionSnapshot!.length} blocks [${_blockDebugShape(_globalSelectionSnapshot)}]';
@@ -515,9 +526,14 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return true;
   }
 
+  void _ensureCutUndoBaseline() {
+    _commitHistory('Before Cut');
+  }
+
   void _onCutClean() {
     final globalBlocks = _globalBlocksForCommand('cut');
     if (globalBlocks != null && globalBlocks.isNotEmpty) {
+      _ensureCutUndoBaseline();
       _storeBlockClipboard(globalBlocks, 'cut');
       _writePlainClipboardForBlocks(_blockClipboard ?? globalBlocks);
       _isCommandExecuting = true;
@@ -534,6 +550,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     final recognizedBlocks = _recognizedBlocksForCommand('cut');
     final recognizedRange = _recognizedBlockRange;
     if (recognizedBlocks != null && recognizedRange != null) {
+      _ensureCutUndoBaseline();
       _storeBlockClipboard(
         recognizedBlocks,
         'cut-recognized',
@@ -545,11 +562,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       return;
     }
 
-    _onCopyClean();
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (hasOverlay) {
       final overlayBlocks = _overlaySelectedMarkupBlocks();
       if (overlayBlocks != null && overlayBlocks.isNotEmpty) {
+        _ensureCutUndoBaseline();
         _storeBlockClipboard(
           overlayBlocks,
           'cut-overlay',
@@ -577,6 +594,12 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (c == null) return;
     final sel = c.selection;
     if (!sel.isValid || sel.isCollapsed) return;
+    _ensureCutUndoBaseline();
+    final slice = sel.textInside(c.text);
+    if (slice.isNotEmpty) {
+      _setBlockClipboard([slice]);
+      _writeRichClipboardForBlocks(_blockClipboard ?? [slice]);
+    }
     c.value = TextEditingValue(
       text: c.text.substring(0, sel.start) + c.text.substring(sel.end),
       selection: TextSelection.collapsed(offset: sel.start),
@@ -658,18 +681,20 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       blocks = protectedBlocks;
     }
     if (blocks == null || blocks.isEmpty || _controllers.isEmpty) return;
+    final pastedBlocks = List<String>.of(blocks);
     _selectionClipboardDebug =
-        'paste: restoring ${blocks.length} blocks into ${_controllers.length} controllers [${_blockDebugShape(blocks)}]';
+        'paste: restoring ${pastedBlocks.length} blocks into ${_controllers.length} controllers [${_blockDebugShape(pastedBlocks)}]';
     _isCommandExecuting = true;
-    while (_controllers.length < blocks.length) {
+    while (_controllers.length < pastedBlocks.length) {
       _addBlock(_controllers.length);
     }
-    for (int i = 0; i < blocks.length; i++) {
+    for (int i = 0; i < pastedBlocks.length; i++) {
       _controllers[i].value = TextEditingValue(
-        text: blocks[i],
-        selection: TextSelection.collapsed(offset: blocks[i].length),
+        text: pastedBlocks[i],
+        selection: TextSelection.collapsed(offset: pastedBlocks[i].length),
       );
     }
+    _setBlockClipboard(pastedBlocks);
     _isCommandExecuting = false;
     setState(() {});
     for (final c in _controllers) {
@@ -678,7 +703,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
     _saveHistory(description: 'Paste');
     _selectionClipboardDebug =
-        'paste: restored ${blocks.length} blocks [${_blockDebugShape(blocks)}]';
+        'paste: restored ${pastedBlocks.length} blocks [${_blockDebugShape(pastedBlocks)}]';
   }
 
   void _selectAllBlocks() {

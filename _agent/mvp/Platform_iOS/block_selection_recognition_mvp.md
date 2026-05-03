@@ -434,3 +434,10 @@ Do not continue implementing if any of these happens:
   from winning after the user has dragged handles into another block.
 - Native iOS `Select All` escalation must compare normalized
   `selection.start` / `selection.end`, never raw base/extent direction.
+- `_onCutClean()` must be an independent command router. It may share helper
+  functions with copy, but it must not call `_onCopyClean()` before resolving
+  live overlay/recognized ranges because that can store stale native
+  one-block text.
+- Recent protected Select All snapshots must be ignored while a partial native
+  selection is active unless `_isGlobalSelection` or all controllers are
+  actually globally selected.

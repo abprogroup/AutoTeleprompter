@@ -1063,3 +1063,25 @@
   iOS selection/bookmark files reported no compile errors, only existing
   warning/info noise in the split editor files. Awaiting IPA/device
   verification.
+
+## 2026-05-03 - iOS Selection Command Router Follow-Up
+
+- **Device QA Input**: Latest IPA still showed native Select All leaving only
+  the originally double-tapped word selected, cross-block handle Cut falling
+  back to the first touched word/block, Select All Copy copying only the first
+  word in some flows, Paste consuming the app clipboard after one paste, and
+  Undo not becoming available until after deselection.
+- **Command Router Result**: `_onCutClean()` no longer calls `_onCopyClean()`
+  before evaluating live recognized/overlay ranges. This prevents stale native
+  one-block selection from overwriting the intended cross-block clipboard.
+- **Snapshot Result**: Recent protected Select All snapshots are ignored while
+  an ordinary partial native selection is active, unless the app is truly in
+  global Select All state.
+- **Clipboard Result**: `_pasteFromGlobalClipboard()` refreshes the internal
+  `_blockClipboard` after paste so the same styled block clipboard remains
+  pasteable multiple times.
+- **History Result**: Cut forces a pre-cut history baseline and then commits
+  the cut state, so Undo can become available immediately after destructive
+  commands.
+- **Bookmark Result**: Present-mode bookmark marker vertical offset was moved
+  from above the word to beside the anchor word.

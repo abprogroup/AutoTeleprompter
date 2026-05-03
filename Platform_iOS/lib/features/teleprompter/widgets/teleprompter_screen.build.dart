@@ -202,36 +202,43 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     ),
                   );
                   if (!hasBookmark) return wordWidget;
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      wordWidget,
-                      Positioned(
-                        left: markerOnRight ? null : -30,
-                        right: markerOnRight ? -30 : null,
-                        top: (effectiveFontSize - 24) / 2,
-                        child: Tooltip(
-                          message: 'Delete bookmark',
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => unawaited(_deletePresenterBookmark(i)),
-                            child: const SizedBox(
-                              width: 24,
-                              height: 28,
-                              child: Text(
-                                '»',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Color(0xFFFFBF00),
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      left: markerOnRight ? 0 : 28,
+                      right: markerOnRight ? 28 : 0,
+                    ),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        wordWidget,
+                        Positioned(
+                          left: markerOnRight ? null : -30,
+                          right: markerOnRight ? -30 : null,
+                          top: (effectiveFontSize - 24) / 2,
+                          child: Tooltip(
+                            message: 'Delete bookmark',
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () =>
+                                  unawaited(_deletePresenterBookmark(i)),
+                              child: const SizedBox(
+                                width: 24,
+                                height: 28,
+                                child: Text(
+                                  '»',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Color(0xFFFFBF00),
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   );
                 }).toList(),
               ),

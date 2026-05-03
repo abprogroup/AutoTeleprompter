@@ -199,3 +199,23 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
   legacy cases with no resolved inline anchor.
 - The marker is positioned from the same markup-aware `TextPainter` span used
   by the editor so hidden style tags do not shift the visual anchor.
+
+---
+
+## iOS Bookmark Marker Non-Overlap Rule - 2026-05-03
+
+- Bookmark markers must never obscure readable script text in either editor or
+  present mode.
+- Presenter markers may reserve visual space beside the anchored word because
+  presenter words are separate widgets. LTR markers reserve space before/left
+  of the word; RTL/Hebrew markers reserve space before/right of the word.
+- Editor markers must remain metadata/UI only and must not be inserted into
+  `controller.text`. Because a standard editable `TextField` cannot reserve
+  arbitrary inline metadata space without changing the text model, editor
+  markers may use exact inline placement only when there is a safe whitespace or
+  text-boundary gap. Otherwise they must fall back to a same-row margin marker
+  that does not cover letters.
+- Future work that attempts true text-flow bookmark glyphs must first replace
+  or extend the editor renderer in a dedicated MVP pass and prove selection,
+  raw markup offsets, clipboard, history, STT tokenization, and export remain
+  unchanged.

@@ -1337,3 +1337,19 @@
   paths are not changed.
 - **Verification Status**: Awaiting iPhone QA for mid-block editor bookmark
   placement and marker deletion.
+
+## 2026-05-03 - iOS Bookmark Marker Non-Overlap Repair
+
+- **Device QA Input**: User confirmed the bookmark sign appears in both editor
+  and present mode, but when it sits inside/before text it hides letters and
+  makes the script hard to read.
+- **Runtime Fix**: Presenter bookmarks now reserve side padding before the
+  anchored word, so the `Â»` marker has its own visual space and does not draw
+  on top of the word. Editor bookmark markers only render at the text caret
+  when there is a safe whitespace/text-boundary gap; otherwise they stay on the
+  same visual row in a non-overlapping margin lane.
+- **Safety Boundary**: Bookmark markers remain metadata/UI only. The fix does
+  not insert marker characters into `controller.text`, and does not change
+  selection, clipboard, STT tokenization, import/export, or bookmark storage.
+- **Verification Status**: Awaiting iPhone QA. Test editor mid-line bookmarks,
+  start-of-block bookmarks, presenter LTR/RTL markers, and marker deletion.

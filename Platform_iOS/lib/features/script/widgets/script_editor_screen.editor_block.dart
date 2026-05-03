@@ -431,8 +431,8 @@ class _EditorBlock extends StatelessWidget {
       textDirection: textDirection,
       maxLines: null,
     )..layout(maxWidth: width);
-    const markerSize = 24.0;
-    const markerGap = 2.0;
+    const markerSize = 20.0;
+    const markerGap = 3.0;
     final lineHeight = settings.fontSize * settings.lineSpacing;
 
     return bookmarkAnchors.map((bookmark) {
@@ -441,12 +441,24 @@ class _EditorBlock extends StatelessWidget {
         TextPosition(offset: safeOffset),
         Rect.zero,
       );
-      final markerLeft = textDirection == TextDirection.rtl
+      final previousRawChar =
+          safeOffset > 0 ? controller.text[safeOffset - 1] : '';
+      final nextRawChar = safeOffset < controller.text.length
+          ? controller.text[safeOffset]
+          : '';
+      final hasSafeInlineGap = previousRawChar.trim().isEmpty ||
+          nextRawChar.trim().isEmpty ||
+          safeOffset == 0 ||
+          safeOffset == controller.text.length;
+      final inlineLeft = textDirection == TextDirection.rtl
           ? caret.dx + markerGap
           : caret.dx - markerSize - markerGap;
+      final markerLeft = hasSafeInlineGap
+          ? inlineLeft
+          : (textDirection == TextDirection.rtl ? width + markerGap : -24.0);
       final markerTop = caret.dy + ((lineHeight - markerSize) / 2);
       return Positioned(
-        left: markerLeft.clamp(-markerSize, width).toDouble(),
+        left: markerLeft.clamp(-28.0, width + markerGap).toDouble(),
         top: markerTop < 0 ? 0 : markerTop,
         child: Tooltip(
           message: 'Delete bookmark',

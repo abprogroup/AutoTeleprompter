@@ -492,3 +492,21 @@ Additional clipboard prohibitions:
 - Pressing iOS keyboard `Done` is a keyboard-dismiss choice, not a selection
   clear. Style commands and Paste must not forcibly reopen the keyboard after
   `Done`; the keyboard may reopen only when the user taps back into the script.
+
+---
+
+## Native Toolbar Suppression Rule - 2026-05-03
+
+- The iOS script editor must never show the native/adaptive UIKit selected-text
+  toolbar for script editing commands. Native selection may seed cursor/range
+  information internally, but visible Cut/Copy/Paste/Select All belongs only to
+  the app-owned toolbar in `script_editor_screen.build.dart`.
+- `_EditorBlock.contextMenuBuilder` must always suppress native toolbar UI with
+  `ContextMenuController.removeAny()` and an empty widget. It may hand off a
+  non-collapsed native seed range to the app selection route before suppression.
+- The only valid selected-text command route is:
+  `_onCutClean()`, `_onCopyClean()`, `_pasteFromGlobalClipboard()`, and
+  `_selectAllBlocks()` from the app-owned toolbar or app-owned intents.
+- Do not return `AdaptiveTextSelectionToolbar.buttonItems(...)` from the script
+  editor. Reintroducing it creates duplicate command surfaces and can route
+  commands to stale native one-word selections.

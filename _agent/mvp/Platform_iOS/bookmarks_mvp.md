@@ -243,3 +243,17 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
 - Presenter-created bookmarks may reinsert missing `»` signs into the editor
   after returning from present mode. Insertion must convert clean presenter
   offsets back to raw editor offsets when earlier bookmark signs already exist.
+
+---
+
+## Text-Flow Sign Command Ownership - 2026-05-03
+
+- The bookmark sign remains real editor text and must behave like an ordinary
+  selectable character, but its Cut/Copy/Paste/Delete command execution still
+  belongs to the app-owned iOS selection toolbar.
+- Long-pressing `\u00BB` / `»` must not expose the native UIKit toolbar. Native
+  iOS may place the cursor or seed a range, then the script editor must suppress
+  the native toolbar and use app-owned commands.
+- Cutting or deleting a selected range containing `\u00BB` / `»` must rescan
+  bookmark metadata through the existing editor-sign rebuild path. Pasting a
+  range containing the sign must recreate metadata at the pasted sign locations.

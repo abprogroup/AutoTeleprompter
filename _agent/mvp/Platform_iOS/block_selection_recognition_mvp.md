@@ -596,3 +596,18 @@ more regressions than a deliberate app-owned selection engine.
   sign locations after the text mutation completes.
 - The sign remains a word boundary for selection/search purposes; it must not
   be swallowed as hidden markup or ignored like an overlay-only marker.
+
+---
+
+## App-Owned Toolbar Only - 2026-05-03
+
+- Block recognition may use native iOS selection only as an intent seed. The
+  native/adaptive toolbar is not a command surface for this MVP.
+- Once a native range is detected, `_EditorBlock.contextMenuBuilder` must
+  promote/record the range through the app-owned selection path as needed,
+  suppress the native toolbar, and let the app toolbar expose Cut/Copy/Paste/
+  Select All.
+- Device QA must treat any visible UIKit toolbar over selected script text as a
+  regression, even if its buttons appear to work for a simple one-block case.
+  The accepted proof is that app-owned Cut/Copy/Paste/All commands run and
+  update the app clipboard/debug state.

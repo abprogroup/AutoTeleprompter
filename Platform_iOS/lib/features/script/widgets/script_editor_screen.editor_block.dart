@@ -173,30 +173,12 @@ class _EditorBlock extends StatelessWidget {
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 2),
                     ),
-                    contextMenuBuilder: (context, editableTextState) {
+                    contextMenuBuilder: (_, __) {
                       final selection = controller.selection;
                       final hasPartialNativeSelection = selection.isValid &&
                           !selection.isCollapsed &&
                           !(selection.start == 0 &&
                               selection.end == controller.text.length);
-                      void selectAllAndReopenToolbar() {
-                        ContextMenuController.removeAny();
-                        onSelectAll();
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          Future<void>.delayed(
-                              const Duration(milliseconds: 120), () {
-                            if (editableTextState.mounted) {
-                              onSelectAll();
-                            }
-                          });
-                          Future<void>.delayed(
-                              const Duration(milliseconds: 180), () {
-                            if (editableTextState.mounted) {
-                              editableTextState.showToolbar();
-                            }
-                          });
-                        });
-                      }
 
                       void adoptPartialSelectionAfterMenuBuild() {
                         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -207,7 +189,7 @@ class _EditorBlock extends StatelessWidget {
                       // When the block is globally selected, bypass editableTextState
                       // entirely. iOS asynchronously resets the native selection back
                       // to the original double-tapped word after Select All, so
-                      // iterating contextMenuButtonItems would serve word-scoped
+                      // any native selected-text menu would serve word-scoped
                       // Cut/Copy actions instead of our global ones. The visible
                       // command surface is the app-owned selection toolbar in the
                       // parent Stack; native selected-text menus are suppressed
@@ -226,126 +208,13 @@ class _EditorBlock extends StatelessWidget {
                       // selection back to the originally double-tapped word.
                       if (hasPartialNativeSelection) {
                         adoptPartialSelectionAfterMenuBuild();
-                        ContextMenuController.removeAny();
-                        return const SizedBox.shrink();
                       }
 
-                      final List<ContextMenuButtonItem> items =
-                          editableTextState.contextMenuButtonItems;
-                      final List<ContextMenuButtonItem> customItems = [];
-                      final hasSelectableRange = isGlobalSelected ||
-                          hasOverlaySelection ||
-                          hasExternalRange ||
-                          hasPartialNativeSelection ||
-                          (selection.isValid && !selection.isCollapsed);
-                      bool hasSelectAll = false;
-                      bool hasCut = false;
-                      bool hasCopy = false;
-                      for (final item in items) {
-                        if (item.type == ContextMenuButtonType.selectAll) {
-                          hasSelectAll = true;
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: selectAllAndReopenToolbar,
-                            type: ContextMenuButtonType.custom,
-                            label: 'Select All',
-                          ));
-                        } else if (item.type == ContextMenuButtonType.cut) {
-                          hasCut = true;
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onExtendSelection();
-                              onCut();
-                            },
-                            type: ContextMenuButtonType.cut,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.copy) {
-                          hasCopy = true;
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onExtendSelection();
-                              onCopy();
-                            },
-                            type: ContextMenuButtonType.copy,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.paste &&
-                            onPaste != null) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onPaste!();
-                            },
-                            type: ContextMenuButtonType.custom,
-                            label: 'Paste',
-                          ));
-                        } else {
-                          customItems.add(item);
-                        }
-                      }
-                      // When a rich in-app clipboard exists, iOS sometimes
-                      // rebuilds the toolbar with only Paste/Select All even
-                      // though the app still has a native or overlay range.
-                      // Force app-owned Cut/Copy so commands keep using the
-                      // visible selection owner instead of falling back to
-                      // stale native menu affordances.
-                      if (hasSelectableRange && !hasCut) {
-                        customItems.insert(
-                          0,
-                          ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onExtendSelection();
-                              onCut();
-                            },
-                            type: ContextMenuButtonType.cut,
-                          ),
-                        );
-                        hasCut = true;
-                      }
-                      if (hasSelectableRange && !hasCopy) {
-                        final copyInsertIndex = customItems.isEmpty
-                            ? 0
-                            : (customItems.length > 1 ? 1 : customItems.length);
-                        customItems.insert(
-                          copyInsertIndex,
-                          ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onExtendSelection();
-                              onCopy();
-                            },
-                            type: ContextMenuButtonType.copy,
-                          ),
-                        );
-                        hasCopy = true;
-                      }
-                      // Force-inject Select All even when the native menu omits it.
-                      if (!hasSelectAll) {
-                        customItems.add(ContextMenuButtonItem(
-                          onPressed: selectAllAndReopenToolbar,
-                          type: ContextMenuButtonType.custom,
-                          label: 'Select All',
-                        ));
-                      }
-                      // Force-inject Paste when _blockClipboard is set but menu omits it.
-                      if (onPaste != null &&
-                          !customItems.any((i) =>
-                              i.label == 'Paste' ||
-                              i.type == ContextMenuButtonType.paste)) {
-                        customItems.add(ContextMenuButtonItem(
-                          onPressed: () {
-                            ContextMenuController.removeAny();
-                            onPaste!();
-                          },
-                          type: ContextMenuButtonType.custom,
-                          label: 'Paste',
-                        ));
-                      }
-                      return AdaptiveTextSelectionToolbar.buttonItems(
-                        anchors: editableTextState.contextMenuAnchors,
-                        buttonItems: customItems,
-                      );
+                      // The script editor owns Cut/Copy/Paste/Select All through
+                      // _buildAppSelectionToolbar. UIKit may seed focus or a
+                      // one-block range, but its native toolbar is never shown.
+                      ContextMenuController.removeAny();
+                      return const SizedBox.shrink();
                     },
                   ),
                 ),

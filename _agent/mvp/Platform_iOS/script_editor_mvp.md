@@ -208,3 +208,14 @@ Additional search toolbar rules:
 - Editor taps, background taps, search jumps, bookmark jumps, imports, block
   splits/removals, undo/redo, and history jumps must clear transient selected
   text UI without clearing `_blockClipboard`.
+
+### Native Toolbar Suppression Addendum - 2026-05-03
+
+- The script editor must not render the native/adaptive iOS selected-text
+  toolbar. That toolbar creates a second command surface and can bypass the
+  app clipboard/history/bookmark metadata routes.
+- `_EditorBlock.contextMenuBuilder` may use iOS selection state only to seed the
+  app-owned range. It must then suppress native UI and return an empty widget.
+- Text-flow bookmark signs (`\u00BB` / `»`) remain real script text, but selected
+  text commands for them use the same app-owned toolbar as all other script
+  content.

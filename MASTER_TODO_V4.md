@@ -579,6 +579,12 @@
   toolbar now includes a whole-word toggle. Next/back search navigation must
   not reopen the keyboard; only the new-search dialog may request text input.
   Awaiting iPhone QA.
+- [P] **iOS Native Toolbar Suppression Correction**: The iOS script editor now
+  treats the native/adaptive selected-text toolbar as forbidden UI. UIKit may
+  seed a cursor/range, but `_EditorBlock.contextMenuBuilder` suppresses native
+  toolbar rendering and leaves Cut/Copy/Paste/Select All to the app-owned
+  selection toolbar. Awaiting iPhone QA for no duplicate toolbar, bookmark-sign
+  Cut/Copy/Paste, Select All, and partial styled multi-block cut/paste.
 - [ ] **iOS STT Visible Skip Language Boundary**: Plan and implement visible
   skip across language transitions, e.g. Hebrew block -> English visible block
   -> Hebrew block. Visible skip must be able to trigger locale transition for a

@@ -1380,3 +1380,21 @@
 - **Verification Status**: Awaiting iPhone QA for LTR and Hebrew bookmark
   sign placement, copy/cut/paste recreation, undo, cross-mode sync, and search
   toolbar keyboard behavior.
+
+## 2026-05-03 - iOS App-Owned Toolbar Protocol Correction
+
+- **Device QA Input**: User confirmed that long-pressing selected text or the
+  `\u00BB` bookmark sign could still expose the native iOS toolbar. This violates
+  the current app-owned selection protocol because native and app command
+  surfaces become duplicates.
+- **Runtime Fix**: `_EditorBlock.contextMenuBuilder` no longer returns an
+  adaptive/native toolbar. Native iOS may seed focus or a non-collapsed range,
+  then the editor suppresses the UIKit toolbar and leaves Cut/Copy/Paste/Select
+  All to `_buildAppSelectionToolbar()`.
+- **Protocol Result**: Updated iOS Selection, Block Selection Recognition,
+  Bookmarks, and Script Editor MVP docs to state that native toolbar UI is
+  forbidden for script editing commands. Historical log entries remain as
+  history only.
+- **Verification Status**: Awaiting iPhone QA for no native toolbar on
+  long-press/handles, bookmark-sign Cut/Copy/Paste, Select All, and partial
+  styled multi-block cut/paste.

@@ -748,3 +748,9 @@
   `_lastFocusedController` as the stale-overlay validation source and treats
   vertical out-of-editor pointer travel as edge-zone autoscroll instead of a
   hard outside exit. Awaiting Windows workflow and device QA.
+- [P] **Windows Vertical Arrow Mirror Correction**: User confirmed handle drag
+  behavior now works and must not be touched, but Down-arrow behavior still
+  diverged from the working Up-arrow behavior. Keyboard-only correction makes
+  vertical line detection and target selection use mirrored TextPainter line
+  metric centers instead of asymmetric top/bottom boundary checks. Awaiting
+  Windows workflow and device QA.

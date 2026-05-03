@@ -524,3 +524,14 @@ file and the matching MVP docs.
 - Handle drags outside the editor are recoverable suspended sessions. They stop
   autoscroll immediately, keep the current selected range, and resume only if
   the still-pressed pointer re-enters the editor.
+
+## 2026-05-04 V5 Vertical Arrow Symmetry
+
+- The editor's vertical keyboard helpers must treat Up and Down as mirrors.
+  The shared `_VerticalLayoutInfo` should decide top/bottom line status from
+  line metrics and caret Y position, then choose adjacent line targets from
+  the same metric-center calculation in either direction.
+- Plain Up/Down and plain Shift+Up/Down may reuse this mirrored helper. Ctrl,
+  Alt, and bookmark behavior remain otherwise unchanged.
+- Do not modify `GlobalSelectionOverlay` or handle drag lifecycle for this
+  keyboard-only correction.

@@ -1627,3 +1627,21 @@
 - **Verification Status**: Targeted analyzer reports no new compile errors;
   existing Windows warnings/infos remain. Awaiting diff check, push, and
   Windows workflow verification.
+
+## 2026-05-04 - Windows v5 Vertical Arrow Mirror Correction
+
+- **Device QA Input**: User confirmed handle dragging now works perfectly and
+  must not be touched. Remaining issue is Down-arrow behavior diverging from
+  the better Up-arrow behavior.
+- **Keyboard Fix**: `_VerticalLayoutInfo` now detects first/last visual lines
+  by comparing the caret Y position to `TextPainter` line metric centers.
+  Cross-block vertical targets also use first/last line centers instead of
+  asymmetric top/bottom offsets.
+- **Shift Fix**: Plain Shift+Up/Down now moves to the adjacent rendered line
+  through the same mirrored line-center helper rather than manually adding or
+  subtracting a fallback line height.
+- **Scope Guard**: `GlobalSelectionOverlay` and all handle drag/autoscroll code
+  were intentionally untouched.
+- **Verification Status**: Targeted analyzer reports no new compile errors;
+  existing Windows warnings/infos remain. Awaiting diff check, push, and
+  Windows workflow verification.

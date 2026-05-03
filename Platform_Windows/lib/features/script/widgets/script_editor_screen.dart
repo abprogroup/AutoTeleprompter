@@ -1179,25 +1179,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
     if (crossBlockOnly) return null;
 
-    final caret = layout.painter.getOffsetForCaret(
-      TextPosition(offset: painterOffset),
-      Rect.zero,
-    );
-    final metrics = layout.painter.computeLineMetrics();
-    final fallbackHeight = (ref.read(settingsProvider).fontSize *
-            ref.read(settingsProvider).lineSpacing)
-        .clamp(16.0, 96.0)
-        .toDouble();
-    final lineHeight = metrics.isEmpty ? fallbackHeight : metrics.first.height;
-    final targetY = moveUp
-        ? (caret.dy - lineHeight).clamp(0.0, layout.painter.height)
-        : (caret.dy + lineHeight).clamp(
-            0.0, (layout.painter.height - 1).clamp(0.0, double.infinity));
-    final targetOffset = layout.painter
-        .getPositionForOffset(Offset(preferredX, targetY))
-        .offset
-        .clamp(0, controller.text.length)
+    final targetOffset = layout
+        .getPositionOnAdjacentLineAtX(preferredX, moveUp: moveUp)
+        ?.clamp(0, controller.text.length)
         .toInt();
+    if (targetOffset == null) return null;
     if (targetOffset == safeOffset) return null;
     return (block: block, offset: targetOffset);
   }

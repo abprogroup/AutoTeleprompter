@@ -684,17 +684,15 @@ class _VerticalLayoutInfo {
   bool get isAtTop {
     if (!selection.isCollapsed) return false;
     if (painter.text?.toPlainText().isEmpty ?? true) return true;
-    final pos = TextPosition(offset: selection.baseOffset);
-    final line = painter.getLineBoundary(pos);
-    return line.start == 0;
+    return _currentLineIndex <= 0;
   }
 
   bool get isAtBottom {
     if (!selection.isCollapsed) return false;
     if (painter.text?.toPlainText().isEmpty ?? true) return true;
-    final pos = TextPosition(offset: selection.baseOffset);
-    final line = painter.getLineBoundary(pos);
-    return line.end == painter.text!.toPlainText().length;
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return true;
+    return _currentLineIndex >= lines.length - 1;
   }
 
   double get currentX {
@@ -705,8 +703,50 @@ class _VerticalLayoutInfo {
 
   int getPositionAtX(double x, {required bool fromBottom}) {
     if (painter.text?.toPlainText().isEmpty ?? true) return 0;
-    final y =
-        fromBottom ? (painter.height > 0 ? painter.height - 1 : 0.0) : 0.0;
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return 0;
+    final y = _lineCenterY(fromBottom ? lines.length - 1 : 0);
     return painter.getPositionForOffset(Offset(x, y)).offset;
+  }
+
+  int? getPositionOnAdjacentLineAtX(double x, {required bool moveUp}) {
+    if (painter.text?.toPlainText().isEmpty ?? true) return null;
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return null;
+    final targetLine = _currentLineIndex + (moveUp ? -1 : 1);
+    if (targetLine < 0 || targetLine >= lines.length) return null;
+    return painter
+        .getPositionForOffset(Offset(x, _lineCenterY(targetLine)))
+        .offset;
+  }
+
+  int get _currentLineIndex {
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return 0;
+    final text = painter.text?.toPlainText() ?? '';
+    final offset = selection.baseOffset.clamp(0, text.length).toInt();
+    final caretY =
+        painter.getOffsetForCaret(TextPosition(offset: offset), Rect.zero).dy;
+    var bestIndex = 0;
+    var bestDistance = double.infinity;
+    for (var i = 0; i < lines.length; i++) {
+      final center = _lineCenterY(i);
+      final distance = (center - caretY).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
+  double _lineCenterY(int index) {
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return 0;
+    final safeIndex = index.clamp(0, lines.length - 1).toInt();
+    final line = lines[safeIndex];
+    final top = line.baseline - line.ascent;
+    final bottom = line.baseline + line.descent;
+    return (top + bottom) / 2;
   }
 }

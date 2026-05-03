@@ -292,3 +292,15 @@ save entries created after selection-based commands.
 - A fresh pointer-down after an outside/stale suspended handle drag ends that
   stale session first, so the next normal click can deselect instead of
   reviving a lost handle.
+
+## 2026-05-04 V5 Vertical Arrow Mirror Rule
+
+- Windows Up/Down keyboard navigation must use mirrored visual-line geometry.
+  First-line and last-line detection are based on caret Y position against
+  `TextPainter.computeLineMetrics()`, not asymmetric `line.start` versus
+  `line.end == text.length` checks.
+- Moving into the previous/next block by vertical arrows uses the center of
+  the target block's first or last rendered line. This keeps Down behavior a
+  true mirror of the already-working Up behavior.
+- This rule is keyboard-only. The handle drag/autoscroll system is considered
+  verified and must not be edited for vertical-arrow fixes.

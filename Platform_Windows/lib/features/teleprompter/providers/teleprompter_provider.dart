@@ -448,7 +448,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (_disposed) return;
 
     final token = ++_sessionToken;
-    final sameScript = identical(_currentScript, script);
+    // Compare by sessionId rather than object identity. _startPresenting()
+    // always rebuilds the Script object, so identical() always returns false
+    // — causing the resume position to reset to 0 on every re-entry. Using
+    // sessionId (stable across editor edits of the same session) lets us
+    // distinguish "re-entered same session" from "loaded a different script".
+    final sameScript = _currentScript != null &&
+        _currentScript!.sessionId.isNotEmpty &&
+        _currentScript!.sessionId == script.sessionId;
     _currentScript = script;
     _accumulatedTranscript = '';
     _noProgressCount = 0;

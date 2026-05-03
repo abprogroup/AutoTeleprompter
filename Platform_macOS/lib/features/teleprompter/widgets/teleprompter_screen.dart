@@ -41,6 +41,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _manualScrolling = false;
   bool _scrollingBackward = false;
   StreamSubscription? _remoteCmdSub;
+  bool _resumeDialogShown = false;
 
   @override
   void initState() {
@@ -50,8 +51,15 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _scheduleHideControls();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(teleprompterProvider.notifier).resetPosition();
-        _scrollController.jumpTo(0);
+        final savedIndex = ref.read(teleprompterProvider).confirmedWordIndex;
+        if (savedIndex > 0 && !_resumeDialogShown) {
+          _resumeDialogShown = true;
+          _showResumeDialog(savedIndex);
+        } else {
+          // No prior position — start fresh at the top.
+          ref.read(teleprompterProvider.notifier).resetPosition();
+          _scrollController.jumpTo(0);
+        }
         _initRemoteListener();
         // Listen for missing language notifications
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage), (prev, next) {
@@ -125,6 +133,63 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   }
 
   /// Show a dialog when Google speech recognition fails
+  Future<void> _showResumeDialog(int savedIndex) async {
+    if (!mounted) return;
+    final script = ref.read(scriptProvider);
+    if (script == null) return;
+
+    final wordCount = script.words.where((w) => !w.isNewline).length;
+    final percent = wordCount > 0
+        ? ((savedIndex / script.words.length) * 100).clamp(0, 100).round()
+        : 0;
+
+    final choice = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
+          children: const [
+            Icon(Icons.history, color: Color(0xFFFFBF00), size: 20),
+            SizedBox(width: 8),
+            Text('Resume reading?',
+                style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'You left this script at ~$percent%. Would you like to continue '
+          'from where you left off, or restart from the beginning?',
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Restart',
+                style: TextStyle(color: Colors.white54, fontSize: 14)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFBF00),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
+            child: const Text('Continue', style: TextStyle(fontSize: 14)),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (choice == true) {
+      _scrollToWordIndex(savedIndex);
+    } else {
+      ref.read(teleprompterProvider.notifier).resetPosition();
+      _scrollController.jumpTo(0);
+    }
+  }
+
   void _showMissingLanguageDialog(String languageName) {
     showDialog(
       context: context,

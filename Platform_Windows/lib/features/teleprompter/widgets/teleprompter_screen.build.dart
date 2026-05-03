@@ -604,6 +604,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         ),
                       ),
 
+                    // Compact search toolbar — floats at top, prev/next, count
+                    buildSearchToolbar(),
+
                     // Controls overlay — control bar + speed slider stacked at bottom
                     Positioned(
                       bottom: 0,

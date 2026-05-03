@@ -329,6 +329,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   Future<void> startSession(Script script) async {
+    // Compare by sessionId to detect same-session re-entry. Using identical()
+    // always returns false because _startPresenting() rebuilds the Script
+    // object — causing the resume position to reset to 0 every time.
+    final sameScript = _currentScript != null &&
+        _currentScript!.sessionId.isNotEmpty &&
+        _currentScript!.sessionId == script.sessionId;
+    final resumeIndex = sameScript
+        ? state.confirmedWordIndex.clamp(
+            0, script.words.isEmpty ? 0 : script.words.length - 1)
+        : 0;
+
     _currentScript = script;
     _accumulatedTranscript = '';
     _noProgressCount = 0;
@@ -336,7 +347,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
     state = state.copyWith(
-        confirmedWordIndex: 0, isListening: false, hasError: false,
+        confirmedWordIndex: resumeIndex, isListening: false, hasError: false,
         statusMessage: '', debugLogs: [], missingLanguage: null);
 
     _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');

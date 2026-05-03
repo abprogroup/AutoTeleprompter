@@ -1,6 +1,68 @@
 part of 'teleprompter_screen.dart';
 
 extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
+  /// Shows a compact banner asking whether to continue from the last reading
+  /// position or restart from the beginning.  Appears on re-entry when the
+  /// confirmedWordIndex is > 0 (i.e. the user left mid-script last time).
+  Future<void> _showResumeDialog(int savedIndex) async {
+    if (!mounted) return;
+    final script = ref.read(scriptProvider);
+    if (script == null) return;
+
+    final wordCount = script.words.where((w) => !w.isNewline).length;
+    final percent = wordCount > 0
+        ? ((savedIndex / script.words.length) * 100).clamp(0, 100).round()
+        : 0;
+
+    final choice = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
+          children: const [
+            Icon(Icons.history, color: Color(0xFFFFBF00), size: 20),
+            SizedBox(width: 8),
+            Text('Resume reading?',
+                style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'You left this script at ~$percent%. Would you like to continue '
+          'from where you left off, or restart from the beginning?',
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Restart',
+                style: TextStyle(color: Colors.white54, fontSize: 14)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFBF00),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
+            child: const Text('Continue', style: TextStyle(fontSize: 14)),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (choice == true) {
+      // Continue: scroll to the saved position.
+      _scrollToWordIndex(savedIndex);
+    } else {
+      // Restart: reset provider position and scroll to top.
+      ref.read(teleprompterProvider.notifier).resetPosition();
+      _scrollToWordIndex(0);
+    }
+  }
   Future<void> _loadBookmarksForScript(Script script,
       {bool force = false}) async {
     final key = ScriptBookmarkService.scopeKey(script.sessionId, script.title);
@@ -210,7 +272,135 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
     _lastSearchQuery = trimmed;
-    _jumpToSearchMatch(trimmed);
+    _openSearchToolbar(trimmed);
+  }
+
+  // ── Compact search toolbar ────────────────────────────────────────────────
+
+  void _openSearchToolbar(String query) {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No match for "$query"'),
+        backgroundColor: Colors.black87,
+        duration: const Duration(seconds: 2),
+      ));
+      return;
+    }
+    final needle = query.toLowerCase();
+    final matches = <int>[];
+    for (var i = 0; i < script.words.length; i++) {
+      if (_wordMatchesQuery(script.words[i], needle)) matches.add(i);
+    }
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No match for "$query"'),
+        backgroundColor: Colors.black87,
+        duration: const Duration(seconds: 2),
+      ));
+      return;
+    }
+    // Start at the match closest to current position.
+    final current = ref.read(teleprompterProvider).confirmedWordIndex;
+    int startIdx = 0;
+    for (var i = 0; i < matches.length; i++) {
+      if (matches[i] >= current) {
+        startIdx = i;
+        break;
+      }
+      startIdx = i;
+    }
+    setState(() {
+      _searchMatches = matches;
+      _searchMatchIndex = startIdx;
+      _showSearchToolbar = true;
+    });
+    _jumpToWordIndex(matches[startIdx]);
+    ref.read(teleprompterProvider.notifier).jumpToPosition(matches[startIdx]);
+  }
+
+  void _navigateSearchMatch(int delta) {
+    if (_searchMatches.isEmpty) return;
+    final next = (_searchMatchIndex + delta) % _searchMatches.length;
+    setState(() => _searchMatchIndex = next);
+    final wordIdx = _searchMatches[next];
+    _jumpToWordIndex(wordIdx);
+    ref.read(teleprompterProvider.notifier).jumpToPosition(wordIdx);
+  }
+
+  void _closeSearchToolbar() {
+    setState(() {
+      _showSearchToolbar = false;
+      _searchMatches = const [];
+      _searchMatchIndex = 0;
+    });
+  }
+
+  Widget buildSearchToolbar() {
+    if (!_showSearchToolbar || _searchMatches.isEmpty) return const SizedBox.shrink();
+    final total = _searchMatches.length;
+    final current = _searchMatchIndex + 1;
+    return Positioned(
+      top: 8,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(28),
+          color: const Color(0xFF1A1A1A),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(width: 8),
+                Icon(Icons.search, color: Colors.white54, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  '"$_lastSearchQuery"',
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$current / $total',
+                  style: const TextStyle(
+                      color: Color(0xFFFFBF00),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.arrow_upward,
+                      color: Colors.white70, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  tooltip: 'Previous result',
+                  onPressed: () => _navigateSearchMatch(-1),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_downward,
+                      color: Colors.white70, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  tooltip: 'Next result',
+                  onPressed: () => _navigateSearchMatch(1),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close,
+                      color: Colors.white38, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  tooltip: 'Close search',
+                  onPressed: _closeSearchToolbar,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _jumpToSearchMatch(String query) {

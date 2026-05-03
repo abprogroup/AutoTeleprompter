@@ -394,16 +394,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     return LayoutBuilder(
       builder: (context, constraints) {
         _stackSize = Size(constraints.maxWidth, constraints.maxHeight);
-        // Fall back to viewport edges so handles are always reachable,
-        // even if the first/last block isn't currently rendered.
-        // v4.1.13: Clamped handle positions to prevent snapping to (12,12)
-        // when blocks are off-screen. Default to viewport edges if null.
-        final start = hasSelection
-            ? (_handleStartPos ?? Offset(constraints.maxWidth - 24, 0))
-            : null;
-        final end = hasSelection
-            ? (_handleEndPos ?? Offset(24, constraints.maxHeight - 48))
-            : null;
+        // Hide handles when their block has scrolled offscreen (position
+        // unknown). Clamping to a viewport edge is misleading — the handle
+        // would float at an unrelated screen position.
+        final start = hasSelection ? _handleStartPos : null;
+        final end = hasSelection ? _handleEndPos : null;
         return Stack(
           key: _stackKey,
           children: [

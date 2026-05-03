@@ -66,6 +66,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   String? _loadedWebViewUrl;
   String _lastSearchQuery = '';
   bool _searchDialogOpen = false;
+  bool _resumeDialogShown = false;
+  // Compact search toolbar state
+  List<int> _searchMatches = const [];
+  int _searchMatchIndex = 0;
+  bool _showSearchToolbar = false;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
@@ -99,9 +104,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         });
         if (Platform.isWindows) _initWebViewController();
         final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
-        if (currentIndex > 0) {
+        if (currentIndex > 0 && !_resumeDialogShown) {
+          _resumeDialogShown = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _scrollToWordIndex(currentIndex);
+            if (mounted) _showResumeDialog(currentIndex);
           });
         }
       }

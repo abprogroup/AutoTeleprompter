@@ -96,6 +96,9 @@ class ScriptEditorScreen extends ConsumerStatefulWidget {
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     with StylingLogicMixin<ScriptEditorScreen> {
+  // Dummy node for HardwareKeyboard → _handleEditorArrowKey bridge
+  // (_handleEditorArrowKey never uses the node parameter).
+  static final _arrowKeyDummyNode = FocusNode();
   // ── Mixin Implementation for StylingLogicMixin ────────────────────────────
   @override
   List<MarkupController> get controllers => _controllers;
@@ -205,6 +208,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_onGlobalArrowKey);
     _startAutoSave();
     if (widget.pendingFile != null) {
       _isInit = true;
@@ -307,6 +311,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
     _historyTimer?.cancel();
     _recentTimer?.cancel();
     _autoSaveTimer?.cancel();
@@ -768,10 +773,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   }
 
   // ── Screen-level arrow-key cross-block navigation ──────────────────────────
-  // Runs ABOVE per-block FocusNodes so that key-repeat events aren't dropped
-  // when a paragraph boundary causes a focus transition between blocks. The
-  // handler returns `ignored` for in-block movement so EditableText's default
-  // cursor handling stays intact.
+  // HardwareKeyboard handler: fires BEFORE Flutter's focus system, so key-repeat
+  // events are never dropped during the async focus-transfer window when crossing
+  // a block boundary. Returns true only at boundaries; in-block movement is passed
+  // through (returns false) so EditableText's default cursor handling stays intact.
+  bool _onGlobalArrowKey(KeyEvent event) {
+    if (!mounted || _controllers.isEmpty) return false;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (!_focusNodes.any((n) => n.hasFocus)) return false;
+    return _handleEditorArrowKey(_arrowKeyDummyNode, event) ==
+        KeyEventResult.handled;
+  }
+
   KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;

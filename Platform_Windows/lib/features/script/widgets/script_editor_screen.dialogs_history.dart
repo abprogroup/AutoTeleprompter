@@ -338,29 +338,25 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     if (_historyIndex > 0) {
       _isCommandExecuting = true;
       _isDirty = false;
-      // Remember which block had focus and the current scroll offset so we
-      // can restore the view after _applyState rebuilds all controllers.
       final preFocusIdx = _lastFocusedController != null
           ? _controllers.indexOf(_lastFocusedController!)
           : 0;
-      final preScroll = _editorScrollController.hasClients
-          ? _editorScrollController.offset
-          : 0.0;
       setState(() {
         _historyIndex--;
         _applyState(_history[_historyIndex]);
       });
+      // Two-phase restore: focus immediately, then scroll after TextField's own
+      // auto-scroll fires (which would otherwise override our ensureVisible).
       Future.delayed(const Duration(milliseconds: 150), () {
-        if (mounted) {
-          _isCommandExecuting = false;
-          _isDirty = false;
-          // Focus the same block the user was editing. scrollEditorBlockIntoView
-          // ensures it's visible without jumping the entire viewport (unlike
-          // clamping preScroll which snaps to end when undoing to shorter content).
-          final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
-          _focusNodes[targetIdx].requestFocus();
-          _scrollEditorBlockIntoView(targetIdx);
-        }
+        if (!mounted) return;
+        _isCommandExecuting = false;
+        _isDirty = false;
+        final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
+        _focusNodes[targetIdx].requestFocus();
+        // Additional frame lets TextField's internal makeVisible() settle first.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollEditorBlockIntoView(targetIdx);
+        });
       });
       _forceRecentUpdate();
     }
@@ -378,13 +374,14 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         _applyState(_history[_historyIndex]);
       });
       Future.delayed(const Duration(milliseconds: 150), () {
-        if (mounted) {
-          _isCommandExecuting = false;
-          _isDirty = false;
-          final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
-          _focusNodes[targetIdx].requestFocus();
-          _scrollEditorBlockIntoView(targetIdx);
-        }
+        if (!mounted) return;
+        _isCommandExecuting = false;
+        _isDirty = false;
+        final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
+        _focusNodes[targetIdx].requestFocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollEditorBlockIntoView(targetIdx);
+        });
       });
       _forceRecentUpdate();
     }

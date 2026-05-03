@@ -229,6 +229,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
               _blockKeys.removeAt(idx);
               if (idx > 0) _focusNodes[idx - 1].requestFocus();
             });
+            _saveHistory(description: 'Delete Empty Line');
           }
           return KeyEventResult.handled;
         }

@@ -74,7 +74,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   // Drag-handle autoscroll
   static const double _autoScrollZone = 60.0;
-  static const double _autoScrollMax = 18.0;
+  static const double _autoScrollMax = 40.0;
   Timer? _autoScrollTimer;
 
   void _startAutoScroll(Offset globalHandlePos) {

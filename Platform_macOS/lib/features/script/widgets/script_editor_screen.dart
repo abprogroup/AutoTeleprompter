@@ -83,6 +83,9 @@ class ScriptEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with StylingLogicMixin<ScriptEditorScreen> {
+  // Dummy node for HardwareKeyboard → _handleEditorArrowKey bridge
+  static final _arrowKeyDummyNode = FocusNode();
+
   // ── Mixin Implementation for StylingLogicMixin ────────────────────────────
   @override
   List<MarkupController> get controllers => _controllers;
@@ -143,6 +146,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_onGlobalArrowKey);
     _startAutoSave();
     if (widget.pendingFile != null) {
       _isInit = true;
@@ -411,6 +415,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
               _blockKeys.removeAt(idx);
               if (idx > 0) _focusNodes[idx - 1].requestFocus();
             });
+            _saveHistory(description: 'Delete Empty Line');
           }
           return KeyEventResult.handled;
         }
@@ -793,6 +798,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
     _historyTimer?.cancel(); _recentTimer?.cancel(); _autoSaveTimer?.cancel(); _typingBulkTimer?.cancel(); _suiteAutoSaveTimer?.cancel();
     _editorScrollController.dispose();
     _clearControllers(); super.dispose();
@@ -1108,13 +1114,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           ? _controllers.indexOf(_lastFocusedController!) : 0;
       setState(() { _historyIndex--; _applyState(_history[_historyIndex]); });
       Future.delayed(const Duration(milliseconds: 150), () {
-        if (mounted) {
-          _isCommandExecuting = false;
-          _isDirty = false;
-          final t = preFocusIdx.clamp(0, _controllers.length - 1);
-          _focusNodes[t].requestFocus();
-          _scrollEditorBlockIntoView(t);
-        }
+        if (!mounted) return;
+        _isCommandExecuting = false;
+        _isDirty = false;
+        final t = preFocusIdx.clamp(0, _controllers.length - 1);
+        _focusNodes[t].requestFocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollEditorBlockIntoView(t);
+        });
       });
       _forceRecentUpdate();
     }
@@ -1128,13 +1135,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           ? _controllers.indexOf(_lastFocusedController!) : 0;
       setState(() { _historyIndex++; _applyState(_history[_historyIndex]); });
       Future.delayed(const Duration(milliseconds: 150), () {
-        if (mounted) {
-          _isCommandExecuting = false;
-          _isDirty = false;
-          final t = preFocusIdx.clamp(0, _controllers.length - 1);
-          _focusNodes[t].requestFocus();
-          _scrollEditorBlockIntoView(t);
-        }
+        if (!mounted) return;
+        _isCommandExecuting = false;
+        _isDirty = false;
+        final t = preFocusIdx.clamp(0, _controllers.length - 1);
+        _focusNodes[t].requestFocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollEditorBlockIntoView(t);
+        });
       });
       _forceRecentUpdate();
     }
@@ -1988,9 +1996,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   }
 
   // ── Screen-level arrow-key cross-block navigation ──────────────────────────
-  // Runs ABOVE per-block FocusNodes so key-repeat events don't drop when a
-  // paragraph boundary causes a focus transition. Returns `ignored` for
-  // in-block movement so EditableText's default cursor handling stays intact.
+  // HardwareKeyboard handler fires BEFORE Flutter's focus system, ensuring
+  // key-repeat events are never dropped during the async focus-transfer window.
+  bool _onGlobalArrowKey(KeyEvent event) {
+    if (!mounted || _controllers.isEmpty) return false;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (!_focusNodes.any((n) => n.hasFocus)) return false;
+    return _handleEditorArrowKey(_arrowKeyDummyNode, event) ==
+        KeyEventResult.handled;
+  }
+
   KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -2204,10 +2219,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   void _onCut() {
     _onCopyClean();
-    _deleteSelection();
+    _deleteSelection(isCut: true);
   }
 
-  void _deleteSelection() {
+  void _deleteSelection({bool isCut = false}) {
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (_isGlobalSelection || hasOverlay) {
       setState(() => _isCommandExecuting = true);
@@ -2247,7 +2262,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       }
       _clearGlobalSelection();
       setState(() => _isCommandExecuting = false);
-      _saveHistory(description: 'Delete Selection');
+      _saveHistory(description: isCut ? 'Cut' : 'Delete Selection');
     } else {
       final c = _activeController;
       if (c != null && !c.selection.isCollapsed) {
@@ -2261,7 +2276,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           text: before + after,
           selection: TextSelection.collapsed(offset: sel.start),
         );
-        _saveHistory(description: 'Delete');
+        _saveHistory(description: isCut ? 'Cut' : 'Delete');
       }
     }
   }

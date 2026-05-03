@@ -351,10 +351,10 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
 
   void _onCut() {
     _onCopyClean();
-    _deleteSelection();
+    _deleteSelection(isCut: true);
   }
 
-  void _deleteSelection() {
+  void _deleteSelection({bool isCut = false}) {
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (_isGlobalSelection || hasOverlay) {
       setState(() => _isCommandExecuting = true);
@@ -394,7 +394,7 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
       }
       _clearGlobalSelection();
       setState(() => _isCommandExecuting = false);
-      _saveHistory(description: 'Delete Selection');
+      _saveHistory(description: isCut ? 'Cut' : 'Delete Selection');
     } else {
       final c = _activeController;
       if (c != null && !c.selection.isCollapsed) {
@@ -408,7 +408,7 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
           text: before + after,
           selection: TextSelection.collapsed(offset: sel.start),
         );
-        _saveHistory(description: 'Delete');
+        _saveHistory(description: isCut ? 'Cut' : 'Delete');
       }
     }
   }

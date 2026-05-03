@@ -66,7 +66,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   // pixels of the top/bottom edge, a periodic timer scrolls the list so the
   // user can extend the selection beyond the visible viewport.
   static const double _autoScrollZone = 60.0; // px from edge to trigger
-  static const double _autoScrollMax = 18.0;  // max px per tick (at edge)
+  static const double _autoScrollMax = 40.0;  // max px per tick (at edge)
   Timer? _autoScrollTimer;
 
   void _startAutoScroll(Offset globalHandlePos) {

@@ -225,7 +225,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 width: 24,
                                 height: 28,
                                 child: Text(
-                                  '»',
+                                  '\u00BB',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Color(0xFFFFBF00),

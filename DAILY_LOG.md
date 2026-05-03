@@ -1348,6 +1348,9 @@
   on top of the word. Editor bookmark markers only render at the text caret
   when there is a safe whitespace/text-boundary gap; otherwise they stay on the
   same visual row in a non-overlapping margin lane.
+- **Sign Correction**: Editor and presenter marker literals now use the
+  source-safe `\u00BB` escape so the displayed marker is the intended `»`
+  instead of a mojibake `Â»` / `Ã‚Â»` variant.
 - **Safety Boundary**: Bookmark markers remain metadata/UI only. The fix does
   not insert marker characters into `controller.text`, and does not change
   selection, clipboard, STT tokenization, import/export, or bookmark storage.

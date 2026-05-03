@@ -206,6 +206,9 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
 
 - Bookmark markers must never obscure readable script text in either editor or
   present mode.
+- The visual marker must be the single right guillemet `\u00BB` / `»`, matching
+  presenter and Windows behavior. Do not use mojibake literals such as `Â»` or
+  `Ã‚Â»`.
 - Presenter markers may reserve visual space beside the anchored word because
   presenter words are separate widgets. LTR markers reserve space before/left
   of the word; RTL/Hebrew markers reserve space before/right of the word.

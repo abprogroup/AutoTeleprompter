@@ -96,7 +96,7 @@ class _EditorBlock extends StatelessWidget {
                       child: const Padding(
                         padding: EdgeInsets.only(top: 3),
                         child: Text(
-                          '»',
+                          '\u00BB',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Color(0xFFFFBF00),
@@ -441,21 +441,8 @@ class _EditorBlock extends StatelessWidget {
         TextPosition(offset: safeOffset),
         Rect.zero,
       );
-      final previousRawChar =
-          safeOffset > 0 ? controller.text[safeOffset - 1] : '';
-      final nextRawChar = safeOffset < controller.text.length
-          ? controller.text[safeOffset]
-          : '';
-      final hasSafeInlineGap = previousRawChar.trim().isEmpty ||
-          nextRawChar.trim().isEmpty ||
-          safeOffset == 0 ||
-          safeOffset == controller.text.length;
-      final inlineLeft = textDirection == TextDirection.rtl
-          ? caret.dx + markerGap
-          : caret.dx - markerSize - markerGap;
-      final markerLeft = hasSafeInlineGap
-          ? inlineLeft
-          : (textDirection == TextDirection.rtl ? width + markerGap : -24.0);
+      final markerLeft =
+          textDirection == TextDirection.rtl ? width + markerGap : -24.0;
       final markerTop = caret.dy + ((lineHeight - markerSize) / 2);
       return Positioned(
         left: markerLeft.clamp(-28.0, width + markerGap).toDouble(),
@@ -469,7 +456,7 @@ class _EditorBlock extends StatelessWidget {
               width: markerSize,
               height: markerSize,
               child: Text(
-                'Â»',
+                '\u00BB',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFFFFBF00),

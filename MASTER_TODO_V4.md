@@ -567,7 +567,8 @@
   markers must never cover readable script text. Presenter markers now reserve
   side space before the anchored word, and editor markers use inline placement
   only when a safe text gap exists; otherwise they stay on the same visual row
-  in a non-overlapping margin lane. Awaiting iPhone QA.
+  in a non-overlapping margin lane. Marker literals use `\u00BB` so editor and
+  presenter both display the intended `»` sign. Awaiting iPhone QA.
 - [ ] **iOS STT Visible Skip Language Boundary**: Plan and implement visible
   skip across language transitions, e.g. Hebrew block -> English visible block
   -> Hebrew block. Visible skip must be able to trigger locale transition for a

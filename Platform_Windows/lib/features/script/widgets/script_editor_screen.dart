@@ -153,6 +153,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   List<_EditorSearchMatch> _editorSearchMatches = const [];
   int _editorSearchMatchIndex = -1;
   String _lastArrowDecision = 'idle';
+  SelectionEndpoint? _shiftSelectionAnchor;
+  SelectionEndpoint? _shiftSelectionFocus;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
@@ -890,6 +892,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     // clear a valid overlay and restart selection in the next block.
     final controller = _lastFocusedController;
     if (controller == null) {
+      _shiftSelectionAnchor = null;
+      _shiftSelectionFocus = null;
       overlay.clearSelection();
       for (final c in _controllers) {
         c.isGlobalSelected = false;
@@ -906,6 +910,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (block < 0) return false;
     final selection = controller.selection;
     if (!selection.isValid) {
+      _shiftSelectionAnchor = null;
+      _shiftSelectionFocus = null;
       overlay.clearSelection();
       for (final c in _controllers) {
         c.isGlobalSelected = false;
@@ -927,6 +933,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         session.focus.offset == offset) {
       return false;
     }
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
     overlay.clearSelection();
     for (final c in _controllers) {
       c.isGlobalSelected = false;
@@ -1006,6 +1014,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _clearAppSelectionForArrow(LogicalKeyboardKey key) {
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (!_isGlobalSelection && !hasOverlay) return false;
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
     final collapseToEnd = key == LogicalKeyboardKey.arrowRight ||
         key == LogicalKeyboardKey.arrowDown;
     final target = _appSelectionEdge(collapseToEnd: collapseToEnd);
@@ -1117,6 +1127,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   ({SelectionEndpoint anchor, SelectionEndpoint focus})? _shiftSelectionSeed(
     HardwareKeyboard keyboard,
   ) {
+    final visibleOverlayRange = _hasVisibleAppSelectionRange();
+    final rememberedAnchor = _shiftSelectionAnchor;
+    final rememberedFocus = _shiftSelectionFocus;
+    if (visibleOverlayRange &&
+        rememberedAnchor != null &&
+        rememberedFocus != null) {
+      return (anchor: rememberedAnchor, focus: rememberedFocus);
+    }
     _clearStaleOverlaySelectionForShift(keyboard);
     final controller = _lastFocusedController ?? _activeController;
     if (controller == null) return null;
@@ -1134,13 +1152,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       offset: selection.extentOffset.clamp(0, controller.text.length).toInt(),
     );
     final session = _overlayKey.currentState?.selectionSessionSnapshot;
-    final visibleOverlayRange = _hasVisibleAppSelectionRange();
+    final currentVisibleOverlayRange = _hasVisibleAppSelectionRange();
     if (session != null &&
-        visibleOverlayRange &&
+        currentVisibleOverlayRange &&
         _sameEndpoint(session.focus, realFocus)) {
       return (anchor: session.anchor, focus: session.focus);
     }
-    if (visibleOverlayRange || _isGlobalSelection) {
+    if (currentVisibleOverlayRange || _isGlobalSelection) {
       _overlayKey.currentState?.clearSelection();
       for (final c in _controllers) {
         c.isGlobalSelected = false;
@@ -1149,6 +1167,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       }
       _isGlobalSelection = false;
     }
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
     return (anchor: realAnchor, focus: realFocus);
   }
 
@@ -1299,6 +1319,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     SelectionEndpoint anchor,
     SelectionEndpoint focus,
   ) {
+    _shiftSelectionAnchor = anchor;
+    _shiftSelectionFocus = focus;
     _lastFocusedController = _controllers[focus.block];
     _focusNodes[focus.block].requestFocus();
     _controllers[focus.block].selection =
@@ -1314,6 +1336,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
   void _collapseAppSelectionTo(SelectionEndpoint target,
       {required String reason}) {
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
     _overlayKey.currentState?.clearSelection();
     for (final c in _controllers) {
       c.isGlobalSelected = false;

@@ -17,6 +17,7 @@ class _ControlBar extends ConsumerWidget {
   final VoidCallback onRemoveBookmark;
   final VoidCallback onPreviousBookmark;
   final VoidCallback onNextBookmark;
+  final VoidCallback onSearch;
 
   const _ControlBar({
     required this.isListening,
@@ -35,6 +36,7 @@ class _ControlBar extends ConsumerWidget {
     required this.onRemoveBookmark,
     required this.onPreviousBookmark,
     required this.onNextBookmark,
+    required this.onSearch,
   });
 
   @override
@@ -143,6 +145,11 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.replay, color: Colors.white70),
               onPressed: onReset,
+            ),
+            IconButton(
+              icon: const Icon(Icons.search, color: Colors.white70),
+              onPressed: onSearch,
+              tooltip: 'Search (Ctrl+Shift+F)',
             ),
           ],
         ),

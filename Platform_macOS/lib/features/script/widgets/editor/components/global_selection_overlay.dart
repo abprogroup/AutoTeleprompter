@@ -455,6 +455,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   Widget _buildHandle(Offset pos, bool isStart) {
+    if (pos.dy < -56 || pos.dy > _stackSize.height + 56 ||
+        pos.dx < -40 || pos.dx > _stackSize.width + 40) {
+      return const SizedBox.shrink();
+    }
     return Positioned(
       left: (pos.dx - 16).clamp(0.0, _stackSize.width > 40 ? _stackSize.width - 40 : 0.0),
       top: (pos.dy - 18).clamp(0.0, _stackSize.height > 56 ? _stackSize.height - 56 : 0.0),

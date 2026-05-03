@@ -55,12 +55,13 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     if (!mounted) return;
 
     if (choice == true) {
-      // Continue: scroll to the saved position.
-      _scrollToWordIndex(savedIndex);
+      // Continue: jump instantly to the saved position (no smooth animation —
+      // in long scripts the scroll animation is too slow).
+      _jumpToWordIndex(savedIndex, immediate: true);
     } else {
-      // Restart: reset provider position and scroll to top.
+      // Restart: reset provider position and jump to top.
       ref.read(teleprompterProvider.notifier).resetPosition();
-      _scrollToWordIndex(0);
+      _jumpToWordIndex(0, immediate: true);
     }
   }
   Future<void> _loadBookmarksForScript(Script script,
@@ -231,46 +232,80 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
   Future<void> _showSearchDialog() async {
     if (_searchDialogOpen) return;
     _searchDialogOpen = true;
-    final controller = TextEditingController(text: _lastSearchQuery);
-    final query = await showDialog<String>(
+    final textCtrl = TextEditingController(text: _lastSearchQuery);
+    bool wholeWord = _searchWholeWord;
+
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title:
-            const Text('Search script', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Word to find',
-            hintStyle: TextStyle(color: Colors.white38),
-            enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Colors.white24)),
-            focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFFFFBF00))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text('Search script',
+              style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: textCtrl,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Word or phrase to find',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24)),
+                  focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFFFFBF00))),
+                ),
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => Navigator.pop(
+                    ctx, {'q': textCtrl.text, 'w': wholeWord}),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () => setDlg(() => wholeWord = !wholeWord),
+                child: Row(
+                  children: [
+                    Icon(
+                      wholeWord
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      color: wholeWord
+                          ? const Color(0xFFFFBF00)
+                          : Colors.white38,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('Whole word only',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
           ),
-          textInputAction: TextInputAction.search,
-          onSubmitted: (value) => Navigator.pop(ctx, value),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                  ctx, {'q': textCtrl.text, 'w': wholeWord}),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFBF00),
+                  foregroundColor: Colors.black),
+              child: const Text('Find'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFBF00),
-                foregroundColor: Colors.black),
-            child: const Text('Find'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
+    textCtrl.dispose();
     _searchDialogOpen = false;
-    if (query == null) return;
-    final trimmed = query.trim();
+    if (result == null) return;
+    final trimmed = (result['q'] as String).trim();
     if (trimmed.isEmpty) return;
+    setState(() => _searchWholeWord = result['w'] as bool);
     _lastSearchQuery = trimmed;
     _openSearchToolbar(trimmed);
   }
@@ -362,6 +397,15 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
                   style: const TextStyle(
                       color: Colors.white70, fontSize: 13),
                 ),
+                if (_searchWholeWord)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Text('W',
+                        style: TextStyle(
+                            color: Color(0xFFFFBF00),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                  ),
                 const SizedBox(width: 8),
                 Text(
                   '$current / $total',
@@ -448,6 +492,11 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
         .replaceAll(_tagStripRe, '')
         .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '')
         .toLowerCase();
+    if (_searchWholeWord) {
+      // Whole-word: the word's visible text must equal the needle exactly.
+      return text == needle;
+    }
+    // Partial (default): match if needle appears anywhere in the word.
     return text.contains(needle);
   }
 

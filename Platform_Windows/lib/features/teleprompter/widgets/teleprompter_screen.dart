@@ -71,6 +71,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<int> _searchMatches = const [];
   int _searchMatchIndex = 0;
   bool _showSearchToolbar = false;
+  bool _searchWholeWord = false; // true = exact word, false = contains
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;

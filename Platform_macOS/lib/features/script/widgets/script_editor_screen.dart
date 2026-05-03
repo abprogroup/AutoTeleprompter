@@ -352,51 +352,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       final node = FocusNode(onKeyEvent: (node, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-            event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          final idx = _controllers.indexOf(controller);
-          final sel = controller.selection;
-          if (idx != -1 && sel.isCollapsed) {
-            final textLen = controller.text.length;
-            final isRtl = controller.text.isHebrew;
-            final isLeft = event.logicalKey == LogicalKeyboardKey.arrowLeft;
-
-            // v4.1.13: Intercept at visual boundaries before TextField consumes it
-            if (isLeft) {
-              if (!isRtl && sel.baseOffset == 0 && idx > 0) {
-                // LTR Left at start -> Prev Block End
-                _focusNodes[idx - 1].requestFocus();
-                _controllers[idx - 1].selection =
-                    TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
-                _scrollEditorBlockIntoView(idx - 1);
-                return KeyEventResult.handled;
-              } else if (isRtl && sel.baseOffset == textLen && idx < _controllers.length - 1) {
-                // RTL Left at end -> Next Block Start
-                _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
-                _scrollEditorBlockIntoView(idx + 1);
-                return KeyEventResult.handled;
-              }
-            } else {
-              // Right arrow
-              if (!isRtl && sel.baseOffset == textLen && idx < _controllers.length - 1) {
-                // LTR Right at end -> Next Block Start
-                _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection = const TextSelection.collapsed(offset: 0);
-                _scrollEditorBlockIntoView(idx + 1);
-                return KeyEventResult.handled;
-              } else if (isRtl && sel.baseOffset == 0 && idx > 0) {
-                // RTL Right at start -> Prev Block End
-                _focusNodes[idx - 1].requestFocus();
-                _controllers[idx - 1].selection =
-                    TextSelection.collapsed(offset: _controllers[idx - 1].text.length);
-                _scrollEditorBlockIntoView(idx - 1);
-                return KeyEventResult.handled;
-              }
-            }
-          }
-        }
-
+        // Arrow cross-block navigation is owned by the screen-level Focus
+        // (_handleEditorArrowKey). Per-block handling here caused a race
+        // condition because requestFocus() is async — multiple KeyRepeat
+        // events reached the old block before focus transferred.
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);
@@ -624,6 +583,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       futureWordColor: settings.futureWordColor,
       historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
     );
+    if (mounted) {
+      ref.read(scriptProvider.notifier).updateHistory(
+            _historyIndex,
+            jsonEncode(_history.map((e) => e.toJson()).toList()),
+          );
+    }
   }
 
   void _onBlockChanged() {
@@ -1115,13 +1080,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (_historyIndex > 0) {
       _isCommandExecuting = true;
       _isDirty = false;
+      final preFocusIdx = _lastFocusedController != null
+          ? _controllers.indexOf(_lastFocusedController!) : 0;
+      final preScroll = _editorScrollController.hasClients
+          ? _editorScrollController.offset : 0.0;
       setState(() { _historyIndex--; _applyState(_history[_historyIndex]); });
-      // Keep _isCommandExecuting true until _isLoading resets (100ms)
-      // to prevent controller listeners from corrupting history
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) {
           _isCommandExecuting = false;
           _isDirty = false;
+          if (_editorScrollController.hasClients) {
+            _editorScrollController.jumpTo(
+                preScroll.clamp(0.0, _editorScrollController.position.maxScrollExtent));
+          }
+          final t = preFocusIdx.clamp(0, _controllers.length - 1);
+          _focusNodes[t].requestFocus();
         }
       });
       _forceRecentUpdate();
@@ -1132,11 +1105,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (_historyIndex < _history.length - 1) {
       _isCommandExecuting = true;
       _isDirty = false;
+      final preFocusIdx = _lastFocusedController != null
+          ? _controllers.indexOf(_lastFocusedController!) : 0;
+      final preScroll = _editorScrollController.hasClients
+          ? _editorScrollController.offset : 0.0;
       setState(() { _historyIndex++; _applyState(_history[_historyIndex]); });
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) {
           _isCommandExecuting = false;
           _isDirty = false;
+          if (_editorScrollController.hasClients) {
+            _editorScrollController.jumpTo(
+                preScroll.clamp(0.0, _editorScrollController.position.maxScrollExtent));
+          }
+          final t = preFocusIdx.clamp(0, _controllers.length - 1);
+          _focusNodes[t].requestFocus();
         }
       });
       _forceRecentUpdate();
@@ -2221,10 +2204,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           // Preserve styling when cutting from the start of a block:
           // opening tags in the deleted range are gone but their closing tags
           // remain — prepend the active tag context so formatting is retained.
-          final after = sel.start == 0
-              ? MarkupController.openTagsAt(c.text, sel.end) + rawAfter
-              : rawAfter;
+          final openPrefix = sel.start == 0
+              ? MarkupController.openTagsAt(c.text, sel.end)
+              : '';
+          final after = openPrefix + rawAfter;
           c.text = before + after;
+          final cursorAt = (sel.start + openPrefix.length).clamp(0, c.text.length);
+          c.selection = TextSelection.collapsed(offset: cursorAt);
           c.externalSelection = null;
           c.refresh();
         }
@@ -2275,7 +2261,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     final internalMarkup = RichClipboard.internalMarkup;
     if (internalMarkup != null) {
       final cleanInternal = StylingService.stripTags(internalMarkup);
-      if (cleanInternal == normalizedClipboard) {
+      if (cleanInternal.trimRight() == normalizedClipboard.trimRight()) {
         text = internalMarkup;
       } else {
         text = normalizedClipboard;

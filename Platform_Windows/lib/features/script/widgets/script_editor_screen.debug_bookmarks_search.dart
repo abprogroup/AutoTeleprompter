@@ -367,15 +367,16 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
         } else if (sel != null && sel.isValid && !sel.isCollapsed) {
           final before = c.text.substring(0, sel.start);
           final rawAfter = c.text.substring(sel.end);
-          // When sel.start == 0 (cutting from the beginning of the block),
-          // the remaining text may be mid-style: opening tags that were in
-          // the deleted range are gone, leaving orphaned closing tags and a
-          // loss of formatting. Prepend the active tag context at sel.end so
-          // the surviving text retains its styling.
-          final after = sel.start == 0
-              ? MarkupController.openTagsAt(c.text, sel.end) + rawAfter
-              : rawAfter;
+          final openPrefix = sel.start == 0
+              ? MarkupController.openTagsAt(c.text, sel.end)
+              : '';
+          final after = openPrefix + rawAfter;
           c.text = before + after;
+          // Place cursor at the start of the deleted range so it stays at
+          // the cut point rather than jumping to the native selection endpoint.
+          final cursorAt = (sel.start + openPrefix.length)
+              .clamp(0, c.text.length);
+          c.selection = TextSelection.collapsed(offset: cursorAt);
           c.externalSelection = null;
           c.refresh();
         }
@@ -426,8 +427,13 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     final internalMarkup = RichClipboard.internalMarkup;
     if (internalMarkup != null) {
       final cleanInternal = StylingService.stripTags(internalMarkup);
-      if (cleanInternal == normalizedClipboard) {
-        text = internalMarkup;
+      // Compare after stripping trailing newlines: some OS clipboard implementations
+      // drop the trailing '\n' from multi-block copies that end with an empty block,
+      // causing a mismatch that makes the paste lose the last empty paragraph.
+      final cmpInternal = cleanInternal.trimRight();
+      final cmpClipboard = normalizedClipboard.trimRight();
+      if (cmpInternal == cmpClipboard) {
+        text = internalMarkup; // use full markup including any trailing empty block
       } else {
         text = normalizedClipboard;
       }

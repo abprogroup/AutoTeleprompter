@@ -338,16 +338,30 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     if (_historyIndex > 0) {
       _isCommandExecuting = true;
       _isDirty = false;
+      // Remember which block had focus and the current scroll offset so we
+      // can restore the view after _applyState rebuilds all controllers.
+      final preFocusIdx = _lastFocusedController != null
+          ? _controllers.indexOf(_lastFocusedController!)
+          : 0;
+      final preScroll = _editorScrollController.hasClients
+          ? _editorScrollController.offset
+          : 0.0;
       setState(() {
         _historyIndex--;
         _applyState(_history[_historyIndex]);
       });
-      // Keep _isCommandExecuting true until _isLoading resets (100ms)
-      // to prevent controller listeners from corrupting history
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) {
           _isCommandExecuting = false;
           _isDirty = false;
+          // Restore scroll position so the view doesn't jump after undo
+          if (_editorScrollController.hasClients) {
+            _editorScrollController.jumpTo(
+                preScroll.clamp(0.0, _editorScrollController.position.maxScrollExtent));
+          }
+          // Restore focus to approximately the same block
+          final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
+          _focusNodes[targetIdx].requestFocus();
         }
       });
       _forceRecentUpdate();
@@ -358,6 +372,12 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     if (_historyIndex < _history.length - 1) {
       _isCommandExecuting = true;
       _isDirty = false;
+      final preFocusIdx = _lastFocusedController != null
+          ? _controllers.indexOf(_lastFocusedController!)
+          : 0;
+      final preScroll = _editorScrollController.hasClients
+          ? _editorScrollController.offset
+          : 0.0;
       setState(() {
         _historyIndex++;
         _applyState(_history[_historyIndex]);
@@ -366,6 +386,12 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         if (mounted) {
           _isCommandExecuting = false;
           _isDirty = false;
+          if (_editorScrollController.hasClients) {
+            _editorScrollController.jumpTo(
+                preScroll.clamp(0.0, _editorScrollController.position.maxScrollExtent));
+          }
+          final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
+          _focusNodes[targetIdx].requestFocus();
         }
       });
       _forceRecentUpdate();

@@ -709,6 +709,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 onPreviousBookmark: () =>
                                     _jumpPresenterBookmark(-1),
                                 onNextBookmark: () => _jumpPresenterBookmark(1),
+                                onSearch: _showSearchDialog,
                               ),
                             ],
                           ),

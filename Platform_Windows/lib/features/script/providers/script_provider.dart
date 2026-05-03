@@ -734,6 +734,18 @@ class ScriptNotifier extends Notifier<Script?> {
     return map[code] ?? code;
   }
 
+  /// Keeps scriptProvider.state in sync with the editor's live history so
+  /// that a new ScriptEditorScreen (created on re-entry) reads the correct
+  /// historyIndex and historyJson from scriptProvider instead of stale startup
+  /// values.  Called from _forceRecentUpdate() after each save.
+  void updateHistory(int historyIndex, String historyJson) {
+    if (state == null) return;
+    state = state!.copyWith(
+      historyIndex: historyIndex,
+      historyJson: historyJson,
+    );
+  }
+
   void clear() {
     state = null;
     ref.read(settingsProvider.notifier).saveScript('', title: '');

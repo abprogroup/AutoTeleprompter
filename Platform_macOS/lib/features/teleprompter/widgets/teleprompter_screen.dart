@@ -183,7 +183,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
     if (!mounted) return;
     if (choice == true) {
-      _scrollToWordIndex(savedIndex);
+      // Jump instantly — smooth scroll takes too long in a large script.
+      _scrollToWordIndex(savedIndex, immediately: true);
     } else {
       ref.read(teleprompterProvider.notifier).resetPosition();
       _scrollController.jumpTo(0);
@@ -462,7 +463,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   // ── Speech-mode scroll ──────────────────────────────────────────────────────
 
-  void _scrollToWordIndex(int index) {
+  void _scrollToWordIndex(int index, {bool immediately = false}) {
     if (index < 0 || index >= _wordKeys.length) return;
     final key = _wordKeys[index];
     final ctx = key.currentContext;
@@ -478,6 +479,15 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     final wordPos = box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
     final rawTarget = _scrollController.offset + wordPos.dy - targetY;
     _scrollTarget = rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
+
+    if (immediately) {
+      _smoothScrollTimer?.cancel();
+      _smoothScrollActive = false;
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollTarget);
+      }
+      return;
+    }
 
     // Start the smooth scroll timer if not already running
     if (!_smoothScrollActive) {

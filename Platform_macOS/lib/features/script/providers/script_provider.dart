@@ -597,6 +597,11 @@ class ScriptNotifier extends Notifier<Script?> {
     return map[code] ?? code;
   }
 
+  void updateHistory(int historyIndex, String historyJson) {
+    if (state == null) return;
+    state = state!.copyWith(historyIndex: historyIndex, historyJson: historyJson);
+  }
+
   void clear() {
     state = null;
     ref.read(settingsProvider.notifier).saveScript('', title: '');

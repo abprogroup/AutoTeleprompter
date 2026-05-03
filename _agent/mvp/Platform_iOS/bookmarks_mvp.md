@@ -150,3 +150,16 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
 - Bookmark jumps are immediate direct navigation commands and must not use the
   smooth STT follow animation.
 - Bookmark jumps must preserve STT session state and resume point.
+
+---
+
+## iOS Boundary Mapping Repair - 2026-05-03
+
+- Editor-created bookmarks at the start of a later block must attach to the
+  first present-mode word in that block, not the second word.
+- When converting editor raw block/offset to presenter `wordIndex`, tokenizing
+  a prefix ending exactly with `\n` creates a phantom hard-break token for the
+  empty trailing line. Subtract that phantom token before storing `wordIndex`.
+- The raw editor coordinates (`blockIndex`, `offset`) remain the exact editor
+  authority. The presenter `wordIndex` is only the teleprompter anchor derived
+  from those editor coordinates.

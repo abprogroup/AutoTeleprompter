@@ -292,8 +292,10 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
                 !_isCommandExecuting &&
                 !overlayActive &&
                 controller.text.isNotEmpty &&
-                controller.selection.baseOffset == 0 &&
-                controller.selection.extentOffset == controller.text.length) {
+                controller.selection.isValid &&
+                !controller.selection.isCollapsed &&
+                controller.selection.start == 0 &&
+                controller.selection.end == controller.text.length) {
               _selectAllBlocks();
             }
           }

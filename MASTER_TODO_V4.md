@@ -463,6 +463,14 @@
   partial cross-block Cut, and clears the transient range on navigation,
   search/bookmark jumps, load/split/remove, undo/redo, import, and clear.
   Awaiting IPA/device verification.
+- [P] **iOS Selection/Bookmark Regression Repair**: After QA found Select All
+  again selecting only the initially touched block, cross-block handle Cut/Copy
+  falling back to the first native block, and editor bookmarks placed before a
+  block appearing after the first present-mode word, patched the editor to
+  normalize full-block native selection direction, rebuild recognized Cut/Copy
+  ranges from live overlay endpoints at command time, and remove the phantom
+  boundary token from editor-to-present bookmark word indexes. Awaiting
+  IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

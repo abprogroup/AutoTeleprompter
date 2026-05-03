@@ -58,9 +58,20 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
       );
     }
     final beforeTokens = WordAligner.tokenize(textBefore.toString());
+    var beforeCount = beforeTokens.length;
+    // Tokenizing a prefix that ends exactly on a block boundary creates a
+    // phantom hard-break token for the empty line after the trailing "\n".
+    // A bookmark placed before the first word of the next block must attach to
+    // that first word, not to the following word.
+    if (textBefore.toString().endsWith('\n') &&
+        beforeTokens.isNotEmpty &&
+        beforeTokens.last.isNewline &&
+        beforeTokens.last.raw == '\n\n') {
+      beforeCount--;
+    }
     final allTokens = WordAligner.tokenize(_getRefinedFullText());
     final maxIndex = allTokens.isEmpty ? 0 : allTokens.length - 1;
-    return beforeTokens.length.clamp(0, maxIndex).toInt();
+    return beforeCount.clamp(0, maxIndex).toInt();
   }
 
   String _bookmarkLabelForEditorPosition(int block, int offset) {

@@ -1044,3 +1044,22 @@
   `git diff --check` passed, and targeted `flutter analyze --no-pub` reported
   no new compile errors, only existing warning/info noise in the large editor
   files. Awaiting IPA/device verification.
+## 2026-05-03 - iOS Selection/Bookmark Regression Repair
+
+- **Session Goal**: Address device QA showing `Select All` again selecting only
+  the initially touched block, cross-block handle Cut/Copy falling back to the
+  first native block, and editor bookmarks placed before a block appearing after
+  the first word in present mode.
+- **Selection Result**: iOS full-block native selection escalation now checks
+  normalized `selection.start/end`, so reversed base/extent Select All events
+  still route into `_selectAllBlocks()`.
+- **Clipboard Result**: Cross-block Cut/Copy now rebuilds the recognized command
+  range from the live overlay handle endpoints at command time before slicing
+  raw markup, reducing stale first-block/native-selection fallback risk.
+- **Bookmark Result**: Editor-to-present bookmark mapping now removes the
+  phantom token produced when a prefix ends exactly at a paragraph boundary, so
+  a bookmark before the first word of block B anchors to that first word.
+- **Verification Result**: Targeted `flutter analyze --no-pub` for the touched
+  iOS selection/bookmark files reported no compile errors, only existing
+  warning/info noise in the split editor files. Awaiting IPA/device
+  verification.

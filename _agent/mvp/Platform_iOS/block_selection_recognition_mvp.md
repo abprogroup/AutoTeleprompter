@@ -420,3 +420,17 @@ Do not continue implementing if any of these happens:
 | Recognized partial range across English and Hebrew blocks | Clipboard order follows script order; visual hit-testing respects block direction |
 | Tap elsewhere after recognized range | Clears transient selection/range but preserves real clipboard |
 | Undo after cross-block Cut | Restores immediately through history |
+
+---
+
+## Runtime Clarification - 2026-05-03
+
+- `_recognizedBlocksForCommand(...)` must rebuild from
+  `GlobalSelectionOverlayState.currentRawRange` when the overlay is currently
+  visible. The live overlay endpoints are the user-facing truth; cached
+  `_recognizedBlockRange` exists only as a transient command/debug mirror.
+- If the live overlay range and cached range differ, update the cached range
+  before slicing raw markup. This prevents a stale native one-block selection
+  from winning after the user has dragged handles into another block.
+- Native iOS `Select All` escalation must compare normalized
+  `selection.start` / `selection.end`, never raw base/extent direction.

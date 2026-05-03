@@ -305,3 +305,20 @@ Additional clipboard prohibitions:
   deselection. The safer replacement avoids passive listener adoption and
   limits promotion to the partial native context-menu build path, with the
   native/adaptive toolbar remaining the visible command surface.
+
+---
+
+## iOS Device Regression Repair - 2026-05-03
+
+- Native iOS full-block selection may report reversed `baseOffset` /
+  `extentOffset`. The full-block escalation check must use normalized
+  `selection.start == 0` and `selection.end == text.length`, or system
+  `Select All` can remain trapped inside the originally touched paragraph.
+- Cross-block handle Cut/Copy must resolve the command range from the live
+  `GlobalSelectionOverlayState.currentRawRange` at command time. Do not rely
+  only on previously cached `_recognizedBlockRange`; iOS toolbar/focus timing
+  can leave cached command metadata stale while the visible handles are
+  correct.
+- The active command order remains unchanged: full Select All first, live
+  recognized overlay range second, overlay slices third, native one-block
+  selection last.

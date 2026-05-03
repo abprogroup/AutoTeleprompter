@@ -141,7 +141,28 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   bool _rangeMatchesOverlay(_BlockSelectionRange range) {
     final raw = _overlayKey.currentState?.currentRawRange;
     if (raw == null) return false;
-    final current = _normalizeBlockRange(
+    final current = _rangeFromOverlayRaw(raw, range.source);
+    if (current == null) return false;
+    return _rangesEqual(current, range);
+  }
+
+  bool _rangesEqual(_BlockSelectionRange a, _BlockSelectionRange b) {
+    return a.start.blockIndex == b.start.blockIndex &&
+        a.start.rawOffset == b.start.rawOffset &&
+        a.end.blockIndex == b.end.blockIndex &&
+        a.end.rawOffset == b.end.rawOffset;
+  }
+
+  _BlockSelectionRange? _rangeFromOverlayRaw(
+    ({
+      int startBlock,
+      int startOffset,
+      int endBlock,
+      int endOffset,
+    }) raw,
+    String source,
+  ) {
+    return _normalizeBlockRange(
       _BlockSelectionPoint(
         blockIndex: raw.startBlock,
         rawOffset: raw.startOffset,
@@ -150,17 +171,21 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
         blockIndex: raw.endBlock,
         rawOffset: raw.endOffset,
       ),
-      range.source,
+      source,
     );
-    if (current == null) return false;
-    return current.start.blockIndex == range.start.blockIndex &&
-        current.start.rawOffset == range.start.rawOffset &&
-        current.end.blockIndex == range.end.blockIndex &&
-        current.end.rawOffset == range.end.rawOffset;
   }
 
   List<String>? _recognizedBlocksForCommand(String reason) {
-    final range = _recognizedBlockRange;
+    var range = _recognizedBlockRange;
+    final raw = _overlayKey.currentState?.currentRawRange;
+    if (raw != null) {
+      final liveRange = _rangeFromOverlayRaw(raw, '$reason-overlay');
+      if (liveRange != null &&
+          (range == null || !_rangesEqual(range, liveRange))) {
+        _setRecognizedBlockRange(liveRange, '$reason-live-overlay');
+        range = liveRange;
+      }
+    }
     if (range == null) return null;
     if (!_rangeMatchesOverlay(range)) {
       _clearRecognizedBlockRange('$reason-stale-range');

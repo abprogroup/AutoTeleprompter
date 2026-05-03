@@ -189,16 +189,7 @@ class _EditorBlock extends StatelessWidget {
                           !selection.isCollapsed &&
                           !(selection.start == 0 &&
                               selection.end == controller.text.length);
-                      var selectAllRequested = false;
-                      void promotePartialSelectionForCrossBlockHandles() {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (selectAllRequested) return;
-                          onExtendSelection();
-                        });
-                      }
-
                       void selectAllAndReopenToolbar() {
-                        selectAllRequested = true;
                         ContextMenuController.removeAny();
                         onSelectAll();
                         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -263,13 +254,11 @@ class _EditorBlock extends StatelessWidget {
                         );
                       }
 
-                      // Partial native iOS selection cannot cross paragraph
-                      // TextFields. Keep the adaptive/native toolbar as the
-                      // command surface, but promote the confirmed native range
-                      // into the existing app handles so dragging can cross
-                      // blocks without a vague extra "Extend" product action.
+                      // Partial native iOS selection is ordinary one-block
+                      // selection. Do not auto-promote it while the toolbar is
+                      // merely being built; that races against Select All and
+                      // can leave the original double-tapped word in control.
                       if (hasPartialNativeSelection) {
-                        promotePartialSelectionForCrossBlockHandles();
                         return AdaptiveTextSelectionToolbar.buttonItems(
                           anchors: editableTextState.contextMenuAnchors,
                           buttonItems: [

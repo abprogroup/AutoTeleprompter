@@ -444,3 +444,8 @@ Do not continue implementing if any of these happens:
 - The visible toolbar may look native/adaptive, but the `Select All` command
   must be app-owned. Do not use a native `ContextMenuButtonType.selectAll`
   action for this bridge; it can remain scoped to the original `TextField`.
+- Opening the double-tap word toolbar must not auto-promote that partial native
+  selection into `GlobalSelectionOverlay`. Toolbar construction is passive.
+  The word selection may be cut/copied as a normal one-block native selection,
+  but Select All must be allowed to replace it with full-script selection
+  before any overlay state exists.

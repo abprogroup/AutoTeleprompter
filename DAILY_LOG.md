@@ -1101,3 +1101,17 @@
 - **Rearm Result**: Toolbar Select All re-arms `_selectAllBlocks()` once after
   the native callback window, then reopens the toolbar into the app-owned
   global Cut/Copy/Paste menu.
+
+## 2026-05-03 - iOS Double-Tap Select All Isolation
+
+- **Device QA Input**: Empty-place Select All correctly selected all script
+  blocks, but double-tapping a word first left the word selection/handles alive
+  and pressing Select All did not expand to the full script.
+- **Root Cause**: The double-tap partial-selection toolbar was automatically
+  promoting the one-word native selection into app overlay state while the
+  toolbar was merely being built. That passive promotion could race against the
+  later Select All command and keep the originally touched word in control.
+- **Fix Result**: Removed toolbar-build auto-promotion for partial native
+  word selections. Double-tap remains an ordinary one-block native selection
+  until the user chooses a command; Select All can now route directly to the
+  app-owned `_selectAllBlocks()` path without stale one-word overlay state.

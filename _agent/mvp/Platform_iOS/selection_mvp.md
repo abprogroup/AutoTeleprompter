@@ -147,18 +147,19 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     handle system. This is intentionally not the rejected app-toolbar/autoscroll
     patch.
 
-20. **Partial native selections enter overlay handles only from the native menu**:
+20. **Partial native selections must not auto-promote while the menu builds**:
     Because each paragraph block is a separate iOS `TextField`, native iOS
     selection handles cannot cross a newline/block boundary. A partial,
-    non-full-block native selection may therefore be promoted into
-    `GlobalSelectionOverlay` only while the native/adaptive context menu is
-    being built for that confirmed user selection. Do not expose a vague
-    product-facing `Extend` button. Do not promote from passive
-    `_onSelectionChanged()` listener events. Promotion is forbidden during
-    `_isGlobalSelection`, command execution, full-block Select All, or any
-    already-active overlay selection. It must not add an app-owned floating
-    Cut/Copy/Paste toolbar, edge-scroll timer, or alternate clipboard command
-    path.
+    non-full-block native selection must remain an ordinary one-block
+    selection while the native/adaptive context menu is merely being built.
+    Do not expose a vague product-facing `Extend` button. Do not promote from
+    passive `_onSelectionChanged()` listener events or from toolbar-build
+    side effects. Any future cross-block promotion entry must be explicit,
+    command-owned, and device-tested against Select All first. Promotion is
+    forbidden during `_isGlobalSelection`, command execution, full-block
+    Select All, or any already-active overlay selection. It must not add an
+    app-owned floating Cut/Copy/Paste toolbar, edge-scroll timer, or alternate
+    clipboard command path.
 
 21. **Handle drag hit-testing must include block boundaries**: Overlay handle
     dragging must let endpoints reach offset `0` and `text.length` for the
@@ -181,9 +182,10 @@ Governs all multi-block text selection, overlay drag handles, cut/copy, and the 
     native iOS selection is still limited to one `TextField`, so its context
     menu must show app-owned `Cut`, `Copy`, `Select All`, and optional `Paste`
     actions instead of burying the user in native-only `Lookup` / `Search Web`
-    actions. The app may promote the confirmed partial selection into overlay
-    handles behind that menu, but it must not add an `Extend` product action or
-    a separate app command bar.
+    actions. The app must not promote the confirmed partial selection into
+    overlay handles just because the menu opened; that stale one-word overlay
+    can beat the user's later Select All command. It must not add an `Extend`
+    product action or a separate app command bar.
 
 24. **Select All must leave a Cut/Copy affordance**: When a native context-menu
     `Select All` command routes through `_selectAllBlocks()`, the toolbar must
@@ -342,3 +344,7 @@ Additional clipboard prohibitions:
 - `_selectAllBlocks()` owns a short native-menu guard window. During that
   window, late native word-selection callbacks must not clear the app global
   selection back to the originally double-tapped word.
+- A double-tapped word toolbar is a passive menu-open state. It must not call
+  `_extendNativeSelectionToOverlay()` from `contextMenuBuilder`; otherwise the
+  app creates a one-word overlay before the user presses Select All and the
+  full-script Select All path can appear to do nothing.

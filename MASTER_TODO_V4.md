@@ -484,6 +484,12 @@
   native-menu guard window in `_selectAllBlocks()`, and re-armed global
   selection once after the native callback window before reopening the global
   Cut/Copy/Paste toolbar. Awaiting IPA/device verification.
+- [P] **iOS Double-Tap Select All Isolation**: After QA proved empty-place
+  Select All works but double-tap-word Select All does not, removed passive
+  toolbar-build auto-promotion of one-word native selections into overlay
+  handles. Double-tap now stays ordinary one-block native selection until a
+  command runs, so app-owned Select All can replace it with full-script
+  selection. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

@@ -742,3 +742,9 @@
   overlay focus before Shift extension, adds `\u00BB`-aware Ctrl+Shift
   horizontal word targets, and turns outside/stale handle states into
   recoverable suspended drags. Awaiting Windows workflow and device QA.
+- [P] **Windows Selection Repair Follow-Up**: Device QA showed the targeted
+  repair still produced broken partial selection islands and stopped vertical
+  handle autoscroll almost immediately. Follow-up restores synchronous
+  `_lastFocusedController` as the stale-overlay validation source and treats
+  vertical out-of-editor pointer travel as edge-zone autoscroll instead of a
+  hard outside exit. Awaiting Windows workflow and device QA.

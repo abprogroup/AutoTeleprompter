@@ -887,7 +887,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     final overlay = _overlayKey.currentState;
     final session = overlay?.selectionSessionSnapshot;
     if (overlay == null || !(overlay.hasSelection)) return false;
-    final controller = _activeController;
+    // Use the editor's synchronous focus authority, not FocusNode iteration.
+    // FocusNode ownership can lag for one key repeat after app-owned
+    // Ctrl/Shift selection crosses a block, which made the stale-overlay guard
+    // clear a valid overlay and restart selection in the next block.
+    final controller = _lastFocusedController;
     if (controller == null) {
       overlay.clearSelection();
       for (final c in _controllers) {

@@ -211,9 +211,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (stack == null) return SelectionPointerState.stale;
     final local = stack.globalToLocal(globalHandlePos);
     final height = _stackSize.height;
-    if (local.dy < -_hardExitMargin ||
-        local.dy > height + _hardExitMargin ||
-        local.dx < -_hardExitMargin ||
+    if (local.dx < -_hardExitMargin ||
         local.dx > _stackSize.width + _hardExitMargin) {
       return SelectionPointerState.outside;
     }

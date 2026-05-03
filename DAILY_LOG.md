@@ -1610,3 +1610,20 @@
 - **Verification Status**: Targeted analyzer reports no new compile errors;
   existing Windows warnings/infos remain. Diff check passed. Awaiting push and
   Windows workflow verification.
+
+## 2026-05-04 - Windows v5 Selection Repair Follow-Up
+
+- **Device QA Input**: User confirmed the final targeted repair still left the
+  reported bugs visible. Ctrl+Shift+Left/Right crossed blocks but produced
+  broken partial selection islands, and handle edge dragging scrolled only
+  briefly before stopping.
+- **Selection Guard Correction**: The stale-overlay guard now uses the editor's
+  synchronous `_lastFocusedController` instead of FocusNode iteration. FocusNode
+  ownership can lag after app-owned keyboard crossing and was clearing a valid
+  overlay mid-selection.
+- **Handle Edge Correction**: Vertical pointer movement beyond the editor top
+  or bottom now remains an edge-zone autoscroll state instead of being treated
+  as an outside hard exit. Horizontal hard exits still suspend the handle drag.
+- **Verification Status**: Targeted analyzer reports no new compile errors;
+  existing Windows warnings/infos remain. Awaiting diff check, push, and
+  Windows workflow verification.

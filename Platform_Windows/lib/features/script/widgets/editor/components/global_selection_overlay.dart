@@ -65,6 +65,7 @@ class _HandleDragSession {
   final Offset? panStartHandleGlobal;
   Offset latestPointerGlobal;
   Offset latestHandleGlobal;
+  Offset? lastEndpointPointerGlobal;
   SelectionPointerState pointerState = SelectionPointerState.inside;
   Timer? autoScrollTimer;
   Timer? staleTimer;
@@ -272,7 +273,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       return;
     }
 
-    if (updateEndpoint) {
+    if (updateEndpoint && session.lastEndpointPointerGlobal != pointerGlobal) {
+      session.lastEndpointPointerGlobal = pointerGlobal;
       _handleUpdate(handleGlobal, session.activeEndpointIsStart);
     }
 
@@ -344,7 +346,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   void updateActiveHandlePointer(Offset pointerGlobal) {
-    _updateHandleDragPointer(pointerGlobal, updateEndpoint: false);
+    _updateHandleDragPointer(pointerGlobal, updateEndpoint: true);
   }
 
   void handlePointerExitedEditor(Offset pointerGlobal) {

@@ -498,3 +498,14 @@ file and the matching MVP docs.
   handle-session termination paths.
 - Selection command routing, bookmark metadata, search, styling, and keyboard
   anchor/focus logic are intentionally unchanged by this lifecycle refactor.
+
+## 2026-05-04 V5 Bookmark-Aware Keyboard Navigation
+
+- The editor-visible bookmark sign `\u00BB` remains real selectable script text
+  for copy/cut/paste/style commands.
+- Ctrl+Up/Down and Ctrl+Shift+Up/Down paragraph-boundary math must ignore the
+  bookmark sign as paragraph content, then translate the chosen target back to
+  a raw editor offset.
+- If a collapsed caret receives Shift-arrow while an old overlay selection is
+  still present and the caret no longer matches the overlay focus endpoint,
+  clear the stale overlay first instead of extending it.

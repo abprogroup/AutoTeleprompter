@@ -102,6 +102,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   // Dummy node for HardwareKeyboard → _handleEditorArrowKey bridge
   // (_handleEditorArrowKey never uses the node parameter).
   static final _arrowKeyDummyNode = FocusNode();
+  static const String _keyboardBookmarkSign = '\u00BB';
   // ── Mixin Implementation for StylingLogicMixin ────────────────────────────
   @override
   List<MarkupController> get controllers => _controllers;
@@ -861,7 +862,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isShiftPressed && !_isGlobalSelection && _hasAppSelection) {
-      if (_extendAppSelectionForArrow(key, keyboard)) return true;
+      if (!_clearStaleOverlaySelectionForShift(keyboard) &&
+          _extendAppSelectionForArrow(key, keyboard)) {
+        return true;
+      }
     }
     if (_clearAppSelectionForArrow(key)) return true;
     final hasModifier = keyboard.isControlPressed ||
@@ -877,6 +881,37 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
   bool get _hasAppSelection =>
       _isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false);
+
+  bool _clearStaleOverlaySelectionForShift(HardwareKeyboard keyboard) {
+    if (!keyboard.isShiftPressed || _isGlobalSelection) return false;
+    final overlay = _overlayKey.currentState;
+    final session = overlay?.selectionSessionSnapshot;
+    if (overlay == null || !(overlay.hasSelection)) return false;
+    final controller = _lastFocusedController;
+    if (controller == null) return false;
+    final block = _controllers.indexOf(controller);
+    if (block < 0) return false;
+    final selection = controller.selection;
+    if (!selection.isValid || !selection.isCollapsed) return false;
+    final offset =
+        selection.baseOffset.clamp(0, controller.text.length).toInt();
+    if (session != null &&
+        session.focus.block == block &&
+        session.focus.offset == offset) {
+      return false;
+    }
+    overlay.clearSelection();
+    for (final c in _controllers) {
+      c.isGlobalSelected = false;
+      c.externalSelection = null;
+      c.refresh();
+    }
+    setState(() {
+      _isGlobalSelection = false;
+      _lastArrowDecision = 'shift stale overlay cleared at $block:$offset';
+    });
+    return true;
+  }
 
   bool _shouldRouteModifiedArrow(
     LogicalKeyboardKey key,
@@ -1401,6 +1436,35 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     return KeyEventResult.handled;
   }
 
+  String _keyboardNavigationText(String text) =>
+      text.replaceAll(_keyboardBookmarkSign, '');
+
+  int _keyboardRawToNavigationOffset(String text, int rawOffset) {
+    final safeRaw = rawOffset.clamp(0, text.length).toInt();
+    var navigationOffset = 0;
+    for (var i = 0; i < safeRaw; i++) {
+      if (text[i] == _keyboardBookmarkSign) continue;
+      navigationOffset++;
+    }
+    return navigationOffset;
+  }
+
+  int _keyboardNavigationToRawOffset(String text, int navigationOffset) {
+    if (navigationOffset <= 0) return 0;
+    var seen = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (text[i] == _keyboardBookmarkSign) continue;
+      seen++;
+      if (seen >= navigationOffset) return i + 1;
+    }
+    return text.length;
+  }
+
+  int _keyboardNavigationSafeEndOffset(String text) {
+    final navigationText = _keyboardNavigationText(text);
+    return MarkupController.safeEndOffset(navigationText);
+  }
+
   ({int block, int offset})? _controlVerticalTarget({
     required int blockIndex,
     required int focusOffset,
@@ -1409,21 +1473,31 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final text = _controllers[blockIndex].text;
     final safeFocus = focusOffset.clamp(0, text.length).toInt();
+    final navigationFocus = _keyboardRawToNavigationOffset(text, safeFocus);
     if (moveUp) {
-      if (safeFocus > 0) return (block: blockIndex, offset: 0);
+      if (navigationFocus > 0) {
+        return (
+          block: blockIndex,
+          offset: _keyboardNavigationToRawOffset(text, 0),
+        );
+      }
       if (blockIndex > 0) return (block: blockIndex - 1, offset: 0);
       return null;
     }
 
-    final endOffset = MarkupController.safeEndOffset(text);
-    if (safeFocus < endOffset) {
-      return (block: blockIndex, offset: endOffset);
+    final navigationEnd = _keyboardNavigationSafeEndOffset(text);
+    if (navigationFocus < navigationEnd) {
+      return (
+        block: blockIndex,
+        offset: _keyboardNavigationToRawOffset(text, navigationEnd),
+      );
     }
     if (blockIndex < _controllers.length - 1) {
       final nextText = _controllers[blockIndex + 1].text;
+      final nextNavigationEnd = _keyboardNavigationSafeEndOffset(nextText);
       return (
         block: blockIndex + 1,
-        offset: MarkupController.safeEndOffset(nextText),
+        offset: _keyboardNavigationToRawOffset(nextText, nextNavigationEnd),
       );
     }
     return null;

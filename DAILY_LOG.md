@@ -1572,3 +1572,21 @@
   in the touched overlay file; broader Windows editor analyzer still shows
   existing warnings/infos. Diff check passed. Awaiting push and Windows
   workflow verification.
+
+## 2026-05-04 - Windows v5 Bookmark Ctrl+Shift + Handle Continuity Follow-Up
+
+- **Device QA Input**: User found that Ctrl+Shift+Down beside a bookmark could
+  select the whole script, and that handle edge drags could scroll briefly then
+  stop following the mouse while still pressed.
+- **Keyboard Fix**: Ctrl vertical paragraph navigation now ignores `\u00BB`
+  bookmark signs only for target math, then maps the target back to raw editor
+  offsets so the sign remains real selectable text.
+- **Selection Guard**: Shift-arrow now clears a stale overlay selection if the
+  focused collapsed caret no longer matches the overlay focus endpoint, instead
+  of extending that old range.
+- **Handle Fix**: Page-level active-handle pointer updates now move the active
+  endpoint and deduplicate identical pointer positions, so returning to the
+  editor safe zone can pull the selection back under the mouse.
+- **Verification Status**: Targeted analyzer reports no new compile errors;
+  existing Windows warnings/infos remain. Diff check passed. Awaiting push and
+  Windows workflow verification.

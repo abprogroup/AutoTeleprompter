@@ -264,3 +264,14 @@ save entries created after selection-based commands.
 - Body-drag promotion remains suppressed only after outside/stale handle
   termination so one still-pressed mouse gesture cannot become a second
   selection path.
+
+## 2026-05-04 V5 Handle Continuity Follow-Up
+
+- Page-level active-handle pointer movement must update the active endpoint,
+  not only the autoscroll pointer state. Otherwise a drag that leaves the
+  handle detector can stop following the mouse when it returns to the editor.
+- Duplicate handle pointer reports from the handle detector and page listener
+  should be deduplicated by pointer position before mutating the endpoint.
+- Scroll clamp is not a handle-session end. If the pointer remains pressed,
+  the session stays alive so a later safe-zone move can update the selected
+  range and allow normal deselection.

@@ -728,3 +728,10 @@
   re-entry now stops autoscroll while preserving the drag; outside/stale ends
   the handle session while preserving selection. Awaiting Windows workflow and
   device QA.
+- [P] **Windows Bookmark Ctrl+Shift + Handle Continuity Follow-Up**: Device QA
+  showed Ctrl+Shift+Down beside a bookmark sign could select the whole script,
+  and handle edge drags could stop following the mouse after a brief scroll.
+  Follow-up makes Ctrl vertical paragraph targets ignore `\u00BB` only for
+  navigation math, clears stale overlay selection before Shift extension, and
+  lets page-level active-handle pointer updates move the active endpoint.
+  Awaiting Windows workflow and device QA.

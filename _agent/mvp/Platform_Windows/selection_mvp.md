@@ -131,3 +131,37 @@ leaks or stale `externalSelection` behavior while editing these smaller files.
 Selection owns selection state and target calculation in `script_editor_screen.dart`.
 Styling Engine owns markup transforms that use those targets. History owns the
 save entries created after selection-based commands.
+
+---
+
+## 2026-05-03 V5 Stabilization Addendum
+
+- Selection handle geometry must be derived from constants, not magic offsets:
+  the caret anchor is the rendered caret x plus vertical center, and the handle
+  hit box is centered on that anchor.
+- Raw handle endpoints and normalized selected ranges are separate concepts.
+  Dragging one handle may update only that handle's raw endpoint; highlight,
+  copy, cut, and style targeting may normalize the range afterward.
+- Handle autoscroll is scoped to an active handle drag only. It must stop on
+  pan end, pan cancel, deselect, clear selection, dispose, and scroll-boundary
+  clamp.
+- Native partial selections may seed the overlay only while command execution,
+  handle drag, autoscroll, global selection, and existing overlay selection are
+  all inactive.
+- Empty editor blocks are valid selection and keyboard-navigation positions.
+  Left/right arrows must visit consecutive empty rows one at a time.
+
+## 2026-05-03 V5 Follow-Up: Endpoint Ownership Repair
+
+- Overlay endpoints are stable ownership points, not document-order labels.
+  Endpoint A and endpoint B may cross; only the normalized range used for
+  highlight/copy/cut is reordered.
+- A dragged handle may update only its active endpoint. Crossing into another
+  block must not move the opposite endpoint or clear the original block from
+  the normalized selection.
+- Handle bars are drawn just outside the selected text boundary. The caret
+  boundary remains the selection truth, while the hit box follows the visible
+  bar so the bar does not cover selected letters.
+- Arrow navigation has one owner: the global hardware-key route. The editor
+  focus shell must not also process arrow keys, because duplicate handling can
+  skip empty rows or stall at paragraph boundaries.

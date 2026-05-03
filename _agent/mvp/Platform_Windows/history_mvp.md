@@ -136,3 +136,18 @@ History owns the history-related sections of `script_editor_screen.dart`,
 `script_provider.dart`, and `settings_provider.dart`. Script Editor owns editor
 orchestration; Settings owns persistence mechanics; History owns the semantics
 of saved snapshots and indices.
+
+---
+
+## 2026-05-03 V5 Bookmark History Addendum
+
+- Bookmark signs are part of editor text history. Undo/redo snapshots restore
+  `\u00BB` text signs first; bookmark metadata is then rebuilt from that restored
+  text.
+- Bookmark add/delete must not leave `_isDirty` set after command-owned text
+  mutations, because focus-loss cleanup can otherwise commit a spurious
+  `Edit Text` entry between bookmark actions.
+- History apply paths may silently save rebuilt bookmark metadata, but must not
+  run metadata-to-text migration during ordinary undo, redo, or jump-history.
+- Adjacent bookmarks must undo/redo by exact text state, not by nearest current
+  metadata id.

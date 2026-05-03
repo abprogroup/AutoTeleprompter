@@ -661,3 +661,28 @@
   `»` markers in editor and present mode, marker deletion, and editor-to-
   presenter session/title handoff so both modes load the same bookmark scope.
   Awaiting user IPA verification.
+
+### Windows v5.0.0 Stabilization Work (2026-05-03)
+
+- [P] **Windows Selection Handle Stabilization**: Reworked Windows editor
+  overlay handle geometry to use constant-derived hit boxes centered on the
+  rendered caret anchor, rendered handle z-order without geometry skew, scoped
+  handle autoscroll to the active drag, and stopped autoscroll on deselect,
+  pan cancel/end, dispose, and scroll-boundary clamp. Awaiting Windows device
+  verification.
+- [P] **Windows Keyboard Navigation Stabilization**: Arrow keys now clear
+  app-owned overlay/global selections before cursor movement, and left/right
+  navigation treats empty paragraph blocks as real one-keypress cursor stops.
+  Up/down behavior was intentionally left unchanged. Awaiting Windows device
+  verification.
+- [P] **Windows Bookmark History Stabilization**: Windows bookmark signs now
+  use the source-safe `\u00BB` constant, normalize legacy mojibake signs, and
+  treat bookmark add/delete as text-first history mutations. Undo/redo/history
+  restore text first, then rebuild bookmark metadata from the restored signs.
+  Awaiting Windows device verification.
+- [P] **Windows Selection Handle Follow-Up**: Device QA showed the first V5
+  stabilization still drew handles inside selected text, moved both endpoints
+  during cross-block drag, and double-processed arrows. Follow-up repair keeps
+  stable endpoint ownership, draws handle bars outside selected text, makes the
+  global hardware-key route the single arrow owner, and exposes endpoint/range
+  state in debug mode. Awaiting Windows artifact QA.

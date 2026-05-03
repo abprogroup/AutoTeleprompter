@@ -345,6 +345,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         _historyIndex--;
         _applyState(_history[_historyIndex]);
       });
+      unawaited(_syncBookmarksFromEditorSigns(notify: false, save: true));
       // Two-phase restore: focus immediately, then scroll after TextField's own
       // auto-scroll fires (which would otherwise override our ensureVisible).
       Future.delayed(const Duration(milliseconds: 150), () {
@@ -373,6 +374,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         _historyIndex++;
         _applyState(_history[_historyIndex]);
       });
+      unawaited(_syncBookmarksFromEditorSigns(notify: false, save: true));
       Future.delayed(const Duration(milliseconds: 150), () {
         if (!mounted) return;
         _isCommandExecuting = false;
@@ -395,6 +397,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       _historyIndex = idx;
       _applyState(_history[idx]);
     });
+    unawaited(_syncBookmarksFromEditorSigns(notify: false, save: true));
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) {
         _isCommandExecuting = false;

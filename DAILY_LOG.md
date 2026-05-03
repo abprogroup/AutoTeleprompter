@@ -1413,3 +1413,49 @@
 - **Verification Status**: Awaiting iPhone QA: delete bookmark in present mode,
   return to editor, confirm the `\u00BB` sign is gone and the bookmark does not
   reappear on the next present-mode entry.
+
+## 2026-05-03 - Windows v5 Selection + Bookmark History Stabilization
+
+- **Device QA Input**: Windows v5 testing found selection handles offset from
+  selected words, delayed/both-handle movement during drag, edge autoscroll
+  continuing after deselection, arrow keys leaving overlay highlights active,
+  left/right skipping empty rows or stalling at block boundaries, and bookmark
+  undo/redo restoring the wrong adjacent bookmark state.
+- **Selection Runtime Fix**: Windows `GlobalSelectionOverlay` now derives
+  handle geometry from constants and centers the hit box on the rendered caret
+  anchor. End handle renders below start handle for z-order only. Active handle
+  drag state is separated from normalized highlight ranges, and same-block
+  crossing flips active ownership intentionally.
+- **Autoscroll/Keyboard Fix**: Handle autoscroll now recalculates speed from
+  the latest pointer position, updates only the active endpoint, and stops on
+  pan end/cancel, deselect, clear selection, dispose, or scroll clamp.
+  Windows arrow handling now clears app-owned selections before cursor
+  movement and treats empty blocks as real left/right cursor stops.
+- **Bookmark History Fix**: Windows bookmark signs now use `\u00BB`, legacy
+  mojibake signs are normalized, bookmark add/delete commit text-first history
+  snapshots, and undo/redo/history jumps rebuild bookmark metadata from the
+  restored text signs.
+- **Verification Status**: Targeted analyzer reported no new compile errors;
+  existing Windows editor warnings/infos remain. Awaiting Windows device QA for
+  handles, autoscroll, empty-row left/right navigation, and adjacent bookmark
+  undo/redo.
+
+## 2026-05-03 - Windows v5 Handle/Arrow Follow-Up
+
+- **Device QA Input**: User verified the first V5 stabilization still placed
+  handles inside selected text, dragged both handles when one endpoint crossed
+  blocks, skipped even single empty rows with up/down, and stalled left/right
+  navigation after the second crossed block.
+- **Root Cause Direction**: The overlay still mixed endpoint ownership with
+  normalized document order, and arrows were still eligible for duplicate
+  handling through both the global hardware route and the editor Focus route.
+- **Runtime Fix**: Windows overlay now treats endpoint A/B as stable raw
+  ownership points and normalizes only for highlight/copy/cut. Handle bars are
+  drawn just outside selected text while the caret boundary remains the
+  selection truth. The editor Focus shell ignores arrows so
+  `HardwareKeyboard` is the single arrow owner.
+- **Debug Aid**: Windows debug sentry now reports overlay endpoint/range state
+  and the last arrow decision for faster device QA diagnosis.
+- **Verification Status**: Awaiting Windows workflow artifact and local smoke
+  test, then user QA for handle placement, cross-block drag, and empty-row
+  arrow stops.

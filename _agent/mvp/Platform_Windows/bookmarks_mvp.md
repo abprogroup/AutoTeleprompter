@@ -141,6 +141,23 @@ Search is owned by Script Editor MVP, but bookmark handoff depends on the same
 editor position mapping helpers. Search must match visible text and translate
 back to raw markup offsets instead of treating hidden tags as visible
 characters.
+
+---
+
+## 2026-05-03 V5 Text-Flow Bookmark Addendum
+
+- Windows v5 editor bookmarks use the source-safe `\u00BB` sign as real editor
+  text plus metadata. Pasted glyph literals and mojibake variants such as
+  `Â»` must be normalized to `\u00BB` during load/reconcile.
+- Bookmark metadata is derived from the current editor text signs in block
+  order and raw-offset order. Metadata must not become the history authority.
+- Add/delete bookmark commands mutate `MarkupController.text` first, commit
+  history from that text state, then rebuild and save metadata from the signs.
+- Undo, redo, and history jumps restore text first and then silently rebuild
+  bookmark metadata from the restored signs.
+- Metadata-to-text reconciliation is a load/migration operation only; ordinary
+  undo/redo must not reinsert stale metadata bookmarks into restored text.
+
 ---
 
 ## Windows v4.1.12 Final Seal Notes

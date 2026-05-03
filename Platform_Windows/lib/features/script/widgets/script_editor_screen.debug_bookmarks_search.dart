@@ -34,6 +34,10 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
                 style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('Global Selection: $_isGlobalSelection',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Overlay: ${_overlayKey.currentState?.debugSelectionSummary ?? "None"}',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Arrow: $_lastArrowDecision',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('History States: ${_history.length}',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
         ],
@@ -48,7 +52,12 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
   ///  - a focused block has a non-collapsed, partial (not full-block) selection
   void _promoteNativeSelectionToOverlay() {
     if (_isGlobalSelection || _isCommandExecuting) return;
-    if (_overlayKey.currentState?.hasSelection ?? false) return;
+    final overlay = _overlayKey.currentState;
+    if (overlay == null ||
+        overlay.hasSelection ||
+        overlay.isHandleInteractionActive) {
+      return;
+    }
     for (var i = 0; i < _controllers.length; i++) {
       if (!_focusNodes[i].hasFocus) continue;
       final sel = _controllers[i].selection;
@@ -64,7 +73,12 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
   void _extendNativeSelectionToOverlay(int blockIndex) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return;
     if (_isGlobalSelection || _isCommandExecuting) return;
-    if (_overlayKey.currentState?.hasSelection ?? false) return;
+    final overlay = _overlayKey.currentState;
+    if (overlay == null ||
+        overlay.hasSelection ||
+        overlay.isHandleInteractionActive) {
+      return;
+    }
     final controller = _controllers[blockIndex];
     final selection  = controller.selection;
     if (!selection.isValid || selection.isCollapsed) return;
@@ -73,7 +87,7 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     if (start == end) return;
     if (start == 0 && end == controller.text.length) return;
     _lastFocusedController = controller;
-    _overlayKey.currentState?.extendNativeBlockSelection(
+    overlay.extendNativeBlockSelection(
       blockIndex, TextSelection(baseOffset: start, extentOffset: end),
     );
   }

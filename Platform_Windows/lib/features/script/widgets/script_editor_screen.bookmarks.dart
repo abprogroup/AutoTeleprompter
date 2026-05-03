@@ -1,7 +1,8 @@
 part of 'script_editor_screen.dart';
 
 extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
-  static const String _bookmarkSign = '»';
+  static const String _bookmarkSign = '\u00BB';
+  static const String _legacyBookmarkSign = '\u00C2\u00BB';
 
   // ── Load / save ────────────────────────────────────────────────────────────
 
@@ -35,7 +36,35 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
 
   // ── Sign helpers ───────────────────────────────────────────────────────────
 
-  String _stripBookmarkSigns(String text) => text.replaceAll(_bookmarkSign, '');
+  String _normalizeBookmarkSigns(String text) =>
+      text.replaceAll(_legacyBookmarkSign, _bookmarkSign);
+
+  String _stripBookmarkSigns(String text) =>
+      _normalizeBookmarkSigns(text).replaceAll(_bookmarkSign, '');
+
+  void _normalizeBookmarkSignsInControllers() {
+    final wasCommandExecuting = _isCommandExecuting;
+    _isCommandExecuting = true;
+    try {
+      for (final controller in _controllers) {
+        final normalized = _normalizeBookmarkSigns(controller.text);
+        if (normalized == controller.text) continue;
+        final selection = controller.selection;
+        final base = selection.baseOffset
+            .clamp(0, normalized.length)
+            .toInt();
+        final extent = selection.extentOffset
+            .clamp(0, normalized.length)
+            .toInt();
+        controller.value = TextEditingValue(
+          text: normalized,
+          selection: TextSelection(baseOffset: base, extentOffset: extent),
+        );
+      }
+    } finally {
+      _isCommandExecuting = wasCommandExecuting;
+    }
+  }
 
   String _getRefinedFullTextWithoutBookmarkSigns() {
     return _controllers.map((c) => _stripBookmarkSigns(c.text)).join('\n');
@@ -47,6 +76,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     bool notify = true,
     bool save = true,
   }) async {
+    _normalizeBookmarkSignsInControllers();
     final rebuilt = <ScriptBookmark>[];
     final now = DateTime.now();
     for (var block = 0; block < _controllers.length; block++) {
@@ -78,6 +108,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   Future<void> _reconcileEditorBookmarkSignsFromMetadata() async {
     await _loadBookmarksForCurrentScript(force: true);
     if (_controllers.isEmpty) return;
+    _normalizeBookmarkSignsInControllers();
     final authoritativeBookmarks = List<ScriptBookmark>.of(_bookmarks);
     final originalTexts = _controllers.map((c) => c.text).toList();
     var changed = false;
@@ -297,6 +328,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
         selection: TextSelection.collapsed(offset: safeOffset + 1),
       );
       _isCommandExecuting = false;
+      _isDirty = false;
       _lastFocusedController = controller;
       _saveHistory(description: 'Add Bookmark');
     }
@@ -504,8 +536,9 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
       );
     }
     _isCommandExecuting = false;
-    await _syncBookmarksFromEditorSigns(notify: true, save: true);
+    _isDirty = false;
     _saveHistory(description: 'Delete Bookmark');
+    await _syncBookmarksFromEditorSigns(notify: true, save: true);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

@@ -388,3 +388,30 @@ Line-count ceiling after split:
 
 Do not recombine these files. Future changes must edit the smallest owning part
 file and the matching MVP docs.
+
+---
+
+## 2026-05-03 V5 Editor Stabilization Addendum
+
+- The editor shell owns keyboard navigation across paragraph blocks. Empty
+  blocks are real script structure and must be visited one-by-one by left/right
+  arrows.
+- The editor shell may clear app-owned selection on arrow movement, but must
+  not change the working up/down navigation behavior unless testing proves a
+  regression.
+- `script_editor_screen.bookmarks.dart` owns text-flow bookmark sign
+  normalization, bookmark metadata rebuild, and bookmark history ordering.
+- `global_selection_overlay.dart` owns handle geometry, active handle drag
+  state, endpoint normalization for visual highlights, and handle autoscroll
+  lifetime.
+
+## 2026-05-03 V5 Follow-Up: One Arrow Owner + Debug Sentry
+
+- Windows editor arrow keys are owned by the global `HardwareKeyboard` route.
+  The surrounding Focus widget is structural only and must return ignored for
+  arrows to prevent duplicate movement.
+- Empty blocks are not layout noise. Keyboard navigation must stop on each
+  empty block before moving to the next block.
+- Debug mode may show endpoint A, endpoint B, active endpoint, normalized
+  selection range, and last arrow decision so device QA screenshots expose
+  the internal selection state.

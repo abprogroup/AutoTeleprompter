@@ -51,6 +51,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   bool _draggingStart = false;
   bool _draggingEnd = false;
   Size _stackSize = Size.zero;
+  bool? _activeHandleIsStart;
 
   // Anchor state for body-drag to prevent jumping
   int? _anchorBlock;
@@ -67,13 +68,23 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   // user can extend the selection beyond the visible viewport.
   static const double _autoScrollZone = 60.0; // px from edge to trigger
   static const double _autoScrollMax = 40.0;  // max px per tick (at edge)
+  static const double _handleHitWidth = 40.0;
+  static const double _handleHitHeight = 56.0;
+  static const double _handleBarWidth = 6.0;
+  static const double _handleBarHeight = 40.0;
   Timer? _autoScrollTimer;
+  Offset? _latestAutoScrollPointerGlobal;
+  Offset? _latestAutoScrollHandleGlobal;
+  bool? _autoScrollIsStart;
 
-  void _startAutoScroll(Offset globalHandlePos) {
+  bool get isHandleInteractionActive =>
+      _draggingStart || _draggingEnd || _autoScrollTimer != null;
+
+  double _edgeScrollSpeed(Offset globalHandlePos) {
     final sc = widget.scrollController;
-    if (sc == null || !sc.hasClients) return;
+    if (sc == null || !sc.hasClients) return 0;
     final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
-    if (stack == null) return;
+    if (stack == null) return 0;
     final local = stack.globalToLocal(globalHandlePos);
     final height = _stackSize.height;
     double speed = 0;
@@ -85,6 +96,22 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       speed = _autoScrollMax *
           (1 - (height - local.dy) / _autoScrollZone);
     }
+    if (speed < 0 && sc.offset <= sc.position.minScrollExtent) return 0;
+    if (speed > 0 && sc.offset >= sc.position.maxScrollExtent) return 0;
+    return speed;
+  }
+
+  void _startAutoScroll({
+    required Offset pointerGlobal,
+    required Offset handleGlobal,
+    required bool isStart,
+  }) {
+    _latestAutoScrollPointerGlobal = pointerGlobal;
+    _latestAutoScrollHandleGlobal = handleGlobal;
+    _autoScrollIsStart = isStart;
+    final sc = widget.scrollController;
+    if (sc == null || !sc.hasClients) return;
+    final speed = _edgeScrollSpeed(pointerGlobal);
     if (speed == 0) {
       _stopAutoScroll();
       return;
@@ -96,8 +123,32 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           _stopAutoScroll();
           return;
         }
-        final pos = sc.offset + speed;
-        sc.jumpTo(pos.clamp(0.0, sc.position.maxScrollExtent));
+        if (!sc.hasClients) {
+          _stopAutoScroll();
+          return;
+        }
+        final latestPointer = _latestAutoScrollPointerGlobal;
+        final latestHandle = _latestAutoScrollHandleGlobal;
+        final activeSide = _autoScrollIsStart ?? _activeHandleIsStart;
+        if (latestPointer == null || latestHandle == null || activeSide == null) {
+          _stopAutoScroll();
+          return;
+        }
+        final tickSpeed = _edgeScrollSpeed(latestPointer);
+        if (tickSpeed == 0) {
+          _stopAutoScroll();
+          return;
+        }
+        final next = (sc.offset + tickSpeed)
+            .clamp(sc.position.minScrollExtent, sc.position.maxScrollExtent)
+            .toDouble();
+        if (next == sc.offset) {
+          _stopAutoScroll();
+          return;
+        }
+        sc.jumpTo(next);
+        _handleUpdate(latestHandle, activeSide);
+        refreshPositions();
       },
     );
   }
@@ -105,6 +156,21 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   void _stopAutoScroll() {
     _autoScrollTimer?.cancel();
     _autoScrollTimer = null;
+    _latestAutoScrollPointerGlobal = null;
+    _latestAutoScrollHandleGlobal = null;
+    _autoScrollIsStart = null;
+  }
+
+  void _resetDragState() {
+    _draggingStart = false;
+    _draggingEnd = false;
+    _activeHandleIsStart = null;
+    _panStartGlobal = null;
+    _panStartHandleGlobal = null;
+    _candidatePos = null;
+    _candidateBlock = null;
+    _candidateOffset = null;
+    _bodyDragActive = false;
   }
 
   // Body-pointer candidate state: pointer-down does NOT immediately start a
@@ -127,6 +193,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       widget.controllers.every((c) => c.isGlobalSelected);
 
   void clearSelection() {
+    _stopAutoScroll();
+    _resetDragState();
     if (!_isSelecting) return;
     setState(() {
       _isSelecting = false;
@@ -171,6 +239,84 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get hasSelection => _isSelecting && _startBlock != null && _endBlock != null;
 
+  String get debugSelectionSummary {
+    final range = _normalizedRange();
+    final a = _startBlock == null
+        ? 'A:-'
+        : 'A:$_startBlock:${_startOffset ?? '-'}';
+    final b =
+        _endBlock == null ? 'B:-' : 'B:$_endBlock:${_endOffset ?? '-'}';
+    final active = _activeHandleIsStart == null
+        ? 'active:none'
+        : 'active:${_activeHandleIsStart! ? 'A' : 'B'}';
+    final normalized = range == null
+        ? 'range:-'
+        : 'range:${range.startBlock}:${range.startOffset}-${range.endBlock}:${range.endOffset}';
+    return '$a $b $active $normalized';
+  }
+
+  int _clampEndpointOffset(int block, int offset) {
+    if (block < 0 || block >= widget.controllers.length) return 0;
+    return offset.clamp(0, widget.controllers[block].text.length).toInt();
+  }
+
+  int _compareEndpoints({
+    required int aBlock,
+    required int aOffset,
+    required int bBlock,
+    required int bOffset,
+  }) {
+    if (aBlock != bBlock) return aBlock.compareTo(bBlock);
+    return aOffset.compareTo(bOffset);
+  }
+
+  ({
+    int startBlock,
+    int startOffset,
+    int endBlock,
+    int endOffset,
+    bool endpointAIsStart,
+  })? _normalizedRange() {
+    if (_startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) {
+      return null;
+    }
+    final aBlock = _startBlock!;
+    final bBlock = _endBlock!;
+    final aOffset = _clampEndpointOffset(aBlock, _startOffset!);
+    final bOffset = _clampEndpointOffset(bBlock, _endOffset!);
+    final endpointAFirst = _compareEndpoints(
+          aBlock: aBlock,
+          aOffset: aOffset,
+          bBlock: bBlock,
+          bOffset: bOffset,
+        ) <=
+        0;
+    return endpointAFirst
+        ? (
+            startBlock: aBlock,
+            startOffset: aOffset,
+            endBlock: bBlock,
+            endOffset: bOffset,
+            endpointAIsStart: true,
+          )
+        : (
+            startBlock: bBlock,
+            startOffset: bOffset,
+            endBlock: aBlock,
+            endOffset: aOffset,
+            endpointAIsStart: false,
+          );
+  }
+
+  bool _endpointIsRangeStart(bool endpointA) {
+    final range = _normalizedRange();
+    if (range == null) return endpointA;
+    return endpointA ? range.endpointAIsStart : !range.endpointAIsStart;
+  }
+
   /// Converts a native single-block partial selection (e.g. from double-click
   /// or drag-to-select inside one TextField) into the app overlay handles.
   /// Full-block selections are ignored here — Select All owns those.
@@ -194,7 +340,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _calculateHandlePositions());
+      refreshPositions();
     });
     widget.onSelectionChanged();
   }
@@ -290,10 +436,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   void endDragging() {
-    _candidatePos = null;
-    _candidateBlock = null;
-    _candidateOffset = null;
-    _bodyDragActive = false;
+    _stopAutoScroll();
+    _resetDragState();
     // Selection persists after drag
   }
 
@@ -365,38 +509,36 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   void _updateControllers() {
-    if (_startBlock == null || _endBlock == null) return;
-
-    final low = _startBlock! < _endBlock! ? _startBlock! : _endBlock!;
-    final high = _startBlock! > _endBlock! ? _startBlock! : _endBlock!;
-    final lowOffset =
-        (_startBlock! < _endBlock! ? _startOffset : _endOffset) ?? 0;
-    final highOffset =
-        (_startBlock! > _endBlock! ? _startOffset : _endOffset) ?? 0;
+    final range = _normalizedRange();
+    if (range == null) return;
 
     for (int i = 0; i < widget.controllers.length; i++) {
       final c = widget.controllers[i];
-      if (i < low || i > high) {
+      if (i < range.startBlock || i > range.endBlock) {
         c.isGlobalSelected = false;
-        c.externalSelection = null;
-      } else if (i > low && i < high) {
+        c.externalSelection = const TextSelection.collapsed(offset: 0);
+      } else if (i > range.startBlock && i < range.endBlock) {
         c.isGlobalSelected = true;
         c.externalSelection =
             TextSelection(baseOffset: 0, extentOffset: c.text.length);
-      } else if (i == low && i == high) {
+      } else if (i == range.startBlock && i == range.endBlock) {
         c.isGlobalSelected = false;
-        final start = lowOffset < highOffset ? lowOffset : highOffset;
-        final end = lowOffset > highOffset ? lowOffset : highOffset;
+        final start = range.startOffset < range.endOffset
+            ? range.startOffset
+            : range.endOffset;
+        final end = range.startOffset > range.endOffset
+            ? range.startOffset
+            : range.endOffset;
         c.externalSelection =
             TextSelection(baseOffset: start, extentOffset: end);
-      } else if (i == low) {
-        c.isGlobalSelected = false;
+      } else if (i == range.startBlock) {
+        c.isGlobalSelected = c.text.isEmpty;
         c.externalSelection = TextSelection(
-            baseOffset: lowOffset, extentOffset: c.text.length);
-      } else if (i == high) {
-        c.isGlobalSelected = false;
+            baseOffset: range.startOffset, extentOffset: c.text.length);
+      } else if (i == range.endBlock) {
+        c.isGlobalSelected = c.text.isEmpty;
         c.externalSelection =
-            TextSelection(baseOffset: 0, extentOffset: highOffset);
+            TextSelection(baseOffset: 0, extentOffset: range.endOffset);
       }
       c.refresh();
     }
@@ -437,11 +579,29 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       final caretOffset = editable.getLocalRectForCaret(
         TextPosition(offset: offset, affinity: TextAffinity.downstream),
       );
-      return editable.localToGlobal(caretOffset.topLeft, ancestor: ourStack);
+      final anchor = Offset(
+        caretOffset.left,
+        caretOffset.top + caretOffset.height / 2,
+      );
+      return editable.localToGlobal(anchor, ancestor: ourStack);
     }
 
     final box = renderObj as RenderBox;
     return box.localToGlobal(Offset.zero, ancestor: ourStack);
+  }
+
+  Offset _handleVisualCenter(Offset caret, bool endpointA) {
+    final isRangeStart = _endpointIsRangeStart(endpointA);
+    final block = endpointA ? _startBlock : _endBlock;
+    final isRtl = block != null &&
+        block >= 0 &&
+        block < widget.controllers.length &&
+        widget.controllers[block].text.isHebrew;
+    final placeLeftOfCaret = isRtl ? !isRangeStart : isRangeStart;
+    final dx = placeLeftOfCaret
+        ? caret.dx - _handleBarWidth / 2 - 2.0
+        : caret.dx + _handleBarWidth / 2 + 2.0;
+    return Offset(dx, caret.dy);
   }
 
   /// v4.0.8: Called after a style command mutates text so that _startOffset /
@@ -497,52 +657,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
       }
     }
-    _calculateHandlePositions();
-  }
-
-  void _calculateHandlePositions() {
-    if (_startBlock == null || _endBlock == null || _startOffset == null || _endOffset == null) return;
-    
-    _handleStartPos = _getOffsetForPosition(_startBlock!, _startOffset!);
-    _handleEndPos = _getOffsetForPosition(_endBlock!, _endOffset!);
-  }
-
-  Offset? _getOffsetForPosition(int blockIdx, int offset) {
-    if (blockIdx < 0 || blockIdx >= widget.blockKeys.length) return null;
-    final context = widget.blockKeys[blockIdx].currentContext;
-    if (context == null) return null;
-
-    final renderObj = context.findRenderObject();
-    if (renderObj == null) return null;
-
-    // Use the actual RenderEditable so caret positions match rendered text
-    // (where markup tags are hidden via zero-size style).
-    final editable = _findRenderEditable(renderObj);
-
-    // v4.1.0: Use _stackKey directly instead of findAncestorRenderObjectOfType<RenderStack>().
-    // The ancestor search walks up the render tree and could find an intermediate
-    // RenderStack (e.g. inside Scaffold internals) before reaching our Stack,
-    // which would put coordinates in the wrong space. _stackKey always refers to
-    // OUR Stack, guaranteed.
-    final ourStack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
-    if (ourStack == null) return null;
-
-    if (editable != null) {
-      // v4.1.0: Use downstream affinity so a position at a line-wrap boundary
-      // resolves to the START of the next line, not the end of the previous line.
-      final caretOffset = editable.getLocalRectForCaret(
-        TextPosition(offset: offset, affinity: TextAffinity.downstream),
-      );
-      // v4.1.13: Ensure caret is within the block's visual bounds.
-      // For RTL blocks at the very start of a line, getLocalRectForCaret
-      // can sometimes return a dx > width or a negative dx.
-      final localTopLeft = caretOffset.topLeft;
-      return editable.localToGlobal(localTopLeft, ancestor: ourStack);
-    }
-
-    // Fallback: use the block's top-left corner
-    final box = renderObj as RenderBox;
-    return box.localToGlobal(Offset.zero, ancestor: ourStack);
   }
 
   void _enterRefineMode() {
@@ -589,15 +703,20 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
               onNotification: (_) {
                 if (_isSelecting) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() => _calculateHandlePositions());
+                    if (mounted) refreshPositions();
                   });
                 }
                 return false; // let notification bubble
               },
               child: widget.child,
             ),
-            if (start != null) _buildHandle(start, true),
-            if (end != null) _buildHandle(end, false),
+            if (_activeHandleIsStart == false) ...[
+              if (start != null) _buildHandle(start, true),
+              if (end != null) _buildHandle(end, false),
+            ] else ...[
+              if (end != null) _buildHandle(end, false),
+              if (start != null) _buildHandle(start, true),
+            ],
           ],
         );
       },
@@ -605,22 +724,29 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   Widget _buildHandle(Offset pos, bool isStart) {
+    final visualCenter = _handleVisualCenter(pos, isStart);
     // Hide handles whose caret is outside the visible stack area.
     // Without this check the handle would clamp to a viewport edge even though
     // the selected text is scrolled fully offscreen.
-    if (pos.dy < -56 || pos.dy > _stackSize.height + 56 ||
-        pos.dx < -40 || pos.dx > _stackSize.width + 40) {
+    if (visualCenter.dy < -56 ||
+        visualCenter.dy > _stackSize.height + 56 ||
+        visualCenter.dx < -40 ||
+        visualCenter.dx > _stackSize.width + 40) {
       return const SizedBox.shrink();
     }
-    // Start handle leans LEFT of caret (hit area: [dx-30, dx+10]).
-    // End handle leans RIGHT of caret (hit area: [dx-10, dx+30]).
-    // This prevents the handles from fully overlapping when the selection is
-    // short (a single word), so tapping the left side always hits the start
-    // handle and tapping the right side always hits the end handle.
-    final leftOffset = isStart ? pos.dx - 30 : pos.dx - 10;
     return Positioned(
-      left: leftOffset.clamp(0.0, _stackSize.width > 40 ? _stackSize.width - 40 : 0.0),
-      top: (pos.dy - 18).clamp(0.0, _stackSize.height > 56 ? _stackSize.height - 56 : 0.0),
+      left: (visualCenter.dx - _handleHitWidth / 2).clamp(
+        0.0,
+        _stackSize.width > _handleHitWidth
+            ? _stackSize.width - _handleHitWidth
+            : 0.0,
+      ),
+      top: (visualCenter.dy - _handleHitHeight / 2).clamp(
+        0.0,
+        _stackSize.height > _handleHitHeight
+            ? _stackSize.height - _handleHitHeight
+            : 0.0,
+      ),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanStart: (details) {
@@ -639,38 +765,46 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
               : null;
           setState(() {
             if (isStart) _draggingStart = true; else _draggingEnd = true;
+            _activeHandleIsStart = isStart;
             _panStartGlobal = details.globalPosition;
             _panStartHandleGlobal = caretGlobal;
           });
         },
         onPanUpdate: (details) {
+          final activeSide = _activeHandleIsStart ?? isStart;
           final caretStart = _panStartHandleGlobal;
           final panStart = _panStartGlobal;
+          final Offset handleGlobal;
           if (caretStart != null && panStart != null) {
             final delta = details.globalPosition - panStart;
-            _handleUpdate(caretStart + delta, isStart);
+            handleGlobal = caretStart + delta;
           } else {
-            _handleUpdate(details.globalPosition, isStart);
+            handleGlobal = details.globalPosition;
           }
+          _handleUpdate(handleGlobal, activeSide);
           // Autoscroll when the handle is dragged near the viewport edge
-          _startAutoScroll(details.globalPosition);
+          _startAutoScroll(
+            pointerGlobal: details.globalPosition,
+            handleGlobal: handleGlobal,
+            isStart: _activeHandleIsStart ?? activeSide,
+          );
         },
         onPanEnd: (_) {
           _stopAutoScroll();
-          setState(() {
-            if (isStart) _draggingStart = false; else _draggingEnd = false;
-            _panStartGlobal = null;
-            _panStartHandleGlobal = null;
-          });
+          setState(_resetDragState);
+        },
+        onPanCancel: () {
+          _stopAutoScroll();
+          setState(_resetDragState);
         },
         child: Container(
-          width: 40,
-          height: 56,
+          width: _handleHitWidth,
+          height: _handleHitHeight,
           color: Colors.transparent, // Hit test area
           child: Center(
             child: Container(
-              width: 6,
-              height: 40,
+              width: _handleBarWidth,
+              height: _handleBarHeight,
               decoration: BoxDecoration(
                 color: const Color(0xFFFFBF00),
                 borderRadius: BorderRadius.circular(3),

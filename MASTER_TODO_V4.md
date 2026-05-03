@@ -721,3 +721,10 @@
   app-owned visual-line continuation across block boundaries and empty rows.
   Handle mouse-exit handling now permits intentional edge-zone autoscroll while
   retaining a stale-timeout safety stop. Awaiting Windows artifact QA.
+- [P] **Windows Handle Drag Lifecycle Refactor**: Replaced scattered
+  handle/autoscroll flags in the Windows overlay with one private
+  `_HandleDragSession` that owns active endpoint, latest pointer/handle
+  positions, pointer state, autoscroll timer, and stale timer. Safe-zone
+  re-entry now stops autoscroll while preserving the drag; outside/stale ends
+  the handle session while preserving selection. Awaiting Windows workflow and
+  device QA.

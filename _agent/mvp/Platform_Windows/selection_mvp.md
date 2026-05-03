@@ -242,3 +242,25 @@ save entries created after selection-based commands.
   edge zone. Mouse exit arms a stale timeout safety brake, but should not
   immediately kill intentional edge scrolling unless the pointer is outside the
   hard margin.
+
+## 2026-05-04 V5 Handle Drag Lifecycle Refactor
+
+- Windows handle drags are owned by one private `_HandleDragSession`. The
+  session records the active endpoint side, pan-start pointer/caret positions,
+  latest pointer/handle positions, pointer state, autoscroll timer, and stale
+  timer.
+- The old scattered handle flags are no longer valid ownership state. A handle
+  gesture begins by choosing the active endpoint once; the opposite endpoint
+  remains frozen while the active endpoint follows the session's caret-driven
+  handle position.
+- Edge autoscroll is state-driven:
+  `inside` stops autoscroll but keeps the drag alive, `edgeZone` runs the
+  timer from the latest pointer/handle positions, `outside` ends the handle
+  session and preserves the selection, and `stale` is the timeout brake for
+  abandoned pointer streams.
+- Mouse exit must pass the pointer position to the overlay. Exit alone does
+  not kill an intentional edge-scroll drag unless the pointer is beyond the
+  hard margin; otherwise the stale timeout is armed.
+- Body-drag promotion remains suppressed only after outside/stale handle
+  termination so one still-pressed mouse gesture cannot become a second
+  selection path.

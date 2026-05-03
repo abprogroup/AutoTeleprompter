@@ -484,3 +484,17 @@ file and the matching MVP docs.
   without mutating the live `TextField` selection first.
 - Handle autoscroll allows edge-zone scrolling after a mouse-exit event and
   relies on stale timeout/hard-margin checks to stop abandoned drags.
+
+## 2026-05-04 V5 Handle Drag Session Contract
+
+- `GlobalSelectionOverlay` owns handle/autoscroll lifecycle with one
+  `_HandleDragSession`; the editor screen only forwards active handle pointer
+  movement and mouse-exit positions into the overlay.
+- The editor must not add a second handle/autoscroll owner in the page layer.
+  Page listeners may feed pointer updates, but the overlay session decides
+  whether the pointer is inside, in the edge zone, outside, or stale.
+- Returning the pointer to the safe middle zone stops the autoscroll timer
+  without ending the selection. Release/cancel/outside/stale are the only
+  handle-session termination paths.
+- Selection command routing, bookmark metadata, search, styling, and keyboard
+  anchor/focus logic are intentionally unchanged by this lifecycle refactor.

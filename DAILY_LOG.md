@@ -1552,3 +1552,23 @@
 - **Verification Status**: Targeted analyzer reports no new compile errors;
   existing Windows warnings/infos remain. Awaiting Windows workflow artifact
   and local launch smoke test.
+
+## 2026-05-04 - Windows v5 Handle Drag Lifecycle Refactor
+
+- **Device QA Input**: User requested the remaining handle edge-scroll lifecycle
+  weakness be handled explicitly instead of through scattered flags.
+- **Runtime Fix**: Windows `GlobalSelectionOverlay` now uses one private
+  `_HandleDragSession` for active endpoint ownership, pan-start pointer/caret
+  positions, latest pointer/handle positions, pointer state, autoscroll timer,
+  and stale timer.
+- **Autoscroll Fix**: Returning to the safe center stops autoscroll without
+  ending the drag; edge-zone movement keeps scrolling from the latest pointer;
+  hard outside and stale timeout end the handle session while preserving the
+  selected range.
+- **Scope Guard**: Selection commands, bookmarks, search, styling, keyboard
+  anchor/focus behavior, and non-Windows platforms were intentionally left
+  untouched.
+- **Verification Status**: Targeted analyzer reports no new compile errors
+  in the touched overlay file; broader Windows editor analyzer still shows
+  existing warnings/infos. Diff check passed. Awaiting push and Windows
+  workflow verification.

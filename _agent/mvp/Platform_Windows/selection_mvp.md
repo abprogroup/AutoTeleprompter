@@ -205,3 +205,23 @@ save entries created after selection-based commands.
 - Ctrl/Shift/Alt left-right boundary movement is routed through the same
   block-aware horizontal target helper. Native text editing may still own
   in-block movement, but the app route owns the block crossing.
+
+## 2026-05-03 V5 State-Machine Correction
+
+- Cross-block, handle-drag, and app Shift-extension selection must be modeled
+  as one app-owned session with stable anchor/focus semantics. Native
+  `TextField` selection may seed simple in-block ranges, but it is not the
+  authority for cross-block copy/cut/style targets.
+- Endpoint A/B remain raw ownership points. The normalized document range is
+  derived only for highlight, copy, cut, paste replacement, style targeting,
+  and debug display. Direction must not be inferred from the normalized range.
+- Handle pan start chooses the active endpoint once and freezes the opposite
+  endpoint. Fast drags, overlapping hit boxes, and cross-block movement must
+  never transfer ownership to the other endpoint mid-gesture.
+- Hard handle exits preserve the selected range, stop autoscroll, clear active
+  handle state, and suppress body-drag promotion until pointer-up or explicit
+  selection clear. This prevents the next pointer move from starting a second
+  selection path while the mouse button is still down.
+- Full Select All is not a Shift-extension session. Any arrow after full
+  Select All collapses/clears first; only non-global overlay selections may
+  extend through the app anchor/focus path.

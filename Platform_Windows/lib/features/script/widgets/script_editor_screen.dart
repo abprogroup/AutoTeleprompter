@@ -459,329 +459,329 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       ),
       bottomNavigationBar:
           _buildBottomActions(keyboardVisible: keyboardVisible),
-      body: Listener(
-        onPointerDown: (event) {
-          if (event.buttons == kPrimaryButton) {
-            final overlay = _overlayKey.currentState;
-            if (overlay?.isPointInsideHandle(event.position) ?? false) {
-              return;
+      body: MouseRegion(
+        onExit: (_) => _overlayKey.currentState?.handlePointerExitedEditor(),
+        child: Listener(
+          onPointerDown: (event) {
+            if (event.buttons == kPrimaryButton) {
+              final overlay = _overlayKey.currentState;
+              if (overlay?.isPointInsideHandle(event.position) ?? false) {
+                return;
+              }
+              overlay?.startDragging(event.position);
             }
-            overlay?.startDragging(event.position);
-          }
-        },
-        onPointerMove: (event) {
-          if (event.buttons == kPrimaryButton) {
-            final overlay = _overlayKey.currentState;
-            if (overlay?.isHandleInteractionActive ?? false) {
-              overlay?.updateActiveHandlePointer(event.position);
-              return;
+          },
+          onPointerMove: (event) {
+            if (event.buttons == kPrimaryButton) {
+              final overlay = _overlayKey.currentState;
+              if (overlay?.isHandleInteractionActive ?? false) {
+                overlay?.updateActiveHandlePointer(event.position);
+                return;
+              }
+              overlay?.updateDragging(event.position);
             }
-            overlay?.updateDragging(event.position);
-          }
-        },
-        onPointerUp: (_) {
-          _overlayKey.currentState?.endDragging();
-          // After any gesture ends, promote a native single-block partial
-          // selection to overlay handles. Doing this on pointer-up (not in the
-          // controller listener) prevents the "one letter selected" bug: during
-          // a drag the controller fires continuously and the overlay would freeze
-          // at the first-delta selection once overlayActive becomes true.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _promoteNativeSelectionToOverlay();
-          });
-        },
-        onPointerCancel: (_) {
-          _overlayKey.currentState?.endDragging();
-        },
-        behavior: HitTestBehavior.translucent,
-        // Screen-level Focus shell only. HardwareKeyboard owns arrow routing
-        // so a single physical keypress cannot be processed twice.
-        child: Focus(
-          canRequestFocus: false,
-          skipTraversal: true,
-          onKeyEvent: (_, __) => KeyEventResult.ignored,
-          child: Stack(
-            children: [
-              Shortcuts(
-                shortcuts: {
-                  LogicalKeySet(
-                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
-                      const _SelectAllIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
-                      const _SelectAllIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
-                      const _CopyIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
-                      const _CopyIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyX):
-                      const _CutIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
-                      const _CutIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyV):
-                      const _PasteIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV):
-                      const _PasteIntent(),
-                  LogicalKeySet(
-                      LogicalKeyboardKey.control,
-                      LogicalKeyboardKey.shift,
-                      LogicalKeyboardKey.keyF): const _SearchIntent(),
-                  LogicalKeySet(
-                      LogicalKeyboardKey.meta,
-                      LogicalKeyboardKey.shift,
-                      LogicalKeyboardKey.keyF): const _SearchIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ):
-                      const _UndoIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyZ):
-                      const _UndoIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.control, LogicalKeyboardKey.keyY):
-                      const _RedoIntent(),
-                  LogicalKeySet(
-                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyY):
-                      const _RedoIntent(),
-                  LogicalKeySet(
-                      LogicalKeyboardKey.control,
-                      LogicalKeyboardKey.shift,
-                      LogicalKeyboardKey.keyZ): const _RedoIntent(),
-                  LogicalKeySet(
-                      LogicalKeyboardKey.meta,
-                      LogicalKeyboardKey.shift,
-                      LogicalKeyboardKey.keyZ): const _RedoIntent(),
-                },
-                child: Actions(
-                  actions: {
-                    _SelectAllIntent:
-                        CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-                      _selectAllBlocks();
-                      return null;
-                    }),
-                    _CopyIntent:
-                        CallbackAction<_CopyIntent>(onInvoke: (intent) {
-                      _onCopyClean();
-                      return null;
-                    }),
-                    _CutIntent: CallbackAction<_CutIntent>(onInvoke: (intent) {
-                      _onCut();
-                      return null;
-                    }),
-                    _PasteIntent:
-                        CallbackAction<_PasteIntent>(onInvoke: (intent) {
-                      _onPaste();
-                      return null;
-                    }),
-                    _UndoIntent: CallbackAction<_UndoIntent>(onInvoke: (_) {
-                      _undo();
-                      return null;
-                    }),
-                    _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) {
-                      _redo();
-                      return null;
-                    }),
-                    _SearchIntent:
-                        CallbackAction<_SearchIntent>(onInvoke: (intent) {
-                      _showEditorSearchDialog();
-                      return null;
-                    }),
+          },
+          onPointerUp: (_) {
+            _overlayKey.currentState?.endDragging();
+            // After any gesture ends, promote a native single-block partial
+            // selection to overlay handles. Doing this on pointer-up (not in the
+            // controller listener) prevents the "one letter selected" bug: during
+            // a drag the controller fires continuously and the overlay would freeze
+            // at the first-delta selection once overlayActive becomes true.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _promoteNativeSelectionToOverlay();
+            });
+          },
+          onPointerCancel: (_) {
+            _overlayKey.currentState?.endDragging();
+          },
+          behavior: HitTestBehavior.translucent,
+          // Screen-level Focus shell only. HardwareKeyboard owns arrow routing
+          // so a single physical keypress cannot be processed twice.
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: (_, __) => KeyEventResult.ignored,
+            child: Stack(
+              children: [
+                Shortcuts(
+                  shortcuts: {
+                    LogicalKeySet(LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+                    LogicalKeySet(
+                            LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
+                        const _SelectAllIntent(),
+                    LogicalKeySet(LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyC): const _CopyIntent(),
+                    LogicalKeySet(
+                            LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
+                        const _CopyIntent(),
+                    LogicalKeySet(LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyX): const _CutIntent(),
+                    LogicalKeySet(
+                            LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
+                        const _CutIntent(),
+                    LogicalKeySet(LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyV): const _PasteIntent(),
+                    LogicalKeySet(
+                            LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV):
+                        const _PasteIntent(),
+                    LogicalKeySet(
+                        LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.shift,
+                        LogicalKeyboardKey.keyF): const _SearchIntent(),
+                    LogicalKeySet(
+                        LogicalKeyboardKey.meta,
+                        LogicalKeyboardKey.shift,
+                        LogicalKeyboardKey.keyF): const _SearchIntent(),
+                    LogicalKeySet(LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyZ): const _UndoIntent(),
+                    LogicalKeySet(
+                            LogicalKeyboardKey.meta, LogicalKeyboardKey.keyZ):
+                        const _UndoIntent(),
+                    LogicalKeySet(LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyY): const _RedoIntent(),
+                    LogicalKeySet(
+                            LogicalKeyboardKey.meta, LogicalKeyboardKey.keyY):
+                        const _RedoIntent(),
+                    LogicalKeySet(
+                        LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.shift,
+                        LogicalKeyboardKey.keyZ): const _RedoIntent(),
+                    LogicalKeySet(
+                        LogicalKeyboardKey.meta,
+                        LogicalKeyboardKey.shift,
+                        LogicalKeyboardKey.keyZ): const _RedoIntent(),
                   },
-                  child: Column(
-                    children: [
-                      FormattingToolbarMVP(
-                        onBold: _onBold,
-                        onUnderline: _onUnderline,
-                        onItalic: _onItalic,
-                        onClear: () {
-                          setState(() => _isCommandExecuting = true);
-                          final tagPattern = RegExp(
-                              r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
-                          if (_isGlobalSelection ||
-                              (_overlayKey.currentState?.hasSelection ??
-                                  false)) {
-                            // Global: strip ALL tags from every block
-                            for (final c in _controllers) {
-                              c.text = c.text.replaceAll(tagPattern, '');
-                            }
-                          } else {
-                            final c = _activeController;
-                            if (c != null) {
-                              final text = c.text;
-                              final sel = c.selection;
-                              if (sel.isValid && !sel.isCollapsed) {
-                                // Selection: strip tags inside the selected range, then
-                                // split any enclosing tags so surrounding text keeps style.
-                                final before = text.substring(0, sel.start);
-                                final selected =
-                                    text.substring(sel.start, sel.end);
-                                final after = text.substring(sel.end);
-                                final cleaned =
-                                    selected.replaceAll(tagPattern, '');
-                                final intermediate = before + cleaned + after;
-                                final cleanEnd = sel.start + cleaned.length;
-                                final result = _splitAllEnclosingStyles(
-                                    intermediate,
-                                    sel.start,
-                                    cleanEnd,
-                                    tagPattern);
-                                c.value = TextEditingValue(
-                                  text: result,
-                                  selection: TextSelection.collapsed(
-                                      offset: sel.start),
-                                );
-                              } else if (sel.isValid && sel.isCollapsed) {
-                                // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
-                                final plainText =
-                                    text.replaceAll(tagPattern, '');
-                                final cursorInPlain =
-                                    sel.start >= text.length ||
-                                        text
-                                            .substring(sel.start)
-                                            .replaceAll(tagPattern, '')
-                                            .isEmpty;
-                                if (cursorInPlain) {
-                                  // Baseline Mode: clear ALL tags from ALL blocks
-                                  for (final ctrl in _controllers) {
-                                    ctrl.text =
-                                        ctrl.text.replaceAll(tagPattern, '');
+                  child: Actions(
+                    actions: {
+                      _SelectAllIntent:
+                          CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
+                        _selectAllBlocks();
+                        return null;
+                      }),
+                      _CopyIntent:
+                          CallbackAction<_CopyIntent>(onInvoke: (intent) {
+                        _onCopyClean();
+                        return null;
+                      }),
+                      _CutIntent:
+                          CallbackAction<_CutIntent>(onInvoke: (intent) {
+                        _onCut();
+                        return null;
+                      }),
+                      _PasteIntent:
+                          CallbackAction<_PasteIntent>(onInvoke: (intent) {
+                        _onPaste();
+                        return null;
+                      }),
+                      _UndoIntent: CallbackAction<_UndoIntent>(onInvoke: (_) {
+                        _undo();
+                        return null;
+                      }),
+                      _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) {
+                        _redo();
+                        return null;
+                      }),
+                      _SearchIntent:
+                          CallbackAction<_SearchIntent>(onInvoke: (intent) {
+                        _showEditorSearchDialog();
+                        return null;
+                      }),
+                    },
+                    child: Column(
+                      children: [
+                        FormattingToolbarMVP(
+                          onBold: _onBold,
+                          onUnderline: _onUnderline,
+                          onItalic: _onItalic,
+                          onClear: () {
+                            setState(() => _isCommandExecuting = true);
+                            final tagPattern = RegExp(
+                                r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
+                            if (_isGlobalSelection ||
+                                (_overlayKey.currentState?.hasSelection ??
+                                    false)) {
+                              // Global: strip ALL tags from every block
+                              for (final c in _controllers) {
+                                c.text = c.text.replaceAll(tagPattern, '');
+                              }
+                            } else {
+                              final c = _activeController;
+                              if (c != null) {
+                                final text = c.text;
+                                final sel = c.selection;
+                                if (sel.isValid && !sel.isCollapsed) {
+                                  // Selection: strip tags inside the selected range, then
+                                  // split any enclosing tags so surrounding text keeps style.
+                                  final before = text.substring(0, sel.start);
+                                  final selected =
+                                      text.substring(sel.start, sel.end);
+                                  final after = text.substring(sel.end);
+                                  final cleaned =
+                                      selected.replaceAll(tagPattern, '');
+                                  final intermediate = before + cleaned + after;
+                                  final cleanEnd = sel.start + cleaned.length;
+                                  final result = _splitAllEnclosingStyles(
+                                      intermediate,
+                                      sel.start,
+                                      cleanEnd,
+                                      tagPattern);
+                                  c.value = TextEditingValue(
+                                    text: result,
+                                    selection: TextSelection.collapsed(
+                                        offset: sel.start),
+                                  );
+                                } else if (sel.isValid && sel.isCollapsed) {
+                                  // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
+                                  final plainText =
+                                      text.replaceAll(tagPattern, '');
+                                  final cursorInPlain =
+                                      sel.start >= text.length ||
+                                          text
+                                              .substring(sel.start)
+                                              .replaceAll(tagPattern, '')
+                                              .isEmpty;
+                                  if (cursorInPlain) {
+                                    // Baseline Mode: clear ALL tags from ALL blocks
+                                    for (final ctrl in _controllers) {
+                                      ctrl.text =
+                                          ctrl.text.replaceAll(tagPattern, '');
+                                    }
+                                  } else {
+                                    // Word Mode: clear styles for the word at cursor
+                                    _clearStyleAtCursor(c, sel.start);
                                   }
-                                } else {
-                                  // Word Mode: clear styles for the word at cursor
-                                  _clearStyleAtCursor(c, sel.start);
                                 }
                               }
                             }
-                          }
-                          _isDirty = false;
-                          setState(() => _isCommandExecuting = false);
-                          _saveHistory(description: 'Clear Format');
-                          // v4.1.4: After stripping alignment tags the text layout shifts,
-                          // but cursorStyleProvider and the overlay handles still hold the
-                          // old alignment. Force re-detection + handle refresh post-frame.
-                          _onSelectionChanged();
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (!mounted) return;
-                            final c = _activeController;
-                            if (c != null) {
-                              final hasAlign = RegExp(
-                                      r'\[(?:align=)?(?:center|left|right)\]')
-                                  .hasMatch(c.text);
-                              if (!hasAlign) {
-                                ref.read(cursorStyleProvider.notifier).state =
-                                    ref
-                                        .read(cursorStyleProvider)
-                                        .copyWith(textAlign: 'left');
+                            _isDirty = false;
+                            setState(() => _isCommandExecuting = false);
+                            _saveHistory(description: 'Clear Format');
+                            // v4.1.4: After stripping alignment tags the text layout shifts,
+                            // but cursorStyleProvider and the overlay handles still hold the
+                            // old alignment. Force re-detection + handle refresh post-frame.
+                            _onSelectionChanged();
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) return;
+                              final c = _activeController;
+                              if (c != null) {
+                                final hasAlign = RegExp(
+                                        r'\[(?:align=)?(?:center|left|right)\]')
+                                    .hasMatch(c.text);
+                                if (!hasAlign) {
+                                  ref.read(cursorStyleProvider.notifier).state =
+                                      ref
+                                          .read(cursorStyleProvider)
+                                          .copyWith(textAlign: 'left');
+                                }
                               }
+                              _overlayKey.currentState?.refreshPositions();
+                            });
+                          },
+                          onFontSize: onFontSize,
+                          onAlign: onAlign,
+                          onDirection: onDirection,
+                          onTextColor: onTextColorSelected,
+                          onBgColor: onBgColorSelected,
+                          onFontFamily: onFontFamily,
+                          onBgColorChange: handleBgColorChange,
+                          lastTextColor: _lastChosenTextColor,
+                          lastHighlightColor: _lastChosenHighlightColor,
+                          onUndo: _undo,
+                          onRedo: _redo,
+                          canUndo: _historyIndex > 0,
+                          canRedo: _historyIndex < _history.length - 1,
+                          history: _history,
+                          historyIndex: _historyIndex,
+                          onHistorySelected: (idx) => _jumpToHistory(idx),
+                          activeSuite: _activeSuite,
+                          onSuiteToggle: (suite) {
+                            // Closing = explicitly closing (none), toggling same suite off, or switching suites
+                            final willClose = suite == EditorSuite.none ||
+                                suite == _activeSuite;
+                            final willSwitch = suite != _activeSuite &&
+                                _activeSuite != EditorSuite.none;
+                            _suiteAutoSaveTimer?.cancel();
+                            if ((willClose || willSwitch) && _isSuiteDirty) {
+                              _commitHistory(_suiteSection ??
+                                  '${_activeSuite.name.toUpperCase()} Session');
+                              _isSuiteDirty = false;
+                              _suiteSection = null;
                             }
-                            _overlayKey.currentState?.refreshPositions();
-                          });
-                        },
-                        onFontSize: onFontSize,
-                        onAlign: onAlign,
-                        onDirection: onDirection,
-                        onTextColor: onTextColorSelected,
-                        onBgColor: onBgColorSelected,
-                        onFontFamily: onFontFamily,
-                        onBgColorChange: handleBgColorChange,
-                        lastTextColor: _lastChosenTextColor,
-                        lastHighlightColor: _lastChosenHighlightColor,
-                        onUndo: _undo,
-                        onRedo: _redo,
-                        canUndo: _historyIndex > 0,
-                        canRedo: _historyIndex < _history.length - 1,
-                        history: _history,
-                        historyIndex: _historyIndex,
-                        onHistorySelected: (idx) => _jumpToHistory(idx),
-                        activeSuite: _activeSuite,
-                        onSuiteToggle: (suite) {
-                          // Closing = explicitly closing (none), toggling same suite off, or switching suites
-                          final willClose = suite == EditorSuite.none ||
-                              suite == _activeSuite;
-                          final willSwitch = suite != _activeSuite &&
-                              _activeSuite != EditorSuite.none;
-                          _suiteAutoSaveTimer?.cancel();
-                          if ((willClose || willSwitch) && _isSuiteDirty) {
-                            _commitHistory(_suiteSection ??
-                                '${_activeSuite.name.toUpperCase()} Session');
-                            _isSuiteDirty = false;
-                            _suiteSection = null;
-                          }
-                          setState(() {
-                            _activeSuite = (_activeSuite == suite)
-                                ? EditorSuite.none
-                                : suite;
-                          });
-                          if (_activeSuite != EditorSuite.none) {
-                            _suiteSection = null;
-                          }
-                        },
-                        onLayoutInteraction: (section) {
-                          _trackSuiteSection(section);
-                          setState(() => _isSuiteDirty = true);
-                        },
-                      ),
-                      Expanded(
-                        child: Container(
-                          color: Color(settings.scriptBgColor),
-                          child: GlobalSelectionOverlay(
-                            key: _overlayKey,
-                            controllers: _controllers,
-                            blockKeys: _blockKeys,
-                            scrollController: _editorScrollController,
-                            onSelectionChanged: () => setState(() {
-                              _isGlobalSelection = _controllers.isNotEmpty &&
-                                  _controllers.every((c) => c.isGlobalSelected);
-                            }),
-                            child: SingleChildScrollView(
-                              controller: _editorScrollController,
-                              padding:
-                                  const EdgeInsets.fromLTRB(24, 24, 24, 250),
-                              child: Column(
-                                children: List.generate(
-                                  _controllers.length,
-                                  (index) => Listener(
-                                    onPointerDown: (event) {
-                                      if (_isGlobalSelection ||
-                                          _controllers
-                                              .any((c) => c.isGlobalSelected) ||
-                                          (_overlayKey
-                                                  .currentState?.hasSelection ??
-                                              false) ||
-                                          _controllers.any((c) =>
-                                              c.externalSelection != null)) {
-                                        _clearGlobalSelection();
-                                      }
-                                    },
-                                    child: _EditorBlock(
-                                      key: _blockKeys[index],
-                                      controller: _controllers[index],
-                                      focusNode: _focusNodes[index],
-                                      settings: settings,
-                                      isGlobalSelected: _isGlobalSelection,
-                                      onSubmitted: () => _addBlock(index + 1),
-                                      onTap: () {
-                                        // Secondary safety, though Listener should handle it
-                                        if (_isGlobalSelection) {
+                            setState(() {
+                              _activeSuite = (_activeSuite == suite)
+                                  ? EditorSuite.none
+                                  : suite;
+                            });
+                            if (_activeSuite != EditorSuite.none) {
+                              _suiteSection = null;
+                            }
+                          },
+                          onLayoutInteraction: (section) {
+                            _trackSuiteSection(section);
+                            setState(() => _isSuiteDirty = true);
+                          },
+                        ),
+                        Expanded(
+                          child: Container(
+                            color: Color(settings.scriptBgColor),
+                            child: GlobalSelectionOverlay(
+                              key: _overlayKey,
+                              controllers: _controllers,
+                              blockKeys: _blockKeys,
+                              scrollController: _editorScrollController,
+                              onSelectionChanged: () => setState(() {
+                                _isGlobalSelection = _controllers.isNotEmpty &&
+                                    _controllers
+                                        .every((c) => c.isGlobalSelected);
+                              }),
+                              child: SingleChildScrollView(
+                                controller: _editorScrollController,
+                                padding:
+                                    const EdgeInsets.fromLTRB(24, 24, 24, 250),
+                                child: Column(
+                                  children: List.generate(
+                                    _controllers.length,
+                                    (index) => Listener(
+                                      onPointerDown: (event) {
+                                        if (_isGlobalSelection ||
+                                            _controllers.any(
+                                                (c) => c.isGlobalSelected) ||
+                                            (_overlayKey.currentState
+                                                    ?.hasSelection ??
+                                                false) ||
+                                            _controllers.any((c) =>
+                                                c.externalSelection != null)) {
                                           _clearGlobalSelection();
                                         }
                                       },
-                                      onSelectAll: _selectAllBlocks,
-                                      onCopy: _onCopyClean,
-                                      onCut: _onCut,
-                                      onPaste: _onPaste,
-                                      onUndo: _undo,
-                                      onRedo: _redo,
-                                      onSearch: _showEditorSearchDialog,
-                                      hasBookmark:
-                                          _hasBookmarkInEditorBlock(index),
-                                      onBookmarkTap: () =>
-                                          _deleteEditorBookmarksForBlock(index),
+                                      child: _EditorBlock(
+                                        key: _blockKeys[index],
+                                        controller: _controllers[index],
+                                        focusNode: _focusNodes[index],
+                                        settings: settings,
+                                        isGlobalSelected: _isGlobalSelection,
+                                        onSubmitted: () => _addBlock(index + 1),
+                                        onTap: () {
+                                          // Secondary safety, though Listener should handle it
+                                          if (_isGlobalSelection) {
+                                            _clearGlobalSelection();
+                                          }
+                                        },
+                                        onSelectAll: _selectAllBlocks,
+                                        onCopy: _onCopyClean,
+                                        onCut: _onCut,
+                                        onPaste: _onPaste,
+                                        onUndo: _undo,
+                                        onRedo: _redo,
+                                        onSearch: _showEditorSearchDialog,
+                                        hasBookmark:
+                                            _hasBookmarkInEditorBlock(index),
+                                        onBookmarkTap: () =>
+                                            _deleteEditorBookmarksForBlock(
+                                                index),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -789,52 +789,52 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                left: 16,
-                right: 16,
-                child: _buildEditorSearchToolbar(),
-              ),
-              if (_isPendingLoad)
-                Positioned.fill(
-                  child: Container(
-                    color: const Color(0xFF0A0A0A),
-                    child: const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 56,
-                            height: 56,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 4,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  Color(0xFFFFBF00)),
-                            ),
-                          ),
-                          SizedBox(height: 18),
-                          Text('Loading script…',
-                              style: TextStyle(
-                                  color: Color(0xFFFFBF00),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
                 ),
-              if (settings.debugMode)
                 Positioned(
-                  bottom: 24,
-                  left: 24,
-                  child: IgnorePointer(child: _buildDebugSentry()),
+                  top: 0,
+                  left: 16,
+                  right: 16,
+                  child: _buildEditorSearchToolbar(),
                 ),
-            ],
+                if (_isPendingLoad)
+                  Positioned.fill(
+                    child: Container(
+                      color: const Color(0xFF0A0A0A),
+                      child: const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 56,
+                              height: 56,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 4,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFFFFBF00)),
+                              ),
+                            ),
+                            SizedBox(height: 18),
+                            Text('Loading script…',
+                                style: TextStyle(
+                                    color: Color(0xFFFFBF00),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                if (settings.debugMode)
+                  Positioned(
+                    bottom: 24,
+                    left: 24,
+                    child: IgnorePointer(child: _buildDebugSentry()),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -859,7 +859,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return false;
     }
     final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isShiftPressed && _hasAppSelection) {
+    if (keyboard.isShiftPressed && !_isGlobalSelection && _hasAppSelection) {
       if (_extendAppSelectionForArrow(key, keyboard)) return true;
     }
     if (_clearAppSelectionForArrow(key)) return true;
@@ -999,11 +999,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     LogicalKeyboardKey key,
     HardwareKeyboard keyboard,
   ) {
-    final positive = key == LogicalKeyboardKey.arrowRight ||
-        key == LogicalKeyboardKey.arrowDown;
-    final anchor = _appSelectionEdge(collapseToEnd: !positive);
-    final focus = _appSelectionEdge(collapseToEnd: positive);
-    if (anchor == null || focus == null) return false;
+    final session = _overlayKey.currentState?.selectionSessionSnapshot;
+    if (session == null) return false;
+    final anchor = session.anchor;
+    final focus = session.focus;
     final target = _arrowTargetFromPosition(
       key: key,
       block: focus.block,
@@ -1014,20 +1013,79 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       allowInBlockVerticalStep: true,
     );
     if (target == null) return true;
+    final adjusted = _clampKeyboardTargetAtAnchor(
+      anchor: anchor,
+      focus: focus,
+      target: SelectionEndpoint(block: target.block, offset: target.offset),
+    );
+    if (_sameEndpoint(anchor, adjusted)) {
+      _collapseAppSelectionTo(anchor,
+          reason: 'extend-collapse ${key.keyLabel}');
+      return true;
+    }
+    _setAppSelectionFromAnchorToFocus(anchor, adjusted);
+    _lastArrowDecision =
+        'extend ${key.keyLabel}: ${anchor.block}:${anchor.offset}-${adjusted.block}:${adjusted.offset}';
+    return true;
+  }
+
+  bool _sameEndpoint(SelectionEndpoint a, SelectionEndpoint b) =>
+      a.block == b.block && a.offset == b.offset;
+
+  int _compareEndpoints(SelectionEndpoint a, SelectionEndpoint b) {
+    if (a.block != b.block) return a.block.compareTo(b.block);
+    return a.offset.compareTo(b.offset);
+  }
+
+  SelectionEndpoint _clampKeyboardTargetAtAnchor({
+    required SelectionEndpoint anchor,
+    required SelectionEndpoint focus,
+    required SelectionEndpoint target,
+  }) {
+    final focusSide = _compareEndpoints(focus, anchor);
+    final targetSide = _compareEndpoints(target, anchor);
+    if (focusSide == 0 || targetSide == 0) return target;
+    if ((focusSide < 0 && targetSide > 0) ||
+        (focusSide > 0 && targetSide < 0)) {
+      return anchor;
+    }
+    return target;
+  }
+
+  void _setAppSelectionFromAnchorToFocus(
+    SelectionEndpoint anchor,
+    SelectionEndpoint focus,
+  ) {
+    _lastFocusedController = _controllers[focus.block];
+    _focusNodes[focus.block].requestFocus();
+    _controllers[focus.block].selection =
+        TextSelection.collapsed(offset: focus.offset);
+    _overlayKey.currentState?.setKeyboardSelection(
+      anchorBlock: anchor.block,
+      anchorOffset: anchor.offset,
+      focusBlock: focus.block,
+      focusOffset: focus.offset,
+    );
+    _scrollEditorBlockIntoView(focus.block);
+  }
+
+  void _collapseAppSelectionTo(SelectionEndpoint target,
+      {required String reason}) {
+    _overlayKey.currentState?.clearSelection();
+    for (final c in _controllers) {
+      c.isGlobalSelected = false;
+      c.externalSelection = null;
+      c.refresh();
+    }
+    setState(() {
+      _isGlobalSelection = false;
+      _lastArrowDecision = '$reason: ${target.block}:${target.offset}';
+    });
     _lastFocusedController = _controllers[target.block];
     _focusNodes[target.block].requestFocus();
     _controllers[target.block].selection =
         TextSelection.collapsed(offset: target.offset);
-    _overlayKey.currentState?.setKeyboardSelection(
-      anchorBlock: anchor.block,
-      anchorOffset: anchor.offset,
-      focusBlock: target.block,
-      focusOffset: target.offset,
-    );
     _scrollEditorBlockIntoView(target.block);
-    _lastArrowDecision =
-        'extend ${key.keyLabel}: ${anchor.block}:${anchor.offset}-${target.block}:${target.offset}';
-    return true;
   }
 
   KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
@@ -1302,9 +1360,22 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       allowInBlockHorizontalStep: false,
       allowInBlockVerticalStep: false,
     );
-    if (target == null || target.block == blockIndex) return false;
     final anchorOffset =
         selection.baseOffset.clamp(0, controller.text.length).toInt();
+    if (target == null) return false;
+    if (target.block == blockIndex) {
+      if (target.offset == focusOffset) return false;
+      controller.selection = TextSelection(
+        baseOffset: anchorOffset,
+        extentOffset: target.offset.clamp(0, controller.text.length).toInt(),
+      );
+      _lastFocusedController = controller;
+      _focusNodes[blockIndex].requestFocus();
+      _scrollEditorBlockIntoView(blockIndex);
+      _lastArrowDecision =
+          'shift same ${key.keyLabel}: $blockIndex:$anchorOffset-$blockIndex:${target.offset}';
+      return true;
+    }
     _lastFocusedController = _controllers[target.block];
     _focusNodes[target.block].requestFocus();
     _controllers[target.block].selection =
@@ -1347,11 +1418,45 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
     if (key == LogicalKeyboardKey.arrowLeft ||
         key == LogicalKeyboardKey.arrowRight) {
+      if (keyboard.isAltPressed &&
+          !keyboard.isControlPressed &&
+          !keyboard.isMetaPressed) {
+        return _altHorizontalTarget(
+          blockIndex: block,
+          rawOffset: offset,
+          key: key,
+        );
+      }
       return _horizontalTargetFromPosition(
         blockIndex: block,
         rawOffset: offset,
         key: key,
         allowInBlockStep: allowInBlockHorizontalStep,
+      );
+    }
+    return null;
+  }
+
+  ({int block, int offset})? _altHorizontalTarget({
+    required int blockIndex,
+    required int rawOffset,
+    required LogicalKeyboardKey key,
+  }) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
+    final text = _controllers[blockIndex].text;
+    final safeOffset = rawOffset.clamp(0, text.length).toInt();
+    final endOffset = MarkupController.safeEndOffset(text);
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (safeOffset > 0) return (block: blockIndex, offset: 0);
+      if (blockIndex > 0) return (block: blockIndex - 1, offset: 0);
+      return null;
+    }
+    if (safeOffset < endOffset) return (block: blockIndex, offset: endOffset);
+    if (blockIndex < _controllers.length - 1) {
+      final nextText = _controllers[blockIndex + 1].text;
+      return (
+        block: blockIndex + 1,
+        offset: MarkupController.safeEndOffset(nextText),
       );
     }
     return null;
@@ -1496,12 +1601,21 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return KeyEventResult.handled;
     }
 
-    final target = _horizontalTargetFromPosition(
-      blockIndex: blockIndex,
-      rawOffset: selection.baseOffset,
-      key: key,
-      allowInBlockStep: manualInBlock,
-    );
+    final keyboard = HardwareKeyboard.instance;
+    final target = keyboard.isAltPressed &&
+            !keyboard.isControlPressed &&
+            !keyboard.isMetaPressed
+        ? _altHorizontalTarget(
+            blockIndex: blockIndex,
+            rawOffset: selection.baseOffset,
+            key: key,
+          )
+        : _horizontalTargetFromPosition(
+            blockIndex: blockIndex,
+            rawOffset: selection.baseOffset,
+            key: key,
+            allowInBlockStep: manualInBlock,
+          );
     if (target == null) return KeyEventResult.ignored;
     if (target.block != blockIndex) {
       _crossToBlock(target.block, atOffset: target.offset);

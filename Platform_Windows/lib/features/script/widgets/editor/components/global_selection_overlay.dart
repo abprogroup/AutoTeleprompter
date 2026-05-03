@@ -15,6 +15,50 @@ RenderEditable? _findRenderEditable(RenderObject obj) {
   return result;
 }
 
+enum SelectionSessionMode {
+  none,
+  overlaySelection,
+  handleDrag,
+  keyboardExtend,
+}
+
+enum SelectionPointerState {
+  inside,
+  edgeZone,
+  outside,
+  stale,
+}
+
+class SelectionEndpoint {
+  final int block;
+  final int offset;
+
+  const SelectionEndpoint({required this.block, required this.offset});
+
+  @override
+  String toString() => '$block:$offset';
+}
+
+class SelectionSessionSnapshot {
+  final SelectionSessionMode mode;
+  final SelectionPointerState pointerState;
+  final SelectionEndpoint endpointA;
+  final SelectionEndpoint endpointB;
+  final SelectionEndpoint anchor;
+  final SelectionEndpoint focus;
+  final bool focusEndpointIsA;
+
+  const SelectionSessionSnapshot({
+    required this.mode,
+    required this.pointerState,
+    required this.endpointA,
+    required this.endpointB,
+    required this.anchor,
+    required this.focus,
+    required this.focusEndpointIsA,
+  });
+}
+
 /// v3.9.5.66: Global Multi-Paragraph Selection Manager
 /// Coordinates drag-handles and selection highlights across independent TextField blocks.
 class GlobalSelectionOverlay extends StatefulWidget {
@@ -53,6 +97,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   bool _draggingEnd = false;
   Size _stackSize = Size.zero;
   bool? _activeHandleIsStart;
+  bool _ignoreBodyDragUntilPointerUp = false;
+  bool _focusEndpointIsStart = false;
+  SelectionSessionMode _sessionMode = SelectionSessionMode.none;
+  SelectionPointerState _pointerState = SelectionPointerState.inside;
 
   // Anchor state for body-drag to prevent jumping
   int? _anchorBlock;
@@ -75,12 +123,45 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   static const double _handleBarWidth = 6.0;
   static const double _handleBarHeight = 40.0;
   Timer? _autoScrollTimer;
+  Timer? _stalePointerTimer;
   Offset? _latestAutoScrollPointerGlobal;
   Offset? _latestAutoScrollHandleGlobal;
   bool? _autoScrollIsStart;
+  static const double _hardExitMargin = 80.0;
+  static const Duration _stalePointerTimeout = Duration(milliseconds: 1200);
 
   bool get isHandleInteractionActive =>
-      _draggingStart || _draggingEnd || _autoScrollTimer != null;
+      _sessionMode == SelectionSessionMode.handleDrag ||
+      _draggingStart ||
+      _draggingEnd ||
+      _autoScrollTimer != null;
+
+  SelectionSessionSnapshot? get selectionSessionSnapshot {
+    if (!hasSelection ||
+        _startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) {
+      return null;
+    }
+    final endpointA = SelectionEndpoint(
+      block: _startBlock!,
+      offset: _clampEndpointOffset(_startBlock!, _startOffset!),
+    );
+    final endpointB = SelectionEndpoint(
+      block: _endBlock!,
+      offset: _clampEndpointOffset(_endBlock!, _endOffset!),
+    );
+    return SelectionSessionSnapshot(
+      mode: _sessionMode,
+      pointerState: _pointerState,
+      endpointA: endpointA,
+      endpointB: endpointB,
+      anchor: _focusEndpointIsStart ? endpointB : endpointA,
+      focus: _focusEndpointIsStart ? endpointA : endpointB,
+      focusEndpointIsA: _focusEndpointIsStart,
+    );
+  }
 
   bool isPointInsideHandle(Offset globalPos) {
     final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
@@ -100,11 +181,31 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     return contains(_handleStartPos, true) || contains(_handleEndPos, false);
   }
 
+  SelectionPointerState _pointerStateFor(Offset globalHandlePos) {
+    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stack == null) return SelectionPointerState.stale;
+    final local = stack.globalToLocal(globalHandlePos);
+    final height = _stackSize.height;
+    if (local.dy < -_hardExitMargin ||
+        local.dy > height + _hardExitMargin ||
+        local.dx < -_hardExitMargin ||
+        local.dx > _stackSize.width + _hardExitMargin) {
+      return SelectionPointerState.outside;
+    }
+    if (local.dy < _autoScrollZone || local.dy > height - _autoScrollZone) {
+      return SelectionPointerState.edgeZone;
+    }
+    return SelectionPointerState.inside;
+  }
+
   double _edgeScrollSpeed(Offset globalHandlePos) {
     final sc = widget.scrollController;
     if (sc == null || !sc.hasClients) return 0;
     final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
     if (stack == null) return 0;
+    if (_pointerStateFor(globalHandlePos) == SelectionPointerState.outside) {
+      return 0;
+    }
     final local = stack.globalToLocal(globalHandlePos);
     final height = _stackSize.height;
     double speed = 0;
@@ -125,6 +226,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     required Offset handleGlobal,
     required bool isStart,
   }) {
+    _pointerState = _pointerStateFor(pointerGlobal);
+    if (_pointerState == SelectionPointerState.outside) {
+      endHandleGesturePreserveSelection(reason: 'outside');
+      return;
+    }
     _latestAutoScrollPointerGlobal = pointerGlobal;
     _latestAutoScrollHandleGlobal = handleGlobal;
     _autoScrollIsStart = isStart;
@@ -155,6 +261,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           _stopAutoScroll();
           return;
         }
+        _pointerState = _pointerStateFor(latestPointer);
+        if (_pointerState == SelectionPointerState.outside) {
+          endHandleGesturePreserveSelection(reason: 'outside-tick');
+          return;
+        }
         final tickSpeed = _edgeScrollSpeed(latestPointer);
         if (tickSpeed == 0) {
           _stopAutoScroll();
@@ -176,15 +287,38 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   void updateActiveHandlePointer(Offset pointerGlobal) {
     if (!isHandleInteractionActive) return;
+    _pointerState = _pointerStateFor(pointerGlobal);
+    if (_pointerState == SelectionPointerState.outside) {
+      endHandleGesturePreserveSelection(reason: 'outside-pointer');
+      return;
+    }
     _latestAutoScrollPointerGlobal = pointerGlobal;
     if (_autoScrollTimer != null && _edgeScrollSpeed(pointerGlobal) == 0) {
       _stopAutoScroll();
     }
+    _armStalePointerTimer();
+  }
+
+  void handlePointerExitedEditor() {
+    if (!isHandleInteractionActive) return;
+    endHandleGesturePreserveSelection(reason: 'editor-exit');
+  }
+
+  void _armStalePointerTimer() {
+    _stalePointerTimer?.cancel();
+    if (_sessionMode != SelectionSessionMode.handleDrag) return;
+    _stalePointerTimer = Timer(_stalePointerTimeout, () {
+      if (!mounted || _sessionMode != SelectionSessionMode.handleDrag) return;
+      _pointerState = SelectionPointerState.stale;
+      endHandleGesturePreserveSelection(reason: 'stale-pointer');
+    });
   }
 
   void _stopAutoScroll() {
     _autoScrollTimer?.cancel();
     _autoScrollTimer = null;
+    _stalePointerTimer?.cancel();
+    _stalePointerTimer = null;
     _latestAutoScrollPointerGlobal = null;
     _latestAutoScrollHandleGlobal = null;
     _autoScrollIsStart = null;
@@ -200,6 +334,20 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     _candidateBlock = null;
     _candidateOffset = null;
     _bodyDragActive = false;
+  }
+
+  void endHandleGesturePreserveSelection({String reason = 'end'}) {
+    _stopAutoScroll();
+    setState(() {
+      _ignoreBodyDragUntilPointerUp = reason != 'pan-end';
+      _resetDragState();
+      _sessionMode = hasSelection
+          ? SelectionSessionMode.overlaySelection
+          : SelectionSessionMode.none;
+      _pointerState = reason == 'stale-pointer'
+          ? SelectionPointerState.stale
+          : SelectionPointerState.inside;
+    });
   }
 
   // Body-pointer candidate state: pointer-down does NOT immediately start a
@@ -224,6 +372,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   void clearSelection() {
     _stopAutoScroll();
     _resetDragState();
+    _ignoreBodyDragUntilPointerUp = false;
+    _sessionMode = SelectionSessionMode.none;
+    _pointerState = SelectionPointerState.inside;
     if (!_isSelecting) return;
     setState(() {
       _isSelecting = false;
@@ -243,6 +394,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (widget.controllers.isEmpty) return;
     setState(() {
       _isSelecting = true;
+      _sessionMode = SelectionSessionMode.overlaySelection;
+      _pointerState = SelectionPointerState.inside;
+      _focusEndpointIsStart = false;
       _startBlock = 0;
       _startOffset = 0;
       _endBlock = widget.controllers.length - 1;
@@ -285,6 +439,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     _resetDragState();
     setState(() {
       _isSelecting = true;
+      _sessionMode = SelectionSessionMode.keyboardExtend;
+      _pointerState = SelectionPointerState.inside;
+      _focusEndpointIsStart = false;
       _startBlock = anchorBlock;
       _startOffset = _clampEndpointOffset(anchorBlock, anchorOffset);
       _endBlock = focusBlock;
@@ -303,6 +460,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   String get debugSelectionSummary {
     final range = _normalizedRange();
+    final session = selectionSessionSnapshot;
     final a =
         _startBlock == null ? 'A:-' : 'A:$_startBlock:${_startOffset ?? '-'}';
     final b = _endBlock == null ? 'B:-' : 'B:$_endBlock:${_endOffset ?? '-'}';
@@ -312,7 +470,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     final normalized = range == null
         ? 'range:-'
         : 'range:${range.startBlock}:${range.startOffset}-${range.endBlock}:${range.endOffset}';
-    return '$a $b $active $normalized';
+    final focus = session == null
+        ? 'focus:-'
+        : 'anchor:${session.anchor} focus:${session.focus}';
+    return '$a $b $active $focus mode:${_sessionMode.name} pointer:${_pointerState.name} $normalized';
   }
 
   int _clampEndpointOffset(int block, int offset) {
@@ -390,6 +551,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (start == 0 && end == controller.text.length) return;
     setState(() {
       _isSelecting = true;
+      _sessionMode = SelectionSessionMode.overlaySelection;
+      _pointerState = SelectionPointerState.inside;
+      _focusEndpointIsStart = false;
       _startBlock = blockIndex;
       _endBlock = blockIndex;
       _startOffset = start;
@@ -431,6 +595,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   /// scroll view may have moved, so neither `controller.selection.baseOffset`
   /// nor a fresh `getPositionForPoint(_candidatePos)` is reliable anymore.
   void startDragging(Offset globalPos) {
+    if (_ignoreBodyDragUntilPointerUp) return;
     _candidatePos = globalPos;
     _candidateBlock = _blockAtPosition(globalPos);
     _candidateOffset = null;
@@ -451,6 +616,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   /// into a different block than where the gesture started. Once active,
   /// extend the selection from the original origin to the current position.
   void updateDragging(Offset globalPos) {
+    if (_ignoreBodyDragUntilPointerUp) return;
     if (_candidatePos == null) return;
     if (!_bodyDragActive) {
       final currentBlock = _blockAtPosition(globalPos);
@@ -482,6 +648,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
       setState(() {
         _isSelecting = true;
+        _sessionMode = SelectionSessionMode.overlaySelection;
+        _pointerState = SelectionPointerState.inside;
+        _focusEndpointIsStart = false;
         if (_anchorBlock != null) {
           _startBlock = _anchorBlock;
           _startOffset = _anchorOffset;
@@ -498,10 +667,22 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   void endDragging() {
     _stopAutoScroll();
     _resetDragState();
+    _ignoreBodyDragUntilPointerUp = false;
+    _sessionMode = hasSelection
+        ? SelectionSessionMode.overlaySelection
+        : SelectionSessionMode.none;
+    _pointerState = SelectionPointerState.inside;
     // Selection persists after drag
   }
 
   void _handleUpdate(Offset globalPos, bool isStart) {
+    if (_sessionMode == SelectionSessionMode.handleDrag) {
+      _pointerState = _pointerStateFor(globalPos);
+      if (_pointerState == SelectionPointerState.outside) {
+        endHandleGesturePreserveSelection(reason: 'outside-update');
+        return;
+      }
+    }
     final RenderBox? overlayBox = context.findRenderObject() as RenderBox?;
     if (overlayBox == null) return;
     final localPos = overlayBox.globalToLocal(globalPos);
@@ -547,9 +728,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
             setState(() {
               if (isStart) {
+                _focusEndpointIsStart = true;
                 _startBlock = bestBlock;
                 _startOffset = pos.offset;
               } else {
+                _focusEndpointIsStart = false;
                 _endBlock = bestBlock;
                 _endOffset = pos.offset;
               }
@@ -867,6 +1050,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
               _draggingStart = false;
               _draggingEnd = true;
             }
+            _sessionMode = SelectionSessionMode.handleDrag;
+            _pointerState = SelectionPointerState.inside;
+            _focusEndpointIsStart = activeSide;
             _activeHandleIsStart = activeSide;
             _panStartGlobal = details.globalPosition;
             _panStartHandleGlobal = caretGlobal;
@@ -890,15 +1076,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             handleGlobal: handleGlobal,
             isStart: _activeHandleIsStart ?? activeSide,
           );
+          _armStalePointerTimer();
         },
-        onPanEnd: (_) {
-          _stopAutoScroll();
-          setState(_resetDragState);
-        },
-        onPanCancel: () {
-          _stopAutoScroll();
-          setState(_resetDragState);
-        },
+        onPanEnd: (_) => endHandleGesturePreserveSelection(reason: 'pan-end'),
+        onPanCancel: () =>
+            endHandleGesturePreserveSelection(reason: 'pan-cancel'),
         child: Container(
           width: _handleHitWidth,
           height: _handleHitHeight,

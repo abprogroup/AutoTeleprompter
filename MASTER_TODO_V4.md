@@ -708,3 +708,9 @@
   of clearing selection, and routes boundary crossings for modified horizontal
   and vertical arrows through the block-aware editor path. Awaiting Windows
   artifact QA.
+- [P] **Windows Selection State-Machine Correction**: Added an explicit
+  app-owned selection session snapshot with stable anchor/focus endpoints for
+  handle drags and modified-arrow extension. Hard handle exits now stop
+  autoscroll, preserve selection, and suppress body-drag promotion until
+  pointer-up/clear. Full Select All is gated out of Shift-extension so arrows
+  collapse it first. Awaiting Windows workflow artifact QA.

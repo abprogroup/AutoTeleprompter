@@ -449,3 +449,23 @@ file and the matching MVP docs.
   multiple paragraphs with repeated Ctrl+Shift+Up/Down or Shift+arrows.
 - Plain right/left can be routed through raw/visible offset mapping to avoid
   focus-transfer stalls after entering a new text block.
+
+## 2026-05-03 V5 State-Machine Integration
+
+- The editor screen reads `SelectionSessionSnapshot` from
+  `GlobalSelectionOverlay` when extending an existing app-owned selection.
+  Anchor/focus, not normalized document order, decide whether a modified-arrow
+  press extends, shrinks, or collapses the range.
+- The screen-level `HardwareKeyboard` route remains the only arrow owner. The
+  structural Focus wrapper must continue returning ignored so one physical key
+  cannot be processed by both the app route and native focus shell.
+- Native `EditableText` still owns safe in-block editing. The app route takes
+  over only for full/global selection clearing, existing app-owned selection
+  extension, shortcut commands over app selection, and block-boundary movement
+  that native fields cannot perform.
+- The editor body is wrapped with a mouse-exit guard so hard handle exits stop
+  the overlay gesture. After such an exit, body-drag promotion is suppressed
+  until pointer-up/clear, preserving the selection while allowing the next
+  normal click to deselect.
+- Empty paragraph blocks remain valid stops for every app-owned cross-block
+  navigation path.

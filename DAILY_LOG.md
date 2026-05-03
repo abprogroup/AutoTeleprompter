@@ -1513,3 +1513,24 @@
   use the block-aware target helpers when crossing paragraph fields.
 - **Verification Status**: Targeted analyzer reports no new compile errors;
   existing Windows warnings/infos remain. Awaiting Windows workflow/device QA.
+
+## 2026-05-03 - Windows v5 Selection State-Machine Correction
+
+- **Device QA Input**: User confirmed the previous pass still had fragile
+  handle and modifier-arrow behavior, especially after hard edge dragging and
+  repeated Shift/Ctrl/Alt arrow extension.
+- **Runtime Fix**: Windows `GlobalSelectionOverlay` now exposes a session
+  snapshot with endpoint A/B plus anchor/focus. Existing app-owned selection
+  extension uses that fixed anchor/focus model instead of deriving direction
+  from the normalized selected range.
+- **Gesture Fix**: Hard handle exits now preserve the current selection, stop
+  autoscroll, clear active handle state, and block body-drag promotion until
+  pointer-up or explicit selection clear. This prevents a stale handle drag
+  from becoming a second body selection while the mouse button remains down.
+- **Arrow Fix**: Full Select All is excluded from Shift-extension and collapses
+  through the normal selection-clear path first. Alt+Left/Right and modified
+  selection extension use block-aware targets while preserving native in-block
+  editing where safe.
+- **Verification Status**: Targeted analyzer reports no new compile errors;
+  existing Windows warnings/infos remain. Awaiting Windows workflow artifact
+  and local launch smoke test.

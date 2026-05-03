@@ -504,3 +504,26 @@ more regressions than a deliberate app-owned selection engine.
 - This is a verification step toward `GlobalSelectionOverlay v2`; device QA
   must confirm that Select All still works from a double-tapped word before any
   broader overlay/toolbar work continues.
+
+### Command Fallback Clarification - 2026-05-03
+
+- The recognized range and overlay raw range are still the preferred sources
+  for cross-block partial commands, but they are not the only app-owned truth.
+  Device QA showed the visual highlight can survive while overlay command state
+  is stale or unavailable.
+- Before falling back to native one-block `controller.selection`, command
+  routing must inspect the currently visible app selection on each
+  `MarkupController`: full-block `isGlobalSelected` and non-collapsed
+  `externalSelection`.
+- This visible app selection check must happen before stale recognized/overlay
+  mirrors are allowed to resolve a command. The visible highlight is the user
+  truth when the mirrors disagree.
+- This fallback is not a new selection system. It is a guardrail that keeps the
+  clipboard synchronized with what the user sees until `GlobalSelectionOverlay
+  v2` is fully mature.
+- The fallback must copy/cut raw markup slices in block order and preserve
+  `_blockClipboard`; it must never write only the originally tapped word when a
+  larger app highlight is visible.
+- Toolbar gating must also recognize non-collapsed `externalSelection` as a
+  selectable app range. A highlighted range with a Paste/Select All-only menu is
+  a command-routing failure.

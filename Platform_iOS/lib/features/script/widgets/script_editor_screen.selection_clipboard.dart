@@ -364,6 +364,53 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return blocks.isEmpty ? null : blocks;
   }
 
+  TextSelection? _visibleAppSelectionForController(MarkupController c) {
+    if (c.isGlobalSelected) {
+      return TextSelection(baseOffset: 0, extentOffset: c.text.length);
+    }
+    final sel = c.externalSelection;
+    if (sel == null || !sel.isValid || sel.isCollapsed) return null;
+    final start = sel.start.clamp(0, c.text.length).toInt();
+    final end = sel.end.clamp(0, c.text.length).toInt();
+    if (start == end) return null;
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
+  List<String>? _visibleAppSelectedMarkupBlocks(String reason) {
+    final blocks = <String>[];
+    for (final c in _controllers) {
+      final sel = _visibleAppSelectionForController(c);
+      if (sel == null) continue;
+      final start = sel.start.clamp(0, c.text.length).toInt();
+      final end = sel.end.clamp(0, c.text.length).toInt();
+      if (start == end) continue;
+      blocks.add(c.text.substring(start, end));
+    }
+    if (blocks.isEmpty) return null;
+    _selectionClipboardDebug =
+        '$reason-visible-app: ${blocks.length} slices [${_blockDebugShape(blocks)}]';
+    return blocks;
+  }
+
+  void _deleteVisibleAppSelectionRanges() {
+    _isCommandExecuting = true;
+    for (final c in _controllers) {
+      final sel = _visibleAppSelectionForController(c);
+      if (sel == null) continue;
+      final start = sel.start.clamp(0, c.text.length).toInt();
+      final end = sel.end.clamp(0, c.text.length).toInt();
+      if (start == end) continue;
+      c.value = TextEditingValue(
+        text: c.text.substring(0, start) + c.text.substring(end),
+        selection: TextSelection.collapsed(offset: start),
+      );
+    }
+    _clearGlobalSelection();
+    _isCommandExecuting = false;
+    _saveHistory(description: 'Cut');
+    setState(() {});
+  }
+
   void _syncSelectionSnapshotFromOverlay(
     String reason, {
     required bool allowShrink,
@@ -555,6 +602,20 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       return;
     }
 
+    final visibleBlocks = _visibleAppSelectedMarkupBlocks('cut');
+    if (visibleBlocks != null && visibleBlocks.isNotEmpty) {
+      _ensureCutUndoBaseline();
+      _storeBlockClipboard(
+        visibleBlocks,
+        'cut-visible-app',
+        preferProtectedSnapshot: false,
+      );
+      _writePlainClipboardForBlocks(_blockClipboard ?? visibleBlocks);
+      _writeRichClipboardForBlocks(_blockClipboard ?? visibleBlocks);
+      _deleteVisibleAppSelectionRanges();
+      return;
+    }
+
     final recognizedBlocks = _recognizedBlocksForCommand('cut');
     final recognizedRange = _recognizedBlockRange;
     if (recognizedBlocks != null && recognizedRange != null) {
@@ -634,6 +695,17 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       return;
     }
 
+    final visibleBlocks = _visibleAppSelectedMarkupBlocks('copy');
+    if (visibleBlocks != null && visibleBlocks.isNotEmpty) {
+      _storeBlockClipboard(
+        visibleBlocks,
+        'copy-visible-app',
+        preferProtectedSnapshot: false,
+      );
+      _writeRichClipboardForBlocks(_blockClipboard ?? visibleBlocks);
+      return;
+    }
+
     final recognizedBlocks = _recognizedBlocksForCommand('copy');
     if (recognizedBlocks != null) {
       _storeBlockClipboard(
@@ -674,6 +746,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (controller == null) return;
     final slice = controller.selection.textInside(controller.text);
     if (slice.isEmpty) return;
+    _setBlockClipboard([slice]);
     RichClipboard.setHtml(
       plain: StylingService.stripTags(slice),
       html: StylingService.markupToHtml(slice),

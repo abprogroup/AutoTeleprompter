@@ -1164,3 +1164,33 @@
 - **Command Result**: Forced Cut/Copy actions call the handoff path before
   command routing so `_onCutClean()` / `_onCopyClean()` can consume the live
   app-owned range instead of stale native word selection.
+
+## 2026-05-03 - iOS Visible App Selection Clipboard Fallback
+
+- **QA Failure Recorded**: Device testing rejected the previous overlay handle
+  command repair. The visible highlight could still exist while the command
+  router fell back to the originally double-tapped native word; Copy could
+  produce an empty result for a visibly selected block, and Cut could remove
+  only the first word of a larger highlighted range.
+- **Surgical Correction**: Added a guarded fallback before native one-block
+  fallback in `_onCutClean()` / `_onCopyClean()`: read the current visible
+  app-owned selections directly from each `MarkupController`
+  (`isGlobalSelected` / non-collapsed `externalSelection`) and store those raw
+  markup slices in `_blockClipboard`.
+- **Command Order Correction**: The visible app highlight check runs
+  immediately after full Select All and before recognized/overlay/native
+  fallbacks, so a stale recognized range cannot win with only the originally
+  tapped word.
+- **Toolbar Correction**: `_EditorBlock` now treats a non-collapsed
+  `externalSelection` as a selectable app range when deciding whether to hide
+  native handles and expose app-owned Cut/Copy. A visible app highlight must not
+  be allowed to produce a Paste/Select All-only toolbar.
+- **Clipboard Correction**: The ordinary native one-block Copy fallback now
+  also writes `_blockClipboard`, matching the contract that Cut/Copy populate
+  the app clipboard instead of leaving in-app Paste dependent on the external
+  system clipboard only.
+- **Reason**: The app must never allow command data to disagree with the
+  visible amber selection. If the visual app highlight exists, it owns Cut/Copy
+  before native iOS selection can own the command.
+- **Verification**: Awaiting iOS device QA. This entry is pending, not user
+  verified.

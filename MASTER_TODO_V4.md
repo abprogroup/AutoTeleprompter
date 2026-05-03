@@ -507,6 +507,18 @@
   Paste/Select All, hide native handles for any non-collapsed selection range
   and force app-owned Cut/Copy toolbar actions whenever native/overlay/global
   selection exists. Awaiting IPA/device verification.
+  - **QA FAILED 2026-05-03**: Device testing showed the visible highlight could
+    still be disconnected from command data. Handle Cut/Copy continued to fall
+    through to the originally tapped word, and a rich clipboard could still make
+    later native toolbars show only Paste/Select All. Do not treat this entry as
+    a working fix.
+- [P] **iOS Visible App Selection Clipboard Fallback**: After QA proved the
+  overlay highlight may survive while overlay command state is stale, Cut/Copy
+  now has one more guarded command source before native fallback: the currently
+  visible app-owned `externalSelection` / `isGlobalSelected` ranges on each
+  `MarkupController`. This must copy/cut the highlighted raw-markup slices
+  before the router can fall back to the original native one-word selection.
+  Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

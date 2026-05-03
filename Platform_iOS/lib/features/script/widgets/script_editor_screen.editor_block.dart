@@ -62,8 +62,15 @@ class _EditorBlock extends StatelessWidget {
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
     final hasNativeRange =
         controller.selection.isValid && !controller.selection.isCollapsed;
-    final useGhostSelectionControls =
-        isGlobalSelected || hasOverlaySelection || hasNativeRange;
+    final externalSelection = controller.externalSelection;
+    final hasExternalRange = controller.isGlobalSelected ||
+        (externalSelection != null &&
+            externalSelection.isValid &&
+            !externalSelection.isCollapsed);
+    final useGhostSelectionControls = isGlobalSelected ||
+        hasOverlaySelection ||
+        hasNativeRange ||
+        hasExternalRange;
 
     return Container(
       decoration: BoxDecoration(
@@ -222,7 +229,9 @@ class _EditorBlock extends StatelessWidget {
                       // to the original double-tapped word after Select All, so
                       // iterating contextMenuButtonItems would serve word-scoped
                       // Cut/Copy actions instead of our global ones.
-                      if (isGlobalSelected || hasOverlaySelection) {
+                      if (isGlobalSelected ||
+                          hasOverlaySelection ||
+                          hasExternalRange) {
                         return AdaptiveTextSelectionToolbar.buttonItems(
                           anchors: editableTextState.contextMenuAnchors,
                           buttonItems: [
@@ -309,6 +318,7 @@ class _EditorBlock extends StatelessWidget {
                       final List<ContextMenuButtonItem> customItems = [];
                       final hasSelectableRange = isGlobalSelected ||
                           hasOverlaySelection ||
+                          hasExternalRange ||
                           hasPartialNativeSelection ||
                           (selection.isValid && !selection.isCollapsed);
                       bool hasSelectAll = false;

@@ -400,3 +400,25 @@ Additional clipboard prohibitions:
   Paste/Select All. The editor must force app-owned Cut/Copy actions whenever
   any selectable native/overlay/global range exists, so a new selection is not
   trapped behind a stale paste-only menu.
+- Device QA proved the previous handle-command repair was still insufficient:
+  the visible amber app highlight could remain while command routing fell back
+  to the originally double-tapped native word. `_onCutClean()` and
+  `_onCopyClean()` must therefore prefer current visible app-owned selections
+  from `MarkupController.isGlobalSelected` / non-collapsed
+  `MarkupController.externalSelection` before they ever fall back to a native
+  one-block `controller.selection`.
+- That visible app-owned selection check must run before stale recognized or
+  overlay command mirrors can win. If those mirrors still point at the original
+  double-tapped word while `externalSelection` visibly spans more text, the
+  visible app highlight owns the command.
+- A visible app highlight is command data. If the user can see highlighted text
+  from the app selection layer, Cut/Copy must store those raw-markup slices in
+  `_blockClipboard` and must not return an empty clipboard or the original
+  tapped word.
+- `_EditorBlock` toolbar construction must treat non-collapsed
+  `MarkupController.externalSelection` as a selectable app range even if the
+  parent overlay state is stale. Otherwise iOS can show only Paste/Select All
+  while the user visibly has a selected range.
+- Even ordinary one-block Copy fallback must write `_blockClipboard` in
+  addition to the rich/system clipboard. In-app Paste must not depend on a
+  separate external clipboard path after Copy.

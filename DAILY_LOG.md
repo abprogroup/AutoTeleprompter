@@ -1497,3 +1497,19 @@
   Ctrl+Shift+Up/Down can extend selection to block boundaries and uses the
   app overlay when the selected range crosses blocks.
 - **Verification Status**: Awaiting Windows workflow/device QA.
+
+## 2026-05-03 - Windows v5 Modified Arrow + Autoscroll Correction
+
+- **Device QA Input**: User found that hard edge autoscroll could continue
+  after returning the mouse to the middle of the screen, and that Shift,
+  Ctrl+Shift, Ctrl, and Alt arrow combinations could still restart selections
+  or stall at paragraph boundaries.
+- **Autoscroll Fix**: The editor page now forwards active handle pointer moves
+  into `GlobalSelectionOverlay`, allowing the overlay to stop the autoscroll
+  timer immediately when the pointer returns to the safe middle zone.
+- **Arrow Fix**: Shift extension over an app-owned overlay now preserves the
+  existing anchor and moves only the active edge. Shift+Up/Down boundary logic
+  runs before plain vertical crossing, and modified horizontal/vertical arrows
+  use the block-aware target helpers when crossing paragraph fields.
+- **Verification Status**: Targeted analyzer reports no new compile errors;
+  existing Windows warnings/infos remain. Awaiting Windows workflow/device QA.

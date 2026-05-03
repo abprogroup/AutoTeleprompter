@@ -700,3 +700,11 @@
   the app command path whenever overlay/global selection exists, and makes
   Ctrl+Up/Down block-aware so repeated presses cross previous/next script
   blocks. Awaiting Windows artifact QA.
+- [P] **Windows Modified Arrow + Autoscroll Correction**: Device QA showed
+  hard edge-scroll could continue until mouse release, and Shift/Ctrl/Alt
+  arrow combinations could still restart or stall at paragraph boundaries.
+  Follow-up forwards live handle pointer movement to the overlay so safe-zone
+  re-entry stops autoscroll, keeps Shift extension on the app overlay instead
+  of clearing selection, and routes boundary crossings for modified horizontal
+  and vertical arrows through the block-aware editor path. Awaiting Windows
+  artifact QA.

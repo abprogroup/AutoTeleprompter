@@ -190,3 +190,18 @@ save entries created after selection-based commands.
 - Ctrl+Shift+Up/Down may extend selection to a block boundary. Cross-block
   extension must use the app overlay selection path so copy/cut keeps the
   selected multi-block range.
+
+## 2026-05-03 V5 Follow-Up: Modified Arrow Boundary Extension
+
+- Handle autoscroll must update from the latest pointer position even when the
+  pointer leaves the handle hit area. Returning the pointer to the safe middle
+  zone must stop the timer before mouse release.
+- Shift+arrow over an existing app-owned selection extends the active edge of
+  that app selection. It must not clear the current overlay and start a fresh
+  native selection.
+- Shift+Up/Down boundary checks run before plain vertical block crossing, so
+  repeated Ctrl+Shift+Up/Down and Shift+Up/Down can extend across multiple
+  paragraphs instead of collapsing at the next block.
+- Ctrl/Shift/Alt left-right boundary movement is routed through the same
+  block-aware horizontal target helper. Native text editing may still own
+  in-block movement, but the app route owns the block crossing.

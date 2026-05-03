@@ -472,7 +472,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         onPointerMove: (event) {
           if (event.buttons == kPrimaryButton) {
             final overlay = _overlayKey.currentState;
-            if (overlay?.isHandleInteractionActive ?? false) return;
+            if (overlay?.isHandleInteractionActive ?? false) {
+              overlay?.updateActiveHandlePointer(event.position);
+              return;
+            }
             overlay?.updateDragging(event.position);
           }
         },
@@ -855,24 +858,40 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         key != LogicalKeyboardKey.arrowRight) {
       return false;
     }
-    if (_clearAppSelectionForArrow(key)) return true;
     final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isShiftPressed && _hasAppSelection) {
+      if (_extendAppSelectionForArrow(key, keyboard)) return true;
+    }
+    if (_clearAppSelectionForArrow(key)) return true;
     final hasModifier = keyboard.isControlPressed ||
         keyboard.isShiftPressed ||
         keyboard.isAltPressed ||
         keyboard.isMetaPressed;
-    final routeControlVertical = keyboard.isControlPressed &&
-        !keyboard.isAltPressed &&
-        !keyboard.isMetaPressed &&
-        (key == LogicalKeyboardKey.arrowUp ||
-            key == LogicalKeyboardKey.arrowDown);
-    if (hasModifier && !routeControlVertical) {
-      _lastArrowDecision = 'arrow ${key.keyLabel}: native modifier';
-      return false;
-    }
+    final routeModifiedArrow = _shouldRouteModifiedArrow(key, keyboard);
+    if (hasModifier && !routeModifiedArrow) return false;
     _lastArrowDecision = 'arrow ${key.keyLabel}: route';
     return _handleEditorArrowKey(_arrowKeyDummyNode, event) ==
         KeyEventResult.handled;
+  }
+
+  bool get _hasAppSelection =>
+      _isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false);
+
+  bool _shouldRouteModifiedArrow(
+    LogicalKeyboardKey key,
+    HardwareKeyboard keyboard,
+  ) {
+    if (!keyboard.isControlPressed &&
+        !keyboard.isShiftPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed) {
+      return true;
+    }
+    if (keyboard.isMetaPressed) return false;
+    return key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight;
   }
 
   bool _handleGlobalEditingShortcut(KeyEvent event) {
@@ -976,6 +995,41 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     return collapseToEnd ? last : first;
   }
 
+  bool _extendAppSelectionForArrow(
+    LogicalKeyboardKey key,
+    HardwareKeyboard keyboard,
+  ) {
+    final positive = key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.arrowDown;
+    final anchor = _appSelectionEdge(collapseToEnd: !positive);
+    final focus = _appSelectionEdge(collapseToEnd: positive);
+    if (anchor == null || focus == null) return false;
+    final target = _arrowTargetFromPosition(
+      key: key,
+      block: focus.block,
+      offset: focus.offset,
+      keyboard: keyboard,
+      allowInBlockHorizontalStep:
+          !keyboard.isControlPressed && !keyboard.isAltPressed,
+      allowInBlockVerticalStep: true,
+    );
+    if (target == null) return true;
+    _lastFocusedController = _controllers[target.block];
+    _focusNodes[target.block].requestFocus();
+    _controllers[target.block].selection =
+        TextSelection.collapsed(offset: target.offset);
+    _overlayKey.currentState?.setKeyboardSelection(
+      anchorBlock: anchor.block,
+      anchorOffset: anchor.offset,
+      focusBlock: target.block,
+      focusOffset: target.offset,
+    );
+    _scrollEditorBlockIntoView(target.block);
+    _lastArrowDecision =
+        'extend ${key.keyLabel}: ${anchor.block}:${anchor.offset}-${target.block}:${target.offset}';
+    return true;
+  }
+
   KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -1021,6 +1075,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       );
     }
 
+    if (keyboard.isShiftPressed) {
+      final shifted = _extendNativeShiftSelectionAcrossBlockIfNeeded(
+        key: key,
+        keyboard: keyboard,
+        controller: controller,
+        blockIndex: idx,
+        selection: controller.selection,
+      );
+      if (shifted) return KeyEventResult.handled;
+    }
+
     if (key == LogicalKeyboardKey.arrowUp && idx > 0) {
       final layout = _getVerticalLayout(idx);
       if (layout.isAtTop) {
@@ -1052,6 +1117,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       isRtl: isRtl,
       selection: sel,
       textLength: textLen,
+      manualInBlock: !keyboard.isControlPressed &&
+          !keyboard.isAltPressed &&
+          !keyboard.isMetaPressed &&
+          !keyboard.isShiftPressed,
     );
     if (horizontal != null) return horizontal;
 
@@ -1215,6 +1284,195 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _scrollEditorBlockIntoView(targetBlock);
   }
 
+  bool _extendNativeShiftSelectionAcrossBlockIfNeeded({
+    required LogicalKeyboardKey key,
+    required HardwareKeyboard keyboard,
+    required MarkupController controller,
+    required int blockIndex,
+    required TextSelection selection,
+  }) {
+    if (!selection.isValid) return false;
+    final focusOffset =
+        selection.extentOffset.clamp(0, controller.text.length).toInt();
+    final target = _arrowTargetFromPosition(
+      key: key,
+      block: blockIndex,
+      offset: focusOffset,
+      keyboard: keyboard,
+      allowInBlockHorizontalStep: false,
+      allowInBlockVerticalStep: false,
+    );
+    if (target == null || target.block == blockIndex) return false;
+    final anchorOffset =
+        selection.baseOffset.clamp(0, controller.text.length).toInt();
+    _lastFocusedController = _controllers[target.block];
+    _focusNodes[target.block].requestFocus();
+    _controllers[target.block].selection =
+        TextSelection.collapsed(offset: target.offset);
+    _overlayKey.currentState?.setKeyboardSelection(
+      anchorBlock: blockIndex,
+      anchorOffset: anchorOffset,
+      focusBlock: target.block,
+      focusOffset: target.offset,
+    );
+    _scrollEditorBlockIntoView(target.block);
+    _lastArrowDecision =
+        'shift cross ${key.keyLabel}: $blockIndex:$anchorOffset-${target.block}:${target.offset}';
+    return true;
+  }
+
+  ({int block, int offset})? _arrowTargetFromPosition({
+    required LogicalKeyboardKey key,
+    required int block,
+    required int offset,
+    required HardwareKeyboard keyboard,
+    required bool allowInBlockHorizontalStep,
+    required bool allowInBlockVerticalStep,
+  }) {
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      if (keyboard.isControlPressed) {
+        return _controlVerticalTarget(
+          blockIndex: block,
+          focusOffset: offset,
+          moveUp: key == LogicalKeyboardKey.arrowUp,
+        );
+      }
+      return _verticalBoundaryTarget(
+        blockIndex: block,
+        focusOffset: offset,
+        moveUp: key == LogicalKeyboardKey.arrowUp,
+        allowInBlockStep: allowInBlockVerticalStep,
+      );
+    }
+    if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight) {
+      return _horizontalTargetFromPosition(
+        blockIndex: block,
+        rawOffset: offset,
+        key: key,
+        allowInBlockStep: allowInBlockHorizontalStep,
+      );
+    }
+    return null;
+  }
+
+  ({int block, int offset})? _verticalBoundaryTarget({
+    required int blockIndex,
+    required int focusOffset,
+    required bool moveUp,
+    required bool allowInBlockStep,
+  }) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
+    final text = _controllers[blockIndex].text;
+    final safeFocus = focusOffset.clamp(0, text.length).toInt();
+    final endOffset = MarkupController.safeEndOffset(text);
+    if (moveUp) {
+      if (safeFocus > 0 && allowInBlockStep) {
+        return (block: blockIndex, offset: 0);
+      }
+      if (safeFocus <= 0 && blockIndex > 0) {
+        return (
+          block: blockIndex - 1,
+          offset:
+              MarkupController.safeEndOffset(_controllers[blockIndex - 1].text),
+        );
+      }
+      return null;
+    }
+    if (safeFocus < endOffset && allowInBlockStep) {
+      return (block: blockIndex, offset: endOffset);
+    }
+    if (safeFocus >= endOffset && blockIndex < _controllers.length - 1) {
+      return (block: blockIndex + 1, offset: 0);
+    }
+    return null;
+  }
+
+  ({int block, int offset})? _horizontalTargetFromPosition({
+    required int blockIndex,
+    required int rawOffset,
+    required LogicalKeyboardKey key,
+    required bool allowInBlockStep,
+  }) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
+    final controller = _controllers[blockIndex];
+    final isRtl = controller.text.isHebrew;
+    final visibleText = StylingService.stripTags(controller.text);
+    final visibleLength = visibleText.length;
+    final safeRaw = rawOffset.clamp(0, controller.text.length).toInt();
+    final visibleOffset = MarkupController.rawToVisualOffset(
+      controller.text,
+      safeRaw,
+    ).clamp(0, visibleLength).toInt();
+    final atVisibleStart = visibleOffset <= 0;
+    final atVisibleEnd = visibleOffset >= visibleLength;
+
+    if (!isRtl) {
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        if (atVisibleStart) {
+          if (blockIndex <= 0) return null;
+          return (
+            block: blockIndex - 1,
+            offset: MarkupController.safeEndOffset(
+                _controllers[blockIndex - 1].text),
+          );
+        }
+        if (!allowInBlockStep) return null;
+        return (
+          block: blockIndex,
+          offset: MarkupController.visualToRawOffset(
+            controller.text,
+            (visibleOffset - 1).clamp(0, visibleLength).toInt(),
+          ),
+        );
+      }
+      if (atVisibleEnd) {
+        if (blockIndex >= _controllers.length - 1) return null;
+        return (block: blockIndex + 1, offset: 0);
+      }
+      if (!allowInBlockStep) return null;
+      return (
+        block: blockIndex,
+        offset: MarkupController.visualToRawOffset(
+          controller.text,
+          (visibleOffset + 1).clamp(0, visibleLength).toInt(),
+        ),
+      );
+    }
+
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (atVisibleEnd) {
+        if (blockIndex >= _controllers.length - 1) return null;
+        return (block: blockIndex + 1, offset: 0);
+      }
+      if (!allowInBlockStep) return null;
+      return (
+        block: blockIndex,
+        offset: MarkupController.visualToRawOffset(
+          controller.text,
+          (visibleOffset + 1).clamp(0, visibleLength).toInt(),
+        ),
+      );
+    }
+    if (atVisibleStart) {
+      if (blockIndex <= 0) return null;
+      return (
+        block: blockIndex - 1,
+        offset:
+            MarkupController.safeEndOffset(_controllers[blockIndex - 1].text),
+      );
+    }
+    if (!allowInBlockStep) return null;
+    return (
+      block: blockIndex,
+      offset: MarkupController.visualToRawOffset(
+        controller.text,
+        (visibleOffset - 1).clamp(0, visibleLength).toInt(),
+      ),
+    );
+  }
+
   KeyEventResult? _handleHorizontalArrowKey({
     required LogicalKeyboardKey key,
     required MarkupController controller,
@@ -1222,6 +1480,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     required bool isRtl,
     required TextSelection selection,
     required int textLength,
+    required bool manualInBlock,
   }) {
     if (key != LogicalKeyboardKey.arrowLeft &&
         key != LogicalKeyboardKey.arrowRight) {
@@ -1237,70 +1496,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return KeyEventResult.handled;
     }
 
-    final visibleText = StylingService.stripTags(controller.text);
-    final visibleLength = visibleText.length;
-    final rawOffset = selection.baseOffset.clamp(0, textLength).toInt();
-    final visibleOffset =
-        MarkupController.rawToVisualOffset(controller.text, rawOffset)
-            .clamp(0, visibleLength)
-            .toInt();
-    final atVisibleStart = visibleOffset <= 0;
-    final atVisibleEnd = visibleOffset >= visibleLength;
-
-    if (!isRtl) {
-      if (key == LogicalKeyboardKey.arrowLeft &&
-          atVisibleStart &&
-          blockIndex > 0) {
-        _crossToBlock(
-          blockIndex - 1,
-          atOffset: _controllers[blockIndex - 1].text.length,
-        );
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowRight &&
-          atVisibleEnd &&
-          blockIndex < _controllers.length - 1) {
-        _crossToBlock(blockIndex + 1, atOffset: 0);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (atVisibleEnd) {
-        if (blockIndex < _controllers.length - 1) {
-          _crossToBlock(blockIndex + 1, atOffset: 0);
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      }
-      final nextVisible = (visibleOffset + 1).clamp(0, visibleLength).toInt();
-      controller.selection = TextSelection.collapsed(
-        offset: MarkupController.visualToRawOffset(
-          controller.text,
-          nextVisible,
-        ),
-      );
+    final target = _horizontalTargetFromPosition(
+      blockIndex: blockIndex,
+      rawOffset: selection.baseOffset,
+      key: key,
+      allowInBlockStep: manualInBlock,
+    );
+    if (target == null) return KeyEventResult.ignored;
+    if (target.block != blockIndex) {
+      _crossToBlock(target.block, atOffset: target.offset);
       return KeyEventResult.handled;
     }
-
-    if (atVisibleStart) {
-      if (blockIndex > 0) {
-        _crossToBlock(
-          blockIndex - 1,
-          atOffset: _controllers[blockIndex - 1].text.length,
-        );
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    final previousVisible = (visibleOffset - 1).clamp(0, visibleLength).toInt();
-    controller.selection = TextSelection.collapsed(
-      offset: MarkupController.visualToRawOffset(
-        controller.text,
-        previousVisible,
-      ),
-    );
+    controller.selection = TextSelection.collapsed(offset: target.offset);
     return KeyEventResult.handled;
   }
 

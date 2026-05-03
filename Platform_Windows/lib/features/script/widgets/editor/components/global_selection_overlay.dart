@@ -174,6 +174,14 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     );
   }
 
+  void updateActiveHandlePointer(Offset pointerGlobal) {
+    if (!isHandleInteractionActive) return;
+    _latestAutoScrollPointerGlobal = pointerGlobal;
+    if (_autoScrollTimer != null && _edgeScrollSpeed(pointerGlobal) == 0) {
+      _stopAutoScroll();
+    }
+  }
+
   void _stopAutoScroll() {
     _autoScrollTimer?.cancel();
     _autoScrollTimer = null;

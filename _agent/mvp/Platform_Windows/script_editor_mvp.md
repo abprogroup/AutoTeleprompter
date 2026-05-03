@@ -435,3 +435,17 @@ file and the matching MVP docs.
 - Repeated Ctrl+Up/Down must cross one block at a time after reaching the
   current block boundary. Ctrl+Shift+Up/Down may extend into the overlay when
   the selection crosses block boundaries.
+
+## 2026-05-03 V5 Correction: Boundary Arrows And Safe Autoscroll
+
+- The editor page listener forwards active handle pointer movement back into
+  `GlobalSelectionOverlay`, so edge autoscroll can stop as soon as the pointer
+  returns to the safe center zone.
+- Modified arrows are block-aware only at the point where native `EditableText`
+  cannot cross to another paragraph field. This preserves normal in-field text
+  editing while preventing stalls at block boundaries.
+- Shift+arrow extension over an existing overlay selection must preserve the
+  anchor edge and move only the focus edge. This is required for selecting
+  multiple paragraphs with repeated Ctrl+Shift+Up/Down or Shift+arrows.
+- Plain right/left can be routed through raw/visible offset mapping to avoid
+  focus-transfer stalls after entering a new text block.

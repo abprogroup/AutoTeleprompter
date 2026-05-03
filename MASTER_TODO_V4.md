@@ -585,6 +585,11 @@
   toolbar rendering and leaves Cut/Copy/Paste/Select All to the app-owned
   selection toolbar. Awaiting iPhone QA for no duplicate toolbar, bookmark-sign
   Cut/Copy/Paste, Select All, and partial styled multi-block cut/paste.
+- [P] **iOS Presenter Bookmark Delete Sync**: Returning from present mode now
+  reconciles editor `\u00BB` signs from the presenter-saved bookmark metadata.
+  Presenter deletion removes stale editor signs before the editor rescans, so a
+  deleted present-mode bookmark cannot recreate itself in editor mode. Awaiting
+  iPhone QA.
 - [ ] **iOS STT Visible Skip Language Boundary**: Plan and implement visible
   skip across language transitions, e.g. Hebrew block -> English visible block
   -> Hebrew block. Visible skip must be able to trigger locale transition for a

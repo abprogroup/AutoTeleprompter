@@ -257,3 +257,17 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
 - Cutting or deleting a selected range containing `\u00BB` / `»` must rescan
   bookmark metadata through the existing editor-sign rebuild path. Pasting a
   range containing the sign must recreate metadata at the pasted sign locations.
+
+---
+
+## Presenter Deletion Reconciliation - 2026-05-03
+
+- Present mode bookmark deletion is authoritative for the shared bookmark
+  scope. When returning to editor mode, the editor must reconcile its real
+  `\u00BB` signs from saved metadata instead of blindly rescanning stale signs.
+- The reconciliation rule is: remove editor signs that are no longer present in
+  saved bookmark metadata, then insert any metadata bookmarks that are missing
+  editor signs. Only after this text reconciliation may the editor rescan signs
+  and save refreshed metadata.
+- This prevents a deleted presenter bookmark from being recreated by the
+  editor's text-flow sign scan.

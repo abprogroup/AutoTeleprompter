@@ -67,17 +67,45 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     if (save) await _saveBookmarks();
   }
 
-  Future<void> _insertMissingEditorBookmarkSignsFromMetadata() async {
+  Future<void> _reconcileEditorBookmarkSignsFromMetadata() async {
     await _loadBookmarksForCurrentScript(force: true);
-    if (_bookmarks.isEmpty || _controllers.isEmpty) return;
+    if (_controllers.isEmpty) return;
+    final authoritativeBookmarks = List<ScriptBookmark>.of(_bookmarks);
+    final originalTexts = _controllers.map((c) => c.text).toList();
     var changed = false;
     _isCommandExecuting = true;
-    final ordered = [..._bookmarks]..sort((a, b) {
+
+    for (final controller in _controllers) {
+      if (!controller.text.contains(_bookmarkSign)) continue;
+      final selection = controller.selection;
+      final newText = _stripBookmarkSigns(controller.text);
+      controller.value = TextEditingValue(
+        text: newText,
+        selection: _selectionAfterBookmarkSignRemoval(
+          selection: selection,
+          oldText: controller.text,
+          newTextLength: newText.length,
+        ),
+      );
+      changed = true;
+    }
+
+    final ordered = [...authoritativeBookmarks]..sort((a, b) {
         final aPos = _editorPositionForBookmark(a);
         final bPos = _editorPositionForBookmark(b);
         final blockCompare = bPos.block.compareTo(aPos.block);
         if (blockCompare != 0) return blockCompare;
-        return bPos.offset.compareTo(aPos.offset);
+        final aOffset = _cleanBookmarkOffsetFromOriginalText(
+          bookmark: a,
+          position: aPos,
+          originalTexts: originalTexts,
+        );
+        final bOffset = _cleanBookmarkOffsetFromOriginalText(
+          bookmark: b,
+          position: bPos,
+          originalTexts: originalTexts,
+        );
+        return bOffset.compareTo(aOffset);
       });
     for (final bookmark in ordered) {
       final position = _editorPositionForBookmark(bookmark);
@@ -85,16 +113,11 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
         continue;
       }
       final controller = _controllers[position.block];
-      final offset = _rawOffsetForBookmarkInsertion(
-        block: position.block,
-        offset: position.offset,
-        bookmarkId: bookmark.id,
+      final offset = _cleanBookmarkOffsetFromOriginalText(
+        bookmark: bookmark,
+        position: position,
+        originalTexts: originalTexts,
       );
-      final alreadyAtOffset = offset < controller.text.length &&
-          controller.text[offset] == _bookmarkSign;
-      final alreadyBeforeOffset =
-          offset > 0 && controller.text[offset - 1] == _bookmarkSign;
-      if (alreadyAtOffset || alreadyBeforeOffset) continue;
       controller.value = TextEditingValue(
         text: controller.text.substring(0, offset) +
             _bookmarkSign +
@@ -110,31 +133,55 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     }
   }
 
+  TextSelection _selectionAfterBookmarkSignRemoval({
+    required TextSelection selection,
+    required String oldText,
+    required int newTextLength,
+  }) {
+    if (!selection.isValid) {
+      return TextSelection.collapsed(
+        offset: newTextLength.clamp(0, newTextLength).toInt(),
+      );
+    }
+    int adjust(int offset) {
+      final safe = offset.clamp(0, oldText.length).toInt();
+      final removedBefore = RegExp(RegExp.escape(_bookmarkSign))
+          .allMatches(oldText.substring(0, safe))
+          .length;
+      return (safe - removedBefore).clamp(0, newTextLength).toInt();
+    }
+
+    return TextSelection(
+      baseOffset: adjust(selection.baseOffset),
+      extentOffset: adjust(selection.extentOffset),
+      affinity: selection.affinity,
+      isDirectional: selection.isDirectional,
+    );
+  }
+
+  int _cleanBookmarkOffsetFromOriginalText({
+    required ScriptBookmark bookmark,
+    required ({int block, int offset}) position,
+    required List<String> originalTexts,
+  }) {
+    if (position.block < 0 || position.block >= _controllers.length) return 0;
+    final cleanLength = _controllers[position.block].text.length;
+    if (bookmark.id.startsWith('editor-') &&
+        position.block < originalTexts.length) {
+      final original = originalTexts[position.block];
+      final rawOffset = position.offset.clamp(0, original.length).toInt();
+      final signsBefore = RegExp(RegExp.escape(_bookmarkSign))
+          .allMatches(original.substring(0, rawOffset))
+          .length;
+      return (rawOffset - signsBefore).clamp(0, cleanLength).toInt();
+    }
+    return position.offset.clamp(0, cleanLength).toInt();
+  }
+
   int _currentEditorBlockIndex() {
     final active = _activeController;
     final index = active == null ? -1 : _controllers.indexOf(active);
     return index >= 0 ? index : 0;
-  }
-
-  int _rawOffsetForBookmarkInsertion({
-    required int block,
-    required int offset,
-    required String bookmarkId,
-  }) {
-    if (block < 0 || block >= _controllers.length) return 0;
-    final text = _controllers[block].text;
-    if (bookmarkId.startsWith('editor-')) {
-      return offset.clamp(0, text.length).toInt();
-    }
-    final cleanOffset =
-        offset.clamp(0, _stripBookmarkSigns(text).length).toInt();
-    var cleanCursor = 0;
-    for (var raw = 0; raw < text.length; raw++) {
-      if (text[raw] == _bookmarkSign) continue;
-      if (cleanCursor >= cleanOffset) return raw;
-      cleanCursor++;
-    }
-    return text.length;
   }
 
   int _currentEditorOffset(int block) {

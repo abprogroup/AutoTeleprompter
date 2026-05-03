@@ -1398,3 +1398,18 @@
 - **Verification Status**: Awaiting iPhone QA for no native toolbar on
   long-press/handles, bookmark-sign Cut/Copy/Paste, Select All, and partial
   styled multi-block cut/paste.
+
+## 2026-05-03 - iOS Presenter Bookmark Delete Sync
+
+- **Device QA Input**: User found that removing bookmarks from present mode did
+  not sync the removal back to editor mode.
+- **Root Cause**: Present mode removed saved bookmark metadata, but the editor
+  still contained the real text-flow `\u00BB` sign. Returning to editor and later
+  rescanning signs could recreate the deleted bookmark.
+- **Runtime Fix**: Return-from-present now reconciles editor signs from the
+  presenter-saved metadata. It removes stale `\u00BB` signs first, inserts any
+  missing signs for remaining metadata bookmarks, then rescans and saves the
+  refreshed metadata.
+- **Verification Status**: Awaiting iPhone QA: delete bookmark in present mode,
+  return to editor, confirm the `\u00BB` sign is gone and the bookmark does not
+  reappear on the next present-mode entry.

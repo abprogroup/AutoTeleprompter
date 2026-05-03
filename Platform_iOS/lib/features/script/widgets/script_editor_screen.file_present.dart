@@ -149,7 +149,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()))
           .then((_) {
         if (mounted) {
-          unawaited(_insertMissingEditorBookmarkSignsFromMetadata());
+          unawaited(_reconcileEditorBookmarkSignsFromMetadata());
         }
       });
     }

@@ -2,7 +2,7 @@
 name: Styling Engine MVP
 type: component
 platform: iOS
-last_updated: 2026-05-02
+last_updated: 2026-05-03
 ---
 
 # Styling Engine MVP - iOS
@@ -86,3 +86,17 @@ range geometry, History owns snapshot timing, and File I/O owns export encoding.
   the user intended to change the script-wide font-size control.
 - Export/import work must preserve inline size tags while also preserving the
   script-level metadata font size.
+
+---
+
+## iOS App-Owned Selection Styling Boundary - 2026-05-03
+
+- App-owned selected text is represented to styling commands through
+  `MarkupController.externalSelection` and `isGlobalSelected`, not through
+  native iOS `controller.selection` once overlay ownership begins.
+- Styling commands must continue to call overlay resync/refresh after inserting
+  or removing tags, because raw offsets move while the user's visible selected
+  range should stay anchored to the same visible text.
+- The selected-text app toolbar owns Cut/Copy/Paste/Select All only. It must not
+  replace the Text/Layout/Color formatting suites or become a second styling
+  toolbar.

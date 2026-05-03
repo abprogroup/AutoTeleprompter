@@ -2,7 +2,7 @@
 name: History MVP
 type: component
 platform: iOS
-last_updated: 2026-04-27
+last_updated: 2026-05-03
 ---
 
 # History MVP — iOS
@@ -85,6 +85,14 @@ Governs the undo/redo stack, history persistence across sessions, and the typing
 
 ## Known Fragilities
 
+- **App-owned selection Cut history (2026-05-03)**: Selection Cut now depends
+  on app-owned toolbar commands reaching `_onCutClean()`. If debug mode shows
+  `Command: idle`, History did not receive a real Cut command and no history
+  behavior can be trusted. App-owned Cut must commit a baseline before mutation
+  and a Cut state after mutation so Undo is available immediately, before any
+  deselection, focus loss, or background tap. Selection toolbar dismiss/clear
+  actions must not create history entries; only destructive mutations and paste
+  restorations own history commits.
 - **Async race on exit**: `_forceRecentUpdate()` is async. If the user exits within ~200ms of an undo, SharedPreferences might not flush before the gallery re-reads. The in-memory `scriptProvider.updateHistoryIndex()` provides a synchronous fallback, but ONLY if the gallery doesn't call `scriptNotifier.loadText()` before the flush completes.
 - **Gallery `loadText` overwrites in-memory**: Whenever the gallery opens a script, it calls `scriptNotifier.loadText()` which rebuilds the in-memory state from the metadata JSON. If that JSON has a stale `historyIndex`, the in-memory fix is lost. This is why the gallery MUST pass `historyIndex` explicitly (Invariant 3).
 - **Suite not committed on back-navigation**: If a suite is left open and the user navigates away, the pending suite history is not committed. `dispose()` cancels the timer but does not flush. Accepted behaviour — the last suite action may be lost from the history stack.

@@ -228,45 +228,15 @@ class _EditorBlock extends StatelessWidget {
                       // entirely. iOS asynchronously resets the native selection back
                       // to the original double-tapped word after Select All, so
                       // iterating contextMenuButtonItems would serve word-scoped
-                      // Cut/Copy actions instead of our global ones.
+                      // Cut/Copy actions instead of our global ones. The visible
+                      // command surface is the app-owned selection toolbar in the
+                      // parent Stack; native selected-text menus are suppressed
+                      // while app selection is active.
                       if (isGlobalSelected ||
                           hasOverlaySelection ||
                           hasExternalRange) {
-                        return AdaptiveTextSelectionToolbar.buttonItems(
-                          anchors: editableTextState.contextMenuAnchors,
-                          buttonItems: [
-                            ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onExtendSelection();
-                                onCut();
-                              },
-                              type: ContextMenuButtonType.cut,
-                            ),
-                            ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onExtendSelection();
-                                onCopy();
-                              },
-                              type: ContextMenuButtonType.copy,
-                            ),
-                            ContextMenuButtonItem(
-                              onPressed: selectAllAndReopenToolbar,
-                              type: ContextMenuButtonType.custom,
-                              label: 'Select All',
-                            ),
-                            if (onPaste != null)
-                              ContextMenuButtonItem(
-                                onPressed: () {
-                                  ContextMenuController.removeAny();
-                                  onPaste!();
-                                },
-                                type: ContextMenuButtonType.custom,
-                                label: 'Paste',
-                              ),
-                          ],
-                        );
+                        ContextMenuController.removeAny();
+                        return const SizedBox.shrink();
                       }
 
                       // Native iOS selection detects the user's one-block
@@ -276,41 +246,8 @@ class _EditorBlock extends StatelessWidget {
                       // selection back to the originally double-tapped word.
                       if (hasPartialNativeSelection) {
                         adoptPartialSelectionAfterMenuBuild();
-                        return AdaptiveTextSelectionToolbar.buttonItems(
-                          anchors: editableTextState.contextMenuAnchors,
-                          buttonItems: [
-                            ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onExtendSelection();
-                                onCut();
-                              },
-                              type: ContextMenuButtonType.cut,
-                            ),
-                            ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onExtendSelection();
-                                onCopy();
-                              },
-                              type: ContextMenuButtonType.copy,
-                            ),
-                            ContextMenuButtonItem(
-                              onPressed: selectAllAndReopenToolbar,
-                              type: ContextMenuButtonType.custom,
-                              label: 'Select All',
-                            ),
-                            if (onPaste != null)
-                              ContextMenuButtonItem(
-                                onPressed: () {
-                                  ContextMenuController.removeAny();
-                                  onPaste!();
-                                },
-                                type: ContextMenuButtonType.custom,
-                                label: 'Paste',
-                              ),
-                          ],
-                        );
+                        ContextMenuController.removeAny();
+                        return const SizedBox.shrink();
                       }
 
                       final List<ContextMenuButtonItem> items =

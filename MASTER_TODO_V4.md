@@ -533,6 +533,13 @@
   The editor debug sentry now also reports command candidates/chosen source so
   the next device test proves the router branch. Awaiting IPA/device
   verification.
+- [P] **iOS App-Owned Selection Command Route**: Device QA showed `Command`
+  stayed `idle`, proving native iOS Cut/Copy can bypass the Flutter/app command
+  router entirely. Non-collapsed selected text now promotes into
+  `GlobalSelectionOverlay`, native selected-text menus are suppressed during
+  app-owned selection, and a compact app toolbar calls Cut/Copy/Paste/Select
+  All directly. Awaiting IPA/device verification that `Command` is non-idle,
+  empty selected blocks survive, and Select All remains intact.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

@@ -439,3 +439,34 @@ Additional clipboard prohibitions:
 - Even ordinary one-block Copy fallback must write `_blockClipboard` in
   addition to the rich/system clipboard. In-app Paste must not depend on a
   separate external clipboard path after Copy.
+
+---
+
+## App-Owned Selected-Text Commands - 2026-05-03
+
+- Device QA proved the native/adaptive iOS toolbar can still bypass Flutter
+  command callbacks. When debug mode shows `Command: idle` after Cut/Copy, the
+  app command router did not run, regardless of how correct the clipboard
+  helpers are.
+- From this point, any non-collapsed selected script text must be treated as an
+  app-owned selection. Native iOS selection may seed the first selected range,
+  but `GlobalSelectionOverlay` owns the visible handles, raw block range,
+  clipboard slices, history mutation, and command toolbar.
+- Selected-text native menus must be suppressed while global/overlay/external
+  app selection exists. The visible command surface is the app selection
+  toolbar in `script_editor_screen.build.dart`.
+- The app selection toolbar calls `_onCutClean()`, `_onCopyClean()`,
+  `_pasteFromGlobalClipboard()`, and `_selectAllBlocks()` directly. A Cut/Copy
+  from that toolbar must update `_selectionCommandDebug`; it must not remain
+  `idle`.
+- `_onSelectionChanged()` may promote a non-collapsed native seed selection into
+  `GlobalSelectionOverlay` only when no global selection, command execution,
+  native-menu guard, or overlay selection is active. This is now an intentional
+  ownership handoff, not a hidden second toolbar or a native/app shared command
+  model.
+- The command order remains: full Select All first, live recognized/overlay raw
+  range second, visible `externalSelection` fallback third, native one-block
+  fallback only when no app-owned selection exists.
+- Search, bookmarks, block taps, background taps, import/load, split/remove,
+  undo/redo/history jumps, and clear-script paths must clear the transient app
+  selection and toolbar without clearing the real `_blockClipboard`.

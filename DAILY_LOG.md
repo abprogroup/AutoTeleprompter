@@ -1239,3 +1239,25 @@
 - **Verification**: Awaiting iOS device QA. If the same selection is tested,
   the desired clipboard debug is a recognized/stored five-slice shape, not
   `copy-visible-app` with only non-empty slices.
+
+## 2026-05-03 - iOS App-Owned Selection Command Route
+
+- **Device QA Root Signal**: User reported `Command` stayed `idle` while
+  clipboard still ignored empty lines and Cut/Copy affected only the first
+  tapped word. This proves native iOS selected-text commands can bypass the
+  Flutter/app command callbacks entirely.
+- **Architecture Correction**: Non-collapsed selected script text is now routed
+  through app-owned selection commands. Native iOS may seed the initial word or
+  range, but `GlobalSelectionOverlay` owns the visible selection and the app
+  toolbar owns Cut/Copy/Paste/Select All.
+- **Runtime Change**: Added an app selection toolbar in the editor build stack,
+  suppressed native selected-text menus during app/global/overlay selection,
+  and promoted eligible native seed selections into the overlay when no global
+  guard/command/overlay selection is active.
+- **Safety Boundary**: The fix is iOS-only and does not touch presenter/STT,
+  other platform runtime folders, import/export serialization, or platform
+  READMEs.
+- **Verification Status**: Local analysis shows no compile errors in the touched
+  editor files, only the existing warning/info load. Physical iPhone QA is still
+  required to verify `Command` changes from `idle` and empty selected blocks
+  survive Cut/Copy/Paste.

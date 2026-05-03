@@ -541,3 +541,26 @@ more regressions than a deliberate app-owned selection engine.
 - Toolbar gating must also recognize non-collapsed `externalSelection` as a
   selectable app range. A highlighted range with a Paste/Select All-only menu is
   a command-routing failure.
+
+---
+
+## App-Owned Toolbar Command Gate - 2026-05-03
+
+- Device QA with `Command: idle` proved that native iOS selected-text commands
+  can bypass Flutter/app callbacks completely. The block recognition layer must
+  therefore not depend on native toolbar Cut/Copy delivery.
+- Recognition now feeds an app-owned selection toolbar. The toolbar is the
+  command gate for selected text and invokes app handlers directly.
+- Native selection remains a seed only. A native non-collapsed selection may be
+  promoted into `GlobalSelectionOverlay`, then native selected-text menus are
+  suppressed so command data cannot fall back to the originally tapped word.
+- Empty selected blocks remain a hard requirement. The recognized raw range is
+  preferred over visible fallback whenever it preserves more block slices,
+  because visible fallback cannot represent empty selected paragraphs.
+- The debug proof for this MVP is two-part: `Range:` must show the intended
+  block/offset shape, and `Command:` must show a non-idle chosen source after
+  app toolbar Cut/Copy.
+- If a future fix reintroduces native toolbar command ownership for selected
+  text, it must first prove on a physical iPhone that Cut/Copy callbacks reach
+  the app command router for one-block, cross-block, empty-block, and Select
+  All selections. Until then, app-owned commands are the only allowed route.

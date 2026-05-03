@@ -330,6 +330,12 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                     ),
                   ),
                 ),
+              if (!_isPendingLoad && _hasAnyActiveEditorSelection)
+                Positioned(
+                  right: 20,
+                  bottom: 24,
+                  child: _buildAppSelectionToolbar(),
+                ),
               if (settings.debugMode)
                 Positioned(
                   bottom: 24,
@@ -338,6 +344,102 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppSelectionToolbar() {
+    Widget action({
+      required IconData icon,
+      required String label,
+      required VoidCallback onPressed,
+    }) {
+      return Tooltip(
+        message: label,
+        child: TextButton.icon(
+          onPressed: () {
+            ContextMenuController.removeAny();
+            onPressed();
+          },
+          icon: Icon(icon, size: 18, color: const Color(0xFFFFBF00)),
+          label: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            minimumSize: const Size(0, 36),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xF21A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0x99FFBF00)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black54,
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            action(
+              icon: Icons.content_cut_rounded,
+              label: 'Cut',
+              onPressed: _onCutClean,
+            ),
+            action(
+              icon: Icons.content_copy_rounded,
+              label: 'Copy',
+              onPressed: _onCopyClean,
+            ),
+            if (_hasPasteableBlockClipboard)
+              action(
+                icon: Icons.content_paste_rounded,
+                label: 'Paste',
+                onPressed: _pasteFromGlobalClipboard,
+              ),
+            action(
+              icon: Icons.select_all_rounded,
+              label: 'All',
+              onPressed: _selectAllBlocks,
+            ),
+            IconButton(
+              tooltip: 'Clear selection',
+              onPressed: () {
+                ContextMenuController.removeAny();
+                _dismissEditorSelectionForUserNavigation(
+                    'app-selection-dismiss');
+              },
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Colors.white70,
+                size: 18,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(
+                width: 34,
+                height: 34,
+              ),
+            ),
+          ],
         ),
       ),
     );

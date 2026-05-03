@@ -2,7 +2,7 @@
 name: Script Editor MVP
 type: component
 platform: iOS
-last_updated: 2026-05-02
+last_updated: 2026-05-03
 ---
 
 # Script Editor MVP - iOS
@@ -172,3 +172,21 @@ When iOS editor work resumes, port these verified Windows editor contracts:
   standalone punctuation, and symbols.
 - Empty blocks can be meaningful file structure and must not be treated as
   cleanup noise.
+
+---
+
+## iOS App-Owned Selection Toolbar - 2026-05-03
+
+- The editor screen now treats non-collapsed selected text as an app-owned
+  script selection. `_EditorBlock` may let native iOS detect the initial word or
+  range, but selected-text commands are presented by the app toolbar in
+  `script_editor_screen.build.dart`.
+- `script_editor_screen.editor_block.dart` must suppress native selected-text
+  menus while global, overlay, or external app selection exists. This prevents
+  UIKit from bypassing `_onCutClean()` / `_onCopyClean()`.
+- The app toolbar is intentionally separate from `FormattingToolbarMVP`.
+  Formatting suites remain the style/editing toolbar; selected-text Cut/Copy/
+  Paste/Select All belongs to the Selection MVP.
+- Editor taps, background taps, search jumps, bookmark jumps, imports, block
+  splits/removals, undo/redo, and history jumps must clear transient selected
+  text UI without clearing `_blockClipboard`.

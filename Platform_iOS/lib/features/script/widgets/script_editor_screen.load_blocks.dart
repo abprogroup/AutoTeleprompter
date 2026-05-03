@@ -297,6 +297,20 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
                 controller.selection.start == 0 &&
                 controller.selection.end == controller.text.length) {
               _selectAllBlocks();
+            } else if (!_isGlobalSelection &&
+                !_isCommandExecuting &&
+                !_isGlobalSelectionNativeGuardActive &&
+                !overlayActive &&
+                controller.selection.isValid &&
+                !controller.selection.isCollapsed) {
+              final blockIndex = _controllers.indexOf(controller);
+              if (blockIndex >= 0) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  ContextMenuController.removeAny();
+                  _extendNativeSelectionToOverlay(blockIndex);
+                });
+              }
             }
           }
           return;

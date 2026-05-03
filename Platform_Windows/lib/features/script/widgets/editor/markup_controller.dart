@@ -169,6 +169,65 @@ class MarkupController extends TextEditingController {
 
   /// Number of visible (non-tag) characters from the start of [text] up to
   /// (but not including) [rawOffset].
+  /// Returns a prefix string of opening markup tags that are active
+  /// (unclosed) at [rawOffset] inside [text].
+  ///
+  /// When deleting a range `[0, rawOffset]` from the start of a block, the
+  /// remaining text (`text.substring(rawOffset)`) loses any opening tags that
+  /// were in the deleted range. Prepending `openTagsAt(text, rawOffset)` to
+  /// the remaining text restores the style context so the cut doesn't wipe
+  /// all formatting from the surviving portion of the block.
+  static String openTagsAt(String text, int rawOffset) {
+    if (rawOffset <= 0 || rawOffset > text.length) return '';
+    final sub = text.substring(0, rawOffset);
+    bool bold = false;
+    bool italic = false;
+    bool underline = false;
+    final textColors = <String>[];
+    final bgColors = <String>[];
+    final sizes = <String>[];
+    final fonts = <String>[];
+    for (final m in _tagRegex.allMatches(sub)) {
+      final tag = m.group(0)!;
+      if (tag == '**') {
+        bold = !bold;
+      } else if (tag == '[u]') {
+        underline = true;
+      } else if (tag == '[/u]') {
+        underline = false;
+      } else if (tag == '[i]') {
+        italic = true;
+      } else if (tag == '[/i]') {
+        italic = false;
+      } else if (m.group(1) != null) {
+        textColors.add('[color=${m.group(1)!}]');
+      } else if (tag == '[/color]') {
+        if (textColors.isNotEmpty) textColors.removeLast();
+      } else if (m.group(2) != null) {
+        bgColors.add('[bg=${m.group(2)!}]');
+      } else if (tag == '[/bg]') {
+        if (bgColors.isNotEmpty) bgColors.removeLast();
+      } else if (m.group(3) != null) {
+        sizes.add('[size=${m.group(3)!}]');
+      } else if (tag == '[/size]') {
+        if (sizes.isNotEmpty) sizes.removeLast();
+      } else if (m.group(4) != null) {
+        fonts.add('[font=${m.group(4)!}]');
+      } else if (tag == '[/font]') {
+        if (fonts.isNotEmpty) fonts.removeLast();
+      }
+    }
+    final sb = StringBuffer();
+    if (bold) sb.write('**');
+    if (italic) sb.write('[i]');
+    if (underline) sb.write('[u]');
+    if (textColors.isNotEmpty) sb.write(textColors.last);
+    if (bgColors.isNotEmpty) sb.write(bgColors.last);
+    if (sizes.isNotEmpty) sb.write(sizes.last);
+    if (fonts.isNotEmpty) sb.write(fonts.last);
+    return sb.toString();
+  }
+
   static int rawToVisualOffset(String text, int rawOffset) {
     int visual = 0;
     int cursor = 0;

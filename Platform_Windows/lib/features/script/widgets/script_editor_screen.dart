@@ -643,6 +643,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                           key: _overlayKey,
                           controllers: _controllers,
                           blockKeys: _blockKeys,
+                          scrollController: _editorScrollController,
                           onSelectionChanged: () => setState(() {
                             _isGlobalSelection = _controllers.isNotEmpty &&
                                 _controllers.every((c) => c.isGlobalSelected);

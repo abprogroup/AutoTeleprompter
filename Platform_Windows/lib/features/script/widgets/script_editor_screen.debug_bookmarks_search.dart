@@ -366,7 +366,15 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
           toRemove.add(i);
         } else if (sel != null && sel.isValid && !sel.isCollapsed) {
           final before = c.text.substring(0, sel.start);
-          final after = c.text.substring(sel.end);
+          final rawAfter = c.text.substring(sel.end);
+          // When sel.start == 0 (cutting from the beginning of the block),
+          // the remaining text may be mid-style: opening tags that were in
+          // the deleted range are gone, leaving orphaned closing tags and a
+          // loss of formatting. Prepend the active tag context at sel.end so
+          // the surviving text retains its styling.
+          final after = sel.start == 0
+              ? MarkupController.openTagsAt(c.text, sel.end) + rawAfter
+              : rawAfter;
           c.text = before + after;
           c.externalSelection = null;
           c.refresh();
@@ -391,7 +399,10 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
       if (c != null && !c.selection.isCollapsed) {
         final sel = c.selection;
         final before = c.text.substring(0, sel.start);
-        final after = c.text.substring(sel.end);
+        final rawAfter = c.text.substring(sel.end);
+        final after = sel.start == 0
+            ? MarkupController.openTagsAt(c.text, sel.end) + rawAfter
+            : rawAfter;
         c.value = TextEditingValue(
           text: before + after,
           selection: TextSelection.collapsed(offset: sel.start),

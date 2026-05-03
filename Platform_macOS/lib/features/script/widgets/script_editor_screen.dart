@@ -101,6 +101,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
 
   // ── State Members ──────────────────────────────────────────────────────────
   final List<MarkupController> _controllers = [];
+  final ScrollController _editorScrollController = ScrollController();
   final List<FocusNode> _focusNodes = [];
   final List<GlobalKey> _blockKeys = [];
   String _currentTitle = 'New Project';
@@ -804,6 +805,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
   @override
   void dispose() {
     _historyTimer?.cancel(); _recentTimer?.cancel(); _autoSaveTimer?.cancel(); _typingBulkTimer?.cancel(); _suiteAutoSaveTimer?.cancel();
+    _editorScrollController.dispose();
     _clearControllers(); super.dispose();
   }
 
@@ -1913,11 +1915,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
                     key: _overlayKey,
                     controllers: _controllers,
                     blockKeys: _blockKeys,
+                    scrollController: _editorScrollController,
                     onSelectionChanged: () => setState(() {
                       _isGlobalSelection = _controllers.isNotEmpty &&
                           _controllers.every((c) => c.isGlobalSelected);
                     }),
                     child: ListView.builder(
+                      controller: _editorScrollController,
                       padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
                       itemCount: _controllers.length,
                       itemBuilder: (context, index) => _EditorBlock(
@@ -2213,7 +2217,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
           toRemove.add(i);
         } else if (sel != null && sel.isValid && !sel.isCollapsed) {
           final before = c.text.substring(0, sel.start);
-          final after = c.text.substring(sel.end);
+          final rawAfter = c.text.substring(sel.end);
+          // Preserve styling when cutting from the start of a block:
+          // opening tags in the deleted range are gone but their closing tags
+          // remain — prepend the active tag context so formatting is retained.
+          final after = sel.start == 0
+              ? MarkupController.openTagsAt(c.text, sel.end) + rawAfter
+              : rawAfter;
           c.text = before + after;
           c.externalSelection = null;
           c.refresh();
@@ -2238,7 +2248,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       if (c != null && !c.selection.isCollapsed) {
         final sel = c.selection;
         final before = c.text.substring(0, sel.start);
-        final after = c.text.substring(sel.end);
+        final rawAfter = c.text.substring(sel.end);
+        final after = sel.start == 0
+            ? MarkupController.openTagsAt(c.text, sel.end) + rawAfter
+            : rawAfter;
         c.value = TextEditingValue(
           text: before + after,
           selection: TextSelection.collapsed(offset: sel.start),

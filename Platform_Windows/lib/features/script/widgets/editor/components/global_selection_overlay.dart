@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +22,10 @@ class GlobalSelectionOverlay extends StatefulWidget {
   final List<GlobalKey> blockKeys;
   final Widget child;
   final VoidCallback onSelectionChanged;
+  /// Editor scroll controller. When provided, dragging a selection handle
+  /// near the top or bottom of the viewport automatically scrolls the list,
+  /// letting users extend selections beyond the visible area.
+  final ScrollController? scrollController;
 
   const GlobalSelectionOverlay({
     super.key,
@@ -28,6 +33,7 @@ class GlobalSelectionOverlay extends StatefulWidget {
     required this.blockKeys,
     required this.child,
     required this.onSelectionChanged,
+    this.scrollController,
   });
 
   @override
@@ -55,6 +61,51 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Offset? _panStartGlobal;
   Offset? _panStartHandleGlobal; // caret global position at the moment of pan start
   final GlobalKey _stackKey = GlobalKey();
+
+  // Drag-handle autoscroll: when a handle is dragged within [_autoScrollZone]
+  // pixels of the top/bottom edge, a periodic timer scrolls the list so the
+  // user can extend the selection beyond the visible viewport.
+  static const double _autoScrollZone = 60.0; // px from edge to trigger
+  static const double _autoScrollMax = 18.0;  // max px per tick (at edge)
+  Timer? _autoScrollTimer;
+
+  void _startAutoScroll(Offset globalHandlePos) {
+    final sc = widget.scrollController;
+    if (sc == null || !sc.hasClients) return;
+    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stack == null) return;
+    final local = stack.globalToLocal(globalHandlePos);
+    final height = _stackSize.height;
+    double speed = 0;
+    if (local.dy < _autoScrollZone) {
+      // Near top — scroll up
+      speed = -_autoScrollMax * (1 - local.dy / _autoScrollZone);
+    } else if (local.dy > height - _autoScrollZone) {
+      // Near bottom — scroll down
+      speed = _autoScrollMax *
+          (1 - (height - local.dy) / _autoScrollZone);
+    }
+    if (speed == 0) {
+      _stopAutoScroll();
+      return;
+    }
+    _autoScrollTimer ??= Timer.periodic(
+      const Duration(milliseconds: 16),
+      (_) {
+        if (!mounted) {
+          _stopAutoScroll();
+          return;
+        }
+        final pos = sc.offset + speed;
+        sc.jumpTo(pos.clamp(0.0, sc.position.maxScrollExtent));
+      },
+    );
+  }
+
+  void _stopAutoScroll() {
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
+  }
 
   // Body-pointer candidate state: pointer-down does NOT immediately start a
   // global selection. We record the origin and the block it landed in, then
@@ -482,6 +533,12 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
 
   @override
+  void dispose() {
+    _stopAutoScroll();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -540,12 +597,17 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           } else {
             _handleUpdate(details.globalPosition, isStart);
           }
+          // Autoscroll when the handle is dragged near the viewport edge
+          _startAutoScroll(details.globalPosition);
         },
-        onPanEnd: (_) => setState(() {
-          if (isStart) _draggingStart = false; else _draggingEnd = false;
-          _panStartGlobal = null;
-          _panStartHandleGlobal = null;
-        }),
+        onPanEnd: (_) {
+          _stopAutoScroll();
+          setState(() {
+            if (isStart) _draggingStart = false; else _draggingEnd = false;
+            _panStartGlobal = null;
+            _panStartHandleGlobal = null;
+          });
+        },
         child: Container(
           width: 40,
           height: 56,

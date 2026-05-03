@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +22,7 @@ class GlobalSelectionOverlay extends StatefulWidget {
   final List<GlobalKey> blockKeys;
   final Widget child;
   final VoidCallback onSelectionChanged;
+  final ScrollController? scrollController;
 
   const GlobalSelectionOverlay({
     super.key,
@@ -28,6 +30,7 @@ class GlobalSelectionOverlay extends StatefulWidget {
     required this.blockKeys,
     required this.child,
     required this.onSelectionChanged,
+    this.scrollController,
   });
 
   @override
@@ -68,6 +71,40 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   int? _candidateBlock;
   int? _candidateOffset;
   bool _bodyDragActive = false;
+
+  // Drag-handle autoscroll
+  static const double _autoScrollZone = 60.0;
+  static const double _autoScrollMax = 18.0;
+  Timer? _autoScrollTimer;
+
+  void _startAutoScroll(Offset globalHandlePos) {
+    final sc = widget.scrollController;
+    if (sc == null || !sc.hasClients) return;
+    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stack == null) return;
+    final local = stack.globalToLocal(globalHandlePos);
+    final height = _stackSize.height;
+    double speed = 0;
+    if (local.dy < _autoScrollZone) {
+      speed = -_autoScrollMax * (1 - local.dy / _autoScrollZone);
+    } else if (local.dy > height - _autoScrollZone) {
+      speed = _autoScrollMax * (1 - (height - local.dy) / _autoScrollZone);
+    }
+    if (speed == 0) {
+      _stopAutoScroll();
+      return;
+    }
+    _autoScrollTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted) { _stopAutoScroll(); return; }
+      final pos = sc.offset + speed;
+      sc.jumpTo(pos.clamp(0.0, sc.position.maxScrollExtent));
+    });
+  }
+
+  void _stopAutoScroll() {
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
+  }
 
   /// True when every block is wholly selected (post Select All, pre refine).
   bool get _isWholeScriptSelected =>
@@ -390,6 +427,12 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   @override
+  void dispose() {
+    _stopAutoScroll();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -446,12 +489,16 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           } else {
             _handleUpdate(details.globalPosition, isStart);
           }
+          _startAutoScroll(details.globalPosition);
         },
-        onPanEnd: (_) => setState(() {
-          if (isStart) _draggingStart = false; else _draggingEnd = false;
-          _panStartGlobal = null;
-          _panStartHandleGlobal = null;
-        }),
+        onPanEnd: (_) {
+          _stopAutoScroll();
+          setState(() {
+            if (isStart) _draggingStart = false; else _draggingEnd = false;
+            _panStartGlobal = null;
+            _panStartHandleGlobal = null;
+          });
+        },
         child: Container(
           width: 40,
           height: 56,

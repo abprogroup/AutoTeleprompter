@@ -76,19 +76,16 @@ class _EditorBlock extends StatelessWidget {
               left: 0,
               top: 2,
               child: Tooltip(
-                message: 'Delete bookmark',
+                message: 'Tap to remove bookmark',
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTap: onBookmarkTap,
                   child: const Padding(
                     padding: EdgeInsets.all(4),
-                    child: Text(
-                      '»',
-                      style: TextStyle(
-                        color: Color(0xFFFFBF00),
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Icon(
+                      Icons.bookmark,
+                      color: Color(0xFFFFBF00),
+                      size: 18,
                     ),
                   ),
                 ),

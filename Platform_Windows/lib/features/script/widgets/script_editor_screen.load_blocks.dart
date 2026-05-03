@@ -270,20 +270,6 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
                 controller.selection.baseOffset == 0 &&
                 controller.selection.extentOffset == controller.text.length) {
               _selectAllBlocks();
-            } else if (!_isGlobalSelection &&
-                !_isCommandExecuting &&
-                !overlayActive &&
-                controller.selection.isValid &&
-                !controller.selection.isCollapsed) {
-              // Native partial selection (double-click word, drag-to-select) →
-              // promote to overlay handles so Cut/Copy commands work on it.
-              final blockIndex = _controllers.indexOf(controller);
-              if (blockIndex >= 0) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  _extendNativeSelectionToOverlay(blockIndex);
-                });
-              }
             }
           }
           return;

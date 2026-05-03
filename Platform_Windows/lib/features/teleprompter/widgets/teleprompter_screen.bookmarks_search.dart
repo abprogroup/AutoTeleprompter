@@ -387,7 +387,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     final wordIndex = _presenterSearchMatches[matchIndex].wordIndex
         .clamp(0, script.words.length - 1)
         .toInt();
-    _jumpToWordIndex(wordIndex);
+    _jumpToWordIndex(wordIndex, immediate: true); // instant jump, not smooth scroll
     ref.read(teleprompterProvider.notifier).jumpToPosition(wordIndex);
   }
 

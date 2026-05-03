@@ -581,7 +581,21 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         return Stack(
           key: _stackKey,
           children: [
-            widget.child,
+            // Recalculate handle positions whenever the scroll view moves so
+            // handles follow the text even when the user scrolls while a
+            // selection is active. Using NotificationListener instead of a
+            // scroll-controller addListener keeps the overlay self-contained.
+            NotificationListener<ScrollNotification>(
+              onNotification: (_) {
+                if (_isSelecting) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _calculateHandlePositions());
+                  });
+                }
+                return false; // let notification bubble
+              },
+              child: widget.child,
+            ),
             if (start != null) _buildHandle(start, true),
             if (end != null) _buildHandle(end, false),
           ],
@@ -598,8 +612,14 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         pos.dx < -40 || pos.dx > _stackSize.width + 40) {
       return const SizedBox.shrink();
     }
+    // Start handle leans LEFT of caret (hit area: [dx-30, dx+10]).
+    // End handle leans RIGHT of caret (hit area: [dx-10, dx+30]).
+    // This prevents the handles from fully overlapping when the selection is
+    // short (a single word), so tapping the left side always hits the start
+    // handle and tapping the right side always hits the end handle.
+    final leftOffset = isStart ? pos.dx - 30 : pos.dx - 10;
     return Positioned(
-      left: (pos.dx - 16).clamp(0.0, _stackSize.width > 40 ? _stackSize.width - 40 : 0.0),
+      left: leftOffset.clamp(0.0, _stackSize.width > 40 ? _stackSize.width - 40 : 0.0),
       top: (pos.dy - 18).clamp(0.0, _stackSize.height > 56 ? _stackSize.height - 56 : 0.0),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

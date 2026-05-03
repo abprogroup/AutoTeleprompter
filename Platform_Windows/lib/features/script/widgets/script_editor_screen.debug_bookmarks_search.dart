@@ -41,6 +41,24 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     );
   }
 
+  /// Called on pointer-up to promote the final native selection (after any
+  /// drag gesture) into the overlay handles. Only fires if:
+  ///  - no global selection is active
+  ///  - overlay has no existing selection (cross-block drag already set it)
+  ///  - a focused block has a non-collapsed, partial (not full-block) selection
+  void _promoteNativeSelectionToOverlay() {
+    if (_isGlobalSelection || _isCommandExecuting) return;
+    if (_overlayKey.currentState?.hasSelection ?? false) return;
+    for (var i = 0; i < _controllers.length; i++) {
+      if (!_focusNodes[i].hasFocus) continue;
+      final sel = _controllers[i].selection;
+      if (!sel.isValid || sel.isCollapsed) continue;
+      if (sel.start == 0 && sel.end == _controllers[i].text.length) continue;
+      _extendNativeSelectionToOverlay(i);
+      return;
+    }
+  }
+
   /// Promotes a native single-block partial selection into the app overlay so
   /// that handles appear after double-click or drag-to-select inside one block.
   void _extendNativeSelectionToOverlay(int blockIndex) {

@@ -471,6 +471,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         },
         onPointerUp: (_) {
           _overlayKey.currentState?.endDragging();
+          // After any gesture ends, promote a native single-block partial
+          // selection to overlay handles. Doing this on pointer-up (not in the
+          // controller listener) prevents the "one letter selected" bug: during
+          // a drag the controller fires continuously and the overlay would freeze
+          // at the first-delta selection once overlayActive becomes true.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _promoteNativeSelectionToOverlay();
+          });
         },
         behavior: HitTestBehavior.translucent,
         // Screen-level Focus that handles arrow-key cross-block navigation.

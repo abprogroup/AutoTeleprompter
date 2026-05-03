@@ -158,6 +158,20 @@ class MarkupController extends TextEditingController {
   // that inserting or removing tags (B/I/U/size/color/font) never shifts the
   // logical selection.
 
+  /// Returns [from] walked backward past any trailing invisible markup tags.
+  static int safeEndOffset(String text, [int? from]) {
+    var pos = from ?? text.length;
+    if (pos <= 0) return 0;
+    bool moved = true;
+    while (moved && pos > 0) {
+      moved = false;
+      for (final m in _tagRegex.allMatches(text)) {
+        if (m.end == pos) { pos = m.start; moved = true; break; }
+      }
+    }
+    return pos;
+  }
+
   /// Returns a prefix string of opening markup tags active at [rawOffset].
   /// Used when deleting `[0, rawOffset]` to preserve the style context of
   /// the remaining text (`text.substring(rawOffset)`).

@@ -307,18 +307,42 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _loadText(initialText);
       _currentTitle = initialTitle;
 
-      if (script?.historyJson != null) {
+      // Read historyJson and historyIndex DIRECTLY from persisted recent
+      // scripts by sessionId — bypasses stale scriptProvider.state.rawText.
+      String? freshHistoryJson = script?.historyJson;
+      int? freshHistoryIndex;
+      if (_currentSessionId != null) {
+        final recents = ref.read(settingsProvider).recentScripts;
+        for (final json in recents) {
+          try {
+            final meta = jsonDecode(json) as Map<String, dynamic>;
+            if (meta['sessionId'] == _currentSessionId) {
+              final mj = meta['historyJson'];
+              final mi = meta['historyIndex'];
+              if (mj is String) freshHistoryJson = mj;
+              if (mi is int) freshHistoryIndex = mi;
+              break;
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (freshHistoryJson != null) {
         try {
-          final List<dynamic> historyData = jsonDecode(script!.historyJson!);
+          final historyData = jsonDecode(freshHistoryJson) as List<dynamic>;
           _history.clear();
           _history.addAll(historyData.map((d) => EditorState.fromJson(d)));
           _historyIndex = _history.length - 1;
         } catch (_) {}
       }
 
+      final resolvedHistoryIndex = freshHistoryIndex ?? script?.historyIndex;
+
       _isInit = true;
-      if (script != null && script.historyIndex >= 0 && script.historyIndex < _history.length) {
-        _historyIndex = script.historyIndex;
+      if (resolvedHistoryIndex != null &&
+          resolvedHistoryIndex >= 0 &&
+          resolvedHistoryIndex < _history.length) {
+        _historyIndex = resolvedHistoryIndex;
         final s = _history[_historyIndex];
         _loadText(s.text);
         Future.microtask(() { if (mounted) _applySettingsFromState(s); });
@@ -1082,19 +1106,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isDirty = false;
       final preFocusIdx = _lastFocusedController != null
           ? _controllers.indexOf(_lastFocusedController!) : 0;
-      final preScroll = _editorScrollController.hasClients
-          ? _editorScrollController.offset : 0.0;
       setState(() { _historyIndex--; _applyState(_history[_historyIndex]); });
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) {
           _isCommandExecuting = false;
           _isDirty = false;
-          if (_editorScrollController.hasClients) {
-            _editorScrollController.jumpTo(
-                preScroll.clamp(0.0, _editorScrollController.position.maxScrollExtent));
-          }
           final t = preFocusIdx.clamp(0, _controllers.length - 1);
           _focusNodes[t].requestFocus();
+          _scrollEditorBlockIntoView(t);
         }
       });
       _forceRecentUpdate();
@@ -1107,19 +1126,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
       _isDirty = false;
       final preFocusIdx = _lastFocusedController != null
           ? _controllers.indexOf(_lastFocusedController!) : 0;
-      final preScroll = _editorScrollController.hasClients
-          ? _editorScrollController.offset : 0.0;
       setState(() { _historyIndex++; _applyState(_history[_historyIndex]); });
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) {
           _isCommandExecuting = false;
           _isDirty = false;
-          if (_editorScrollController.hasClients) {
-            _editorScrollController.jumpTo(
-                preScroll.clamp(0.0, _editorScrollController.position.maxScrollExtent));
-          }
           final t = preFocusIdx.clamp(0, _controllers.length - 1);
           _focusNodes[t].requestFocus();
+          _scrollEditorBlockIntoView(t);
         }
       });
       _forceRecentUpdate();
@@ -2096,14 +2110,19 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen> with St
     if (targetIdx < 0 || targetIdx >= _controllers.length) return;
     _lastFocusedController = _controllers[targetIdx];
     _focusNodes[targetIdx].requestFocus();
+    final text = _controllers[targetIdx].text;
     int offset;
     if (atOffset != null) {
-      offset = atOffset.clamp(0, _controllers[targetIdx].text.length);
+      final raw = atOffset.clamp(0, text.length);
+      offset = (atOffset >= text.length)
+          ? MarkupController.safeEndOffset(text)
+          : raw;
     } else if (x != null) {
       final layout = _getVerticalLayout(targetIdx);
       offset = layout.getPositionAtX(x, fromBottom: atEnd ?? false);
     } else {
-      offset = atEnd == true ? _controllers[targetIdx].text.length : 0;
+      final raw = atEnd == true ? text.length : 0;
+      offset = atEnd == true ? MarkupController.safeEndOffset(text) : raw;
     }
     _controllers[targetIdx].selection = TextSelection.collapsed(offset: offset);
     _scrollEditorBlockIntoView(targetIdx);

@@ -354,14 +354,12 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         if (mounted) {
           _isCommandExecuting = false;
           _isDirty = false;
-          // Restore scroll position so the view doesn't jump after undo
-          if (_editorScrollController.hasClients) {
-            _editorScrollController.jumpTo(
-                preScroll.clamp(0.0, _editorScrollController.position.maxScrollExtent));
-          }
-          // Restore focus to approximately the same block
+          // Focus the same block the user was editing. scrollEditorBlockIntoView
+          // ensures it's visible without jumping the entire viewport (unlike
+          // clamping preScroll which snaps to end when undoing to shorter content).
           final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
           _focusNodes[targetIdx].requestFocus();
+          _scrollEditorBlockIntoView(targetIdx);
         }
       });
       _forceRecentUpdate();
@@ -375,9 +373,6 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       final preFocusIdx = _lastFocusedController != null
           ? _controllers.indexOf(_lastFocusedController!)
           : 0;
-      final preScroll = _editorScrollController.hasClients
-          ? _editorScrollController.offset
-          : 0.0;
       setState(() {
         _historyIndex++;
         _applyState(_history[_historyIndex]);
@@ -386,12 +381,9 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         if (mounted) {
           _isCommandExecuting = false;
           _isDirty = false;
-          if (_editorScrollController.hasClients) {
-            _editorScrollController.jumpTo(
-                preScroll.clamp(0.0, _editorScrollController.position.maxScrollExtent));
-          }
           final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
           _focusNodes[targetIdx].requestFocus();
+          _scrollEditorBlockIntoView(targetIdx);
         }
       });
       _forceRecentUpdate();

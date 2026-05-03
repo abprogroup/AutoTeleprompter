@@ -55,11 +55,10 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     if (!mounted) return;
 
     if (choice == true) {
-      // Continue: jump instantly to the saved position (no smooth animation —
-      // in long scripts the scroll animation is too slow).
-      _jumpToWordIndex(savedIndex, immediate: true);
+      // Continue: script is already scrolled to savedIndex (done before showing
+      // the dialog). Nothing more to do — just stay.
     } else {
-      // Restart: reset provider position and jump to top.
+      // Restart: reset provider word-index and jump to the beginning.
       ref.read(teleprompterProvider.notifier).resetPosition();
       _jumpToWordIndex(0, immediate: true);
     }

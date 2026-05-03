@@ -54,9 +54,14 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         final savedIndex = ref.read(teleprompterProvider).confirmedWordIndex;
         if (savedIndex > 0 && !_resumeDialogShown) {
           _resumeDialogShown = true;
-          _showResumeDialog(savedIndex);
+          // Jump to the saved position first so the user can see it before
+          // deciding whether to continue or restart.
+          _scrollToWordIndex(savedIndex, immediately: true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _showResumeDialog(savedIndex);
+          });
         } else {
-          // No prior position — start fresh at the top.
+          // No prior position — start at the top.
           ref.read(teleprompterProvider.notifier).resetPosition();
           _scrollController.jumpTo(0);
         }
@@ -183,8 +188,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
     if (!mounted) return;
     if (choice == true) {
-      // Jump instantly — smooth scroll takes too long in a large script.
-      _scrollToWordIndex(savedIndex, immediately: true);
+      // Continue: already at savedIndex (scrolled before showing dialog). Stay.
     } else {
       ref.read(teleprompterProvider.notifier).resetPosition();
       _scrollController.jumpTo(0);

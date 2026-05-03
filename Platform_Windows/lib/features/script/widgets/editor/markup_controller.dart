@@ -169,6 +169,34 @@ class MarkupController extends TextEditingController {
 
   /// Number of visible (non-tag) characters from the start of [text] up to
   /// (but not including) [rawOffset].
+  /// Returns [from] walked backward past any trailing invisible markup tags.
+  ///
+  /// When navigating into a block from the right (e.g. arrowLeft cross-block),
+  /// placing the cursor at [text.length] can trap it between the end of the
+  /// raw string and the end of a trailing invisible tag. Flutter's default
+  /// cursor-left then increments the position INTO the tag; MarkupController's
+  /// value-setter snaps it back to the end of the tag — forever stuck.
+  ///
+  /// Placing the cursor at safeEndOffset instead lands just before those
+  /// trailing tags, so the very next arrowLeft moves past a real character.
+  static int safeEndOffset(String text, [int? from]) {
+    var pos = from ?? text.length;
+    if (pos <= 0) return 0;
+    // Walk backward: if pos is exactly at the END of a tag, step to its start.
+    bool moved = true;
+    while (moved && pos > 0) {
+      moved = false;
+      for (final m in _tagRegex.allMatches(text)) {
+        if (m.end == pos) {
+          pos = m.start;
+          moved = true;
+          break;
+        }
+      }
+    }
+    return pos;
+  }
+
   /// Returns a prefix string of opening markup tags that are active
   /// (unclosed) at [rawOffset] inside [text].
   ///

@@ -247,20 +247,44 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _loadText(initialText);
       _currentTitle = initialTitle;
 
-      if (script?.historyJson != null) {
+      // Read historyJson and historyIndex DIRECTLY from the persisted recent
+      // scripts entry (matched by sessionId).  scriptProvider.state.rawText is
+      // only updated by _startPresenting, so it can be stale when the user
+      // navigates away and back without going through the presenter.
+      String? freshHistoryJson = script?.historyJson;
+      int? freshHistoryIndex;
+      if (_currentSessionId != null) {
+        final recents = ref.read(settingsProvider).recentScripts;
+        for (final json in recents) {
+          try {
+            final meta = jsonDecode(json) as Map<String, dynamic>;
+            if (meta['sessionId'] == _currentSessionId) {
+              final mj = meta['historyJson'];
+              final mi = meta['historyIndex'];
+              if (mj is String) freshHistoryJson = mj;
+              if (mi is int) freshHistoryIndex = mi;
+              break;
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (freshHistoryJson != null) {
         try {
-          final List<dynamic> historyData = jsonDecode(script!.historyJson!);
+          final List<dynamic> historyData = jsonDecode(freshHistoryJson);
           _history.clear();
           _history.addAll(historyData.map((d) => EditorState.fromJson(d)));
           _historyIndex = _history.length - 1;
         } catch (_) {}
       }
 
+      final resolvedHistoryIndex = freshHistoryIndex ?? script?.historyIndex;
+
       _isInit = true;
-      if (script != null &&
-          script.historyIndex >= 0 &&
-          script.historyIndex < _history.length) {
-        _historyIndex = script.historyIndex;
+      if (resolvedHistoryIndex != null &&
+          resolvedHistoryIndex >= 0 &&
+          resolvedHistoryIndex < _history.length) {
+        _historyIndex = resolvedHistoryIndex;
         final s = _history[_historyIndex];
         _loadText(s.text);
         Future.microtask(() {
@@ -877,14 +901,22 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (targetIdx < 0 || targetIdx >= _controllers.length) return;
     _lastFocusedController = _controllers[targetIdx];
     _focusNodes[targetIdx].requestFocus();
+    final text = _controllers[targetIdx].text;
     int offset;
     if (atOffset != null) {
-      offset = atOffset.clamp(0, _controllers[targetIdx].text.length);
+      final raw = atOffset.clamp(0, text.length);
+      // When entering a block at the END (arrowLeft cross-block), walk backward
+      // past any trailing invisible tags so the cursor isn't trapped just after a
+      // tag's end where MarkupController would snap it back on every arrowLeft.
+      offset = (atOffset >= text.length)
+          ? MarkupController.safeEndOffset(text)
+          : raw;
     } else if (x != null) {
       final layout = _getVerticalLayout(targetIdx);
       offset = layout.getPositionAtX(x, fromBottom: atEnd ?? false);
     } else {
-      offset = atEnd == true ? _controllers[targetIdx].text.length : 0;
+      final raw = atEnd == true ? text.length : 0;
+      offset = atEnd == true ? MarkupController.safeEndOffset(text) : raw;
     }
     _controllers[targetIdx].selection = TextSelection.collapsed(offset: offset);
     _scrollEditorBlockIntoView(targetIdx);

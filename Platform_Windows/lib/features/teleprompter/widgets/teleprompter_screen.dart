@@ -108,7 +108,14 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         if (currentIndex > 0 && !_resumeDialogShown) {
           _resumeDialogShown = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _showResumeDialog(currentIndex);
+            if (!mounted) return;
+            // Jump to the saved position FIRST so the user can see it in the
+            // faded background before deciding whether to continue or restart.
+            _jumpToWordIndex(currentIndex, immediate: true);
+            // Show the dialog after layout settles.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showResumeDialog(currentIndex);
+            });
           });
         }
       }

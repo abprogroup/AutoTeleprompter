@@ -304,3 +304,16 @@ save entries created after selection-based commands.
   true mirror of the already-working Up behavior.
 - This rule is keyboard-only. The handle drag/autoscroll system is considered
   verified and must not be edited for vertical-arrow fixes.
+
+## 2026-05-04 V5 Shift Owner + Body Drag Autoscroll Rule
+
+- Shift is a selection modifier only. Arrow target helpers decide the normal
+  destination; Shift applies anchor-to-focus selection to that destination.
+- Native `EditableText` must not also process Shift+Arrow after the app route
+  has claimed it. This prevents duplicate native/app selection mutations,
+  false Select All escalation, and stale overlay reuse.
+- Empty blocks remain real selection stops because the shared arrow target
+  resolver owns empty-row navigation, not Shift-specific branches.
+- Body click-drag autoscroll is separate from handle autoscroll. The verified
+  `_HandleDragSession` must remain unchanged; body drag uses its own timer and
+  stops on safe-zone return, release, cancel, clear, dispose, or scroll clamp.

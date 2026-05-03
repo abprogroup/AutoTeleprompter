@@ -1645,3 +1645,19 @@
 - **Verification Status**: Targeted analyzer reports no new compile errors;
   existing Windows warnings/infos remain. Awaiting diff check, push, and
   Windows workflow verification.
+
+## 2026-05-04 - Windows v5 Shift Selection Isolation + Body Drag Scroll
+
+- **Device QA Input**: User confirmed arrow navigation works well until Shift
+  is added, and requested click-drag selection to scroll at the editor edges
+  like handle dragging.
+- **Keyboard Fix**: Shift+Arrow now enters one app-owned route. Existing arrow
+  target helpers decide the destination, while Shift only extends the
+  anchor-to-focus range. Stale overlay selection is cleared before reuse, and
+  transient full-block native selections no longer escalate to Select All while
+  Shift is pressed.
+- **Body Drag Fix**: Body click-drag selection now has a separate edge
+  autoscroll timer that updates only the body-drag focus endpoint. The verified
+  handle drag/autoscroll session is intentionally untouched.
+- **Verification Status**: Awaiting targeted analyzer, diff check, push, and
+  Windows workflow verification.

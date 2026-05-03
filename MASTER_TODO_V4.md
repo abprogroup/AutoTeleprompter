@@ -754,3 +754,9 @@
   vertical line detection and target selection use mirrored TextPainter line
   metric centers instead of asymmetric top/bottom boundary checks. Awaiting
   Windows workflow and device QA.
+- [P] **Windows Shift Selection Isolation + Body Drag Scroll**: Shift-arrow
+  handling is being reduced to one app-owned route where normal arrow target
+  helpers choose the destination and Shift only extends anchor-to-focus
+  selection. Body click-drag selection receives its own edge autoscroll timer;
+  the verified handle drag/autoscroll system remains untouched. Awaiting
+  Windows workflow and device QA.

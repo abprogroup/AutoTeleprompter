@@ -408,7 +408,14 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     _handleDrag?.cancelAutoScroll();
   }
 
+  void _stopBodyAutoScroll() {
+    _bodyAutoScrollTimer?.cancel();
+    _bodyAutoScrollTimer = null;
+  }
+
   void _resetDragState() {
+    _stopBodyAutoScroll();
+    _latestBodyDragGlobal = null;
     _candidatePos = null;
     _candidateBlock = null;
     _candidateOffset = null;
@@ -467,6 +474,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   int? _candidateBlock;
   int? _candidateOffset; // cached raw char offset at pointer-down
   bool _bodyDragActive = false;
+  Offset? _latestBodyDragGlobal;
+  Timer? _bodyAutoScrollTimer;
 
   /// True when every block is wholly selected (post Select All, pre refine).
   bool get _isWholeScriptSelected =>
@@ -711,6 +720,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     }
     if (_ignoreBodyDragUntilPointerUp) return;
     _candidatePos = globalPos;
+    _latestBodyDragGlobal = globalPos;
     _candidateBlock = _blockAtPosition(globalPos);
     _candidateOffset = null;
     _bodyDragActive = false;
@@ -732,13 +742,15 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   void updateDragging(Offset globalPos) {
     if (_ignoreBodyDragUntilPointerUp) return;
     if (_candidatePos == null) return;
+    _latestBodyDragGlobal = globalPos;
     if (!_bodyDragActive) {
       final currentBlock = _blockAtPosition(globalPos);
       final crossed = currentBlock != null &&
           _candidateBlock != null &&
           currentBlock != _candidateBlock;
       final emptyToBlock = _candidateBlock == null && currentBlock != null;
-      if (!crossed && !emptyToBlock) return;
+      final edgeDrag = _shouldStartBodyEdgeDrag(globalPos);
+      if (!crossed && !emptyToBlock && !edgeDrag) return;
 
       _bodyDragActive = true;
       _enterRefineMode();
@@ -773,9 +785,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         }
         _handleUpdate(globalPos, false);
       });
+      _updateBodyAutoScroll(globalPos);
       return;
     }
     _handleUpdate(globalPos, false);
+    _updateBodyAutoScroll(globalPos);
   }
 
   void endDragging() {
@@ -793,6 +807,86 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         : SelectionSessionMode.none;
     _pointerState = SelectionPointerState.inside;
     // Selection persists after drag
+  }
+
+  bool _shouldStartBodyEdgeDrag(Offset globalPos) {
+    if (_handleDrag != null ||
+        _candidateBlock == null ||
+        _candidateOffset == null ||
+        _candidatePos == null) {
+      return false;
+    }
+    if ((globalPos - _candidatePos!).distance <= 4.0) return false;
+    if (_pointerStateFor(globalPos) != SelectionPointerState.edgeZone) {
+      return false;
+    }
+    return _bodyScrollSpeed(globalPos) != 0;
+  }
+
+  double _bodyScrollSpeed(Offset globalPos) {
+    final sc = widget.scrollController;
+    if (sc == null || !sc.hasClients) return 0;
+    final speed = _edgeScrollSpeed(globalPos);
+    if (speed == 0) return 0;
+    final next = (sc.offset + speed)
+        .clamp(sc.position.minScrollExtent, sc.position.maxScrollExtent)
+        .toDouble();
+    return next == sc.offset ? 0 : speed;
+  }
+
+  void _updateBodyAutoScroll(Offset globalPos) {
+    if (_handleDrag != null || !_bodyDragActive) {
+      _stopBodyAutoScroll();
+      return;
+    }
+    _latestBodyDragGlobal = globalPos;
+    if (_pointerStateFor(globalPos) == SelectionPointerState.edgeZone &&
+        _bodyScrollSpeed(globalPos) != 0) {
+      _ensureBodyAutoScroll();
+    } else {
+      _stopBodyAutoScroll();
+    }
+  }
+
+  void handleBodyPointerExitedEditor(Offset globalPos) {
+    if (!_bodyDragActive || _handleDrag != null) return;
+    _latestBodyDragGlobal = globalPos;
+    _updateBodyAutoScroll(globalPos);
+  }
+
+  void _ensureBodyAutoScroll() {
+    if (_bodyAutoScrollTimer != null) return;
+    final sc = widget.scrollController;
+    if (sc == null || !sc.hasClients) return;
+    _bodyAutoScrollTimer = Timer.periodic(
+      const Duration(milliseconds: 16),
+      (_) {
+        if (!mounted || !_bodyDragActive || _handleDrag != null) {
+          _stopBodyAutoScroll();
+          return;
+        }
+        final pointer = _latestBodyDragGlobal;
+        if (pointer == null || !sc.hasClients) {
+          _stopBodyAutoScroll();
+          return;
+        }
+        if (_pointerStateFor(pointer) != SelectionPointerState.edgeZone) {
+          _stopBodyAutoScroll();
+          return;
+        }
+        final speed = _bodyScrollSpeed(pointer);
+        if (speed == 0) {
+          _stopBodyAutoScroll();
+          return;
+        }
+        final next = (sc.offset + speed)
+            .clamp(sc.position.minScrollExtent, sc.position.maxScrollExtent)
+            .toDouble();
+        sc.jumpTo(next);
+        _handleUpdate(pointer, false);
+        refreshPositions();
+      },
+    );
   }
 
   void _handleUpdate(Offset globalPos, bool isStart) {
@@ -1064,6 +1158,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   @override
   void dispose() {
     _discardHandleDragSession();
+    _stopBodyAutoScroll();
     super.dispose();
   }
 

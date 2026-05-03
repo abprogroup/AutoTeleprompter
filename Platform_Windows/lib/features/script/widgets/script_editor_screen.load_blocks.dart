@@ -265,6 +265,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             if (!_isGlobalSelection &&
                 !_isCommandExecuting &&
                 !overlayActive &&
+                !HardwareKeyboard.instance.isShiftPressed &&
                 controller.text.isNotEmpty &&
                 controller.selection.baseOffset == 0 &&
                 controller.selection.extentOffset == controller.text.length) {

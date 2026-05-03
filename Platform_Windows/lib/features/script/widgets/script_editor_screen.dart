@@ -461,8 +461,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       bottomNavigationBar:
           _buildBottomActions(keyboardVisible: keyboardVisible),
       body: MouseRegion(
-        onExit: (event) =>
-            _overlayKey.currentState?.handlePointerExitedEditor(event.position),
+        onExit: (event) {
+          final overlay = _overlayKey.currentState;
+          overlay?.handlePointerExitedEditor(event.position);
+          overlay?.handleBodyPointerExitedEditor(event.position);
+        },
         child: Listener(
           onPointerDown: (event) {
             if (event.buttons == kPrimaryButton) {
@@ -861,11 +864,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return false;
     }
     final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isShiftPressed && !_isGlobalSelection && _hasAppSelection) {
-      if (!_clearStaleOverlaySelectionForShift(keyboard) &&
-          _extendAppSelectionForArrow(key, keyboard)) {
-        return true;
-      }
+    if (keyboard.isShiftPressed) {
+      return _extendAppSelectionForArrow(key, keyboard);
     }
     if (_clearAppSelectionForArrow(key)) return true;
     final hasModifier = keyboard.isControlPressed ||
@@ -878,9 +878,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     return _handleEditorArrowKey(_arrowKeyDummyNode, event) ==
         KeyEventResult.handled;
   }
-
-  bool get _hasAppSelection =>
-      _isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false);
 
   bool _clearStaleOverlaySelectionForShift(HardwareKeyboard keyboard) {
     if (!keyboard.isShiftPressed || _isGlobalSelection) return false;
@@ -1079,26 +1076,28 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     LogicalKeyboardKey key,
     HardwareKeyboard keyboard,
   ) {
-    final session = _overlayKey.currentState?.selectionSessionSnapshot;
-    if (session == null) return false;
-    final anchor = session.anchor;
-    final focus = session.focus;
-    final target = _isPlainShiftVerticalArrow(key, keyboard)
-        ? _plainShiftVerticalLineTarget(
-            block: focus.block,
-            offset: focus.offset,
-            key: key,
-          )
-        : _arrowTargetFromPosition(
-            key: key,
-            block: focus.block,
-            offset: focus.offset,
-            keyboard: keyboard,
-            allowInBlockHorizontalStep:
-                !keyboard.isControlPressed && !keyboard.isAltPressed,
-            allowInBlockVerticalStep: true,
-          );
-    if (target == null) return true;
+    final seed = _shiftSelectionSeed(keyboard);
+    if (seed == null) {
+      _lastArrowDecision = 'shift ${key.keyLabel}: no focused caret';
+      return true;
+    }
+    final anchor = seed.anchor;
+    final focus = seed.focus;
+    final target = _shiftArrowTarget(
+      key: key,
+      keyboard: keyboard,
+      focus: focus,
+    );
+    if (target == null) {
+      _lastArrowDecision =
+          'shift ${key.keyLabel}: boundary ${focus.block}:${focus.offset}';
+      return true;
+    }
+    if (target.block == focus.block && target.offset == focus.offset) {
+      _lastArrowDecision =
+          'shift ${key.keyLabel}: unchanged ${focus.block}:${focus.offset}';
+      return true;
+    }
     final adjusted = _clampKeyboardTargetAtAnchor(
       anchor: anchor,
       focus: focus,
@@ -1113,6 +1112,67 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _lastArrowDecision =
         'extend ${key.keyLabel}: ${anchor.block}:${anchor.offset}-${adjusted.block}:${adjusted.offset}';
     return true;
+  }
+
+  ({SelectionEndpoint anchor, SelectionEndpoint focus})? _shiftSelectionSeed(
+    HardwareKeyboard keyboard,
+  ) {
+    _clearStaleOverlaySelectionForShift(keyboard);
+    final controller = _lastFocusedController ?? _activeController;
+    if (controller == null) return null;
+    final block = _controllers.indexOf(controller);
+    if (block < 0) return null;
+    final selection = controller.selection.isValid
+        ? controller.selection
+        : const TextSelection.collapsed(offset: 0);
+    final realAnchor = SelectionEndpoint(
+      block: block,
+      offset: selection.baseOffset.clamp(0, controller.text.length).toInt(),
+    );
+    final realFocus = SelectionEndpoint(
+      block: block,
+      offset: selection.extentOffset.clamp(0, controller.text.length).toInt(),
+    );
+    final session = _overlayKey.currentState?.selectionSessionSnapshot;
+    final visibleOverlayRange = _hasVisibleAppSelectionRange();
+    if (session != null &&
+        visibleOverlayRange &&
+        _sameEndpoint(session.focus, realFocus)) {
+      return (anchor: session.anchor, focus: session.focus);
+    }
+    if (visibleOverlayRange || _isGlobalSelection) {
+      _overlayKey.currentState?.clearSelection();
+      for (final c in _controllers) {
+        c.isGlobalSelected = false;
+        c.externalSelection = null;
+        c.refresh();
+      }
+      _isGlobalSelection = false;
+    }
+    return (anchor: realAnchor, focus: realFocus);
+  }
+
+  ({int block, int offset})? _shiftArrowTarget({
+    required LogicalKeyboardKey key,
+    required HardwareKeyboard keyboard,
+    required SelectionEndpoint focus,
+  }) {
+    if (_isPlainShiftVerticalArrow(key, keyboard)) {
+      return _plainShiftVerticalLineTarget(
+        block: focus.block,
+        offset: focus.offset,
+        key: key,
+      );
+    }
+    return _arrowTargetFromPosition(
+      key: key,
+      block: focus.block,
+      offset: focus.offset,
+      keyboard: keyboard,
+      allowInBlockHorizontalStep:
+          !keyboard.isControlPressed && !keyboard.isAltPressed,
+      allowInBlockVerticalStep: true,
+    );
   }
 
   bool _isPlainShiftVerticalArrow(

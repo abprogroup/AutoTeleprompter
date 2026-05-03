@@ -535,3 +535,19 @@ file and the matching MVP docs.
   Alt, and bookmark behavior remain otherwise unchanged.
 - Do not modify `GlobalSelectionOverlay` or handle drag lifecycle for this
   keyboard-only correction.
+
+## 2026-05-04 V5 Shift Selection Isolation
+
+- The script editor owns every Shift+Arrow event before native `EditableText`
+  can process it. Shift does not calculate a separate navigation path; it only
+  extends selection to the target that the matching non-Shift arrow route would
+  choose.
+- App-owned Shift selection uses a fixed anchor and moving focus. A live
+  overlay may continue only when its focus endpoint matches the focused caret;
+  otherwise stale highlights are cleared and the current caret starts a fresh
+  selection.
+- The full-block Select All escalation guard must ignore transient full-block
+  native selections while Shift is pressed.
+- Click-drag selection can edge-scroll the editor with its own body-drag timer.
+  Handle drag/autoscroll remains the verified handle-only system and should not
+  be changed for body-drag behavior.

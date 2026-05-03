@@ -60,6 +60,11 @@ class _SearchIntent extends Intent {
   const _SearchIntent();
 }
 
+enum _BlockClipboardKind {
+  partialSelection,
+  fullScript,
+}
+
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
@@ -123,6 +128,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isDirty = false;
   bool _isLoading = false;
   List<String>? _blockClipboard; // raw markup per block, written by Cut/Copy
+  _BlockClipboardKind _blockClipboardKind =
+      _BlockClipboardKind.partialSelection;
   String? _plainBlockClipboardText;
   List<String>? _globalSelectionSnapshot;
   DateTime? _globalSelectionSnapshotAt;
@@ -139,6 +146,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String _lastSearchQuery = '';
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
+  bool _keyboardDismissedForSelection = false;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
 
   // v3.9.6: Professional History Bulking

@@ -100,3 +100,20 @@ range geometry, History owns snapshot timing, and File I/O owns export encoding.
 - The selected-text app toolbar owns Cut/Copy/Paste/Select All only. It must not
   replace the Text/Layout/Color formatting suites or become a second styling
   toolbar.
+
+---
+
+## iOS Partial Clipboard Style Envelope - 2026-05-03
+
+- A partial selection inside styled raw markup must preserve the style envelope
+  in the clipboard slice. For example, selecting part of
+  `[color=#FF0000]red text[/color]` stores that selected text wrapped with the
+  color tag so paste restores the red style.
+- This envelope is slice-local. It must not apply one block's color/font/size
+  to any other selected block or to unselected surrounding text.
+- Formatting-suite taps must preserve app-owned selection. The toolbar/suite
+  surface is not editor background navigation, and accidental suite taps must
+  not clear the selection while leaving a stale visual highlight.
+- Keyboard `Done` must only dismiss the keyboard. Applying style after `Done`
+  may reuse the preserved selection but must not force keyboard focus unless the
+  user taps the script again.

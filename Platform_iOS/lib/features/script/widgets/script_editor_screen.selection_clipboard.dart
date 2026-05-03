@@ -52,7 +52,8 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     _selectionCommandDebug = '$command chosen=$chosen '
         'r=[${_blockDebugShape(recognized)}] '
         'v=[${_blockDebugShape(visible)}] '
-        'o=[${_blockDebugShape(overlay)}]';
+        'o=[${_blockDebugShape(overlay)}] '
+        'clip=${_blockClipboardKind.name}';
   }
 
   bool _isBetterBlockSnapshot(List<String> candidate, List<String>? current) {
@@ -105,6 +106,57 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return _BlockSelectionRange(start: start, end: end, source: source);
   }
 
+  String _rawSlicePreservingEnclosingStyles(
+    String text,
+    int start,
+    int end,
+  ) {
+    final safeStart = start.clamp(0, text.length).toInt();
+    final safeEnd = end.clamp(safeStart, text.length).toInt();
+    final selected = text.substring(safeStart, safeEnd);
+    if (selected.isEmpty) return selected;
+
+    final wrappers = <({int index, String open, String close})>[];
+    final bracketOpen = RegExp(
+        r'\[(u|i|color|bg|font|size|align|rtl|ltr|center|left|right)(?:=[^\]]+)?\]');
+    for (final match in bracketOpen.allMatches(text)) {
+      if (match.start >= safeStart) break;
+      final family = match.group(1)!;
+      final close = family == 'align' && match.group(0)!.startsWith('[align=')
+          ? '[/${match.group(0)!.substring(1)}'
+          : '[/$family]';
+      final closeIndex = text.indexOf(close, match.end);
+      if (closeIndex >= safeEnd) {
+        wrappers.add((index: match.start, open: match.group(0)!, close: close));
+      }
+    }
+
+    final boldBefore =
+        RegExp(r'\*\*').allMatches(text.substring(0, safeStart)).length;
+    if (boldBefore.isOdd) {
+      final closeIndex = text.indexOf('**', safeStart);
+      if (closeIndex >= safeEnd) {
+        wrappers.add((
+          index: text.lastIndexOf('**', safeStart),
+          open: '**',
+          close: '**'
+        ));
+      }
+    }
+
+    if (wrappers.isEmpty) return selected;
+    wrappers.sort((a, b) => a.index.compareTo(b.index));
+    final buffer = StringBuffer();
+    for (final wrapper in wrappers) {
+      buffer.write(wrapper.open);
+    }
+    buffer.write(selected);
+    for (final wrapper in wrappers.reversed) {
+      buffer.write(wrapper.close);
+    }
+    return buffer.toString();
+  }
+
   List<String>? _rawMarkupSlicesForRange(_BlockSelectionRange range) {
     final normalized =
         _normalizeBlockRange(range.start, range.end, range.source);
@@ -114,17 +166,31 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     final end = normalized.end;
     if (start.blockIndex == end.blockIndex) {
       final text = _controllers[start.blockIndex].text;
-      return [text.substring(start.rawOffset, end.rawOffset)];
+      return [
+        _rawSlicePreservingEnclosingStyles(
+          text,
+          start.rawOffset,
+          end.rawOffset,
+        )
+      ];
     }
 
     final slices = <String>[];
     final startText = _controllers[start.blockIndex].text;
-    slices.add(startText.substring(start.rawOffset));
+    slices.add(_rawSlicePreservingEnclosingStyles(
+      startText,
+      start.rawOffset,
+      startText.length,
+    ));
     for (var i = start.blockIndex + 1; i < end.blockIndex; i++) {
       slices.add(_controllers[i].text);
     }
     final endText = _controllers[end.blockIndex].text;
-    slices.add(endText.substring(0, end.rawOffset));
+    slices.add(_rawSlicePreservingEnclosingStyles(
+      endText,
+      0,
+      end.rawOffset,
+    ));
     return slices;
   }
 
@@ -316,7 +382,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     String reason,
   ) {
     if (blocks.isEmpty || blocks.every((b) => b.isEmpty)) return;
-    _setBlockClipboard(blocks);
+    _setBlockClipboard(blocks, kind: _BlockClipboardKind.fullScript);
     _writePlainClipboardForBlocks(blocks);
   }
 
@@ -379,7 +445,9 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
         if (sel != null && sel.isValid && !sel.isCollapsed) {
           final start = sel.start.clamp(0, c.text.length);
           final end = sel.end.clamp(0, c.text.length);
-          if (start < end) slice = c.text.substring(start, end);
+          if (start < end) {
+            slice = _rawSlicePreservingEnclosingStyles(c.text, start, end);
+          }
         }
       }
       if (slice.isNotEmpty) blocks.add(slice);
@@ -407,7 +475,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       final start = sel.start.clamp(0, c.text.length).toInt();
       final end = sel.end.clamp(0, c.text.length).toInt();
       if (start == end) continue;
-      blocks.add(c.text.substring(start, end));
+      blocks.add(_rawSlicePreservingEnclosingStyles(c.text, start, end));
     }
     if (blocks.isEmpty) return null;
     _selectionClipboardDebug =
@@ -528,6 +596,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     List<String> blocks,
     String reason, {
     bool preferProtectedSnapshot = true,
+    _BlockClipboardKind kind = _BlockClipboardKind.partialSelection,
   }) {
     final protectedBlocks = _globalSelectionSnapshot;
     final selectedBlocks = preferProtectedSnapshot &&
@@ -536,13 +605,17 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
             _isBetterBlockSnapshot(protectedBlocks, blocks)
         ? protectedBlocks
         : blocks;
-    _setBlockClipboard(selectedBlocks);
+    _setBlockClipboard(selectedBlocks, kind: kind);
     _selectionClipboardDebug =
-        '$reason: stored ${selectedBlocks.length} blocks [${_blockDebugShape(selectedBlocks)}]';
+        '$reason: stored ${selectedBlocks.length} ${kind.name} blocks [${_blockDebugShape(selectedBlocks)}]';
   }
 
-  void _setBlockClipboard(List<String> blocks) {
+  void _setBlockClipboard(
+    List<String> blocks, {
+    _BlockClipboardKind kind = _BlockClipboardKind.partialSelection,
+  }) {
     _blockClipboard = List<String>.of(blocks);
+    _blockClipboardKind = kind;
     _plainBlockClipboardText = _plainTextForBlocks(blocks);
     _blockClipboardTimer?.cancel();
     _blockClipboardTimer = Timer(const Duration(seconds: 60), () {
@@ -632,7 +705,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
         chosen: 'global',
       );
       _ensureCutUndoBaseline();
-      _storeBlockClipboard(globalBlocks, 'cut');
+      _storeBlockClipboard(
+        globalBlocks,
+        'cut',
+        kind: _BlockClipboardKind.fullScript,
+      );
       _writePlainClipboardForBlocks(_blockClipboard ?? globalBlocks);
       _isCommandExecuting = true;
       for (final c in _controllers) {
@@ -740,7 +817,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       chosen: 'native:${sel.start}-${sel.end}',
     );
     _ensureCutUndoBaseline();
-    final slice = sel.textInside(c.text);
+    final slice = _rawSlicePreservingEnclosingStyles(
+      c.text,
+      sel.start,
+      sel.end,
+    );
     if (slice.isNotEmpty) {
       _setBlockClipboard([slice]);
       _writeRichClipboardForBlocks(_blockClipboard ?? [slice]);
@@ -762,7 +843,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
         overlay: null,
         chosen: 'global',
       );
-      _storeBlockClipboard(globalBlocks, 'copy');
+      _storeBlockClipboard(
+        globalBlocks,
+        'copy',
+        kind: _BlockClipboardKind.fullScript,
+      );
       final copiedBlocks = _blockClipboard ?? globalBlocks;
       _writeRichClipboardForBlocks(copiedBlocks);
       return;
@@ -839,7 +924,11 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
     final controller = _activeController;
     if (controller == null) return;
-    final slice = controller.selection.textInside(controller.text);
+    final slice = _rawSlicePreservingEnclosingStyles(
+      controller.text,
+      controller.selection.start,
+      controller.selection.end,
+    );
     if (slice.isEmpty) return;
     _recordSelectionCommandDebug(
       'copy',
@@ -856,18 +945,167 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     );
   }
 
-  void _pasteFromGlobalClipboard() {
-    var blocks = _blockClipboard;
-    final protectedBlocks = _globalSelectionSnapshot;
-    if (protectedBlocks != null &&
-        _hasRecentGlobalSelectionSnapshot &&
-        _isBetterBlockSnapshot(protectedBlocks, blocks)) {
-      blocks = protectedBlocks;
+  _BlockSelectionRange? _activePasteTargetRange() {
+    final raw = _overlayKey.currentState?.currentRawRange;
+    if (raw != null) {
+      final range = _rangeFromOverlayRaw(raw, 'paste-overlay');
+      if (range != null) return range;
     }
-    if (blocks == null || blocks.isEmpty || _controllers.isEmpty) return;
-    final pastedBlocks = List<String>.of(blocks);
+
+    final recognized = _recognizedBlockRange;
+    if (recognized != null) {
+      return recognized;
+    }
+
+    _BlockSelectionPoint? start;
+    _BlockSelectionPoint? end;
+    for (var i = 0; i < _controllers.length; i++) {
+      final sel = _visibleAppSelectionForController(_controllers[i]);
+      if (sel == null) continue;
+      start ??= _BlockSelectionPoint(blockIndex: i, rawOffset: sel.start);
+      end = _BlockSelectionPoint(blockIndex: i, rawOffset: sel.end);
+    }
+    if (start != null && end != null) {
+      return _normalizeBlockRange(start, end, 'paste-visible-app');
+    }
+
+    final controller = _activeController;
+    if (controller == null) return null;
+    final blockIndex = _controllers.indexOf(controller);
+    if (blockIndex < 0) return null;
+    final sel = controller.selection;
+    if (!sel.isValid || sel.isCollapsed) return null;
+    return _normalizeBlockRange(
+      _BlockSelectionPoint(blockIndex: blockIndex, rawOffset: sel.start),
+      _BlockSelectionPoint(blockIndex: blockIndex, rawOffset: sel.end),
+      'paste-native',
+    );
+  }
+
+  int _activePasteBlockIndex() {
+    final controller = _activeController;
+    if (controller == null) return _controllers.isEmpty ? -1 : 0;
+    final index = _controllers.indexOf(controller);
+    return index < 0 ? (_controllers.isEmpty ? -1 : 0) : index;
+  }
+
+  int _activePasteOffset(int blockIndex) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return 0;
+    final controller = _controllers[blockIndex];
+    final sel = controller.selection;
+    if (!sel.isValid) return controller.text.length;
+    return sel.extentOffset.clamp(0, controller.text.length).toInt();
+  }
+
+  void _replaceRangeWithPastedBlocks(
+    _BlockSelectionRange range,
+    List<String> pastedBlocks,
+  ) {
+    final normalized =
+        _normalizeBlockRange(range.start, range.end, range.source);
+    if (normalized == null || pastedBlocks.isEmpty) return;
+    final start = normalized.start;
+    final end = normalized.end;
+    final startController = _controllers[start.blockIndex];
+    final endController = _controllers[end.blockIndex];
+    final before = startController.text.substring(0, start.rawOffset);
+    final after = endController.text.substring(end.rawOffset);
+
+    _isCommandExecuting = true;
+    for (var i = end.blockIndex; i > start.blockIndex; i--) {
+      _controllers[i].dispose();
+      _focusNodes[i].dispose();
+      _controllers.removeAt(i);
+      _focusNodes.removeAt(i);
+      _blockKeys.removeAt(i);
+    }
+    if (pastedBlocks.length == 1) {
+      startController.value = TextEditingValue(
+        text: before + pastedBlocks.first + after,
+        selection: TextSelection.collapsed(
+          offset: before.length + pastedBlocks.first.length,
+        ),
+      );
+      _lastFocusedController = startController;
+    } else {
+      startController.value = TextEditingValue(
+        text: before + pastedBlocks.first,
+        selection: TextSelection.collapsed(
+          offset: before.length + pastedBlocks.first.length,
+        ),
+      );
+      for (var i = 1; i < pastedBlocks.length; i++) {
+        final isLast = i == pastedBlocks.length - 1;
+        _addBlock(
+          start.blockIndex + i,
+          text: isLast ? pastedBlocks[i] + after : pastedBlocks[i],
+        );
+        if (isLast) {
+          _controllers[start.blockIndex + i].selection =
+              TextSelection.collapsed(offset: pastedBlocks[i].length);
+        }
+      }
+      _lastFocusedController =
+          _controllers[start.blockIndex + pastedBlocks.length - 1];
+    }
+    _clearGlobalSelection();
+    _isCommandExecuting = false;
+  }
+
+  void _insertPastedBlocksAtCursor(
+    int blockIndex,
+    int offset,
+    List<String> pastedBlocks,
+  ) {
+    if (blockIndex < 0 ||
+        blockIndex >= _controllers.length ||
+        pastedBlocks.isEmpty) {
+      return;
+    }
+    final controller = _controllers[blockIndex];
+    final safeOffset = offset.clamp(0, controller.text.length).toInt();
+    final before = controller.text.substring(0, safeOffset);
+    final after = controller.text.substring(safeOffset);
+
+    _isCommandExecuting = true;
+    if (pastedBlocks.length == 1) {
+      controller.value = TextEditingValue(
+        text: before + pastedBlocks.first + after,
+        selection: TextSelection.collapsed(
+          offset: before.length + pastedBlocks.first.length,
+        ),
+      );
+      _lastFocusedController = controller;
+    } else {
+      controller.value = TextEditingValue(
+        text: before + pastedBlocks.first,
+        selection: TextSelection.collapsed(
+          offset: before.length + pastedBlocks.first.length,
+        ),
+      );
+      for (var i = 1; i < pastedBlocks.length; i++) {
+        final targetIndex = blockIndex + i;
+        final isLast = i == pastedBlocks.length - 1;
+        final text = isLast ? pastedBlocks[i] + after : pastedBlocks[i];
+        if (targetIndex >= _controllers.length) {
+          _addBlock(_controllers.length, text: text);
+        } else {
+          _addBlock(targetIndex, text: text);
+        }
+        if (isLast) {
+          _controllers[targetIndex].selection =
+              TextSelection.collapsed(offset: pastedBlocks[i].length);
+          _lastFocusedController = _controllers[targetIndex];
+        }
+      }
+    }
+    _clearGlobalSelection();
+    _isCommandExecuting = false;
+  }
+
+  void _restoreFullScriptClipboard(List<String> pastedBlocks) {
     _selectionClipboardDebug =
-        'paste: restoring ${pastedBlocks.length} blocks into ${_controllers.length} controllers [${_blockDebugShape(pastedBlocks)}]';
+        'paste-full: restoring ${pastedBlocks.length} blocks into ${_controllers.length} controllers [${_blockDebugShape(pastedBlocks)}]';
     _isCommandExecuting = true;
     while (_controllers.length < pastedBlocks.length) {
       _addBlock(_controllers.length);
@@ -878,16 +1116,71 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
         selection: TextSelection.collapsed(offset: pastedBlocks[i].length),
       );
     }
-    _setBlockClipboard(pastedBlocks);
+    while (
+        _controllers.length > pastedBlocks.length && _controllers.length > 1) {
+      _controllers.last.dispose();
+      _focusNodes.last.dispose();
+      _blockKeys.removeLast();
+      _controllers.removeLast();
+      _focusNodes.removeLast();
+    }
+    _lastFocusedController =
+        _controllers.isNotEmpty ? _controllers.first : null;
     _isCommandExecuting = false;
+  }
+
+  void _pasteFromGlobalClipboard() {
+    var blocks = _blockClipboard;
+    var kind = _blockClipboardKind;
+    final protectedBlocks = _globalSelectionSnapshot;
+    if (blocks == null &&
+        protectedBlocks != null &&
+        _hasRecentGlobalSelectionSnapshot) {
+      blocks = protectedBlocks;
+      kind = _BlockClipboardKind.fullScript;
+    } else if (kind == _BlockClipboardKind.fullScript &&
+        protectedBlocks != null &&
+        _hasRecentGlobalSelectionSnapshot &&
+        _isBetterBlockSnapshot(protectedBlocks, blocks)) {
+      blocks = protectedBlocks;
+    }
+    if (blocks == null || blocks.isEmpty || _controllers.isEmpty) return;
+    final pastedBlocks = List<String>.of(blocks);
+
+    if (kind == _BlockClipboardKind.fullScript) {
+      _restoreFullScriptClipboard(pastedBlocks);
+    } else {
+      final targetRange = _activePasteTargetRange();
+      if (targetRange != null) {
+        _replaceRangeWithPastedBlocks(targetRange, pastedBlocks);
+        _selectionClipboardDebug =
+            'paste-partial: replaced ${targetRange.source} with ${pastedBlocks.length} slices [${_blockDebugShape(pastedBlocks)}]';
+      } else {
+        final blockIndex = _activePasteBlockIndex();
+        _insertPastedBlocksAtCursor(
+          blockIndex,
+          _activePasteOffset(blockIndex),
+          pastedBlocks,
+        );
+        _selectionClipboardDebug =
+            'paste-partial: inserted ${pastedBlocks.length} slices at block $blockIndex [${_blockDebugShape(pastedBlocks)}]';
+      }
+    }
+
+    _setBlockClipboard(pastedBlocks, kind: kind);
     setState(() {});
     for (final c in _controllers) {
       c.refresh();
     }
-    if (_focusNodes.isNotEmpty) _focusNodes.first.requestFocus();
+    if (!_keyboardDismissedForSelection) {
+      final focusIndex = _lastFocusedController == null
+          ? -1
+          : _controllers.indexOf(_lastFocusedController!);
+      if (focusIndex >= 0) {
+        _focusNodes[focusIndex].requestFocus();
+      }
+    }
     _saveHistory(description: 'Paste');
-    _selectionClipboardDebug =
-        'paste: restored ${pastedBlocks.length} blocks [${_blockDebugShape(pastedBlocks)}]';
   }
 
   void _selectAllBlocks() {

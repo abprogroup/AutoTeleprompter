@@ -470,3 +470,25 @@ Additional clipboard prohibitions:
 - Search, bookmarks, block taps, background taps, import/load, split/remove,
   undo/redo/history jumps, and clear-script paths must clear the transient app
   selection and toolbar without clearing the real `_blockClipboard`.
+
+---
+
+## Partial Clipboard Paste Modes - 2026-05-03
+
+- `_blockClipboard` now has an explicit kind: `fullScript` or
+  `partialSelection`. This is a required boundary. Only `fullScript` clipboard
+  data from real Select All Copy/Cut or protected full-script repair may rebuild
+  controllers starting at block `0`.
+- Partial-selection clipboard data must never use the full-script restore path.
+  If the user has selected text when Paste is pressed, Paste replaces that
+  selected range. If no selected range exists, Paste inserts at the active
+  cursor/resume block position.
+- Partial paste must preserve raw markup slices. A selected part of a styled
+  span must carry its own enclosing style tags in the clipboard slice, while
+  unrelated blocks must not inherit that style.
+- Formatting-suite taps must not count as editor background navigation. Tapping
+  suites while app-owned text remains selected must preserve the selection so a
+  style command can still apply to the selected text.
+- Pressing iOS keyboard `Done` is a keyboard-dismiss choice, not a selection
+  clear. Style commands and Paste must not forcibly reopen the keyboard after
+  `Done`; the keyboard may reopen only when the user taps back into the script.

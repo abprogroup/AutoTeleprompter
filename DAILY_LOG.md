@@ -1261,3 +1261,28 @@
   editor files, only the existing warning/info load. Physical iPhone QA is still
   required to verify `Command` changes from `idle` and empty selected blocks
   survive Cut/Copy/Paste.
+
+## 2026-05-03 - iOS Partial Clipboard Paste + Style Envelope Repair
+
+- **Device QA Input**: User confirmed the app-owned command route was mostly
+  working, but partial cut/paste still had three issues: partial paste could
+  overwrite surrounding block content, selected text from inside a styled span
+  could paste without its original style, and tapping formatting suites could
+  clear selection while leaving a highlighted range.
+- **Clipboard Mode Fix**: `_blockClipboard` now records whether it represents a
+  full-script Select All clipboard or a partial selection clipboard. Only
+  full-script clipboard data may restore controllers from block `0`; partial
+  clipboard data inserts at the cursor or replaces the currently selected
+  range.
+- **Style Envelope Fix**: Partial clipboard slices now preserve enclosing raw
+  style tags around the selected slice. A cut from inside a red/color/font/size
+  span carries only that selected slice's style, without leaking the style to
+  unrelated selected blocks or surrounding text.
+- **Toolbar/Keyboard Fix**: Editor background selection dismissal is now scoped
+  to the script canvas instead of the full editor body, so formatting-suite taps
+  preserve app-owned selection. The iOS keyboard `Done` action records that the
+  keyboard was intentionally dismissed, and Paste/style flows no longer
+  forcibly reopen it unless the user taps back into the script.
+- **Verification Status**: Targeted iOS editor analysis reports no new compile
+  errors; only the existing warning/info load remains. Awaiting physical iPhone
+  QA for styled partial A + full B + partial C Cut/Paste and post-Done styling.

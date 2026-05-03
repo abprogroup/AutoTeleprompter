@@ -540,6 +540,14 @@
   app-owned selection, and a compact app toolbar calls Cut/Copy/Paste/Select
   All directly. Awaiting IPA/device verification that `Command` is non-idle,
   empty selected blocks survive, and Select All remains intact.
+- [P] **iOS Partial Clipboard Paste + Style Envelope Repair**: Partial
+  selection clipboards now stay separate from full-script Select All
+  clipboards. Partial Paste replaces the newly selected range or inserts at the
+  active cursor; only full-script paste may rebuild controllers from block `0`.
+  Partial selected slices preserve enclosing raw style tags so styled text
+  round-trips without style loss or style bleed. Formatting-suite taps preserve
+  app-owned selection, and keyboard `Done` no longer forces keyboard reopen
+  during style/paste commands. Awaiting iPhone QA.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

@@ -167,7 +167,10 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: () => FocusScope.of(context).unfocus(),
+                  onPressed: () {
+                    _keyboardDismissedForSelection = true;
+                    FocusScope.of(context).unfocus();
+                  },
                   child: const Text('Done',
                       style: TextStyle(
                           color: Color(0xFFFFBF00),

@@ -564,3 +564,21 @@ more regressions than a deliberate app-owned selection engine.
   text, it must first prove on a physical iPhone that Cut/Copy callbacks reach
   the app command router for one-block, cross-block, empty-block, and Select
   All selections. Until then, app-owned commands are the only allowed route.
+
+---
+
+## Partial Selection Paste Contract - 2026-05-03
+
+- Block recognition does not end at Cut/Copy. Paste must also respect the
+  recognized/app-owned range. If a user selects a new range and presses Paste,
+  the pasted raw-markup slices replace that newly selected range, matching
+  document-editor behavior.
+- If the paste target is only a cursor, the same raw slices are inserted at the
+  cursor without overwriting untouched neighboring block content.
+- The block clipboard must preserve style envelopes for partial selections.
+  Example: selecting the middle of a red block must store the selected visible
+  text wrapped with the red color tag, not plain stripped text and not a style
+  that leaks into later blocks.
+- Full-script Select All clipboard data remains a separate mode. Never let
+  partial block recognition turn a partial clipboard into a full-controller
+  restore.

@@ -554,6 +554,11 @@
   matching. Bookmark conversion now snaps to readable non-newline words so empty
   blocks do not steal anchors, and presenter markers align beside the anchor
   word for LTR/RTL. Awaiting iPhone QA.
+- [P] **iOS Default STT Five-Word Recovery Tightening**: Visible skip works in
+  opt-in mode, but default/off mode must still recover from normal STT misses.
+  `WordAligner` now keeps phrase-aware recovery active inside the five-word
+  local window and caps default sequence recovery to five words. Awaiting iPhone
+  QA.
 - [ ] **iOS STT Visible Skip Language Boundary**: Plan and implement visible
   skip across language transitions, e.g. Hebrew block -> English visible block
   -> Hebrew block. Visible skip must be able to trigger locale transition for a

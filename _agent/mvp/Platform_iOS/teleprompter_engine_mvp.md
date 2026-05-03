@@ -244,6 +244,9 @@ fragilities above and port these final Windows product contracts:
   currently rendered visible word window when explicitly enabled.
 - Default local recovery remains separate from visible skip and must stay
   active even when the visible skip switch is off.
+- Off/default mode still allows a safety recovery of up to five words for
+  normal STT omissions. That local recovery is phrase-aware but cannot become
+  a paragraph/section skip.
 
 ---
 

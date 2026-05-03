@@ -1308,3 +1308,18 @@
 - **Verification Status**: Targeted editor and presenter analysis shows no new
   compile errors; only existing warning/info load remains. Awaiting physical
   iPhone QA.
+
+## 2026-05-03 - iOS Default STT Five-Word Recovery Tightening
+
+- **Device QA Input**: User confirmed opt-in visible text skip works well, but
+  the default/off mode still needs safe recovery for normal STT omissions of
+  one to five unclear words.
+- **Runtime Fix**: `WordAligner.align(...)` now runs phrase-aware local recovery
+  inside the same five-word window even when `Allow visible text skip` is off.
+  Sequence recovery is also capped to five words in default mode.
+- **Safety Boundary**: This does not widen default mode into paragraph skip.
+  Larger jumps still require the explicit visible-skip toggle and the
+  presenter-reported visible word window.
+- **Verification Status**: Awaiting targeted analyzer/build and physical iPhone
+  QA with visible skip off: skipping one to five words should recover, while
+  skipping farther visible text should still require the toggle.

@@ -219,6 +219,19 @@ alternative.
   `_maxSingleJump` without the explicit `Allow visible text skip` opt-in. The
   legacy 50-word default window broke the strict-progress contract.
 
+### 2026-05-03 device-QA tightening
+
+- The off/default mode must be phrase-aware inside the same five-word safety
+  window. If STT misses one to five unclear words and the next two or more
+  spoken words match inside that local window, alignment may recover there.
+- Default recovery is not visible skip. With `Allow visible text skip` off,
+  sequence recovery and phrase recovery are both capped to `_maxSingleJump`.
+- Visible skip remains the only path that may search beyond five words, and
+  it still requires the presenter-reported visible window.
+- Forbidden regression: do not gate all phrase recovery behind
+  `sttVisibleSkipEnabled`; small local recovery must remain active when the
+  visible-skip switch is off.
+
 ---
 
 ## iOS Resume Identity Repair - 2026-05-02

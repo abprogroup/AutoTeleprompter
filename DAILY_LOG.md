@@ -1194,3 +1194,26 @@
   before native iOS selection can own the command.
 - **Verification**: Awaiting iOS device QA. This entry is pending, not user
   verified.
+
+## 2026-05-03 - iOS Empty-Block Selection Clipboard Repair
+
+- **Device QA Input**: Debug output showed the overlay range was correct
+  (`0:57-4:30`, with slices shaped like `0:16,1:0,2:29,3:0,4:30`), but the
+  clipboard stored only non-empty visible slices (`0:16,1:29,2:30`). Empty
+  paragraph blocks inside the selected range were being dropped.
+- **Root Cause**: The visible app-selection fallback was placed before the live
+  overlay/raw range command path. That fallback reconstructs selected text from
+  per-controller visible highlight and cannot represent selected empty blocks,
+  so it collapsed the script structure even when `GlobalSelectionOverlay`
+  already had the correct raw range.
+- **Fix Result**: Cut/Copy now compare live recognized overlay blocks against
+  visible fallback blocks and prefer the recognized/raw range whenever it
+  preserves more block slices or equal/better non-empty coverage. Visible
+  fallback remains only a safety net for stale/missing overlay command state.
+- **Clipboard Companion Result**: Plain/rich clipboard companion text no
+  longer filters out empty block slices. `_blockClipboard`, plain text, and
+  rich clipboard output now preserve selected blank-line structure as the same
+  block sequence.
+- **Verification**: Awaiting iOS device QA. The expected clipboard shape for a
+  selection spanning text-empty-text-empty-text is five slices, including the
+  empty blocks.

@@ -519,6 +519,12 @@
   `MarkupController`. This must copy/cut the highlighted raw-markup slices
   before the router can fall back to the original native one-word selection.
   Awaiting IPA/device verification.
+- [P] **iOS Empty-Block Selection Clipboard Repair**: QA debug output showed
+  the overlay raw range could be correct while the newer visible-selection
+  fallback dropped selected empty paragraph blocks. Cut/Copy now prefer the live
+  recognized overlay/raw range whenever it preserves more block slices than the
+  visible fallback, keeping selected blank lines in `_blockClipboard`. Awaiting
+  IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

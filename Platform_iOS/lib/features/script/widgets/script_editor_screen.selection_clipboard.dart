@@ -392,6 +392,17 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return blocks;
   }
 
+  bool _shouldPreferRecognizedBlocks(
+    List<String> recognizedBlocks,
+    List<String>? visibleBlocks,
+  ) {
+    if (visibleBlocks == null || visibleBlocks.isEmpty) return true;
+    if (recognizedBlocks.length > visibleBlocks.length) return true;
+    if (recognizedBlocks.length < visibleBlocks.length) return false;
+    return _nonEmptyBlockCount(recognizedBlocks) >=
+        _nonEmptyBlockCount(visibleBlocks);
+  }
+
   void _deleteVisibleAppSelectionRanges() {
     _isCommandExecuting = true;
     for (final c in _controllers) {
@@ -517,10 +528,8 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     });
   }
 
-  String _plainTextForBlocks(List<String> blocks) => blocks
-      .map((t) => StylingService.stripTags(t))
-      .where((t) => t.isNotEmpty)
-      .join('\n');
+  String _plainTextForBlocks(List<String> blocks) =>
+      blocks.map((t) => StylingService.stripTags(t)).join('\n');
 
   String _normalizePlainClipboardText(String text) =>
       text.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -533,11 +542,15 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   void _writeRichClipboardForBlocks(List<String> blocks) {
     final plainBuf = StringBuffer();
     final htmlBuf = StringBuffer();
-    for (final slice in blocks) {
-      if (slice.isEmpty) continue;
-      if (plainBuf.isNotEmpty) plainBuf.write('\n');
+    for (var i = 0; i < blocks.length; i++) {
+      final slice = blocks[i];
+      if (i > 0) plainBuf.write('\n');
       plainBuf.write(StylingService.stripTags(slice));
-      htmlBuf.write(StylingService.markupToHtml(slice));
+      if (slice.isNotEmpty) {
+        htmlBuf.write(StylingService.markupToHtml(slice));
+      } else {
+        htmlBuf.write('<br>');
+      }
     }
     if (plainBuf.isEmpty) return;
     RichClipboard.setHtml(
@@ -603,6 +616,23 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
 
     final visibleBlocks = _visibleAppSelectedMarkupBlocks('cut');
+    final recognizedBlocks = _recognizedBlocksForCommand('cut');
+    final recognizedRange = _recognizedBlockRange;
+    if (recognizedBlocks != null &&
+        recognizedRange != null &&
+        _shouldPreferRecognizedBlocks(recognizedBlocks, visibleBlocks)) {
+      _ensureCutUndoBaseline();
+      _storeBlockClipboard(
+        recognizedBlocks,
+        'cut-recognized',
+        preferProtectedSnapshot: false,
+      );
+      _writePlainClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
+      _writeRichClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
+      _deleteRecognizedRange(recognizedRange);
+      return;
+    }
+
     if (visibleBlocks != null && visibleBlocks.isNotEmpty) {
       _ensureCutUndoBaseline();
       _storeBlockClipboard(
@@ -613,21 +643,6 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       _writePlainClipboardForBlocks(_blockClipboard ?? visibleBlocks);
       _writeRichClipboardForBlocks(_blockClipboard ?? visibleBlocks);
       _deleteVisibleAppSelectionRanges();
-      return;
-    }
-
-    final recognizedBlocks = _recognizedBlocksForCommand('cut');
-    final recognizedRange = _recognizedBlockRange;
-    if (recognizedBlocks != null && recognizedRange != null) {
-      _ensureCutUndoBaseline();
-      _storeBlockClipboard(
-        recognizedBlocks,
-        'cut-recognized',
-        preferProtectedSnapshot: false,
-      );
-      _writePlainClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
-      _writeRichClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
-      _deleteRecognizedRange(recognizedRange);
       return;
     }
 
@@ -696,6 +711,18 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
 
     final visibleBlocks = _visibleAppSelectedMarkupBlocks('copy');
+    final recognizedBlocks = _recognizedBlocksForCommand('copy');
+    if (recognizedBlocks != null &&
+        _shouldPreferRecognizedBlocks(recognizedBlocks, visibleBlocks)) {
+      _storeBlockClipboard(
+        recognizedBlocks,
+        'copy-recognized',
+        preferProtectedSnapshot: false,
+      );
+      _writeRichClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
+      return;
+    }
+
     if (visibleBlocks != null && visibleBlocks.isNotEmpty) {
       _storeBlockClipboard(
         visibleBlocks,
@@ -703,17 +730,6 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
         preferProtectedSnapshot: false,
       );
       _writeRichClipboardForBlocks(_blockClipboard ?? visibleBlocks);
-      return;
-    }
-
-    final recognizedBlocks = _recognizedBlocksForCommand('copy');
-    if (recognizedBlocks != null) {
-      _storeBlockClipboard(
-        recognizedBlocks,
-        'copy-recognized',
-        preferProtectedSnapshot: false,
-      );
-      _writeRichClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
       return;
     }
 

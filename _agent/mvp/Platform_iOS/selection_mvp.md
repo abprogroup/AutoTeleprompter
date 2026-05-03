@@ -411,6 +411,14 @@ Additional clipboard prohibitions:
   overlay command mirrors can win. If those mirrors still point at the original
   double-tapped word while `externalSelection` visibly spans more text, the
   visible app highlight owns the command.
+- Exception: when the live recognized/overlay raw range contains more block
+  slices than the visible fallback, the recognized raw range must win. The
+  visible fallback cannot represent selected empty paragraph blocks, so using it
+  first can collapse a selection shaped like text-empty-text-empty-text into
+  only the non-empty slices.
+- Plain and rich clipboard companions must preserve empty selected block slices
+  too. Do not filter empty blocks out of `_plainTextForBlocks()` or rich
+  clipboard serialization when they are part of the selected range.
 - A visible app highlight is command data. If the user can see highlighted text
   from the app selection layer, Cut/Copy must store those raw-markup slices in
   `_blockClipboard` and must not return an empty clipboard or the original

@@ -518,6 +518,13 @@ more regressions than a deliberate app-owned selection engine.
 - This visible app selection check must happen before stale recognized/overlay
   mirrors are allowed to resolve a command. The visible highlight is the user
   truth when the mirrors disagree.
+- If the live recognized/overlay raw range preserves more block slices than the
+  visible fallback, it must win. Empty blocks inside the selected range are real
+  selected structure even though they have no visible characters; dropping them
+  corrupts copy/cut/paste paragraph shape.
+- The plain and rich clipboard companion paths are part of the same contract:
+  selected empty blocks must survive as blank-line structure there too, not only
+  inside `_blockClipboard`.
 - This fallback is not a new selection system. It is a guardrail that keeps the
   clipboard synchronized with what the user sees until `GlobalSelectionOverlay
   v2` is fully mature.

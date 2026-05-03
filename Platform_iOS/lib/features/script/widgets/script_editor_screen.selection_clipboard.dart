@@ -326,6 +326,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   void _extendNativeSelectionToOverlay(int blockIndex) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return;
     if (_isGlobalSelection || _isCommandExecuting) return;
+    if (_isGlobalSelectionNativeGuardActive) return;
     if (_overlayKey.currentState?.hasSelection ?? false) return;
 
     final controller = _controllers[blockIndex];

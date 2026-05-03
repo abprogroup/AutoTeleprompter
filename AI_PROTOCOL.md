@@ -79,6 +79,23 @@ Before modifying **any file owned by a Component MVP**, the AI MUST:
 4. **Never change the external API** without updating every caller listed in the context doc AND updating the context doc itself.
 5. **After the fix**, update the context doc if any invariant, caller, or file list changed.
 
+### Native Shortcut Ownership Rule
+
+Native platform controls may be used as helpers only when they match the
+application's full domain contract. They must not become the owner of a feature
+that crosses the native control's boundaries. If the app feature requires
+script-level behavior, multi-block state, styled raw-markup preservation,
+history integration, bookmarks, STT handoff, or cross-platform parity, the
+owning MVP must define an app-owned state model and command router instead of
+leaning on a half-working native shortcut.
+
+The iOS selection work is the canonical warning case: native iOS `TextField`
+selection is reliable inside one paragraph block, but it cannot own
+script-level multi-block selection. Future agents must not repeat the shortcut
+of trying to make native one-field handles and app cross-block overlay handles
+share ownership. Native selection may detect intent; the owning app MVP must
+own the real range, clipboard behavior, and invariants.
+
 ### What a Context Doc Must Contain
 - **Owned files** — every file the MVP controls (no other code should directly mutate its internal state)
 - **External API** — the public methods/fields that outside code is allowed to call

@@ -2,7 +2,7 @@
 name: Selection MVP
 type: component
 platform: iOS
-last_updated: 2026-05-02
+last_updated: 2026-05-03
 ---
 
 # Selection MVP — iOS
@@ -348,3 +348,47 @@ Additional clipboard prohibitions:
   `_extendNativeSelectionToOverlay()` from `contextMenuBuilder`; otherwise the
   app creates a one-word overlay before the user presses Select All and the
   full-script Select All path can appear to do nothing.
+
+---
+
+## Architectural Lesson - Native Selection Is Not Script Selection
+
+- Native iOS selection is useful only as a one-`TextField` editing helper:
+  cursor placement, word selection, ordinary one-block Cut/Copy, and keyboard
+  behavior.
+- Native iOS selection must not own any script-level selection feature. The
+  editor is a multi-block styled script surface, not one native text control.
+  Features that span blocks, preserve raw markup, write history, sync
+  bookmarks, or affect presenter handoff must be owned by the app selection MVP.
+- `GlobalSelectionOverlay` is the intended app-owned selection authority for
+  script-level ranges. A mature implementation may allow native gestures to
+  detect the initial user intent, but the app overlay/range model must own the
+  selected raw range before cross-block Cut/Copy/Style operations run.
+- Do not try to save implementation effort by combining native handle ownership
+  with app overlay ownership. Device QA proved that this creates repeated
+  regressions: Select All downgrades to one block, clipboard reads stale native
+  ranges, history commits late, and app/native toolbars collide.
+- Future selection development should be planned as `GlobalSelectionOverlay`
+  quality work: precise hit-testing, LTR/RTL block boundaries, scroll-aware
+  handle positions, offscreen handle hiding, raw range slicing, and one
+  deterministic command router.
+
+---
+
+## Runtime Direction - Guarded Native-to-Overlay Handoff
+
+- Native double-tap may detect the first one-block selection, but after the
+  toolbar opens the app may hand that range to `GlobalSelectionOverlay` so the
+  app overlay becomes the handle owner.
+- This handoff is allowed only through the existing `_extendNativeSelectionToOverlay`
+  command path. It is still forbidden from passive `_onSelectionChanged()`
+  listener events.
+- The handoff must be blocked while `_selectAllBlocks()` owns the native-menu
+  guard window. Select All is the full-script escape path and must never be
+  downgraded back to the originally double-tapped word.
+- Cut/Copy from a partial-selection toolbar should call the handoff path before
+  command routing, so `_onCutClean()` / `_onCopyClean()` can read the live
+  app-owned overlay range instead of stale native one-block selection.
+- Any overlay/global toolbar `Select All` button must use the same re-armed
+  app-owned Select All path as the stable double-tap fix. Do not use a raw
+  native `ContextMenuButtonType.selectAll` action.

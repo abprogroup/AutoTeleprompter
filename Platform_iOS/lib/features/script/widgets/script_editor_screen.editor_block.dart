@@ -208,6 +208,12 @@ class _EditorBlock extends StatelessWidget {
                         });
                       }
 
+                      void adoptPartialSelectionAfterMenuBuild() {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          onExtendSelection();
+                        });
+                      }
+
                       // When the block is globally selected, bypass editableTextState
                       // entirely. iOS asynchronously resets the native selection back
                       // to the original double-tapped word after Select All, so
@@ -234,10 +240,7 @@ class _EditorBlock extends StatelessWidget {
                               type: ContextMenuButtonType.copy,
                             ),
                             ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onSelectAll();
-                              },
+                              onPressed: selectAllAndReopenToolbar,
                               type: ContextMenuButtonType.custom,
                               label: 'Select All',
                             ),
@@ -254,17 +257,20 @@ class _EditorBlock extends StatelessWidget {
                         );
                       }
 
-                      // Partial native iOS selection is ordinary one-block
-                      // selection. Do not auto-promote it while the toolbar is
-                      // merely being built; that races against Select All and
-                      // can leave the original double-tapped word in control.
+                      // Native iOS selection detects the user's one-block
+                      // intent, then the app overlay becomes the handle owner.
+                      // The parent guards this handoff during Select All so a
+                      // late word-selection event cannot downgrade full-script
+                      // selection back to the originally double-tapped word.
                       if (hasPartialNativeSelection) {
+                        adoptPartialSelectionAfterMenuBuild();
                         return AdaptiveTextSelectionToolbar.buttonItems(
                           anchors: editableTextState.contextMenuAnchors,
                           buttonItems: [
                             ContextMenuButtonItem(
                               onPressed: () {
                                 ContextMenuController.removeAny();
+                                onExtendSelection();
                                 onCut();
                               },
                               type: ContextMenuButtonType.cut,
@@ -272,6 +278,7 @@ class _EditorBlock extends StatelessWidget {
                             ContextMenuButtonItem(
                               onPressed: () {
                                 ContextMenuController.removeAny();
+                                onExtendSelection();
                                 onCopy();
                               },
                               type: ContextMenuButtonType.copy,

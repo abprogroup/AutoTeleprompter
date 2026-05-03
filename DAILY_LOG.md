@@ -1115,3 +1115,35 @@
   word selections. Double-tap remains an ordinary one-block native selection
   until the user chooses a command; Select All can now route directly to the
   app-owned `_selectAllBlocks()` path without stale one-word overlay state.
+
+## 2026-05-03 - iOS Selection Architecture Lesson
+
+- **Decision**: Future iOS selection work must not rely on native iOS
+  `TextField` handles as the owner of script-level selection. Native selection
+  is acceptable as a one-block gesture/input helper only.
+- **Reason**: The editor is a multi-block styled script surface. Native iOS
+  selection only knows the current `TextField`, which caused repeated
+  regressions when it was asked to coordinate with cross-block overlay ranges,
+  raw-markup clipboard preservation, history, and bookmarks.
+- **Protocol Result**: `AI_PROTOCOL.md`, `selection_mvp.md`, and
+  `block_selection_recognition_mvp.md` now document the rule: native selection
+  may detect intent, but `GlobalSelectionOverlay` / the owning app MVP must own
+  script-level range, handles, clipboard routing, and invariants.
+
+## 2026-05-03 - iOS GlobalSelectionOverlay Handoff Step 1
+
+- **Goal**: Start moving partial selection toward one app-owned handle system
+  without re-breaking the now-verified double-tap Select All path.
+- **Runtime Result**: Partial native word selection can hand off to
+  `GlobalSelectionOverlay` after the toolbar opens, so the app overlay becomes
+  the handle/range owner instead of leaving native one-block selection as the
+  only owner.
+- **Safety Result**: `_extendNativeSelectionToOverlay(...)` now refuses to run
+  during the Select All native-menu guard window, while global selection is
+  active, during command execution, or when overlay selection already exists.
+- **Command Result**: Partial toolbar Cut/Copy force the handoff before command
+  routing. Partial/global toolbar Select All uses the re-armed app-owned Select
+  All path so it should still expand to the full script after double-tap.
+- **Verification Needed**: Device QA must confirm double-tap word -> Select All
+  still selects the full script, and double-tap word -> overlay handles can be
+  dragged without clipboard falling back to the originally touched word.

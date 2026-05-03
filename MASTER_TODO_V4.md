@@ -490,6 +490,18 @@
   handles. Double-tap now stays ordinary one-block native selection until a
   command runs, so app-owned Select All can replace it with full-script
   selection. Awaiting IPA/device verification.
+- [ ] **iOS GlobalSelectionOverlay v2 Planning**: Future cross-block partial
+  selection must be designed around one app-owned selection authority. Native
+  iOS `TextField` selection may detect one-block user intent, but it must not
+  own script-level range, handles, clipboard, history, bookmarks, or style
+  commands. Plan precise overlay hit-testing, LTR/RTL boundaries, scroll-aware
+  handle positions, offscreen handle hiding, raw-markup slicing, and a single
+  deterministic command router before another runtime attempt.
+- [P] **iOS GlobalSelectionOverlay Handoff Step 1**: Added the first guarded
+  native-to-overlay handoff. Double-tap native selection may detect the word,
+  then `GlobalSelectionOverlay` owns the handle/range. The handoff is blocked
+  during the Select All native-menu guard, and partial Cut/Copy route through
+  the handoff before clipboard commands. Awaiting IPA/device verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

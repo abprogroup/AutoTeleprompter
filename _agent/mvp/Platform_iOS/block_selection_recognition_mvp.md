@@ -2,7 +2,7 @@
 name: Block Selection Recognition MVP
 type: component
 platform: iOS
-last_updated: 2026-05-02
+last_updated: 2026-05-03
 ---
 
 # Block Selection Recognition MVP - iOS
@@ -449,3 +449,52 @@ Do not continue implementing if any of these happens:
   The word selection may be cut/copied as a normal one-block native selection,
   but Select All must be allowed to replace it with full-script selection
   before any overlay state exists.
+
+---
+
+## Architecture Direction - GlobalSelectionOverlay v2
+
+This MVP exists because iOS native selection cannot become a multi-block script
+selection engine. It can help detect a user gesture inside one `TextField`, but
+it does not understand the script as a sequence of styled blocks.
+
+Future runtime work should therefore move toward a single app-owned selection
+authority:
+
+| Layer | Allowed role |
+|------|--------------|
+| Native iOS selection | Gesture/input helper for one block only |
+| `GlobalSelectionOverlay` | Owner of single-block app selection, cross-block selection, selected raw range, handles, and clipboard command data |
+| Clipboard/history/style commands | Read the overlay/app range, never a stale native range, once the app owns selection |
+
+The target behavior is native-quality overlay handles without native ownership:
+
+1. Detect the initial word/range in the touched block.
+2. Convert to an app-owned raw range.
+3. Hide or neutralize native handle ownership.
+4. Draw one set of app handles.
+5. Let those handles move inside a block or across blocks.
+6. On Cut/Copy/Style, slice raw markup from the live overlay range.
+
+Do not reintroduce a shortcut where native handles and overlay handles both
+claim to own the selected text. That shortcut saved time initially but caused
+more regressions than a deliberate app-owned selection engine.
+
+### First Runtime Step - 2026-05-03
+
+- The first runtime step is a guarded native-to-overlay handoff, not a new
+  selection system.
+- When the partial native selection toolbar opens after a double-tap, the app
+  may schedule `_extendNativeSelectionToOverlay(...)` after menu build so
+  `GlobalSelectionOverlay` owns the selected word/range and can expose app
+  handles.
+- The handoff must be ignored while the Select All native-menu guard is active,
+  while `_isGlobalSelection` is true, while a command is executing, or while an
+  overlay range already exists.
+- Partial toolbar Cut/Copy must call the handoff before command routing so the
+  clipboard can consume live overlay raw slices. Partial toolbar Select All
+  must not call the handoff; it must use the app-owned re-armed Select All
+  command.
+- This is a verification step toward `GlobalSelectionOverlay v2`; device QA
+  must confirm that Select All still works from a double-tapped word before any
+  broader overlay/toolbar work continues.

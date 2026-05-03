@@ -425,6 +425,9 @@ Additional clipboard prohibitions:
   than the visible fallback, the stored recognized range must win.
 - Debug output must distinguish this path as `copy-recognized-stored` or
   `cut-recognized-stored` so device QA can prove which command source won.
+- Debug sentry must expose command candidate shapes (`r`, `v`, `o`) and the
+  chosen source for Cut/Copy while this selection work remains pending. Do not
+  remove that diagnostic until device QA proves the app-owned selection route.
 - A visible app highlight is command data. If the user can see highlighted text
   from the app selection layer, Cut/Copy must store those raw-markup slices in
   `_blockClipboard` and must not return an empty clipboard or the original

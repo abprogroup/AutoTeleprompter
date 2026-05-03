@@ -378,6 +378,8 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
               style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('Clipboard: $_selectionClipboardDebug',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Command: $_selectionCommandDebug',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('Range: $_recognizedBlockRangeDebug',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('History States: ${_history.length}',

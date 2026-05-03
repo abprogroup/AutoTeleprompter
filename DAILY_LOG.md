@@ -1232,6 +1232,10 @@
   recognized range when a visible app selection exists and the stored range
   preserves more block slices than that fallback. Debug output marks this as
   `copy-recognized-stored` / `cut-recognized-stored`.
+- **Safety Result**: Editor debug sentry now includes a command-candidate line
+  (`chosen=... r=[...] v=[...] o=[...]`) so the next device test proves which
+  source won. Overlay Copy also uses the shared rich clipboard serializer so
+  empty selected slices are not filtered in that fallback path.
 - **Verification**: Awaiting iOS device QA. If the same selection is tested,
   the desired clipboard debug is a recognized/stored five-slice shape, not
   `copy-visible-app` with only non-empty slices.

@@ -530,7 +530,9 @@
   the live overlay range cannot be re-read during the toolbar command callback.
   `_recognizedBlocksForCommand()` now allows that stored range to win when a
   visible app selection exists and the stored shape preserves more block slices.
-  Awaiting IPA/device verification.
+  The editor debug sentry now also reports command candidates/chosen source so
+  the next device test proves the router branch. Awaiting IPA/device
+  verification.
 - [ ] **Windows Follow-Up From iOS QA**: Port the new Resume/Restart re-entry
   choice and compact multi-result search navigation UX to Windows in a future
   Windows-only pass. Details are appended in

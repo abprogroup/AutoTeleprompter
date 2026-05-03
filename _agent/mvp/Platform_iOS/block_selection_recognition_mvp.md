@@ -529,6 +529,9 @@ more regressions than a deliberate app-owned selection engine.
   the stored recognized range is correct. When a visible app selection exists
   and the stored recognized range preserves more block slices than the visible
   fallback, the stored recognized range remains authoritative.
+- While pending device verification, Cut/Copy must report candidate shapes and
+  chosen command source in the editor debug sentry. That diagnostic is part of
+  the surgical safety net, not product UI.
 - This fallback is not a new selection system. It is a guardrail that keeps the
   clipboard synchronized with what the user sees until `GlobalSelectionOverlay
   v2` is fully mature.

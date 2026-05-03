@@ -42,6 +42,19 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
         .join(',');
   }
 
+  void _recordSelectionCommandDebug(
+    String command, {
+    required List<String>? recognized,
+    required List<String>? visible,
+    required List<String>? overlay,
+    required String chosen,
+  }) {
+    _selectionCommandDebug = '$command chosen=$chosen '
+        'r=[${_blockDebugShape(recognized)}] '
+        'v=[${_blockDebugShape(visible)}] '
+        'o=[${_blockDebugShape(overlay)}]';
+  }
+
   bool _isBetterBlockSnapshot(List<String> candidate, List<String>? current) {
     if (current == null) return true;
     final candidateNonEmpty = _nonEmptyBlockCount(candidate);
@@ -611,6 +624,13 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   void _onCutClean() {
     final globalBlocks = _globalBlocksForCommand('cut');
     if (globalBlocks != null && globalBlocks.isNotEmpty) {
+      _recordSelectionCommandDebug(
+        'cut',
+        recognized: null,
+        visible: null,
+        overlay: null,
+        chosen: 'global',
+      );
       _ensureCutUndoBaseline();
       _storeBlockClipboard(globalBlocks, 'cut');
       _writePlainClipboardForBlocks(_blockClipboard ?? globalBlocks);
@@ -630,10 +650,18 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       'cut',
       allowStoredRange: visibleBlocks != null && visibleBlocks.isNotEmpty,
     );
+    final overlayBlocks = _overlaySelectedMarkupBlocks();
     final recognizedRange = _recognizedBlockRange;
     if (recognizedBlocks != null &&
         recognizedRange != null &&
         _shouldPreferRecognizedBlocks(recognizedBlocks, visibleBlocks)) {
+      _recordSelectionCommandDebug(
+        'cut',
+        recognized: recognizedBlocks,
+        visible: visibleBlocks,
+        overlay: overlayBlocks,
+        chosen: 'recognized',
+      );
       _ensureCutUndoBaseline();
       _storeBlockClipboard(
         recognizedBlocks,
@@ -647,6 +675,13 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
 
     if (visibleBlocks != null && visibleBlocks.isNotEmpty) {
+      _recordSelectionCommandDebug(
+        'cut',
+        recognized: recognizedBlocks,
+        visible: visibleBlocks,
+        overlay: overlayBlocks,
+        chosen: 'visible',
+      );
       _ensureCutUndoBaseline();
       _storeBlockClipboard(
         visibleBlocks,
@@ -661,8 +696,14 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (hasOverlay) {
-      final overlayBlocks = _overlaySelectedMarkupBlocks();
       if (overlayBlocks != null && overlayBlocks.isNotEmpty) {
+        _recordSelectionCommandDebug(
+          'cut',
+          recognized: recognizedBlocks,
+          visible: visibleBlocks,
+          overlay: overlayBlocks,
+          chosen: 'overlay',
+        );
         _ensureCutUndoBaseline();
         _storeBlockClipboard(
           overlayBlocks,
@@ -691,6 +732,13 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (c == null) return;
     final sel = c.selection;
     if (!sel.isValid || sel.isCollapsed) return;
+    _recordSelectionCommandDebug(
+      'cut',
+      recognized: recognizedBlocks,
+      visible: visibleBlocks,
+      overlay: overlayBlocks,
+      chosen: 'native:${sel.start}-${sel.end}',
+    );
     _ensureCutUndoBaseline();
     final slice = sel.textInside(c.text);
     if (slice.isNotEmpty) {
@@ -707,19 +755,16 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
   void _onCopyClean() {
     final globalBlocks = _globalBlocksForCommand('copy');
     if (globalBlocks != null && globalBlocks.isNotEmpty) {
+      _recordSelectionCommandDebug(
+        'copy',
+        recognized: null,
+        visible: null,
+        overlay: null,
+        chosen: 'global',
+      );
       _storeBlockClipboard(globalBlocks, 'copy');
       final copiedBlocks = _blockClipboard ?? globalBlocks;
-      final plainBuf = StringBuffer();
-      final htmlBuf = StringBuffer();
-      for (final slice in copiedBlocks) {
-        if (slice.isEmpty) continue;
-        if (plainBuf.isNotEmpty) plainBuf.write('\n');
-        plainBuf.write(StylingService.stripTags(slice));
-        htmlBuf.write(StylingService.markupToHtml(slice));
-      }
-      if (plainBuf.isEmpty) return;
-      RichClipboard.setHtml(
-          plain: plainBuf.toString(), html: htmlBuf.toString());
+      _writeRichClipboardForBlocks(copiedBlocks);
       return;
     }
 
@@ -728,8 +773,16 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       'copy',
       allowStoredRange: visibleBlocks != null && visibleBlocks.isNotEmpty,
     );
+    final overlayBlocks = _overlaySelectedMarkupBlocks();
     if (recognizedBlocks != null &&
         _shouldPreferRecognizedBlocks(recognizedBlocks, visibleBlocks)) {
+      _recordSelectionCommandDebug(
+        'copy',
+        recognized: recognizedBlocks,
+        visible: visibleBlocks,
+        overlay: overlayBlocks,
+        chosen: 'recognized',
+      );
       _storeBlockClipboard(
         recognizedBlocks,
         'copy-recognized',
@@ -740,6 +793,13 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
 
     if (visibleBlocks != null && visibleBlocks.isNotEmpty) {
+      _recordSelectionCommandDebug(
+        'copy',
+        recognized: recognizedBlocks,
+        visible: visibleBlocks,
+        overlay: overlayBlocks,
+        chosen: 'visible',
+      );
       _storeBlockClipboard(
         visibleBlocks,
         'copy-visible-app',
@@ -751,26 +811,29 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (hasOverlay) {
-      final overlayBlocks = _overlaySelectedMarkupBlocks();
       if (overlayBlocks != null && overlayBlocks.isNotEmpty) {
+        _recordSelectionCommandDebug(
+          'copy',
+          recognized: recognizedBlocks,
+          visible: visibleBlocks,
+          overlay: overlayBlocks,
+          chosen: 'overlay',
+        );
         _storeBlockClipboard(
           overlayBlocks,
           'copy-overlay',
           preferProtectedSnapshot: false,
         );
+        _writeRichClipboardForBlocks(_blockClipboard ?? overlayBlocks);
+        return;
       }
-      final plainBuf = StringBuffer();
-      final htmlBuf = StringBuffer();
-      final copiedBlocks = overlayBlocks;
-      for (final slice in copiedBlocks ?? const <String>[]) {
-        if (slice.isEmpty) continue;
-        if (plainBuf.isNotEmpty) plainBuf.write('\n');
-        plainBuf.write(StylingService.stripTags(slice));
-        htmlBuf.write(StylingService.markupToHtml(slice));
-      }
-      if (plainBuf.isEmpty) return;
-      RichClipboard.setHtml(
-          plain: plainBuf.toString(), html: htmlBuf.toString());
+      _recordSelectionCommandDebug(
+        'copy',
+        recognized: recognizedBlocks,
+        visible: visibleBlocks,
+        overlay: overlayBlocks,
+        chosen: 'overlay-empty',
+      );
       return;
     }
 
@@ -778,6 +841,14 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (controller == null) return;
     final slice = controller.selection.textInside(controller.text);
     if (slice.isEmpty) return;
+    _recordSelectionCommandDebug(
+      'copy',
+      recognized: recognizedBlocks,
+      visible: visibleBlocks,
+      overlay: overlayBlocks,
+      chosen:
+          'native:${controller.selection.start}-${controller.selection.end}',
+    );
     _setBlockClipboard([slice]);
     RichClipboard.setHtml(
       plain: StylingService.stripTags(slice),

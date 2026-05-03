@@ -1356,3 +1356,27 @@
   selection, clipboard, STT tokenization, import/export, or bookmark storage.
 - **Verification Status**: Awaiting iPhone QA. Test editor mid-line bookmarks,
   start-of-block bookmarks, presenter LTR/RTL markers, and marker deletion.
+
+## 2026-05-03 - iOS Text-Flow Bookmark Sign + Search Toolbar Completion
+
+- **Device QA Input**: User clarified that the bookmark sign must behave like
+  a real editor character: selectable, cuttable, copyable, pasteable, and
+  direction-aware for Hebrew/RTL. Overlay-only markers are not sufficient.
+- **Bookmark Result**: Editor bookmark add now inserts the real `\u00BB`
+  character into `MarkupController.text`. Editor overlay bookmark markers are
+  superseded; bookmark metadata is rebuilt from text-flow signs and saved for
+  present-mode navigation.
+- **Cross-Mode Result**: Present mode receives script text with bookmark signs
+  stripped so STT/tokenization do not see duplicate marker words. Returning
+  from present mode inserts missing `\u00BB` signs for presenter-created
+  bookmarks, converting clean presenter offsets back to raw editor offsets when
+  earlier signs already exist.
+- **Clipboard Result**: Cut/delete/paste paths rescan editor text after
+  mutation so `\u00BB` signs removed or pasted through normal text selection
+  update bookmark metadata.
+- **Search Result**: Editor search toolbar now has a whole-word toggle.
+  Previous/next result navigation does not request focus or reopen the
+  keyboard; only the new-search dialog opens text input.
+- **Verification Status**: Awaiting iPhone QA for LTR and Hebrew bookmark
+  sign placement, copy/cut/paste recreation, undo, cross-mode sync, and search
+  toolbar keyboard behavior.

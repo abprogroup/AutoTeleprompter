@@ -222,3 +222,24 @@ The final Windows bookmark baseline is user verified and must be the iOS target:
   or extend the editor renderer in a dedicated MVP pass and prove selection,
   raw markup offsets, clipboard, history, STT tokenization, and export remain
   unchanged.
+
+---
+
+## iOS Text-Flow Bookmark Signs - 2026-05-03
+
+- Editor bookmarks are now represented by the real text character `\u00BB`
+  (`»`) inside `MarkupController.text`; the editor overlay marker path is
+  superseded for normal bookmarks.
+- The sign is selectable, copyable, cuttable, deletable, undoable, redoable,
+  and pasteable like any other script character.
+- Bookmark metadata remains the navigation authority for present mode. Before
+  entering present mode, editor metadata is rebuilt from all `»` signs and the
+  presenter receives script text with bookmark signs stripped so STT and word
+  tokenization do not see duplicate marker words.
+- Pasting text containing `»` must rescan editor blocks and recreate bookmark
+  metadata at those sign positions.
+- RTL/Hebrew uses the same `»` character. Do not flip it to `«`; Flutter text
+  shaping owns visual placement from the logical raw offset.
+- Presenter-created bookmarks may reinsert missing `»` signs into the editor
+  after returning from present mode. Insertion must convert clean presenter
+  offsets back to raw editor offsets when earlier bookmark signs already exist.

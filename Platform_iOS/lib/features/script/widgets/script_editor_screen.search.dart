@@ -62,6 +62,38 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
                 ),
               ),
               const SizedBox(width: 6),
+              Tooltip(
+                message: 'Match whole word',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: _toggleEditorWholeWordSearch,
+                  child: Container(
+                    height: 32,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: _searchWholeWord
+                          ? const Color(0xFFFFBF00)
+                          : Colors.white10,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: _searchWholeWord
+                            ? const Color(0xFFFFBF00)
+                            : Colors.white24,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Word',
+                      style: TextStyle(
+                        color: _searchWholeWord ? Colors.black : Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
               _EditorSearchToolbarButton(
                 icon: Icons.search,
                 tooltip: 'Search new text',
@@ -212,6 +244,14 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     _jumpToEditorSearchMatchAt(_editorSearchMatchIndex);
   }
 
+  void _toggleEditorWholeWordSearch() {
+    if (_lastSearchQuery.isEmpty) return;
+    setState(() {
+      _searchWholeWord = !_searchWholeWord;
+    });
+    _setEditorSearchQuery(_lastSearchQuery);
+  }
+
   List<_EditorSearchMatch> _visibleSearchMatches({
     required int block,
     required String visible,
@@ -256,10 +296,13 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       _editorSearchMatchIndex = normalized;
       _editorSearchToolbarVisible = true;
     });
-    _jumpToEditorSearchMatchAt(normalized);
+    _jumpToEditorSearchMatchAt(normalized, requestKeyboard: false);
   }
 
-  void _jumpToEditorSearchMatchAt(int matchIndex) {
+  void _jumpToEditorSearchMatchAt(
+    int matchIndex, {
+    bool requestKeyboard = false,
+  }) {
     if (matchIndex < 0 || matchIndex >= _editorSearchMatches.length) return;
     final match = _editorSearchMatches[matchIndex];
     if (match.blockIndex < 0 || match.blockIndex >= _controllers.length) {
@@ -287,7 +330,11 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     controller.selection = selection;
     controller.externalSelection = selection;
     _lastFocusedController = controller;
-    _focusNodes[match.blockIndex].requestFocus();
+    if (requestKeyboard) {
+      _focusNodes[match.blockIndex].requestFocus();
+    } else {
+      _focusNodes[match.blockIndex].unfocus();
+    }
     controller.refresh();
     setState(() {});
     _scrollEditorBlockIntoView(match.blockIndex, alignment: 0.25);

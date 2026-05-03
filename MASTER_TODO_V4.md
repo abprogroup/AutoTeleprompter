@@ -569,6 +569,16 @@
   only when a safe text gap exists; otherwise they stay on the same visual row
   in a non-overlapping margin lane. Marker literals use `\u00BB` so editor and
   presenter both display the intended `»` sign. Awaiting iPhone QA.
+- [P] **iOS Text-Flow Bookmark Sign**: Editor bookmarks now use the real
+  `\u00BB` / `»` character in `MarkupController.text` so the sign can be
+  selected, cut, copied, pasted, undone, and redone like ordinary script text.
+  Bookmark metadata is rebuilt from those signs for present-mode navigation,
+  while present-mode script handoff strips the signs from STT/tokenization text
+  to avoid duplicate marker words. Awaiting iPhone QA.
+- [P] **iOS Editor Search Toolbar Whole-Word Toggle**: The editor search
+  toolbar now includes a whole-word toggle. Next/back search navigation must
+  not reopen the keyboard; only the new-search dialog may request text input.
+  Awaiting iPhone QA.
 - [ ] **iOS STT Visible Skip Language Boundary**: Plan and implement visible
   skip across language transitions, e.g. Hebrew block -> English visible block
   -> Hebrew block. Visible skip must be able to trigger locale transition for a

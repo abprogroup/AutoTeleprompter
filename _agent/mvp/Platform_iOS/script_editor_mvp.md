@@ -154,6 +154,12 @@ Additional search toolbar rules:
   characters; punctuation and whitespace are boundaries.
 - Closing the search toolbar clears search UI state only. It must not clear the
   app-private cut/copy clipboard.
+- The editor search toolbar also owns a compact `Match whole word` toggle.
+  Toggling it re-runs the current query without reopening the keyboard.
+- Search result previous/next navigation must not request focus or reopen the
+  keyboard. Only the new-search dialog is allowed to reopen text input.
+- Bookmark signs `\u00BB` / `»` are visible text boundaries for search; they
+  must not be treated as English/Hebrew/digit word characters.
 
 ---
 

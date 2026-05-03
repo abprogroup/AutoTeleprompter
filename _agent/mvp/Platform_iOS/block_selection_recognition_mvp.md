@@ -582,3 +582,17 @@ more regressions than a deliberate app-owned selection engine.
 - Full-script Select All clipboard data remains a separate mode. Never let
   partial block recognition turn a partial clipboard into a full-controller
   restore.
+
+---
+
+## Bookmark Sign Selection Rule - 2026-05-03
+
+- The bookmark sign `\u00BB` / `»` is real editor text on iOS and must be
+  selectable, cuttable, copyable, deletable, and pasteable through the same
+  app-owned selection routes as ordinary script text.
+- Cut/delete of a selected range containing `»` must rescan bookmark metadata
+  immediately so removed signs do not remain as active present-mode bookmarks.
+- Paste of a range containing `»` must rebuild bookmark metadata at the pasted
+  sign locations after the text mutation completes.
+- The sign remains a word boundary for selection/search purposes; it must not
+  be swallowed as hidden markup or ignored like an overlay-only marker.

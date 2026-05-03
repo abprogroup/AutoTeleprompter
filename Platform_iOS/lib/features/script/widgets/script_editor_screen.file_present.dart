@@ -133,12 +133,12 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     });
   }
 
-  void _startPresenting() {
+  Future<void> _startPresenting() async {
     FocusManager.instance.primaryFocus?.unfocus();
     try {
-      unawaited(_saveBookmarks());
+      await _syncBookmarksFromEditorSigns(notify: false, save: true);
       ref.read(scriptProvider.notifier).loadText(
-            _getRefinedFullText(),
+            _getRefinedFullTextWithoutBookmarkSigns(),
             title: _currentTitle,
             sourceType: _sourceType,
             sessionId: _currentSessionId,
@@ -149,7 +149,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()))
           .then((_) {
         if (mounted) {
-          unawaited(_loadBookmarksForCurrentScript(force: true));
+          unawaited(_insertMissingEditorBookmarkSignsFromMetadata());
         }
       });
     }

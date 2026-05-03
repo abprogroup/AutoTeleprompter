@@ -717,6 +717,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       }
       _clearGlobalSelection();
       _isCommandExecuting = false;
+      unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
       _saveHistory(description: 'Cut');
       setState(() {});
       return;
@@ -748,6 +749,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       _writePlainClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
       _writeRichClipboardForBlocks(_blockClipboard ?? recognizedBlocks);
       _deleteRecognizedRange(recognizedRange);
+      unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
       return;
     }
 
@@ -768,6 +770,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       _writePlainClipboardForBlocks(_blockClipboard ?? visibleBlocks);
       _writeRichClipboardForBlocks(_blockClipboard ?? visibleBlocks);
       _deleteVisibleAppSelectionRanges();
+      unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
       return;
     }
 
@@ -800,6 +803,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       }
       _clearGlobalSelection();
       _isCommandExecuting = false;
+      unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
       _saveHistory(description: 'Cut');
       setState(() {});
       return;
@@ -830,6 +834,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       text: c.text.substring(0, sel.start) + c.text.substring(sel.end),
       selection: TextSelection.collapsed(offset: sel.start),
     );
+    unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
     _saveHistory(description: 'Cut');
   }
 
@@ -1168,6 +1173,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     }
 
     _setBlockClipboard(pastedBlocks, kind: kind);
+    unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
     setState(() {});
     for (final c in _controllers) {
       c.refresh();

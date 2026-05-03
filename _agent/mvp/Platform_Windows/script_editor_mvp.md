@@ -509,3 +509,18 @@ file and the matching MVP docs.
 - If a collapsed caret receives Shift-arrow while an old overlay selection is
   still present and the caret no longer matches the overlay focus endpoint,
   clear the stale overlay first instead of extending it.
+
+## 2026-05-04 V5 Ctrl+Shift Horizontal And Stale Overlay Contract
+
+- Ctrl+Shift+Left/Right is app-owned once a selection crosses block boundaries.
+  It must continue selecting by visible word boundaries inside the next block
+  instead of consuming the key with no movement.
+- Word-boundary target math ignores `\u00BB` bookmark signs and markup tags,
+  then maps the chosen visible target back to raw text. The bookmark sign stays
+  real editor content whenever the selected range covers it.
+- A Shift-arrow over an old overlay is valid only when the live focused
+  selection extent equals the overlay focus endpoint. Otherwise the overlay is
+  cleared and the key starts from the current caret.
+- Handle drags outside the editor are recoverable suspended sessions. They stop
+  autoscroll immediately, keep the current selected range, and resume only if
+  the still-pressed pointer re-enters the editor.

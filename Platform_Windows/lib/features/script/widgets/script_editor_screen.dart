@@ -887,15 +887,41 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     final overlay = _overlayKey.currentState;
     final session = overlay?.selectionSessionSnapshot;
     if (overlay == null || !(overlay.hasSelection)) return false;
-    final controller = _lastFocusedController;
-    if (controller == null) return false;
+    final controller = _activeController;
+    if (controller == null) {
+      overlay.clearSelection();
+      for (final c in _controllers) {
+        c.isGlobalSelected = false;
+        c.externalSelection = null;
+        c.refresh();
+      }
+      setState(() {
+        _isGlobalSelection = false;
+        _lastArrowDecision = 'shift stale overlay cleared: no focus';
+      });
+      return true;
+    }
     final block = _controllers.indexOf(controller);
     if (block < 0) return false;
     final selection = controller.selection;
-    if (!selection.isValid || !selection.isCollapsed) return false;
+    if (!selection.isValid) {
+      overlay.clearSelection();
+      for (final c in _controllers) {
+        c.isGlobalSelected = false;
+        c.externalSelection = null;
+        c.refresh();
+      }
+      setState(() {
+        _isGlobalSelection = false;
+        _lastArrowDecision = 'shift stale overlay cleared: invalid selection';
+      });
+      return true;
+    }
     final offset =
-        selection.baseOffset.clamp(0, controller.text.length).toInt();
+        selection.extentOffset.clamp(0, controller.text.length).toInt();
+    final visibleOverlayRange = _hasVisibleAppSelectionRange();
     if (session != null &&
+        visibleOverlayRange &&
         session.focus.block == block &&
         session.focus.offset == offset) {
       return false;
@@ -908,9 +934,23 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
     setState(() {
       _isGlobalSelection = false;
-      _lastArrowDecision = 'shift stale overlay cleared at $block:$offset';
+      _lastArrowDecision = visibleOverlayRange
+          ? 'shift stale overlay cleared focus ${session?.focus} != $block:$offset'
+          : 'shift stale overlay cleared invisible at $block:$offset';
     });
     return true;
+  }
+
+  bool _hasVisibleAppSelectionRange() {
+    if (_isGlobalSelection) return true;
+    for (final c in _controllers) {
+      if (c.isGlobalSelected) return true;
+      final selection = c.externalSelection;
+      if (selection != null && selection.isValid && !selection.isCollapsed) {
+        return true;
+      }
+    }
+    return false;
   }
 
   bool _shouldRouteModifiedArrow(
@@ -1465,6 +1505,53 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     return MarkupController.safeEndOffset(navigationText);
   }
 
+  String _keyboardVisibleNavigationText(String rawText) =>
+      StylingService.stripTags(rawText).replaceAll(_keyboardBookmarkSign, '');
+
+  int _keyboardRawToVisibleNavigationOffset(String rawText, int rawOffset) {
+    final visibleText = StylingService.stripTags(rawText);
+    final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
+    final visibleOffset = MarkupController.rawToVisualOffset(
+      rawText,
+      safeRaw,
+    ).clamp(0, visibleText.length).toInt();
+    var navigationOffset = 0;
+    for (var i = 0; i < visibleOffset; i++) {
+      if (visibleText[i] == _keyboardBookmarkSign) continue;
+      navigationOffset++;
+    }
+    return navigationOffset;
+  }
+
+  int _keyboardVisibleNavigationToRawOffset(
+    String rawText,
+    int navigationOffset,
+  ) {
+    final visibleText = StylingService.stripTags(rawText);
+    if (navigationOffset <= 0) {
+      return MarkupController.visualToRawOffset(rawText, 0);
+    }
+    var seen = 0;
+    for (var i = 0; i < visibleText.length; i++) {
+      if (visibleText[i] == _keyboardBookmarkSign) continue;
+      seen++;
+      if (seen >= navigationOffset) {
+        return MarkupController.visualToRawOffset(rawText, i + 1);
+      }
+    }
+    return MarkupController.visualToRawOffset(rawText, visibleText.length);
+  }
+
+  bool _isKeyboardNavigationWordChar(String value) {
+    if (value.isEmpty || value == _keyboardBookmarkSign) return false;
+    final code = value.codeUnitAt(0);
+    final isAsciiLetter =
+        (code >= 0x41 && code <= 0x5A) || (code >= 0x61 && code <= 0x7A);
+    final isDigit = code >= 0x30 && code <= 0x39;
+    final isHebrew = code >= 0x0590 && code <= 0x05FF;
+    return isAsciiLetter || isDigit || isHebrew;
+  }
+
   ({int block, int offset})? _controlVerticalTarget({
     required int blockIndex,
     required int focusOffset,
@@ -1617,6 +1704,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
     if (key == LogicalKeyboardKey.arrowLeft ||
         key == LogicalKeyboardKey.arrowRight) {
+      if (keyboard.isControlPressed &&
+          keyboard.isShiftPressed &&
+          !keyboard.isAltPressed &&
+          !keyboard.isMetaPressed) {
+        return _controlShiftHorizontalTarget(
+          blockIndex: block,
+          rawOffset: offset,
+          key: key,
+        );
+      }
       if (keyboard.isAltPressed &&
           !keyboard.isControlPressed &&
           !keyboard.isMetaPressed) {
@@ -1634,6 +1731,81 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       );
     }
     return null;
+  }
+
+  ({int block, int offset})? _controlShiftHorizontalTarget({
+    required int blockIndex,
+    required int rawOffset,
+    required LogicalKeyboardKey key,
+  }) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
+    final moveLeft = key == LogicalKeyboardKey.arrowLeft;
+    final text = _controllers[blockIndex].text;
+    final navigationText = _keyboardVisibleNavigationText(text);
+    final navigationOffset = _keyboardRawToVisibleNavigationOffset(
+      text,
+      rawOffset,
+    ).clamp(0, navigationText.length).toInt();
+
+    if (moveLeft) {
+      if (navigationOffset <= 0) {
+        if (blockIndex <= 0) return null;
+        final previousText = _controllers[blockIndex - 1].text;
+        return (
+          block: blockIndex - 1,
+          offset: _keyboardVisibleNavigationToRawOffset(
+            previousText,
+            _keyboardVisibleNavigationText(previousText).length,
+          ),
+        );
+      }
+
+      var target = navigationOffset - 1;
+      while (target >= 0 &&
+          !_isKeyboardNavigationWordChar(navigationText[target])) {
+        target--;
+      }
+      if (target < 0) {
+        return (
+          block: blockIndex,
+          offset: _keyboardVisibleNavigationToRawOffset(text, 0),
+        );
+      }
+      while (target > 0 &&
+          _isKeyboardNavigationWordChar(navigationText[target - 1])) {
+        target--;
+      }
+      return (
+        block: blockIndex,
+        offset: _keyboardVisibleNavigationToRawOffset(text, target),
+      );
+    }
+
+    if (navigationOffset >= navigationText.length) {
+      if (blockIndex >= _controllers.length - 1) return null;
+      return (block: blockIndex + 1, offset: 0);
+    }
+
+    var target = navigationOffset;
+    if (_isKeyboardNavigationWordChar(navigationText[target])) {
+      while (target < navigationText.length &&
+          _isKeyboardNavigationWordChar(navigationText[target])) {
+        target++;
+      }
+    } else {
+      while (target < navigationText.length &&
+          !_isKeyboardNavigationWordChar(navigationText[target])) {
+        target++;
+      }
+      while (target < navigationText.length &&
+          _isKeyboardNavigationWordChar(navigationText[target])) {
+        target++;
+      }
+    }
+    return (
+      block: blockIndex,
+      offset: _keyboardVisibleNavigationToRawOffset(text, target),
+    );
   }
 
   ({int block, int offset})? _altHorizontalTarget({

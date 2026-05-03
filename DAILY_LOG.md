@@ -1590,3 +1590,23 @@
 - **Verification Status**: Targeted analyzer reports no new compile errors;
   existing Windows warnings/infos remain. Diff check passed. Awaiting push and
   Windows workflow verification.
+
+## 2026-05-04 - Windows v5 Final Targeted Selection Repair
+
+- **Device QA Input**: User confirmed most keyboard paths now work, but
+  Ctrl+Shift+Down beside a `\u00BB` bookmark could still reuse stale overlay
+  state, Ctrl+Shift+Left/Right could stall after crossing block boundaries,
+  and hard handle drags could leave the active handle stuck outside the editor.
+- **Selection Guard**: Shift-arrow reuse now requires the overlay focus
+  endpoint to match the live focused selection extent and requires a visible
+  app-selected range. Otherwise the stale overlay is cleared before the key
+  starts from the real caret.
+- **Keyboard Fix**: Ctrl+Shift+Left/Right now has a bookmark-aware visible
+  word-boundary target that skips `\u00BB` for navigation math while preserving
+  the sign as real selectable editor text.
+- **Handle Fix**: Outside/stale handle states now suspend the drag, stop
+  autoscroll, and preserve endpoint ownership. Re-entry while still pressed
+  resumes the active endpoint; a fresh click ends any stale suspended session.
+- **Verification Status**: Targeted analyzer reports no new compile errors;
+  existing Windows warnings/infos remain. Diff check passed. Awaiting push and
+  Windows workflow verification.

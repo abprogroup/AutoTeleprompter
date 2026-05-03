@@ -735,3 +735,10 @@
   navigation math, clears stale overlay selection before Shift extension, and
   lets page-level active-handle pointer updates move the active endpoint.
   Awaiting Windows workflow and device QA.
+- [P] **Windows Final Targeted Selection Repair**: Device QA showed the prior
+  follow-up still allowed stale overlay reuse near bookmark signs,
+  Ctrl+Shift+Left/Right could stall after crossing into a block, and hard
+  handle exits could lose the active handle. Final targeted repair validates
+  overlay focus before Shift extension, adds `\u00BB`-aware Ctrl+Shift
+  horizontal word targets, and turns outside/stale handle states into
+  recoverable suspended drags. Awaiting Windows workflow and device QA.

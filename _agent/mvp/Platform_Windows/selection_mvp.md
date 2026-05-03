@@ -275,3 +275,20 @@ save entries created after selection-based commands.
 - Scroll clamp is not a handle-session end. If the pointer remains pressed,
   the session stays alive so a later safe-zone move can update the selected
   range and allow normal deselection.
+
+## 2026-05-04 V5 Final Targeted Selection Repair
+
+- Shift-arrow extension may reuse an existing app overlay only when the overlay
+  focus endpoint still matches the live focused selection/caret and the overlay
+  has a visible selected range. Invisible or mismatched overlays are stale and
+  must be cleared before the key is processed.
+- Ctrl+Shift+Left/Right uses bookmark-aware visible word-boundary math. The
+  editor-visible `\u00BB` bookmark sign remains selectable script text, but it
+  is skipped for navigation target calculation so it does not become a fake
+  word stop.
+- A handle pointer outside the editor is a suspended drag, not an ended drag.
+  Outside/stale states cancel autoscroll and preserve active endpoint ownership;
+  pointer re-entry while still pressed resumes endpoint updates.
+- A fresh pointer-down after an outside/stale suspended handle drag ends that
+  stale session first, so the next normal click can deselect instead of
+  reviving a lost handle.

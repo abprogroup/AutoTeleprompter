@@ -265,10 +265,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     _pointerState = state;
 
     if (state == SelectionPointerState.outside) {
-      _endHandleDrag(
-        reason: 'outside-pointer',
+      _suspendHandleDrag(
         pointerState: SelectionPointerState.outside,
-        suppressBodyDragUntilPointerUp: true,
+        armStale: true,
       );
       return;
     }
@@ -312,10 +311,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         activeSession.pointerState = state;
         _pointerState = state;
         if (state == SelectionPointerState.outside) {
-          _endHandleDrag(
-            reason: 'outside-tick',
+          _suspendHandleDrag(
             pointerState: SelectionPointerState.outside,
-            suppressBodyDragUntilPointerUp: true,
+            armStale: true,
           );
           return;
         }
@@ -359,10 +357,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     session.pointerState = state;
     _pointerState = state;
     if (state == SelectionPointerState.outside) {
-      _endHandleDrag(
-        reason: 'editor-exit',
+      _suspendHandleDrag(
         pointerState: SelectionPointerState.outside,
-        suppressBodyDragUntilPointerUp: true,
+        armStale: true,
       );
       return;
     }
@@ -381,11 +378,31 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     session.staleTimer = Timer(_stalePointerTimeout, () {
       if (!mounted || _handleDrag != session) return;
       session.pointerState = SelectionPointerState.stale;
-      _endHandleDrag(
-        reason: 'stale-pointer',
+      _suspendHandleDrag(
         pointerState: SelectionPointerState.stale,
-        suppressBodyDragUntilPointerUp: true,
+        armStale: false,
       );
+    });
+  }
+
+  void _suspendHandleDrag({
+    required SelectionPointerState pointerState,
+    required bool armStale,
+  }) {
+    final session = _handleDrag;
+    if (session == null) return;
+    session.pointerState = pointerState;
+    session.cancelAutoScroll();
+    if (armStale) {
+      _armStalePointerTimer();
+    } else {
+      session.cancelStale();
+    }
+    if (!mounted) return;
+    setState(() {
+      _ignoreBodyDragUntilPointerUp = true;
+      _sessionMode = SelectionSessionMode.handleDrag;
+      _pointerState = pointerState;
     });
   }
 
@@ -685,6 +702,15 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   /// scroll view may have moved, so neither `controller.selection.baseOffset`
   /// nor a fresh `getPositionForPoint(_candidatePos)` is reliable anymore.
   void startDragging(Offset globalPos) {
+    if (_handleDrag != null &&
+        (_pointerState == SelectionPointerState.outside ||
+            _pointerState == SelectionPointerState.stale)) {
+      _endHandleDrag(
+        reason: 'new-pointer',
+        pointerState: SelectionPointerState.inside,
+        suppressBodyDragUntilPointerUp: false,
+      );
+    }
     if (_ignoreBodyDragUntilPointerUp) return;
     _candidatePos = globalPos;
     _candidateBlock = _blockAtPosition(globalPos);

@@ -462,12 +462,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       body: Listener(
         onPointerDown: (event) {
           if (event.buttons == kPrimaryButton) {
-            _overlayKey.currentState?.startDragging(event.position);
+            final overlay = _overlayKey.currentState;
+            if (overlay?.isPointInsideHandle(event.position) ?? false) {
+              return;
+            }
+            overlay?.startDragging(event.position);
           }
         },
         onPointerMove: (event) {
           if (event.buttons == kPrimaryButton) {
-            _overlayKey.currentState?.updateDragging(event.position);
+            final overlay = _overlayKey.currentState;
+            if (overlay?.isHandleInteractionActive ?? false) return;
+            overlay?.updateDragging(event.position);
           }
         },
         onPointerUp: (_) {
@@ -492,34 +498,40 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           skipTraversal: true,
           onKeyEvent: (_, __) => KeyEventResult.ignored,
           child: Stack(
-          children: [
-            Shortcuts(
+            children: [
+              Shortcuts(
                 shortcuts: {
                   LogicalKeySet(
                           LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
                       const _SelectAllIntent(),
-                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
+                  LogicalKeySet(
+                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
                       const _SelectAllIntent(),
                   LogicalKeySet(
                           LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
                       const _CopyIntent(),
-                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
+                  LogicalKeySet(
+                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
                       const _CopyIntent(),
                   LogicalKeySet(
                           LogicalKeyboardKey.control, LogicalKeyboardKey.keyX):
                       const _CutIntent(),
-                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
+                  LogicalKeySet(
+                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyX):
                       const _CutIntent(),
                   LogicalKeySet(
                           LogicalKeyboardKey.control, LogicalKeyboardKey.keyV):
                       const _PasteIntent(),
-                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV):
+                  LogicalKeySet(
+                          LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV):
                       const _PasteIntent(),
                   LogicalKeySet(
                       LogicalKeyboardKey.control,
                       LogicalKeyboardKey.shift,
                       LogicalKeyboardKey.keyF): const _SearchIntent(),
-                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
+                  LogicalKeySet(
+                      LogicalKeyboardKey.meta,
+                      LogicalKeyboardKey.shift,
                       LogicalKeyboardKey.keyF): const _SearchIntent(),
                   LogicalKeySet(
                           LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ):
@@ -533,10 +545,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                   LogicalKeySet(
                           LogicalKeyboardKey.meta, LogicalKeyboardKey.keyY):
                       const _RedoIntent(),
-                  LogicalKeySet(LogicalKeyboardKey.control,
-                      LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ):
-                      const _RedoIntent(),
-                  LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
+                  LogicalKeySet(
+                      LogicalKeyboardKey.control,
+                      LogicalKeyboardKey.shift,
+                      LogicalKeyboardKey.keyZ): const _RedoIntent(),
+                  LogicalKeySet(
+                      LogicalKeyboardKey.meta,
+                      LogicalKeyboardKey.shift,
                       LogicalKeyboardKey.keyZ): const _RedoIntent(),
                 },
                 child: Actions(
@@ -546,7 +561,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                       _selectAllBlocks();
                       return null;
                     }),
-                    _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
+                    _CopyIntent:
+                        CallbackAction<_CopyIntent>(onInvoke: (intent) {
                       _onCopyClean();
                       return null;
                     }),
@@ -554,7 +570,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                       _onCut();
                       return null;
                     }),
-                    _PasteIntent: CallbackAction<_PasteIntent>(onInvoke: (intent) {
+                    _PasteIntent:
+                        CallbackAction<_PasteIntent>(onInvoke: (intent) {
                       _onPaste();
                       return null;
                     }),
@@ -572,190 +589,197 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                       return null;
                     }),
                   },
-                child: Column(
-                  children: [
-                    FormattingToolbarMVP(
-                      onBold: _onBold,
-                      onUnderline: _onUnderline,
-                      onItalic: _onItalic,
-                      onClear: () {
-                        setState(() => _isCommandExecuting = true);
-                        final tagPattern = RegExp(
-                            r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
-                        if (_isGlobalSelection ||
-                            (_overlayKey.currentState?.hasSelection ?? false)) {
-                          // Global: strip ALL tags from every block
-                          for (final c in _controllers) {
-                            c.text = c.text.replaceAll(tagPattern, '');
-                          }
-                        } else {
-                          final c = _activeController;
-                          if (c != null) {
-                            final text = c.text;
-                            final sel = c.selection;
-                            if (sel.isValid && !sel.isCollapsed) {
-                              // Selection: strip tags inside the selected range, then
-                              // split any enclosing tags so surrounding text keeps style.
-                              final before = text.substring(0, sel.start);
-                              final selected =
-                                  text.substring(sel.start, sel.end);
-                              final after = text.substring(sel.end);
-                              final cleaned =
-                                  selected.replaceAll(tagPattern, '');
-                              final intermediate = before + cleaned + after;
-                              final cleanEnd = sel.start + cleaned.length;
-                              final result = _splitAllEnclosingStyles(
-                                  intermediate,
-                                  sel.start,
-                                  cleanEnd,
-                                  tagPattern);
-                              c.value = TextEditingValue(
-                                text: result,
-                                selection:
-                                    TextSelection.collapsed(offset: sel.start),
-                              );
-                            } else if (sel.isValid && sel.isCollapsed) {
-                              // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
-                              final plainText = text.replaceAll(tagPattern, '');
-                              final cursorInPlain = sel.start >= text.length ||
-                                  text
-                                      .substring(sel.start)
-                                      .replaceAll(tagPattern, '')
-                                      .isEmpty;
-                              if (cursorInPlain) {
-                                // Baseline Mode: clear ALL tags from ALL blocks
-                                for (final ctrl in _controllers) {
-                                  ctrl.text =
-                                      ctrl.text.replaceAll(tagPattern, '');
+                  child: Column(
+                    children: [
+                      FormattingToolbarMVP(
+                        onBold: _onBold,
+                        onUnderline: _onUnderline,
+                        onItalic: _onItalic,
+                        onClear: () {
+                          setState(() => _isCommandExecuting = true);
+                          final tagPattern = RegExp(
+                              r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
+                          if (_isGlobalSelection ||
+                              (_overlayKey.currentState?.hasSelection ??
+                                  false)) {
+                            // Global: strip ALL tags from every block
+                            for (final c in _controllers) {
+                              c.text = c.text.replaceAll(tagPattern, '');
+                            }
+                          } else {
+                            final c = _activeController;
+                            if (c != null) {
+                              final text = c.text;
+                              final sel = c.selection;
+                              if (sel.isValid && !sel.isCollapsed) {
+                                // Selection: strip tags inside the selected range, then
+                                // split any enclosing tags so surrounding text keeps style.
+                                final before = text.substring(0, sel.start);
+                                final selected =
+                                    text.substring(sel.start, sel.end);
+                                final after = text.substring(sel.end);
+                                final cleaned =
+                                    selected.replaceAll(tagPattern, '');
+                                final intermediate = before + cleaned + after;
+                                final cleanEnd = sel.start + cleaned.length;
+                                final result = _splitAllEnclosingStyles(
+                                    intermediate,
+                                    sel.start,
+                                    cleanEnd,
+                                    tagPattern);
+                                c.value = TextEditingValue(
+                                  text: result,
+                                  selection: TextSelection.collapsed(
+                                      offset: sel.start),
+                                );
+                              } else if (sel.isValid && sel.isCollapsed) {
+                                // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
+                                final plainText =
+                                    text.replaceAll(tagPattern, '');
+                                final cursorInPlain =
+                                    sel.start >= text.length ||
+                                        text
+                                            .substring(sel.start)
+                                            .replaceAll(tagPattern, '')
+                                            .isEmpty;
+                                if (cursorInPlain) {
+                                  // Baseline Mode: clear ALL tags from ALL blocks
+                                  for (final ctrl in _controllers) {
+                                    ctrl.text =
+                                        ctrl.text.replaceAll(tagPattern, '');
+                                  }
+                                } else {
+                                  // Word Mode: clear styles for the word at cursor
+                                  _clearStyleAtCursor(c, sel.start);
                                 }
-                              } else {
-                                // Word Mode: clear styles for the word at cursor
-                                _clearStyleAtCursor(c, sel.start);
                               }
                             }
                           }
-                        }
-                        _isDirty = false;
-                        setState(() => _isCommandExecuting = false);
-                        _saveHistory(description: 'Clear Format');
-                        // v4.1.4: After stripping alignment tags the text layout shifts,
-                        // but cursorStyleProvider and the overlay handles still hold the
-                        // old alignment. Force re-detection + handle refresh post-frame.
-                        _onSelectionChanged();
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (!mounted) return;
-                          final c = _activeController;
-                          if (c != null) {
-                            final hasAlign =
-                                RegExp(r'\[(?:align=)?(?:center|left|right)\]')
-                                    .hasMatch(c.text);
-                            if (!hasAlign) {
-                              ref.read(cursorStyleProvider.notifier).state = ref
-                                  .read(cursorStyleProvider)
-                                  .copyWith(textAlign: 'left');
+                          _isDirty = false;
+                          setState(() => _isCommandExecuting = false);
+                          _saveHistory(description: 'Clear Format');
+                          // v4.1.4: After stripping alignment tags the text layout shifts,
+                          // but cursorStyleProvider and the overlay handles still hold the
+                          // old alignment. Force re-detection + handle refresh post-frame.
+                          _onSelectionChanged();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted) return;
+                            final c = _activeController;
+                            if (c != null) {
+                              final hasAlign = RegExp(
+                                      r'\[(?:align=)?(?:center|left|right)\]')
+                                  .hasMatch(c.text);
+                              if (!hasAlign) {
+                                ref.read(cursorStyleProvider.notifier).state =
+                                    ref
+                                        .read(cursorStyleProvider)
+                                        .copyWith(textAlign: 'left');
+                              }
                             }
+                            _overlayKey.currentState?.refreshPositions();
+                          });
+                        },
+                        onFontSize: onFontSize,
+                        onAlign: onAlign,
+                        onDirection: onDirection,
+                        onTextColor: onTextColorSelected,
+                        onBgColor: onBgColorSelected,
+                        onFontFamily: onFontFamily,
+                        onBgColorChange: handleBgColorChange,
+                        lastTextColor: _lastChosenTextColor,
+                        lastHighlightColor: _lastChosenHighlightColor,
+                        onUndo: _undo,
+                        onRedo: _redo,
+                        canUndo: _historyIndex > 0,
+                        canRedo: _historyIndex < _history.length - 1,
+                        history: _history,
+                        historyIndex: _historyIndex,
+                        onHistorySelected: (idx) => _jumpToHistory(idx),
+                        activeSuite: _activeSuite,
+                        onSuiteToggle: (suite) {
+                          // Closing = explicitly closing (none), toggling same suite off, or switching suites
+                          final willClose = suite == EditorSuite.none ||
+                              suite == _activeSuite;
+                          final willSwitch = suite != _activeSuite &&
+                              _activeSuite != EditorSuite.none;
+                          _suiteAutoSaveTimer?.cancel();
+                          if ((willClose || willSwitch) && _isSuiteDirty) {
+                            _commitHistory(_suiteSection ??
+                                '${_activeSuite.name.toUpperCase()} Session');
+                            _isSuiteDirty = false;
+                            _suiteSection = null;
                           }
-                          _overlayKey.currentState?.refreshPositions();
-                        });
-                      },
-                      onFontSize: onFontSize,
-                      onAlign: onAlign,
-                      onDirection: onDirection,
-                      onTextColor: onTextColorSelected,
-                      onBgColor: onBgColorSelected,
-                      onFontFamily: onFontFamily,
-                      onBgColorChange: handleBgColorChange,
-                      lastTextColor: _lastChosenTextColor,
-                      lastHighlightColor: _lastChosenHighlightColor,
-                      onUndo: _undo,
-                      onRedo: _redo,
-                      canUndo: _historyIndex > 0,
-                      canRedo: _historyIndex < _history.length - 1,
-                      history: _history,
-                      historyIndex: _historyIndex,
-                      onHistorySelected: (idx) => _jumpToHistory(idx),
-                      activeSuite: _activeSuite,
-                      onSuiteToggle: (suite) {
-                        // Closing = explicitly closing (none), toggling same suite off, or switching suites
-                        final willClose =
-                            suite == EditorSuite.none || suite == _activeSuite;
-                        final willSwitch = suite != _activeSuite &&
-                            _activeSuite != EditorSuite.none;
-                        _suiteAutoSaveTimer?.cancel();
-                        if ((willClose || willSwitch) && _isSuiteDirty) {
-                          _commitHistory(_suiteSection ??
-                              '${_activeSuite.name.toUpperCase()} Session');
-                          _isSuiteDirty = false;
-                          _suiteSection = null;
-                        }
-                        setState(() {
-                          _activeSuite = (_activeSuite == suite)
-                              ? EditorSuite.none
-                              : suite;
-                        });
-                        if (_activeSuite != EditorSuite.none) {
-                          _suiteSection = null;
-                        }
-                      },
-                      onLayoutInteraction: (section) {
-                        _trackSuiteSection(section);
-                        setState(() => _isSuiteDirty = true);
-                      },
-                    ),
-                    Expanded(
-                      child: Container(
-                        color: Color(settings.scriptBgColor),
-                        child: GlobalSelectionOverlay(
-                          key: _overlayKey,
-                          controllers: _controllers,
-                          blockKeys: _blockKeys,
-                          scrollController: _editorScrollController,
-                          onSelectionChanged: () => setState(() {
-                            _isGlobalSelection = _controllers.isNotEmpty &&
-                                _controllers.every((c) => c.isGlobalSelected);
-                          }),
-                          child: SingleChildScrollView(
-                            controller: _editorScrollController,
-                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 250),
-                            child: Column(
-                              children: List.generate(
-                                _controllers.length,
-                                (index) => Listener(
-                                  onPointerDown: (event) {
-                                    if (_isGlobalSelection ||
-                                        _controllers
-                                            .any((c) => c.isGlobalSelected) ||
-                                        (_overlayKey
-                                                .currentState?.hasSelection ??
-                                            false) ||
-                                        _controllers.any((c) =>
-                                            c.externalSelection != null)) {
-                                      _clearGlobalSelection();
-                                    }
-                                  },
-                                  child: _EditorBlock(
-                                    key: _blockKeys[index],
-                                    controller: _controllers[index],
-                                    focusNode: _focusNodes[index],
-                                    settings: settings,
-                                    isGlobalSelected: _isGlobalSelection,
-                                    onSubmitted: () => _addBlock(index + 1),
-                                    onTap: () {
-                                      // Secondary safety, though Listener should handle it
-                                      if (_isGlobalSelection) {
+                          setState(() {
+                            _activeSuite = (_activeSuite == suite)
+                                ? EditorSuite.none
+                                : suite;
+                          });
+                          if (_activeSuite != EditorSuite.none) {
+                            _suiteSection = null;
+                          }
+                        },
+                        onLayoutInteraction: (section) {
+                          _trackSuiteSection(section);
+                          setState(() => _isSuiteDirty = true);
+                        },
+                      ),
+                      Expanded(
+                        child: Container(
+                          color: Color(settings.scriptBgColor),
+                          child: GlobalSelectionOverlay(
+                            key: _overlayKey,
+                            controllers: _controllers,
+                            blockKeys: _blockKeys,
+                            scrollController: _editorScrollController,
+                            onSelectionChanged: () => setState(() {
+                              _isGlobalSelection = _controllers.isNotEmpty &&
+                                  _controllers.every((c) => c.isGlobalSelected);
+                            }),
+                            child: SingleChildScrollView(
+                              controller: _editorScrollController,
+                              padding:
+                                  const EdgeInsets.fromLTRB(24, 24, 24, 250),
+                              child: Column(
+                                children: List.generate(
+                                  _controllers.length,
+                                  (index) => Listener(
+                                    onPointerDown: (event) {
+                                      if (_isGlobalSelection ||
+                                          _controllers
+                                              .any((c) => c.isGlobalSelected) ||
+                                          (_overlayKey
+                                                  .currentState?.hasSelection ??
+                                              false) ||
+                                          _controllers.any((c) =>
+                                              c.externalSelection != null)) {
                                         _clearGlobalSelection();
                                       }
                                     },
-                                    onSelectAll: _selectAllBlocks,
-                                    onCopy: _onCopyClean,
-                                    onCut: _onCut,
-                                    onPaste: _onPaste,
-                                    onUndo: _undo,
-                                    onRedo: _redo,
-                                    onSearch: _showEditorSearchDialog,
-                                    hasBookmark: _hasBookmarkInEditorBlock(index),
-                                    onBookmarkTap: () =>
-                                        _deleteEditorBookmarksForBlock(index),
+                                    child: _EditorBlock(
+                                      key: _blockKeys[index],
+                                      controller: _controllers[index],
+                                      focusNode: _focusNodes[index],
+                                      settings: settings,
+                                      isGlobalSelected: _isGlobalSelection,
+                                      onSubmitted: () => _addBlock(index + 1),
+                                      onTap: () {
+                                        // Secondary safety, though Listener should handle it
+                                        if (_isGlobalSelection) {
+                                          _clearGlobalSelection();
+                                        }
+                                      },
+                                      onSelectAll: _selectAllBlocks,
+                                      onCopy: _onCopyClean,
+                                      onCut: _onCut,
+                                      onPaste: _onPaste,
+                                      onUndo: _undo,
+                                      onRedo: _redo,
+                                      onSearch: _showEditorSearchDialog,
+                                      hasBookmark:
+                                          _hasBookmarkInEditorBlock(index),
+                                      onBookmarkTap: () =>
+                                          _deleteEditorBookmarksForBlock(index),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -763,51 +787,52 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              top: 0, left: 16, right: 16,
-              child: _buildEditorSearchToolbar(),
-            ),
-            if (_isPendingLoad)
-              Positioned.fill(
-                child: Container(
-                  color: const Color(0xFF0A0A0A),
-                  child: const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 56,
-                          height: 56,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 4,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFFFFBF00)),
-                          ),
-                        ),
-                        SizedBox(height: 18),
-                        Text('Loading script…',
-                            style: TextStyle(
-                                color: Color(0xFFFFBF00),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ),
-            if (settings.debugMode)
               Positioned(
-                bottom: 24,
-                left: 24,
-                child: IgnorePointer(child: _buildDebugSentry()),
+                top: 0,
+                left: 16,
+                right: 16,
+                child: _buildEditorSearchToolbar(),
               ),
-          ],
-        ),
+              if (_isPendingLoad)
+                Positioned.fill(
+                  child: Container(
+                    color: const Color(0xFF0A0A0A),
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 56,
+                            height: 56,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 4,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFFFFBF00)),
+                            ),
+                          ),
+                          SizedBox(height: 18),
+                          Text('Loading script…',
+                              style: TextStyle(
+                                  color: Color(0xFFFFBF00),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (settings.debugMode)
+                Positioned(
+                  bottom: 24,
+                  left: 24,
+                  child: IgnorePointer(child: _buildDebugSentry()),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -830,6 +855,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return false;
     }
     if (_clearAppSelectionForArrow(key)) return true;
+    final keyboard = HardwareKeyboard.instance;
+    final hasModifier = keyboard.isControlPressed ||
+        keyboard.isShiftPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed;
+    if (hasModifier) {
+      _lastArrowDecision = 'arrow ${key.keyLabel}: native modifier';
+      return false;
+    }
     _lastArrowDecision = 'arrow ${key.keyLabel}: route';
     return _handleEditorArrowKey(_arrowKeyDummyNode, event) ==
         KeyEventResult.handled;
@@ -838,8 +872,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _clearAppSelectionForArrow(LogicalKeyboardKey key) {
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (!_isGlobalSelection && !hasOverlay) return false;
-    final collapseToEnd =
-        key == LogicalKeyboardKey.arrowRight ||
+    final collapseToEnd = key == LogicalKeyboardKey.arrowRight ||
         key == LogicalKeyboardKey.arrowDown;
     final target = _appSelectionEdge(collapseToEnd: collapseToEnd);
     _overlayKey.currentState?.clearSelection();
@@ -884,9 +917,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           fullBlock || (sel != null && sel.isValid && !sel.isCollapsed);
       if (!hasRange) continue;
       final start = fullBlock ? 0 : sel!.start.clamp(0, c.text.length).toInt();
-      final end = fullBlock
-          ? c.text.length
-          : sel!.end.clamp(0, c.text.length).toInt();
+      final end =
+          fullBlock ? c.text.length : sel!.end.clamp(0, c.text.length).toInt();
       final low = start < end ? start : end;
       final high = start > end ? start : end;
       first ??= (block: i, offset: low);

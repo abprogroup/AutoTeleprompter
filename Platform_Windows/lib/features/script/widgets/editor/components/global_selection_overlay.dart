@@ -22,6 +22,7 @@ class GlobalSelectionOverlay extends StatefulWidget {
   final List<GlobalKey> blockKeys;
   final Widget child;
   final VoidCallback onSelectionChanged;
+
   /// Editor scroll controller. When provided, dragging a selection handle
   /// near the top or bottom of the viewport automatically scrolls the list,
   /// letting users extend selections beyond the visible area.
@@ -60,14 +61,15 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   // Delta-drag state: track finger start (global) and the handle's caret start
   // position (also global, converted at pan-start while layout is valid).
   Offset? _panStartGlobal;
-  Offset? _panStartHandleGlobal; // caret global position at the moment of pan start
+  Offset?
+      _panStartHandleGlobal; // caret global position at the moment of pan start
   final GlobalKey _stackKey = GlobalKey();
 
   // Drag-handle autoscroll: when a handle is dragged within [_autoScrollZone]
   // pixels of the top/bottom edge, a periodic timer scrolls the list so the
   // user can extend the selection beyond the visible viewport.
   static const double _autoScrollZone = 60.0; // px from edge to trigger
-  static const double _autoScrollMax = 40.0;  // max px per tick (at edge)
+  static const double _autoScrollMax = 40.0; // max px per tick (at edge)
   static const double _handleHitWidth = 40.0;
   static const double _handleHitHeight = 56.0;
   static const double _handleBarWidth = 6.0;
@@ -79,6 +81,24 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get isHandleInteractionActive =>
       _draggingStart || _draggingEnd || _autoScrollTimer != null;
+
+  bool isPointInsideHandle(Offset globalPos) {
+    final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stackBox == null || !hasSelection) return false;
+
+    bool contains(Offset? caret, bool endpointA) {
+      if (caret == null) return false;
+      final center = _handleVisualCenter(caret, endpointA);
+      final rect = Rect.fromCenter(
+        center: center,
+        width: _handleHitWidth,
+        height: _handleHitHeight,
+      );
+      return rect.contains(stackBox.globalToLocal(globalPos));
+    }
+
+    return contains(_handleStartPos, true) || contains(_handleEndPos, false);
+  }
 
   double _edgeScrollSpeed(Offset globalHandlePos) {
     final sc = widget.scrollController;
@@ -93,8 +113,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       speed = -_autoScrollMax * (1 - local.dy / _autoScrollZone);
     } else if (local.dy > height - _autoScrollZone) {
       // Near bottom — scroll down
-      speed = _autoScrollMax *
-          (1 - (height - local.dy) / _autoScrollZone);
+      speed = _autoScrollMax * (1 - (height - local.dy) / _autoScrollZone);
     }
     if (speed < 0 && sc.offset <= sc.position.minScrollExtent) return 0;
     if (speed > 0 && sc.offset >= sc.position.maxScrollExtent) return 0;
@@ -130,7 +149,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         final latestPointer = _latestAutoScrollPointerGlobal;
         final latestHandle = _latestAutoScrollHandleGlobal;
         final activeSide = _autoScrollIsStart ?? _activeHandleIsStart;
-        if (latestPointer == null || latestHandle == null || activeSide == null) {
+        if (latestPointer == null ||
+            latestHandle == null ||
+            activeSide == null) {
           _stopAutoScroll();
           return;
         }
@@ -237,15 +258,14 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     widget.onSelectionChanged();
   }
 
-  bool get hasSelection => _isSelecting && _startBlock != null && _endBlock != null;
+  bool get hasSelection =>
+      _isSelecting && _startBlock != null && _endBlock != null;
 
   String get debugSelectionSummary {
     final range = _normalizedRange();
-    final a = _startBlock == null
-        ? 'A:-'
-        : 'A:$_startBlock:${_startOffset ?? '-'}';
-    final b =
-        _endBlock == null ? 'B:-' : 'B:$_endBlock:${_endOffset ?? '-'}';
+    final a =
+        _startBlock == null ? 'A:-' : 'A:$_startBlock:${_startOffset ?? '-'}';
+    final b = _endBlock == null ? 'B:-' : 'B:$_endBlock:${_endOffset ?? '-'}';
     final active = _activeHandleIsStart == null
         ? 'active:none'
         : 'active:${_activeHandleIsStart! ? 'A' : 'B'}';
@@ -325,18 +345,17 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (!selection.isValid || selection.isCollapsed) return;
     final controller = widget.controllers[blockIndex];
     final start = selection.start.clamp(0, controller.text.length).toInt();
-    final end   = selection.end  .clamp(0, controller.text.length).toInt();
+    final end = selection.end.clamp(0, controller.text.length).toInt();
     if (start == end) return;
     if (start == 0 && end == controller.text.length) return;
     setState(() {
       _isSelecting = true;
-      _startBlock  = blockIndex;
-      _endBlock    = blockIndex;
+      _startBlock = blockIndex;
+      _endBlock = blockIndex;
       _startOffset = start;
-      _endOffset   = end;
+      _endOffset = end;
       for (final c in widget.controllers) c.isGlobalSelected = false;
-      _updateBlockHighlights();
-      for (final c in widget.controllers) c.refresh();
+      _updateControllers();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -348,7 +367,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   /// Returns the block index whose render box contains [globalPos], or null.
   int? _blockAtPosition(Offset globalPos) {
     for (int i = 0; i < widget.blockKeys.length; i++) {
-      final box = widget.blockKeys[i].currentContext?.findRenderObject() as RenderBox?;
+      final box =
+          widget.blockKeys[i].currentContext?.findRenderObject() as RenderBox?;
       if (box == null) continue;
       final local = box.globalToLocal(globalPos);
       if (local.dx >= 0 &&
@@ -442,8 +462,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   void _handleUpdate(Offset globalPos, bool isStart) {
-    final RenderBox? overlayBox =
-        context.findRenderObject() as RenderBox?;
+    final RenderBox? overlayBox = context.findRenderObject() as RenderBox?;
     if (overlayBox == null) return;
     final localPos = overlayBox.globalToLocal(globalPos);
 
@@ -612,13 +631,17 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (_startBlock == null || _endBlock == null) return;
     if (_startBlock! < controllers.length) {
       final c = controllers[_startBlock!];
-      if (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) {
+      if (c.externalSelection != null &&
+          c.externalSelection!.isValid &&
+          !c.externalSelection!.isCollapsed) {
         _startOffset = c.externalSelection!.start;
       }
     }
     if (_endBlock! < controllers.length) {
       final c = controllers[_endBlock!];
-      if (c.externalSelection != null && c.externalSelection!.isValid && !c.externalSelection!.isCollapsed) {
+      if (c.externalSelection != null &&
+          c.externalSelection!.isValid &&
+          !c.externalSelection!.isCollapsed) {
         _endOffset = c.externalSelection!.end;
       }
     }
@@ -629,14 +652,21 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   }
 
   void _updateBlockHighlights() {
-    if (_startBlock == null || _endBlock == null || _startOffset == null || _endOffset == null) return;
+    if (_startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) return;
 
     // Ensure start is before end
     int sB = _startBlock!, eB = _endBlock!;
     int sO = _startOffset!, eO = _endOffset!;
     if (sB > eB || (sB == eB && sO > eO)) {
-      final tB = sB; sB = eB; eB = tB;
-      final tO = sO; sO = eO; eO = tO;
+      final tB = sB;
+      sB = eB;
+      eB = tB;
+      final tO = sO;
+      sO = eO;
+      eO = tO;
     }
 
     for (int i = 0; i < widget.controllers.length; i++) {
@@ -650,13 +680,35 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       } else if (i == sB && i == eB) {
         c.externalSelection = TextSelection(baseOffset: sO, extentOffset: eO);
       } else if (i == sB) {
-        c.externalSelection = TextSelection(baseOffset: sO, extentOffset: c.text.length);
+        c.externalSelection =
+            TextSelection(baseOffset: sO, extentOffset: c.text.length);
       } else if (i == eB) {
         c.externalSelection = TextSelection(baseOffset: 0, extentOffset: eO);
       } else {
-        c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+        c.externalSelection =
+            TextSelection(baseOffset: 0, extentOffset: c.text.length);
       }
     }
+  }
+
+  bool? _nearestHandleForPointer(Offset globalPos, {required bool fallback}) {
+    final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stackBox == null) return fallback;
+
+    double? distanceTo(Offset? caret, bool endpointA) {
+      if (caret == null) return null;
+      final center = _handleVisualCenter(caret, endpointA);
+      final globalCenter = stackBox.localToGlobal(center);
+      final delta = globalCenter - globalPos;
+      return delta.dx * delta.dx + delta.dy * delta.dy;
+    }
+
+    final startDistance = distanceTo(_handleStartPos, true);
+    final endDistance = distanceTo(_handleEndPos, false);
+    if (startDistance == null && endDistance == null) return fallback;
+    if (startDistance == null) return false;
+    if (endDistance == null) return true;
+    return startDistance <= endDistance;
   }
 
   void _enterRefineMode() {
@@ -672,7 +724,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     // Collapsing native selection was causing _getPositionForPoint() to misreport
     // positions on the second visual line of wrapped text blocks (multi-line drag bug).
   }
-
 
   @override
   void dispose() {
@@ -751,6 +802,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         behavior: HitTestBehavior.opaque,
         onPanStart: (details) {
           _enterRefineMode();
+          final activeSide = _nearestHandleForPointer(details.globalPosition,
+                  fallback: isStart) ??
+              isStart;
           // v4.0.9: Convert the handle's Stack-local caret position to GLOBAL
           // coordinates HERE (layout is guaranteed valid from the previous frame).
           // Subsequent onPanUpdate calls just add the finger delta to this global
@@ -758,14 +812,22 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           // _handleUpdate.  This eliminates the line-1 snap that occurred when
           // the user's finger landed at the top of the 56-px hit area (18 px
           // above the caret) and the raw touch y was mapped to line 1 instead.
-          final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
-          final logicalStackLocal = isStart ? _handleStartPos : _handleEndPos;
+          final stackBox =
+              _stackKey.currentContext?.findRenderObject() as RenderBox?;
+          final logicalStackLocal =
+              activeSide ? _handleStartPos : _handleEndPos;
           final caretGlobal = (stackBox != null && logicalStackLocal != null)
               ? stackBox.localToGlobal(logicalStackLocal)
               : null;
           setState(() {
-            if (isStart) _draggingStart = true; else _draggingEnd = true;
-            _activeHandleIsStart = isStart;
+            if (activeSide) {
+              _draggingStart = true;
+              _draggingEnd = false;
+            } else {
+              _draggingStart = false;
+              _draggingEnd = true;
+            }
+            _activeHandleIsStart = activeSide;
             _panStartGlobal = details.globalPosition;
             _panStartHandleGlobal = caretGlobal;
           });
@@ -809,7 +871,10 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
                 color: const Color(0xFFFFBF00),
                 borderRadius: BorderRadius.circular(3),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 4, offset: const Offset(0, 2)),
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2)),
                 ],
               ),
             ),

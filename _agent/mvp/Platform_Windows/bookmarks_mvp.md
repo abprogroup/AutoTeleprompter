@@ -170,3 +170,15 @@ characters.
 - Presenter bookmark jumps are direct and must not use smooth STT scrolling.
 - A bookmark added or removed in present mode must be reflected when returning
   to editor mode, and the reverse must also hold.
+
+## 2026-05-03 V5 Follow-Up: Presenter Coordinate Sync
+
+- Before entering present mode, editor bookmark metadata must be rebuilt from
+  the live text-flow `\u00BB` signs. Saving stale metadata before presenting can
+  place presenter markers at old coordinates.
+- Bookmark word-index mapping must use the same cleaned text that presenter
+  tokenization receives: bookmark signs removed, markup tags treated as
+  invisible, and empty blocks preserved as newline tokens.
+- Returning from present mode reconciles editor signs from presenter-saved
+  metadata without recording a new editor history entry. This keeps
+  present-mode add/remove actions synced without polluting text undo order.

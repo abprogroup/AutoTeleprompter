@@ -165,3 +165,15 @@ save entries created after selection-based commands.
 - Arrow navigation has one owner: the global hardware-key route. The editor
   focus shell must not also process arrow keys, because duplicate handling can
   skip empty rows or stall at paragraph boundaries.
+
+## 2026-05-03 V5 Follow-Up: Handle Gesture Fencing
+
+- The page-level cross-block drag listener must not start when the pointer
+  begins inside an existing handle hit box. Handle drags and body drags are
+  separate gesture systems.
+- If handle hit boxes overlap, the active endpoint is chosen by nearest visible
+  handle center at pan start, not by whichever `GestureDetector` wins z-order.
+  This prevents fast drags from moving the opposite endpoint.
+- While a handle drag or handle autoscroll is active, body drag updates are
+  ignored. Cross-block selection may still extend through `_handleUpdate`, but
+  only the active endpoint moves.

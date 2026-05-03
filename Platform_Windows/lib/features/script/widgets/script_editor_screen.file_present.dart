@@ -165,7 +165,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   void _startPresenting() async {
-    await _saveBookmarks();
+    await _syncBookmarksFromEditorSigns(notify: true, save: true);
     try {
       final settings = ref.read(settingsProvider);
       ref.read(scriptProvider.notifier).loadText(
@@ -191,6 +191,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
       if (mounted) {
         await _loadBookmarksForCurrentScript(force: true);
+        await _reconcileEditorBookmarkSignsFromMetadata(recordHistory: false);
         _onSelectionChanged();
       }
     }

@@ -50,12 +50,9 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
         final normalized = _normalizeBookmarkSigns(controller.text);
         if (normalized == controller.text) continue;
         final selection = controller.selection;
-        final base = selection.baseOffset
-            .clamp(0, normalized.length)
-            .toInt();
-        final extent = selection.extentOffset
-            .clamp(0, normalized.length)
-            .toInt();
+        final base = selection.baseOffset.clamp(0, normalized.length).toInt();
+        final extent =
+            selection.extentOffset.clamp(0, normalized.length).toInt();
         controller.value = TextEditingValue(
           text: normalized,
           selection: TextSelection(baseOffset: base, extentOffset: extent),
@@ -105,7 +102,9 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
 
   // ── Reconcile: metadata → text signs (migration from old metadata-only system) ──
 
-  Future<void> _reconcileEditorBookmarkSignsFromMetadata() async {
+  Future<void> _reconcileEditorBookmarkSignsFromMetadata({
+    bool recordHistory = true,
+  }) async {
     await _loadBookmarksForCurrentScript(force: true);
     if (_controllers.isEmpty) return;
     _normalizeBookmarkSignsInControllers();
@@ -168,7 +167,9 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     _isCommandExecuting = false;
     if (changed) {
       await _syncBookmarksFromEditorSigns(notify: true, save: true);
-      _saveHistory(description: 'Sync Bookmarks');
+      if (recordHistory) {
+        _saveHistory(description: 'Sync Bookmarks');
+      }
     }
   }
 
@@ -189,6 +190,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
           .length;
       return (safe - removedBefore).clamp(0, newTextLength).toInt();
     }
+
     return TextSelection(
       baseOffset: adjust(selection.baseOffset),
       extentOffset: adjust(selection.extentOffset),
@@ -261,7 +263,8 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     if (block < 0 || block >= _controllers.length) return 0;
     final text = _stripBookmarkSigns(_controllers[block].text);
     if (text.trim().isEmpty) return 1;
-    final wordCount = RegExp(r'\S+').allMatches(text).length;
+    final wordCount =
+        WordAligner.tokenize(text).where((word) => !word.isNewline).length;
     return wordCount + (includeSoftBreak ? 1 : 0);
   }
 
@@ -273,11 +276,16 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     final cleanText = _stripBookmarkSigns(text);
     final cleanOffset =
         (safeOffset - signsBefore).clamp(0, cleanText.length).toInt();
-    final matches = RegExp(r'\S+').allMatches(cleanText).toList();
+    final visibleText = StylingService.stripTags(cleanText);
+    final visibleOffset =
+        MarkupController.rawToVisualOffset(cleanText, cleanOffset)
+            .clamp(0, visibleText.length)
+            .toInt();
+    final matches = RegExp(r'\S+').allMatches(visibleText).toList();
     if (matches.isEmpty) return 0;
     for (var i = 0; i < matches.length; i++) {
-      if (cleanOffset <= matches[i].start) return i;
-      if (cleanOffset > matches[i].start && cleanOffset < matches[i].end) {
+      if (visibleOffset <= matches[i].start) return i;
+      if (visibleOffset > matches[i].start && visibleOffset < matches[i].end) {
         return i;
       }
     }
@@ -372,7 +380,8 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     _goToEditorBookmark(target);
   }
 
-  ({int block, int offset}) _editorPositionForBookmark(ScriptBookmark bookmark) {
+  ({int block, int offset}) _editorPositionForBookmark(
+      ScriptBookmark bookmark) {
     if (bookmark.blockIndex >= 0 && bookmark.blockIndex < _controllers.length) {
       final bookmarkedBlock = _controllers[bookmark.blockIndex];
       if (bookmarkedBlock.text.trim().isEmpty) {
@@ -394,17 +403,22 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     final lastBlock = _controllers.length - 1;
     for (var block = 0; block < _controllers.length; block++) {
       final text = _controllers[block].text;
-      final wordMatches = RegExp(r'\S+')
-          .allMatches(text)
-          .where((m) =>
-              _stripBookmarkSigns(m.group(0) ?? '').trim().isNotEmpty)
-          .toList();
+      final cleanText = _stripBookmarkSigns(text);
+      final visibleText = StylingService.stripTags(cleanText);
+      final wordMatches = RegExp(r'\S+').allMatches(visibleText).toList();
       if (wordMatches.isNotEmpty &&
           wordIndex >= cursor &&
           wordIndex < cursor + wordMatches.length) {
         final localToken =
             (wordIndex - cursor).clamp(0, wordMatches.length - 1).toInt();
-        return (block: block, offset: wordMatches[localToken].start);
+        final cleanRawOffset = MarkupController.visualToRawOffset(
+          cleanText,
+          wordMatches[localToken].start,
+        );
+        return (
+          block: block,
+          offset: _rawOffsetWithBookmarkSigns(text, cleanRawOffset),
+        );
       }
       cursor += _tokenLengthForEditorBlock(
         block,
@@ -418,6 +432,26 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
           ? _controllers[last].text.length
           : 0
     );
+  }
+
+  int _rawOffsetWithBookmarkSigns(String text, int cleanRawOffset) {
+    final target =
+        cleanRawOffset.clamp(0, _stripBookmarkSigns(text).length).toInt();
+    var raw = 0;
+    var clean = 0;
+    while (raw < text.length && clean < target) {
+      if (text.startsWith(_bookmarkSign, raw)) {
+        raw += _bookmarkSign.length;
+        continue;
+      }
+      if (text.startsWith(_legacyBookmarkSign, raw)) {
+        raw += _legacyBookmarkSign.length;
+        continue;
+      }
+      raw++;
+      clean++;
+    }
+    return raw.clamp(0, text.length).toInt();
   }
 
   void _goToEditorBookmark(int bookmarkIndex) {
@@ -523,15 +557,13 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
       if (offset < controller.text.length &&
           controller.text[offset] == _bookmarkSign) {
         deleteOffset = offset;
-      } else if (offset > 0 &&
-          controller.text[offset - 1] == _bookmarkSign) {
+      } else if (offset > 0 && controller.text[offset - 1] == _bookmarkSign) {
         deleteOffset = offset - 1;
       }
       if (deleteOffset < 0) continue;
       controller.value = TextEditingValue(
         text: controller.text.substring(0, deleteOffset) +
-            controller.text
-                .substring(deleteOffset + _bookmarkSign.length),
+            controller.text.substring(deleteOffset + _bookmarkSign.length),
         selection: TextSelection.collapsed(offset: deleteOffset),
       );
     }
@@ -563,6 +595,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
         alignment: alignment,
       );
     }
+
     final ctx = _blockKeys[block].currentContext;
     if (ctx != null) {
       ensure();

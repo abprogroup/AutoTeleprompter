@@ -415,3 +415,12 @@ file and the matching MVP docs.
 - Debug mode may show endpoint A, endpoint B, active endpoint, normalized
   selection range, and last arrow decision so device QA screenshots expose
   the internal selection state.
+
+## 2026-05-03 V5 Follow-Up: Modified Arrow Fallback
+
+- Plain arrow keys may use the Windows editor block-navigation route.
+- Ctrl, Shift, Alt, and Meta arrow combinations must fall back to the native
+  `EditableText` shortcut behavior unless an app-owned selection is currently
+  active and must be cleared first.
+- This preserves system/editor shortcut semantics such as Ctrl+Up/Down and
+  Shift-based selection while keeping app-owned overlay deselection explicit.

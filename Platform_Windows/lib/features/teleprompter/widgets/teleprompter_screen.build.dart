@@ -227,7 +227,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                               vertical: effectiveFontSize * 0.04,
                             ),
                             child: Text(
-                              '»',
+                              '\u00BB',
                               style: TextStyle(
                                 color: Color(settings.currentWordColor),
                                 fontSize: effectiveFontSize * 0.62,
@@ -606,7 +606,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
 
                     // Compact search toolbar — floats at top, prev/next, count
                     Positioned(
-                      top: 8, left: 0, right: 0,
+                      top: 8,
+                      left: 0,
+                      right: 0,
                       child: Center(child: _buildPresenterSearchToolbar()),
                     ),
 

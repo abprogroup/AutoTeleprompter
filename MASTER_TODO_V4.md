@@ -686,3 +686,11 @@
   stable endpoint ownership, draws handle bars outside selected text, makes the
   global hardware-key route the single arrow owner, and exposes endpoint/range
   state in debug mode. Awaiting Windows artifact QA.
+- [P] **Windows Handle Gesture + Bookmark Presenter Sync Follow-Up**: Device QA
+  showed fast handle drags could still grab the opposite endpoint, handle/body
+  drag listeners could collide across blocks, Ctrl+Up/Down needed native
+  shortcut fallback, and editor bookmark signs could save stale presenter
+  coordinates. Follow-up fences body drag away from handle hit boxes, chooses
+  the nearest visible endpoint at pan start, lets modified arrows fall through
+  to native `EditableText`, and rebuilds presenter bookmark metadata from live
+  `\u00BB` signs before presentation. Awaiting Windows artifact QA.

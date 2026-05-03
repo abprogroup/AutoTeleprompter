@@ -1459,3 +1459,26 @@
 - **Verification Status**: Awaiting Windows workflow artifact and local smoke
   test, then user QA for handle placement, cross-block drag, and empty-row
   arrow stops.
+
+## 2026-05-03 - Windows v5 Handle Gesture + Presenter Bookmark Follow-Up
+
+- **Device QA Input**: User found that fast handle drags could move the
+  opposite endpoint, cross-block handle drags became unstable, double-click
+  selection handles were not fully synced before drag, Ctrl+Up/Down shortcuts
+  did not preserve native paragraph-selection behavior, and editor bookmarks
+  did not land at the correct present-mode coordinates.
+- **Runtime Fix**: Windows body drag now refuses to start from an existing
+  handle hit box and ignores body drag updates while a handle is active. If
+  hit boxes overlap, pan start chooses the nearest visible handle center so
+  fast drags keep the intended endpoint.
+- **Keyboard Fix**: Plain arrows still use the app block-navigation route, but
+  Ctrl/Shift/Alt/Meta arrow combinations now fall through to native
+  `EditableText` shortcut handling unless an app-owned selection must first be
+  cleared.
+- **Bookmark Fix**: Present mode entry now rebuilds bookmark metadata from the
+  live `\u00BB` text signs, and bookmark word-index mapping counts the same
+  cleaned visible/tokenized text that the presenter receives. Return from
+  present reconciles editor signs from presenter metadata without creating a
+  history entry.
+- **Verification Status**: Targeted analyzer reports no new compile errors;
+  existing Windows warnings/infos remain. Awaiting Windows artifact/device QA.

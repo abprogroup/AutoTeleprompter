@@ -116,8 +116,34 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     final baseName =
         ExportNameService.sanitizeBaseName(_currentTitle, normalizedFormat);
+    final treeUri = await AndroidFileAccess.pickExportFolder();
+    if (!mounted) return;
+    if (treeUri == null || treeUri.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Save cancelled.'),
+          backgroundColor: Colors.black54,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
 
-    final folderExports = await AndroidFileAccess.listDefaultExportFolder();
+    if (!await AndroidFileAccess.hasPersistedExportFolder(treeUri)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Android did not grant write access to that folder.',
+          ),
+          backgroundColor: Colors.red[800],
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+    await ExportFolderRegistry.save(treeUri);
+
+    final folderExports = await AndroidFileAccess.listExportFolder(treeUri);
     final exactDisplayName =
         ExportNameService.buildDisplayName(baseName, normalizedFormat);
     final exactFolderExport =
@@ -129,8 +155,8 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     if (exactFolderExport != null && mounted) {
       final choice = await _showExportConflictDialog(
         exactFolderExport.displayName,
-        message: '"${exactFolderExport.displayName}" already exists in '
-            'Documents/AutoTeleprompter.',
+        message: '"${exactFolderExport.displayName}" already exists in the '
+            'selected folder.',
       );
       if (!mounted || choice == _ExportConflictChoice.cancel) return;
       if (choice == _ExportConflictChoice.replace) {
@@ -156,7 +182,8 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           )
         : ExportNameService.buildDisplayName(baseName, normalizedFormat);
 
-    final createdLocation = await AndroidFileAccess.createDefaultExportDocument(
+    final createdLocation = await AndroidFileAccess.createExportDocument(
+      treeUri: treeUri,
       displayName: fileName,
       mimeType: ExportNameService.mimeTypeForFormat(normalizedFormat),
     );
@@ -166,7 +193,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not create "$fileName" in Documents/AutoTeleprompter.',
+            'Could not create "$fileName" in the selected folder.',
           ),
           backgroundColor: Colors.red[800],
           duration: const Duration(seconds: 5),
@@ -272,7 +299,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         SnackBar(
           content: Text(
             'Could not ${replaced ? 'replace' : 'save'} '
-            '"${entry.displayName}" in Documents/AutoTeleprompter.',
+            '"${entry.displayName}" in the selected folder.',
           ),
           backgroundColor: Colors.red[800],
           duration: const Duration(seconds: 5),

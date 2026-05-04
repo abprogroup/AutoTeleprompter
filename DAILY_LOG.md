@@ -1786,16 +1786,17 @@
 - Changed the Android workflow to release split-per-ABI APK artifacts instead
   of debug APK upload, and kept all active Android Dart files under 800 lines.
 
-### 2026-05-04 - Android MediaStore Export Folder Repair
+### 2026-05-04 - Android Direct Folder Export Repair
 
-- Replaced Android's normal export save path with an app-owned MediaStore
-  export folder at `Documents/AutoTeleprompter`, avoiding the restricted
-  Android folder picker and the provider auto-rename path.
+- Replaced Android's normal export save path with a direct selected-folder
+  export flow. After format selection, Android opens the folder picker directly
+  without an extra app explanation dialog.
 - Duplicate export handling now happens before document creation: Replace
   writes to the existing URI, Keep Both creates `name (1).ext`, and Cancel
   performs no write.
-- Added native Android MediaStore channel methods for app export-folder
-  listing, document creation, direct URI writes, and cleanup if a provider
-  creates an unexpected display name.
+- Android still refuses restricted system roots in the platform picker; users
+  should choose a writable folder/subfolder. The app lists that selected folder,
+  creates the final safe display name there, and rejects unexpected provider
+  names.
 - Repaired the Android export-name test to use real Hebrew instead of mojibake
   and added MIME-type coverage for document creation.

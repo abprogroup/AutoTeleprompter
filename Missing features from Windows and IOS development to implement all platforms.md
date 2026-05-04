@@ -757,12 +757,12 @@ artifacts instead of debug APK uploads. Future platform agents should not copy
 desktop toolbar density or native clipboard command paths into mobile surfaces
 when iOS already proved the mobile-specific protocol.
 
-Android MediaStore export folder repair — 2026-05-04
+Android selected-folder export repair — 2026-05-04
 
-Android export duplicate handling must be app-folder-authoritative, not
-provider auto-rename based. Normal Android exports use
-`Documents/AutoTeleprompter` through MediaStore, list existing display names
-before saving, and present Replace / Keep Both / Cancel before document
-creation. Keep Both creates `name (1).ext`; `name.ext (1)` is rejected as a
-provider failure, not accepted as a valid export. Broad all-files storage
+Android export duplicate handling must be selected-folder-authoritative, not
+provider auto-rename based. Normal Android exports open the folder picker
+directly after format selection, list existing display names in the selected
+writable folder before saving, and present Replace / Keep Both / Cancel before
+document creation. Keep Both creates `name (1).ext`; `name.ext (1)` is rejected
+as a provider failure, not accepted as a valid export. Broad all-files storage
 permission remains out of scope.

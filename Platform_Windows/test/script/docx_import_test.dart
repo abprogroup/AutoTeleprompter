@@ -1,0 +1,79 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:archive/archive.dart';
+import 'package:autoteleprompter/features/script/providers/script_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
+
+  test('DOCX import preserves underline, breaks, and empty paragraphs',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('docx_import_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/styled.docx');
+    await file.writeAsBytes(_docxBytes('''
+<w:p>
+  <w:pPr><w:jc w:val="right"/></w:pPr>
+  <w:r><w:rPr><w:b/><w:u w:val="single"/></w:rPr><w:t>bold underline</w:t></w:r>
+</w:p>
+<w:p/>
+<w:p>
+  <w:r><w:t>first line</w:t><w:br/><w:t>second line</w:t></w:r>
+</w:p>
+<w:p>
+  <w:r><w:rPr><w:i/></w:rPr><w:t>italic</w:t></w:r>
+</w:p>
+'''));
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(text, contains('[align=right]'));
+    expect(text, contains('**[u]bold underline[/u]**'));
+    expect(text, contains('\n\nfirst line\nsecond line'));
+    expect(text, contains('[i]italic[/i]'));
+  });
+}
+
+List<int> _docxBytes(String bodyXml) {
+  final archive = Archive();
+  void add(String name, String content) {
+    final bytes = utf8.encode(content);
+    archive.addFile(ArchiveFile(name, bytes.length, bytes));
+  }
+
+  add('[Content_Types].xml', '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>
+''');
+  add('_rels/.rels', '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>
+''');
+  add('word/document.xml', '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    $bodyXml
+  </w:body>
+</w:document>
+''');
+
+  return ZipEncoder().encode(archive)!;
+}

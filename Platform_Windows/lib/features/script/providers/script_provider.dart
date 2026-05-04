@@ -315,20 +315,35 @@ class ScriptNotifier extends Notifier<Script?> {
     final xmlStr = utf8.decode(bytes, allowMalformed: true);
     final document = XmlDocument.parse(xmlStr);
     final paragraphs = document.findAllElements('w:p').toList();
-    final buf = StringBuffer();
+    final parsedParagraphs = <String>[];
 
     for (final p in paragraphs) {
+      final paragraph = StringBuffer();
+      final paragraphAlign = _docxParagraphAlign(p);
+
       for (final r in p.findAllElements('w:r')) {
         final rPr = r.getElement('w:rPr');
-        final textNode = r.getElement('w:t');
-        if (textNode == null) continue;
-
-        String text = textNode.innerText;
+        final text = _docxRunText(r);
         if (text.isEmpty) continue;
 
+        bool isBold = false;
+        bool isItalic = false;
+        bool isUnderline = false;
+        String? color;
+
         if (rPr != null) {
-          final isBold = rPr.getElement('w:b') != null;
-          final color = rPr.getElement('w:color')?.getAttribute('w:val');
+          isBold = rPr.getElement('w:b') != null &&
+              rPr.getElement('w:b')?.getAttribute('w:val') != '0' &&
+              rPr.getElement('w:b')?.getAttribute('w:val') != 'false';
+          isItalic = rPr.getElement('w:i') != null &&
+              rPr.getElement('w:i')?.getAttribute('w:val') != '0' &&
+              rPr.getElement('w:i')?.getAttribute('w:val') != 'false';
+          final underline = rPr.getElement('w:u');
+          isUnderline = underline != null &&
+              underline.getAttribute('w:val') != 'none' &&
+              underline.getAttribute('w:val') != '0' &&
+              underline.getAttribute('w:val') != 'false';
+          color = rPr.getElement('w:color')?.getAttribute('w:val');
 
           if (detectedFontSize == null) {
             final sz = rPr.getElement('w:sz')?.getAttribute('w:val') ??
@@ -338,17 +353,21 @@ class ScriptNotifier extends Notifier<Script?> {
               if (halfPoints != null) detectedFontSize = halfPoints / 2.0;
             }
           }
-
-          if (color != null && color != 'auto') {
-            text = '[color=#$color]$text[/color]';
-          }
-          if (isBold) {
-            text = '**$text**';
-          }
         }
-        buf.write(text);
+
+        paragraph.write(_docxWrapRun(
+          text,
+          isBold: isBold,
+          isItalic: isItalic,
+          isUnderline: isUnderline,
+          color: color,
+        ));
       }
-      buf.write('\n');
+
+      parsedParagraphs.add(_docxWrapParagraph(
+        paragraph.toString(),
+        paragraphAlign,
+      ));
     }
 
     // Background color detection
@@ -370,8 +389,83 @@ class ScriptNotifier extends Notifier<Script?> {
       }
     } catch (_) {}
 
-    return _ParsedFile(buf.toString().trim(), fontSize: detectedFontSize);
+    return _ParsedFile(
+      _normalizeImportedDocxText(parsedParagraphs.join('\n')),
+      fontSize: detectedFontSize,
+    );
   }
+
+  static String _docxRunText(XmlElement run) {
+    final buf = StringBuffer();
+    for (final child in run.children.whereType<XmlElement>()) {
+      final name = child.name.qualified;
+      switch (name) {
+        case 'w:t':
+          buf.write(child.innerText);
+          break;
+        case 'w:tab':
+          buf.write('\t');
+          break;
+        case 'w:br':
+        case 'w:cr':
+          buf.write('\n');
+          break;
+      }
+    }
+    return buf.toString();
+  }
+
+  static String _docxWrapRun(
+    String text, {
+    required bool isBold,
+    required bool isItalic,
+    required bool isUnderline,
+    required String? color,
+  }) {
+    if (text.isEmpty) return '';
+    return text.split('\n').map((line) {
+      if (line.isEmpty) return '';
+      var wrapped = line;
+      final normalizedColor = _docxNormalizeColor(color);
+      if (normalizedColor != null) {
+        wrapped = '[color=#$normalizedColor]$wrapped[/color]';
+      }
+      if (isUnderline) wrapped = '[u]$wrapped[/u]';
+      if (isItalic) wrapped = '[i]$wrapped[/i]';
+      if (isBold) wrapped = '**$wrapped**';
+      return wrapped;
+    }).join('\n');
+  }
+
+  static String? _docxNormalizeColor(String? color) {
+    if (color == null || color == 'auto') return null;
+    final hex = color.trim().replaceFirst('#', '').toUpperCase();
+    return RegExp(r'^[0-9A-F]{6}$').hasMatch(hex) ? hex : null;
+  }
+
+  static String _docxWrapParagraph(String paragraph, String? align) {
+    if (align == null || paragraph.isEmpty) return paragraph;
+    return paragraph.split('\n').map((line) {
+      if (line.isEmpty) return '';
+      return '[align=$align]$line[/align=$align]';
+    }).join('\n');
+  }
+
+  static String? _docxParagraphAlign(XmlElement paragraph) {
+    final pPr = paragraph.getElement('w:pPr');
+    if (pPr == null) return null;
+
+    final jc = pPr.getElement('w:jc')?.getAttribute('w:val');
+    if (jc == 'center' || jc == 'left' || jc == 'right') return jc;
+
+    // Word often stores Hebrew/RTL paragraph direction with w:bidi instead of
+    // an explicit right alignment. Preserve that as app-level right alignment.
+    if (pPr.getElement('w:bidi') != null) return 'right';
+    return null;
+  }
+
+  static String _normalizeImportedDocxText(String text) =>
+      text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trimRight();
 
   /// Parses Apple Pages files (.pages) — a ZIP archive.
   /// Handles both the old XML-based format (index.xml) and the newer

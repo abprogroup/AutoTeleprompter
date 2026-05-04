@@ -117,9 +117,16 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   final isManual = settings.scrollMode == 'manual';
                   final isCurrent = !isManual && i == tState.confirmedWordIndex;
                   final isPast = !isManual && i < tState.confirmedWordIndex;
-                  final displayText = word.raw
-                      .replaceAll(_tagStripRe, '')
-                      .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
+                  final displayText = _bidiIsolatedDisplayText(
+                    word.raw
+                        .replaceAll(_tagStripRe, '')
+                        .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), ''),
+                    paragraphDirection: paraDir,
+                  );
+                  final wordDirection = _wordDirectionForDisplay(
+                    displayText,
+                    paragraphDirection: paraDir,
+                  );
 
                   final effectiveFontSize = word.fontSize != null
                       ? word.fontSize! * 2.0
@@ -178,14 +185,16 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     behavior: HitTestBehavior.translucent,
                     onTap: speechActive ? null : () => _jumpToWordIndex(i),
                     child: Directionality(
-                      textDirection: word.effectiveRtl
-                          ? TextDirection.rtl
-                          : TextDirection.ltr,
+                      textDirection: wordDirection,
                       child: Container(
                         key: _wordKeys[i],
                         padding: EdgeInsets.only(
-                          right: word.effectiveRtl ? 0 : wordGap,
-                          left: word.effectiveRtl ? wordGap : 0,
+                          right: wordDirection == TextDirection.rtl
+                              ? 0
+                              : wordGap,
+                          left: wordDirection == TextDirection.rtl
+                              ? wordGap
+                              : 0,
                         ),
                         color: effectiveBg,
                         child: Text(
@@ -789,4 +798,33 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // Default fallback
     return Alignment.center;
   }
+
+  TextDirection _wordDirectionForDisplay(
+    String text, {
+    required TextDirection paragraphDirection,
+  }) {
+    final clean = _stripBidiIsolation(text);
+    if (RegExp(r'[\u0590-\u08FF]').hasMatch(clean)) return TextDirection.rtl;
+    if (RegExp(r'[A-Za-z0-9]').hasMatch(clean)) return TextDirection.ltr;
+    return paragraphDirection;
+  }
+
+  String _bidiIsolatedDisplayText(
+    String text, {
+    required TextDirection paragraphDirection,
+  }) {
+    if (text.isEmpty) return text;
+    const lri = '\u2066';
+    const rli = '\u2067';
+    const pdi = '\u2069';
+    final direction = _wordDirectionForDisplay(
+      text,
+      paragraphDirection: paragraphDirection,
+    );
+    final open = direction == TextDirection.rtl ? rli : lri;
+    return '$open$text$pdi';
+  }
+
+  String _stripBidiIsolation(String text) =>
+      text.replaceAll(RegExp('[\u2066\u2067\u2068\u2069]'), '');
 }

@@ -1,5 +1,6 @@
 package com.autoteleprompter.autoteleprompter
 
+import android.content.ContentValues
 import android.net.Uri
 import android.content.ContentUris
 import android.provider.DocumentsContract
@@ -47,13 +48,27 @@ class MainActivity: FlutterActivity() {
                         result.success(null)
                         return@setMethodCallHandler
                     }
+                    val uri = Uri.parse(uriValue)
                     try {
                         val renamed = DocumentsContract.renameDocument(
                             contentResolver,
-                            Uri.parse(uriValue),
+                            uri,
                             displayName
                         )
-                        result.success(renamed?.toString())
+                        if (renamed != null) {
+                            result.success(renamed.toString())
+                            return@setMethodCallHandler
+                        }
+                    } catch (_: Exception) {
+                        // Some providers return MediaStore URIs from ACTION_CREATE_DOCUMENT.
+                        // DocumentsContract cannot rename those, but DISPLAY_NAME update can.
+                    }
+                    try {
+                        val values = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                        }
+                        val updated = contentResolver.update(uri, values, null, null)
+                        result.success(if (updated > 0) uri.toString() else null)
                     } catch (_: Exception) {
                         result.success(null)
                     }
@@ -98,12 +113,15 @@ class MainActivity: FlutterActivity() {
                         )
                         val candidates = mutableListOf<Map<String, String>>()
                         val safeBase = Regex("[/\\\\:*?\"<>|]").replace(baseName, "_")
-                            .replace(Regex("\\.(txt|pdf|docx|rtf|doc|pages|md)$", RegexOption.IGNORE_CASE), "")
+                            .replace(
+                                Regex("""\.(txt|pdf|docx|rtf|doc|pages|md)$""", RegexOption.IGNORE_CASE),
+                                ""
+                            )
                             .trim()
                         val escapedBase = Regex.escape(safeBase)
                         val escapedExt = Regex.escape(format)
                         val namePattern = Regex(
-                            "^$escapedBase(?: \\(\\d+\\))?\\.$escapedExt$|^$escapedBase\\.$escapedExt \\(\\d+\\)$",
+                            """^$escapedBase(?: \(\d+\))?\.$escapedExt$|^$escapedBase\.$escapedExt \(\d+\)$""",
                             RegexOption.IGNORE_CASE
                         )
 

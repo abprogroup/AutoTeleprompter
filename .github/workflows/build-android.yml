@@ -42,7 +42,7 @@ jobs:
         working-directory: Platform_Android
 
       - name: Build Android APK (Release, split ABI)
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi
         working-directory: Platform_Android
 
       - name: Upload APKs

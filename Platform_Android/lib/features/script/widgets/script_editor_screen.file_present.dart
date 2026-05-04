@@ -122,13 +122,51 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       baseName: baseName,
       format: normalizedFormat,
     );
+    final deviceExports = await AndroidFileAccess.findDocumentsByDisplayBase(
+      baseName: baseName,
+      format: normalizedFormat,
+    );
+    final exactDisplayName =
+        ExportNameService.buildDisplayName(baseName, normalizedFormat);
+    final exactDeviceExport =
+        _findDeviceExportByDisplayName(deviceExports, exactDisplayName);
+    final existingDisplayNames = <String>{
+      ...registry.map((e) => e.displayName),
+      ...deviceExports.map((e) => e.displayName),
+    };
 
     var keepBoth = false;
     if (knownExport != null && mounted) {
-      final choice = await _showExportConflictDialog(knownExport.displayName);
+      final choice = await _showExportConflictDialog(
+        knownExport.displayName,
+        message:
+            '"${knownExport.displayName}" was already saved from this app.',
+      );
       if (!mounted || choice == _ExportConflictChoice.cancel) return;
       if (choice == _ExportConflictChoice.replace) {
         await _replaceKnownExport(knownExport, bytes);
+        return;
+      }
+      keepBoth = true;
+    } else if (exactDeviceExport != null && mounted) {
+      final choice = await _showExportConflictDialog(
+        exactDeviceExport.displayName,
+        message:
+            '"${exactDeviceExport.displayName}" already exists on this device. '
+            'Choose Keep Both to avoid Android creating a broken duplicate '
+            'such as "$exactDisplayName (1)".',
+      );
+      if (!mounted || choice == _ExportConflictChoice.cancel) return;
+      if (choice == _ExportConflictChoice.replace) {
+        await _replaceKnownExport(
+          SavedExportEntry(
+            baseName: baseName,
+            format: normalizedFormat,
+            displayName: exactDeviceExport.displayName,
+            location: exactDeviceExport.location,
+          ),
+          bytes,
+        );
         return;
       }
       keepBoth = true;
@@ -138,7 +176,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         ? ExportNameService.nextDuplicateDisplayName(
             baseName: baseName,
             format: normalizedFormat,
-            existingDisplayNames: registry.map((e) => e.displayName),
+            existingDisplayNames: existingDisplayNames,
           )
         : ExportNameService.buildDisplayName(baseName, normalizedFormat);
 
@@ -162,16 +200,43 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     }
 
     var finalLocation = savedPath;
+    final locationHint = AndroidFileAccess.displayNameHintFromLocation(
+      savedPath,
+    );
     var finalName = await AndroidFileAccess.displayNameForLocation(savedPath) ??
-        AndroidFileAccess.displayNameFromPath(savedPath);
-    final repairedName = ExportNameService.repairBrokenDuplicateSuffix(
-        finalName, normalizedFormat);
-    if (repairedName != finalName) {
+        locationHint;
+    if (!ExportNameService.hasExpectedExtension(finalName, normalizedFormat) &&
+        ExportNameService.hasExpectedExtension(
+            locationHint, normalizedFormat)) {
+      finalName = locationHint;
+    }
+    final brokenName = <String>{finalName, locationHint}.firstWhere(
+      (name) =>
+          ExportNameService.isBrokenDuplicateSuffix(name, normalizedFormat),
+      orElse: () => '',
+    );
+    if (brokenName.isNotEmpty) {
+      final repairedName = ExportNameService.repairBrokenDuplicateSuffix(
+        brokenName,
+        normalizedFormat,
+      );
       final renamedLocation =
           await AndroidFileAccess.rename(finalLocation, repairedName);
       if (renamedLocation != null && renamedLocation.isNotEmpty) {
         finalLocation = renamedLocation;
         finalName = repairedName;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Android created "$brokenName". It should be "$repairedName", '
+              'but this storage provider refused automatic rename.',
+            ),
+            backgroundColor: Colors.orange[800],
+            duration: const Duration(seconds: 7),
+          ),
+        );
+        return;
       }
     }
 
@@ -212,8 +277,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   Future<_ExportConflictChoice> _showExportConflictDialog(
-    String displayName,
-  ) async {
+    String displayName, {
+    required String message,
+  }) async {
     final result = await showDialog<_ExportConflictChoice>(
       context: context,
       barrierDismissible: false,
@@ -223,10 +289,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           'Replace existing file?',
           style: TextStyle(color: Colors.white),
         ),
-        content: Text(
-          '"$displayName" was already saved from this app.',
-          style: const TextStyle(color: Colors.white70),
-        ),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, _ExportConflictChoice.cancel),
@@ -244,6 +307,19 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       ),
     );
     return result ?? _ExportConflictChoice.cancel;
+  }
+
+  AndroidDocumentEntry? _findDeviceExportByDisplayName(
+    List<AndroidDocumentEntry> entries,
+    String displayName,
+  ) {
+    final expected = displayName.toLowerCase().trim();
+    for (final entry in entries) {
+      if (entry.displayName.toLowerCase().trim() == expected) {
+        return entry;
+      }
+    }
+    return null;
   }
 
   Future<void> _replaceKnownExport(

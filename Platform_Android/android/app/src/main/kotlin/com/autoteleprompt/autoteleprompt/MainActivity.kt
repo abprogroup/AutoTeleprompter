@@ -1,7 +1,9 @@
 package com.autoteleprompter.autoteleprompter
 
 import android.net.Uri
+import android.content.ContentUris
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -79,6 +81,55 @@ class MainActivity: FlutterActivity() {
                         }
                     } catch (_: Exception) {
                         result.success(null)
+                    }
+                }
+                "findDocumentsByDisplayBase" -> {
+                    val baseName = call.argument<String>("baseName")?.trim().orEmpty()
+                    val format = call.argument<String>("format")?.trim()?.lowercase().orEmpty()
+                    if (baseName.isBlank() || format.isBlank()) {
+                        result.success(emptyList<Map<String, String>>())
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val collection = MediaStore.Files.getContentUri("external")
+                        val projection = arrayOf(
+                            MediaStore.MediaColumns._ID,
+                            MediaStore.MediaColumns.DISPLAY_NAME
+                        )
+                        val candidates = mutableListOf<Map<String, String>>()
+                        val safeBase = Regex("[/\\\\:*?\"<>|]").replace(baseName, "_")
+                            .replace(Regex("\\.(txt|pdf|docx|rtf|doc|pages|md)$", RegexOption.IGNORE_CASE), "")
+                            .trim()
+                        val escapedBase = Regex.escape(safeBase)
+                        val escapedExt = Regex.escape(format)
+                        val namePattern = Regex(
+                            "^$escapedBase(?: \\(\\d+\\))?\\.$escapedExt$|^$escapedBase\\.$escapedExt \\(\\d+\\)$",
+                            RegexOption.IGNORE_CASE
+                        )
+
+                        contentResolver.query(
+                            collection,
+                            projection,
+                            "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?",
+                            arrayOf("$safeBase%"),
+                            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+                        ).use { cursor ->
+                            if (cursor != null) {
+                                val idIndex = cursor.getColumnIndex(MediaStore.MediaColumns._ID)
+                                val nameIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                                while (cursor.moveToNext()) {
+                                    if (idIndex < 0 || nameIndex < 0) continue
+                                    val displayName = cursor.getString(nameIndex) ?: continue
+                                    if (!namePattern.matches(displayName.trim())) continue
+                                    val id = cursor.getLong(idIndex)
+                                    val uri = ContentUris.withAppendedId(collection, id).toString()
+                                    candidates.add(mapOf("displayName" to displayName, "uri" to uri))
+                                }
+                            }
+                        }
+                        result.success(candidates)
+                    } catch (_: Exception) {
+                        result.success(emptyList<Map<String, String>>())
                     }
                 }
                 else -> result.notImplemented()

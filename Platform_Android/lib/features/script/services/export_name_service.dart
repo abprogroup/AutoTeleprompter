@@ -60,6 +60,27 @@ class ExportNameService {
         .trim()
         .endsWith('.${format.toLowerCase()}');
   }
+
+  static bool belongsToBaseName({
+    required String displayName,
+    required String baseName,
+    required String format,
+  }) {
+    final ext = format.toLowerCase();
+    final safeBase = sanitizeBaseName(baseName, ext);
+    final escapedBase = RegExp.escape(safeBase);
+    final escapedExt = RegExp.escape(ext);
+    final pattern = RegExp(
+      '^$escapedBase(?: \\(\\d+\\))?\\.$escapedExt\$'
+      '|^$escapedBase\\.$escapedExt \\(\\d+\\)\$',
+      caseSensitive: false,
+    );
+    return pattern.hasMatch(displayName.trim());
+  }
+
+  static bool isBrokenDuplicateSuffix(String displayName, String format) {
+    return repairBrokenDuplicateSuffix(displayName, format) != displayName;
+  }
 }
 
 class SavedExportEntry {

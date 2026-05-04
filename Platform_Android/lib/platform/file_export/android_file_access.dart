@@ -1,7 +1,23 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+
+class AndroidDocumentEntry {
+  final String displayName;
+  final String location;
+
+  const AndroidDocumentEntry({
+    required this.displayName,
+    required this.location,
+  });
+
+  factory AndroidDocumentEntry.fromMap(Map<dynamic, dynamic> value) {
+    return AndroidDocumentEntry(
+      displayName: (value['displayName'] as String? ?? '').trim(),
+      location: (value['uri'] as String? ?? '').trim(),
+    );
+  }
+}
 
 class AndroidFileAccess {
   static const MethodChannel _channel =
@@ -12,6 +28,44 @@ class AndroidFileAccess {
   static String displayNameFromPath(String value) {
     final normalized = value.replaceAll('\\', '/');
     return normalized.split('/').last;
+  }
+
+  static String displayNameHintFromLocation(String value) {
+    try {
+      final uri = Uri.parse(value);
+      final segments = uri.pathSegments;
+      if (segments.isNotEmpty) {
+        var hint = Uri.decodeComponent(segments.last);
+        if (hint.contains('/')) hint = hint.split('/').last;
+        if (hint.contains(':')) hint = hint.split(':').last;
+        if (hint.trim().isNotEmpty) return hint.trim();
+      }
+    } catch (_) {}
+    return displayNameFromPath(value);
+  }
+
+  static Future<List<AndroidDocumentEntry>> findDocumentsByDisplayBase({
+    required String baseName,
+    required String format,
+  }) async {
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>(
+        'findDocumentsByDisplayBase',
+        {
+          'baseName': baseName,
+          'format': format,
+        },
+      );
+      if (raw == null) return const [];
+      return raw
+          .whereType<Map<dynamic, dynamic>>()
+          .map(AndroidDocumentEntry.fromMap)
+          .where((entry) =>
+              entry.displayName.isNotEmpty && entry.location.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
   }
 
   static Future<void> writeBytes(String location, Uint8List bytes) async {

@@ -817,3 +817,6 @@
   preempts same-locale visible matches after only a few no-progress waits.
 - [P] **Regression tests added**: Targeted Windows aligner tests now cover
   English/Hebrew mixed visible skips and the conservative default mode.
+- [P] **Provider advance cap corrected**: Visible-window aligner matches now
+  bypass the normal 30-word provider advance cap and fluid step-through delay.
+  The cap remains active for non-visible STT progress.

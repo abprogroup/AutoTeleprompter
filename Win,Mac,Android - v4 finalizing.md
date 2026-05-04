@@ -107,6 +107,9 @@ Repair status:
   same-locale visible skip before alignment has searched the visible window.
 - Targeted Windows tests cover mixed English/Hebrew visible skip and
   visible-skip-off conservative recovery.
+- Follow-up debug QA found the provider was clipping successful visible-window
+  matches to the normal 30-word advance cap. Trusted visible-window matches now
+  land directly on the aligner target; non-visible progress remains capped.
 
 ### 2. Android Mobile Fixes
 

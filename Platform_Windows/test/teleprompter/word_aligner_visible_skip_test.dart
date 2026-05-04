@@ -1,4 +1,5 @@
 import 'package:autoteleprompter/features/script/models/script_word.dart';
+import 'package:autoteleprompter/features/teleprompter/providers/teleprompter_provider.dart';
 import 'package:autoteleprompter/features/teleprompter/services/word_aligner.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -125,6 +126,26 @@ void main() {
       );
 
       expect(result.confirmedWordIndex, 0);
+    });
+
+    test('provider does not cap trusted visible-skip alignments', () {
+      final target = TeleprompterNotifier.resolveAdvanceTarget(
+        currentIndex: 21,
+        alignedIndex: 85,
+        visibleMaxSkipTargetIndex: 85,
+      );
+
+      expect(target, 85);
+    });
+
+    test('provider still caps non-visible large advances', () {
+      final target = TeleprompterNotifier.resolveAdvanceTarget(
+        currentIndex: 21,
+        alignedIndex: 85,
+        visibleMaxSkipTargetIndex: null,
+      );
+
+      expect(target, 51);
     });
   });
 }

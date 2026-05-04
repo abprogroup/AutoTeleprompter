@@ -165,27 +165,30 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
       _resetVisibleLocaleAssist();
-      final capped = aligned.confirmedWordIndex.clamp(
-        state.confirmedWordIndex,
-        state.confirmedWordIndex + _maxAdvancePerUpdate,
+      final visibleSkipTargetTrusted = maxSkipTargetIndex != null &&
+          aligned.confirmedWordIndex <= maxSkipTargetIndex;
+      final target = resolveAdvanceTarget(
+        currentIndex: state.confirmedWordIndex,
+        alignedIndex: aligned.confirmedWordIndex,
+        visibleMaxSkipTargetIndex: maxSkipTargetIndex,
       );
       final advancedWord =
-          capped < script.words.length ? script.words[capped].raw : '?';
+          target < script.words.length ? script.words[target].raw : '?';
       _addDebugLog(
-          '$engineTag ✅ ADVANCE → #$capped "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
+          '$engineTag ✅ ADVANCE → #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
 
       // Fluid advancement: if jumping more than 3 words, animate
       // through intermediate words so the user's eye can follow.
-      final jump = capped - state.confirmedWordIndex;
-      if (jump <= 3) {
-        // Small jump — instant
+      final jump = target - state.confirmedWordIndex;
+      if (visibleSkipTargetTrusted || jump <= 3) {
+        // Small jumps and trusted visible-skip targets are instant.
         _fluidAdvanceTimer?.cancel();
-        _safeSetState((s) => s.copyWith(confirmedWordIndex: capped));
+        _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
       } else {
         // Large jump — advance word by word with short delays
-        _startFluidAdvance(capped, script);
+        _startFluidAdvance(target, script);
       }
-      _syncLocaleForPosition(script, capped + 1, reason: 'advance');
+      _syncLocaleForPosition(script, target + 1, reason: 'advance');
     } else {
       _noProgressCount++;
       _addDebugLog(
@@ -316,6 +319,20 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
                 'Please connect to WiFi or mobile data and try again.',
           ));
     };
+  }
+
+  static int resolveAdvanceTarget({
+    required int currentIndex,
+    required int alignedIndex,
+    required int? visibleMaxSkipTargetIndex,
+  }) {
+    if (visibleMaxSkipTargetIndex != null &&
+        alignedIndex <= visibleMaxSkipTargetIndex) {
+      return alignedIndex;
+    }
+    return alignedIndex
+        .clamp(currentIndex, currentIndex + _maxAdvancePerUpdate)
+        .toInt();
   }
 
   void _setupWhisperCallbacks() {

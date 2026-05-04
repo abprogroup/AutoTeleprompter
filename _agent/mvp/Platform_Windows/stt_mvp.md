@@ -266,8 +266,12 @@ owns how confirmed indices are rendered after STT produces results.
   has had a fair chance to match the current locale against the full visible
   window.
 - Delayed visible-locale assistance may run only after repeated no-progress
-  waits and must not switch away from the active locale when a later same-locale
-  section is still visible after an intervening section.
+  waits, after the aligner has failed to match the current transcript inside
+  the visible window.
+- The provider's normal 30-word advance cap is not applied to trusted
+  visible-window phrase/sequence matches. Those targets are already bounded by
+  the presenter visible window and confidence-gated by the aligner, so they must
+  apply immediately. The 30-word cap remains active for non-visible STT progress.
 
 ---
 

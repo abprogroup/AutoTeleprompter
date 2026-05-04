@@ -1741,3 +1741,7 @@
 - Added targeted Windows aligner tests for English -> English across Hebrew,
   Hebrew -> Hebrew across English, English -> Hebrew, Hebrew -> English, and
   visible-skip-off conservative recovery.
+- Follow-up QA showed the provider still clipped a trusted visible-window match
+  to the normal 30-word advance cap and then slowed it through fluid advance.
+  Visible-skip matches now apply the exact aligner target immediately; normal
+  non-visible STT progress remains capped.

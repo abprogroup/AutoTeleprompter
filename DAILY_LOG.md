@@ -1745,3 +1745,14 @@
   to the normal 30-word advance cap and then slowed it through fluid advance.
   Visible-skip matches now apply the exact aligner target immediately; normal
   non-visible STT progress remains capped.
+
+### 2026-05-04 - Windows STT Fast Visible-Locale Assist
+- Reduced the Windows visible-locale assist wait from eight no-progress chunks
+  to a two-step arm/switch flow so Hebrew/English visible jumps can switch
+  while the user is still reading the visible target.
+- Added a short assist-locale pin so heartbeat/pre-switch logic cannot
+  immediately switch WebView2 STT back to the old script position after a
+  visible assist.
+- Added active-locale plausibility checks so English phrases such as
+  "Samaritan woman at well" keep English active even when Hebrew is also
+  visible.

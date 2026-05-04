@@ -65,6 +65,48 @@ List<ScriptWord> _mixedScript({
   return words;
 }
 
+List<ScriptWord> _storyWindowScript() {
+  final raw = [
+    'overlooked',
+    'by',
+    'man',
+    'but',
+    'precious',
+    'to',
+    'God',
+    'Yeshua',
+    'met',
+    'them',
+    'Join',
+    'us',
+    'next',
+    'time',
+    'as',
+    'we',
+    'visit',
+    'the',
+    'story',
+    'of',
+    'the',
+    'Samaritan',
+    'woman',
+    'at',
+    'the',
+    'well',
+    _hReturn,
+    _hSection,
+    _hNext,
+  ];
+  return [
+    for (var i = 0; i < raw.length; i++)
+      _word(raw[i], i, rtl: i >= raw.length - 3),
+  ];
+}
+
+List<String> _localesFor(List<ScriptWord> words) {
+  return [for (final word in words) word.isRtl ? 'he_IL' : 'en_US'];
+}
+
 void main() {
   group('Windows visible STT skip', () {
     test('finds English phrase after visible Hebrew section', () {
@@ -146,6 +188,64 @@ void main() {
       );
 
       expect(target, 51);
+    });
+
+    test('plausible active English text blocks visible Hebrew assist', () {
+      final script = _storyWindowScript();
+      final plausible =
+          TeleprompterNotifier.visibleTranscriptPlausiblyMatchesLocale(
+        words: script,
+        sectionLocales: _localesFor(script),
+        locale: 'en_US',
+        transcript: 'story of the Samaritan woman at the well',
+        visibleStart: 0,
+        visibleEnd: script.length - 1,
+        currentIndex: 6,
+      );
+
+      expect(plausible, isTrue);
+    });
+
+    test('wrong-language gibberish does not block visible Hebrew assist', () {
+      final script = _storyWindowScript();
+      final plausible =
+          TeleprompterNotifier.visibleTranscriptPlausiblyMatchesLocale(
+        words: script,
+        sectionLocales: _localesFor(script),
+        locale: 'en_US',
+        transcript: 'that text livdo kaim niktanik vods ben stafford',
+        visibleStart: 0,
+        visibleEnd: script.length - 1,
+        currentIndex: 6,
+      );
+
+      expect(plausible, isFalse);
+    });
+
+    test('assist pin blocks heartbeat locale sync until expiry', () {
+      final now = DateTime(2026, 5, 4, 12);
+
+      expect(
+        TeleprompterNotifier.shouldBlockLocaleSyncDuringAssistPin(
+          pinnedLocale: 'he_IL',
+          activeLocale: 'he_IL',
+          scriptLocale: 'he_IL',
+          pinnedUntil: now.add(const Duration(seconds: 3)),
+          now: now,
+        ),
+        isTrue,
+      );
+
+      expect(
+        TeleprompterNotifier.shouldBlockLocaleSyncDuringAssistPin(
+          pinnedLocale: 'he_IL',
+          activeLocale: 'he_IL',
+          scriptLocale: 'he_IL',
+          pinnedUntil: now.subtract(const Duration(milliseconds: 1)),
+          now: now,
+        ),
+        isFalse,
+      );
     });
   });
 }

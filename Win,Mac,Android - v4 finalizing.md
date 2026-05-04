@@ -110,6 +110,10 @@ Repair status:
 - Follow-up debug QA found the provider was clipping successful visible-window
   matches to the normal 30-word advance cap. Trusted visible-window matches now
   land directly on the aligner target; non-visible progress remains capped.
+- Second follow-up QA showed WebView2 STT switched to Hebrew too late and
+  heartbeat could switch it back to English before recognition resumed. The
+  provider now uses a faster two-step visible-locale assist with a short
+  assisted-locale pin and active-language transcript protection.
 
 ### 2. Android Mobile Fixes
 

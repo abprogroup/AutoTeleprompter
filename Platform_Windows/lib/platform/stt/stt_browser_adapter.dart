@@ -401,7 +401,7 @@ ws.onmessage = (e) => {
     status.textContent = 'Syncing ' + d.locale;
     if(restartTimer) clearTimeout(restartTimer);
     if(rec) rec.abort();
-    restartTimer = setTimeout(() => startRec(currentLocale), 250);
+    restartTimer = setTimeout(() => startRec(currentLocale), 80);
   }
   if(d.type === 'setAudioInputDevice') {
     selectedDeviceId = d.deviceId || '';

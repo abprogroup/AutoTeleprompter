@@ -8,6 +8,7 @@ import '../../script/models/script.dart';
 import '../../script/models/script_word.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../remote/services/remote_control_service.dart';
+import '../../../core/extensions/string_extensions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../platform/stt/stt_service_factory.dart';
 
@@ -35,14 +36,19 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int? _visibleWordEnd;
   DateTime? _lastVisibleLocaleAssistAt;
   String? _lastVisibleLocaleAssistLocale;
+  DateTime? _visibleLocaleAssistPinnedUntil;
+  String? _visibleLocaleAssistPinnedLocale;
+  String? _pendingVisibleLocaleAssistLocale;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
   static const int _whisperSkipAfterStuck = 10;
   static const int _maxAdvancePerUpdate = 30;
-  static const int _visibleLocaleAssistAfterWaits = 8;
+  static const int _visibleLocaleAssistAfterWaits = 2;
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
+  static const Duration _visibleLocaleAssistPinDuration =
+      Duration(milliseconds: 3000);
 
   @override
   TeleprompterState build() {
@@ -335,6 +341,84 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         .toInt();
   }
 
+  static bool visibleTranscriptPlausiblyMatchesLocale({
+    required List<ScriptWord> words,
+    required List<String> sectionLocales,
+    required String locale,
+    required String transcript,
+    required int visibleStart,
+    required int visibleEnd,
+    required int currentIndex,
+  }) {
+    if (words.isEmpty || sectionLocales.length != words.length) return false;
+    final start = visibleStart.clamp(0, words.length - 1).toInt();
+    final end = visibleEnd.clamp(start, words.length - 1).toInt();
+    final minIndex = (currentIndex + 1).clamp(0, end).toInt();
+    final scanStart = start < minIndex ? minIndex : start;
+    if (scanStart > end) return false;
+
+    final visible = <String>[];
+    for (var i = scanStart; i <= end; i++) {
+      final word = words[i];
+      if (word.isNewline || word.normalized.isEmpty) continue;
+      if (sectionLocales[i] != locale) continue;
+      visible.add(word.normalized.normalizeForMatching());
+    }
+    if (visible.isEmpty) return false;
+
+    final spoken = transcript
+        .split(RegExp(r'\s+'))
+        .map((w) => w.trim().normalizeForMatching())
+        .where((w) => w.isNotEmpty)
+        .toList();
+    if (spoken.isEmpty) return false;
+
+    var usefulMatches = 0;
+    for (final spokenWord in spoken) {
+      if (_visibleAssistStopWords.contains(spokenWord)) continue;
+      var best = 0.0;
+      for (final visibleWord in visible) {
+        final sim = spokenWord.similarity(visibleWord);
+        if (sim > best) best = sim;
+      }
+      if (best >= 0.92 && spokenWord.length >= 4) {
+        usefulMatches++;
+      }
+      if (best >= 0.96 && spokenWord.length >= 6) {
+        return true;
+      }
+    }
+    return usefulMatches >= 2;
+  }
+
+  static bool shouldBlockLocaleSyncDuringAssistPin({
+    required String? pinnedLocale,
+    required String? activeLocale,
+    required String? scriptLocale,
+    required DateTime? pinnedUntil,
+    required DateTime now,
+  }) {
+    if (pinnedLocale == null || pinnedUntil == null) return false;
+    if (!now.isBefore(pinnedUntil)) return false;
+    return pinnedLocale == activeLocale || pinnedLocale == scriptLocale;
+  }
+
+  static const Set<String> _visibleAssistStopWords = {
+    'a',
+    'an',
+    'and',
+    'at',
+    'for',
+    'in',
+    'is',
+    'of',
+    'or',
+    'the',
+    'to',
+    'we',
+    'you',
+  };
+
   void _setupWhisperCallbacks() {
     _whisperService.onResult = (result) {
       if (_disposed || _sessionStopped) return;
@@ -513,6 +597,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
   void _checkAndSwitchLocale() {
     if (_useWhisper || _disposed || _sessionStopped) return;
+    if (_visibleLocaleAssistPinActive()) return;
     if (_sectionLocales.isEmpty) return;
     final currentIdx = state.confirmedWordIndex;
     if (currentIdx < 0 || currentIdx >= _sectionLocales.length) return;
@@ -526,6 +611,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   void _syncLocaleForPosition(Script script, int wordIndex,
       {required String reason}) {
     if (_useWhisper || _disposed || _sessionStopped) return;
+    if (_visibleLocaleAssistPinActive()) return;
     if (_sectionLocales.length != script.words.length) {
       _precomputeSectionLocales(script);
     }
@@ -559,6 +645,41 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (_useWhisper || _disposed || _sessionStopped) return false;
     if (!settings.sttVisibleSkipEnabled || heard.trim().isEmpty) return false;
     if (_visibleWordStart == null || _visibleWordEnd == null) return false;
+    if (_visibleLocaleAssistPinActive()) return false;
+    if (_sectionLocales.length != script.words.length) {
+      _precomputeSectionLocales(script);
+    }
+    if (_sectionLocales.isEmpty) return false;
+
+    final active = _activeLocale ?? _scriptLanguageLocale;
+    if (active != null &&
+        visibleTranscriptPlausiblyMatchesLocale(
+          words: script.words,
+          sectionLocales: _sectionLocales,
+          locale: active,
+          transcript: heard,
+          visibleStart: _visibleWordStart!,
+          visibleEnd: _visibleWordEnd!,
+          currentIndex: state.confirmedWordIndex,
+        )) {
+      _pendingVisibleLocaleAssistLocale = null;
+      return false;
+    }
+
+    final candidate = _nextVisibleLocaleCandidate(script);
+    if (candidate == null || candidate == _activeLocale) {
+      _pendingVisibleLocaleAssistLocale = null;
+      return false;
+    }
+
+    if (_pendingVisibleLocaleAssistLocale != candidate) {
+      _pendingVisibleLocaleAssistLocale = candidate;
+      _addDebugLog(
+        'VISIBLE LOCALE ASSIST ARMED -> $candidate | wait=$_noProgressCount/$_visibleLocaleAssistAfterWaits',
+      );
+      if (_noProgressCount < _visibleLocaleAssistAfterWaits) return false;
+    }
+
     if (_noProgressCount < _visibleLocaleAssistAfterWaits) return false;
 
     final now = DateTime.now();
@@ -568,11 +689,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       return false;
     }
 
-    final candidate = _nextVisibleLocaleCandidate(script);
-    if (candidate == null || candidate == _activeLocale) return false;
-
     _lastVisibleLocaleAssistAt = now;
     _lastVisibleLocaleAssistLocale = candidate;
+    _visibleLocaleAssistPinnedLocale = candidate;
+    _visibleLocaleAssistPinnedUntil = now.add(_visibleLocaleAssistPinDuration);
+    _pendingVisibleLocaleAssistLocale = null;
     _noProgressCount = 0;
     final switched = _switchLocaleIfNeeded(
       candidate,
@@ -623,6 +744,25 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   void _resetVisibleLocaleAssist() {
     _lastVisibleLocaleAssistAt = null;
     _lastVisibleLocaleAssistLocale = null;
+    _visibleLocaleAssistPinnedUntil = null;
+    _visibleLocaleAssistPinnedLocale = null;
+    _pendingVisibleLocaleAssistLocale = null;
+  }
+
+  bool _visibleLocaleAssistPinActive({DateTime? now}) {
+    final clock = now ?? DateTime.now();
+    final active = shouldBlockLocaleSyncDuringAssistPin(
+      pinnedLocale: _visibleLocaleAssistPinnedLocale,
+      activeLocale: _activeLocale,
+      scriptLocale: _scriptLanguageLocale,
+      pinnedUntil: _visibleLocaleAssistPinnedUntil,
+      now: clock,
+    );
+    if (!active) {
+      _visibleLocaleAssistPinnedUntil = null;
+      _visibleLocaleAssistPinnedLocale = null;
+    }
+    return active;
   }
 
   /// Find the next non-newline word index after [from]

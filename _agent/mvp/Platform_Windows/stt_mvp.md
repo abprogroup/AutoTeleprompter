@@ -272,6 +272,14 @@ owns how confirmed indices are rendered after STT produces results.
   visible-window phrase/sequence matches. Those targets are already bounded by
   the presenter visible window and confidence-gated by the aligner, so they must
   apply immediately. The 30-word cap remains active for non-visible STT progress.
+- Windows visible-locale assistance uses a two-step arm/switch flow. A plausible
+  active-locale visible transcript blocks the assist; wrong-language gibberish
+  may switch to the next visible alternate locale on the second no-progress
+  result.
+- After a visible-locale assist, the assisted locale is pinned briefly. Heartbeat
+  and one-word-ahead pre-switch logic must not switch back to the old script
+  position until the pin expires or a successful advance/manual jump/reset clears
+  it.
 
 ---
 

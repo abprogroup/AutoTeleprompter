@@ -820,3 +820,7 @@
 - [P] **Provider advance cap corrected**: Visible-window aligner matches now
   bypass the normal 30-word provider advance cap and fluid step-through delay.
   The cap remains active for non-visible STT progress.
+- [P] **Windows visible-locale assist accelerated**: WebView2 STT now arms a
+  visible alternate-locale candidate on the first wrong-language no-progress
+  result, may switch on the second, and pins the assisted locale briefly so
+  heartbeat cannot undo the switch before recognition resumes.

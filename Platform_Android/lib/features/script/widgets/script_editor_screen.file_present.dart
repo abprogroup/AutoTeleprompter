@@ -1,11 +1,5 @@
 part of 'script_editor_screen.dart';
 
-enum _ExportConflictChoice {
-  replace,
-  keepBoth,
-  cancel,
-}
-
 extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   Future<void> _importFile() async {
     final supportedExts = PlatformFileImport.supportedExtensions;
@@ -116,46 +110,10 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     final baseName =
         ExportNameService.sanitizeBaseName(_currentTitle, normalizedFormat);
-    final savedExports = await SavedExportRegistry.load();
-    final exactDisplayName =
-        ExportNameService.buildDisplayName(baseName, normalizedFormat);
-    final exactSavedExport = SavedExportRegistry.findExact(
-      entries: savedExports,
-      baseName: baseName,
-      format: normalizedFormat,
+    final fileName = ExportNameService.buildDisplayName(
+      baseName,
+      normalizedFormat,
     );
-    final existingDisplayNames = <String>{
-      ...savedExports
-          .where((entry) => ExportNameService.belongsToBaseName(
-                displayName: entry.displayName,
-                baseName: baseName,
-                format: normalizedFormat,
-              ))
-          .map((entry) => entry.displayName),
-    };
-
-    var fileName = exactDisplayName;
-    if (exactSavedExport != null && mounted) {
-      final choice = await _showExportConflictDialog(
-        exactSavedExport.displayName,
-        message: '"${exactSavedExport.displayName}" was saved before by '
-            'AutoTeleprompter.',
-      );
-      if (!mounted || choice == _ExportConflictChoice.cancel) return;
-      if (choice == _ExportConflictChoice.replace) {
-        await _writeAndroidExport(
-          exactSavedExport,
-          bytes,
-          replaced: true,
-        );
-        return;
-      }
-      fileName = ExportNameService.nextDuplicateDisplayName(
-        baseName: baseName,
-        format: normalizedFormat,
-        existingDisplayNames: existingDisplayNames,
-      );
-    }
 
     final createdLocation = await AndroidFileAccess.createExportFile(
       displayName: fileName,
@@ -182,33 +140,6 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     var finalName =
         await AndroidFileAccess.displayNameForLocation(createdLocation) ??
             locationHint;
-
-    if (_looksLikeAndroidDuplicateName(
-      requestedName: fileName,
-      actualName: finalName,
-      baseName: baseName,
-      format: normalizedFormat,
-    )) {
-      final choice = await _showExportConflictDialog(
-        exactDisplayName,
-        message: 'Android found an existing "$exactDisplayName" and created '
-            '"$finalName" instead.',
-      );
-      if (!mounted || choice == _ExportConflictChoice.cancel) {
-        await AndroidFileAccess.deleteDocument(finalLocation);
-        return;
-      }
-      if (choice == _ExportConflictChoice.replace) {
-        await AndroidFileAccess.deleteDocument(finalLocation);
-        await _replaceAndroidExportByUserSelection(
-          baseName: baseName,
-          format: normalizedFormat,
-          expectedDisplayName: exactDisplayName,
-          bytes: bytes,
-        );
-        return;
-      }
-    }
 
     final repairedName = ExportNameService.repairBrokenDuplicateSuffix(
       finalName,
@@ -264,101 +195,6 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       ),
       bytes,
     );
-  }
-
-  Future<_ExportConflictChoice> _showExportConflictDialog(
-    String displayName, {
-    required String message,
-  }) async {
-    final result = await showDialog<_ExportConflictChoice>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          'Replace existing file?',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(message, style: const TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, _ExportConflictChoice.cancel),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, _ExportConflictChoice.keepBoth),
-            child: const Text('Keep Both'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, _ExportConflictChoice.replace),
-            child: const Text('Replace'),
-          ),
-        ],
-      ),
-    );
-    return result ?? _ExportConflictChoice.cancel;
-  }
-
-  bool _looksLikeAndroidDuplicateName({
-    required String requestedName,
-    required String actualName,
-    required String baseName,
-    required String format,
-  }) {
-    final requested = requestedName.toLowerCase().trim();
-    final actual = actualName.toLowerCase().trim();
-    if (actual == requested) return false;
-    return ExportNameService.belongsToBaseName(
-      displayName: actualName,
-      baseName: baseName,
-      format: format,
-    );
-  }
-
-  Future<void> _replaceAndroidExportByUserSelection({
-    required String baseName,
-    required String format,
-    required String expectedDisplayName,
-    required Uint8List bytes,
-  }) async {
-    final selectedLocation = await AndroidFileAccess.pickExportFileForReplace();
-    if (!mounted) return;
-    if (selectedLocation == null || selectedLocation.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Replace cancelled.'),
-          backgroundColor: Colors.black54,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    final selectedName =
-        await AndroidFileAccess.displayNameForLocation(selectedLocation) ??
-            AndroidFileAccess.displayNameHintFromLocation(selectedLocation);
-    if (selectedName.toLowerCase().trim() !=
-        expectedDisplayName.toLowerCase().trim()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Selected "$selectedName", but Replace needs '
-            '"$expectedDisplayName". No file was changed.',
-          ),
-          backgroundColor: Colors.orange[800],
-          duration: const Duration(seconds: 7),
-        ),
-      );
-      return;
-    }
-
-    final replacement = SavedExportEntry(
-      baseName: baseName,
-      format: format.toLowerCase(),
-      displayName: selectedName,
-      location: selectedLocation,
-    );
-    await _writeAndroidExport(replacement, bytes, replaced: true);
   }
 
   Future<void> _writeAndroidExport(

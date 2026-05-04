@@ -1714,3 +1714,17 @@
   `flutter pub get` because the workflow uses Flutter 3.24.3, which pins
   `flutter_localizations` to `intl 0.19.0`. Android `pubspec.yaml` was brought
   back to `intl: ^0.19.0` to match the existing platform workflow.
+
+## 2026-05-04 - Android Mobile Toolbar + STT Language Correction
+
+- **Toolbar Density**: Removed the four Android bookmark buttons from the
+  top project app bar and moved them into one iOS-style bookmark popup inside
+  the formatting toolbar.
+- **Bookmark Commands**: The popup delegates to the existing Android editor
+  add/remove/previous/next bookmark callbacks; text-flow `»` bookmark behavior
+  remains unchanged.
+- **STT Language Flow**: Android `SttAndroidAdapter` / `SpeechService` now
+  implement active `setLocale(...)`, and the provider uses the tested iOS
+  section-locale pre-switch model for mixed Hebrew/English scripts.
+- **Verification Note**: Android analyzer still reports existing warnings and
+  infos, but no new hard compile errors were introduced by this correction.

@@ -795,3 +795,10 @@
   lines. Local APK build is blocked by missing Android SDK on this workstation;
   GitHub Android workflow verification is required. Android `intl` constraint
   is pinned to `^0.19.0` for the Flutter 3.24.3 workflow.
+
+## 2026-05-04 Android Mobile Correction
+- [P] **Android toolbar density and STT language flow**: Move Android bookmark
+  controls out of the overflowing project app bar into the tested iOS-style
+  formatting-toolbar bookmark popup. Android STT now implements active locale
+  switching and uses iOS-tested section-locale pre-switch behavior so
+  Hebrew/English/Hebrew scripts can advance across language boundaries.

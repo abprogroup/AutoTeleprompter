@@ -59,6 +59,7 @@ class SpeechService {
   bool _isInitialized = false;
   bool _isRestarting = false;
   String _localeId = 'en_US';
+  List<LocaleName> _availableLocales = const [];
   int _languageRetries = 0; // Prevent infinite language error loop
 
   int _consecutiveErrors = 0;
@@ -227,6 +228,7 @@ class SpeechService {
 
     // Get available locales from the device
     final locales = await _stt.locales();
+    _availableLocales = locales;
     bool languageMissing = false;
     String? requestedLang = localeId;
 
@@ -317,4 +319,19 @@ class SpeechService {
   }
 
   bool get isListening => _stt.isListening;
+
+  /// Switch recognition locale during an active Android STT session.
+  /// Cancelling the current listen cycle lets the existing restart loop begin
+  /// listening again with the new locale instead of waiting for a timeout.
+  void setLocale(String locale) {
+    final resolved = _availableLocales.isEmpty
+        ? locale
+        : (_findBestLocale(_availableLocales, locale) ?? locale);
+    if (resolved == _localeId) return;
+    _localeId = resolved;
+    _languageRetries = 0;
+    if (_isActive && !_isRestarting && _stt.isListening) {
+      _stt.cancel();
+    }
+  }
 }

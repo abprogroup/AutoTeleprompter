@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 // v4.0: Stable Release — Record and Settings buttons hidden (premium features)
 class ProjectActionsSuite extends StatelessWidget {
   final VoidCallback onBack, onPresent, onClear, onSave, onImport, onRename;
-  final VoidCallback onAddBookmark, onRemoveBookmark;
-  final VoidCallback onPreviousBookmark, onNextBookmark;
   final VoidCallback? onSearch;
   final String title;
 
@@ -16,10 +14,6 @@ class ProjectActionsSuite extends StatelessWidget {
     required this.onSave,
     required this.onImport,
     required this.onRename,
-    required this.onAddBookmark,
-    required this.onRemoveBookmark,
-    required this.onPreviousBookmark,
-    required this.onNextBookmark,
     required this.title,
     this.onSearch,
   });
@@ -43,17 +37,6 @@ class ProjectActionsSuite extends StatelessWidget {
             IconButton(icon: const Icon(Icons.save_alt), onPressed: onSave),
             IconButton(
                 icon: const Icon(Icons.folder_open), onPressed: onImport),
-            IconButton(
-                icon: const Icon(Icons.bookmark_add_outlined),
-                onPressed: onAddBookmark),
-            IconButton(
-                icon: const Icon(Icons.bookmark_remove_outlined),
-                onPressed: onRemoveBookmark),
-            IconButton(
-                icon: const Icon(Icons.skip_previous),
-                onPressed: onPreviousBookmark),
-            IconButton(
-                icon: const Icon(Icons.skip_next), onPressed: onNextBookmark),
           ],
         ),
         const SizedBox(height: 8),

@@ -29,5 +29,8 @@ class SttAndroidAdapter extends AbstractSttService {
   bool get isListening => _inner.isListening;
 
   @override
+  void setLocale(String locale) => _inner.setLocale(locale);
+
+  @override
   String get platformName => 'Android';
 }

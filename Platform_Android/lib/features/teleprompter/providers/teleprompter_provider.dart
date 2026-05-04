@@ -20,6 +20,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   Timer? _fluidAdvanceTimer;
   int _fluidTarget = 0;
   String? _scriptLanguageLocale;
+  String? _activeLocale;
+  List<String> _sectionLocales = const [];
   DateTime? _lastVolLog;
   DateTime? _sessionStartTime;
   bool _silentWarningFired = false;
@@ -145,7 +147,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         : '<END>';
 
     const engineTag = '🎤';
-    const skipThreshold = _googleSkipAfterStuck;
+    final skipThreshold = _effectiveSkipThreshold();
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
       final capped = aligned.confirmedWordIndex.clamp(
@@ -173,8 +175,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _noProgressCount++;
       _addDebugLog(
           '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
-      _syncLocaleForPosition(script, state.confirmedWordIndex + 1,
-          reason: 'boundary wait');
 
       if (_noProgressCount >= skipThreshold) {
         _noProgressCount = 0;
@@ -184,7 +184,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           _addDebugLog(
               '🤖 ⏭ FORCE SKIP → #$next "$skippedWord" (stuck too long)');
           _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
-          _syncLocaleForPosition(script, next + 1, reason: 'force skip');
+          _checkAndSwitchLocale();
         }
       }
     }
@@ -330,31 +330,105 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     });
   }
 
-  /// Detect the language of the next real expected word starting at [wordIndex].
-  /// Broad lookahead can pivot too early in bilingual scripts; the recognizer
-  /// should switch only when the next speakable word actually changes language.
-  String _detectLanguageAhead(int wordIndex, Script script) {
-    final words = script.words;
-    final start = wordIndex.clamp(0, words.length);
-    for (int i = start; i < words.length; i++) {
-      if (words[i].isNewline || words[i].normalized.isEmpty) continue;
-      return words[i].isRtl ? 'he_IL' : 'en_US';
+  /// Pre-compute a per-word locale map so mixed Hebrew/English scripts can
+  /// switch languages before the boundary, matching the tested iOS behavior.
+  void _precomputeSectionLocales(Script script) {
+    const minSectionWords = 3;
+
+    final realWords = script.words
+        .where((w) => !w.isNewline && w.normalized.isNotEmpty)
+        .toList();
+    if (realWords.isEmpty) {
+      _sectionLocales = const [];
+      return;
     }
-    return _scriptLanguageLocale ?? 'en_US';
+
+    final raw = realWords.map((w) => w.isRtl ? 'he_IL' : 'en_US').toList();
+    final smoothed = List<String>.from(raw);
+    var changed = true;
+    while (changed) {
+      changed = false;
+      var i = 0;
+      while (i < smoothed.length) {
+        final locale = smoothed[i];
+        final runStart = i;
+        while (i < smoothed.length && smoothed[i] == locale) {
+          i++;
+        }
+        final runLen = i - runStart;
+        if (runLen < minSectionWords) {
+          final inherit = runStart > 0
+              ? smoothed[runStart - 1]
+              : (i < smoothed.length ? smoothed[i] : locale);
+          if (inherit != locale) {
+            for (var j = runStart; j < i; j++) {
+              smoothed[j] = inherit;
+            }
+            changed = true;
+          }
+        }
+      }
+    }
+
+    final mapped = <String>[];
+    var realIndex = 0;
+    for (final word in script.words) {
+      if (word.isNewline || word.normalized.isEmpty) {
+        mapped.add(mapped.isNotEmpty ? mapped.last : smoothed.first);
+      } else {
+        mapped.add(realIndex < smoothed.length ? smoothed[realIndex] : 'en_US');
+        realIndex++;
+      }
+    }
+    _sectionLocales = mapped;
+  }
+
+  int _effectiveSkipThreshold() {
+    if (_sectionLocales.isEmpty) return _googleSkipAfterStuck;
+    final currentIdx = state.confirmedWordIndex;
+    for (var lookahead = 1; lookahead <= 2; lookahead++) {
+      final checkIdx = currentIdx + lookahead;
+      if (checkIdx < _sectionLocales.length &&
+          _sectionLocales[checkIdx] != _activeLocale) {
+        return 5;
+      }
+    }
+    return _googleSkipAfterStuck;
+  }
+
+  void _checkAndSwitchLocale() {
+    if (_disposed || _sessionStopped || _sectionLocales.isEmpty) return;
+    final currentIdx = state.confirmedWordIndex;
+    if (currentIdx < 0 || currentIdx >= _sectionLocales.length) return;
+    final lookIdx =
+        (currentIdx + 1).clamp(0, _sectionLocales.length - 1).toInt();
+    final needed = _sectionLocales[lookIdx];
+    if (needed == _activeLocale) return;
+    _activeLocale = needed;
+    _scriptLanguageLocale = needed;
+    _accumulatedTranscript = '';
+    _addDebugLog('LANG PRE-SWITCH: $needed (cur=$currentIdx)');
+    _safeSetState((s) => s.copyWith(isStarting: true, soundLevel: 0.0));
+    _sttService.setLocale(needed);
   }
 
   void _syncLocaleForPosition(Script script, int wordIndex,
       {required String reason}) {
     if (_sessionStopped || _disposed) return;
-    final upcomingLocale = _detectLanguageAhead(wordIndex, script);
-    if (upcomingLocale == _scriptLanguageLocale) return;
-    _scriptLanguageLocale = upcomingLocale;
+    if (_sectionLocales.length != script.words.length) {
+      _precomputeSectionLocales(script);
+    }
+    if (_sectionLocales.isEmpty) return;
+    final lookIdx = wordIndex.clamp(0, _sectionLocales.length - 1).toInt();
+    final needed = _sectionLocales[lookIdx];
+    if (needed == _activeLocale) return;
+    _activeLocale = needed;
+    _scriptLanguageLocale = needed;
     _accumulatedTranscript = '';
     final engineName = _sttService.platformName.toUpperCase();
-    _addDebugLog(
-        '🔤 [$engineName] Switching STT locale → $upcomingLocale ($reason)');
+    _addDebugLog('LANG SYNC [$engineName]: $needed ($reason)');
     _safeSetState((s) => s.copyWith(isStarting: true, soundLevel: 0.0));
-    _sttService.setLocale(upcomingLocale);
+    _sttService.setLocale(needed);
   }
 
   /// Find the next non-newline word index after [from]
@@ -406,21 +480,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog(
         '🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
-    String? localeId;
-
-    // v4.2: Detect starting locale focusing ONLY on the immediate first words.
-    // This prevents a long Hebrew document from forcing English start-text into Hebrew STT.
-    if (script.words.isNotEmpty) {
-      final initialLocale = _detectLanguageAhead(startIndex, script);
-      _scriptLanguageLocale = initialLocale;
-
-      final realWords = script.words.where((w) => !w.isNewline).toList();
-      final hebrewCount = realWords.where((w) => w.isRtl).length;
-      final ratio = hebrewCount / realWords.length;
-      _addDebugLog(
-          '🌐 LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew overall)');
-      localeId = initialLocale;
-    }
+    _precomputeSectionLocales(script);
+    final localeId = startIndex < _sectionLocales.length
+        ? _sectionLocales[startIndex]
+        : (_sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US');
+    _scriptLanguageLocale = localeId;
+    _activeLocale = localeId;
+    _addDebugLog(
+        'START LOCALE: $localeId | ${_sectionLocales.toSet().length} section(s)');
 
     // Start heartbeat timer in debug mode
     _heartbeatTimer?.cancel();
@@ -459,8 +526,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         // Every heartbeat, check the next expected word. If its language
         // changed, hot-switch the STT locale via WebSocket.
         if (listening && _currentScript != null) {
-          _syncLocaleForPosition(_currentScript!, state.confirmedWordIndex + 1,
-              reason: 'heartbeat');
+          _checkAndSwitchLocale();
         }
       });
     }
@@ -539,6 +605,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _noProgressCount = 0;
     _lastVolLog = null;
     _scriptLanguageLocale = null;
+    _activeLocale = null;
+    _sectionLocales = const [];
 
     // Stop the Android-native speech recognizer.
     final stopFuture = _sttService.stop();

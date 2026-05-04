@@ -709,3 +709,14 @@ Shift selection methods. macOS intentionally does not receive WebView2 STT,
 Windows mic selector UI, `setx`, Windows Settings links, or Windows speech
 pack dialogs. Future platform ports should treat `385911e` plus this macOS
 port as the current behavior reference.
+
+Android mobile correction — 2026-05-04
+
+Android mobile UI must follow tested iOS density where the project app bar
+cannot host every command. Bookmark commands belong in one formatting-toolbar
+bookmark popup, while Windows/iOS tested command semantics remain the behavior
+authority. Android STT must also keep iOS-tested language-boundary behavior:
+active adapter `setLocale(...)`, section-locale precompute, one-word-ahead
+pre-switching, and the tighter near-boundary recovery threshold. Android keeps
+native `speech_to_text` and Android language-pack/offline handling; do not port
+iOS Whisper or Windows WebView2/STT desktop runtime paths.

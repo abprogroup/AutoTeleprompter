@@ -18,8 +18,10 @@ class MainActivity: FlutterActivity() {
     private val androidFilesChannel = "autoteleprompter/android_files"
     private val exportFolderRequestCode = 41013
     private val exportFileRequestCode = 41014
+    private val exportReplaceFileRequestCode = 41015
     private var pendingExportFolderResult: MethodChannel.Result? = null
     private var pendingExportFileResult: MethodChannel.Result? = null
+    private var pendingExportReplaceFileResult: MethodChannel.Result? = null
     private val appExportRelativePath = "${Environment.DIRECTORY_DOCUMENTS}/AutoTeleprompter/"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -130,6 +132,30 @@ class MainActivity: FlutterActivity() {
                     } catch (e: Exception) {
                         pendingExportFileResult = null
                         result.error("export_file_picker_failed", e.message, null)
+                    }
+                }
+                "pickExportFileForReplace" -> {
+                    if (pendingExportReplaceFileResult != null) {
+                        result.error(
+                            "export_replace_file_pending",
+                            "An export replace picker is already open.",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        pendingExportReplaceFileResult = result
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                        }
+                        startActivityForResult(intent, exportReplaceFileRequestCode)
+                    } catch (e: Exception) {
+                        pendingExportReplaceFileResult = null
+                        result.error("export_replace_file_picker_failed", e.message, null)
                     }
                 }
                 "listDefaultExportFolder" -> {
@@ -329,6 +355,36 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == exportReplaceFileRequestCode) {
+            val pending = pendingExportReplaceFileResult
+            pendingExportReplaceFileResult = null
+            if (pending == null) {
+                super.onActivityResult(requestCode, resultCode, data)
+                return
+            }
+            if (resultCode != Activity.RESULT_OK || data?.data == null) {
+                pending.success(null)
+                return
+            }
+
+            val fileUri = data.data!!
+            val requestedFlags =
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            val grantedFlags = data.flags and requestedFlags
+            try {
+                contentResolver.takePersistableUriPermission(
+                    fileUri,
+                    if (grantedFlags != 0) grantedFlags else requestedFlags
+                )
+            } catch (_: Exception) {
+                // The returned URI still carries transient write permission for
+                // the immediate replacement even if the provider refuses a
+                // persistent grant.
+            }
+            pending.success(fileUri.toString())
+            return
+        }
+
         if (requestCode == exportFileRequestCode) {
             val pending = pendingExportFileResult
             pendingExportFileResult = null

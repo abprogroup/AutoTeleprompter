@@ -157,6 +157,16 @@ class AndroidFileAccess {
     }
   }
 
+  static Future<String?> pickExportFileForReplace() async {
+    try {
+      final value =
+          await _channel.invokeMethod<String>('pickExportFileForReplace');
+      return value?.trim().isEmpty == true ? null : value;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<List<AndroidDocumentEntry>> listDefaultExportFolder() async {
     try {
       final raw = await _channel.invokeMethod<List<dynamic>>(

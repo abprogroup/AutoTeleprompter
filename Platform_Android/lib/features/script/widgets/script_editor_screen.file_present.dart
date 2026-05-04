@@ -189,12 +189,6 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       baseName: baseName,
       format: normalizedFormat,
     )) {
-      final exactExport = await _findAndroidExportByDisplayName(
-        baseName: baseName,
-        format: normalizedFormat,
-        displayName: exactDisplayName,
-        excludeLocation: finalLocation,
-      );
       final choice = await _showExportConflictDialog(
         exactDisplayName,
         message: 'Android found an existing "$exactDisplayName" and created '
@@ -206,22 +200,12 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       }
       if (choice == _ExportConflictChoice.replace) {
         await AndroidFileAccess.deleteDocument(finalLocation);
-        if (exactExport == null) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Android did not give AutoTeleprompter access to the existing '
-                '"$exactDisplayName". Save again and choose the existing file '
-                'when Android asks where to save.',
-              ),
-              backgroundColor: Colors.orange[800],
-              duration: const Duration(seconds: 7),
-            ),
-          );
-          return;
-        }
-        await _writeAndroidExport(exactExport, bytes, replaced: true);
+        await _replaceAndroidExportByUserSelection(
+          baseName: baseName,
+          format: normalizedFormat,
+          expectedDisplayName: exactDisplayName,
+          bytes: bytes,
+        );
         return;
       }
     }
@@ -331,28 +315,50 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     );
   }
 
-  Future<SavedExportEntry?> _findAndroidExportByDisplayName({
+  Future<void> _replaceAndroidExportByUserSelection({
     required String baseName,
     required String format,
-    required String displayName,
-    required String excludeLocation,
+    required String expectedDisplayName,
+    required Uint8List bytes,
   }) async {
-    final expected = displayName.toLowerCase().trim();
-    final candidates = await AndroidFileAccess.findDocumentsByDisplayBase(
-      baseName: baseName,
-      format: format,
-    );
-    for (final candidate in candidates) {
-      if (candidate.location == excludeLocation) continue;
-      if (candidate.displayName.toLowerCase().trim() != expected) continue;
-      return SavedExportEntry(
-        baseName: baseName,
-        format: format.toLowerCase(),
-        displayName: candidate.displayName,
-        location: candidate.location,
+    final selectedLocation = await AndroidFileAccess.pickExportFileForReplace();
+    if (!mounted) return;
+    if (selectedLocation == null || selectedLocation.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Replace cancelled.'),
+          backgroundColor: Colors.black54,
+          duration: Duration(seconds: 2),
+        ),
       );
+      return;
     }
-    return null;
+
+    final selectedName =
+        await AndroidFileAccess.displayNameForLocation(selectedLocation) ??
+            AndroidFileAccess.displayNameHintFromLocation(selectedLocation);
+    if (selectedName.toLowerCase().trim() !=
+        expectedDisplayName.toLowerCase().trim()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Selected "$selectedName", but Replace needs '
+            '"$expectedDisplayName". No file was changed.',
+          ),
+          backgroundColor: Colors.orange[800],
+          duration: const Duration(seconds: 7),
+        ),
+      );
+      return;
+    }
+
+    final replacement = SavedExportEntry(
+      baseName: baseName,
+      format: format.toLowerCase(),
+      displayName: selectedName,
+      location: selectedLocation,
+    );
+    await _writeAndroidExport(replacement, bytes, replaced: true);
   }
 
   Future<void> _writeAndroidExport(

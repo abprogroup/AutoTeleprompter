@@ -33,15 +33,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _sessionToken = 0;
   int? _visibleWordStart;
   int? _visibleWordEnd;
-  DateTime? _lastVisibleLocaleProbeAt;
-  String? _lastVisibleLocaleProbeLocale;
+  DateTime? _lastVisibleLocaleAssistAt;
+  String? _lastVisibleLocaleAssistLocale;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
   static const int _whisperSkipAfterStuck = 10;
   static const int _maxAdvancePerUpdate = 30;
-  static const int _visibleLocaleProbeAfterWaits = 3;
-  static const Duration _visibleLocaleProbeCooldown =
+  static const int _visibleLocaleAssistAfterWaits = 8;
+  static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
 
   @override
@@ -164,7 +164,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _useWhisper ? _whisperSkipAfterStuck : _effectiveSkipThreshold();
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
-      _resetVisibleLocaleProbe();
+      _resetVisibleLocaleAssist();
       final capped = aligned.confirmedWordIndex.clamp(
         state.confirmedWordIndex,
         state.confirmedWordIndex + _maxAdvancePerUpdate,
@@ -192,7 +192,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
       _checkAndSwitchLocale();
 
-      if (_maybeProbeVisibleLocale(script, settings, result.words)) {
+      if (_maybeAssistVisibleLocale(script, settings, result.words)) {
         return;
       }
 
@@ -203,7 +203,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           final skippedWord = script.words[next].raw;
           _addDebugLog(
               '🤖 ⏭ FORCE SKIP → #$next "$skippedWord" (stuck too long)');
-          _resetVisibleLocaleProbe();
+          _resetVisibleLocaleAssist();
           _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
           _syncLocaleForPosition(script, next + 1, reason: 'force skip');
         }
@@ -534,7 +534,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     return true;
   }
 
-  bool _maybeProbeVisibleLocale(
+  bool _maybeAssistVisibleLocale(
     Script script,
     AppSettings settings,
     String heard,
@@ -542,28 +542,28 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (_useWhisper || _disposed || _sessionStopped) return false;
     if (!settings.sttVisibleSkipEnabled || heard.trim().isEmpty) return false;
     if (_visibleWordStart == null || _visibleWordEnd == null) return false;
-    if (_noProgressCount < _visibleLocaleProbeAfterWaits) return false;
+    if (_noProgressCount < _visibleLocaleAssistAfterWaits) return false;
 
     final now = DateTime.now();
-    final lastProbeAt = _lastVisibleLocaleProbeAt;
-    if (lastProbeAt != null &&
-        now.difference(lastProbeAt) < _visibleLocaleProbeCooldown) {
+    final lastAssistAt = _lastVisibleLocaleAssistAt;
+    if (lastAssistAt != null &&
+        now.difference(lastAssistAt) < _visibleLocaleAssistCooldown) {
       return false;
     }
 
     final candidate = _nextVisibleLocaleCandidate(script);
     if (candidate == null || candidate == _activeLocale) return false;
 
-    _lastVisibleLocaleProbeAt = now;
-    _lastVisibleLocaleProbeLocale = candidate;
+    _lastVisibleLocaleAssistAt = now;
+    _lastVisibleLocaleAssistLocale = candidate;
     _noProgressCount = 0;
     final switched = _switchLocaleIfNeeded(
       candidate,
-      reason: 'visible skip probe',
+      reason: 'visible skip assist',
     );
     if (switched) {
       _addDebugLog(
-        'VISIBLE LOCALE PROBE -> $candidate | window=$_visibleWordStart-$_visibleWordEnd | heard="$heard"',
+        'VISIBLE LOCALE ASSIST -> $candidate | window=$_visibleWordStart-$_visibleWordEnd | heard="$heard"',
       );
     }
     return switched;
@@ -596,16 +596,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
     }
     if (candidates.isEmpty) return null;
-    if (_lastVisibleLocaleProbeLocale == null) return candidates.first;
+    if (_lastVisibleLocaleAssistLocale == null) return candidates.first;
 
-    final lastIdx = candidates.indexOf(_lastVisibleLocaleProbeLocale!);
+    final lastIdx = candidates.indexOf(_lastVisibleLocaleAssistLocale!);
     if (lastIdx < 0 || candidates.length == 1) return candidates.first;
     return candidates[(lastIdx + 1) % candidates.length];
   }
 
-  void _resetVisibleLocaleProbe() {
-    _lastVisibleLocaleProbeAt = null;
-    _lastVisibleLocaleProbeLocale = null;
+  void _resetVisibleLocaleAssist() {
+    _lastVisibleLocaleAssistAt = null;
+    _lastVisibleLocaleAssistLocale = null;
   }
 
   /// Find the next non-newline word index after [from]
@@ -641,7 +641,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _lastVolLog = null;
     _visibleWordStart = null;
     _visibleWordEnd = null;
-    _resetVisibleLocaleProbe();
+    _resetVisibleLocaleAssist();
     _precomputeSectionLocales(script);
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
@@ -813,7 +813,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sectionLocales = [];
     _visibleWordStart = null;
     _visibleWordEnd = null;
-    _resetVisibleLocaleProbe();
+    _resetVisibleLocaleAssist();
 
     // Stop all engines — Whisper may have been auto-started via fallback
     final stopFuture = Future.wait([
@@ -844,7 +844,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   void resetPosition() {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
-    _resetVisibleLocaleProbe();
+    _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('🔄 POSITION RESET → 0');
     state = state.copyWith(confirmedWordIndex: 0);
@@ -860,7 +860,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final target = index.clamp(0, activeScript.words.length - 1);
     _accumulatedTranscript = '';
     _noProgressCount = 0;
-    _resetVisibleLocaleProbe();
+    _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(
         '📍 POSITION JUMP → #$target "${activeScript.words[target].raw}"');
@@ -891,7 +891,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   void setVisibleWordWindow(int? startIndex, int? endIndex) {
     if (_disposed) return;
     if (startIndex != _visibleWordStart || endIndex != _visibleWordEnd) {
-      _resetVisibleLocaleProbe();
+      _resetVisibleLocaleAssist();
     }
     _visibleWordStart = startIndex;
     _visibleWordEnd = endIndex;

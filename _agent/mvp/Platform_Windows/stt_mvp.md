@@ -252,6 +252,23 @@ owns how confirmed indices are rendered after STT produces results.
 | Safety cap | The visible window is an upper bound, not permission for unrestricted jumps. Single-word matches stay near-range only; longer visible jumps require multi-word sequence confirmation and aligner confidence checks. |
 | Display-only tokens | Newlines, punctuation-only markers, and unspeakable display symbols must not expand the skip window or become skip targets. |
 
+### 2026-05-04 Regression Repair Addendum
+
+- Alignment owns visible skip decisions before locale switching. The aligner
+  must scan the full presenter visible word window when
+  `maxSkipTargetIndex` is supplied.
+- Visible skip off remains conservative: local recovery is limited to the
+  next five words.
+- Large visible jumps require phrase or sequence confidence. Single-word large
+  jumps remain blocked.
+- Windows WebView2 STT locale switching is secondary assistance only. The
+  provider must not switch locale after a few no-match waits before the aligner
+  has had a fair chance to match the current locale against the full visible
+  window.
+- Delayed visible-locale assistance may run only after repeated no-progress
+  waits and must not switch away from the active locale when a later same-locale
+  section is still visible after an intervening section.
+
 ---
 
 ## Shared-File Ownership Notes

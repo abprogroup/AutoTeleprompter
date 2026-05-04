@@ -20,8 +20,6 @@ class WordAligner {
   static const int _nearPhrasePriorityWindow = 50;
   static const int _nearPhraseMaxWords = 8;
   static const int _localRecoveryPhraseMaxWords = 5;
-  // Max words for a MULTI-WORD sequence match (reliable — multiple words confirmed).
-  static const int _maxSeqJump = 30;
   // Minimum similarity for a word to be considered a match
   static const double _matchThreshold = 0.55;
   // Stricter threshold for the fast single-word path
@@ -433,6 +431,7 @@ class WordAligner {
         searchStart: searchStart,
         windowEnd: windowEnd,
         lastConfirmedIndex: lastConfirmedIndex,
+        scanFullWindow: true,
         debugPrefix: 'NEAR_PHRASE_PRIORITY',
       );
       if (nearbyPhrase != null) return nearbyPhrase;
@@ -488,12 +487,9 @@ class WordAligner {
         final seqJump = (si - 1) - lastConfirmedIndex;
         final maxSeqJump = visibleMaxSkipTargetIndex == null
             ? _maxSingleJump
-            : _minInt(
-                _maxSeqJump,
-                (visibleMaxSkipTargetIndex - lastConfirmedIndex)
-                    .clamp(0, script.length)
-                    .toInt(),
-              );
+            : (visibleMaxSkipTargetIndex - lastConfirmedIndex)
+                .clamp(0, script.length)
+                .toInt();
         // For large jumps, require at least 2 matching words for confidence
         final minMatches = seqJump > _maxSingleJump ? 2 : 1;
         if (matchCount >= minMatches && seqJump <= maxSeqJump) {
@@ -528,20 +524,25 @@ class WordAligner {
     int maxPhraseWords = _nearPhraseMaxWords,
     int? maxJump,
     int minPhraseWords = 3,
+    bool scanFullWindow = false,
     String debugPrefix = 'NEAR_PHRASE_PRIORITY',
   }) {
     if (transcriptWords.length < minPhraseWords) return null;
 
-    final phraseWindowEnd = (searchStart + _nearPhrasePriorityWindow)
-        .clamp(searchStart, windowEnd)
-        .toInt();
+    final phraseWindowEnd = scanFullWindow
+        ? windowEnd
+        : (searchStart + _nearPhrasePriorityWindow)
+            .clamp(searchStart, windowEnd)
+            .toInt();
     if (phraseWindowEnd <= searchStart) return null;
 
     final longestPhrase = transcriptWords.length < maxPhraseWords
         ? transcriptWords.length
         : maxPhraseWords;
 
-    for (int phraseLen = longestPhrase; phraseLen >= minPhraseWords; phraseLen--) {
+    for (int phraseLen = longestPhrase;
+        phraseLen >= minPhraseWords;
+        phraseLen--) {
       final spokenPhrase =
           transcriptWords.sublist(transcriptWords.length - phraseLen);
       double bestScore = 0.0;
@@ -599,8 +600,6 @@ class WordAligner {
   }
 
   // ── Word similarity helper ─────────────────────────────────────────────────
-  static int _minInt(int a, int b) => a < b ? a : b;
-
   /// Compute similarity between a spoken word and a script word,
   /// with special handling for Hebrew prefix stripping.
   static double _wordSimilarity(String spoken, String scriptWord, bool isRtl) {

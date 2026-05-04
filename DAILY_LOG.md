@@ -1731,3 +1731,13 @@
 ### 2026-05-04 - Windows STT Visible-Skip Parity
 - Implemented a Windows-only STT parity pass to keep WebView2 STT plumbing while adopting the tested iOS Hebrew/English language-section behavior for visible skip.
 - Added the v5 tracking note that universal system-language STT needs shared cross-platform language metadata instead of guessing from RTL/LTR direction.
+
+### 2026-05-04 - Windows STT Visible-Skip Regression Repair
+- Repaired the Windows visible-skip regression from `590cad3` by restoring
+  full visible-window phrase/sequence matching in `WordAligner`.
+- Delayed visible-locale assistance now waits longer, runs only after a failed
+  full-window alignment pass, and avoids switching away from the active locale
+  when a later same-locale section remains visible.
+- Added targeted Windows aligner tests for English -> English across Hebrew,
+  Hebrew -> Hebrew across English, English -> Hebrew, Hebrew -> English, and
+  visible-skip-off conservative recovery.

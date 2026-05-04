@@ -806,3 +806,14 @@
   formatting-toolbar bookmark popup. Android STT now implements active locale
   switching and uses iOS-tested section-locale pre-switch behavior so
   Hebrew/English/Hebrew scripts can advance across language boundaries.
+
+## 2026-05-04 Windows STT Visible-Skip Regression Repair
+- [P] **Windows visible skip restored**: Repair the `590cad3` regression by
+  letting Windows `WordAligner` scan the full visible viewport for phrase and
+  sequence matches while keeping visible-skip-off recovery capped to five
+  words.
+- [P] **Locale assist delayed and guarded**: WebView2 locale switching remains
+  Windows-native and secondary. Delayed visible-locale assistance no longer
+  preempts same-locale visible matches after only a few no-progress waits.
+- [P] **Regression tests added**: Targeted Windows aligner tests now cover
+  English/Hebrew mixed visible skips and the conservative default mode.

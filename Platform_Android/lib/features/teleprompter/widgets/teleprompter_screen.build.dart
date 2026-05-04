@@ -674,19 +674,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                     : () => ref
                                         .read(teleprompterProvider.notifier)
                                         .stopSession(),
-                                onReset: () {
-                                  if (settings.scrollMode == 'manual') {
-                                    _resetManual();
-                                  } else {
-                                    ref
-                                        .read(teleprompterProvider.notifier)
-                                        .resetPosition();
-                                    _scrollController.animateTo(0,
-                                        duration:
-                                            const Duration(milliseconds: 400),
-                                        curve: Curves.easeOutCubic);
-                                  }
-                                },
+                                onReset: _restartPresenterFromBeginning,
                                 onBack: () {
                                   _exitPresentation();
                                 },

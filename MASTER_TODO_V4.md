@@ -806,6 +806,12 @@
   formatting-toolbar bookmark popup. Android STT now implements active locale
   switching and uses iOS-tested section-locale pre-switch behavior so
   Hebrew/English/Hebrew scripts can advance across language boundaries.
+- [P] **Android Done/Restart/Visible-Skip Repair**: Enable the Android editor
+  keyboard Done bar, route presenter Restart through one immediate word-0
+  helper from both control surfaces, and port the final Windows visible-skip
+  aligner/provider behavior to Android-native `speech_to_text`. Targeted
+  Android visible-skip tests pass; presenter split files still have existing
+  analyzer warnings unrelated to this repair.
 
 ## 2026-05-04 Windows STT Visible-Skip Regression Repair
 - [P] **Windows visible skip restored**: Repair the `590cad3` regression by

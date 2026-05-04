@@ -1756,3 +1756,17 @@
 - Added active-locale plausibility checks so English phrases such as
   "Samaritan woman at well" keep English active even when Hebrew is also
   visible.
+
+### 2026-05-04 - Android Done, Restart, and Visible-Skip Repair
+- Enabled the Android editor keyboard Done bar through
+  `PlatformKeyboard.showDoneBar`; the control only dismisses the soft keyboard.
+- Centralized presenter Restart in `_restartPresenterFromBeginning()` so the
+  main Restart button and resume-dialog Restart reset provider position,
+  manual index, scroll, and visible-window state together.
+- Ported final Windows visible-skip STT behavior to Android-native
+  `speech_to_text`: full visible phrase/sequence scan, conservative
+  visible-skip-off recovery, trusted visible-target cap bypass, quick guarded
+  locale assist, and assist pinning.
+- Added targeted Android visible-skip tests covering English/Hebrew crossing,
+  same-language visible skips across a foreign section, conservative mode, cap
+  bypass, active-locale plausibility, and assist pinning.

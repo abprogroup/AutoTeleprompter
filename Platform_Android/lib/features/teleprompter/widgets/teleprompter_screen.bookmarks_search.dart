@@ -59,10 +59,10 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       // the dialog). Nothing more to do — just stay.
     } else {
       // Restart: reset provider word-index and jump to the beginning.
-      ref.read(teleprompterProvider.notifier).resetPosition();
-      _jumpToWordIndex(0, immediate: true);
+      _restartPresenterFromBeginning();
     }
   }
+
   Future<void> _loadBookmarksForScript(Script script,
       {bool force = false}) async {
     final key = ScriptBookmarkService.scopeKey(script.sessionId, script.title);
@@ -266,8 +266,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
               const SizedBox(height: 12),
               CheckboxListTile(
                 value: wholeWord,
-                onChanged: (value) =>
-                    setDlg(() => wholeWord = value ?? false),
+                onChanged: (value) => setDlg(() => wholeWord = value ?? false),
                 dense: true,
                 controlAffinity: ListTileControlAffinity.leading,
                 activeColor: const Color(0xFFFFBF00),
@@ -336,11 +335,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     }
 
     if (matches.isEmpty) {
-      if (mounted) setState(() {
-        _presenterSearchToolbarVisible = false;
-        _presenterSearchMatches = const [];
-        _presenterSearchMatchIndex = -1;
-      });
+      if (mounted)
+        setState(() {
+          _presenterSearchToolbarVisible = false;
+          _presenterSearchMatches = const [];
+          _presenterSearchMatchIndex = -1;
+        });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No match for "$query"'),
@@ -358,11 +358,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
         .toInt();
     final nextIndex = matches.indexWhere((m) => m.wordIndex > current);
     final initialIndex = nextIndex >= 0 ? nextIndex : 0;
-    if (mounted) setState(() {
-      _presenterSearchToolbarVisible = true;
-      _presenterSearchMatches = matches;
-      _presenterSearchMatchIndex = initialIndex;
-    });
+    if (mounted)
+      setState(() {
+        _presenterSearchToolbarVisible = true;
+        _presenterSearchMatches = matches;
+        _presenterSearchMatchIndex = initialIndex;
+      });
     _jumpToPresenterSearchMatchAt(initialIndex);
   }
 
@@ -371,10 +372,11 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     final count = _presenterSearchMatches.length;
     final next = (_presenterSearchMatchIndex + delta) % count;
     final normalized = next < 0 ? next + count : next;
-    if (mounted) setState(() {
-      _presenterSearchMatchIndex = normalized;
-      _presenterSearchToolbarVisible = true;
-    });
+    if (mounted)
+      setState(() {
+        _presenterSearchMatchIndex = normalized;
+        _presenterSearchToolbarVisible = true;
+      });
     _jumpToPresenterSearchMatchAt(normalized);
   }
 
@@ -384,19 +386,22 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
         _presenterSearchMatches.isEmpty ||
         matchIndex < 0 ||
         matchIndex >= _presenterSearchMatches.length) return;
-    final wordIndex = _presenterSearchMatches[matchIndex].wordIndex
+    final wordIndex = _presenterSearchMatches[matchIndex]
+        .wordIndex
         .clamp(0, script.words.length - 1)
         .toInt();
-    _jumpToWordIndex(wordIndex, immediate: true); // instant jump, not smooth scroll
+    _jumpToWordIndex(wordIndex,
+        immediate: true); // instant jump, not smooth scroll
     ref.read(teleprompterProvider.notifier).jumpToPosition(wordIndex);
   }
 
   void _closePresenterSearchToolbar() {
-    if (mounted) setState(() {
-      _presenterSearchToolbarVisible = false;
-      _presenterSearchMatches = const [];
-      _presenterSearchMatchIndex = -1;
-    });
+    if (mounted)
+      setState(() {
+        _presenterSearchToolbarVisible = false;
+        _presenterSearchMatches = const [];
+        _presenterSearchMatchIndex = -1;
+      });
   }
 
   Widget _buildPresenterSearchToolbar() {
@@ -557,7 +562,8 @@ class _PresenterSearchText {
 
   int? wordIndexForChar(int charIndex) {
     for (final span in spans) {
-      if (charIndex >= span.start && charIndex < span.end) return span.wordIndex;
+      if (charIndex >= span.start && charIndex < span.end)
+        return span.wordIndex;
       if (charIndex < span.start) return span.wordIndex;
     }
     return spans.isEmpty ? null : spans.last.wordIndex;

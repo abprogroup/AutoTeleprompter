@@ -140,6 +140,20 @@ Acceptance checks:
 - Android Hebrew missing-language/offline-pack behavior still works.
 - Android workflow passes, APK installs to the connected phone, and app launches.
 
+Status update - 2026-05-04:
+
+- Done bar runtime path is implemented by enabling
+  `PlatformKeyboard.showDoneBar`; targeted analyzer on the keyboard helper
+  passes.
+- Restart now routes through one presenter helper from the main control bar and
+  resume dialog, using an immediate word-0 jump plus forced visible-window sync.
+- Android visible skip now uses the final Windows aligner/provider behavior on
+  top of Android-native `speech_to_text`: full visible phrase/sequence scans,
+  trusted visible-match cap bypass, quick guarded locale assist, and assist
+  pinning.
+- Targeted Android visible-skip tests pass. Presenter split files still report
+  existing part-extension analyzer warnings unrelated to this focused repair.
+
 ### 3. macOS Launch Recovery
 
 Goal: make the macOS artifact launch correctly before any additional parity work.

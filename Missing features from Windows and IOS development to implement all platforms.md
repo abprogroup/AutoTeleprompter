@@ -734,3 +734,14 @@ active adapter `setLocale(...)`, section-locale precompute, one-word-ahead
 pre-switching, and the tighter near-boundary recovery threshold. Android keeps
 native `speech_to_text` and Android language-pack/offline handling; do not port
 iOS Whisper or Windows WebView2/STT desktop runtime paths.
+
+Android focused repair — 2026-05-04
+
+Android now has the missing editor keyboard Done bar enabled through
+`PlatformKeyboard.showDoneBar`, a single presenter Restart helper that resets
+provider state and scroll/visible-window state together, and final Windows
+visible-skip STT parity adapted to Android-native `speech_to_text`. The STT
+repair includes full visible-window phrase/sequence scan, no large single-word
+jumps, cap bypass only for trusted visible targets, active-locale plausibility,
+quick visible-locale assist, and assist pinning. Targeted Android visible-skip
+tests were added under `Platform_Android/test/teleprompter/`.

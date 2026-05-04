@@ -1,10 +1,10 @@
 /// Platform-specific keyboard behavior helpers for Android.
 ///
-/// Android's system keyboard includes a built-in dismiss button in the
-/// navigation bar — no in-app "Done" toolbar is needed.
+/// Android phones need the same in-app "Done" affordance as iOS for the
+/// script editor because many keyboards do not expose a clear dismiss key.
 class PlatformKeyboard {
   const PlatformKeyboard._();
 
-  /// Always false on Android — the system keyboard has its own dismiss control.
-  static const bool showDoneBar = false;
+  /// Show a "Done" dismiss bar above the on-screen keyboard.
+  static const bool showDoneBar = true;
 }

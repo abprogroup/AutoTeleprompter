@@ -19,8 +19,7 @@ class WordAligner {
   // Nearby phrase window checked before the visible-skip fallback.
   static const int _nearPhrasePriorityWindow = 50;
   static const int _nearPhraseMaxWords = 8;
-  // Max words for a MULTI-WORD sequence match (reliable — multiple words confirmed).
-  static const int _maxSeqJump = 30;
+  static const int _localRecoveryPhraseMaxWords = 5;
   // Minimum similarity for a word to be considered a match
   static const double _matchThreshold = 0.55;
   // Stricter threshold for the fast single-word path
@@ -28,7 +27,6 @@ class WordAligner {
   // Penalty applied per word of distance from the current position.
   static const double _distancePenaltyPerWord = 0.025;
   // Cross-language (e.g. Latin word in Hebrew script) — more lenient
-  static const double _crossLangThreshold = 0.45;
   // Hebrew-specific: even more lenient because STT often returns approximate matches
   static const double _hebrewMatchThreshold = 0.50;
 
@@ -159,34 +157,42 @@ class WordAligner {
         spans.addAll(_parseMarkupRecursive(
             m.group(2)!,
             base.copyWith(
-                text: '', highlight: Colors.yellow.withOpacity(0.6))));
+                text: '', highlight: Colors.yellow.withValues(alpha: 0.6))));
       } else if (m.group(3) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(3)!,
-            base.copyWith(text: '', highlight: Colors.red.withOpacity(0.55))));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(3)!,
+            base.copyWith(
+                text: '', highlight: Colors.red.withValues(alpha: 0.55))));
       } else if (m.group(4) != null) {
         spans.addAll(_parseMarkupRecursive(
             m.group(4)!,
             base.copyWith(
-                text: '', highlight: Colors.green.withOpacity(0.55))));
+                text: '', highlight: Colors.green.withValues(alpha: 0.55))));
       } else if (m.group(5) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(5)!,
-            base.copyWith(text: '', highlight: Colors.blue.withOpacity(0.45))));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(5)!,
+            base.copyWith(
+                text: '', highlight: Colors.blue.withValues(alpha: 0.45))));
       } else if (m.group(6) != null) {
         spans.addAll(_parseMarkupRecursive(
             m.group(6)!,
             base.copyWith(
-                text: '', highlight: Colors.orange.withOpacity(0.50))));
+                text: '', highlight: Colors.orange.withValues(alpha: 0.50))));
       } else if (m.group(7) != null) {
         spans.addAll(_parseMarkupRecursive(
             m.group(7)!,
             base.copyWith(
-                text: '', highlight: Colors.purple.withOpacity(0.45))));
+                text: '', highlight: Colors.purple.withValues(alpha: 0.45))));
       } else if (m.group(8) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(8)!,
-            base.copyWith(text: '', highlight: Colors.cyan.withOpacity(0.45))));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(8)!,
+            base.copyWith(
+                text: '', highlight: Colors.cyan.withValues(alpha: 0.45))));
       } else if (m.group(9) != null) {
-        spans.addAll(_parseMarkupRecursive(m.group(9)!,
-            base.copyWith(text: '', highlight: Colors.pink.withOpacity(0.45))));
+        spans.addAll(_parseMarkupRecursive(
+            m.group(9)!,
+            base.copyWith(
+                text: '', highlight: Colors.pink.withValues(alpha: 0.45))));
       } else if (m.group(10) != null) {
         spans.addAll(_parseMarkupRecursive(m.group(10)!,
             base.copyWith(text: '', textColor: Colors.yellow.shade300)));
@@ -346,7 +352,7 @@ class WordAligner {
     final visibleSkipEnabled = visibleMaxSkipTargetIndex != null;
     final strictEnd = searchStart + 1;
     final defaultLocalRecoveryEnd =
-        (searchStart + _maxSingleJump).clamp(strictEnd, script.length);
+        (searchStart + _maxSingleJump).clamp(strictEnd, script.length).toInt();
     final allowedEnd = visibleMaxSkipTargetIndex == null
         ? defaultLocalRecoveryEnd
         : (visibleMaxSkipTargetIndex + 1).clamp(strictEnd, script.length);
@@ -412,6 +418,19 @@ class WordAligner {
       }
     }
 
+    final localPhrase = _nearbyPhrasePriorityMatch(
+      script: script,
+      transcriptWords: transcriptWords,
+      searchStart: searchStart,
+      windowEnd: defaultLocalRecoveryEnd,
+      lastConfirmedIndex: lastConfirmedIndex,
+      maxPhraseWords: _localRecoveryPhraseMaxWords,
+      maxJump: _maxSingleJump,
+      minPhraseWords: 2,
+      debugPrefix: 'LOCAL_RECOVERY_PHRASE',
+    );
+    if (localPhrase != null) return localPhrase;
+
     if (visibleSkipEnabled) {
       final nearbyPhrase = _nearbyPhrasePriorityMatch(
         script: script,
@@ -419,6 +438,8 @@ class WordAligner {
         searchStart: searchStart,
         windowEnd: windowEnd,
         lastConfirmedIndex: lastConfirmedIndex,
+        scanFullWindow: true,
+        debugPrefix: 'NEAR_PHRASE_PRIORITY',
       );
       if (nearbyPhrase != null) return nearbyPhrase;
     }
@@ -472,7 +493,7 @@ class WordAligner {
       if (normalizedScore > bestSeqScore && matchCount >= 1) {
         final seqJump = (si - 1) - lastConfirmedIndex;
         final maxSeqJump = visibleMaxSkipTargetIndex == null
-            ? _maxSeqJump
+            ? _maxSingleJump
             : (visibleMaxSkipTargetIndex - lastConfirmedIndex)
                 .clamp(0, script.length)
                 .toInt();
@@ -507,19 +528,28 @@ class WordAligner {
     required int searchStart,
     required int windowEnd,
     required int lastConfirmedIndex,
+    int maxPhraseWords = _nearPhraseMaxWords,
+    int? maxJump,
+    int minPhraseWords = 3,
+    bool scanFullWindow = false,
+    String debugPrefix = 'NEAR_PHRASE_PRIORITY',
   }) {
-    if (transcriptWords.length < 3) return null;
+    if (transcriptWords.length < minPhraseWords) return null;
 
-    final phraseWindowEnd = (searchStart + _nearPhrasePriorityWindow)
-        .clamp(searchStart, windowEnd)
-        .toInt();
+    final phraseWindowEnd = scanFullWindow
+        ? windowEnd
+        : (searchStart + _nearPhrasePriorityWindow)
+            .clamp(searchStart, windowEnd)
+            .toInt();
     if (phraseWindowEnd <= searchStart) return null;
 
-    final longestPhrase = transcriptWords.length < _nearPhraseMaxWords
+    final longestPhrase = transcriptWords.length < maxPhraseWords
         ? transcriptWords.length
-        : _nearPhraseMaxWords;
+        : maxPhraseWords;
 
-    for (int phraseLen = longestPhrase; phraseLen >= 3; phraseLen--) {
+    for (int phraseLen = longestPhrase;
+        phraseLen >= minPhraseWords;
+        phraseLen--) {
       final spokenPhrase =
           transcriptWords.sublist(transcriptWords.length - phraseLen);
       double bestScore = 0.0;
@@ -566,9 +596,10 @@ class WordAligner {
 
       if (bestStart >= 0 &&
           bestEnd > lastConfirmedIndex &&
-          bestScore >= _matchThreshold) {
+          bestScore >= _matchThreshold &&
+          (maxJump == null || bestEnd - lastConfirmedIndex <= maxJump)) {
         return AlignmentResult(bestEnd, bestScore,
-            'NEAR_PHRASE_PRIORITY@$bestStart: words=$phraseLen end=$bestEnd score=${bestScore.toStringAsFixed(2)}');
+            '$debugPrefix@$bestStart: words=$phraseLen end=$bestEnd score=${bestScore.toStringAsFixed(2)}');
       }
     }
 

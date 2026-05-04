@@ -139,6 +139,18 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
+  void _restartPresenterFromBeginning() {
+    _stopManualScroll();
+    _cancelSmoothScroll();
+    _manualWordIndex = 0;
+    ref.read(teleprompterProvider.notifier).resetPosition();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _jumpToWordIndex(0, immediate: true);
+      _syncVisibleWordWindow(force: true);
+    });
+  }
+
   // ── Speech-mode scroll ──────────────────────────────────────────────────────
 
   void _scrollToWordIndex(int index,

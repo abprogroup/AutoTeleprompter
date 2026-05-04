@@ -5,16 +5,19 @@ import 'package:flutter/services.dart';
 class AndroidDocumentEntry {
   final String displayName;
   final String location;
+  final String mimeType;
 
   const AndroidDocumentEntry({
     required this.displayName,
     required this.location,
+    this.mimeType = '',
   });
 
   factory AndroidDocumentEntry.fromMap(Map<dynamic, dynamic> value) {
     return AndroidDocumentEntry(
       displayName: (value['displayName'] as String? ?? '').trim(),
       location: (value['uri'] as String? ?? '').trim(),
+      mimeType: (value['mimeType'] as String? ?? '').trim(),
     );
   }
 }
@@ -65,6 +68,94 @@ class AndroidFileAccess {
           .toList(growable: false);
     } catch (_) {
       return const [];
+    }
+  }
+
+  static Future<String?> pickExportFolder() async {
+    try {
+      final value = await _channel.invokeMethod<String>('pickExportFolder');
+      return value?.trim().isEmpty == true ? null : value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> hasPersistedExportFolder(String treeUri) async {
+    if (treeUri.trim().isEmpty) return false;
+    try {
+      return await _channel.invokeMethod<bool>('hasPersistedExportFolder', {
+            'treeUri': treeUri,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<List<AndroidDocumentEntry>> listExportFolder(
+    String treeUri,
+  ) async {
+    if (treeUri.trim().isEmpty) return const [];
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>(
+        'listExportFolder',
+        {'treeUri': treeUri},
+      );
+      if (raw == null) return const [];
+      return raw
+          .whereType<Map<dynamic, dynamic>>()
+          .map(AndroidDocumentEntry.fromMap)
+          .where((entry) =>
+              entry.displayName.isNotEmpty && entry.location.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<String?> createExportDocument({
+    required String treeUri,
+    required String displayName,
+    required String mimeType,
+  }) async {
+    if (treeUri.trim().isEmpty ||
+        displayName.trim().isEmpty ||
+        mimeType.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final value = await _channel.invokeMethod<String>(
+        'createExportDocument',
+        {
+          'treeUri': treeUri,
+          'displayName': displayName,
+          'mimeType': mimeType,
+        },
+      );
+      return value?.trim().isEmpty == true ? null : value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> deleteDocument(String location) async {
+    if (!isContentUri(location)) {
+      try {
+        final file = File(location);
+        if (!await file.exists()) return true;
+        await file.delete();
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+    try {
+      return await _channel.invokeMethod<bool>('deleteDocument', {
+            'uri': location,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
     }
   }
 

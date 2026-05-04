@@ -169,6 +169,10 @@ Professional repair status - 2026-05-04:
 - Android workflow now builds release split-per-ABI APKs for QA; local APK
   build/install remains blocked on this workstation because no Android SDK is
   installed.
+- Android duplicate export repair now uses a persistent SAF export folder
+  instead of the system save sheet. The app lists the selected folder before
+  saving and resolves `Replace / Keep Both / Cancel` before creating a document,
+  preventing provider-created broken names like `name.rtf (1)`.
 
 ### 3. macOS Launch Recovery
 

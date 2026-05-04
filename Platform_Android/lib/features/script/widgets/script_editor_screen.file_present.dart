@@ -116,63 +116,42 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     final baseName =
         ExportNameService.sanitizeBaseName(_currentTitle, normalizedFormat);
-    final registry = await SavedExportRegistry.load();
-    final knownExport = SavedExportRegistry.findExact(
-      entries: registry,
-      baseName: baseName,
-      format: normalizedFormat,
-    );
-    final deviceExports = await AndroidFileAccess.findDocumentsByDisplayBase(
-      baseName: baseName,
-      format: normalizedFormat,
-    );
+    final treeUri = await _ensureAndroidExportFolder();
+    if (!mounted || treeUri == null) return;
+
+    final folderExports = await AndroidFileAccess.listExportFolder(treeUri);
     final exactDisplayName =
         ExportNameService.buildDisplayName(baseName, normalizedFormat);
-    final exactDeviceExport =
-        _findDeviceExportByDisplayName(deviceExports, exactDisplayName);
+    final exactFolderExport =
+        _findDeviceExportByDisplayName(folderExports, exactDisplayName);
     final existingDisplayNames = <String>{
-      ...registry.map((e) => e.displayName),
-      ...deviceExports.map((e) => e.displayName),
+      ...folderExports.map((e) => e.displayName),
     };
 
-    var keepBoth = false;
-    if (knownExport != null && mounted) {
+    if (exactFolderExport != null && mounted) {
       final choice = await _showExportConflictDialog(
-        knownExport.displayName,
+        exactFolderExport.displayName,
         message:
-            '"${knownExport.displayName}" was already saved from this app.',
+            '"${exactFolderExport.displayName}" already exists in the export '
+            'folder.',
       );
       if (!mounted || choice == _ExportConflictChoice.cancel) return;
       if (choice == _ExportConflictChoice.replace) {
-        await _replaceKnownExport(knownExport, bytes);
-        return;
-      }
-      keepBoth = true;
-    } else if (exactDeviceExport != null && mounted) {
-      final choice = await _showExportConflictDialog(
-        exactDeviceExport.displayName,
-        message:
-            '"${exactDeviceExport.displayName}" already exists on this device. '
-            'Choose Keep Both to avoid Android creating a broken duplicate '
-            'such as "$exactDisplayName (1)".',
-      );
-      if (!mounted || choice == _ExportConflictChoice.cancel) return;
-      if (choice == _ExportConflictChoice.replace) {
-        await _replaceKnownExport(
+        await _writeAndroidExport(
           SavedExportEntry(
             baseName: baseName,
             format: normalizedFormat,
-            displayName: exactDeviceExport.displayName,
-            location: exactDeviceExport.location,
+            displayName: exactFolderExport.displayName,
+            location: exactFolderExport.location,
           ),
           bytes,
+          replaced: true,
         );
         return;
       }
-      keepBoth = true;
     }
 
-    final fileName = keepBoth
+    final fileName = exactFolderExport != null
         ? ExportNameService.nextDuplicateDisplayName(
             baseName: baseName,
             format: normalizedFormat,
@@ -180,99 +159,57 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           )
         : ExportNameService.buildDisplayName(baseName, normalizedFormat);
 
-    final savedPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save as ${normalizedFormat.toUpperCase()}',
-      fileName: fileName,
-      bytes: bytes,
+    final createdLocation = await AndroidFileAccess.createExportDocument(
+      treeUri: treeUri,
+      displayName: fileName,
+      mimeType: ExportNameService.mimeTypeForFormat(normalizedFormat),
     );
-
     if (!mounted) return;
 
-    if (savedPath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Save cancelled.'),
-          backgroundColor: Colors.black54,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    var finalLocation = savedPath;
-    final locationHint = AndroidFileAccess.displayNameHintFromLocation(
-      savedPath,
-    );
-    var finalName = await AndroidFileAccess.displayNameForLocation(savedPath) ??
-        locationHint;
-    if (!ExportNameService.hasExpectedExtension(finalName, normalizedFormat) &&
-        ExportNameService.hasExpectedExtension(
-            locationHint, normalizedFormat)) {
-      finalName = locationHint;
-    }
-    final brokenName = <String>{finalName, locationHint}.firstWhere(
-      (name) =>
-          ExportNameService.isBrokenDuplicateSuffix(name, normalizedFormat),
-      orElse: () => '',
-    );
-    if (brokenName.isNotEmpty) {
-      final repairedName = ExportNameService.repairBrokenDuplicateSuffix(
-        brokenName,
-        normalizedFormat,
-      );
-      final renamedLocation =
-          await AndroidFileAccess.rename(finalLocation, repairedName);
-      if (renamedLocation != null && renamedLocation.isNotEmpty) {
-        finalLocation = renamedLocation;
-        finalName = repairedName;
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Android created "$brokenName". It should be "$repairedName", '
-              'but this storage provider refused automatic rename.',
-            ),
-            backgroundColor: Colors.orange[800],
-            duration: const Duration(seconds: 7),
-          ),
-        );
-        return;
-      }
-    }
-
-    if (!ExportNameService.hasExpectedExtension(finalName, normalizedFormat)) {
+    if (createdLocation == null || createdLocation.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'File saved as "$finalName", but Android did not preserve the '
-            '.$normalizedFormat extension. Rename it before opening.',
+            'Could not create "$fileName". Choose another export folder.',
           ),
-          backgroundColor: Colors.orange[800],
-          duration: const Duration(seconds: 6),
+          backgroundColor: Colors.red[800],
+          duration: const Duration(seconds: 5),
         ),
       );
       return;
     }
 
-    await SavedExportRegistry.record(
+    final locationHint = AndroidFileAccess.displayNameHintFromLocation(
+      createdLocation,
+    );
+    final finalName =
+        await AndroidFileAccess.displayNameForLocation(createdLocation) ??
+            locationHint;
+
+    if (finalName.trim() != fileName ||
+        !ExportNameService.hasExpectedExtension(finalName, normalizedFormat)) {
+      await AndroidFileAccess.deleteDocument(createdLocation);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'The storage provider created "$finalName" instead of "$fileName". '
+            'Choose another export folder so duplicates stay extension-safe.',
+          ),
+          backgroundColor: Colors.orange[800],
+          duration: const Duration(seconds: 7),
+        ),
+      );
+      return;
+    }
+
+    await _writeAndroidExport(
       SavedExportEntry(
         baseName: baseName,
         format: normalizedFormat,
         displayName: finalName,
-        location: finalLocation,
+        location: createdLocation,
       ),
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(children: [
-          const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          Expanded(child: Text('Saved: $finalName')),
-        ]),
-        backgroundColor: Colors.green[800],
-        duration: const Duration(seconds: 3),
-      ),
+      bytes,
     );
   }
 
@@ -322,32 +259,117 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     return null;
   }
 
-  Future<void> _replaceKnownExport(
-    SavedExportEntry entry,
-    Uint8List bytes,
-  ) async {
-    try {
-      await AndroidFileAccess.writeBytes(entry.location, bytes);
-      if (!mounted) return;
+  Future<String?> _ensureAndroidExportFolder() async {
+    final stored = await ExportFolderRegistry.load();
+    if (stored != null &&
+        await AndroidFileAccess.hasPersistedExportFolder(stored)) {
+      return stored;
+    }
+
+    if (stored != null) {
+      await ExportFolderRegistry.clear();
+    }
+
+    if (!mounted) return null;
+    final choose = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text(
+          'Choose export folder',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Choose a folder once so AutoTeleprompter can replace files or '
+          'create extension-safe copies such as "script (1).rtf".',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Choose Folder'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choose != true) return null;
+
+    final picked = await AndroidFileAccess.pickExportFolder();
+    if (!mounted) return null;
+    if (picked == null || picked.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Replaced: ${entry.displayName}'),
-          backgroundColor: Colors.green[800],
-          duration: const Duration(seconds: 3),
+        const SnackBar(
+          content: Text('Export folder selection cancelled.'),
+          backgroundColor: Colors.black54,
+          duration: Duration(seconds: 2),
         ),
       );
-    } catch (_) {
-      if (!mounted) return;
+      return null;
+    }
+
+    if (!await AndroidFileAccess.hasPersistedExportFolder(picked)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Could not replace "${entry.displayName}". Use Keep Both instead.',
+          content: const Text(
+            'Android did not grant persistent write access to that folder.',
           ),
           backgroundColor: Colors.red[800],
           duration: const Duration(seconds: 5),
         ),
       );
+      return null;
     }
+
+    await ExportFolderRegistry.save(picked);
+    return picked;
+  }
+
+  Future<void> _writeAndroidExport(
+    SavedExportEntry entry,
+    Uint8List bytes, {
+    bool replaced = false,
+  }) async {
+    try {
+      await AndroidFileAccess.writeBytes(entry.location, bytes);
+      await SavedExportRegistry.record(entry);
+    } catch (_) {
+      if (!replaced) {
+        await AndroidFileAccess.deleteDocument(entry.location);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not ${replaced ? 'replace' : 'save'} '
+            '"${entry.displayName}". Choose another export folder.',
+          ),
+          backgroundColor: Colors.red[800],
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(children: [
+          const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('${replaced ? 'Replaced' : 'Saved'}: '
+                '${entry.displayName}'),
+          ),
+        ]),
+        backgroundColor: Colors.green[800],
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _clearScript() {

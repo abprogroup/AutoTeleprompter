@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ExportNameService {
   static final RegExp _knownExtensionPattern = RegExp(
-    r'\.(txt|pdf|docx|rtf|doc|pages|md)$',
+    r'\.(txt|pdf|docx|rtf|doc|pages|md|log)$',
     caseSensitive: false,
   );
 
@@ -80,6 +80,27 @@ class ExportNameService {
 
   static bool isBrokenDuplicateSuffix(String displayName, String format) {
     return repairBrokenDuplicateSuffix(displayName, format) != displayName;
+  }
+
+  static String mimeTypeForFormat(String format) {
+    switch (format.toLowerCase().trim()) {
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'pdf':
+        return 'application/pdf';
+      case 'rtf':
+        return 'application/rtf';
+      case 'pages':
+        return 'application/vnd.apple.pages';
+      case 'md':
+        return 'text/markdown';
+      case 'log':
+      case 'txt':
+      default:
+        return 'text/plain';
+    }
   }
 }
 
@@ -169,5 +190,25 @@ class SavedExportRegistry {
       }
     }
     return null;
+  }
+}
+
+class ExportFolderRegistry {
+  static const String _prefsKey = 'android_export_folder_tree_uri_v1';
+
+  static Future<String?> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKey)?.trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  static Future<void> save(String treeUri) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, treeUri);
+  }
+
+  static Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsKey);
   }
 }

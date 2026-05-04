@@ -1785,3 +1785,17 @@
   language switch.
 - Changed the Android workflow to release split-per-ABI APK artifacts instead
   of debug APK upload, and kept all active Android Dart files under 800 lines.
+
+### 2026-05-04 - Android SAF Export Folder Repair
+
+- Replaced Android's normal export save path with an app-owned SAF export
+  folder flow. The user grants a persistent folder once, then the app lists
+  that folder and resolves duplicate names before creating or writing a file.
+- Duplicate export handling now happens before document creation: Replace
+  writes to the existing URI, Keep Both creates `name (1).ext`, and Cancel
+  performs no write.
+- Added native Android tree-folder channel methods for folder picking,
+  persisted-permission checks, child listing, child document creation, direct
+  URI writes, and cleanup if a provider creates an unexpected display name.
+- Repaired the Android export-name test to use real Hebrew instead of mojibake
+  and added MIME-type coverage for SAF document creation.

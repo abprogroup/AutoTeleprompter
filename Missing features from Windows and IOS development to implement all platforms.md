@@ -756,3 +756,12 @@ STT locale-switch grace handling, and release split-per-ABI APK workflow
 artifacts instead of debug APK uploads. Future platform agents should not copy
 desktop toolbar density or native clipboard command paths into mobile surfaces
 when iOS already proved the mobile-specific protocol.
+
+Android SAF export folder repair — 2026-05-04
+
+Android export duplicate handling must be folder-authoritative, not provider
+auto-rename based. Normal Android exports use a persistent user-selected SAF
+folder, list existing display names before saving, and present Replace / Keep
+Both / Cancel before document creation. Keep Both creates `name (1).ext`;
+`name.ext (1)` is rejected as a provider failure, not accepted as a valid
+export. Broad all-files storage permission remains out of scope.

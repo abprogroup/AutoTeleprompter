@@ -30,6 +30,9 @@ class WordAligner {
   static const double _crossLangThreshold = 0.45;
   // Hebrew-specific: even more lenient because STT often returns approximate matches
   static const double _hebrewMatchThreshold = 0.50;
+  // Bullet/header prompting must not silently walk through guessed words.
+  static const double _strictMatchThreshold = 0.82;
+  static const double _strictPhraseThreshold = 0.78;
 
   /// Parse raw script text into a list of ScriptWords.
   /// Preserves paragraph breaks as isNewline=true entries.
@@ -305,6 +308,7 @@ class WordAligner {
     required String transcript,
     required int lastConfirmedIndex,
     int? maxSkipTargetIndex,
+    bool strictBulletMode = false,
   }) {
     if (script.isEmpty || transcript.trim().isEmpty) {
       return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY');
@@ -344,8 +348,10 @@ class WordAligner {
     final visibleMaxSkipTargetIndex = maxSkipTargetIndex;
     final visibleSkipEnabled = visibleMaxSkipTargetIndex != null;
     final strictEnd = searchStart + 1;
-    final defaultLocalRecoveryEnd =
-        (searchStart + _maxSingleJump).clamp(strictEnd, script.length).toInt();
+    final localRecoveryWords = strictBulletMode ? 1 : _maxSingleJump;
+    final defaultLocalRecoveryEnd = (searchStart + localRecoveryWords)
+        .clamp(strictEnd, script.length)
+        .toInt();
     final allowedEnd = visibleMaxSkipTargetIndex == null
         ? defaultLocalRecoveryEnd
         : (visibleMaxSkipTargetIndex + 1).clamp(strictEnd, script.length);
@@ -362,7 +368,8 @@ class WordAligner {
         final isHebrew = script[searchStart].isRtl;
         final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
         // Hebrew STT is less precise — use a lower threshold for the next word
-        final nextThreshold = isHebrew ? 0.45 : 0.55;
+        final nextThreshold =
+            strictBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
         if (sim >= nextThreshold) {
           return AlignmentResult(searchStart, sim,
               'NEXT_WORD: "${lastSpoken}" ~ "${nextWord}" = ${sim.toStringAsFixed(2)}');
@@ -401,10 +408,13 @@ class WordAligner {
           bestSingleIdx < script.length && script[bestSingleIdx].isRtl;
       final singleThreshold =
           bestIsHebrew ? _hebrewMatchThreshold : _fastMatchThreshold;
-      if (bestSingleSim >= singleThreshold) {
+      final effectiveSingleThreshold =
+          strictBulletMode ? _strictMatchThreshold : singleThreshold;
+      if (bestSingleSim >= effectiveSingleThreshold) {
         final jumpDist = bestSingleIdx - lastConfirmedIndex;
         // Single-word matches only allow small jumps to prevent false skips
-        if (jumpDist <= _maxSingleJump) {
+        final maxSingleJump = strictBulletMode ? 1 : _maxSingleJump;
+        if (jumpDist <= maxSingleJump) {
           return AlignmentResult(bestSingleIdx, bestSingleSim,
               'SINGLE: "${lastSpoken}" → [${bestSingleIdx}]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
         }
@@ -418,8 +428,11 @@ class WordAligner {
       windowEnd: defaultLocalRecoveryEnd,
       lastConfirmedIndex: lastConfirmedIndex,
       maxPhraseWords: _localRecoveryPhraseMaxWords,
-      maxJump: _maxSingleJump,
+      maxJump: strictBulletMode ? 1 : _maxSingleJump,
       minPhraseWords: 2,
+      overrideWordThreshold: strictBulletMode ? _strictPhraseThreshold : null,
+      minPhraseScore:
+          strictBulletMode ? _strictPhraseThreshold : _matchThreshold,
       debugPrefix: 'LOCAL_RECOVERY_PHRASE',
     );
     if (localPhrase != null) return localPhrase;
@@ -432,6 +445,10 @@ class WordAligner {
         windowEnd: windowEnd,
         lastConfirmedIndex: lastConfirmedIndex,
         scanFullWindow: true,
+        minPhraseWords: strictBulletMode ? 2 : 3,
+        overrideWordThreshold: strictBulletMode ? _strictPhraseThreshold : null,
+        minPhraseScore:
+            strictBulletMode ? _strictPhraseThreshold : _matchThreshold,
         debugPrefix: 'NEAR_PHRASE_PRIORITY',
       );
       if (nearbyPhrase != null) return nearbyPhrase;
@@ -466,8 +483,9 @@ class WordAligner {
         final spokenWord = recentWords[j];
 
         final sim = _wordSimilarity(spokenWord, scriptWord, script[si].isRtl);
-        final threshold =
-            script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
+        final threshold = strictBulletMode
+            ? _strictPhraseThreshold
+            : (script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold);
         if (sim >= threshold) {
           seqScore += sim;
           matchCount++;
@@ -491,7 +509,9 @@ class WordAligner {
                 .clamp(0, script.length)
                 .toInt();
         // For large jumps, require at least 2 matching words for confidence
-        final minMatches = seqJump > _maxSingleJump ? 2 : 1;
+        final minMatches = strictBulletMode
+            ? (seqJump > 1 ? 2 : 1)
+            : (seqJump > _maxSingleJump ? 2 : 1);
         if (matchCount >= minMatches && seqJump <= maxSeqJump) {
           bestSeqScore = normalizedScore;
           bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
@@ -501,7 +521,9 @@ class WordAligner {
       }
     }
 
-    if (bestSeqScore >= _matchThreshold && bestSeqEndIdx > lastConfirmedIndex) {
+    final minSeqScore =
+        strictBulletMode ? _strictPhraseThreshold : _matchThreshold;
+    if (bestSeqScore >= minSeqScore && bestSeqEndIdx > lastConfirmedIndex) {
       return AlignmentResult(
           bestSeqEndIdx, bestSeqScore, '$bestSeqDebug\n$debugScans');
     }
@@ -525,6 +547,8 @@ class WordAligner {
     int? maxJump,
     int minPhraseWords = 3,
     bool scanFullWindow = false,
+    double? overrideWordThreshold,
+    double minPhraseScore = _matchThreshold,
     String debugPrefix = 'NEAR_PHRASE_PRIORITY',
   }) {
     if (transcriptWords.length < minPhraseWords) return null;
@@ -564,8 +588,8 @@ class WordAligner {
 
           final sim = _wordSimilarity(
               spokenPhrase[j], script[si].normalized, script[si].isRtl);
-          final threshold =
-              script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
+          final threshold = overrideWordThreshold ??
+              (script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold);
           if (sim < threshold) break;
 
           matched++;
@@ -589,7 +613,7 @@ class WordAligner {
 
       if (bestStart >= 0 &&
           bestEnd > lastConfirmedIndex &&
-          bestScore >= _matchThreshold &&
+          bestScore >= minPhraseScore &&
           (maxJump == null || bestEnd - lastConfirmedIndex <= maxJump)) {
         return AlignmentResult(bestEnd, bestScore,
             '$debugPrefix@$bestStart: words=$phraseLen end=$bestEnd score=${bestScore.toStringAsFixed(2)}');

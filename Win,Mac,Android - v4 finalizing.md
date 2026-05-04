@@ -239,3 +239,28 @@ Acceptance checks:
 
 The next focused plan should be Windows STT regression repair only.
 It should not touch Android or macOS runtime files.
+
+## Windows v4.1.14 - Strict Bullet/Header STT
+
+Status: Windows runtime implementation in progress for v4.1.14.
+
+Goal:
+
+- Let presenters use present mode for bullet headers / section cues without
+  the STT system automatically advancing through words they did not say.
+
+Contract:
+
+- Normal Windows STT remains the default behavior.
+- `Strict bullet/header STT` is an explicit presenter setting.
+- Strict mode disables provider force-skip and tightens local recovery.
+- Strict mode still allows next-word progress and confirmed multi-word visible
+  phrase/sequence jumps across English/Hebrew visible text.
+- Large single-word visible jumps stay blocked because they are too risky for
+  bullet-header prompting.
+
+Porting note:
+
+- After Windows v4.1.14 is user-tested, port the same explicit strict mode to
+  Android and iOS. Do not make strict mode the default until the user verifies
+  it improves bullet-header reading without hurting normal scripts.

@@ -43,6 +43,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
   static const int _whisperSkipAfterStuck = 10;
+  static const int _strictBulletWaitLogThreshold = 9999;
   static const int _maxAdvancePerUpdate = 30;
   static const int _visibleLocaleAssistAfterWaits = 2;
   static const Duration _visibleLocaleAssistCooldown =
@@ -143,6 +144,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = result.words;
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
+    final strictBulletMode = settings.sttStrictBulletMode;
     final maxSkipTargetIndex =
         settings.sttVisibleSkipEnabled && _visibleWordStart != null
             ? _visibleWordEnd
@@ -153,6 +155,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       transcript: _accumulatedTranscript,
       lastConfirmedIndex: state.confirmedWordIndex,
       maxSkipTargetIndex: maxSkipTargetIndex,
+      strictBulletMode: strictBulletMode,
     );
 
     final currentIdx = state.confirmedWordIndex;
@@ -166,8 +169,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         : '<END>';
 
     final engineTag = _useWhisper ? '🤖' : '🎤';
-    final skipThreshold =
-        _useWhisper ? _whisperSkipAfterStuck : _effectiveSkipThreshold();
+    final forceSkipEnabled = !strictBulletMode;
+    final skipThreshold = forceSkipEnabled
+        ? (_useWhisper ? _whisperSkipAfterStuck : _effectiveSkipThreshold())
+        : _strictBulletWaitLogThreshold;
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
       _resetVisibleLocaleAssist();
@@ -205,7 +210,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         return;
       }
 
-      if (_noProgressCount >= skipThreshold) {
+      if (shouldForceSkipAfterNoProgress(
+        strictBulletMode: strictBulletMode,
+        noProgressCount: _noProgressCount,
+        skipThreshold: skipThreshold,
+      )) {
         _noProgressCount = 0;
         final next = _nextRealWord(state.confirmedWordIndex, script);
         if (next != null) {
@@ -339,6 +348,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     return alignedIndex
         .clamp(currentIndex, currentIndex + _maxAdvancePerUpdate)
         .toInt();
+  }
+
+  static bool shouldForceSkipAfterNoProgress({
+    required bool strictBulletMode,
+    required int noProgressCount,
+    required int skipThreshold,
+  }) {
+    if (strictBulletMode) return false;
+    if (skipThreshold <= 0) return false;
+    return noProgressCount >= skipThreshold;
   }
 
   static bool visibleTranscriptPlausiblyMatchesLocale({

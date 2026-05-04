@@ -252,6 +252,22 @@ owns how confirmed indices are rendered after STT produces results.
 | Safety cap | The visible window is an upper bound, not permission for unrestricted jumps. Single-word matches stay near-range only; longer visible jumps require multi-word sequence confirmation and aligner confidence checks. |
 | Display-only tokens | Newlines, punctuation-only markers, and unspeakable display symbols must not expand the skip window or become skip targets. |
 
+### 2026-05-05 Strict Bullet/Header Mode
+
+- `AppSettings.sttStrictBulletMode` is false by default and is exposed only as
+  an explicit Windows presenter setting.
+- Strict mode is for bullet/header prompting, where the presenter may speak a
+  heading or section cue rather than every word in the script.
+- Strict mode keeps WebView2 STT, visible-skip bounds, locale assist, mic
+  selection, and normal presenter lifecycle unchanged.
+- Strict mode disables provider force-skip. Repeated no-match results must not
+  walk the confirmed index through words the user did not say.
+- Strict mode narrows local recovery to the next word and raises aligner
+  thresholds. Local single-word guesses cannot skip several words.
+- Strict mode still permits deliberate next-word progress and confirmed
+  multi-word visible-window phrase/sequence jumps, including Hebrew phrases.
+- Large single-word visible jumps remain blocked even in strict mode.
+
 ### 2026-05-04 Regression Repair Addendum
 
 - Alignment owns visible skip decisions before locale switching. The aligner

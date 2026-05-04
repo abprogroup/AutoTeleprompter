@@ -43,6 +43,8 @@ class AppSettings {
       sttInputDeviceLabel; // Windows: display label for the selected mic
   final bool
       sttVisibleSkipEnabled; // Windows: allow STT to skip only to visible words
+  final bool
+      sttStrictBulletMode; // Windows: stricter STT for bullet/header prompting
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -80,6 +82,7 @@ class AppSettings {
     this.sttInputDeviceId = '',
     this.sttInputDeviceLabel = 'System default microphone',
     this.sttVisibleSkipEnabled = false,
+    this.sttStrictBulletMode = false,
   });
 
   AppSettings copyWith({
@@ -118,6 +121,7 @@ class AppSettings {
     String? sttInputDeviceId,
     String? sttInputDeviceLabel,
     bool? sttVisibleSkipEnabled,
+    bool? sttStrictBulletMode,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -159,6 +163,7 @@ class AppSettings {
       sttInputDeviceLabel: sttInputDeviceLabel ?? this.sttInputDeviceLabel,
       sttVisibleSkipEnabled:
           sttVisibleSkipEnabled ?? this.sttVisibleSkipEnabled,
+      sttStrictBulletMode: sttStrictBulletMode ?? this.sttStrictBulletMode,
     );
   }
 }
@@ -198,6 +203,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _sttInputDeviceIdKey = 'sttInputDeviceId';
   static const _sttInputDeviceLabelKey = 'sttInputDeviceLabel';
   static const _sttVisibleSkipEnabledKey = 'sttVisibleSkipEnabled';
+  static const _sttStrictBulletModeKey = 'sttStrictBulletMode';
 
   @override
   AppSettings build() {
@@ -300,6 +306,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       sttInputDeviceLabel: prefs.getString(_sttInputDeviceLabelKey) ??
           'System default microphone',
       sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
+      sttStrictBulletMode: prefs.getBool(_sttStrictBulletModeKey) ?? false,
     );
   }
 
@@ -761,6 +768,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(sttVisibleSkipEnabled: enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_sttVisibleSkipEnabledKey, enabled);
+  }
+
+  Future<void> setSttStrictBulletMode(bool enabled) async {
+    state = state.copyWith(sttStrictBulletMode: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sttStrictBulletModeKey, enabled);
   }
 }
 

@@ -766,3 +766,14 @@ writable folder before saving, and present Replace / Keep Both / Cancel before
 document creation. Keep Both creates `name (1).ext`; `name.ext (1)` is rejected
 as a provider failure, not accepted as a valid export. Broad all-files storage
 permission remains out of scope.
+
+Windows v4.1.14 strict bullet/header STT — 2026-05-05
+
+Windows adds an explicit presenter setting for strict bullet/header prompting.
+This mode is designed for presenters who speak section headers or bullet cues
+instead of reading every word. Normal STT remains default. Strict mode disables
+provider force-skip, narrows local recovery to deliberate next-word progress,
+and requires confirmed multi-word visible-window phrase/sequence matches for
+larger jumps. Large single-word visible jumps remain blocked. After Windows QA,
+port the same explicit setting and contract to Android and iOS; do not make it
+the default for normal script reading.

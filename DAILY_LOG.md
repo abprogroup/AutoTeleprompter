@@ -1823,3 +1823,16 @@
   handles recalculate after the soft keyboard opens/closes or the viewport
   moves.
 - Verification is pending iPhone workflow/device QA.
+
+### 2026-05-05 - Windows v4.1.14 Strict Bullet/Header STT
+
+- Added a Windows presenter setting, `Strict bullet/header STT`, for users who
+  present from bullet headers instead of reading every script word.
+- Strict mode keeps normal WebView2 STT plumbing but disables force-skip
+  advancement and tightens alignment so local recovery cannot walk through
+  guessed single words.
+- Strict mode still allows deliberate next-word progress and confirmed
+  multi-word visible-window phrase/sequence jumps, including Hebrew visible
+  phrase jumps.
+- Added targeted Windows tests for strict bullet/header alignment and preserved
+  the existing visible-skip regression tests.

@@ -863,3 +863,17 @@
   the user chooses. The app lists existing exports first, asks Replace / Keep
   Both / Cancel before writing, and creates extension-safe duplicates like
   `name (1).rtf` without allowing Android to create `name.rtf (1)`.
+
+## 2026-05-05 Windows v4.1.14 Strict Bullet/Header STT
+
+- [P] **Windows Strict Bullet/Header STT Mode**: Added a presenter setting for
+  bullet-header prompting where the user may speak section headers rather than
+  every word. In this mode, Windows keeps WebView2 STT and visible-skip
+  behavior, but disables provider force-skip and restricts aligner local
+  recovery so guessed single words cannot silently advance the script.
+- [P] **Strict Visible Phrase Contract**: Strict mode still advances on a
+  deliberate next-word match and confirmed multi-word visible-window phrase or
+  sequence matches, including Hebrew phrases. Large single-word visible jumps
+  remain blocked to avoid false positives.
+- [P] **Version / Workflow**: Windows metadata is advanced to `4.1.14+14` and
+  the Windows workflow title is `Build Windows EXE (v4.1.14)`.

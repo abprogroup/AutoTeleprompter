@@ -66,18 +66,11 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
-    final hasNativeRange =
-        controller.selection.isValid && !controller.selection.isCollapsed;
     final externalSelection = controller.externalSelection;
     final hasExternalRange = controller.isGlobalSelected ||
         (externalSelection != null &&
             externalSelection.isValid &&
             !externalSelection.isCollapsed);
-    final useGhostSelectionControls = isGlobalSelected ||
-        hasOverlaySelection ||
-        hasNativeRange ||
-        hasExternalRange;
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.transparent,
@@ -225,9 +218,12 @@ class _EditorBlock extends StatelessWidget {
                     ),
                   ),
                   child: TextField(
-                    selectionControls: useGhostSelectionControls
-                        ? GhostSelectionControls()
-                        : null,
+                    // Android native handles/toolbars may seed a cursor/range,
+                    // but all script Cut/Copy/Paste/Select All commands belong
+                    // to the app-owned toolbar. Keep ghost controls installed
+                    // from first touch so native UI cannot appear for one frame
+                    // before overlay promotion catches up.
+                    selectionControls: GhostSelectionControls(),
                     controller: controller,
                     focusNode: focusNode,
                     maxLines: null,

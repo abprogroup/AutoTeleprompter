@@ -95,6 +95,7 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
 
     final settings = ref.watch(settingsProvider);
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    final editorBottomPadding = keyboardVisible ? 96.0 : 180.0;
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
@@ -402,8 +403,12 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                               }),
                               child: SingleChildScrollView(
                                 controller: _editorScrollController,
-                                padding:
-                                    const EdgeInsets.fromLTRB(24, 24, 24, 250),
+                                padding: EdgeInsets.fromLTRB(
+                                  24,
+                                  24,
+                                  24,
+                                  editorBottomPadding,
+                                ),
                                 child: Column(
                                   children: List.generate(
                                     _controllers.length,

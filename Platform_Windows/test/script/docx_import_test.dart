@@ -43,6 +43,41 @@ void main() {
     expect(text, contains('\n\nfirst line\nsecond line'));
     expect(text, contains('[i]italic[/i]'));
   });
+
+  test('DOCX import preserves meaningful colors and row highlights safely',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('docx_color_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/colors.docx');
+    await file.writeAsBytes(_docxBytes('''
+<w:p>
+  <w:r><w:rPr><w:color w:val="252525"/></w:rPr><w:t>default dark text</w:t></w:r>
+</w:p>
+<w:p>
+  <w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t>red text</w:t></w:r>
+</w:p>
+<w:p>
+  <w:r><w:rPr><w:shd w:fill="FCE5CD"/></w:rPr><w:t>shaded row</w:t></w:r>
+</w:p>
+<w:p>
+  <w:r><w:rPr><w:highlight w:val="yellow"/></w:rPr><w:t>highlight row</w:t></w:r>
+</w:p>
+'''));
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(text, contains('default dark text'));
+    expect(text, isNot(contains('[color=#252525]default dark text[/color]')));
+    expect(text, contains('[color=#FF0000]red text[/color]'));
+    expect(text, contains('[bg=#FCE5CD]shaded row[/bg]'));
+    expect(text, contains('[bg=#FFFF00]highlight row[/bg]'));
+  });
 }
 
 List<int> _docxBytes(String bodyXml) {

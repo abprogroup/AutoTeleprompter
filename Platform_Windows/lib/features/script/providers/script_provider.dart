@@ -330,24 +330,32 @@ class ScriptNotifier extends Notifier<Script?> {
         bool isItalic = false;
         bool isUnderline = false;
         String? color;
+        String? highlightColor;
 
         if (rPr != null) {
           isBold = rPr.getElement('w:b') != null &&
-              rPr.getElement('w:b')?.getAttribute('w:val') != '0' &&
-              rPr.getElement('w:b')?.getAttribute('w:val') != 'false';
+              _docxAttr(rPr.getElement('w:b')!, 'val') != '0' &&
+              _docxAttr(rPr.getElement('w:b')!, 'val') != 'false';
           isItalic = rPr.getElement('w:i') != null &&
-              rPr.getElement('w:i')?.getAttribute('w:val') != '0' &&
-              rPr.getElement('w:i')?.getAttribute('w:val') != 'false';
+              _docxAttr(rPr.getElement('w:i')!, 'val') != '0' &&
+              _docxAttr(rPr.getElement('w:i')!, 'val') != 'false';
           final underline = rPr.getElement('w:u');
           isUnderline = underline != null &&
-              underline.getAttribute('w:val') != 'none' &&
-              underline.getAttribute('w:val') != '0' &&
-              underline.getAttribute('w:val') != 'false';
-          color = rPr.getElement('w:color')?.getAttribute('w:val');
+              _docxAttr(underline, 'val') != 'none' &&
+              _docxAttr(underline, 'val') != '0' &&
+              _docxAttr(underline, 'val') != 'false';
+          final colorElement = rPr.getElement('w:color');
+          color = colorElement == null ? null : _docxAttr(colorElement, 'val');
+          highlightColor = _docxRunHighlightColor(rPr);
 
           if (detectedFontSize == null) {
-            final sz = rPr.getElement('w:sz')?.getAttribute('w:val') ??
-                rPr.getElement('w:szCs')?.getAttribute('w:val');
+            final sizeElement = rPr.getElement('w:sz');
+            final complexSizeElement = rPr.getElement('w:szCs');
+            final sz =
+                (sizeElement == null ? null : _docxAttr(sizeElement, 'val')) ??
+                    (complexSizeElement == null
+                        ? null
+                        : _docxAttr(complexSizeElement, 'val'));
             if (sz != null) {
               final halfPoints = double.tryParse(sz);
               if (halfPoints != null) detectedFontSize = halfPoints / 2.0;
@@ -361,6 +369,7 @@ class ScriptNotifier extends Notifier<Script?> {
           isItalic: isItalic,
           isUnderline: isUnderline,
           color: color,
+          highlightColor: highlightColor,
         ));
       }
 
@@ -373,15 +382,15 @@ class ScriptNotifier extends Notifier<Script?> {
     // Background color detection
     try {
       final background = document.rootElement.getElement('w:background');
-      final bgColorVal = background?.getAttribute('w:color');
+      final bgColorVal =
+          background == null ? null : _docxAttr(background, 'color');
       if (bgColorVal != null && bgColorVal != 'auto') {
         final colorInt = int.parse('FF$bgColorVal', radix: 16);
         ref.read(settingsProvider.notifier).setScriptBgColor(colorInt);
       } else if (paragraphs.isNotEmpty) {
-        final shd = paragraphs.first
-            .getElement('w:pPr')
-            ?.getElement('w:shd')
-            ?.getAttribute('w:fill');
+        final shading =
+            paragraphs.first.getElement('w:pPr')?.getElement('w:shd');
+        final shd = shading == null ? null : _docxAttr(shading, 'fill');
         if (shd != null && shd != 'auto' && shd != 'clear') {
           final colorInt = int.parse('FF$shd', radix: 16);
           ref.read(settingsProvider.notifier).setScriptBgColor(colorInt);
@@ -421,14 +430,19 @@ class ScriptNotifier extends Notifier<Script?> {
     required bool isItalic,
     required bool isUnderline,
     required String? color,
+    required String? highlightColor,
   }) {
     if (text.isEmpty) return '';
     return text.split('\n').map((line) {
       if (line.isEmpty) return '';
       var wrapped = line;
-      final normalizedColor = _docxNormalizeColor(color);
+      final normalizedColor = _docxNormalizeTextColor(color);
       if (normalizedColor != null) {
         wrapped = '[color=#$normalizedColor]$wrapped[/color]';
+      }
+      final normalizedHighlight = _docxNormalizeColor(highlightColor);
+      if (normalizedHighlight != null) {
+        wrapped = '[bg=#$normalizedHighlight]$wrapped[/bg]';
       }
       if (isUnderline) wrapped = '[u]$wrapped[/u]';
       if (isItalic) wrapped = '[i]$wrapped[/i]';
@@ -437,10 +451,84 @@ class ScriptNotifier extends Notifier<Script?> {
     }).join('\n');
   }
 
+  static String? _docxRunHighlightColor(XmlElement runProperties) {
+    final shading = runProperties.getElement('w:shd');
+    final shadingFill = shading == null ? null : _docxAttr(shading, 'fill');
+    final normalizedShading = _docxNormalizeColor(shadingFill);
+    if (normalizedShading != null) return normalizedShading;
+
+    final highlightElement = runProperties.getElement('w:highlight');
+    final highlight =
+        highlightElement == null ? null : _docxAttr(highlightElement, 'val');
+    if (highlight == null || highlight == 'none') return null;
+    return _docxHighlightNameToHex(highlight);
+  }
+
+  static String? _docxNormalizeTextColor(String? color) {
+    final normalized = _docxNormalizeColor(color);
+    if (normalized == null) return null;
+
+    // Word often serializes normal black document text as near-black colors
+    // such as #252525. On the teleprompter's black background those become
+    // nearly invisible, so treat very dark DOCX text colors as "default text".
+    final red = int.parse(normalized.substring(0, 2), radix: 16);
+    final green = int.parse(normalized.substring(2, 4), radix: 16);
+    final blue = int.parse(normalized.substring(4, 6), radix: 16);
+    if (red < 80 && green < 80 && blue < 80) return null;
+    return normalized;
+  }
+
   static String? _docxNormalizeColor(String? color) {
     if (color == null || color == 'auto') return null;
     final hex = color.trim().replaceFirst('#', '').toUpperCase();
     return RegExp(r'^[0-9A-F]{6}$').hasMatch(hex) ? hex : null;
+  }
+
+  static const String _docxNamespace =
+      'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  static String? _docxAttr(XmlElement element, String name) =>
+      element.getAttribute('w:$name') ??
+      element.getAttribute(name) ??
+      element.getAttribute(name, namespace: _docxNamespace);
+
+  static String? _docxHighlightNameToHex(String name) {
+    switch (name) {
+      case 'black':
+        return '000000';
+      case 'blue':
+        return '0000FF';
+      case 'cyan':
+        return '00FFFF';
+      case 'green':
+        return '00FF00';
+      case 'magenta':
+        return 'FF00FF';
+      case 'red':
+        return 'FF0000';
+      case 'yellow':
+        return 'FFFF00';
+      case 'white':
+        return 'FFFFFF';
+      case 'darkBlue':
+        return '000080';
+      case 'darkCyan':
+        return '008080';
+      case 'darkGreen':
+        return '008000';
+      case 'darkMagenta':
+        return '800080';
+      case 'darkRed':
+        return '800000';
+      case 'darkYellow':
+        return '808000';
+      case 'darkGray':
+        return '808080';
+      case 'lightGray':
+        return 'C0C0C0';
+      default:
+        return _docxNormalizeColor(name);
+    }
   }
 
   static String _docxWrapParagraph(String paragraph, String? align) {
@@ -455,7 +543,8 @@ class ScriptNotifier extends Notifier<Script?> {
     final pPr = paragraph.getElement('w:pPr');
     if (pPr == null) return null;
 
-    final jc = pPr.getElement('w:jc')?.getAttribute('w:val');
+    final alignment = pPr.getElement('w:jc');
+    final jc = alignment == null ? null : _docxAttr(alignment, 'val');
     if (jc == 'center' || jc == 'left' || jc == 'right') return jc;
 
     // Word often stores Hebrew/RTL paragraph direction with w:bidi instead of

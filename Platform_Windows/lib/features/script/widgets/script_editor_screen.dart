@@ -857,7 +857,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (!mounted || _controllers.isEmpty) return false;
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
     if (_handleGlobalEditingShortcut(event)) return true;
-    if (!_focusNodes.any((n) => n.hasFocus)) return false;
+    final hasEditorFocus = _focusNodes.any((n) => n.hasFocus);
+    final hasAppSelectionForKeyboard =
+        _isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false);
+    if (!hasEditorFocus && !hasAppSelectionForKeyboard) return false;
     final key = event.logicalKey;
     if (key != LogicalKeyboardKey.arrowUp &&
         key != LogicalKeyboardKey.arrowDown &&

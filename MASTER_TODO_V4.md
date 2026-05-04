@@ -793,4 +793,5 @@
   STT skip contracts, markup-safe import/export, and bookmark-safe history.
   Analyzer has no hard errors and all active Android Dart files are below 800
   lines. Local APK build is blocked by missing Android SDK on this workstation;
-  GitHub Android workflow verification is required.
+  GitHub Android workflow verification is required. Android `intl` constraint
+  is pinned to `^0.19.0` for the Flutter 3.24.3 workflow.

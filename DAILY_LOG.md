@@ -1710,3 +1710,7 @@
   runtime files. Local APK build is blocked on this workstation because no
   Android SDK is installed, so the GitHub Android workflow is the APK build
   authority.
+- **Workflow Follow-Up**: First Android workflow attempt failed during
+  `flutter pub get` because the workflow uses Flutter 3.24.3, which pins
+  `flutter_localizations` to `intl 0.19.0`. Android `pubspec.yaml` was brought
+  back to `intl: ^0.19.0` to match the existing platform workflow.

@@ -1800,3 +1800,14 @@
   names.
 - Repaired the Android export-name test to use real Hebrew instead of mojibake
   and added MIME-type coverage for document creation.
+
+### 2026-05-05 - Mobile Selection Follow-Up Captured
+
+- Android QA found that long-press/drag selection can still show the native
+  Cut/Copy/Paste/Select All toolbar together with the app toolbar.
+- Android QA also found that pressing keyboard Done while a range is selected
+  can move the keyboard/viewport without recalculating app handle positions,
+  leaving handles detached from the selected text.
+- The same two behaviors are known iOS risks. Android remains the current
+  repair target; after Android is stable, iOS should receive the same
+  app-owned toolbar suppression and post-Done handle refresh protocol.

@@ -175,6 +175,19 @@ Professional repair status - 2026-05-04:
   Cancel` before creating a document, preventing provider-created broken names
   like `name.rtf (1)`.
 
+Mobile selection follow-up - 2026-05-05:
+
+- Android device QA still shows two mobile selection risks that also exist on
+  iOS: long-press/drag can expose the native Cut / Copy / Paste / Select All
+  toolbar alongside the app toolbar, and pressing keyboard Done while a text
+  range is selected can move the viewport without re-syncing app selection
+  handles to the selected text.
+- Android remains the active repair target first. After Android is stable,
+  repeat the same protocol on iOS: native selection may seed a cursor/range,
+  native command toolbar must stay suppressed, the app toolbar owns script
+  commands, and selection handles must refresh after keyboard/viewInsets/focus
+  changes.
+
 ### 3. macOS Launch Recovery
 
 Goal: make the macOS artifact launch correctly before any additional parity work.

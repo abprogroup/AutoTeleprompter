@@ -8,7 +8,8 @@ import 'package:flutter/material.dart';
 /// Android, long-press/drag can still ask the deprecated selection-controls
 /// toolbar path to build before `contextMenuBuilder` removes the adaptive menu,
 /// so both paths must return empty widgets.
-class GhostSelectionControls extends MaterialTextSelectionControls {
+class GhostSelectionControls extends MaterialTextSelectionControls
+    with TextSelectionHandleControls {
   @override
   Widget buildHandle(
     BuildContext context,

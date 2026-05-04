@@ -45,6 +45,14 @@
   - Nested style toggle-off, Riverpod safety, undo/redo stabilization.
 
 ## 🛠️ UI & UX Fixes (Android)
+- [X] **Android/iOS mobile selection toolbar and Done resync follow-up**:
+  Android device QA shows native Cut/Copy/Paste/Select All can still appear
+  alongside the app-owned toolbar during long-press/drag selection, and pressing
+  keyboard Done while text is selected can leave app handles out of sync with
+  the selected text after the keyboard/viewport changes. Fix Android first,
+  then apply the same mobile-selection protocol to iOS: native selection may
+  seed range only, native command toolbar is forbidden, app toolbar owns script
+  commands, and handles refresh after keyboard/viewInsets/focus changes.
 - [U] **BUG: Style Regression**: Text alignment and paragraph spacing ignored in the prompter. (USER VERIFIED v3.9.5.6: Hardened Alignment extraction + 1.5x intentional row gaps)
   1. -> Enter a script.
   2. -> Align the first paragraph to the LEFT.

@@ -15,7 +15,10 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                 TextButton(
                   onPressed: () {
                     _keyboardDismissedForSelection = true;
+                    ContextMenuController.removeAny();
+                    _promoteNativeSelectionToOverlay();
                     FocusScope.of(context).unfocus();
+                    _scheduleMobileSelectionGeometryRefresh();
                   },
                   child: const Text('Done',
                       style: TextStyle(

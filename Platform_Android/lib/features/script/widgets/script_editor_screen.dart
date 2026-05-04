@@ -111,7 +111,7 @@ class ScriptEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
-    with StylingLogicMixin<ScriptEditorScreen> {
+    with StylingLogicMixin<ScriptEditorScreen>, WidgetsBindingObserver {
   // Dummy node for HardwareKeyboard â†’ _handleEditorArrowKey bridge
   // (_handleEditorArrowKey never uses the node parameter).
   static final _arrowKeyDummyNode = FocusNode();
@@ -198,6 +198,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   Timer? _historyTimer, _recentTimer, _autoSaveTimer, _clipboardGuardTimer;
   Timer?
       _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
+  Timer? _mobileSelectionRefreshTimer;
 
   // v3.9.6: Professional History Bulking
   int _typingCharCount = 0; // chars typed since last history commit
@@ -211,6 +212,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onGlobalArrowKey);
     _startAutoSave();
     if (widget.pendingFile != null) {
@@ -330,8 +332,36 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   }
 
   @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    _scheduleMobileSelectionGeometryRefresh();
+  }
+
+  void _scheduleMobileSelectionGeometryRefresh() {
+    void refresh() {
+      if (!mounted) return;
+      ContextMenuController.removeAny();
+      final scroll = _editorScrollController;
+      if (scroll.hasClients) {
+        final max = scroll.position.maxScrollExtent;
+        if (scroll.offset > max) {
+          scroll.jumpTo(max);
+        }
+      }
+      _overlayKey.currentState?.refreshPositions();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
+    _mobileSelectionRefreshTimer?.cancel();
+    _mobileSelectionRefreshTimer =
+        Timer(const Duration(milliseconds: 260), refresh);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
+    _mobileSelectionRefreshTimer?.cancel();
     _blockClipboardTimer?.cancel();
     _clipboardGuardTimer?.cancel();
     _historyTimer?.cancel();

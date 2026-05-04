@@ -251,7 +251,9 @@ class _EditorBlock extends StatelessWidget {
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 2),
                     ),
-                    contextMenuBuilder: (_, __) {
+                    contextMenuBuilder: (_, editableTextState) {
+                      editableTextState.hideToolbar(false);
+                      ContextMenuController.removeAny();
                       final selection = controller.selection;
                       final hasPartialNativeSelection = selection.isValid &&
                           !selection.isCollapsed &&
@@ -264,6 +266,7 @@ class _EditorBlock extends StatelessWidget {
                           !hasExternalRange) {
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           onExtendSelection();
+                          ContextMenuController.removeAny();
                         });
                       }
 

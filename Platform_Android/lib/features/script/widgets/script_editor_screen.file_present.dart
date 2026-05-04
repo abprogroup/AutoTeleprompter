@@ -182,6 +182,50 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     var finalName =
         await AndroidFileAccess.displayNameForLocation(createdLocation) ??
             locationHint;
+
+    if (_looksLikeAndroidDuplicateName(
+      requestedName: fileName,
+      actualName: finalName,
+      baseName: baseName,
+      format: normalizedFormat,
+    )) {
+      final exactExport = await _findAndroidExportByDisplayName(
+        baseName: baseName,
+        format: normalizedFormat,
+        displayName: exactDisplayName,
+        excludeLocation: finalLocation,
+      );
+      final choice = await _showExportConflictDialog(
+        exactDisplayName,
+        message: 'Android found an existing "$exactDisplayName" and created '
+            '"$finalName" instead.',
+      );
+      if (!mounted || choice == _ExportConflictChoice.cancel) {
+        await AndroidFileAccess.deleteDocument(finalLocation);
+        return;
+      }
+      if (choice == _ExportConflictChoice.replace) {
+        await AndroidFileAccess.deleteDocument(finalLocation);
+        if (exactExport == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Android did not give AutoTeleprompter access to the existing '
+                '"$exactDisplayName". Save again and choose the existing file '
+                'when Android asks where to save.',
+              ),
+              backgroundColor: Colors.orange[800],
+              duration: const Duration(seconds: 7),
+            ),
+          );
+          return;
+        }
+        await _writeAndroidExport(exactExport, bytes, replaced: true);
+        return;
+      }
+    }
+
     final repairedName = ExportNameService.repairBrokenDuplicateSuffix(
       finalName,
       normalizedFormat,
@@ -269,6 +313,46 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       ),
     );
     return result ?? _ExportConflictChoice.cancel;
+  }
+
+  bool _looksLikeAndroidDuplicateName({
+    required String requestedName,
+    required String actualName,
+    required String baseName,
+    required String format,
+  }) {
+    final requested = requestedName.toLowerCase().trim();
+    final actual = actualName.toLowerCase().trim();
+    if (actual == requested) return false;
+    return ExportNameService.belongsToBaseName(
+      displayName: actualName,
+      baseName: baseName,
+      format: format,
+    );
+  }
+
+  Future<SavedExportEntry?> _findAndroidExportByDisplayName({
+    required String baseName,
+    required String format,
+    required String displayName,
+    required String excludeLocation,
+  }) async {
+    final expected = displayName.toLowerCase().trim();
+    final candidates = await AndroidFileAccess.findDocumentsByDisplayBase(
+      baseName: baseName,
+      format: format,
+    );
+    for (final candidate in candidates) {
+      if (candidate.location == excludeLocation) continue;
+      if (candidate.displayName.toLowerCase().trim() != expected) continue;
+      return SavedExportEntry(
+        baseName: baseName,
+        format: format.toLowerCase(),
+        displayName: candidate.displayName,
+        location: candidate.location,
+      );
+    }
+    return null;
   }
 
   Future<void> _writeAndroidExport(

@@ -1128,6 +1128,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     HardwareKeyboard keyboard,
   ) {
     final visibleOverlayRange = _hasVisibleAppSelectionRange();
+    final session = _overlayKey.currentState?.selectionSessionSnapshot;
+    if (visibleOverlayRange && session != null) {
+      _shiftSelectionAnchor = session.anchor;
+      _shiftSelectionFocus = session.focus;
+      return (anchor: session.anchor, focus: session.focus);
+    }
     final rememberedAnchor = _shiftSelectionAnchor;
     final rememberedFocus = _shiftSelectionFocus;
     if (visibleOverlayRange &&
@@ -1151,7 +1157,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       block: block,
       offset: selection.extentOffset.clamp(0, controller.text.length).toInt(),
     );
-    final session = _overlayKey.currentState?.selectionSessionSnapshot;
     final currentVisibleOverlayRange = _hasVisibleAppSelectionRange();
     if (session != null &&
         currentVisibleOverlayRange &&

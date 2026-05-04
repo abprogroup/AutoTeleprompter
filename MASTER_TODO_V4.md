@@ -23,6 +23,10 @@
 # MASTER TODO V4 — 4-Way Splitting Active
 > **NOTICE**: The repository has been physically split into `Platform_Android`, `Platform_iOS`, `Platform_Windows`, and `Platform_macOS`. All future work MUST be executed inside the specific platform's directory to ensure zero contamination.
 
+## Windows STT Visible-Skip Parity - 2026-05-04
+- [P] **Windows Hebrew/English visible-skip parity**: keep native WebView2 STT while adopting the tested iOS language-section behavior. Visible skip should support English -> Hebrew, Hebrew -> English, English -> later English while skipping visible Hebrew, and Hebrew -> later Hebrew while skipping visible English.
+- [-] **V5 Universal STT Languages**: add shared cross-platform language metadata or a reliable language resolver so all system-supported STT languages can be selected without guessing from RTL/LTR direction.
+
 ## 🤖 APK — Sealed
 > ⚠️ v4.0 Android is complete. Do not modify this section. For v5.0 Android premium features, see MASTER_TODO_V5.md.
 

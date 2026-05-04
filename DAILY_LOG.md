@@ -1728,3 +1728,6 @@
   section-locale pre-switch model for mixed Hebrew/English scripts.
 - **Verification Note**: Android analyzer still reports existing warnings and
   infos, but no new hard compile errors were introduced by this correction.
+### 2026-05-04 - Windows STT Visible-Skip Parity
+- Implemented a Windows-only STT parity pass to keep WebView2 STT plumbing while adopting the tested iOS Hebrew/English language-section behavior for visible skip.
+- Added the v5 tracking note that universal system-language STT needs shared cross-platform language metadata instead of guessing from RTL/LTR direction.

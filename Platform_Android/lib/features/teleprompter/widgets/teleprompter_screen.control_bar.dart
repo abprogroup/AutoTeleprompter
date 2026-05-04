@@ -58,98 +58,121 @@ class _ControlBar extends ConsumerWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
-          colors: [Colors.black.withOpacity(0.95), Colors.transparent],
+          colors: [
+            Colors.black.withOpacity(0.98),
+            Colors.black.withOpacity(0.88),
+            Colors.black.withOpacity(0.36),
+          ],
+          stops: const [0.0, 0.62, 1.0],
         ),
       ),
       child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white70),
-              onPressed: onBack,
-            ),
-            IconButton(
-              icon: const Icon(Icons.skip_previous, color: Colors.white70),
-              onPressed: onPreviousBookmark,
-              tooltip: 'Previous bookmark',
-            ),
-            IconButton(
-              icon: const Text('A',
-                  style: TextStyle(color: Colors.white70, fontSize: 16)),
-              onPressed: () {
-                applyPresenterFontSize(settings.fontSize - 4);
-              },
-              tooltip: 'Smaller font',
-            ),
-            // Backward button removed in favor of bidirectional slider
-            GestureDetector(
-              onTap: isBooting ? null : (isActive ? onStop : onStart),
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive ? Colors.red : accentColor,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                  onPressed: onBack,
+                  tooltip: 'Back',
                 ),
-                child: Icon(
-                  isManualMode
-                      ? (isManualScrolling && settings.scrollSpeed != 0
-                          ? Icons.pause
-                          : Icons.play_arrow)
-                      : (isStarting
-                          ? Icons.hourglass_top
-                          : (isListening ? Icons.stop : Icons.mic)),
-                  color: isActive ? Colors.white : Colors.black,
-                  size: 30,
+                IconButton(
+                  icon: const Icon(Icons.skip_previous, color: Colors.white70),
+                  onPressed: onPreviousBookmark,
+                  tooltip: 'Previous bookmark',
                 ),
-              ),
+                IconButton(
+                  icon: const Icon(Icons.bookmark_add_outlined,
+                      color: Colors.white70),
+                  onPressed: onAddBookmark,
+                  tooltip: 'Add bookmark',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.bookmark_remove_outlined,
+                      color: Colors.white70),
+                  onPressed: onRemoveBookmark,
+                  tooltip: 'Remove bookmark',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.skip_next, color: Colors.white70),
+                  onPressed: onNextBookmark,
+                  tooltip: 'Next bookmark',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.search, color: Colors.white70),
+                  onPressed: onSearch,
+                  tooltip: 'Search script',
+                ),
+              ],
             ),
-            IconButton(
-              icon: const Text('A',
-                  style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold)),
-              onPressed: () {
-                applyPresenterFontSize(settings.fontSize + 4);
-              },
-              tooltip: 'Larger font',
-            ),
-            IconButton(
-              icon: const Icon(Icons.bookmark_add_outlined,
-                  color: Colors.white70),
-              onPressed: onAddBookmark,
-              tooltip: 'Add bookmark',
-            ),
-            IconButton(
-              icon: const Icon(Icons.bookmark_remove_outlined,
-                  color: Colors.white70),
-              onPressed: isListening || isStarting ? null : onRemoveBookmark,
-              tooltip: 'Remove bookmark',
-            ),
-            IconButton(
-              icon: const Icon(Icons.tune, color: Colors.white70),
-              onPressed: onSettings,
-            ),
-            IconButton(
-              icon: const Icon(Icons.skip_next, color: Colors.white70),
-              onPressed: onNextBookmark,
-              tooltip: 'Next bookmark',
-            ),
-            IconButton(
-              icon: const Icon(Icons.replay, color: Colors.white70),
-              onPressed: onReset,
-            ),
-            IconButton(
-              icon: const Icon(Icons.search, color: Colors.white70),
-              onPressed: onSearch,
-              tooltip: 'Search (Ctrl+Shift+F)',
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.tune, color: Colors.white70),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    onSettings();
+                  },
+                  tooltip: 'Settings',
+                ),
+                IconButton(
+                  icon: const Text('A',
+                      style: TextStyle(color: Colors.white70, fontSize: 16)),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    applyPresenterFontSize(settings.fontSize - 4);
+                  },
+                  tooltip: 'Smaller font',
+                ),
+                GestureDetector(
+                  onTap: isBooting ? null : (isActive ? onStop : onStart),
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isActive ? Colors.red : accentColor,
+                    ),
+                    child: Icon(
+                      isManualMode
+                          ? (isManualScrolling && settings.scrollSpeed != 0
+                              ? Icons.pause
+                              : Icons.play_arrow)
+                          : (isStarting
+                              ? Icons.hourglass_top
+                              : (isListening ? Icons.stop : Icons.mic)),
+                      color: isActive ? Colors.white : Colors.black,
+                      size: 30,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Text('A',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    applyPresenterFontSize(settings.fontSize + 4);
+                  },
+                  tooltip: 'Larger font',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.replay, color: Colors.white70),
+                  onPressed: onReset,
+                  tooltip: 'Restart',
+                ),
+              ],
             ),
           ],
         ),

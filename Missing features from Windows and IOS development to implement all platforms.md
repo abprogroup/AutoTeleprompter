@@ -1,5 +1,19 @@
 ﻿iOS Windows-Parity Handoff
 
+Windows STT parity update - 2026-05-04:
+
+- Windows now targets the tested iOS Hebrew/English visible-skip STT behavior
+  while keeping its native WebView2 STT plumbing. Visible skip should allow
+  English -> Hebrew, Hebrew -> English, English -> later English while skipping
+  visible Hebrew, and Hebrew -> later Hebrew while skipping visible English.
+- The current v4 script model only stores direction-level language metadata
+  (`isRtl`), so the safe resolved locales are RTL/Hebrew and LTR/English.
+  Universal same-script language support such as English/French/Spanish/German
+  must be handled as a v5 cross-platform language metadata feature.
+- V5 tracker item: add shared per-section/per-block STT language metadata or a
+  reliable language resolver so every platform can use all system-supported STT
+  languages without guessing from text direction.
+
 Android parity implementation note - 2026-05-04:
 
 - Platform_Android has been brought onto the tested Windows/iOS parity track

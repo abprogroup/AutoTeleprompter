@@ -472,7 +472,7 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                               ),
                             ),
                             SizedBox(height: 18),
-                            Text('Loading scriptâ€¦',
+                            Text('Loading script...',
                                 style: TextStyle(
                                     color: Color(0xFFFFBF00),
                                     fontSize: 14,

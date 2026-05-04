@@ -16,10 +16,11 @@ class ScriptNotifier extends Notifier<Script?> {
     final settings = ref.read(settingsProvider);
     final lastText = settings.lastScript;
     final lastTitle = settings.lastScriptTitle;
-    
+
     String sourceType = 'TEMP';
     String? sessionId;
     int? historyIndex;
+    String? historyJson;
     double? fontSize, lineSpacing, letterSpacing, wordSpacing;
     String? fontFamily, textAlign;
     int? scriptBgColor, currentWordColor, futureWordColor;
@@ -27,37 +28,50 @@ class ScriptNotifier extends Notifier<Script?> {
     for (final json in settings.recentScripts) {
       try {
         final meta = jsonDecode(json);
-        if (meta['fullText'] == lastText || meta['sessionId'] == sessionId || meta['title'] == lastTitle) {
+        if (meta['fullText'] == lastText ||
+            meta['sessionId'] == sessionId ||
+            meta['title'] == lastTitle) {
           sourceType = meta['type'] ?? 'TEMP';
           sessionId = meta['sessionId'];
           final metaIdx = meta['historyIndex'];
           if (metaIdx != null) historyIndex = metaIdx;
+          final metaHistJson = meta['historyJson'];
+          if (metaHistJson is String) historyJson = metaHistJson;
 
           // v3.9.5.70: Extract styling metadata (Nested for Gallery Compatibility)
           final style = meta['style'] as Map<String, dynamic>?;
           if (style != null) {
-            if (style['fontSize'] != null) fontSize = (style['fontSize'] as num).toDouble();
+            if (style['fontSize'] != null)
+              fontSize = (style['fontSize'] as num).toDouble();
             if (style['fontFamily'] != null) fontFamily = style['fontFamily'];
-            if (style['lineSpacing'] != null) lineSpacing = (style['lineSpacing'] as num).toDouble();
-            if (style['letterSpacing'] != null) letterSpacing = (style['letterSpacing'] as num).toDouble();
-            if (style['wordSpacing'] != null) wordSpacing = (style['wordSpacing'] as num).toDouble();
+            if (style['lineSpacing'] != null)
+              lineSpacing = (style['lineSpacing'] as num).toDouble();
+            if (style['letterSpacing'] != null)
+              letterSpacing = (style['letterSpacing'] as num).toDouble();
+            if (style['wordSpacing'] != null)
+              wordSpacing = (style['wordSpacing'] as num).toDouble();
             if (style['textAlign'] != null) textAlign = style['textAlign'];
-            if (style['scriptBgColor'] != null) scriptBgColor = style['scriptBgColor'];
-            if (style['currentWordColor'] != null) currentWordColor = style['currentWordColor'];
-            if (style['futureWordColor'] != null) futureWordColor = style['futureWordColor'];
+            if (style['scriptBgColor'] != null)
+              scriptBgColor = style['scriptBgColor'];
+            if (style['currentWordColor'] != null)
+              currentWordColor = style['currentWordColor'];
+            if (style['futureWordColor'] != null)
+              futureWordColor = style['futureWordColor'];
           }
-          
+
           break;
         }
       } catch (_) {}
     }
 
     if (lastText.isNotEmpty) {
-      return _buildScript(lastText, 
-        title: lastTitle.isNotEmpty ? lastTitle : null, 
-        sourceType: sourceType, 
+      return _buildScript(
+        lastText,
+        title: lastTitle.isNotEmpty ? lastTitle : null,
+        sourceType: sourceType,
         sessionId: sessionId,
         historyIndex: historyIndex ?? settings.lastHistoryIndex,
+        historyJson: historyJson,
         fontSize: fontSize,
         fontFamily: fontFamily,
         lineSpacing: lineSpacing,
@@ -72,11 +86,12 @@ class ScriptNotifier extends Notifier<Script?> {
     return null;
   }
 
-  Script _buildScript(String text, {
-    String? title, 
-    String? sourceType, 
-    String? sessionId, 
-    String? historyJson, 
+  Script _buildScript(
+    String text, {
+    String? title,
+    String? sourceType,
+    String? sessionId,
+    String? historyJson,
     int? historyIndex,
     double? fontSize,
     String? fontFamily,
@@ -90,15 +105,17 @@ class ScriptNotifier extends Notifier<Script?> {
   }) {
     final words = WordAligner.tokenize(text);
     final isRtl = text.isHebrew;
-    
+
     // v3.9.5.46: Pull baseline from settings if not provided by import
     final settings = ref.read(settingsProvider);
 
     return Script(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: title ?? (text.split('\n').first.trim().isNotEmpty
-          ? text.split('\n').first.trim().substring(0, text.split('\n').first.trim().length.clamp(0, 40))
-          : 'Script'),
+      title: title ??
+          (text.split('\n').first.trim().isNotEmpty
+              ? text.split('\n').first.trim().substring(
+                  0, text.split('\n').first.trim().length.clamp(0, 40))
+              : 'Script'),
       rawText: text,
       words: words,
       isRtl: isRtl,
@@ -106,7 +123,7 @@ class ScriptNotifier extends Notifier<Script?> {
       sessionId: sessionId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       historyJson: historyJson,
       historyIndex: historyIndex ?? -1,
-      fontSize: fontSize ?? 18.0,
+      fontSize: fontSize ?? settings.fontSize,
       fontFamily: fontFamily ?? 'Inter',
       lineSpacing: lineSpacing ?? settings.lineSpacing,
       letterSpacing: letterSpacing ?? settings.letterSpacing,
@@ -118,11 +135,12 @@ class ScriptNotifier extends Notifier<Script?> {
     );
   }
 
-  void loadText(String text, {
-    String? title, 
-    String? sourceType, 
-    String? sessionId, 
-    String? historyJson, 
+  void loadText(
+    String text, {
+    String? title,
+    String? sourceType,
+    String? sessionId,
+    String? historyJson,
     int? historyIndex,
     double? fontSize,
     String? fontFamily,
@@ -134,11 +152,12 @@ class ScriptNotifier extends Notifier<Script?> {
     int? currentWordColor,
     int? futureWordColor,
   }) {
-    state = _buildScript(text, 
-      title: title, 
-      sourceType: sourceType, 
-      sessionId: sessionId, 
-      historyJson: historyJson, 
+    state = _buildScript(
+      text,
+      title: title,
+      sourceType: sourceType,
+      sessionId: sessionId,
+      historyJson: historyJson,
       historyIndex: historyIndex,
       fontSize: fontSize,
       fontFamily: fontFamily,
@@ -151,9 +170,36 @@ class ScriptNotifier extends Notifier<Script?> {
       futureWordColor: futureWordColor,
     );
     ref.read(settingsProvider.notifier).saveScript(
-      text, 
-      title: title, 
-      historyIndex: historyIndex,
+          text,
+          title: title,
+          historyIndex: historyIndex,
+          fontSize: fontSize,
+          fontFamily: fontFamily,
+          lineSpacing: lineSpacing,
+          letterSpacing: letterSpacing,
+          wordSpacing: wordSpacing,
+          textAlign: textAlign,
+          scriptBgColor: scriptBgColor,
+          currentWordColor: currentWordColor,
+          futureWordColor: futureWordColor,
+          historyJson: historyJson,
+        );
+  }
+
+  Future<void> updateStyleMetadata({
+    double? fontSize,
+    String? fontFamily,
+    double? lineSpacing,
+    double? letterSpacing,
+    double? wordSpacing,
+    String? textAlign,
+    int? scriptBgColor,
+    int? currentWordColor,
+    int? futureWordColor,
+  }) async {
+    final current = state;
+    if (current == null) return;
+    final next = current.copyWith(
       fontSize: fontSize,
       fontFamily: fontFamily,
       lineSpacing: lineSpacing,
@@ -163,8 +209,25 @@ class ScriptNotifier extends Notifier<Script?> {
       scriptBgColor: scriptBgColor,
       currentWordColor: currentWordColor,
       futureWordColor: futureWordColor,
-      historyJson: historyJson,
     );
+    state = next;
+    await ref.read(settingsProvider.notifier).saveScript(
+          next.rawText,
+          title: next.title,
+          type: next.sourceType,
+          historyIndex: next.historyIndex,
+          sessionId: next.sessionId,
+          fontSize: next.fontSize,
+          fontFamily: next.fontFamily,
+          lineSpacing: next.lineSpacing,
+          letterSpacing: next.letterSpacing,
+          wordSpacing: next.wordSpacing,
+          textAlign: next.textAlign,
+          scriptBgColor: next.scriptBgColor,
+          currentWordColor: next.currentWordColor,
+          futureWordColor: next.futureWordColor,
+          historyJson: next.historyJson,
+        );
   }
 
   Future<_ParsedFile> parseFile(File file) async {
@@ -175,16 +238,21 @@ class ScriptNotifier extends Notifier<Script?> {
     try {
       if (lower.endsWith('.docx')) {
         result = _parseDocx(rawBytes);
+      } else if (lower.endsWith('.pages')) {
+        result = _parsePages(rawBytes);
       } else if (lower.endsWith('.rtf') || lower.endsWith('.doc')) {
         final raw = utf8.decode(rawBytes, allowMalformed: true);
         if (raw.trimLeft().startsWith('{\\rtf')) {
           result = _parseRtf(raw);
+        } else if (lower.endsWith('.rtf')) {
+          // Non-RTF content in a .rtf file (e.g. saved before the fix) — treat as UTF-8
+          result = _ParsedFile(raw.trim());
         } else {
+          // Legacy .doc binary files — strip non-printable bytes
           final content = String.fromCharCodes(
-            rawBytes.where((b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
-          ).replaceAll(RegExp(r'[ \t]{3,}'), '  ')
-           .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-           .trim();
+            rawBytes.where(
+                (b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
+          ).replaceAll(RegExp(r'[ \t]{3,}'), '  ').trim();
           result = _ParsedFile(content);
         }
       } else {
@@ -194,7 +262,8 @@ class ScriptNotifier extends Notifier<Script?> {
       final errStr = e.toString();
       String errContent = '';
       if (errStr.contains('Central Directory') || errStr.contains('Format')) {
-        errContent = 'This file appears to be corrupted or is not a valid ${file.path.split('.').last.toUpperCase()} file.';
+        errContent =
+            'This file appears to be corrupted or is not a valid ${file.path.split('.').last.toUpperCase()} file.';
       } else {
         errContent = 'Error loading file: $errStr';
       }
@@ -207,8 +276,10 @@ class ScriptNotifier extends Notifier<Script?> {
     final result = await parseFile(file);
     if (result.text.isNotEmpty) {
       final title = file.path.split('/').last;
-      final extension = title.contains('.') ? title.split('.').last.toUpperCase() : 'FILE';
-      loadText(result.text, title: title, sourceType: extension, fontSize: result.fontSize);
+      final extension =
+          title.contains('.') ? title.split('.').last.toUpperCase() : 'FILE';
+      loadText(result.text,
+          title: title, sourceType: extension, fontSize: result.fontSize);
     }
   }
 
@@ -258,10 +329,10 @@ class ScriptNotifier extends Notifier<Script?> {
         if (rPr != null) {
           final isBold = rPr.getElement('w:b') != null;
           final color = rPr.getElement('w:color')?.getAttribute('w:val');
-          
+
           if (detectedFontSize == null) {
-            final sz = rPr.getElement('w:sz')?.getAttribute('w:val') ?? 
-                       rPr.getElement('w:szCs')?.getAttribute('w:val');
+            final sz = rPr.getElement('w:sz')?.getAttribute('w:val') ??
+                rPr.getElement('w:szCs')?.getAttribute('w:val');
             if (sz != null) {
               final halfPoints = double.tryParse(sz);
               if (halfPoints != null) detectedFontSize = halfPoints / 2.0;
@@ -288,7 +359,10 @@ class ScriptNotifier extends Notifier<Script?> {
         final colorInt = int.parse('FF$bgColorVal', radix: 16);
         ref.read(settingsProvider.notifier).setScriptBgColor(colorInt);
       } else if (paragraphs.isNotEmpty) {
-        final shd = paragraphs.first.getElement('w:pPr')?.getElement('w:shd')?.getAttribute('w:fill');
+        final shd = paragraphs.first
+            .getElement('w:pPr')
+            ?.getElement('w:shd')
+            ?.getAttribute('w:fill');
         if (shd != null && shd != 'auto' && shd != 'clear') {
           final colorInt = int.parse('FF$shd', radix: 16);
           ref.read(settingsProvider.notifier).setScriptBgColor(colorInt);
@@ -297,6 +371,58 @@ class ScriptNotifier extends Notifier<Script?> {
     } catch (_) {}
 
     return _ParsedFile(buf.toString().trim(), fontSize: detectedFontSize);
+  }
+
+  /// Parses Apple Pages files (.pages) — a ZIP archive.
+  /// Handles both the old XML-based format (index.xml) and the newer
+  /// iWork format by extracting readable text from all XML entries.
+  _ParsedFile _parsePages(List<int> rawBytes) {
+    final archive = ZipDecoder().decodeBytes(rawBytes);
+    final buf = StringBuffer();
+
+    // Old Pages format: index.xml contains <sf:p> paragraph elements
+    final indexFile = archive.findFile('index.xml');
+    if (indexFile != null) {
+      final xml =
+          utf8.decode(indexFile.content as List<int>, allowMalformed: true);
+      // Extract text from <sf:p> and <sf:s> (span) elements
+      final paraMatches =
+          RegExp(r'<sf:p\b[^>]*>(.*?)</sf:p>', dotAll: true).allMatches(xml);
+      for (final m in paraMatches) {
+        final inner = m.group(1) ?? '';
+        // Strip any nested XML tags to get raw text
+        final text = inner.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+        if (text.isNotEmpty) buf.writeln(text);
+      }
+      if (buf.isNotEmpty) return _ParsedFile(buf.toString().trim());
+    }
+
+    // Newer Pages format: scan all XML files in the archive for text content
+    for (final file in archive.files) {
+      if (!file.isFile) continue;
+      final name = file.name.toLowerCase();
+      if (!name.endsWith('.xml') && !name.endsWith('.iwa')) continue;
+      try {
+        final content =
+            utf8.decode(file.content as List<int>, allowMalformed: true);
+        // Extract anything that looks like readable paragraph text
+        final matches =
+            RegExp(r'<[^>]*p[^>]*>(.*?)</[^>]*p[^>]*>', dotAll: true)
+                .allMatches(content);
+        for (final m in matches) {
+          final text =
+              (m.group(1) ?? '').replaceAll(RegExp(r'<[^>]+>'), '').trim();
+          if (text.length > 2) buf.writeln(text);
+        }
+      } catch (_) {}
+    }
+
+    final result = buf.toString().trim();
+    if (result.isEmpty) {
+      return _ParsedFile('Could not extract text from this Pages file. '
+          'Please open it in Pages and export as DOCX or TXT first.');
+    }
+    return _ParsedFile(result);
   }
 
   /// Parses RTF, extracts text with style markup (bold, color, size).
@@ -397,7 +523,10 @@ class ScriptNotifier extends Notifier<Script?> {
         continue;
       }
 
-      if (skipDepths.isNotEmpty) { i++; continue; }
+      if (skipDepths.isNotEmpty) {
+        i++;
+        continue;
+      }
 
       if (c == '\\') {
         i++;
@@ -405,10 +534,28 @@ class ScriptNotifier extends Notifier<Script?> {
         final next = raw[i];
 
         // Literal escapes
-        if (next == '\\') { currentText.write('\\'); i++; continue; }
-        if (next == '{')  { currentText.write('{');  i++; continue; }
-        if (next == '}')  { currentText.write('}');  i++; continue; }
-        if (next == '\n' || next == '\r') { flushRun(); currentText.write('\n'); flushRun(); i++; continue; }
+        if (next == '\\') {
+          currentText.write('\\');
+          i++;
+          continue;
+        }
+        if (next == '{') {
+          currentText.write('{');
+          i++;
+          continue;
+        }
+        if (next == '}') {
+          currentText.write('}');
+          i++;
+          continue;
+        }
+        if (next == '\n' || next == '\r') {
+          flushRun();
+          currentText.write('\n');
+          flushRun();
+          i++;
+          continue;
+        }
 
         // Hex escape \' XX (Windows-1252 codepage for bytes 0x80-0x9F)
         if (next == '\'') {
@@ -425,13 +572,21 @@ class ScriptNotifier extends Notifier<Script?> {
 
         // Unicode escape \uNNNN? — only if followed by a digit or minus sign.
         // Control words like \uc, \ul, \ulnone start with 'u' but are NOT unicode escapes.
-        if (next == 'u' && (i + 1) < raw.length &&
-            (raw.codeUnitAt(i + 1) >= 0x30 && raw.codeUnitAt(i + 1) <= 0x39 || raw[i + 1] == '-')) {
+        if (next == 'u' &&
+            (i + 1) < raw.length &&
+            (raw.codeUnitAt(i + 1) >= 0x30 && raw.codeUnitAt(i + 1) <= 0x39 ||
+                raw[i + 1] == '-')) {
           i++;
           final nb = StringBuffer();
-          if (i < raw.length && raw[i] == '-') { nb.write('-'); i++; }
-          while (i < raw.length && raw.codeUnitAt(i) >= 0x30 && raw.codeUnitAt(i) <= 0x39) {
-            nb.write(raw[i]); i++;
+          if (i < raw.length && raw[i] == '-') {
+            nb.write('-');
+            i++;
+          }
+          while (i < raw.length &&
+              raw.codeUnitAt(i) >= 0x30 &&
+              raw.codeUnitAt(i) <= 0x39) {
+            nb.write(raw[i]);
+            i++;
           }
           final num = int.tryParse(nb.toString());
           if (num != null) {
@@ -439,7 +594,10 @@ class ScriptNotifier extends Notifier<Script?> {
             if (code > 31) currentText.writeCharCode(code);
           }
           // Skip replacement char
-          if (i < raw.length && raw[i] != '\\' && raw[i] != '{' && raw[i] != '}') i++;
+          if (i < raw.length &&
+              raw[i] != '\\' &&
+              raw[i] != '{' &&
+              raw[i] != '}') i++;
           continue;
         }
 
@@ -451,10 +609,14 @@ class ScriptNotifier extends Notifier<Script?> {
 
           // Optional numeric parameter
           String param = '';
-          if (i < raw.length && (raw[i] == '-' || (raw.codeUnitAt(i) >= 0x30 && raw.codeUnitAt(i) <= 0x39))) {
+          if (i < raw.length &&
+              (raw[i] == '-' ||
+                  (raw.codeUnitAt(i) >= 0x30 && raw.codeUnitAt(i) <= 0x39))) {
             final ps = i;
             if (raw[i] == '-') i++;
-            while (i < raw.length && raw.codeUnitAt(i) >= 0x30 && raw.codeUnitAt(i) <= 0x39) i++;
+            while (i < raw.length &&
+                raw.codeUnitAt(i) >= 0x30 &&
+                raw.codeUnitAt(i) <= 0x39) i++;
             param = raw.substring(ps, i);
           }
           if (i < raw.length && raw[i] == ' ') i++;
@@ -463,17 +625,24 @@ class ScriptNotifier extends Notifier<Script?> {
           switch (word) {
             case 'b':
               final newBold = param != '0';
-              if (newBold != bold) { flushRun(); bold = newBold; }
+              if (newBold != bold) {
+                flushRun();
+                bold = newBold;
+              }
               break;
             case 'fs':
               if (detectedFontSize == null) {
                 final halfPoints = double.tryParse(param);
-                if (halfPoints != null && halfPoints > 0) detectedFontSize = halfPoints / 2.0;
+                if (halfPoints != null && halfPoints > 0)
+                  detectedFontSize = halfPoints / 2.0;
               }
               break;
             case 'cf':
               final newCf = int.tryParse(param) ?? 0;
-              if (newCf != cfIndex) { flushRun(); cfIndex = newCf; }
+              if (newCf != cfIndex) {
+                flushRun();
+                cfIndex = newCf;
+              }
               break;
             case 'par':
             case 'line':
@@ -483,7 +652,8 @@ class ScriptNotifier extends Notifier<Script?> {
               break;
             case 'plain':
               flushRun();
-              bold = false; cfIndex = 0;
+              bold = false;
+              cfIndex = 0;
               break;
           }
           continue;
@@ -508,7 +678,10 @@ class ScriptNotifier extends Notifier<Script?> {
       if (text.isEmpty) continue;
 
       // Don't wrap newlines in style tags
-      if (text == '\n') { buf.write('\n'); continue; }
+      if (text == '\n') {
+        buf.write('\n');
+        continue;
+      }
 
       if (run.cfIndex > 0 && run.cfIndex < colorTable.length) {
         text = '[color=#${colorTable[run.cfIndex]}]$text[/color]';
@@ -519,26 +692,58 @@ class ScriptNotifier extends Notifier<Script?> {
       buf.write(text);
     }
 
-    String result = buf.toString();
-    result = result.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    final result = buf.toString();
     return _ParsedFile(result.trim(), fontSize: detectedFontSize);
   }
 
   static bool _isAlpha(int codeUnit) =>
-      (codeUnit >= 0x41 && codeUnit <= 0x5A) || (codeUnit >= 0x61 && codeUnit <= 0x7A);
+      (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
+      (codeUnit >= 0x61 && codeUnit <= 0x7A);
 
   /// Maps Windows-1252 bytes 0x80-0x9F to their Unicode equivalents.
   static int _win1252ToUnicode(int code) {
     const map = {
-      0x80: 0x20AC, 0x82: 0x201A, 0x83: 0x0192, 0x84: 0x201E,
-      0x85: 0x2026, 0x86: 0x2020, 0x87: 0x2021, 0x88: 0x02C6,
-      0x89: 0x2030, 0x8A: 0x0160, 0x8B: 0x2039, 0x8C: 0x0152,
-      0x8E: 0x017D, 0x91: 0x2018, 0x92: 0x2019, 0x93: 0x201C,
-      0x94: 0x201D, 0x95: 0x2022, 0x96: 0x2013, 0x97: 0x2014,
-      0x98: 0x02DC, 0x99: 0x2122, 0x9A: 0x0161, 0x9B: 0x203A,
-      0x9C: 0x0153, 0x9E: 0x017E, 0x9F: 0x0178,
+      0x80: 0x20AC,
+      0x82: 0x201A,
+      0x83: 0x0192,
+      0x84: 0x201E,
+      0x85: 0x2026,
+      0x86: 0x2020,
+      0x87: 0x2021,
+      0x88: 0x02C6,
+      0x89: 0x2030,
+      0x8A: 0x0160,
+      0x8B: 0x2039,
+      0x8C: 0x0152,
+      0x8E: 0x017D,
+      0x91: 0x2018,
+      0x92: 0x2019,
+      0x93: 0x201C,
+      0x94: 0x201D,
+      0x95: 0x2022,
+      0x96: 0x2013,
+      0x97: 0x2014,
+      0x98: 0x02DC,
+      0x99: 0x2122,
+      0x9A: 0x0161,
+      0x9B: 0x203A,
+      0x9C: 0x0153,
+      0x9E: 0x017E,
+      0x9F: 0x0178,
     };
     return map[code] ?? code;
+  }
+
+  /// Keeps scriptProvider.state in sync with the editor's live history so
+  /// that a new ScriptEditorScreen (created on re-entry) reads the correct
+  /// historyIndex and historyJson from scriptProvider instead of stale startup
+  /// values.  Called from _forceRecentUpdate() after each save.
+  void updateHistory(int historyIndex, String historyJson) {
+    if (state == null) return;
+    state = state!.copyWith(
+      historyIndex: historyIndex,
+      historyJson: historyJson,
+    );
   }
 
   void clear() {
@@ -547,15 +752,16 @@ class ScriptNotifier extends Notifier<Script?> {
   }
 }
 
-final scriptProvider = NotifierProvider<ScriptNotifier, Script?>(ScriptNotifier.new);
+final scriptProvider =
+    NotifierProvider<ScriptNotifier, Script?>(ScriptNotifier.new);
 
 extension ScriptUtils on Script {
   Script copyWith({
-    String? title, 
-    String? rawText, 
-    List<ScriptWord>? words, 
-    bool? isRtl, 
-    String? sourceType, 
+    String? title,
+    String? rawText,
+    List<ScriptWord>? words,
+    bool? isRtl,
+    String? sourceType,
     String? sessionId,
     String? historyJson,
   }) {

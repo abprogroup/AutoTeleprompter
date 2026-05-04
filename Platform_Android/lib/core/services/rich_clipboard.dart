@@ -8,10 +8,14 @@ class RichClipboard {
   static const MethodChannel _channel =
       MethodChannel('autoteleprompter/clipboard');
 
+  static String? _internalMarkup;
+
   static Future<void> setHtml({
     required String plain,
     required String html,
+    String? markup,
   }) async {
+    _internalMarkup = markup;
     try {
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         final ok = await _channel.invokeMethod<bool>('setHtml', {
@@ -25,4 +29,10 @@ class RichClipboard {
     }
     await Clipboard.setData(ClipboardData(text: plain));
   }
+
+  static String? get internalMarkup => _internalMarkup;
+
+  /// Clears the internal markup buffer so stale rich styles cannot leak
+  /// into a paste after the OS clipboard has been replaced externally.
+  static void clearInternal() => _internalMarkup = null;
 }

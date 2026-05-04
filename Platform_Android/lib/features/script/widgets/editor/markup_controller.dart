@@ -58,7 +58,8 @@ class MarkupController extends TextEditingController {
 
     if (newText != oldText) {
       int prefix = 0;
-      final minLen = oldText.length < newText.length ? oldText.length : newText.length;
+      final minLen =
+          oldText.length < newText.length ? oldText.length : newText.length;
       while (prefix < minLen &&
           oldText.codeUnitAt(prefix) == newText.codeUnitAt(prefix)) {
         prefix++;
@@ -110,7 +111,8 @@ class MarkupController extends TextEditingController {
           }
         }
         if (victim != null) {
-          newText = oldText.substring(0, victim) + oldText.substring(victim + 1);
+          newText =
+              oldText.substring(0, victim) + oldText.substring(victim + 1);
           newSelection = TextSelection.collapsed(offset: victim);
         } else {
           return;
@@ -123,11 +125,17 @@ class MarkupController extends TextEditingController {
     if (newSelection.isValid && !newSelection.isCollapsed) {
       final matches = _tagRegex.allMatches(newText);
       int s = newSelection.start; // normalized min
-      int e = newSelection.end;   // normalized max
+      int e = newSelection.end; // normalized max
       bool shifted = false;
       for (final m in matches) {
-        if (s > m.start && s < m.end) { s = m.start; shifted = true; }
-        if (e > m.start && e < m.end) { e = m.end; shifted = true; }
+        if (s > m.start && s < m.end) {
+          s = m.start;
+          shifted = true;
+        }
+        if (e > m.start && e < m.end) {
+          e = m.end;
+          shifted = true;
+        }
       }
       if (shifted) {
         // Preserve the original direction (RTL selections have base > extent)
@@ -139,7 +147,8 @@ class MarkupController extends TextEditingController {
       }
     } else if (newSelection.isCollapsed && newSelection.baseOffset > 0) {
       for (final m in _tagRegex.allMatches(newText)) {
-        if (newSelection.baseOffset > m.start && newSelection.baseOffset < m.end) {
+        if (newSelection.baseOffset > m.start &&
+            newSelection.baseOffset < m.end) {
           final toStart = (newSelection.baseOffset - m.start).abs();
           final toEnd = (newSelection.baseOffset - m.end).abs();
           final target = (toStart <= toEnd) ? m.start : m.end;
@@ -150,6 +159,138 @@ class MarkupController extends TextEditingController {
     }
 
     super.value = newValue.copyWith(text: newText, selection: newSelection);
+  }
+
+  // ── Visual-offset conversion helpers ─────────────────────────────────────
+  // Tags occupy raw character positions but render at zero visible width.
+  // These helpers let callers track selections by VISIBLE character count so
+  // that inserting or removing tags (B/I/U/size/color/font) never shifts the
+  // logical selection.
+
+  /// Number of visible (non-tag) characters from the start of [text] up to
+  /// (but not including) [rawOffset].
+  /// Returns [from] walked backward past any trailing invisible markup tags.
+  ///
+  /// When navigating into a block from the right (e.g. arrowLeft cross-block),
+  /// placing the cursor at [text.length] can trap it between the end of the
+  /// raw string and the end of a trailing invisible tag. Flutter's default
+  /// cursor-left then increments the position INTO the tag; MarkupController's
+  /// value-setter snaps it back to the end of the tag — forever stuck.
+  ///
+  /// Placing the cursor at safeEndOffset instead lands just before those
+  /// trailing tags, so the very next arrowLeft moves past a real character.
+  static int safeEndOffset(String text, [int? from]) {
+    var pos = from ?? text.length;
+    if (pos <= 0) return 0;
+    // Walk backward: if pos is exactly at the END of a tag, step to its start.
+    bool moved = true;
+    while (moved && pos > 0) {
+      moved = false;
+      for (final m in _tagRegex.allMatches(text)) {
+        if (m.end == pos) {
+          pos = m.start;
+          moved = true;
+          break;
+        }
+      }
+    }
+    return pos;
+  }
+
+  /// Returns a prefix string of opening markup tags that are active
+  /// (unclosed) at [rawOffset] inside [text].
+  ///
+  /// When deleting a range `[0, rawOffset]` from the start of a block, the
+  /// remaining text (`text.substring(rawOffset)`) loses any opening tags that
+  /// were in the deleted range. Prepending `openTagsAt(text, rawOffset)` to
+  /// the remaining text restores the style context so the cut doesn't wipe
+  /// all formatting from the surviving portion of the block.
+  static String openTagsAt(String text, int rawOffset) {
+    if (rawOffset <= 0 || rawOffset > text.length) return '';
+    final sub = text.substring(0, rawOffset);
+    bool bold = false;
+    bool italic = false;
+    bool underline = false;
+    final textColors = <String>[];
+    final bgColors = <String>[];
+    final sizes = <String>[];
+    final fonts = <String>[];
+    for (final m in _tagRegex.allMatches(sub)) {
+      final tag = m.group(0)!;
+      if (tag == '**') {
+        bold = !bold;
+      } else if (tag == '[u]') {
+        underline = true;
+      } else if (tag == '[/u]') {
+        underline = false;
+      } else if (tag == '[i]') {
+        italic = true;
+      } else if (tag == '[/i]') {
+        italic = false;
+      } else if (m.group(1) != null) {
+        textColors.add('[color=${m.group(1)!}]');
+      } else if (tag == '[/color]') {
+        if (textColors.isNotEmpty) textColors.removeLast();
+      } else if (m.group(2) != null) {
+        bgColors.add('[bg=${m.group(2)!}]');
+      } else if (tag == '[/bg]') {
+        if (bgColors.isNotEmpty) bgColors.removeLast();
+      } else if (m.group(3) != null) {
+        sizes.add('[size=${m.group(3)!}]');
+      } else if (tag == '[/size]') {
+        if (sizes.isNotEmpty) sizes.removeLast();
+      } else if (m.group(4) != null) {
+        fonts.add('[font=${m.group(4)!}]');
+      } else if (tag == '[/font]') {
+        if (fonts.isNotEmpty) fonts.removeLast();
+      }
+    }
+    final sb = StringBuffer();
+    if (bold) sb.write('**');
+    if (italic) sb.write('[i]');
+    if (underline) sb.write('[u]');
+    if (textColors.isNotEmpty) sb.write(textColors.last);
+    if (bgColors.isNotEmpty) sb.write(bgColors.last);
+    if (sizes.isNotEmpty) sb.write(sizes.last);
+    if (fonts.isNotEmpty) sb.write(fonts.last);
+    return sb.toString();
+  }
+
+  static int rawToVisualOffset(String text, int rawOffset) {
+    int visual = 0;
+    int cursor = 0;
+    for (final m in _tagRegex.allMatches(text)) {
+      if (m.start >= rawOffset) break;
+      final segEnd = m.start < rawOffset ? m.start : rawOffset;
+      visual += segEnd - cursor;
+      cursor = m.end;
+    }
+    if (cursor < rawOffset) visual += rawOffset - cursor;
+    return visual;
+  }
+
+  /// Raw offset of the [visualOffset]-th visible character in [text].
+  /// Returns [text.length] when [visualOffset] exceeds the visible char count.
+  static int visualToRawOffset(String text, int visualOffset) {
+    int visual = 0;
+    int cursor = 0;
+    for (final m in _tagRegex.allMatches(text)) {
+      if (m.start > cursor) {
+        final segLen = m.start - cursor;
+        if (visual + segLen >= visualOffset) {
+          return cursor + (visualOffset - visual);
+        }
+        visual += segLen;
+      }
+      cursor = m.end;
+    }
+    if (cursor < text.length) {
+      final segLen = text.length - cursor;
+      if (visual + segLen >= visualOffset) {
+        return cursor + (visualOffset - visual);
+      }
+    }
+    return text.length;
   }
 
   static Color? _parseHex(String raw) {
@@ -169,13 +310,18 @@ class MarkupController extends TextEditingController {
     TextSelection renderSelection;
     if (isGlobalSelected) {
       renderSelection = TextSelection(baseOffset: 0, extentOffset: src.length);
-    } else if (externalSelection != null && !externalSelection!.isCollapsed) {
-      // Normalize RTL selection where base > extent
+    } else if (externalSelection != null) {
+      // externalSelection is authoritative whenever it is set:
+      //   - range  → show amber highlight for that range
+      //   - collapsed (offset: 0) → suppress all highlight (block is outside
+      //     the global selection range). Do NOT fall through to the native
+      //     controller.selection, which may hold a stale range from a prior
+      //     user gesture and would leak an amber highlight.
       final s = externalSelection!.start;
       final e = externalSelection!.end;
       renderSelection = TextSelection(baseOffset: s, extentOffset: e);
     } else {
-      // Use native selection, normalized
+      // null → not in global-selection mode; show native cursor/selection.
       final s = selection.start.clamp(0, src.length);
       final e = selection.end.clamp(0, src.length);
       renderSelection = TextSelection(baseOffset: s, extentOffset: e);
@@ -211,20 +357,23 @@ class MarkupController extends TextEditingController {
           renderSelection.end > start &&
           renderSelection.start < end;
       if (!hasSelection) {
-        children.add(TextSpan(text: src.substring(start, end), style: baseStyle));
+        children
+            .add(TextSpan(text: src.substring(start, end), style: baseStyle));
         return;
       }
       final selStart = renderSelection.start.clamp(start, end);
       final selEnd = renderSelection.end.clamp(start, end);
       if (selStart > start) {
-        children.add(TextSpan(text: src.substring(start, selStart), style: baseStyle));
+        children.add(
+            TextSpan(text: src.substring(start, selStart), style: baseStyle));
       }
       children.add(TextSpan(
         text: src.substring(selStart, selEnd),
         style: baseStyle.copyWith(backgroundColor: _selectionBg),
       ));
       if (selEnd < end) {
-        children.add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
+        children
+            .add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
       }
     }
 

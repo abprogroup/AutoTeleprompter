@@ -1,5 +1,28 @@
 ﻿iOS Windows-Parity Handoff
 
+Android parity implementation note - 2026-05-04:
+
+- Platform_Android has been brought onto the tested Windows/iOS parity track
+  using Windows v4.1.13 / Windows `385911e` and iOS v4.1.8 behavior as the
+  behavioral authority. macOS was used only as a compiled split-file scaffold.
+- Android editor/presenter runtime is now split into smaller ownership files
+  under the same V5-safe rule used by Windows/iOS: no active Dart file under
+  `Platform_Android/lib` should exceed 800 lines.
+- Implemented parity areas: multi-block selection/clipboard structure,
+  rich internal clipboard guard, text-flow `»` bookmarks with metadata rebuild,
+  editor/presenter search toolbars with whole-word matching, presenter resume
+  semantics, visible skip/default 5-word recovery contracts, markup-safe
+  import/export services, settings/provider metadata parity, and bookmark-safe
+  history rebuild.
+- Android-specific exclusions remain active: Whisper is removed/deferred from
+  active `lib`, Android keeps `speech_to_text` / `SttAndroidAdapter`, and no
+  Windows WebView2 STT, Windows mic selector, speech-pack dialogs, `setx`, or
+  Windows settings actions may be ported into Android.
+- Verification on the Windows workstation: Android analyzer exits with no hard
+  errors and active Dart line counts are under 800. Local APK build is blocked
+  on this machine because no Android SDK is installed; the GitHub Android
+  workflow remains the APK artifact authority.
+
 Goal: port verified Windows v4 behavior into Platform_iOS surgically. Work only inside Platform_iOS/, relevant _agent/mvp/Platform_iOS/*.md, MASTER_TODO_V4.md, and DAILY_LOG.md. Do not touch other platform folders.
 
 Before editing:

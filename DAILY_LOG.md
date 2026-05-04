@@ -1685,3 +1685,28 @@
   --no-fatal-warnings` passes with existing warnings/infos and no compile
   errors. Line-count check reports no Dart files over 800 lines. Final diff
   and scope checks pending.
+
+## 2026-05-04 - Android User-Tested Parity Port
+
+- **Scope**: Brought `Platform_Android` onto the tested Windows/iOS parity
+  track using Windows v4.1.13 / Windows `385911e` and iOS v4.1.8 as behavior
+  authority. macOS was used only as a split-file scaffold.
+- **Runtime Split**: Android editor/presenter files were split into feature
+  parts for build, load, file-present, history, styling, selection/clipboard,
+  bookmarks, search, keyboard, presenter build, control bar, settings, manual
+  scroll, STT session, bookmarks/search, and alignment helpers.
+- **Parity Features**: Added rich internal clipboard guard, text-flow `»`
+  bookmark model, bookmark metadata rebuild/sync, editor/presenter search
+  toolbars with whole-word matching, presenter resume semantics, visible skip
+  contracts, markup-safe import/export services, and shared settings/provider
+  metadata behavior.
+- **Android Exclusions**: Removed active Whisper runtime references from the
+  Android provider and archived Whisper outside active `lib`. Android keeps
+  `speech_to_text` / `SttAndroidAdapter` and does not receive Windows WebView2,
+  Windows mic selector, Windows speech-pack dialogs, `setx`, or Windows
+  settings actions.
+- **Verification Status**: Android analyzer exits with no hard errors; active
+  Dart file line counts are under 800; `git diff --check` passes for Android
+  runtime files. Local APK build is blocked on this workstation because no
+  Android SDK is installed, so the GitHub Android workflow is the APK build
+  authority.

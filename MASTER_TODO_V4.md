@@ -784,3 +784,13 @@
   `Missing features from Windows and IOS development to implement all platforms.md`
   with Windows W21-W27 and the macOS parity-port status for future platform
   agents.
+
+## 2026-05-04 Android Parity Port
+- [P] **Android Windows/iOS parity implementation**: `Platform_Android` now
+  mirrors the tested Windows v4.1.13 / iOS v4.1.8 contracts for split editor
+  architecture, multi-block selection/clipboard, text-flow `»` bookmarks,
+  editor/presenter search toolbars with whole-word matching, presenter resume,
+  STT skip contracts, markup-safe import/export, and bookmark-safe history.
+  Analyzer has no hard errors and all active Android Dart files are below 800
+  lines. Local APK build is blocked by missing Android SDK on this workstation;
+  GitHub Android workflow verification is required.

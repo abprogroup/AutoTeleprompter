@@ -12,11 +12,15 @@ class SttAndroidAdapter extends AbstractSttService {
     _inner.onResult = (r) => onResult?.call(r);
     _inner.onStatusChange = (s) => onStatusChange?.call(s);
     _inner.onError = (e) => onError?.call(e);
-    _inner.onLanguageUnavailable = (locale) => onNeedLanguagePack?.call(locale);
+    _inner.onLanguageUnavailable = (locale) {
+      onLanguageUnavailable?.call(locale);
+      onNeedLanguagePack?.call(locale);
+    };
   }
 
   @override
-  Future<void> start({String? localeId}) => _inner.start(localeId: localeId);
+  Future<SpeechStartResult> start({String? localeId}) =>
+      _inner.start(localeId: localeId);
 
   @override
   Future<void> stop() => _inner.stop();

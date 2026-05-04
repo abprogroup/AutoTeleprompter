@@ -117,5 +117,28 @@ void main() {
         isTrue,
       );
     });
+
+    test('strict mode uses visible window even when visible skip toggle is off',
+        () {
+      expect(
+        TeleprompterNotifier.resolveVisibleSkipTarget(
+          visibleSkipEnabled: false,
+          strictBulletMode: true,
+          visibleWordStart: 10,
+          visibleWordEnd: 40,
+        ),
+        40,
+      );
+
+      expect(
+        TeleprompterNotifier.resolveVisibleSkipTarget(
+          visibleSkipEnabled: false,
+          strictBulletMode: false,
+          visibleWordStart: 10,
+          visibleWordEnd: 40,
+        ),
+        isNull,
+      );
+    });
   });
 }

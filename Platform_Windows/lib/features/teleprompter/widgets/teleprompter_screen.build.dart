@@ -215,12 +215,12 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Tooltip(
-                        message: 'Delete bookmark',
+                        message: 'Bookmark',
                         child: GestureDetector(
                           behavior: HitTestBehavior.translucent,
                           onTap: speechActive
                               ? null
-                              : () => _deletePresenterBookmark(i),
+                              : () => _tapPresenterBookmarkMarker(i),
                           child: Padding(
                             padding: EdgeInsets.symmetric(
                               horizontal: effectiveFontSize * 0.06,

@@ -877,3 +877,10 @@
   remain blocked to avoid false positives.
 - [P] **Version / Workflow**: Windows metadata is advanced to `4.1.14+14` and
   the Windows workflow title is `Build Windows EXE (v4.1.14)`.
+- [P] **Windows Presenter Follow-Up**: Presenter bookmark markers are no
+  longer one-click delete controls. A marker tap selects that bookmark position;
+  deletion remains available only through the explicit bottom-toolbar Remove
+  Bookmark command. Windows presenter controls also remain visible to avoid
+  accidental tap-to-show-toolbar jumps, and strict bullet/header STT treats the
+  visible window as its phrase target even when the separate visible-skip toggle
+  is off.

@@ -105,6 +105,13 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   void _scheduleHideControls() {
+    if (Platform.isWindows) {
+      _hideControlsTimer?.cancel();
+      if (mounted && !_controlsVisible) {
+        setState(() => _controlsVisible = true);
+      }
+      return;
+    }
     _hideControlsTimer?.cancel();
     _hideControlsTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _controlsVisible = false);
@@ -297,7 +304,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   void _showControls() {
     setState(() => _controlsVisible = true);
-    _scheduleHideControls();
+    if (!Platform.isWindows) _scheduleHideControls();
   }
 
   Future<void> _requestAndStart() async {

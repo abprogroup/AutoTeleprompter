@@ -145,10 +145,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
     final strictBulletMode = settings.sttStrictBulletMode;
-    final maxSkipTargetIndex =
-        settings.sttVisibleSkipEnabled && _visibleWordStart != null
-            ? _visibleWordEnd
-            : null;
+    final maxSkipTargetIndex = resolveVisibleSkipTarget(
+      visibleSkipEnabled: settings.sttVisibleSkipEnabled,
+      strictBulletMode: strictBulletMode,
+      visibleWordStart: _visibleWordStart,
+      visibleWordEnd: _visibleWordEnd,
+    );
 
     final aligned = WordAligner.align(
       script: script.words,
@@ -358,6 +360,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (strictBulletMode) return false;
     if (skipThreshold <= 0) return false;
     return noProgressCount >= skipThreshold;
+  }
+
+  static int? resolveVisibleSkipTarget({
+    required bool visibleSkipEnabled,
+    required bool strictBulletMode,
+    required int? visibleWordStart,
+    required int? visibleWordEnd,
+  }) {
+    if (!(visibleSkipEnabled || strictBulletMode)) return null;
+    if (visibleWordStart == null) return null;
+    return visibleWordEnd;
   }
 
   static bool visibleTranscriptPlausiblyMatchesLocale({
@@ -662,7 +675,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     String heard,
   ) {
     if (_useWhisper || _disposed || _sessionStopped) return false;
-    if (!settings.sttVisibleSkipEnabled || heard.trim().isEmpty) return false;
+    if (!(settings.sttVisibleSkipEnabled || settings.sttStrictBulletMode) ||
+        heard.trim().isEmpty) {
+      return false;
+    }
     if (_visibleWordStart == null || _visibleWordEnd == null) return false;
     if (_visibleLocaleAssistPinActive()) return false;
     if (_sectionLocales.length != script.words.length) {

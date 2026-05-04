@@ -1836,3 +1836,15 @@
   phrase jumps.
 - Added targeted Windows tests for strict bullet/header alignment and preserved
   the existing visible-skip regression tests.
+
+### 2026-05-05 - Windows Presenter Follow-Up
+
+- Presenter bookmark markers no longer delete bookmarks on a simple click.
+  Clicking a marker now selects/jumps to that bookmark position; deletion stays
+  behind the explicit bottom-toolbar Remove Bookmark command.
+- Windows presenter controls now stay visible instead of auto-hiding, avoiding
+  accidental text-position jumps when the user only wants the bottom toolbar.
+- Strict bullet/header STT now uses the current visible window as its allowed
+  phrase target even if the separate visible-skip toggle is off, so it can
+  re-lock onto a visible row after improvised speech while still blocking
+  guessed single-word jumps.

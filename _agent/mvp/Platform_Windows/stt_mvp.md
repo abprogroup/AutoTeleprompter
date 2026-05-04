@@ -267,6 +267,11 @@ owns how confirmed indices are rendered after STT produces results.
 - Strict mode still permits deliberate next-word progress and confirmed
   multi-word visible-window phrase/sequence jumps, including Hebrew phrases.
 - Large single-word visible jumps remain blocked even in strict mode.
+- Strict mode uses the presenter visible word window as its allowed phrase
+  target even when the separate `Allow visible text skip` toggle is off. This
+  keeps bullet/header prompting recoverable after improvisation, but still
+  requires confirmed phrase/sequence evidence and never enables large
+  single-word jumps.
 
 ### 2026-05-04 Regression Repair Addendum
 

@@ -17,7 +17,9 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity: FlutterActivity() {
     private val androidFilesChannel = "autoteleprompter/android_files"
     private val exportFolderRequestCode = 41013
+    private val exportFileRequestCode = 41014
     private var pendingExportFolderResult: MethodChannel.Result? = null
+    private var pendingExportFileResult: MethodChannel.Result? = null
     private val appExportRelativePath = "${Environment.DIRECTORY_DOCUMENTS}/AutoTeleprompter/"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -97,6 +99,37 @@ class MainActivity: FlutterActivity() {
                         result.success(created?.toString())
                     } catch (_: Exception) {
                         result.success(null)
+                    }
+                }
+                "createExportFile" -> {
+                    val displayName = call.argument<String>("displayName")
+                    val mimeType = call.argument<String>("mimeType")
+                    if (displayName.isNullOrBlank() || mimeType.isNullOrBlank()) {
+                        result.success(null)
+                        return@setMethodCallHandler
+                    }
+                    if (pendingExportFileResult != null) {
+                        result.error(
+                            "export_file_pending",
+                            "An export file picker is already open.",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        pendingExportFileResult = result
+                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = mimeType
+                            putExtra(Intent.EXTRA_TITLE, displayName)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                        }
+                        startActivityForResult(intent, exportFileRequestCode)
+                    } catch (e: Exception) {
+                        pendingExportFileResult = null
+                        result.error("export_file_picker_failed", e.message, null)
                     }
                 }
                 "listDefaultExportFolder" -> {
@@ -296,6 +329,36 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == exportFileRequestCode) {
+            val pending = pendingExportFileResult
+            pendingExportFileResult = null
+            if (pending == null) {
+                super.onActivityResult(requestCode, resultCode, data)
+                return
+            }
+            if (resultCode != Activity.RESULT_OK || data?.data == null) {
+                pending.success(null)
+                return
+            }
+
+            val fileUri = data.data!!
+            val requestedFlags =
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            val grantedFlags = data.flags and requestedFlags
+            try {
+                contentResolver.takePersistableUriPermission(
+                    fileUri,
+                    if (grantedFlags != 0) grantedFlags else requestedFlags
+                )
+            } catch (_: Exception) {
+                // Some document providers grant a one-shot write URI only. The
+                // immediate save can still proceed, but future Replace may need
+                // the provider to grant persistent access.
+            }
+            pending.success(fileUri.toString())
+            return
+        }
+
         if (requestCode == exportFolderRequestCode) {
             val pending = pendingExportFolderResult
             pendingExportFolderResult = null

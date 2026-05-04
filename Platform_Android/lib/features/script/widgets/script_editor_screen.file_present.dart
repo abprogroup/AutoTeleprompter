@@ -116,74 +116,48 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     final baseName =
         ExportNameService.sanitizeBaseName(_currentTitle, normalizedFormat);
-    final treeUri = await AndroidFileAccess.pickExportFolder();
-    if (!mounted) return;
-    if (treeUri == null || treeUri.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Save cancelled.'),
-          backgroundColor: Colors.black54,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    if (!await AndroidFileAccess.hasPersistedExportFolder(treeUri)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Android did not grant write access to that folder.',
-          ),
-          backgroundColor: Colors.red[800],
-          duration: const Duration(seconds: 5),
-        ),
-      );
-      return;
-    }
-    await ExportFolderRegistry.save(treeUri);
-
-    final folderExports = await AndroidFileAccess.listExportFolder(treeUri);
+    final savedExports = await SavedExportRegistry.load();
     final exactDisplayName =
         ExportNameService.buildDisplayName(baseName, normalizedFormat);
-    final exactFolderExport =
-        _findDeviceExportByDisplayName(folderExports, exactDisplayName);
+    final exactSavedExport = SavedExportRegistry.findExact(
+      entries: savedExports,
+      baseName: baseName,
+      format: normalizedFormat,
+    );
     final existingDisplayNames = <String>{
-      ...folderExports.map((e) => e.displayName),
+      ...savedExports
+          .where((entry) => ExportNameService.belongsToBaseName(
+                displayName: entry.displayName,
+                baseName: baseName,
+                format: normalizedFormat,
+              ))
+          .map((entry) => entry.displayName),
     };
 
-    if (exactFolderExport != null && mounted) {
+    var fileName = exactDisplayName;
+    if (exactSavedExport != null && mounted) {
       final choice = await _showExportConflictDialog(
-        exactFolderExport.displayName,
-        message: '"${exactFolderExport.displayName}" already exists in the '
-            'selected folder.',
+        exactSavedExport.displayName,
+        message: '"${exactSavedExport.displayName}" was saved before by '
+            'AutoTeleprompter.',
       );
       if (!mounted || choice == _ExportConflictChoice.cancel) return;
       if (choice == _ExportConflictChoice.replace) {
         await _writeAndroidExport(
-          SavedExportEntry(
-            baseName: baseName,
-            format: normalizedFormat,
-            displayName: exactFolderExport.displayName,
-            location: exactFolderExport.location,
-          ),
+          exactSavedExport,
           bytes,
           replaced: true,
         );
         return;
       }
+      fileName = ExportNameService.nextDuplicateDisplayName(
+        baseName: baseName,
+        format: normalizedFormat,
+        existingDisplayNames: existingDisplayNames,
+      );
     }
 
-    final fileName = exactFolderExport != null
-        ? ExportNameService.nextDuplicateDisplayName(
-            baseName: baseName,
-            format: normalizedFormat,
-            existingDisplayNames: existingDisplayNames,
-          )
-        : ExportNameService.buildDisplayName(baseName, normalizedFormat);
-
-    final createdLocation = await AndroidFileAccess.createExportDocument(
-      treeUri: treeUri,
+    final createdLocation = await AndroidFileAccess.createExportFile(
       displayName: fileName,
       mimeType: ExportNameService.mimeTypeForFormat(normalizedFormat),
     );
@@ -202,21 +176,49 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       return;
     }
 
-    final locationHint = AndroidFileAccess.displayNameHintFromLocation(
-      createdLocation,
-    );
-    final finalName =
+    var finalLocation = createdLocation;
+    final locationHint =
+        AndroidFileAccess.displayNameHintFromLocation(finalLocation);
+    var finalName =
         await AndroidFileAccess.displayNameForLocation(createdLocation) ??
             locationHint;
+    final repairedName = ExportNameService.repairBrokenDuplicateSuffix(
+      finalName,
+      normalizedFormat,
+    );
+    if (repairedName != finalName) {
+      final renamedLocation = await AndroidFileAccess.rename(
+        finalLocation,
+        repairedName,
+      );
+      if (renamedLocation == null || renamedLocation.trim().isEmpty) {
+        await AndroidFileAccess.deleteDocument(finalLocation);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Android created "$finalName", which breaks the file extension. '
+              'The file was not saved. Try Keep Both with a different name in '
+              'the save picker.',
+            ),
+            backgroundColor: Colors.orange[800],
+            duration: const Duration(seconds: 7),
+          ),
+        );
+        return;
+      }
+      finalLocation = renamedLocation;
+      finalName =
+          await AndroidFileAccess.displayNameForLocation(finalLocation) ??
+              repairedName;
+    }
 
-    if (finalName.trim() != fileName ||
-        !ExportNameService.hasExpectedExtension(finalName, normalizedFormat)) {
-      await AndroidFileAccess.deleteDocument(createdLocation);
+    if (!ExportNameService.hasExpectedExtension(finalName, normalizedFormat)) {
+      await AndroidFileAccess.deleteDocument(finalLocation);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'The storage provider created "$finalName" instead of "$fileName". '
-            'The file was not saved so duplicates stay extension-safe.',
+            'Android created "$finalName" without the .$normalizedFormat '
+            'extension. The file was not saved.',
           ),
           backgroundColor: Colors.orange[800],
           duration: const Duration(seconds: 7),
@@ -230,7 +232,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         baseName: baseName,
         format: normalizedFormat,
         displayName: finalName,
-        location: createdLocation,
+        location: finalLocation,
       ),
       bytes,
     );
@@ -267,19 +269,6 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       ),
     );
     return result ?? _ExportConflictChoice.cancel;
-  }
-
-  AndroidDocumentEntry? _findDeviceExportByDisplayName(
-    List<AndroidDocumentEntry> entries,
-    String displayName,
-  ) {
-    final expected = displayName.toLowerCase().trim();
-    for (final entry in entries) {
-      if (entry.displayName.toLowerCase().trim() == expected) {
-        return entry;
-      }
-    }
-    return null;
   }
 
   Future<void> _writeAndroidExport(

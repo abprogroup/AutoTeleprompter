@@ -138,6 +138,25 @@ class AndroidFileAccess {
     }
   }
 
+  static Future<String?> createExportFile({
+    required String displayName,
+    required String mimeType,
+  }) async {
+    if (displayName.trim().isEmpty || mimeType.trim().isEmpty) return null;
+    try {
+      final value = await _channel.invokeMethod<String>(
+        'createExportFile',
+        {
+          'displayName': displayName,
+          'mimeType': mimeType,
+        },
+      );
+      return value?.trim().isEmpty == true ? null : value;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<List<AndroidDocumentEntry>> listDefaultExportFolder() async {
     try {
       final raw = await _channel.invokeMethod<List<dynamic>>(

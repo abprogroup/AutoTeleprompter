@@ -5,6 +5,8 @@ import android.content.ContentValues
 import android.content.ContentUris
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -16,6 +18,7 @@ class MainActivity: FlutterActivity() {
     private val androidFilesChannel = "autoteleprompter/android_files"
     private val exportFolderRequestCode = 41013
     private var pendingExportFolderResult: MethodChannel.Result? = null
+    private val appExportRelativePath = "${Environment.DIRECTORY_DOCUMENTS}/AutoTeleprompter/"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -96,6 +99,35 @@ class MainActivity: FlutterActivity() {
                         result.success(null)
                     }
                 }
+                "listDefaultExportFolder" -> {
+                    try {
+                        result.success(listMediaStoreExportFolder())
+                    } catch (_: Exception) {
+                        result.success(emptyList<Map<String, String>>())
+                    }
+                }
+                "createDefaultExportDocument" -> {
+                    val displayName = call.argument<String>("displayName")
+                    val mimeType = call.argument<String>("mimeType")
+                    if (displayName.isNullOrBlank() || mimeType.isNullOrBlank()) {
+                        result.success(null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val values = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                put(MediaStore.MediaColumns.RELATIVE_PATH, appExportRelativePath)
+                                put(MediaStore.MediaColumns.IS_PENDING, 1)
+                            }
+                        }
+                        val created = contentResolver.insert(mediaStoreFilesUri(), values)
+                        result.success(created?.toString())
+                    } catch (_: Exception) {
+                        result.success(null)
+                    }
+                }
                 "deleteDocument" -> {
                     val uriValue = call.argument<String>("uri")
                     if (uriValue.isNullOrBlank()) {
@@ -110,7 +142,12 @@ class MainActivity: FlutterActivity() {
                             )
                         )
                     } catch (_: Exception) {
-                        result.success(false)
+                        try {
+                            val deleted = contentResolver.delete(Uri.parse(uriValue), null, null)
+                            result.success(deleted > 0)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
                     }
                 }
                 "writeBytesToUri" -> {
@@ -127,6 +164,16 @@ class MainActivity: FlutterActivity() {
                             } else {
                                 stream.write(bytes)
                                 stream.flush()
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    try {
+                                        val values = ContentValues().apply {
+                                            put(MediaStore.MediaColumns.IS_PENDING, 0)
+                                        }
+                                        contentResolver.update(Uri.parse(uriValue), values, null, null)
+                                    } catch (_: Exception) {
+                                        // Non-MediaStore providers do not support IS_PENDING.
+                                    }
+                                }
                                 result.success(true)
                             }
                         }
@@ -315,6 +362,63 @@ class MainActivity: FlutterActivity() {
                     mapOf(
                         "displayName" to displayName,
                         "uri" to documentUri.toString(),
+                        "mimeType" to if (mimeIndex >= 0) {
+                            cursor.getString(mimeIndex) ?: ""
+                        } else {
+                            ""
+                        }
+                    )
+                )
+            }
+        }
+        return entries
+    }
+
+    private fun mediaStoreFilesUri(): Uri {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Files.getContentUri("external")
+        }
+    }
+
+    private fun listMediaStoreExportFolder(): List<Map<String, String>> {
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE
+        )
+        val entries = mutableListOf<Map<String, String>>()
+        val selection: String?
+        val args: Array<String>?
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            selection = "${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+            args = arrayOf(appExportRelativePath)
+        } else {
+            selection = null
+            args = null
+        }
+
+        contentResolver.query(
+            mediaStoreFilesUri(),
+            projection,
+            selection,
+            args,
+            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        ).use { cursor ->
+            if (cursor == null) return entries
+            val idIndex = cursor.getColumnIndex(MediaStore.MediaColumns._ID)
+            val nameIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
+            while (cursor.moveToNext()) {
+                if (idIndex < 0 || nameIndex < 0) continue
+                val displayName = cursor.getString(nameIndex) ?: continue
+                val id = cursor.getLong(idIndex)
+                val uri = ContentUris.withAppendedId(mediaStoreFilesUri(), id)
+                entries.add(
+                    mapOf(
+                        "displayName" to displayName,
+                        "uri" to uri.toString(),
                         "mimeType" to if (mimeIndex >= 0) {
                             cursor.getString(mimeIndex) ?: ""
                         } else {

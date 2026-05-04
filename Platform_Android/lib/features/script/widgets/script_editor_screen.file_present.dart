@@ -116,10 +116,8 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     final baseName =
         ExportNameService.sanitizeBaseName(_currentTitle, normalizedFormat);
-    final treeUri = await _ensureAndroidExportFolder();
-    if (!mounted || treeUri == null) return;
 
-    final folderExports = await AndroidFileAccess.listExportFolder(treeUri);
+    final folderExports = await AndroidFileAccess.listDefaultExportFolder();
     final exactDisplayName =
         ExportNameService.buildDisplayName(baseName, normalizedFormat);
     final exactFolderExport =
@@ -131,9 +129,8 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     if (exactFolderExport != null && mounted) {
       final choice = await _showExportConflictDialog(
         exactFolderExport.displayName,
-        message:
-            '"${exactFolderExport.displayName}" already exists in the export '
-            'folder.',
+        message: '"${exactFolderExport.displayName}" already exists in '
+            'Documents/AutoTeleprompter.',
       );
       if (!mounted || choice == _ExportConflictChoice.cancel) return;
       if (choice == _ExportConflictChoice.replace) {
@@ -159,8 +156,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           )
         : ExportNameService.buildDisplayName(baseName, normalizedFormat);
 
-    final createdLocation = await AndroidFileAccess.createExportDocument(
-      treeUri: treeUri,
+    final createdLocation = await AndroidFileAccess.createDefaultExportDocument(
       displayName: fileName,
       mimeType: ExportNameService.mimeTypeForFormat(normalizedFormat),
     );
@@ -170,7 +166,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not create "$fileName". Choose another export folder.',
+            'Could not create "$fileName" in Documents/AutoTeleprompter.',
           ),
           backgroundColor: Colors.red[800],
           duration: const Duration(seconds: 5),
@@ -193,7 +189,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         SnackBar(
           content: Text(
             'The storage provider created "$finalName" instead of "$fileName". '
-            'Choose another export folder so duplicates stay extension-safe.',
+            'The file was not saved so duplicates stay extension-safe.',
           ),
           backgroundColor: Colors.orange[800],
           duration: const Duration(seconds: 7),
@@ -259,76 +255,6 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     return null;
   }
 
-  Future<String?> _ensureAndroidExportFolder() async {
-    final stored = await ExportFolderRegistry.load();
-    if (stored != null &&
-        await AndroidFileAccess.hasPersistedExportFolder(stored)) {
-      return stored;
-    }
-
-    if (stored != null) {
-      await ExportFolderRegistry.clear();
-    }
-
-    if (!mounted) return null;
-    final choose = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          'Choose export folder',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Choose a folder once so AutoTeleprompter can replace files or '
-          'create extension-safe copies such as "script (1).rtf".',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Choose Folder'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || choose != true) return null;
-
-    final picked = await AndroidFileAccess.pickExportFolder();
-    if (!mounted) return null;
-    if (picked == null || picked.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Export folder selection cancelled.'),
-          backgroundColor: Colors.black54,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return null;
-    }
-
-    if (!await AndroidFileAccess.hasPersistedExportFolder(picked)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Android did not grant persistent write access to that folder.',
-          ),
-          backgroundColor: Colors.red[800],
-          duration: const Duration(seconds: 5),
-        ),
-      );
-      return null;
-    }
-
-    await ExportFolderRegistry.save(picked);
-    return picked;
-  }
-
   Future<void> _writeAndroidExport(
     SavedExportEntry entry,
     Uint8List bytes, {
@@ -346,7 +272,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         SnackBar(
           content: Text(
             'Could not ${replaced ? 'replace' : 'save'} '
-            '"${entry.displayName}". Choose another export folder.',
+            '"${entry.displayName}" in Documents/AutoTeleprompter.',
           ),
           backgroundColor: Colors.red[800],
           duration: const Duration(seconds: 5),

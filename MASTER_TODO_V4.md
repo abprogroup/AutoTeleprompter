@@ -850,8 +850,9 @@
 - [P] **Android release APK workflow**: Android workflow now builds release
   split-per-ABI APKs (`arm64-v8a`, `armeabi-v7a`) instead of uploading the huge
   debug APK with `kernel_blob.bin` and validation assets.
-- [P] **Android SAF export folder authority**: Android export now uses a
-  persistent user-chosen folder instead of the system save sheet. The app lists
-  the folder first, asks Replace / Keep Both / Cancel before writing, and
-  creates extension-safe duplicates like `name (1).rtf` without allowing
-  Android to create `name.rtf (1)`.
+- [P] **Android MediaStore export folder authority**: Android export now writes
+  to `Documents/AutoTeleprompter` through MediaStore instead of the system save
+  sheet or restricted folder picker. The app lists existing exports first, asks
+  Replace / Keep Both / Cancel before writing, and creates extension-safe
+  duplicates like `name (1).rtf` without allowing Android to create
+  `name.rtf (1)`.

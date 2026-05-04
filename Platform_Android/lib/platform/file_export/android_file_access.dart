@@ -138,6 +138,42 @@ class AndroidFileAccess {
     }
   }
 
+  static Future<List<AndroidDocumentEntry>> listDefaultExportFolder() async {
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>(
+        'listDefaultExportFolder',
+      );
+      if (raw == null) return const [];
+      return raw
+          .whereType<Map<dynamic, dynamic>>()
+          .map(AndroidDocumentEntry.fromMap)
+          .where((entry) =>
+              entry.displayName.isNotEmpty && entry.location.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<String?> createDefaultExportDocument({
+    required String displayName,
+    required String mimeType,
+  }) async {
+    if (displayName.trim().isEmpty || mimeType.trim().isEmpty) return null;
+    try {
+      final value = await _channel.invokeMethod<String>(
+        'createDefaultExportDocument',
+        {
+          'displayName': displayName,
+          'mimeType': mimeType,
+        },
+      );
+      return value?.trim().isEmpty == true ? null : value;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<bool> deleteDocument(String location) async {
     if (!isContentUri(location)) {
       try {

@@ -43,12 +43,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
-        ndk {
-            // arm64-v8a covers all Android phones since ~2017.
-            // armeabi-v7a kept for older devices (pre-2017, 32-bit).
-            // x86_64 (emulator only) excluded to halve APK size.
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
-        }
     }
 
     buildTypes {

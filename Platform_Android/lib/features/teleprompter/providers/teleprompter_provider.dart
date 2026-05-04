@@ -39,7 +39,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _visibleLocaleAssistPinnedLocale;
   String? _pendingVisibleLocaleAssistLocale;
 
-  // â”€â”€ Tuning: how patient we are before force-skipping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Tuning: how patient we are before force-skipping.
   static const int _googleSkipAfterStuck = 45;
   static const int _maxAdvancePerUpdate = 30;
   static const int _visibleLocaleAssistAfterWaits = 1;
@@ -110,24 +110,24 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
       // Voice Commands
       if (words.contains('stop prompt') ||
-          words.contains('×¢×¦×•×¨') ||
-          words.contains('×¢×¦×™×¨×”')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: STOP');
+          words.contains('עצור') ||
+          words.contains('עצירה')) {
+        _addDebugLog('[VOICE] COMMAND: STOP');
         ref.read(settingsProvider.notifier).setScrollSpeed(0);
         return;
-      } else if (words.contains('start prompt') || words.contains('×‘×•×')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: START');
+      } else if (words.contains('start prompt') || words.contains('בוא')) {
+        _addDebugLog('[VOICE] COMMAND: START');
         if (settings.scrollSpeed == 0)
           ref.read(settingsProvider.notifier).setScrollSpeed(100);
         return;
-      } else if (words.contains('speed up') || words.contains('×ž×”×¨')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: FASTER');
+      } else if (words.contains('speed up') || words.contains('מהר')) {
+        _addDebugLog('[VOICE] COMMAND: FASTER');
         ref
             .read(settingsProvider.notifier)
             .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
         return;
-      } else if (words.contains('slow down') || words.contains('×œ××˜')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: SLOWER');
+      } else if (words.contains('slow down') || words.contains('לאט')) {
+        _addDebugLog('[VOICE] COMMAND: SLOWER');
         ref
             .read(settingsProvider.notifier)
             .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
@@ -160,7 +160,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             .join(' ')
         : '<END>';
 
-    const engineTag = 'ðŸŽ¤';
+    const engineTag = '[STT]';
     final skipThreshold = _effectiveSkipThreshold();
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
@@ -175,7 +175,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       final advancedWord =
           target < script.words.length ? script.words[target].raw : '?';
       _addDebugLog(
-          '$engineTag âœ… ADVANCE â†’ #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
+          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
 
       // Fluid advancement: if jumping more than 3 words, animate
       // through intermediate words so the user's eye can follow.
@@ -185,14 +185,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _fluidAdvanceTimer?.cancel();
         _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
       } else {
-        // Large jump â€” advance word by word with short delays
+        // Large jump - advance word by word with short delays.
         _startFluidAdvance(target, script);
       }
       _syncLocaleForPosition(script, target + 1, reason: 'advance');
     } else {
       _noProgressCount++;
       _addDebugLog(
-          '$engineTag â¸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
+          '$engineTag WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
       _checkAndSwitchLocale();
 
       if (_maybeAssistVisibleLocale(script, settings, result.words)) {
@@ -205,7 +205,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         if (next != null) {
           final skippedWord = script.words[next].raw;
           _addDebugLog(
-              'ðŸ¤– â­ FORCE SKIP â†’ #$next "$skippedWord" (stuck too long)');
+              '[STT] FORCE SKIP -> #$next "$skippedWord" (stuck too long)');
           _resetVisibleLocaleAssist();
           _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
           _syncLocaleForPosition(script, next + 1, reason: 'force skip');
@@ -252,7 +252,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         }
       }
       _addDebugLog(
-          'ðŸŽ™ï¸ Selected microphone was not found; using system default input.');
+          '[STT] Selected microphone was not found; using system default input.');
     };
 
     _sttService.onStatusChange = (status) {
@@ -262,7 +262,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       // from resetting isListening=false right after the new session starts.
       if (_startingSession && status != SpeechStatus.listening) return;
       _startingSession = false;
-      _addDebugLog('ðŸŽ¤ [${_sttService.platformName}] STATUS: $status');
+      _addDebugLog('[STT] [${_sttService.platformName}] STATUS: $status');
       _safeSetState((s) => s.copyWith(
             isListening: status == SpeechStatus.listening,
             isStarting: false,
@@ -273,7 +273,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _sttService.onError = (error) {
       if (_disposed || _sessionStopped) return;
-      _addDebugLog('ðŸŽ¤ [${_sttService.platformName}] STT ERROR: $error');
+      _addDebugLog('[STT] [${_sttService.platformName}] ERROR: $error');
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
           error.contains('error_permission') ||
@@ -291,7 +291,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       final langName = SpeechStartResult.languageNameFromLocale(
         _scriptLanguageLocale ?? requestedLocale,
       );
-      _addDebugLog('ðŸŽ¤ [$platform] LANGUAGE UNAVAILABLE: $langName');
+      _addDebugLog('[STT] [$platform] LANGUAGE UNAVAILABLE: $langName');
       _safeSetState((s) => s.copyWith(
             missingLanguage: langName,
             hasError: true,
@@ -308,7 +308,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       if (_disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(locale);
       _addDebugLog(
-          'ðŸŽ¤ [$platform] ALL STT FAILED for $langName â€” internet required');
+          '[STT] [$platform] ALL STT FAILED for $langName - internet required');
       _safeSetState((s) => s.copyWith(
             hasError: true,
             isListening: false,
@@ -454,7 +454,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final token = ++_sessionToken;
     // Compare by sessionId rather than object identity. _startPresenting()
     // always rebuilds the Script object, so identical() always returns false
-    // â€” causing the resume position to reset to 0 on every re-entry. Using
+    // - causing the resume position to reset to 0 on every re-entry. Using
     // sessionId (stable across editor edits of the same session) lets us
     // distinguish "re-entered same session" from "loaded a different script".
     final sameScript = _currentScript != null &&
@@ -485,7 +485,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         missingLanguage: null);
 
     _addDebugLog(
-        'ðŸš€ SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
+        '[STT] SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
     _precomputeSectionLocales(script);
     final localeId = startIndex < _sectionLocales.length
         ? _sectionLocales[startIndex]
@@ -506,7 +506,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
         _addDebugLog(
-            'ðŸ’“ HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
+            '[STT] HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
 
         // Silent-listening detector: STT says listening but no audio level or results received.
         if (listening &&
@@ -517,9 +517,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           if (elapsed.inSeconds >= 10) {
             _silentWarningFired = true;
             _addDebugLog(
-                'ðŸš¨ SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
+                '[STT] SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
             _addDebugLog(
-                'ðŸ‘‰ FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
+                '[STT] FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
             _safeSetState((s) => s.copyWith(
                   statusMessage:
                       'Microphone signal weak or blocked.\n1. Check Privacy Settings -> Microphone.\n2. Ensure "Online Speech Recognition" is enabled.',
@@ -547,10 +547,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             ? 'System default microphone'
             : selectedMicLabel,
       );
-      _addDebugLog('ðŸŽ¤ [$platform] Starting STT locale=$localeId...');
+      _addDebugLog('[STT] [$platform] Starting STT locale=$localeId...');
       _addDebugLog(selectedMicId.isEmpty
-          ? 'ðŸŽ™ï¸ [$platform] Microphone: system default input'
-          : 'ðŸŽ™ï¸ [$platform] Microphone: $selectedMicLabel');
+          ? '[STT] [$platform] Microphone: system default input'
+          : '[STT] [$platform] Microphone: $selectedMicLabel');
       final result = await _sttService.start(localeId: localeId);
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _sttService.stop();
@@ -558,7 +558,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
 
       if (!result.success) {
-        _addDebugLog('ðŸŽ¤ [$platform] STT FAILED: ${result.message}');
+        _addDebugLog('[STT] [$platform] FAILED: ${result.message}');
         _safeSetState((s) => s.copyWith(
               statusMessage: result.message ?? 'Speech recognition failed',
               hasError: true,
@@ -588,12 +588,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
       if (result.languageMissing && result.missingLanguageName != null) {
         _addDebugLog(
-            'âš ï¸ [$platform] LANG MISSING: ${result.missingLanguageName} â€” using ${result.actualLocale}');
+            '[STT] [$platform] LANG MISSING: ${result.missingLanguageName} - using ${result.actualLocale}');
         _safeSetState(
             (s) => s.copyWith(missingLanguage: result.missingLanguageName));
       } else {
         _addDebugLog(
-            'ðŸŽ¤ [$platform] STT using locale: ${result.actualLocale}');
+            '[STT] [$platform] STT using locale: ${result.actualLocale}');
       }
     }
   }
@@ -646,7 +646,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _noProgressCount = 0;
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
-    _addDebugLog('ðŸ”„ POSITION RESET â†’ 0');
+    _addDebugLog('[STT] POSITION RESET -> 0');
     state = state.copyWith(confirmedWordIndex: 0);
     if (!_sessionStopped && _currentScript != null && state.isListening) {
       _syncLocaleForPosition(_currentScript!, 0, reason: 'reset');
@@ -663,7 +663,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(
-        'ðŸ“ POSITION JUMP â†’ #$target "${activeScript.words[target].raw}"');
+        '[STT] POSITION JUMP -> #$target "${activeScript.words[target].raw}"');
     try {
       state = state.copyWith(confirmedWordIndex: target);
     } catch (_) {
@@ -684,8 +684,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       label: normalizedLabel,
     );
     _addDebugLog(normalizedId.isEmpty
-        ? 'ðŸŽ™ï¸ Microphone input set to system default'
-        : 'ðŸŽ™ï¸ Microphone input set to $normalizedLabel');
+        ? '[STT] Microphone input set to system default'
+        : '[STT] Microphone input set to $normalizedLabel');
   }
 
   void setVisibleWordWindow(int? startIndex, int? endIndex) {

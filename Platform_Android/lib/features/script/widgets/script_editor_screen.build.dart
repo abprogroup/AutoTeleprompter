@@ -2,37 +2,36 @@ part of 'script_editor_screen.dart';
 
 extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
   Widget _buildBottomActions({bool keyboardVisible = false}) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 120),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: keyboardVisible ? bottomInset : 0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (keyboardVisible && PlatformKeyboard.showDoneBar)
-            Container(
-              color: const Color(0xFF1C1C1E),
-              height: 44,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      _keyboardDismissedForSelection = true;
-                      FocusScope.of(context).unfocus();
-                    },
-                    child: const Text('Done',
-                        style: TextStyle(
-                            color: Color(0xFFFFBF00),
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600)),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ),
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (keyboardVisible && PlatformKeyboard.showDoneBar)
           Container(
+            color: const Color(0xFF1C1C1E),
+            height: 44,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    _keyboardDismissedForSelection = true;
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: const Text('Done',
+                      style: TextStyle(
+                          color: Color(0xFFFFBF00),
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+        Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Container(
             color: Colors.black,
             padding: const EdgeInsets.only(bottom: 12, top: 8),
             child: Row(
@@ -63,8 +62,8 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
               ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -473,10 +472,7 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                 if (!_isPendingLoad && _hasAnyActiveEditorSelection)
                   Positioned(
                     right: 20,
-                    bottom: (keyboardVisible
-                            ? MediaQuery.of(context).viewInsets.bottom
-                            : 0) +
-                        86,
+                    bottom: 24,
                     child: _buildAppSelectionToolbar(),
                   ),
                 if (_isPendingLoad)

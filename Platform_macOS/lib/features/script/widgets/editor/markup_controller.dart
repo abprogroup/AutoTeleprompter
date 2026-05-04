@@ -58,7 +58,8 @@ class MarkupController extends TextEditingController {
 
     if (newText != oldText) {
       int prefix = 0;
-      final minLen = oldText.length < newText.length ? oldText.length : newText.length;
+      final minLen =
+          oldText.length < newText.length ? oldText.length : newText.length;
       while (prefix < minLen &&
           oldText.codeUnitAt(prefix) == newText.codeUnitAt(prefix)) {
         prefix++;
@@ -110,7 +111,8 @@ class MarkupController extends TextEditingController {
           }
         }
         if (victim != null) {
-          newText = oldText.substring(0, victim) + oldText.substring(victim + 1);
+          newText =
+              oldText.substring(0, victim) + oldText.substring(victim + 1);
           newSelection = TextSelection.collapsed(offset: victim);
         } else {
           return;
@@ -123,11 +125,17 @@ class MarkupController extends TextEditingController {
     if (newSelection.isValid && !newSelection.isCollapsed) {
       final matches = _tagRegex.allMatches(newText);
       int s = newSelection.start; // normalized min
-      int e = newSelection.end;   // normalized max
+      int e = newSelection.end; // normalized max
       bool shifted = false;
       for (final m in matches) {
-        if (s > m.start && s < m.end) { s = m.start; shifted = true; }
-        if (e > m.start && e < m.end) { e = m.end; shifted = true; }
+        if (s > m.start && s < m.end) {
+          s = m.start;
+          shifted = true;
+        }
+        if (e > m.start && e < m.end) {
+          e = m.end;
+          shifted = true;
+        }
       }
       if (shifted) {
         // Preserve the original direction (RTL selections have base > extent)
@@ -139,7 +147,8 @@ class MarkupController extends TextEditingController {
       }
     } else if (newSelection.isCollapsed && newSelection.baseOffset > 0) {
       for (final m in _tagRegex.allMatches(newText)) {
-        if (newSelection.baseOffset > m.start && newSelection.baseOffset < m.end) {
+        if (newSelection.baseOffset > m.start &&
+            newSelection.baseOffset < m.end) {
           final toStart = (newSelection.baseOffset - m.start).abs();
           final toEnd = (newSelection.baseOffset - m.end).abs();
           final target = (toStart <= toEnd) ? m.start : m.end;
@@ -158,27 +167,50 @@ class MarkupController extends TextEditingController {
   // that inserting or removing tags (B/I/U/size/color/font) never shifts the
   // logical selection.
 
+  /// Number of visible (non-tag) characters from the start of [text] up to
+  /// (but not including) [rawOffset].
   /// Returns [from] walked backward past any trailing invisible markup tags.
+  ///
+  /// When navigating into a block from the right (e.g. arrowLeft cross-block),
+  /// placing the cursor at [text.length] can trap it between the end of the
+  /// raw string and the end of a trailing invisible tag. Flutter's default
+  /// cursor-left then increments the position INTO the tag; MarkupController's
+  /// value-setter snaps it back to the end of the tag — forever stuck.
+  ///
+  /// Placing the cursor at safeEndOffset instead lands just before those
+  /// trailing tags, so the very next arrowLeft moves past a real character.
   static int safeEndOffset(String text, [int? from]) {
     var pos = from ?? text.length;
     if (pos <= 0) return 0;
+    // Walk backward: if pos is exactly at the END of a tag, step to its start.
     bool moved = true;
     while (moved && pos > 0) {
       moved = false;
       for (final m in _tagRegex.allMatches(text)) {
-        if (m.end == pos) { pos = m.start; moved = true; break; }
+        if (m.end == pos) {
+          pos = m.start;
+          moved = true;
+          break;
+        }
       }
     }
     return pos;
   }
 
-  /// Returns a prefix string of opening markup tags active at [rawOffset].
-  /// Used when deleting `[0, rawOffset]` to preserve the style context of
-  /// the remaining text (`text.substring(rawOffset)`).
+  /// Returns a prefix string of opening markup tags that are active
+  /// (unclosed) at [rawOffset] inside [text].
+  ///
+  /// When deleting a range `[0, rawOffset]` from the start of a block, the
+  /// remaining text (`text.substring(rawOffset)`) loses any opening tags that
+  /// were in the deleted range. Prepending `openTagsAt(text, rawOffset)` to
+  /// the remaining text restores the style context so the cut doesn't wipe
+  /// all formatting from the surviving portion of the block.
   static String openTagsAt(String text, int rawOffset) {
     if (rawOffset <= 0 || rawOffset > text.length) return '';
     final sub = text.substring(0, rawOffset);
-    bool bold = false, italic = false, underline = false;
+    bool bold = false;
+    bool italic = false;
+    bool underline = false;
     final textColors = <String>[];
     final bgColors = <String>[];
     final sizes = <String>[];
@@ -224,8 +256,6 @@ class MarkupController extends TextEditingController {
     return sb.toString();
   }
 
-  /// Number of visible (non-tag) characters from the start of [text] up to
-  /// (but not including) [rawOffset].
   static int rawToVisualOffset(String text, int rawOffset) {
     int visual = 0;
     int cursor = 0;
@@ -327,20 +357,23 @@ class MarkupController extends TextEditingController {
           renderSelection.end > start &&
           renderSelection.start < end;
       if (!hasSelection) {
-        children.add(TextSpan(text: src.substring(start, end), style: baseStyle));
+        children
+            .add(TextSpan(text: src.substring(start, end), style: baseStyle));
         return;
       }
       final selStart = renderSelection.start.clamp(start, end);
       final selEnd = renderSelection.end.clamp(start, end);
       if (selStart > start) {
-        children.add(TextSpan(text: src.substring(start, selStart), style: baseStyle));
+        children.add(
+            TextSpan(text: src.substring(start, selStart), style: baseStyle));
       }
       children.add(TextSpan(
         text: src.substring(selStart, selEnd),
         style: baseStyle.copyWith(backgroundColor: _selectionBg),
       ));
       if (selEnd < end) {
-        children.add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
+        children
+            .add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
       }
     }
 

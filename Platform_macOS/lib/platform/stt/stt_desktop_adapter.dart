@@ -1,14 +1,9 @@
 import 'abstract_stt_service.dart';
 import '../../features/teleprompter/services/speech_service.dart';
 
-/// Desktop STT adapter — used on Windows (and Linux if added in future).
+/// Desktop STT adapter used only as a non-Apple fallback.
 ///
 /// Wraps [SpeechService] which uses the speech_to_text plugin.
-/// The speech_to_text plugin supports Windows via the Windows Speech
-/// Recognition API (SAPI / Windows.Media.SpeechRecognition).
-///
-/// Note: Windows STT requires the Windows Speech Recognition feature to
-/// be enabled in Windows Settings → Time & Language → Speech.
 class SttDesktopAdapter extends AbstractSttService {
   final SpeechService _inner = SpeechService();
 
@@ -17,7 +12,7 @@ class SttDesktopAdapter extends AbstractSttService {
     _inner.onStatusChange = (s) => onStatusChange?.call(s);
     _inner.onError = (e) => onError?.call(e);
     _inner.onLanguageUnavailable = (l) => onLanguageUnavailable?.call(l);
-    // onNeedLanguagePack: not applicable on Windows
+    // onNeedLanguagePack: not applicable for this fallback adapter.
   }
 
   @override
@@ -31,7 +26,7 @@ class SttDesktopAdapter extends AbstractSttService {
   bool get isListening => _inner.isListening;
 
   @override
-  String get platformName => 'Windows';
+  String get platformName => 'Desktop';
 
   @override
   bool get requiresImmediateListeningFlag => false;

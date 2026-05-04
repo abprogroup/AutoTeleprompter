@@ -2,13 +2,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'speech_service.dart';
 
-/// Native Android speech recognition service.
-///
-/// Uses Android's SpeechRecognizer.createOnDeviceSpeechRecognizer() on API 31+,
-/// which runs in OUR app's process and uses OUR microphone permission.
-/// This bypasses the issue on ColorOS/MIUI/OneUI where the Google app's
-/// microphone permission is restricted to foreground-only, blocking the
-/// standard speech_to_text plugin from accessing the mic.
+/// Native speech recognition bridge used by platform-specific runners.
 class NativeSpeechService {
   static const _channel = MethodChannel('autoteleprompter/stt');
   bool _isActive = false;
@@ -17,8 +11,7 @@ class NativeSpeechService {
   void Function(SpeechStatus)? onStatusChange;
   void Function(String)? onError;
   void Function(String requestedLocale)? onLanguageUnavailable;
-  /// Fires when the device needs an offline speech pack download
-  /// (ColorOS/MIUI devices where regular STT mic is blocked).
+  /// Fires when the platform reports that extra language resources are needed.
   void Function(String locale)? onNeedLanguagePack;
 
   NativeSpeechService() {

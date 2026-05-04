@@ -220,7 +220,7 @@ class SpeechService {
       if (!ok) {
         return SpeechStartResult(
           success: false,
-          message: 'Speech recognition not available. Please install the Google app and check that speech recognition is enabled in your device settings.',
+          message: 'Speech recognition not available. Please check that speech recognition is enabled in your device settings.',
         );
       }
     }

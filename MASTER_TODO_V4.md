@@ -760,3 +760,27 @@
   selection. Body click-drag selection receives its own edge autoscroll timer;
   the verified handle drag/autoscroll system remains untouched. Awaiting
   Windows workflow and device QA.
+
+### macOS Parity Port From Windows 385911e (2026-05-04)
+
+- [P] **macOS Editor/Presenter Split**: Split macOS editor and presenter
+  screens into focused part files under 800 lines where Dart lifecycle rules
+  allow it. Root `State` files retain required lifecycle overrides and delegate
+  build/runtime sections to parts.
+- [P] **macOS Selection Parity**: Ported Windows `385911e` app-owned selection
+  model: stable endpoint ownership, handle drag session lifecycle, body
+  click-drag edge autoscroll, block-aware arrows, Shift isolation, and mouse/
+  handle/Shift selection bridging.
+- [P] **macOS Bookmark/Search/History Parity**: Ported editor and presenter
+  search toolbars with whole-word matching, text-flow `\u00BB` bookmarks,
+  bookmark-safe undo/redo metadata rebuild, presenter bookmark sync, and rich
+  clipboard guard.
+- [P] **macOS Teleprompter/STT Parity Without Windows Runtime Paths**: Ported
+  visible-skip-aware word alignment, presenter resume/search/bookmark flow,
+  and shared STT contract shape while keeping Apple-native STT. WebView2,
+  Windows mic selector UI, `setx`, Windows Settings links, and Windows speech
+  pack dialogs remain excluded.
+- [P] **Tracker Updated**: Updated
+  `Missing features from Windows and IOS development to implement all platforms.md`
+  with Windows W21-W27 and the macOS parity-port status for future platform
+  agents.

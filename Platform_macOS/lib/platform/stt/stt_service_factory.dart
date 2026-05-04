@@ -7,13 +7,10 @@ import 'stt_desktop_adapter.dart';
 /// Creates the correct [AbstractSttService] implementation for the
 /// current runtime platform.
 ///
-/// Platform → Adapter mapping:
-/// ┌─────────────────┬──────────────────────────────────────────────────┐
-/// │ Android         │ SttAndroidAdapter  (Google on-device via channel)│
-/// │ iOS             │ SttAppleAdapter    (Apple SFSpeechRecognizer)     │
-/// │ macOS           │ SttAppleAdapter    (Apple SFSpeechRecognizer)     │
-/// │ Windows         │ SttDesktopAdapter  (Windows SAPI / speech_to_text)│
-/// └─────────────────┴──────────────────────────────────────────────────┘
+/// Platform adapter mapping:
+/// - Android: SttAndroidAdapter.
+/// - iOS/macOS: SttAppleAdapter.
+/// - Unsupported desktop fallback: SttDesktopAdapter.
 ///
 /// Usage:
 /// ```dart
@@ -25,7 +22,7 @@ class SttServiceFactory {
   static AbstractSttService create() {
     if (Platform.isAndroid) return SttAndroidAdapter();
     if (Platform.isIOS || Platform.isMacOS) return SttAppleAdapter();
-    // Windows (and future Linux/Web fallback)
+    // Non-Apple desktop fallback.
     return SttDesktopAdapter();
   }
 }

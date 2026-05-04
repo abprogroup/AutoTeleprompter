@@ -31,4 +31,8 @@ class RichClipboard {
   }
 
   static String? get internalMarkup => _internalMarkup;
+
+  /// Clears the internal markup buffer so stale rich styles cannot leak
+  /// into a paste after the OS clipboard has been replaced externally.
+  static void clearInternal() => _internalMarkup = null;
 }

@@ -1661,3 +1661,27 @@
   handle drag/autoscroll session is intentionally untouched.
 - **Verification Status**: Awaiting targeted analyzer, diff check, push, and
   Windows workflow verification.
+
+## 2026-05-04 - macOS Parity Port From Windows 385911e
+
+- **Scope**: Ported verified Windows editor/presenter behavior through
+  `385911e` into `Platform_macOS` only, plus macOS MVP docs, TODO/log, and the
+  cross-platform missing-features tracker.
+- **Editor Split**: Split macOS `script_editor_screen.dart` into build,
+  keyboard, keyboard navigation, load-block, bookmark, search, history,
+  file-present, styling-command, and editor-block parts. Split the overlay into
+  root/body-drag/rendering parts while keeping required `State` lifecycle
+  methods on the root class.
+- **Runtime Port**: Added app-owned selection parity, stable handle session
+  lifecycle, body click-drag edge autoscroll, Shift continuation after mouse
+  selections, editor search toolbar, whole-word search, text-flow bookmark
+  signs, bookmark-safe history rebuild, rich clipboard guard, presenter search
+  and bookmark sync, visible text skip, and safe local STT recovery.
+- **macOS Exclusions**: Removed copied Windows WebView2/STT browser code,
+  Windows mic selector UI, Windows Settings actions, Windows speech-pack
+  dialogs, and Windows-specific STT copy. macOS keeps Apple-native STT and
+  `intl: ^0.19.0`.
+- **Verification Status**: `flutter analyze --no-pub --no-fatal-infos
+  --no-fatal-warnings` passes with existing warnings/infos and no compile
+  errors. Line-count check reports no Dart files over 800 lines. Final diff
+  and scope checks pending.

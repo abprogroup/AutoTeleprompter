@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../../../platform/file_import/platform_file_import.dart';
 
 // v3.9.5.58: Extracted Editor Dialogs Factory
 class EditorDialogs {
@@ -43,7 +43,7 @@ class EditorDialogs {
           TextButton(onPressed: () => Navigator.pop(context, 'pdf'), child: const Text('PDF (.pdf)')),
           TextButton(onPressed: () => Navigator.pop(context, 'docx'), child: const Text('Word (.docx)')),
           TextButton(onPressed: () => Navigator.pop(context, 'rtf'), child: const Text('Rich Text (.rtf)')),
-          if (Platform.isIOS || Platform.isMacOS)
+          if (PlatformFileImport.supportedExtensions.contains('pages'))
             TextButton(onPressed: () => Navigator.pop(context, 'pages'), child: const Text('Pages (.pages)')),
           TextButton(onPressed: () => Navigator.pop(context, 'txt'), child: const Text('Plain Text (.txt)')),
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),

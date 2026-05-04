@@ -86,6 +86,8 @@ class SpeechService {
   String _localeId = 'en_US';
   List<LocaleName> _availableLocales = const [];
   int _languageRetries = 0; // Prevent infinite language error loop
+  int _listenCycle = 0;
+  DateTime? _localeSwitchGraceUntil;
 
   int _consecutiveErrors = 0;
   Timer? _errorResetTimer;
@@ -105,10 +107,21 @@ class SpeechService {
           if (!_isActive) return;
 
           final msg = error.errorMsg;
+          final isLanguageError = msg.contains('error_language');
+          final transientSwitchError = _isLocaleSwitchGraceActive &&
+              (isLanguageError ||
+                  msg.contains('no_match') ||
+                  msg.contains('speech_timeout'));
+          if (transientSwitchError) {
+            if (!_isRestarting) {
+              _scheduleRestart(const Duration(milliseconds: 80));
+            }
+            return;
+          }
           onError?.call(msg);
 
           // Language error — try fallback, then give up and notify
-          if (msg.contains('error_language')) {
+          if (isLanguageError) {
             _languageRetries++;
             if (_languageRetries == 1 && _localeId.isNotEmpty) {
               // 1st retry: try with no locale (device default)
@@ -170,12 +183,14 @@ class SpeechService {
         },
         onStatus: (status) {
           if (status == 'done' || status == 'notListening') {
+            if (_isLocaleSwitchGraceActive) return;
             if (_isActive && !_isRestarting) {
               _scheduleRestart(const Duration(milliseconds: 150));
             } else if (!_isActive) {
               onStatusChange?.call(SpeechStatus.idle);
             }
           } else if (status == 'listening') {
+            _localeSwitchGraceUntil = null;
             onStatusChange?.call(SpeechStatus.listening);
           }
         },
@@ -296,6 +311,7 @@ class SpeechService {
   Future<void> _startListening() async {
     if (!_isActive) return;
     try {
+      final cycle = ++_listenCycle;
       if (_stt.isListening) {
         await _stt.cancel();
         await Future.delayed(const Duration(milliseconds: 80));
@@ -306,6 +322,7 @@ class SpeechService {
       final useLocale = _localeId.isEmpty ? null : _localeId;
       await _stt.listen(
         onResult: (SpeechRecognitionResult result) {
+          if (cycle != _listenCycle) return;
           _consecutiveErrors = 0;
           if (result.recognizedWords.isNotEmpty) {
             onResult?.call(
@@ -334,6 +351,8 @@ class SpeechService {
   Future<void> stop() async {
     _isActive = false;
     _isRestarting = false;
+    _localeSwitchGraceUntil = null;
+    _listenCycle++;
     _consecutiveErrors = 0;
     _errorResetTimer?.cancel();
     await _stt.stop();
@@ -343,6 +362,8 @@ class SpeechService {
   Future<void> pause() async {
     _isActive = false;
     _isRestarting = false;
+    _localeSwitchGraceUntil = null;
+    _listenCycle++;
     _errorResetTimer?.cancel();
     await _stt.stop();
     onStatusChange?.call(SpeechStatus.paused);
@@ -360,11 +381,19 @@ class SpeechService {
     if (resolved == _localeId) return;
     _localeId = resolved;
     _languageRetries = 0;
+    _localeSwitchGraceUntil =
+        DateTime.now().add(const Duration(milliseconds: 1800));
+    _listenCycle++;
     if (_isActive && !_isRestarting) {
       if (_stt.isListening) {
         _stt.cancel();
       }
-      _scheduleRestart(const Duration(milliseconds: 80));
+      _scheduleRestart(const Duration(milliseconds: 60));
     }
+  }
+
+  bool get _isLocaleSwitchGraceActive {
+    final until = _localeSwitchGraceUntil;
+    return until != null && DateTime.now().isBefore(until);
   }
 }

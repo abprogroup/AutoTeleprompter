@@ -745,3 +745,14 @@ repair includes full visible-window phrase/sequence scan, no large single-word
 jumps, cap bypass only for trusted visible targets, active-locale plausibility,
 quick visible-locale assist, and assist pinning. Targeted Android visible-skip
 tests were added under `Platform_Android/test/teleprompter/`.
+
+Android professional repair — 2026-05-04
+
+Android now needs the final mobile-polish contracts copied into future
+platform work: extension-safe duplicate export names (`name (1).rtf`), app-known
+export Replace / Keep Both / Cancel, Done footer above keyboard insets,
+app-owned mobile selection commands with native toolbar suppression, Android
+STT locale-switch grace handling, and release split-per-ABI APK workflow
+artifacts instead of debug APK uploads. Future platform agents should not copy
+desktop toolbar density or native clipboard command paths into mobile surfaces
+when iOS already proved the mobile-specific protocol.

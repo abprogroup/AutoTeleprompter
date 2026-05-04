@@ -1770,3 +1770,18 @@
 - Added targeted Android visible-skip tests covering English/Hebrew crossing,
   same-language visible skips across a foreign section, conservative mode, cap
   bypass, active-locale plausibility, and assist pinning.
+
+### 2026-05-04 - Android Professional Repair Pass
+
+- Added extension-safe Android export naming plus app-created export tracking:
+  duplicate saves keep suffixes before extensions (`name (1).rtf`) and known
+  exports can Replace / Keep Both / Cancel.
+- Added Android file-access channel helpers for content URI write/display-name
+  lookup/rename so SAF-created broken names can be repaired or warned about.
+- Anchored the editor Done/PRESENT bottom route above the soft keyboard and
+  ported the iOS app-owned mobile selection command toolbar to Android.
+- Added Android STT locale-switch tokens and grace-window suppression so stale
+  recognizer callbacks do not show false offline/privacy errors during a
+  language switch.
+- Changed the Android workflow to release split-per-ABI APK artifacts instead
+  of debug APK upload, and kept all active Android Dart files under 800 lines.

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +7,7 @@ import '../../../../../core/extensions/string_extensions.dart';
 
 part 'global_selection_overlay.body_drag.dart';
 part 'global_selection_overlay.rendering.dart';
+
 /// Walk a render tree to find the first RenderEditable.
 RenderEditable? _findRenderEditable(RenderObject obj) {
   if (obj is RenderEditable) return obj;
@@ -538,6 +539,27 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get hasSelection =>
       _isSelecting && _startBlock != null && _endBlock != null;
+
+  ({
+    int startBlock,
+    int startOffset,
+    int endBlock,
+    int endOffset,
+  })? get currentRawRange {
+    if (!hasSelection ||
+        _startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) {
+      return null;
+    }
+    return (
+      startBlock: _startBlock!,
+      startOffset: _clampEndpointOffset(_startBlock!, _startOffset!),
+      endBlock: _endBlock!,
+      endOffset: _clampEndpointOffset(_endBlock!, _endOffset!),
+    );
+  }
 
   void setKeyboardSelection({
     required int anchorBlock,

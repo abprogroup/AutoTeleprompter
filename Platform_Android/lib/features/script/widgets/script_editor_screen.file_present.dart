@@ -1,5 +1,11 @@
 part of 'script_editor_screen.dart';
 
+enum _ExportConflictChoice {
+  replace,
+  keepBoth,
+  cancel,
+}
+
 extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   Future<void> _importFile() async {
     final supportedExts = PlatformFileImport.supportedExtensions;
@@ -7,7 +13,6 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         .pickFiles(type: FileType.any, allowMultiple: false);
     if (!mounted) return;
     if (result == null || result.files.single.path == null) {
-      // v3.9.5.59: Fluid navigation fallback
       if (widget.shouldAutoLoad) Navigator.pop(context);
       setState(() => _isPendingLoad = false);
       return;
@@ -27,91 +32,125 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           title: const Row(children: [
             Icon(Icons.block_rounded, color: Colors.redAccent, size: 22),
             SizedBox(width: 10),
-            Text("Not Supported",
-                style: TextStyle(color: Colors.white, fontSize: 17)),
+            Text(
+              'Not Supported',
+              style: TextStyle(color: Colors.white, fontSize: 17),
+            ),
           ]),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('"${selectedFile.path.split('/').last}"',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
+              Text(
+                '"${selectedFile.path.split('/').last}"',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 6),
-              Text('.${ext.toUpperCase()} files cannot be used as scripts.',
-                  style: const TextStyle(color: Colors.white70)),
+              Text(
+                '.${ext.toUpperCase()} files cannot be used as scripts.',
+                style: const TextStyle(color: Colors.white70),
+              ),
               const SizedBox(height: 12),
-              const Text('Supported formats:',
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
-              Text(PlatformFileImport.formatsLabel,
-                  style: const TextStyle(
-                      color: Color(0xFFFFBF00),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold)),
+              const Text(
+                'Supported formats:',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              Text(
+                PlatformFileImport.formatsLabel,
+                style: const TextStyle(
+                  color: Color(0xFFFFBF00),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("OK",
-                    style: TextStyle(
-                        color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                'OK',
+                style: TextStyle(
+                  color: Color(0xFFFFBF00),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ],
         ),
       );
       return;
     }
 
-    // Persist the current script's session before swapping editors so its
-    // history index / recent entry are not lost.
     await _forceRecentUpdate();
     if (!mounted) return;
 
-    // Replace this editor with a fresh instance that runs the standard
-    // pending-file load flow (conflict detection focuses an existing
-    // recent if the file is already known, otherwise it loads as new).
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-          builder: (_) => ScriptEditorScreen(pendingFile: selectedFile)),
+        builder: (_) => ScriptEditorScreen(pendingFile: selectedFile),
+      ),
     );
   }
 
   Future<void> _saveScript() async {
     final format = await EditorDialogs.showSaveFormatDialog(context);
     if (format == null || !mounted) return;
+    final normalizedFormat = format.toLowerCase();
 
     final text = _getRefinedFullTextWithoutBookmarkSigns();
-
-    // Generate bytes in the correct format for the chosen file type
-    final List<int> bytes;
-    if (format == 'docx') {
-      bytes = DocxService.generate(text);
-    } else if (format == 'rtf') {
-      bytes = RtfService.generate(text);
-    } else if (format == 'pages') {
-      bytes = PagesService.generate(text);
+    final Uint8List bytes;
+    if (normalizedFormat == 'docx') {
+      bytes = Uint8List.fromList(DocxService.generate(text));
+    } else if (normalizedFormat == 'rtf') {
+      bytes = Uint8List.fromList(RtfService.generate(text));
+    } else if (normalizedFormat == 'pages') {
+      bytes = Uint8List.fromList(PagesService.generate(text));
     } else {
-      // txt, md — plain UTF-8
-      bytes = utf8.encode(MarkupExportService.toPlainText(text));
+      bytes = Uint8List.fromList(
+        utf8.encode(MarkupExportService.toPlainText(text)),
+      );
     }
 
-    // Build filename with guaranteed extension — strip any prior extension first
-    final safeName = _currentTitle
-        .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
-        .replaceAll(
-            RegExp(r'\.(txt|pdf|docx|rtf|pages|md)$', caseSensitive: false),
-            '');
-    final fileName = '$safeName.$format';
+    final baseName =
+        ExportNameService.sanitizeBaseName(_currentTitle, normalizedFormat);
+    final registry = await SavedExportRegistry.load();
+    final knownExport = SavedExportRegistry.findExact(
+      entries: registry,
+      baseName: baseName,
+      format: normalizedFormat,
+    );
+
+    var keepBoth = false;
+    if (knownExport != null && mounted) {
+      final choice = await _showExportConflictDialog(knownExport.displayName);
+      if (!mounted || choice == _ExportConflictChoice.cancel) return;
+      if (choice == _ExportConflictChoice.replace) {
+        await _replaceKnownExport(knownExport, bytes);
+        return;
+      }
+      keepBoth = true;
+    }
+
+    final fileName = keepBoth
+        ? ExportNameService.nextDuplicateDisplayName(
+            baseName: baseName,
+            format: normalizedFormat,
+            existingDisplayNames: registry.map((e) => e.displayName),
+          )
+        : ExportNameService.buildDisplayName(baseName, normalizedFormat);
 
     final savedPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save as ${format.toUpperCase()}',
+      dialogTitle: 'Save as ${normalizedFormat.toUpperCase()}',
       fileName: fileName,
+      bytes: bytes,
     );
 
     if (!mounted) return;
 
     if (savedPath == null) {
-      // User cancelled the dialog — make that explicit
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Save cancelled.'),
@@ -122,36 +161,114 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       return;
     }
 
-    // On Windows, FilePicker.saveFile only returns the path — it does NOT write
-    // the file. We must write it explicitly.
-    final finalPath =
-        savedPath.endsWith('.$format') ? savedPath : '$savedPath.$format';
-    await File(finalPath).writeAsBytes(Uint8List.fromList(bytes));
+    var finalLocation = savedPath;
+    var finalName = await AndroidFileAccess.displayNameForLocation(savedPath) ??
+        AndroidFileAccess.displayNameFromPath(savedPath);
+    final repairedName = ExportNameService.repairBrokenDuplicateSuffix(
+        finalName, normalizedFormat);
+    if (repairedName != finalName) {
+      final renamedLocation =
+          await AndroidFileAccess.rename(finalLocation, repairedName);
+      if (renamedLocation != null && renamedLocation.isNotEmpty) {
+        finalLocation = renamedLocation;
+        finalName = repairedName;
+      }
+    }
 
-    if (!mounted) return;
-
-    final name = finalPath.split(RegExp(r'[\\/]')).last;
-    if (!savedPath.endsWith('.$format')) {
-      // OS stripped the extension — we added it back, but warn the user
+    if (!ExportNameService.hasExpectedExtension(finalName, normalizedFormat)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('Saved as "$name" (extension was added automatically).'),
+          content: Text(
+            'File saved as "$finalName", but Android did not preserve the '
+            '.$normalizedFormat extension. Rename it before opening.',
+          ),
           backgroundColor: Colors.orange[800],
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 6),
         ),
       );
-    } else {
+      return;
+    }
+
+    await SavedExportRegistry.record(
+      SavedExportEntry(
+        baseName: baseName,
+        format: normalizedFormat,
+        displayName: finalName,
+        location: finalLocation,
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(children: [
+          const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Saved: $finalName')),
+        ]),
+        backgroundColor: Colors.green[800],
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<_ExportConflictChoice> _showExportConflictDialog(
+    String displayName,
+  ) async {
+    final result = await showDialog<_ExportConflictChoice>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text(
+          'Replace existing file?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          '"$displayName" was already saved from this app.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _ExportConflictChoice.cancel),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _ExportConflictChoice.keepBoth),
+            child: const Text('Keep Both'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, _ExportConflictChoice.replace),
+            child: const Text('Replace'),
+          ),
+        ],
+      ),
+    );
+    return result ?? _ExportConflictChoice.cancel;
+  }
+
+  Future<void> _replaceKnownExport(
+    SavedExportEntry entry,
+    Uint8List bytes,
+  ) async {
+    try {
+      await AndroidFileAccess.writeBytes(entry.location, bytes);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Row(children: [
-            const Icon(Icons.check_circle_outline,
-                color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Expanded(child: Text('Saved: $name')),
-          ]),
+          content: Text('Replaced: ${entry.displayName}'),
           backgroundColor: Colors.green[800],
           duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not replace "${entry.displayName}". Use Keep Both instead.',
+          ),
+          backgroundColor: Colors.red[800],
+          duration: const Duration(seconds: 5),
         ),
       );
     }

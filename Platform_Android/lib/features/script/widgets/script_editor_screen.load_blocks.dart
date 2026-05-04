@@ -267,14 +267,50 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
                 !overlayActive &&
                 !HardwareKeyboard.instance.isShiftPressed &&
                 controller.text.isNotEmpty &&
+                controller.selection.isValid &&
+                !controller.selection.isCollapsed &&
                 controller.selection.baseOffset == 0 &&
                 controller.selection.extentOffset == controller.text.length) {
               _selectAllBlocks();
+            } else if (!_isGlobalSelection &&
+                !_isCommandExecuting &&
+                !_isGlobalSelectionNativeGuardActive &&
+                !overlayActive &&
+                controller.selection.isValid &&
+                !controller.selection.isCollapsed) {
+              final blockIndex = _controllers.indexOf(controller);
+              if (blockIndex >= 0) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  ContextMenuController.removeAny();
+                  _extendNativeSelectionToOverlay(blockIndex);
+                });
+              }
             }
           }
           return;
         }
+        final previousText = lastText;
         lastText = controller.text;
+        if (_consumeNativePlainBlockPasteIfNeeded(controller, previousText)) {
+          return;
+        }
+        if (_isGlobalSelection &&
+            !_isCommandExecuting &&
+            controller.text.isEmpty) {
+          final blockIndex = _controllers.indexOf(controller);
+          if (blockIndex >= 0 && previousText.isNotEmpty) {
+            _repairGlobalSelectionSnapshotBlock(
+              blockIndex,
+              previousText,
+              'native-empty',
+            );
+          }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _isGlobalSelection) _deleteGlobalSelection();
+          });
+          return;
+        }
         _isDirty = true;
         // v4.1.2: When the user edits text (not inside a style command), clear
         // any pinned externalSelection so stale amber doesn't linger after typing.

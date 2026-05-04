@@ -154,6 +154,22 @@ Status update - 2026-05-04:
 - Targeted Android visible-skip tests pass. Presenter split files still report
   existing part-extension analyzer warnings unrelated to this focused repair.
 
+Professional repair status - 2026-05-04:
+
+- Android export is now extension-safe for duplicate names and keeps app-known
+  exports in a registry so known duplicates can Replace, Keep Both, or Cancel.
+- Android Done/PRESENT footer is anchored above the soft keyboard instead of
+  hiding behind it.
+- Android script selection command UI now follows the tested iOS protocol:
+  native selection may seed a range, native command toolbar is suppressed, and
+  the app toolbar owns Cut / Copy / Paste / Select All.
+- Android STT locale switching now ignores stale callbacks during a short
+  switch grace window and pins visible-locale assists long enough to receive
+  fresh recognition.
+- Android workflow now builds release split-per-ABI APKs for QA; local APK
+  build/install remains blocked on this workstation because no Android SDK is
+  installed.
+
 ### 3. macOS Launch Recovery
 
 Goal: make the macOS artifact launch correctly before any additional parity work.

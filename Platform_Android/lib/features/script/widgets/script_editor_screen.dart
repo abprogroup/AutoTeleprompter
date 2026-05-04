@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
@@ -37,12 +37,17 @@ import '../services/markup_export_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../models/script_word.dart';
 import '../../../platform/file_import/platform_file_import.dart';
+import '../../../platform/file_export/android_file_access.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
+import '../services/export_name_service.dart';
 
 part 'script_editor_screen.load_blocks.dart';
 part 'script_editor_screen.dialogs_history.dart';
 part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';
+part 'script_editor_screen.selection_clipboard.dart';
+part 'script_editor_screen.selection_clipboard_commands.dart';
+part 'script_editor_screen.selection_clipboard_paste.dart';
 part 'script_editor_screen.debug_bookmarks_search.dart';
 part 'script_editor_screen.bookmarks.dart';
 part 'script_editor_screen.search.dart';
@@ -68,6 +73,11 @@ class _CutIntent extends Intent {
 
 class _PasteIntent extends Intent {
   const _PasteIntent();
+}
+
+enum _BlockClipboardKind {
+  partialSelection,
+  fullScript,
 }
 
 class _SearchIntent extends Intent {
@@ -158,6 +168,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String _lastArrowDecision = 'idle';
   SelectionEndpoint? _shiftSelectionAnchor;
   SelectionEndpoint? _shiftSelectionFocus;
+  List<String>? _blockClipboard; // raw markup per block, written by Cut/Copy
+  _BlockClipboardKind _blockClipboardKind =
+      _BlockClipboardKind.partialSelection;
+  String? _plainBlockClipboardText;
+  List<String>? _globalSelectionSnapshot;
+  DateTime? _globalSelectionSnapshotAt;
+  DateTime? _globalSelectionLockUntil;
+  String _selectionClipboardDebug = 'idle';
+  String _selectionCommandDebug = 'idle';
+  _BlockSelectionRange? _recognizedBlockRange;
+  String _recognizedBlockRangeDebug = 'idle';
+  Timer? _blockClipboardTimer;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
@@ -172,6 +194,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isLoading = false;
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
+  bool _keyboardDismissedForSelection = false;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer, _clipboardGuardTimer;
   Timer?
       _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
@@ -184,41 +207,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _suiteSection; // current function section within a suite (e.g. 'Bold', 'Font Size')
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
-
-  void _clearGlobalSelection() {
-    if (!mounted) return;
-    setState(() {
-      _isGlobalSelection = false;
-      _overlayKey.currentState?.clearSelection();
-      for (final c in _controllers) {
-        c.isGlobalSelected = false;
-        c.externalSelection = null;
-        // Collapse native selection to prevent residual highlight in buildTextSpan.
-        if (!c.selection.isCollapsed) {
-          final collapseAt = c.selection.baseOffset.clamp(0, c.text.length);
-          c.selection = TextSelection.collapsed(offset: collapseAt);
-        }
-        c.refresh();
-      }
-    });
-
-    // Safety net: re-clear after Flutter's TextField processes any lingering gestures.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      bool needsRefresh = false;
-      for (final c in _controllers) {
-        if (c.externalSelection != null || c.isGlobalSelected) {
-          c.externalSelection = null;
-          c.isGlobalSelected = false;
-          needsRefresh = true;
-        }
-      }
-      if (needsRefresh) {
-        for (final c in _controllers) c.refresh();
-        setState(() {});
-      }
-    });
-  }
 
   @override
   void initState() {
@@ -344,6 +332,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
+    _blockClipboardTimer?.cancel();
     _clipboardGuardTimer?.cancel();
     _historyTimer?.cancel();
     _recentTimer?.cancel();

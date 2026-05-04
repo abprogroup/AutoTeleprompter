@@ -5,12 +5,14 @@ class _EditorBlock extends StatelessWidget {
   final FocusNode focusNode;
   final AppSettings settings;
   final bool isGlobalSelected;
+  final bool hasOverlaySelection;
   final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
   final VoidCallback onCut;
   final VoidCallback onPaste;
+  final VoidCallback onExtendSelection;
   final VoidCallback onUndo;
   final VoidCallback onRedo;
   final VoidCallback onSearch;
@@ -23,12 +25,14 @@ class _EditorBlock extends StatelessWidget {
     required this.focusNode,
     required this.settings,
     required this.isGlobalSelected,
+    required this.hasOverlaySelection,
     required this.onSubmitted,
     required this.onTap,
     required this.onSelectAll,
     required this.onCopy,
     required this.onCut,
     required this.onPaste,
+    required this.onExtendSelection,
     required this.onUndo,
     required this.onRedo,
     required this.onSearch,
@@ -62,6 +66,17 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+    final hasNativeRange =
+        controller.selection.isValid && !controller.selection.isCollapsed;
+    final externalSelection = controller.externalSelection;
+    final hasExternalRange = controller.isGlobalSelected ||
+        (externalSelection != null &&
+            externalSelection.isValid &&
+            !externalSelection.isCollapsed);
+    final useGhostSelectionControls = isGlobalSelected ||
+        hasOverlaySelection ||
+        hasNativeRange ||
+        hasExternalRange;
 
     return Container(
       decoration: BoxDecoration(
@@ -210,7 +225,9 @@ class _EditorBlock extends StatelessWidget {
                     ),
                   ),
                   child: TextField(
-                    selectionControls: GhostSelectionControls(),
+                    selectionControls: useGhostSelectionControls
+                        ? GhostSelectionControls()
+                        : null,
                     controller: controller,
                     focusNode: focusNode,
                     maxLines: null,
@@ -238,62 +255,24 @@ class _EditorBlock extends StatelessWidget {
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 2),
                     ),
-                    contextMenuBuilder: (context, editableTextState) {
-                      final List<ContextMenuButtonItem> items =
-                          editableTextState.contextMenuButtonItems;
-                      final List<ContextMenuButtonItem> customItems = [];
-                      bool hasSelectAll = false;
-                      for (final item in items) {
-                        if (item.type == ContextMenuButtonType.selectAll) {
-                          hasSelectAll = true;
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onSelectAll();
-                            },
-                            type: ContextMenuButtonType.selectAll,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.copy) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onCopy();
-                            },
-                            type: ContextMenuButtonType.copy,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.cut) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onCut();
-                            },
-                            type: ContextMenuButtonType.cut,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.paste) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onPaste();
-                            },
-                            type: ContextMenuButtonType.paste,
-                          ));
-                        } else {
-                          customItems.add(item);
-                        }
+                    contextMenuBuilder: (_, __) {
+                      final selection = controller.selection;
+                      final hasPartialNativeSelection = selection.isValid &&
+                          !selection.isCollapsed &&
+                          !(selection.start == 0 &&
+                              selection.end == controller.text.length);
+
+                      if (hasPartialNativeSelection &&
+                          !isGlobalSelected &&
+                          !hasOverlaySelection &&
+                          !hasExternalRange) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          onExtendSelection();
+                        });
                       }
-                      if (!hasSelectAll) {
-                        customItems.add(ContextMenuButtonItem(
-                          onPressed: () {
-                            ContextMenuController.removeAny();
-                            onSelectAll();
-                          },
-                          type: ContextMenuButtonType.selectAll,
-                        ));
-                      }
-                      return AdaptiveTextSelectionToolbar.buttonItems(
-                        anchors: editableTextState.contextMenuAnchors,
-                        buttonItems: customItems,
-                      );
+
+                      ContextMenuController.removeAny();
+                      return const SizedBox.shrink();
                     },
                   ),
                 ),

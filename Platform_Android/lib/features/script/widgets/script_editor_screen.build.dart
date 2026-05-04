@@ -1,60 +1,70 @@
-﻿part of 'script_editor_screen.dart';
+part of 'script_editor_screen.dart';
 
 extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
   Widget _buildBottomActions({bool keyboardVisible = false}) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (keyboardVisible && PlatformKeyboard.showDoneBar)
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: keyboardVisible ? bottomInset : 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (keyboardVisible && PlatformKeyboard.showDoneBar)
+            Container(
+              color: const Color(0xFF1C1C1E),
+              height: 44,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      _keyboardDismissedForSelection = true;
+                      FocusScope.of(context).unfocus();
+                    },
+                    child: const Text('Done',
+                        style: TextStyle(
+                            color: Color(0xFFFFBF00),
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+            ),
           Container(
-            color: const Color(0xFF1C1C1E),
-            height: 44,
+            color: Colors.black,
+            padding: const EdgeInsets.only(bottom: 12, top: 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(
-                  onPressed: () => FocusScope.of(context).unfocus(),
-                  child: const Text('Done',
-                      style: TextStyle(
-                          color: Color(0xFFFFBF00),
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _startPresenting,
+                    icon:
+                        const Icon(Icons.play_circle_filled_rounded, size: 24),
+                    label: const Text('PRESENT',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            letterSpacing: 1.5)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFBF00),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      elevation: 12,
+                      shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 16),
               ],
             ),
           ),
-        Container(
-          color: Colors.black,
-          padding: const EdgeInsets.only(bottom: 12, top: 8),
-          child: Row(
-            children: [
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _startPresenting,
-                  icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
-                  label: const Text('PRESENT',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          letterSpacing: 1.5)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFBF00),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    elevation: 12,
-                    shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -417,6 +427,9 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                                         focusNode: _focusNodes[index],
                                         settings: settings,
                                         isGlobalSelected: _isGlobalSelection,
+                                        hasOverlaySelection: _overlayKey
+                                                .currentState?.hasSelection ??
+                                            false,
                                         onSubmitted: () => _addBlock(index + 1),
                                         onTap: () {
                                           // Secondary safety, though Listener should handle it
@@ -428,6 +441,9 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                                         onCopy: _onCopyClean,
                                         onCut: _onCut,
                                         onPaste: _onPaste,
+                                        onExtendSelection: () =>
+                                            _extendNativeSelectionToOverlay(
+                                                index),
                                         onUndo: _undo,
                                         onRedo: _redo,
                                         onSearch: _showEditorSearchDialog,
@@ -454,6 +470,15 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                   right: 16,
                   child: _buildEditorSearchToolbar(),
                 ),
+                if (!_isPendingLoad && _hasAnyActiveEditorSelection)
+                  Positioned(
+                    right: 20,
+                    bottom: (keyboardVisible
+                            ? MediaQuery.of(context).viewInsets.bottom
+                            : 0) +
+                        86,
+                    child: _buildAppSelectionToolbar(),
+                  ),
                 if (_isPendingLoad)
                   Positioned.fill(
                     child: Container(
@@ -491,6 +516,103 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppSelectionToolbar() {
+    Widget action({
+      required IconData icon,
+      required String label,
+      required VoidCallback onPressed,
+    }) {
+      return Tooltip(
+        message: label,
+        child: TextButton.icon(
+          onPressed: () {
+            ContextMenuController.removeAny();
+            onPressed();
+          },
+          icon: Icon(icon, size: 18, color: const Color(0xFFFFBF00)),
+          label: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            minimumSize: const Size(0, 36),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xF21A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0x99FFBF00)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black54,
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            action(
+              icon: Icons.content_cut_rounded,
+              label: 'Cut',
+              onPressed: _onCutClean,
+            ),
+            action(
+              icon: Icons.content_copy_rounded,
+              label: 'Copy',
+              onPressed: _onCopyClean,
+            ),
+            if (_hasPasteableBlockClipboard)
+              action(
+                icon: Icons.content_paste_rounded,
+                label: 'Paste',
+                onPressed: _pasteFromGlobalClipboard,
+              ),
+            action(
+              icon: Icons.select_all_rounded,
+              label: 'All',
+              onPressed: _selectAllBlocks,
+            ),
+            IconButton(
+              tooltip: 'Clear selection',
+              onPressed: () {
+                ContextMenuController.removeAny();
+                _dismissEditorSelectionForUserNavigation(
+                    'app-selection-dismiss');
+              },
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Colors.white70,
+                size: 18,
+              ),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(
+                width: 30,
+                height: 30,
+              ),
+            ),
+          ],
         ),
       ),
     );

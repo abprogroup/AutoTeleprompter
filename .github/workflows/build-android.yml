@@ -41,12 +41,14 @@ jobs:
         run: flutter pub get
         working-directory: Platform_Android
 
-      - name: Build Android APK (Debug)
-        run: flutter build apk --debug
+      - name: Build Android APK (Release, split ABI)
+        run: flutter build apk --release --split-per-abi
         working-directory: Platform_Android
 
-      - name: Upload APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
           name: AutoTeleprompter-Android-APK
-          path: Platform_Android/build/app/outputs/flutter-apk/app-debug.apk
+          path: |
+            Platform_Android/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            Platform_Android/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk

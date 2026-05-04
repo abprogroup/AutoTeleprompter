@@ -14,7 +14,6 @@ class SttAndroidAdapter extends AbstractSttService {
     _inner.onError = (e) => onError?.call(e);
     _inner.onLanguageUnavailable = (locale) {
       onLanguageUnavailable?.call(locale);
-      onNeedLanguagePack?.call(locale);
     };
   }
 

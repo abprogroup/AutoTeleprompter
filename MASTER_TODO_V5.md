@@ -323,5 +323,9 @@
 - [ ] **Proactive Multi-Language STT Switching for Long Skips**: Resolve the limitation where users cannot skip to a distant sentence in a different language because the STT engine only switches locales a few words before the transition.
   - *Problem*: If a Hebrew script has an English sentence visible at the bottom, the STT (currently in Hebrew) won't recognize English speech for that distant target until the user reads through the Hebrew text immediately preceding it.
   - *Solution*: The visible viewport skip logic should account for language transitions. If a strong multi-word match is detected in any language present in the visible viewport, the engine should proactively switch locales to complete the jump.
-
-
+- [-] **Late V5 - Multi-Lane Warm STT / Parallel Recognizer Research**: Research whether future STT can keep multiple language recognizers warm, or route one mic capture into an audio-buffer fan-out, so locale switches do not create a cold-start gap.
+  - *Why deferred late*: iOS and Android mic/STT APIs make simultaneous recognizers difficult and risky, and this should not destabilize the final v4 Windows/iOS/Android STT behavior.
+  - *Goal*: Evaluate a cross-platform architecture after v5 core parity is stable; keep current v4 WebView2/Apple/Android-native STT behavior unchanged.
+- [-] **Late V5 - Collapsible Editor Debug Sentry**: Add minimize/collapse mode for the editor sentry/debug overlay on mobile and desktop.
+  - *Problem*: In debug mode, the editor sentry can occupy too much screen space, especially on Android with the soft keyboard open.
+  - *Goal*: Keep critical diagnostics available while allowing a compact/minimized view for real editor QA.

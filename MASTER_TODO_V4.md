@@ -830,3 +830,23 @@
   visible alternate-locale candidate on the first wrong-language no-progress
   result, may switch on the second, and pins the assisted locale briefly so
   heartbeat cannot undo the switch before recognition resumes.
+
+## 2026-05-04 Android Professional Repair
+
+- [P] **Android export filename safety**: Added extension-safe export naming
+  and app-known export tracking. Duplicate RTF/DOCX/text exports now use
+  `name (1).ext` style names, with Replace / Keep Both / Cancel for known
+  app-created exports and SAF display-name repair/warning behavior.
+- [P] **Android keyboard Done visibility**: Anchored the editor bottom Done /
+  PRESENT route above `MediaQuery.viewInsets.bottom` so Done stays above the
+  soft keyboard and only unfocuses the editor.
+- [P] **Android app-owned selection commands**: Ported the tested iOS mobile
+  command protocol. Native Android selection may seed a range, native command
+  UI is suppressed, and the app toolbar owns Cut / Copy / Paste / Select All
+  while preserving markup, styles, blank rows, and `\u00BB` bookmark signs.
+- [P] **Android STT switch stability**: Added speech-service switch tokens,
+  locale-switch grace suppression for stale false errors, and fast visible
+  locale assist on top of Android-native `speech_to_text`.
+- [P] **Android release APK workflow**: Android workflow now builds release
+  split-per-ABI APKs (`arm64-v8a`, `armeabi-v7a`) instead of uploading the huge
+  debug APK with `kernel_blob.bin` and validation assets.

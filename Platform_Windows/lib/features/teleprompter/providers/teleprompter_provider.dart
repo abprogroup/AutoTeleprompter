@@ -49,7 +49,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
-      Duration(milliseconds: 3000);
+      Duration(milliseconds: 5000);
 
   @override
   TeleprompterState build() {
@@ -203,10 +203,20 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
       _syncLocaleForPosition(script, target + 1, reason: 'advance');
     } else {
+      final improvising = shouldUseImprovisationNoMatch(
+        strictBulletMode: strictBulletMode,
+        alignedIndex: aligned.confirmedWordIndex,
+        currentIndex: state.confirmedWordIndex,
+      );
       _noProgressCount++;
-      _addDebugLog(
-          '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
-      _checkAndSwitchLocale();
+      if (improvising) {
+        _addDebugLog(
+            '$engineTag IMPROVISING | heard: "${result.words}" | visible relock waiting');
+      } else {
+        _addDebugLog(
+            '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
+        _checkAndSwitchLocale();
+      }
 
       if (_maybeAssistVisibleLocale(script, settings, result.words)) {
         return;
@@ -360,6 +370,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (strictBulletMode) return false;
     if (skipThreshold <= 0) return false;
     return noProgressCount >= skipThreshold;
+  }
+
+  static bool shouldUseImprovisationNoMatch({
+    required bool strictBulletMode,
+    required int alignedIndex,
+    required int currentIndex,
+  }) {
+    return strictBulletMode && alignedIndex <= currentIndex;
   }
 
   static int? resolveVisibleSkipTarget({
@@ -913,6 +931,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         // Every heartbeat, check the next expected word. If its language
         // changed, hot-switch the STT locale via WebSocket.
         if (!_useWhisper && listening && _currentScript != null) {
+          if (settings.sttStrictBulletMode && _noProgressCount > 0) return;
           _syncLocaleForPosition(_currentScript!, state.confirmedWordIndex + 1,
               reason: 'heartbeat');
         }

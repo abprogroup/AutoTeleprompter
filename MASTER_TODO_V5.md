@@ -323,6 +323,12 @@
 - [ ] **Proactive Multi-Language STT Switching for Long Skips**: Resolve the limitation where users cannot skip to a distant sentence in a different language because the STT engine only switches locales a few words before the transition.
   - *Problem*: If a Hebrew script has an English sentence visible at the bottom, the STT (currently in Hebrew) won't recognize English speech for that distant target until the user reads through the Hebrew text immediately preceding it.
   - *Solution*: The visible viewport skip logic should account for language transitions. If a strong multi-word match is detected in any language present in the visible viewport, the engine should proactively switch locales to complete the jump.
+- [ ] **V5 Research / V6 Premium Candidate - Three STT Reading Modes**: Design a first-run/presenter-start mode choice with three cards:
+  - *Strict Reading*: word-by-word script fidelity, least improvisation, safest for exact scripts.
+  - *Flexible Reading*: moderate paraphrase support, normal local recovery, visible-skip behavior when enabled.
+  - *Bullet Reading*: presenter may improvise between headers; STT ignores off-script speech and relocks only on confident visible phrases.
+  - *Why not v4*: This is product-level UX, settings, onboarding, QA, and possibly premium positioning. Keep v4 focused on making the explicit Windows strict/bullet mode reliable before generalizing.
+  - *Premium note*: This may become a "Gold" presenter feature after v5 core platform parity is stable.
 - [-] **Late V5 - Multi-Lane Warm STT / Parallel Recognizer Research**: Research whether future STT can keep multiple language recognizers warm, or route one mic capture into an audio-buffer fan-out, so locale switches do not create a cold-start gap.
   - *Why deferred late*: iOS and Android mic/STT APIs make simultaneous recognizers difficult and risky, and this should not destabilize the final v4 Windows/iOS/Android STT behavior.
   - *Goal*: Evaluate a cross-platform architecture after v5 core parity is stable; keep current v4 WebView2/Apple/Android-native STT behavior unchanged.

@@ -777,3 +777,23 @@ and requires confirmed multi-word visible-window phrase/sequence matches for
 larger jumps. Large single-word visible jumps remain blocked. After Windows QA,
 port the same explicit setting and contract to Android and iOS; do not make it
 the default for normal script reading.
+
+Windows v4.1.14 final STT relock plan - 2026-05-05
+
+The next Windows slice must refine strict/bullet mode so off-script speech is
+treated as normal improvisation rather than a stuck recognizer. During
+improvisation, STT should keep listening without force-skip, restart, reset, or
+desperate language switching. Advancement should happen only when a confident
+two-or-more-word phrase/sequence from the current visible presenter window is
+heard. If the spoken phrase appears to belong to a visible alternate-language
+section, the provider may switch and pin that locale, but it must wait for the
+next recognition result before advancing. Future Android/iOS ports should copy
+this final user-tested Windows contract, not the earlier no-progress/stuck
+behavior.
+
+Implementation update: Windows runtime slice was implemented on 2026-05-05.
+The aligner now searches strict visible phrases inside longer transcripts,
+provider strict no-match state is treated as improvisation, heartbeat
+pre-switch is suppressed during strict no-progress stretches, and presenter
+controls use the active-STT bottom hover-zone model. Port only after Windows
+artifact QA confirms the live behavior.

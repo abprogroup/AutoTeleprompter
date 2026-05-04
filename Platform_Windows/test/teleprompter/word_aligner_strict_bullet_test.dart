@@ -78,6 +78,35 @@ void main() {
       expect(result.confidence, greaterThanOrEqualTo(0.78));
     });
 
+    test('strict mode relocks to a visible phrase after improvised preface',
+        () {
+      final script = _words([
+        'intro',
+        'alpha',
+        'beta',
+        'story',
+        'of',
+        'the',
+        'Samaritan',
+        'woman',
+        'at',
+        'the',
+        'well',
+      ]);
+
+      final result = WordAligner.align(
+        script: script,
+        transcript:
+            'today I want to explain this with my own words story of the Samaritan woman and then continue',
+        lastConfirmedIndex: 0,
+        maxSkipTargetIndex: script.length - 1,
+        strictBulletMode: true,
+      );
+
+      expect(result.confirmedWordIndex, 7);
+      expect(result.confidence, greaterThanOrEqualTo(0.78));
+    });
+
     test('strict mode allows visible Hebrew phrase jump', () {
       final script = [
         _word('intro', 0),
@@ -95,6 +124,26 @@ void main() {
       );
 
       expect(result.confirmedWordIndex, 3);
+      expect(result.confidence, greaterThanOrEqualTo(0.78));
+    });
+
+    test('strict mode relocks to visible Hebrew after improvised preface', () {
+      final script = [
+        _word('intro', 0),
+        _word(_hOpening, 1, rtl: true),
+        _word(_hBlessing, 2, rtl: true),
+        _word(_hClosing, 3, rtl: true),
+      ];
+
+      final result = WordAligner.align(
+        script: script,
+        transcript: 'random words before $_hOpening $_hBlessing after',
+        lastConfirmedIndex: 0,
+        maxSkipTargetIndex: 3,
+        strictBulletMode: true,
+      );
+
+      expect(result.confirmedWordIndex, 2);
       expect(result.confidence, greaterThanOrEqualTo(0.78));
     });
 
@@ -138,6 +187,26 @@ void main() {
           visibleWordEnd: 40,
         ),
         isNull,
+      );
+    });
+
+    test('strict improvisation suppresses normal stuck recovery', () {
+      expect(
+        TeleprompterNotifier.shouldUseImprovisationNoMatch(
+          strictBulletMode: true,
+          alignedIndex: 0,
+          currentIndex: 0,
+        ),
+        isTrue,
+      );
+
+      expect(
+        TeleprompterNotifier.shouldUseImprovisationNoMatch(
+          strictBulletMode: false,
+          alignedIndex: 0,
+          currentIndex: 0,
+        ),
+        isFalse,
       );
     });
   });

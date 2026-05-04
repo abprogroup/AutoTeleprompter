@@ -78,6 +78,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<ScriptBookmark> _bookmarks = const [];
   bool _visibleWindowSyncScheduled = false;
   DateTime? _lastVisibleWindowSync;
+  bool _windowsControlsHovering = false;
 
   @override
   void initState() {
@@ -102,6 +103,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           } else if (next != _loadedWebViewUrl) {
             _loadSttWebView(next);
           }
+        });
+        ref.listenManual(
+            teleprompterProvider.select((s) => s.isListening || s.isStarting),
+            (prev, next) {
+          if (!mounted || !Platform.isWindows) return;
+          _syncWindowsControlsForSpeech(next);
         });
         if (Platform.isWindows) _initWebViewController();
         final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;

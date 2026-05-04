@@ -1848,3 +1848,35 @@
   phrase target even if the separate visible-skip toggle is off, so it can
   re-lock onto a visible row after improvised speech while still blocking
   guessed single-word jumps.
+
+### 2026-05-05 - Windows v4.1.14 STT Final Plan Refined
+
+- Captured the next strict/bullet STT correction before implementation:
+  off-script speech is normal improvisation, not a stuck recognizer state.
+- The planned Windows model keeps listening during improvisation without
+  force-skip, panic restart, or desperate language switching.
+- Re-lock is allowed only through confident visible-window phrase/sequence
+  matches. Language switching is secondary: if the active locale cannot match
+  and the visible window contains a plausible alternate-language section, the
+  provider may switch, pin briefly, and wait for the next result before any
+  advance.
+- Presenter toolbar UX is also refined: visible while STT is stopped, hidden
+  during active STT, and revealed by a bottom hover hot-zone or shortcut without
+  changing resume position.
+- Added the future three-mode STT reading concept to V5/V6 planning:
+  Strict Reading, Flexible Reading, and Bullet Reading.
+
+### 2026-05-05 - Windows v4.1.14 STT Improvisation Relock Implemented
+
+- Implemented the strict/bullet relock slice for Windows WebView2 STT.
+- `WordAligner` can now find strict visible phrase matches inside a longer
+  transcript, not only at the trailing end. This supports the pattern:
+  improvise, say a visible cue, then keep speaking.
+- Strict no-match results are logged as improvisation and no longer run the
+  normal pre-switch/stuck path. Force-skip remains disabled in strict mode.
+- Heartbeat locale sync no longer pulls the recognizer back to the current
+  script-index language during a strict no-progress/improvisation stretch, and
+  visible-locale assist pinning is extended to reduce bounce-back.
+- Windows presenter controls now hide during active STT and can be revealed
+  through a bottom hover hot-zone without tapping the script body or changing
+  the resume point.

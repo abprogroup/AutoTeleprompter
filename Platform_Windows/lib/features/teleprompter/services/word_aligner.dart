@@ -445,6 +445,7 @@ class WordAligner {
         windowEnd: windowEnd,
         lastConfirmedIndex: lastConfirmedIndex,
         scanFullWindow: true,
+        scanAllTranscriptPhrases: strictBulletMode,
         minPhraseWords: strictBulletMode ? 2 : 3,
         overrideWordThreshold: strictBulletMode ? _strictPhraseThreshold : null,
         minPhraseScore:
@@ -547,6 +548,7 @@ class WordAligner {
     int? maxJump,
     int minPhraseWords = 3,
     bool scanFullWindow = false,
+    bool scanAllTranscriptPhrases = false,
     double? overrideWordThreshold,
     double minPhraseScore = _matchThreshold,
     String debugPrefix = 'NEAR_PHRASE_PRIORITY',
@@ -567,61 +569,115 @@ class WordAligner {
     for (int phraseLen = longestPhrase;
         phraseLen >= minPhraseWords;
         phraseLen--) {
-      final spokenPhrase =
-          transcriptWords.sublist(transcriptWords.length - phraseLen);
-      double bestScore = 0.0;
-      int bestStart = -1;
-      int bestEnd = -1;
+      final phraseStarts = scanAllTranscriptPhrases
+          ? [
+              for (var i = transcriptWords.length - phraseLen; i >= 0; i--) i,
+            ]
+          : [transcriptWords.length - phraseLen];
 
-      for (int i = searchStart; i < phraseWindowEnd; i++) {
-        if (script[i].isNewline || script[i].normalized.isEmpty) continue;
+      double phraseBestScore = 0.0;
+      int phraseBestStart = -1;
+      int phraseBestEnd = -1;
+      int phraseBestTranscriptStart = -1;
 
-        int si = i;
-        int matched = 0;
-        double score = 0.0;
-        int endIdx = i;
+      for (final transcriptStart in phraseStarts) {
+        final spokenPhrase = transcriptWords.sublist(
+          transcriptStart,
+          transcriptStart + phraseLen,
+        );
+        if (!_hasUsefulPhraseWords(spokenPhrase, minPhraseWords)) continue;
 
-        for (int j = 0; j < spokenPhrase.length && si < phraseWindowEnd; si++) {
-          if (script[si].isNewline || script[si].normalized.isEmpty) {
-            continue;
+        double bestScore = 0.0;
+        int bestStart = -1;
+        int bestEnd = -1;
+
+        for (int i = searchStart; i < phraseWindowEnd; i++) {
+          if (script[i].isNewline || script[i].normalized.isEmpty) continue;
+
+          int si = i;
+          int matched = 0;
+          double score = 0.0;
+          int endIdx = i;
+
+          for (int j = 0;
+              j < spokenPhrase.length && si < phraseWindowEnd;
+              si++) {
+            if (script[si].isNewline || script[si].normalized.isEmpty) {
+              continue;
+            }
+
+            final sim = _wordSimilarity(
+                spokenPhrase[j], script[si].normalized, script[si].isRtl);
+            final threshold = overrideWordThreshold ??
+                (script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold);
+            if (sim < threshold) break;
+
+            matched++;
+            score += sim;
+            endIdx = si;
+            j++;
           }
 
-          final sim = _wordSimilarity(
-              spokenPhrase[j], script[si].normalized, script[si].isRtl);
-          final threshold = overrideWordThreshold ??
-              (script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold);
-          if (sim < threshold) break;
+          if (matched != spokenPhrase.length) continue;
 
-          matched++;
-          score += sim;
-          endIdx = si;
-          j++;
+          final distance = i - searchStart;
+          final adjustedScore =
+              (score / spokenPhrase.length) - (distance * 0.006);
+          if (adjustedScore > bestScore ||
+              (adjustedScore == bestScore && i < bestStart)) {
+            bestScore = adjustedScore;
+            bestStart = i;
+            bestEnd = endIdx;
+          }
         }
 
-        if (matched != spokenPhrase.length) continue;
-
-        final distance = i - searchStart;
-        final adjustedScore =
-            (score / spokenPhrase.length) - (distance * 0.006);
-        if (adjustedScore > bestScore ||
-            (adjustedScore == bestScore && i < bestStart)) {
-          bestScore = adjustedScore;
-          bestStart = i;
-          bestEnd = endIdx;
+        if (bestStart >= 0 &&
+            bestEnd > lastConfirmedIndex &&
+            bestScore >= minPhraseScore &&
+            (maxJump == null || bestEnd - lastConfirmedIndex <= maxJump) &&
+            (bestScore > phraseBestScore ||
+                (bestScore == phraseBestScore &&
+                    transcriptStart > phraseBestTranscriptStart))) {
+          phraseBestScore = bestScore;
+          phraseBestStart = bestStart;
+          phraseBestEnd = bestEnd;
+          phraseBestTranscriptStart = transcriptStart;
         }
       }
 
-      if (bestStart >= 0 &&
-          bestEnd > lastConfirmedIndex &&
-          bestScore >= minPhraseScore &&
-          (maxJump == null || bestEnd - lastConfirmedIndex <= maxJump)) {
-        return AlignmentResult(bestEnd, bestScore,
-            '$debugPrefix@$bestStart: words=$phraseLen end=$bestEnd score=${bestScore.toStringAsFixed(2)}');
+      if (phraseBestStart >= 0) {
+        return AlignmentResult(phraseBestEnd, phraseBestScore,
+            '$debugPrefix@$phraseBestStart: words=$phraseLen transcript=$phraseBestTranscriptStart end=$phraseBestEnd score=${phraseBestScore.toStringAsFixed(2)}');
       }
     }
 
     return null;
   }
+
+  static bool _hasUsefulPhraseWords(List<String> phrase, int minPhraseWords) {
+    var useful = 0;
+    for (final word in phrase) {
+      if (!_phraseStopWords.contains(word)) useful++;
+    }
+    return useful >= (minPhraseWords == 2 ? 1 : 2);
+  }
+
+  static const Set<String> _phraseStopWords = {
+    'a',
+    'an',
+    'and',
+    'as',
+    'at',
+    'for',
+    'in',
+    'is',
+    'of',
+    'or',
+    'the',
+    'to',
+    'we',
+    'you',
+  };
 
   // ── Word similarity helper ─────────────────────────────────────────────────
   /// Compute similarity between a spoken word and a script word,

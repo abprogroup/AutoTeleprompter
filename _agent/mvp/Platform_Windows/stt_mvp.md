@@ -273,6 +273,51 @@ owns how confirmed indices are rendered after STT produces results.
   requires confirmed phrase/sequence evidence and never enables large
   single-word jumps.
 
+### 2026-05-05 Final Strict/Bullet Relock Protocol
+
+- Treat no-match speech as improvisation, not recognizer failure. A presenter
+  may speak off-script for a while and then return to a visible cue.
+- During strict bullet/header mode, repeated no-match results must not:
+  force-skip, reset the session, restart the script position, or advance by
+  guessing.
+- Visible phrase/sequence alignment is the only owner of relock advancement.
+  Locale switching may help recognition, but it must not decide the target.
+- Relock may jump inside the current rendered visible word window only after a
+  confident two-or-more-word phrase or sequence match.
+- Large single-word jumps remain blocked. A single word may advance only in the
+  normal next-word/local-safe case.
+- Language-aware relock flow:
+  1. Try active-locale visible phrase/sequence matching first.
+  2. If that fails and the visible window contains a plausible alternate
+     language section, switch to that locale and pin it briefly.
+  3. Clear stale transcript from the previous locale.
+  4. Wait for the next recognizer result before advancing.
+  5. If the user keeps improvising, stay listening without panic switching.
+- This protocol keeps Windows WebView2 STT, mic selection, diagnostics, and
+  existing stop/resume behavior unchanged.
+
+### 2026-05-05 Presenter Toolbar Visibility Protocol
+
+- Windows stopped/manual presenter mode may keep the bottom controls visible.
+- During active STT, hide the bottom toolbar by default so the reading surface
+  stays clean.
+- Reveal controls by moving the mouse into a bottom hot-zone or by an explicit
+  shortcut. Hover reveal must not jump to a word, change the resume point, or
+  act like a body tap.
+- Keep controls visible while the mouse remains over the toolbar; fade them
+  after the mouse leaves the hot-zone/toolbar.
+
+Implementation status - 2026-05-05:
+
+- The strict/bullet relock protocol is implemented for Windows and covered by
+  targeted aligner/provider tests.
+- Strict visible relock scans phrase windows inside longer transcripts so a
+  visible cue can be found after off-script speech.
+- Provider no-match handling logs strict improvisation and avoids normal
+  heartbeat/pre-switch churn during that stretch.
+- Live WebView2 STT behavior still requires user artifact QA because recognizer
+  transcript timing depends on the Windows/browser speech engine.
+
 ### 2026-05-04 Regression Repair Addendum
 
 - Alignment owns visible skip decisions before locale switching. The aligner

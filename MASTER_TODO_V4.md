@@ -884,3 +884,30 @@
   accidental tap-to-show-toolbar jumps, and strict bullet/header STT treats the
   visible window as its phrase target even when the separate visible-skip toggle
   is off.
+
+### Windows v4.1.14 Final STT Functionality Fix Plan (2026-05-05)
+
+- [P] **Windows Presenter Toolbar Behavior - Planned Final Form**: Keep the
+  bottom presenter toolbar visible while STT is stopped/manual. When STT is
+  active, hide the toolbar for a clean reading surface and reveal it only from a
+  bottom hover hot-zone or explicit keyboard shortcut. Hover reveal must never
+  jump the script, change the resume point, or behave like a word tap.
+- [P] **Windows Bullet/Header STT - Improvisation State**: Treat off-script
+  speech as normal improvisation, not a stuck recognizer state. In strict
+  bullet/header mode, no-match speech must keep listening without force-skip,
+  panic restart, or desperate locale switching.
+- [P] **Windows Bullet/Header STT - Visible Relock**: After improvisation, STT
+  should relock only when it hears a confident two-or-more-word phrase or
+  sequence from the current visible presenter window. Large single-word jumps
+  stay blocked.
+- [P] **Windows Bullet/Header STT - Language-Aware Relock**: If no visible
+  match is found in the active locale and the heard text plausibly belongs to a
+  visible alternate language section, switch locale quickly, pin it briefly,
+  and wait for the next recognizer result before advancing. Language switching
+  assists relock; it does not own advancement.
+- [P] **Porting Guard**: Keep this as a Windows v4.1.14 validation pass first.
+  After user QA confirms the model, port the same explicit strict/bullet
+  behavior to Android and iOS in their next v4 patch versions.
+- [P] **Implementation Status**: Windows runtime slice implemented 2026-05-05.
+  Targeted teleprompter tests pass for visible-skip and strict/bullet relock.
+  Awaiting Windows workflow/artifact QA for live WebView2 STT behavior.

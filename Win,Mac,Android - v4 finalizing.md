@@ -264,3 +264,72 @@ Porting note:
 - After Windows v4.1.14 is user-tested, port the same explicit strict mode to
   Android and iOS. Do not make strict mode the default until the user verifies
   it improves bullet-header reading without hurting normal scripts.
+
+## Windows v4.1.14 - Final STT Functionality Fix Plan
+
+Status: planned next Windows-only implementation slice.
+
+Implementation update - 2026-05-05:
+
+- Runtime slice implemented in Windows.
+- `WordAligner` now searches strict visible phrases inside longer transcripts,
+  allowing relock after improvised preface/suffix speech.
+- Strict no-match is treated as improvisation in the provider instead of using
+  the normal stuck/pre-switch path.
+- Heartbeat locale sync is suppressed during strict no-progress stretches.
+- Windows presenter controls hide during active STT and reveal from a bottom
+  hover hot-zone without body-tap resume changes.
+
+Problem:
+
+- Bullet/header presenting requires the speaker to improvise between visible
+  script cues.
+- Current strict mode blocks some false advancement, but no-match speech can
+  still make the provider behave as if recognition is stuck.
+- The provider may restart, accumulate no-progress state, or try language
+  changes while the user is simply speaking off-script.
+- When the user resumes from the middle of the visible presenter window, STT
+  should relock from the visible phrase instead of requiring word-by-word
+  reading from the current provider index.
+
+Contract:
+
+- No-match speech is normal improvisation.
+- In strict bullet/header mode, no-match speech must not force-skip, restart,
+  reset, or advance.
+- Visible phrase/sequence matching owns advancement.
+- Language switching is only an assist to hear a visible phrase. It must not
+  advance on the same callback that switches language.
+- Large single-word jumps remain blocked.
+- Confident two-or-more-word visible matches may jump anywhere inside the
+  current visible presenter window.
+
+Implementation slices:
+
+1. Add tests for strict visible relock after off-script speech:
+   English visible phrase, Hebrew visible phrase, same-language later visible
+   phrase after a foreign section, and no large single-word jump.
+2. Add a provider-level improvisation/no-match state for strict mode:
+   keep listening, suppress force skip, suppress restart-like locale churn, and
+   do not treat no-progress as failure while active STT is healthy.
+3. Improve visible relock matching so it can search recent transcript phrases,
+   not only the trailing last few words, after an improvisation stretch.
+4. Add language-aware relock:
+   if active-locale matching fails and the visible window contains another
+   language section that plausibly fits the transcript, switch/pin that locale
+   and wait for the next result before advancing.
+5. Replace Windows presenter control visibility with desktop hot-zone behavior:
+   toolbar visible while STT is stopped, hidden during active STT, revealed by
+   hovering near the bottom or by keyboard shortcut, and never by tapping the
+   script body.
+
+Acceptance checks:
+
+- User may improvise for 30+ seconds without the script advancing or resetting.
+- User may then speak a visible two-or-more-word cue from the middle/lower
+  visible window and the presenter relocks to it.
+- English to Hebrew and Hebrew to English visible relock work after the switch
+  result arrives.
+- Normal reading still advances naturally.
+- Presenter bookmark marker taps still do not delete bookmarks.
+- STT-active toolbar reveal does not change resume point.

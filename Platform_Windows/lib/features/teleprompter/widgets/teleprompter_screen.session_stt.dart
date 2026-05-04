@@ -107,9 +107,18 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   void _scheduleHideControls() {
     if (Platform.isWindows) {
       _hideControlsTimer?.cancel();
-      if (mounted && !_controlsVisible) {
-        setState(() => _controlsVisible = true);
+      final tState = ref.read(teleprompterProvider);
+      final speechActive = tState.isListening || tState.isStarting;
+      if (!speechActive) {
+        if (mounted && !_controlsVisible) {
+          setState(() => _controlsVisible = true);
+        }
+        return;
       }
+      _hideControlsTimer = Timer(const Duration(milliseconds: 1400), () {
+        if (!mounted || _windowsControlsHovering) return;
+        setState(() => _controlsVisible = false);
+      });
       return;
     }
     _hideControlsTimer?.cancel();
@@ -303,8 +312,34 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   void _showControls() {
+    if (Platform.isWindows) {
+      final tState = ref.read(teleprompterProvider);
+      final speechActive = tState.isListening || tState.isStarting;
+      if (speechActive && !_windowsControlsHovering) return;
+      setState(() => _controlsVisible = true);
+      if (speechActive) _scheduleHideControls();
+      return;
+    }
     setState(() => _controlsVisible = true);
-    if (!Platform.isWindows) _scheduleHideControls();
+    _scheduleHideControls();
+  }
+
+  void _showWindowsControlsFromHotZone() {
+    if (!Platform.isWindows) {
+      _showControls();
+      return;
+    }
+    _hideControlsTimer?.cancel();
+    if (mounted && !_controlsVisible) {
+      setState(() => _controlsVisible = true);
+    }
+  }
+
+  void _syncWindowsControlsForSpeech(bool speechActive) {
+    if (!Platform.isWindows || !mounted) return;
+    _hideControlsTimer?.cancel();
+    _windowsControlsHovering = false;
+    setState(() => _controlsVisible = !speechActive);
   }
 
   Future<void> _requestAndStart() async {

@@ -157,42 +157,34 @@ class WordAligner {
         spans.addAll(_parseMarkupRecursive(
             m.group(2)!,
             base.copyWith(
-                text: '', highlight: Colors.yellow.withValues(alpha: 0.6))));
+                text: '', highlight: Colors.yellow.withOpacity(0.6))));
       } else if (m.group(3) != null) {
-        spans.addAll(_parseMarkupRecursive(
-            m.group(3)!,
-            base.copyWith(
-                text: '', highlight: Colors.red.withValues(alpha: 0.55))));
+        spans.addAll(_parseMarkupRecursive(m.group(3)!,
+            base.copyWith(text: '', highlight: Colors.red.withOpacity(0.55))));
       } else if (m.group(4) != null) {
         spans.addAll(_parseMarkupRecursive(
             m.group(4)!,
             base.copyWith(
-                text: '', highlight: Colors.green.withValues(alpha: 0.55))));
+                text: '', highlight: Colors.green.withOpacity(0.55))));
       } else if (m.group(5) != null) {
-        spans.addAll(_parseMarkupRecursive(
-            m.group(5)!,
-            base.copyWith(
-                text: '', highlight: Colors.blue.withValues(alpha: 0.45))));
+        spans.addAll(_parseMarkupRecursive(m.group(5)!,
+            base.copyWith(text: '', highlight: Colors.blue.withOpacity(0.45))));
       } else if (m.group(6) != null) {
         spans.addAll(_parseMarkupRecursive(
             m.group(6)!,
             base.copyWith(
-                text: '', highlight: Colors.orange.withValues(alpha: 0.50))));
+                text: '', highlight: Colors.orange.withOpacity(0.50))));
       } else if (m.group(7) != null) {
         spans.addAll(_parseMarkupRecursive(
             m.group(7)!,
             base.copyWith(
-                text: '', highlight: Colors.purple.withValues(alpha: 0.45))));
+                text: '', highlight: Colors.purple.withOpacity(0.45))));
       } else if (m.group(8) != null) {
-        spans.addAll(_parseMarkupRecursive(
-            m.group(8)!,
-            base.copyWith(
-                text: '', highlight: Colors.cyan.withValues(alpha: 0.45))));
+        spans.addAll(_parseMarkupRecursive(m.group(8)!,
+            base.copyWith(text: '', highlight: Colors.cyan.withOpacity(0.45))));
       } else if (m.group(9) != null) {
-        spans.addAll(_parseMarkupRecursive(
-            m.group(9)!,
-            base.copyWith(
-                text: '', highlight: Colors.pink.withValues(alpha: 0.45))));
+        spans.addAll(_parseMarkupRecursive(m.group(9)!,
+            base.copyWith(text: '', highlight: Colors.pink.withOpacity(0.45))));
       } else if (m.group(10) != null) {
         spans.addAll(_parseMarkupRecursive(m.group(10)!,
             base.copyWith(text: '', textColor: Colors.yellow.shade300)));

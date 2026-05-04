@@ -188,6 +188,11 @@ Mobile selection follow-up - 2026-05-05:
   commands, and selection handles must refresh after keyboard/viewInsets/focus
   changes.
 
+- iOS runtime pass applied after Android v4.1.1 seal: native toolbar suppression
+  now uses Flutter's handle-only selection-control contract, keyboard Done
+  promotes the active native range before unfocus, and keyboard/viewInsets
+  changes refresh overlay handles. Awaiting iPhone workflow/device QA.
+
 ### 3. macOS Launch Recovery
 
 Goal: make the macOS artifact launch correctly before any additional parity work.

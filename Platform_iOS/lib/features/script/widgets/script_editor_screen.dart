@@ -77,7 +77,7 @@ class ScriptEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
-    with StylingLogicMixin<ScriptEditorScreen> {
+    with StylingLogicMixin<ScriptEditorScreen>, WidgetsBindingObserver {
   // ── Mixin Implementation for StylingLogicMixin ────────────────────────────
   @override
   List<MarkupController> get controllers => _controllers;
@@ -154,6 +154,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   EditorSuite _activeSuite = EditorSuite.none;
   bool _keyboardDismissedForSelection = false;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer;
+  Timer? _mobileSelectionRefreshTimer;
 
   // v3.9.6: Professional History Bulking
   int _typingCharCount = 0; // chars typed since last history commit
@@ -167,6 +168,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startAutoSave();
     if (widget.pendingFile != null) {
       _isInit = true;
@@ -196,7 +198,28 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   }
 
   @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    _scheduleMobileSelectionGeometryRefresh();
+  }
+
+  void _scheduleMobileSelectionGeometryRefresh() {
+    void refresh() {
+      if (!mounted) return;
+      ContextMenuController.removeAny();
+      _overlayKey.currentState?.refreshPositions();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
+    _mobileSelectionRefreshTimer?.cancel();
+    _mobileSelectionRefreshTimer =
+        Timer(const Duration(milliseconds: 260), refresh);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _mobileSelectionRefreshTimer?.cancel();
     _disposeScriptEditorScreenBody();
     super.dispose();
   }

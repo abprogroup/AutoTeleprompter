@@ -412,6 +412,23 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     return !(selection.start == 0 && selection.end == controller.text.length);
   }
 
+  void _promoteNativeSelectionToOverlay() {
+    if (_isGlobalSelection || _isCommandExecuting) return;
+    final overlay = _overlayKey.currentState;
+    if (overlay == null || overlay.hasSelection) return;
+    for (var i = 0; i < _controllers.length; i++) {
+      if (!_focusNodes[i].hasFocus) continue;
+      final selection = _controllers[i].selection;
+      if (!selection.isValid || selection.isCollapsed) continue;
+      if (selection.start == 0 &&
+          selection.end == _controllers[i].text.length) {
+        continue;
+      }
+      _extendNativeSelectionToOverlay(i);
+      return;
+    }
+  }
+
   void _extendNativeSelectionToOverlay(int blockIndex) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return;
     if (_isGlobalSelection || _isCommandExecuting) return;

@@ -1811,3 +1811,15 @@
 - The same two behaviors are known iOS risks. Android remains the current
   repair target; after Android is stable, iOS should receive the same
   app-owned toolbar suppression and post-Done handle refresh protocol.
+
+### 2026-05-05 - iOS Mobile Selection Toolbar + Done Resync Port
+
+- Ported the Android-proven mobile selection lifecycle repair back to iOS:
+  `GhostSelectionControls` now uses Flutter's handle-only selection-control
+  contract, native selected-text toolbars are force-hidden through
+  `contextMenuBuilder`, and partial native ranges are promoted to the app
+  overlay before keyboard Done dismisses focus.
+- Added a keyboard/viewInsets metric refresh hook so app-owned selection
+  handles recalculate after the soft keyboard opens/closes or the viewport
+  moves.
+- Verification is pending iPhone workflow/device QA.

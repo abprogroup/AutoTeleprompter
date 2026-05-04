@@ -64,18 +64,11 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
-    final hasNativeRange =
-        controller.selection.isValid && !controller.selection.isCollapsed;
     final externalSelection = controller.externalSelection;
     final hasExternalRange = controller.isGlobalSelected ||
         (externalSelection != null &&
             externalSelection.isValid &&
             !externalSelection.isCollapsed);
-    final useGhostSelectionControls = isGlobalSelected ||
-        hasOverlaySelection ||
-        hasNativeRange ||
-        hasExternalRange;
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.transparent,
@@ -143,9 +136,7 @@ class _EditorBlock extends StatelessWidget {
                     ),
                   ),
                   child: TextField(
-                    selectionControls: useGhostSelectionControls
-                        ? GhostSelectionControls()
-                        : null,
+                    selectionControls: GhostSelectionControls(),
                     controller: controller,
                     focusNode: focusNode,
                     maxLines: null,
@@ -173,7 +164,9 @@ class _EditorBlock extends StatelessWidget {
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 2),
                     ),
-                    contextMenuBuilder: (_, __) {
+                    contextMenuBuilder: (_, editableTextState) {
+                      editableTextState.hideToolbar(false);
+                      ContextMenuController.removeAny();
                       final selection = controller.selection;
                       final hasPartialNativeSelection = selection.isValid &&
                           !selection.isCollapsed &&
@@ -183,6 +176,7 @@ class _EditorBlock extends StatelessWidget {
                       void adoptPartialSelectionAfterMenuBuild() {
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           onExtendSelection();
+                          ContextMenuController.removeAny();
                         });
                       }
 

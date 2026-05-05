@@ -1104,15 +1104,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       } catch (_) {}
     }
 
-    Future<void> safeStop(Future<void> stop) async {
+    Future<void> safeStopWhisper(Future<void> stop) async {
       try {
         await stop.timeout(const Duration(milliseconds: 900));
       } catch (_) {}
     }
 
     final stopFuture = Future.wait([
-      safeStop(_sttService.stop()),
-      safeStop(_whisperService.stop()),
+      _sttService.stop(),
+      safeStopWhisper(_whisperService.stop()),
     ]);
     _stopInFlight = stopFuture.then((_) {});
     try {

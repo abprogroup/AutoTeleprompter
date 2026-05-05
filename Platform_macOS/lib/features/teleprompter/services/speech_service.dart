@@ -87,6 +87,8 @@ class SpeechService {
   int _languageRetries = 0; // Prevent infinite language error loop
   int _localeSwitchToken = 0;
   DateTime? _localeSwitchGraceUntil;
+  Future<void> _engineQueue = Future.value();
+  Timer? _restartTimer;
 
   int _consecutiveErrors = 0;
   Timer? _errorResetTimer;
@@ -201,24 +203,67 @@ class SpeechService {
     return _isInitialized;
   }
 
+  Future<T> _runEngineOperation<T>(Future<T> Function() operation) {
+    final previous = _engineQueue;
+    final completer = Completer<void>();
+    _engineQueue = previous.catchError((_) {}).then((_) => completer.future);
+
+    return (() async {
+      await previous.catchError((_) {});
+      try {
+        return await operation();
+      } finally {
+        if (!completer.isCompleted) completer.complete();
+      }
+    })();
+  }
+
+  void _cancelPendingRestart() {
+    _restartTimer?.cancel();
+    _restartTimer = null;
+    _isRestarting = false;
+  }
+
+  Future<void> _settleAudioEngine([
+    Duration duration = const Duration(milliseconds: 650),
+  ]) async {
+    await Future.delayed(duration);
+  }
+
+  Future<void> _cancelNativeRecognition({
+    Duration settle = const Duration(milliseconds: 750),
+  }) async {
+    try {
+      await _stt.cancel();
+    } catch (_) {
+      try {
+        await _stt.stop();
+      } catch (_) {}
+    }
+    await _settleAudioEngine(settle);
+  }
+
   void _scheduleRestart(Duration delay, {bool reinit = false}) {
     if (_isRestarting) return;
     _isRestarting = true;
-    Future.delayed(delay, () async {
-      _isRestarting = false;
-      if (!_isActive) return;
-      if (reinit) {
-        await initialize();
-      }
-      if (_isActive) await _startListening();
+    _restartTimer = Timer(delay, () {
+      unawaited(_runEngineOperation(() async {
+        _isRestarting = false;
+        _restartTimer = null;
+        if (!_isActive) return;
+        if (reinit) {
+          await initialize();
+        }
+        if (_isActive) await _startListeningLocked();
+      }));
     });
   }
 
   void setLocale(String localeId) {
-    unawaited(_switchLocale(localeId));
+    unawaited(_runEngineOperation(() => _switchLocaleLocked(localeId)));
   }
 
-  Future<void> _switchLocale(String localeId) async {
+  Future<void> _switchLocaleLocked(String localeId) async {
     final normalized = localeId.replaceAll('-', '_');
     if (normalized.isEmpty) return;
     if (_localeId.toLowerCase().replaceAll('-', '_') ==
@@ -247,12 +292,9 @@ class SpeechService {
 
     if (!_isActive) return;
     try {
-      if (_stt.isListening) {
-        await _stt.cancel();
-      }
-      await Future.delayed(const Duration(milliseconds: 120));
+      await _cancelNativeRecognition();
       if (_isActive) {
-        await _startListening();
+        await _startListeningLocked();
       }
     } catch (e) {
       onError?.call('Locale switch failed: $e');
@@ -297,7 +339,12 @@ class SpeechService {
 
   /// Start speech recognition. Returns a [SpeechStartResult] so the caller
   /// knows if the requested language was available or if a fallback was used.
-  Future<SpeechStartResult> start({String? localeId}) async {
+  Future<SpeechStartResult> start({String? localeId}) {
+    return _runEngineOperation(() => _startLocked(localeId: localeId));
+  }
+
+  Future<SpeechStartResult> _startLocked({String? localeId}) async {
+    _cancelPendingRestart();
     final hasPermission = await _stt.hasPermission;
 
     if (!_isInitialized || !hasPermission) {
@@ -334,7 +381,7 @@ class SpeechService {
     _consecutiveErrors = 0;
     _languageRetries = 0;
     _isRestarting = false;
-    await _startListening();
+    await _startListeningLocked();
 
     return SpeechStartResult(
       success: true,
@@ -347,13 +394,12 @@ class SpeechService {
     );
   }
 
-  Future<void> _startListening() async {
+  Future<void> _startListeningLocked() async {
     if (!_isActive) return;
     try {
       final listenToken = _localeSwitchToken;
       if (_stt.isListening) {
-        await _stt.cancel();
-        await Future.delayed(const Duration(milliseconds: 80));
+        await _cancelNativeRecognition();
       }
       // Use the simplest possible listen call — no locale override,
       // no special modes. Let the device's speech recognizer decide everything.
@@ -387,24 +433,30 @@ class SpeechService {
     }
   }
 
-  Future<void> stop() async {
+  Future<void> stop() {
+    return _runEngineOperation(_stopLocked);
+  }
+
+  Future<void> _stopLocked() async {
     _isActive = false;
-    _isRestarting = false;
+    _cancelPendingRestart();
     _localeSwitchToken++;
     _consecutiveErrors = 0;
     _errorResetTimer?.cancel();
-    try {
-      await _stt.cancel().timeout(const Duration(milliseconds: 700));
-    } catch (_) {}
+    await _cancelNativeRecognition(settle: const Duration(milliseconds: 900));
     onStatusChange?.call(SpeechStatus.idle);
   }
 
-  Future<void> pause() async {
+  Future<void> pause() {
+    return _runEngineOperation(_pauseLocked);
+  }
+
+  Future<void> _pauseLocked() async {
     _isActive = false;
-    _isRestarting = false;
+    _cancelPendingRestart();
     _localeSwitchToken++;
     _errorResetTimer?.cancel();
-    await _stt.stop();
+    await _cancelNativeRecognition(settle: const Duration(milliseconds: 900));
     onStatusChange?.call(SpeechStatus.paused);
   }
 

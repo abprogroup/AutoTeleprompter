@@ -156,6 +156,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       script: script.words,
       transcript: _accumulatedTranscript,
       lastConfirmedIndex: state.confirmedWordIndex,
+      visibleSkipStartIndex:
+          maxSkipTargetIndex == null ? null : _visibleWordStart,
       maxSkipTargetIndex: maxSkipTargetIndex,
       strictBulletMode: strictBulletMode,
     );
@@ -178,12 +180,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _noProgressCount = 0;
       _resetVisibleLocaleAssist();
-      final visibleSkipTargetTrusted = maxSkipTargetIndex != null &&
-          aligned.confirmedWordIndex <= maxSkipTargetIndex;
+      final visibleSkipTargetTrusted = isTrustedVisibleSkipTarget(
+        alignedIndex: aligned.confirmedWordIndex,
+        visibleWordStart: _visibleWordStart,
+        visibleWordEnd: _visibleWordEnd,
+      );
       final target = resolveAdvanceTarget(
         currentIndex: state.confirmedWordIndex,
         alignedIndex: aligned.confirmedWordIndex,
-        visibleMaxSkipTargetIndex: maxSkipTargetIndex,
+        visibleMaxSkipTargetIndex:
+            visibleSkipTargetTrusted ? maxSkipTargetIndex : null,
       );
       final advancedWord =
           target < script.words.length ? script.words[target].raw : '?';
@@ -389,6 +395,19 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (!(visibleSkipEnabled || strictBulletMode)) return null;
     if (visibleWordStart == null) return null;
     return visibleWordEnd;
+  }
+
+  static bool isTrustedVisibleSkipTarget({
+    required int alignedIndex,
+    required int? visibleWordStart,
+    required int? visibleWordEnd,
+  }) {
+    if (visibleWordStart == null || visibleWordEnd == null) return false;
+    final start =
+        visibleWordStart <= visibleWordEnd ? visibleWordStart : visibleWordEnd;
+    final end =
+        visibleWordStart <= visibleWordEnd ? visibleWordEnd : visibleWordStart;
+    return alignedIndex >= start && alignedIndex <= end;
   }
 
   static bool visibleTranscriptPlausiblyMatchesLocale({

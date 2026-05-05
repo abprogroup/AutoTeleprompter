@@ -1,7 +1,9 @@
 part of 'teleprompter_screen.dart';
 
 class TeleprompterSettingsPanel extends ConsumerWidget {
-  const TeleprompterSettingsPanel({super.key});
+  final ValueChanged<double>? onFontSizeChanged;
+
+  const TeleprompterSettingsPanel({super.key, this.onFontSizeChanged});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -10,12 +12,14 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
     final notifier = ref.read(settingsProvider.notifier);
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
+      ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
       unawaited(notifier.setFontSize(clamped));
       unawaited(
         ref.read(scriptProvider.notifier).updateStyleMetadata(
               fontSize: clamped,
             ),
       );
+      onFontSizeChanged?.call(clamped);
     }
 
     void applyPresenterLineSpacing(double spacing) {

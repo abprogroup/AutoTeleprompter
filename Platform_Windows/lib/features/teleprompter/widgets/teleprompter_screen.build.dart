@@ -839,6 +839,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                   onNextBookmark: () =>
                                       _jumpPresenterBookmark(1),
                                   onSearch: _showSearchDialog,
+                                  onFontSizeChanged:
+                                      _preserveReadingPositionAfterLayoutChange,
                                 ),
                               ],
                             ),

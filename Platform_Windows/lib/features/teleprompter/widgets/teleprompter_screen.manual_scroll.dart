@@ -132,6 +132,24 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         .setVisibleWordWindow(firstVisible, lastVisible);
   }
 
+  void _preserveReadingPositionAfterLayoutChange(double _) {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+    final sttState = ref.read(teleprompterProvider);
+    final settings = ref.read(settingsProvider);
+    final speechActive = sttState.isListening || sttState.isStarting;
+    final baseIndex = settings.scrollMode == 'manual' && !speechActive
+        ? _manualWordIndex
+        : sttState.confirmedWordIndex;
+    final targetIndex = baseIndex.clamp(0, script.words.length - 1).toInt();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollToWordIndex(targetIndex, immediate: true);
+      _syncVisibleWordWindow(force: true);
+    });
+  }
+
   void _resetManual() {
     _stopManualScroll();
     _manualWordIndex = 0;

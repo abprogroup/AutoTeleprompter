@@ -33,6 +33,7 @@ class WordAligner {
   // Bullet/header prompting must not silently walk through guessed words.
   static const double _strictMatchThreshold = 0.82;
   static const double _strictPhraseThreshold = 0.78;
+  static const int _normalModeMinTranscriptWords = 3;
 
   /// Parse raw script text into a list of ScriptWords.
   /// Preserves paragraph breaks as isNewline=true entries.
@@ -353,6 +354,7 @@ class WordAligner {
     required List<ScriptWord> script,
     required String transcript,
     required int lastConfirmedIndex,
+    int? visibleSkipStartIndex,
     int? maxSkipTargetIndex,
     bool strictBulletMode = false,
   }) {
@@ -374,6 +376,15 @@ class WordAligner {
     final transcriptWords = _collapseAbbreviations(rawWords);
     if (transcriptWords.isEmpty)
       return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY_NORM');
+
+    if (!strictBulletMode &&
+        transcriptWords.length < _normalModeMinTranscriptWords) {
+      return AlignmentResult(
+        lastConfirmedIndex,
+        0.0,
+        'WAIT_MIN_WORDS: ${transcriptWords.length}/$_normalModeMinTranscriptWords',
+      );
+    }
 
     final lastSpoken = transcriptWords.last;
 
@@ -404,6 +415,11 @@ class WordAligner {
     final scanEnd =
         visibleSkipEnabled ? allowedEnd : searchStart + _searchWindowSize;
     final windowEnd = scanEnd.clamp(0, allowedEnd).toInt();
+    final visibleScanStart = visibleSkipEnabled
+        ? (visibleSkipStartIndex ?? searchStart)
+            .clamp(searchStart, windowEnd)
+            .toInt()
+        : searchStart;
 
     // ── STEP 1: NEXT-WORD PRIORITY ──────────────────────────────────────────
     // The most common case: user said the very next word. Check it first with
@@ -487,7 +503,7 @@ class WordAligner {
       final nearbyPhrase = _nearbyPhrasePriorityMatch(
         script: script,
         transcriptWords: transcriptWords,
-        searchStart: searchStart,
+        searchStart: visibleScanStart,
         windowEnd: windowEnd,
         lastConfirmedIndex: lastConfirmedIndex,
         scanFullWindow: true,
@@ -513,7 +529,8 @@ class WordAligner {
     int bestSeqEndIdx = lastConfirmedIndex;
     String bestSeqDebug = '';
 
-    for (int i = searchStart; i < windowEnd; i++) {
+    final seqSearchStart = visibleSkipEnabled ? visibleScanStart : searchStart;
+    for (int i = seqSearchStart; i < windowEnd; i++) {
       if (script[i].isNewline) continue;
       int matchCount = 0;
       double seqScore = 0.0;
@@ -540,7 +557,7 @@ class WordAligner {
         j++;
       }
 
-      final distance = i - searchStart;
+      final distance = i - seqSearchStart;
       final distPenalty = visibleSkipEnabled
           ? (distance * _distancePenaltyPerWord).clamp(0.0, 0.20)
           : distance * _distancePenaltyPerWord;

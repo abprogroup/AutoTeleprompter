@@ -36,7 +36,9 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       isScrollControlled: true,
-      builder: (_) => const TeleprompterSettingsPanel(),
+      builder: (_) => TeleprompterSettingsPanel(
+        onFontSizeChanged: _preserveReadingPositionAfterLayoutChange,
+      ),
     );
   }
 }

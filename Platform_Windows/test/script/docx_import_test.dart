@@ -129,6 +129,35 @@ void main() {
       contains('[align=right][u][bg=#00FF00]paragraph default style[/bg][/u]'),
     );
   });
+
+  test('DOCX import attaches standalone RTL brackets to text runs', () async {
+    final dir = await Directory.systemTemp.createTemp('docx_bracket_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/brackets.docx');
+    await file.writeAsBytes(_docxBytes('''
+<w:p>
+  <w:pPr><w:bidi/></w:pPr>
+  <w:r><w:rPr><w:rtl/></w:rPr><w:t>[</w:t></w:r>
+  <w:r><w:rPr><w:b/><w:rtl/></w:rPr><w:t>\u05d4\u05e4\u05e7\u05e1 \u05e9\u05dc \u05d4\u05de\u05d8\u05d1\u05d7]</w:t></w:r>
+</w:p>
+'''));
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(
+      text,
+      contains(
+        '[align=right]**[\u05d4\u05e4\u05e7\u05e1 \u05e9\u05dc \u05d4\u05de\u05d8\u05d1\u05d7]**',
+      ),
+    );
+    expect(text, isNot(contains('[align=right][**')));
+  });
 }
 
 List<int> _docxBytes(String bodyXml) {

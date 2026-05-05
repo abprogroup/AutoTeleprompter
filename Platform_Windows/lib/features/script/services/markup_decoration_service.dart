@@ -82,6 +82,30 @@ class MarkupDecorationParser {
 
   static String visibleText(String rawText) => rawText.replaceAll(tagRegex, '');
 
+  static TextRange? paintableContentRange(
+    String rawText,
+    MarkupDecorationRange range,
+  ) {
+    var start = range.start.clamp(0, rawText.length).toInt();
+    var end = range.end.clamp(start, rawText.length).toInt();
+    while (start < end && _isDecorationWhitespace(rawText.codeUnitAt(start))) {
+      start++;
+    }
+    while (
+        end > start && _isDecorationWhitespace(rawText.codeUnitAt(end - 1))) {
+      end--;
+    }
+    if (end <= start) return null;
+    return TextRange(start: start, end: end);
+  }
+
+  static bool _isDecorationWhitespace(int codeUnit) =>
+      codeUnit == 0x09 || // tab
+      codeUnit == 0x0A || // line feed
+      codeUnit == 0x0D || // carriage return
+      codeUnit == 0x20 || // space
+      codeUnit == 0xA0; // no-break space
+
   static int rawToVisibleOffset(String rawText, int rawOffset) {
     final clamped = rawOffset.clamp(0, rawText.length);
     var visible = 0;
@@ -194,37 +218,31 @@ class MarkupTextDecorationPainter extends CustomPainter {
     final width = size.width - contentPadding.horizontal;
     if (width <= 0) return;
 
-    final visible = MarkupDecorationParser.visibleText(rawText);
-    if (visible.isEmpty) return;
-    final rootStyle =
-        textSpan is TextSpan ? (textSpan as TextSpan).style : null;
     final painter = TextPainter(
-      text: TextSpan(text: visible, style: rootStyle),
+      text: textSpan,
       textDirection: textDirection,
       textAlign: textAlign,
       strutStyle: strutStyle,
     )..layout(maxWidth: width);
+    final lineMetrics = painter.computeLineMetrics();
 
     canvas.save();
     canvas.translate(contentPadding.left, contentPadding.top);
     for (final range in MarkupDecorationParser.decorationRanges(rawText)) {
       if (range.type != type) continue;
-      final start = MarkupDecorationParser.rawToVisibleOffset(
-        rawText,
-        range.start,
-      );
-      final end = MarkupDecorationParser.rawToVisibleOffset(
-        rawText,
-        range.end,
-      );
-      if (end <= start) continue;
+      final paintableRange =
+          MarkupDecorationParser.paintableContentRange(rawText, range);
+      if (paintableRange == null) continue;
       final boxes = painter
           .getBoxesForSelection(
-            TextSelection(baseOffset: start, extentOffset: end),
+            TextSelection(
+              baseOffset: paintableRange.start,
+              extentOffset: paintableRange.end,
+            ),
             boxHeightStyle: ui.BoxHeightStyle.tight,
             boxWidthStyle: ui.BoxWidthStyle.tight,
           )
-          .map((box) => box.toRect());
+          .map((box) => _applyLineAlignment(box.toRect(), lineMetrics, width));
       final merged = MarkupDecorationBoxMerger.merge(
         boxes,
         rowTolerance: 5.0,
@@ -237,6 +255,38 @@ class MarkupTextDecorationPainter extends CustomPainter {
       }
     }
     canvas.restore();
+  }
+
+  Rect _applyLineAlignment(
+    Rect rect,
+    List<ui.LineMetrics> lines,
+    double width,
+  ) {
+    final centerY = rect.center.dy;
+    ui.LineMetrics? best;
+    var bestDistance = double.infinity;
+    for (final line in lines) {
+      final lineCenter = line.baseline - line.ascent + line.height / 2;
+      final distance = (lineCenter - centerY).abs();
+      if (distance < bestDistance) {
+        best = line;
+        bestDistance = distance;
+      }
+    }
+    if (best == null) return rect;
+
+    final desiredLeft = switch (textAlign) {
+      TextAlign.right => width - best.width,
+      TextAlign.center => (width - best.width) / 2,
+      TextAlign.end =>
+        textDirection == TextDirection.rtl ? 0.0 : width - best.width,
+      TextAlign.start =>
+        textDirection == TextDirection.rtl ? width - best.width : 0.0,
+      TextAlign.justify || TextAlign.left => 0.0,
+    };
+    final delta = desiredLeft.clamp(0.0, width) - best.left;
+    if (delta.abs() < 0.01) return rect;
+    return rect.shift(Offset(delta, 0));
   }
 
   void _paintBackground(Canvas canvas, List<Rect> rects, Color color) {

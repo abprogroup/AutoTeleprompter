@@ -43,6 +43,22 @@ void main() {
     );
   });
 
+  test('paintable decoration range trims whitespace-only styling', () {
+    const blank = '[u]   [/u]';
+    final blankRange = MarkupDecorationParser.decorationRanges(blank).single;
+    expect(
+      MarkupDecorationParser.paintableContentRange(blank, blankRange),
+      isNull,
+    );
+
+    const text = '[u] \u05e9\u05dc\u05d5\u05dd [/u]';
+    final range = MarkupDecorationParser.decorationRanges(text).single;
+    final paintable = MarkupDecorationParser.paintableContentRange(text, range);
+    expect(paintable, isNotNull);
+    expect(text.substring(paintable!.start, paintable.end),
+        '\u05e9\u05dc\u05d5\u05dd');
+  });
+
   test('merges only same-row nearby decoration boxes', () {
     final merged = MarkupDecorationBoxMerger.merge(
       const [

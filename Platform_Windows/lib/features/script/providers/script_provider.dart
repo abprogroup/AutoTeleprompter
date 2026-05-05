@@ -370,6 +370,11 @@ class ScriptNotifier extends Notifier<Script?> {
           }
         }
 
+        if (_docxIsDecorationWhitespace(text)) {
+          isUnderline = false;
+          highlightColor = null;
+        }
+
         _addDocxRunSegment(
             segments,
             _DocxRunSegment(
@@ -382,6 +387,7 @@ class ScriptNotifier extends Notifier<Script?> {
             ));
       }
 
+      _mergeDocxNeutralPunctuationSegments(segments);
       for (final segment in segments) {
         paragraph.write(_docxWrapRun(
           segment.text,
@@ -433,6 +439,44 @@ class ScriptNotifier extends Notifier<Script?> {
       return;
     }
     segments.add(next);
+  }
+
+  static void _mergeDocxNeutralPunctuationSegments(
+      List<_DocxRunSegment> segments) {
+    var i = 0;
+    while (i < segments.length) {
+      final segment = segments[i];
+      if (_docxIsStandaloneOpeningNeutral(segment.text) &&
+          i + 1 < segments.length) {
+        final next = segments[i + 1];
+        segments[i + 1] = next.copyWith(text: segment.text + next.text);
+        segments.removeAt(i);
+        continue;
+      }
+      if (_docxIsStandaloneClosingNeutral(segment.text) && i > 0) {
+        final previous = segments[i - 1];
+        segments[i - 1] = previous.copyWith(text: previous.text + segment.text);
+        segments.removeAt(i);
+        continue;
+      }
+      i++;
+    }
+  }
+
+  static bool _docxIsDecorationWhitespace(String text) =>
+      text.isNotEmpty && text.trim().isEmpty;
+
+  static bool _docxIsStandaloneOpeningNeutral(String text) {
+    if (text.contains('\n')) return false;
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty && RegExp(r'^[\[\(\{]+$').hasMatch(trimmed);
+  }
+
+  static bool _docxIsStandaloneClosingNeutral(String text) {
+    if (text.contains('\n')) return false;
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty &&
+        RegExp(r'^[\]\)\}\.,:;!?]+$').hasMatch(trimmed);
   }
 
   static String _docxRunText(XmlElement run) {

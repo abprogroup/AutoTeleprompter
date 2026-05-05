@@ -60,7 +60,8 @@ class WordAligner {
           final clean = token.text.trim();
           if (clean.isEmpty) continue;
 
-          final parts = clean.split(RegExp(r'\s+'));
+          final parts =
+              _mergeStandaloneNeutralParts(clean.split(RegExp(r'\s+')));
           for (final part in parts) {
             if (part.isEmpty) continue;
             // v3.9.7: Strip residual markup tags before RTL detection AND normalization
@@ -71,6 +72,10 @@ class WordAligner {
                 '');
             final isRtl = cleanPart.isHebrew;
             final normalized = cleanPart.normalizeForMatching();
+            if (normalized.isEmpty &&
+                _isStandaloneNeutralPunctuation(cleanPart)) {
+              continue;
+            }
             if (normalized.isEmpty && cleanPart.trim().isEmpty) continue;
             words.add(ScriptWord(
               raw: part,
@@ -102,6 +107,47 @@ class WordAligner {
       }
     }
     return words;
+  }
+
+  static List<String> _mergeStandaloneNeutralParts(Iterable<String> parts) {
+    final merged = <String>[];
+    var pendingOpen = '';
+    for (final part in parts) {
+      if (part.isEmpty) continue;
+      if (_isStandaloneOpeningNeutral(part)) {
+        pendingOpen += part;
+        continue;
+      }
+      if (_isStandaloneClosingNeutral(part) && merged.isNotEmpty) {
+        merged[merged.length - 1] = merged.last + part;
+        continue;
+      }
+      merged.add(pendingOpen + part);
+      pendingOpen = '';
+    }
+    if (pendingOpen.isNotEmpty && merged.isNotEmpty) {
+      merged[merged.length - 1] = merged.last + pendingOpen;
+    } else if (pendingOpen.isNotEmpty) {
+      merged.add(pendingOpen);
+    }
+    return merged;
+  }
+
+  static bool _isStandaloneNeutralPunctuation(String text) {
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty &&
+        RegExp(r'^[\[\]\(\)\{\}\.,:;!?]+$').hasMatch(trimmed);
+  }
+
+  static bool _isStandaloneOpeningNeutral(String text) {
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty && RegExp(r'^[\[\(\{]+$').hasMatch(trimmed);
+  }
+
+  static bool _isStandaloneClosingNeutral(String text) {
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty &&
+        RegExp(r'^[\]\)\}\.,:;!?]+$').hasMatch(trimmed);
   }
 
   // ── Markup parser ───────────────────────────────────────────────────────────

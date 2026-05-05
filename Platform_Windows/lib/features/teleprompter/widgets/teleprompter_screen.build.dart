@@ -894,19 +894,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     String text, {
     required TextDirection paragraphDirection,
   }) {
-    if (text.isEmpty) return text;
-    const lri = '\u2066';
-    const rli = '\u2067';
-    const lrm = '\u200E';
-    const rlm = '\u200F';
-    const pdi = '\u2069';
-    final direction = _wordDirectionForDisplay(
-      text,
-      paragraphDirection: paragraphDirection,
-    );
-    final open = direction == TextDirection.rtl ? rli : lri;
-    final mark = direction == TextDirection.rtl ? rlm : lrm;
-    return '$open$mark$text$mark$pdi';
+    // Each presenter word is already wrapped in a Directionality widget.
+    // Adding Unicode isolates inside every word over-constrains mixed
+    // Hebrew/English/neutral punctuation and can flip brackets/numbers.
+    return text;
   }
 
   String _stripBidiIsolation(String text) =>

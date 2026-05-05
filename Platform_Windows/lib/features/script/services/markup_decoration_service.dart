@@ -194,8 +194,12 @@ class MarkupTextDecorationPainter extends CustomPainter {
     final width = size.width - contentPadding.horizontal;
     if (width <= 0) return;
 
+    final visible = MarkupDecorationParser.visibleText(rawText);
+    if (visible.isEmpty) return;
+    final rootStyle =
+        textSpan is TextSpan ? (textSpan as TextSpan).style : null;
     final painter = TextPainter(
-      text: textSpan,
+      text: TextSpan(text: visible, style: rootStyle),
       textDirection: textDirection,
       textAlign: textAlign,
       strutStyle: strutStyle,
@@ -205,9 +209,18 @@ class MarkupTextDecorationPainter extends CustomPainter {
     canvas.translate(contentPadding.left, contentPadding.top);
     for (final range in MarkupDecorationParser.decorationRanges(rawText)) {
       if (range.type != type) continue;
+      final start = MarkupDecorationParser.rawToVisibleOffset(
+        rawText,
+        range.start,
+      );
+      final end = MarkupDecorationParser.rawToVisibleOffset(
+        rawText,
+        range.end,
+      );
+      if (end <= start) continue;
       final boxes = painter
           .getBoxesForSelection(
-            TextSelection(baseOffset: range.start, extentOffset: range.end),
+            TextSelection(baseOffset: start, extentOffset: end),
             boxHeightStyle: ui.BoxHeightStyle.tight,
             boxWidthStyle: ui.BoxWidthStyle.tight,
           )

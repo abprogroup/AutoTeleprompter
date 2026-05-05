@@ -321,33 +321,39 @@ class ScriptNotifier extends Notifier<Script?> {
       final paragraph = StringBuffer();
       final segments = <_DocxRunSegment>[];
       final paragraphAlign = _docxParagraphAlign(p);
+      final paragraphRunDefaults = _docxParagraphRunDefaults(p);
 
       for (final r in p.findAllElements('w:r')) {
         final rPr = r.getElement('w:rPr');
         final text = _docxRunText(r);
         if (text.isEmpty) continue;
 
-        bool isBold = false;
-        bool isItalic = false;
-        bool isUnderline = false;
-        String? color;
-        String? highlightColor;
+        bool isBold = paragraphRunDefaults.isBold;
+        bool isItalic = paragraphRunDefaults.isItalic;
+        bool isUnderline = paragraphRunDefaults.isUnderline;
+        String? color = paragraphRunDefaults.color;
+        String? highlightColor = paragraphRunDefaults.highlightColor;
 
         if (rPr != null) {
-          isBold = rPr.getElement('w:b') != null &&
-              _docxAttr(rPr.getElement('w:b')!, 'val') != '0' &&
-              _docxAttr(rPr.getElement('w:b')!, 'val') != 'false';
-          isItalic = rPr.getElement('w:i') != null &&
-              _docxAttr(rPr.getElement('w:i')!, 'val') != '0' &&
-              _docxAttr(rPr.getElement('w:i')!, 'val') != 'false';
+          final bold = rPr.getElement('w:b');
+          if (bold != null) {
+            isBold = _docxBoolOn(bold);
+          }
+          final italic = rPr.getElement('w:i');
+          if (italic != null) {
+            isItalic = _docxBoolOn(italic);
+          }
           final underline = rPr.getElement('w:u');
-          isUnderline = underline != null &&
-              _docxAttr(underline, 'val') != 'none' &&
-              _docxAttr(underline, 'val') != '0' &&
-              _docxAttr(underline, 'val') != 'false';
+          if (underline != null) {
+            isUnderline = _docxUnderlineOn(underline);
+          }
           final colorElement = rPr.getElement('w:color');
-          color = colorElement == null ? null : _docxAttr(colorElement, 'val');
-          highlightColor = _docxRunHighlightColor(rPr);
+          if (colorElement != null) {
+            color = _docxAttr(colorElement, 'val');
+          }
+          if (_docxRunHasHighlightProperty(rPr)) {
+            highlightColor = _docxRunHighlightColor(rPr);
+          }
 
           if (detectedFontSize == null) {
             final sizeElement = rPr.getElement('w:sz');
@@ -487,6 +493,40 @@ class ScriptNotifier extends Notifier<Script?> {
         highlightElement == null ? null : _docxAttr(highlightElement, 'val');
     if (highlight == null || highlight == 'none') return null;
     return _docxHighlightNameToHex(highlight);
+  }
+
+  static _DocxRunStyle _docxParagraphRunDefaults(XmlElement paragraph) {
+    final rPr = paragraph.getElement('w:pPr')?.getElement('w:rPr');
+    if (rPr == null) return const _DocxRunStyle();
+    final bold = rPr.getElement('w:b');
+    final italic = rPr.getElement('w:i');
+    final underline = rPr.getElement('w:u');
+    final color = rPr.getElement('w:color');
+    return _DocxRunStyle(
+      isBold: bold != null && _docxBoolOn(bold),
+      isItalic: italic != null && _docxBoolOn(italic),
+      isUnderline: underline != null && _docxUnderlineOn(underline),
+      color: color == null
+          ? null
+          : _docxNormalizeTextColor(_docxAttr(color, 'val')),
+      highlightColor: _docxRunHasHighlightProperty(rPr)
+          ? _docxNormalizeColor(_docxRunHighlightColor(rPr))
+          : null,
+    );
+  }
+
+  static bool _docxRunHasHighlightProperty(XmlElement runProperties) =>
+      runProperties.getElement('w:shd') != null ||
+      runProperties.getElement('w:highlight') != null;
+
+  static bool _docxBoolOn(XmlElement element) {
+    final val = _docxAttr(element, 'val');
+    return val != '0' && val != 'false' && val != 'off';
+  }
+
+  static bool _docxUnderlineOn(XmlElement element) {
+    final val = _docxAttr(element, 'val');
+    return val != 'none' && val != '0' && val != 'false' && val != 'off';
   }
 
   static String? _docxNormalizeTextColor(String? color) {
@@ -990,6 +1030,22 @@ class _ParsedFile {
   final String text;
   final double? fontSize;
   _ParsedFile(this.text, {this.fontSize});
+}
+
+class _DocxRunStyle {
+  final bool isBold;
+  final bool isItalic;
+  final bool isUnderline;
+  final String? color;
+  final String? highlightColor;
+
+  const _DocxRunStyle({
+    this.isBold = false,
+    this.isItalic = false,
+    this.isUnderline = false,
+    this.color,
+    this.highlightColor,
+  });
 }
 
 class _DocxRunSegment {

@@ -101,6 +101,34 @@ void main() {
     expect(text, contains('[u][bg=#FCE5CD]first second[/bg][/u]'));
     expect('[bg=#FCE5CD]'.allMatches(text), hasLength(1));
   });
+
+  test('DOCX import inherits paragraph run defaults', () async {
+    final dir = await Directory.systemTemp.createTemp('docx_ppr_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/paragraph_defaults.docx');
+    await file.writeAsBytes(_docxBytes('''
+<w:p>
+  <w:pPr>
+    <w:bidi/>
+    <w:rPr><w:highlight w:val="green"/><w:u w:val="single"/></w:rPr>
+  </w:pPr>
+  <w:r><w:rPr><w:rtl/></w:rPr><w:t>paragraph default style</w:t></w:r>
+</w:p>
+'''));
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(
+      text,
+      contains('[align=right][u][bg=#00FF00]paragraph default style[/bg][/u]'),
+    );
+  });
 }
 
 List<int> _docxBytes(String bodyXml) {

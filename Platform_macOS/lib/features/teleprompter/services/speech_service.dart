@@ -13,10 +13,11 @@ class SpeechResult {
 /// Result of starting the speech service — tells the caller what happened.
 class SpeechStartResult {
   final bool success;
-  final String? actualLocale;       // The locale that was actually used
-  final String? requestedLocale;    // What was requested
-  final bool languageMissing;       // True if requested language wasn't available
-  final String? missingLanguageName; // Human-readable name of the missing language
+  final String? actualLocale; // The locale that was actually used
+  final String? requestedLocale; // What was requested
+  final bool languageMissing; // True if requested language wasn't available
+  final String?
+      missingLanguageName; // Human-readable name of the missing language
   final String? message;
 
   SpeechStartResult({
@@ -32,14 +33,38 @@ class SpeechStartResult {
   static String languageNameFromLocale(String localeId) {
     final lang = localeId.toLowerCase().split(RegExp(r'[_-]')).first;
     const names = {
-      'he': 'Hebrew', 'en': 'English', 'ar': 'Arabic', 'fr': 'French',
-      'de': 'German', 'es': 'Spanish', 'it': 'Italian', 'pt': 'Portuguese',
-      'ru': 'Russian', 'zh': 'Chinese', 'ja': 'Japanese', 'ko': 'Korean',
-      'hi': 'Hindi', 'tr': 'Turkish', 'pl': 'Polish', 'nl': 'Dutch',
-      'sv': 'Swedish', 'da': 'Danish', 'fi': 'Finnish', 'no': 'Norwegian',
-      'th': 'Thai', 'vi': 'Vietnamese', 'uk': 'Ukrainian', 'cs': 'Czech',
-      'ro': 'Romanian', 'hu': 'Hungarian', 'el': 'Greek', 'id': 'Indonesian',
-      'ms': 'Malay', 'fa': 'Persian', 'bn': 'Bengali', 'ta': 'Tamil',
+      'he': 'Hebrew',
+      'en': 'English',
+      'ar': 'Arabic',
+      'fr': 'French',
+      'de': 'German',
+      'es': 'Spanish',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ru': 'Russian',
+      'zh': 'Chinese',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'hi': 'Hindi',
+      'tr': 'Turkish',
+      'pl': 'Polish',
+      'nl': 'Dutch',
+      'sv': 'Swedish',
+      'da': 'Danish',
+      'fi': 'Finnish',
+      'no': 'Norwegian',
+      'th': 'Thai',
+      'vi': 'Vietnamese',
+      'uk': 'Ukrainian',
+      'cs': 'Czech',
+      'ro': 'Romanian',
+      'hu': 'Hungarian',
+      'el': 'Greek',
+      'id': 'Indonesian',
+      'ms': 'Malay',
+      'fa': 'Persian',
+      'bn': 'Bengali',
+      'ta': 'Tamil',
     };
     return names[lang] ?? localeId;
   }
@@ -69,6 +94,7 @@ class SpeechService {
   void Function(SpeechResult)? onResult;
   void Function(SpeechStatus)? onStatusChange;
   void Function(String)? onError;
+
   /// Fires when the language is confirmed unavailable (after retries exhausted).
   /// The string is the original requested locale ID.
   void Function(String requestedLocale)? onLanguageUnavailable;
@@ -133,7 +159,8 @@ class SpeechService {
 
           if (_isRestarting) return;
 
-          final isTimeout = msg == 'error_no_match' || msg.contains('no_match') ||
+          final isTimeout = msg == 'error_no_match' ||
+              msg.contains('no_match') ||
               msg.contains('speech_timeout');
 
           if (_consecutiveErrors >= 8) {
@@ -250,7 +277,10 @@ class SpeechService {
 
     // 2. Language match (e.g. requested en_US, found en_GB)
     for (final l in locales) {
-      if (l.localeId.toLowerCase().replaceAll('-', '_').startsWith('${lang}_')) {
+      if (l.localeId
+          .toLowerCase()
+          .replaceAll('-', '_')
+          .startsWith('${lang}_')) {
         return l.localeId;
       }
     }
@@ -275,7 +305,8 @@ class SpeechService {
       if (!ok) {
         return SpeechStartResult(
           success: false,
-          message: 'Speech recognition not available. Please check that speech recognition is enabled in your device settings.',
+          message:
+              'Speech recognition not available. Please check that speech recognition is enabled in your device settings.',
         );
       }
     }
@@ -294,7 +325,6 @@ class SpeechService {
         languageMissing = true;
         _localeId = '';
       }
-
     } else {
       // No locale specified — use device default
       _localeId = '';
@@ -334,7 +364,8 @@ class SpeechService {
           if (listenToken != _localeSwitchToken) return;
           _consecutiveErrors = 0;
           if (result.recognizedWords.isNotEmpty) {
-            onResult?.call(SpeechResult(result.recognizedWords, result.finalResult));
+            onResult?.call(
+                SpeechResult(result.recognizedWords, result.finalResult));
           }
           if (result.finalResult && _isActive && !_isRestarting) {
             _scheduleRestart(const Duration(milliseconds: 100));
@@ -362,7 +393,9 @@ class SpeechService {
     _localeSwitchToken++;
     _consecutiveErrors = 0;
     _errorResetTimer?.cancel();
-    await _stt.stop();
+    try {
+      await _stt.cancel().timeout(const Duration(milliseconds: 700));
+    } catch (_) {}
     onStatusChange?.call(SpeechStatus.idle);
   }
 

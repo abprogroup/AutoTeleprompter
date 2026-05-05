@@ -1,5 +1,20 @@
 part of 'teleprompter_screen.dart';
 
+Future<void> _openMacSoundInputSettings() async {
+  final targets = [
+    'x-apple.systempreferences:com.apple.Sound-Settings.extension?input',
+    'x-apple.systempreferences:com.apple.preference.sound?Input',
+    'x-apple.systempreferences:com.apple.Sound-Settings.extension',
+  ];
+
+  for (final target in targets) {
+    try {
+      final result = await Process.run('open', [target]);
+      if (result.exitCode == 0) return;
+    } catch (_) {}
+  }
+}
+
 class _MacMicSelector extends StatelessWidget {
   final String selectedLabel;
   final List<SttAudioInputDevice> devices;
@@ -50,11 +65,29 @@ class _MacMicSelector extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            devices.isEmpty
-                ? 'macOS uses the microphone selected in System Settings.'
-                : 'macOS routes Apple Speech through the system input device.',
+            devices.length <= 1
+                ? 'Apple Speech uses the macOS Sound Input device.'
+                : 'Apple Speech follows the input selected in macOS Sound settings.',
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
+          if (devices.length > 1) ...[
+            const SizedBox(height: 8),
+            for (final device in devices)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  device.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: device.label == label ? accentColor : Colors.white54,
+                    fontSize: 11,
+                    fontWeight: device.label == label
+                        ? FontWeight.w700
+                        : FontWeight.w400,
+                  ),
+                ),
+              ),
+          ],
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -70,11 +103,7 @@ class _MacMicSelector extends StatelessWidget {
                 icon: const Icon(Icons.settings_input_component, size: 16),
                 label: const Text('Open Input Settings'),
                 style: TextButton.styleFrom(foregroundColor: accentColor),
-                onPressed: () {
-                  Process.run('open', [
-                    'x-apple.systempreferences:com.apple.Sound-Settings.extension',
-                  ]);
-                },
+                onPressed: () => unawaited(_openMacSoundInputSettings()),
               ),
               TextButton.icon(
                 icon: const Icon(Icons.restart_alt, size: 16),

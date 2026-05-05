@@ -86,6 +86,35 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
 
     final settings = ref.watch(settingsProvider);
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    if (_isPendingLoad) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0A0A0A),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: CircularProgressIndicator(
+                  strokeWidth: 4,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFBF00)),
+                ),
+              ),
+              SizedBox(height: 18),
+              Text(
+                'Loading script...',
+                style: TextStyle(
+                  color: Color(0xFFFFBF00),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
@@ -454,34 +483,6 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                   right: 16,
                   child: _buildEditorSearchToolbar(),
                 ),
-                if (_isPendingLoad)
-                  Positioned.fill(
-                    child: Container(
-                      color: const Color(0xFF0A0A0A),
-                      child: const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 56,
-                              height: 56,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 4,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                    Color(0xFFFFBF00)),
-                              ),
-                            ),
-                            SizedBox(height: 18),
-                            Text('Loading script...',
-                                style: TextStyle(
-                                    color: Color(0xFFFFBF00),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
                 if (settings.debugMode)
                   Positioned(
                     bottom: 24,

@@ -574,6 +574,30 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   /// Universal same-script language support belongs to the v5 language MVP.
   String _localeForWord(ScriptWord word) => word.isRtl ? 'he_IL' : 'en_US';
 
+  String? _strongLocaleForWord(ScriptWord word) {
+    if (word.isNewline) return null;
+    final visible = word.raw.replaceAll(RegExp(r'\[[^\]]+\]|\*\*'), '');
+    if (RegExp(r'[\u0590-\u05FF]').hasMatch(visible)) return 'he_IL';
+    if (RegExp(r'[A-Za-z]').hasMatch(visible)) return 'en_US';
+    return null;
+  }
+
+  String _startLocaleForIndex(Script script, int startIndex) {
+    if (script.words.isEmpty) return 'en_US';
+    final clamped = startIndex.clamp(0, script.words.length - 1).toInt();
+
+    for (var i = clamped; i < script.words.length && i <= clamped + 24; i++) {
+      final locale = _strongLocaleForWord(script.words[i]);
+      if (locale != null) return locale;
+    }
+    for (var i = clamped - 1; i >= 0 && i >= clamped - 8; i--) {
+      final locale = _strongLocaleForWord(script.words[i]);
+      if (locale != null) return locale;
+    }
+    if (clamped < _sectionLocales.length) return _sectionLocales[clamped];
+    return _sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US';
+  }
+
   /// Precompute the STT locale section for every script token. Short foreign
   /// runs inherit surrounding context so names or isolated words do not restart
   /// the recognizer unnecessarily.
@@ -872,9 +896,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog(
         '🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
-    final localeId = startIndex < _sectionLocales.length
-        ? _sectionLocales[startIndex]
-        : (_sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US');
+    final localeId = _startLocaleForIndex(script, startIndex);
     _scriptLanguageLocale = localeId;
     _activeLocale = localeId;
 
@@ -1049,17 +1071,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _resetVisibleLocaleAssist();
 
     // Stop all engines — Whisper may have been auto-started via fallback
-    final stopFuture = Future.wait([
-      _sttService.stop(),
-      _whisperService.stop(),
-    ]);
-    _stopInFlight = stopFuture.then((_) {});
-    try {
-      await _stopInFlight;
-    } finally {
-      _stopInFlight = null;
-    }
-
     if (!_disposed) {
       try {
         state = state.copyWith(
@@ -1071,6 +1082,23 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           sttBrowserUrl: null,
         );
       } catch (_) {}
+    }
+
+    Future<void> safeStop(Future<void> stop) async {
+      try {
+        await stop.timeout(const Duration(milliseconds: 900));
+      } catch (_) {}
+    }
+
+    final stopFuture = Future.wait([
+      safeStop(_sttService.stop()),
+      safeStop(_whisperService.stop()),
+    ]);
+    _stopInFlight = stopFuture.then((_) {});
+    try {
+      await _stopInFlight;
+    } finally {
+      _stopInFlight = null;
     }
   }
 

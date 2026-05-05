@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:autoteleprompter/features/script/providers/script_provider.dart';
+import 'package:autoteleprompter/features/script/services/pages_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -157,6 +158,29 @@ void main() {
       ),
     );
     expect(text, isNot(contains('[align=right][**')));
+  });
+
+  test('Pages round trip preserves AutoTeleprompter markup metadata', () async {
+    final dir = await Directory.systemTemp.createTemp('pages_markup_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    const source =
+        '[align=right]**[u][bg=#FCE5CD]styled Hebrew row[/bg][/u]**[/align=right]\n\nplain row';
+    final file = File('${dir.path}/styled.pages');
+    await file.writeAsBytes(PagesService.generate(source));
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(text, source);
+    expect(text, contains('[bg=#FCE5CD]'));
+    expect(text, contains('[u]'));
+    expect(text, contains('**'));
+    expect(text, contains('\n\nplain row'));
   });
 }
 

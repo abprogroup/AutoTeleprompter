@@ -78,6 +78,13 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   void _scheduleHideControls() {
     _hideControlsTimer?.cancel();
+    final tState = ref.read(teleprompterProvider);
+    if (!tState.isListening && !tState.isStarting) {
+      if (mounted && !_controlsVisible) {
+        setState(() => _controlsVisible = true);
+      }
+      return;
+    }
     _hideControlsTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _controlsVisible = false);
     });
@@ -187,7 +194,11 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     final speechActive = tState.isListening || tState.isStarting;
     if (speechActive && !_controlsHovering) return;
     setState(() => _controlsVisible = true);
-    _scheduleHideControls();
+    if (speechActive) {
+      _scheduleHideControls();
+    } else {
+      _hideControlsTimer?.cancel();
+    }
   }
 
   void _showControlsFromHotZone() {

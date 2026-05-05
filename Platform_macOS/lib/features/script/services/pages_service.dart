@@ -8,18 +8,24 @@ import 'markup_export_service.dart';
 ///
 /// A .pages file is a ZIP archive. We use the old XML-based format (index.xml)
 /// which is the only format we can write without Apple's private protobuf
-/// schema. Internal markup is stripped to visible text so exported files do not
-/// expose app-private editing tags.
+/// schema. The visible Pages XML stays plain text, but the original app markup
+/// is stored in a private archive member so AutoTeleprompter can round-trip
+/// styles when reopening files it created.
 class PagesService {
   PagesService._();
+  static const markupEntryName = 'AutoTeleprompter/raw_markup.txt';
 
   /// Converts internal-markup text to .pages ZIP bytes.
   static List<int> generate(String text) {
     final xml = _buildIndexXml(text);
     final xmlBytes = utf8.encode(xml);
+    final markupBytes = utf8.encode(text.replaceAll('\r\n', '\n'));
 
     final archive = Archive();
     archive.addFile(ArchiveFile('index.xml', xmlBytes.length, xmlBytes));
+    archive.addFile(
+      ArchiveFile(markupEntryName, markupBytes.length, markupBytes),
+    );
 
     return ZipEncoder().encode(archive)!;
   }

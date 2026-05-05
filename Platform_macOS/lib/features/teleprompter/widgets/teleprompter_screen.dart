@@ -84,7 +84,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     HardwareKeyboard.instance.addHandler(_handlePresentationKey);
     WakelockPlus.enable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    _scheduleHideControls();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initRemoteListener();

@@ -1903,7 +1903,7 @@
   so macOS can port the behavior without copying Windows-only WebView2,
   browser microphone, or speech-pack plumbing.
 
-### 2026-05-05 - macOS v4.1.14 Parity Port Implemented
+### 2026-05-05 - macOS v4.1.1 Parity Port Implemented
 
 - Removed the macOS black-screen startup risk by moving microphone/speech
   permission initialization after first frame with recoverable debug logging.
@@ -1917,3 +1917,16 @@
   instead of deleting, and active STT hides controls until bottom hover.
 - Added macOS script and teleprompter tests copied/adapted from Windows;
   targeted tests pass locally with `flutter test --no-pub`.
+
+### 2026-05-05 - macOS v4.1.1 Finalization Follow-Up
+
+- Corrected macOS metadata/workflow naming to `4.1.1+11` /
+  `Build macOS App (v4.1.1)` while keeping Windows v4.1.14 as the behavior
+  source for DOCX/STT/presenter parity.
+- Added `NSSpeechRecognitionUsageDescription` for Apple speech permission, kept
+  microphone/speech startup recoverable, and preserved symlink-safe artifact
+  packaging.
+- Added Pages metadata round-trip for AutoTeleprompter-created `.pages` files
+  so app-owned styles, blank rows, alignment, and bookmarks can reopen intact.
+- Fixed macOS loading-screen mojibake and kept presenter controls visible until
+  STT actually starts.

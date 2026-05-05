@@ -177,7 +177,8 @@ Do not port:
 - Restart still resets to beginning; stop/start still resumes.
 # 2026-05-05 Implementation Status
 
-The macOS v4.1.14 parity port has been implemented against this packet:
+The macOS v4.1.1 parity port has been implemented against this Windows v4.1.14
+behavior packet:
 
 - launch startup permission deferral;
 - DOCX import preservation and markup decoration painting;

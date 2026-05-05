@@ -912,7 +912,7 @@
   Targeted teleprompter tests pass for visible-skip and strict/bullet relock.
   Awaiting Windows workflow/artifact QA for live WebView2 STT behavior.
 
-## 2026-05-05 macOS v4.1.14 Windows-Parity Port
+## 2026-05-05 macOS v4.1.1 Windows-Parity Port
 
 - [P] **macOS Launch Guard**: macOS no longer blocks `runApp()` on microphone /
   speech permission initialization. Permission failures are logged after first
@@ -927,4 +927,8 @@
   delete bookmarks directly; active STT hides presenter controls and bottom
   hover reveals them without moving the resume point.
 - [P] **macOS Workflow Label**: macOS package/workflow metadata now targets
-  `v4.1.14`; workflow logs include app/zip size breakdown for artifact audit.
+  `v4.1.1`; workflow logs include app/zip size breakdown for artifact audit.
+- [P] **macOS Finalization Follow-Up**: Correct the macOS version label from
+  `v4.1.14` to `v4.1.1`, add the missing macOS speech-recognition usage key,
+  preserve AutoTeleprompter-created Pages style metadata, keep presenter
+  controls visible before STT starts, and fix the loading-screen mojibake.

@@ -670,6 +670,20 @@ class ScriptNotifier extends Notifier<Script?> {
   /// iWork format by extracting readable text from all XML entries.
   _ParsedFile _parsePages(List<int> rawBytes) {
     final archive = ZipDecoder().decodeBytes(rawBytes);
+    final markupEntry = archive.findFile('AutoTeleprompter/raw_markup.txt') ??
+        archive.findFile('autoteleprompter/raw_markup.txt');
+    if (markupEntry != null) {
+      try {
+        final content = utf8.decode(List<int>.from(markupEntry.content),
+            allowMalformed: true);
+        if (content.trim().isNotEmpty) {
+          return _ParsedFile(
+            content.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trimRight(),
+          );
+        }
+      } catch (_) {}
+    }
+
     final buf = StringBuffer();
 
     // Old Pages format: index.xml contains <sf:p> paragraph elements

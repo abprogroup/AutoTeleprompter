@@ -828,7 +828,7 @@ flow. Android should port it later with extra phone QA because
 Keep normal reading as the default until the future three-mode STT UX is
 designed.
 
-macOS v4.1.14 parity implementation — 2026-05-05
+macOS v4.1.1 parity implementation — 2026-05-05
 
 macOS has now received the verified Windows v4.1.14 behavior model: deferred
 startup permissions to avoid black screen, DOCX import preservation,
@@ -838,3 +838,11 @@ bypass, Apple-safe locale switching, bookmark-safe presenter markers, and
 active-STT bottom-hover control reveal. Remaining proof is macOS workflow and
 device QA; do not treat Windows WebView2, Windows mic selector UI, Android SAF,
 or mobile selection-toolbar logic as macOS features.
+
+macOS v4.1.1 finalization note — 2026-05-05
+
+macOS versioning is intentionally `4.1.1+11`, not `4.1.14`; the higher Windows
+number remains only the behavior-source label. macOS also keeps Pages support:
+AutoTeleprompter-created `.pages` files store private raw-markup metadata for
+style round-trip, while external Pages files remain visible-text imports unless
+they contain that metadata.

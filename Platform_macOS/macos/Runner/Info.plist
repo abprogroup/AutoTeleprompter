@@ -26,6 +26,8 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>AutoTeleprompt needs microphone access to listen to your voice and pace the script accordingly.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AutoTeleprompt needs speech recognition access to follow your reading and keep the teleprompter in sync.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

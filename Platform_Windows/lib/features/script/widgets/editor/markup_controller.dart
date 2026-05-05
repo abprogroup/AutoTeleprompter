@@ -30,6 +30,7 @@ class MarkupController extends TextEditingController {
   );
 
   static const Color _selectionBg = Color(0x66FFBF00);
+  static const int _hiddenTagPlaceholderCodeUnit = 0x2060; // WORD JOINER
 
   static final RegExp _tagRegex = RegExp(
     r'\*\*'
@@ -379,7 +380,18 @@ class MarkupController extends TextEditingController {
 
     void emitTag(int start, int end) {
       if (start >= end) return;
-      children.add(TextSpan(text: src.substring(start, end), style: _tagStyle));
+      // Keep the rendered span length identical to the raw markup tag length
+      // so caret/selection offsets still map to controller.text, but avoid
+      // painting literal hidden "[bg]" / "[align]" letters. Those invisible
+      // LTR tag characters still participate in Unicode bidi layout and can
+      // split RTL punctuation, underline, and DOCX highlight bands.
+      children.add(TextSpan(
+        text: String.fromCharCodes(List<int>.filled(
+          end - start,
+          _hiddenTagPlaceholderCodeUnit,
+        )),
+        style: _tagStyle,
+      ));
     }
 
     int cursor = 0;

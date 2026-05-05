@@ -3,8 +3,54 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   Future<void> _importFile() async {
     final supportedExts = PlatformFileImport.supportedExtensions;
-    final result = await FilePicker.platform
-        .pickFiles(type: FileType.any, allowMultiple: false);
+    if (widget.shouldAutoLoad && _isPendingLoad) {
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      if (!mounted) return;
+    }
+
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: supportedExts,
+        allowMultiple: false,
+        dialogTitle: 'Load Script',
+      );
+    } catch (error, stack) {
+      debugPrint('macOS file picker failed: $error');
+      debugPrintStack(stackTrace: stack);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(children: [
+            Icon(Icons.folder_off_rounded, color: Color(0xFFFFBF00), size: 22),
+            SizedBox(width: 10),
+            Text('Could Not Open Files',
+                style: TextStyle(color: Colors.white, fontSize: 17)),
+          ]),
+          content: Text(
+            'macOS did not allow the file picker to open. Please try again.',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK',
+                  style: TextStyle(
+                      color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      if (widget.shouldAutoLoad && mounted) Navigator.pop(context);
+      if (mounted) setState(() => _isPendingLoad = false);
+      return;
+    }
     if (!mounted) return;
     if (result == null || result.files.single.path == null) {
       // v3.9.5.59: Fluid navigation fallback

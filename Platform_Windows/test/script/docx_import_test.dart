@@ -78,6 +78,29 @@ void main() {
     expect(text, contains('[bg=#FCE5CD]shaded row[/bg]'));
     expect(text, contains('[bg=#FFFF00]highlight row[/bg]'));
   });
+
+  test('DOCX import coalesces adjacent runs with the same style', () async {
+    final dir = await Directory.systemTemp.createTemp('docx_merge_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/merged.docx');
+    await file.writeAsBytes(_docxBytes('''
+<w:p>
+  <w:r><w:rPr><w:shd w:fill="FCE5CD"/><w:u w:val="single"/></w:rPr><w:t>first </w:t></w:r>
+  <w:r><w:rPr><w:shd w:fill="FCE5CD"/><w:u w:val="single"/></w:rPr><w:t>second</w:t></w:r>
+</w:p>
+'''));
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(text, contains('[u][bg=#FCE5CD]first second[/bg][/u]'));
+    expect('[bg=#FCE5CD]'.allMatches(text), hasLength(1));
+  });
 }
 
 List<int> _docxBytes(String bodyXml) {

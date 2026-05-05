@@ -319,6 +319,7 @@ class ScriptNotifier extends Notifier<Script?> {
 
     for (final p in paragraphs) {
       final paragraph = StringBuffer();
+      final segments = <_DocxRunSegment>[];
       final paragraphAlign = _docxParagraphAlign(p);
 
       for (final r in p.findAllElements('w:r')) {
@@ -363,13 +364,26 @@ class ScriptNotifier extends Notifier<Script?> {
           }
         }
 
+        _addDocxRunSegment(
+            segments,
+            _DocxRunSegment(
+              text,
+              isBold: isBold,
+              isItalic: isItalic,
+              isUnderline: isUnderline,
+              color: _docxNormalizeTextColor(color),
+              highlightColor: _docxNormalizeColor(highlightColor),
+            ));
+      }
+
+      for (final segment in segments) {
         paragraph.write(_docxWrapRun(
-          text,
-          isBold: isBold,
-          isItalic: isItalic,
-          isUnderline: isUnderline,
-          color: color,
-          highlightColor: highlightColor,
+          segment.text,
+          isBold: segment.isBold,
+          isItalic: segment.isItalic,
+          isUnderline: segment.isUnderline,
+          color: segment.color,
+          highlightColor: segment.highlightColor,
         ));
       }
 
@@ -402,6 +416,17 @@ class ScriptNotifier extends Notifier<Script?> {
       _normalizeImportedDocxText(parsedParagraphs.join('\n')),
       fontSize: detectedFontSize,
     );
+  }
+
+  static void _addDocxRunSegment(
+      List<_DocxRunSegment> segments, _DocxRunSegment next) {
+    if (next.text.isEmpty) return;
+    if (segments.isNotEmpty && segments.last.sameStyle(next)) {
+      final previous = segments.removeLast();
+      segments.add(previous.copyWith(text: previous.text + next.text));
+      return;
+    }
+    segments.add(next);
   }
 
   static String _docxRunText(XmlElement run) {
@@ -965,6 +990,40 @@ class _ParsedFile {
   final String text;
   final double? fontSize;
   _ParsedFile(this.text, {this.fontSize});
+}
+
+class _DocxRunSegment {
+  final String text;
+  final bool isBold;
+  final bool isItalic;
+  final bool isUnderline;
+  final String? color;
+  final String? highlightColor;
+
+  const _DocxRunSegment(
+    this.text, {
+    required this.isBold,
+    required this.isItalic,
+    required this.isUnderline,
+    required this.color,
+    required this.highlightColor,
+  });
+
+  bool sameStyle(_DocxRunSegment other) =>
+      isBold == other.isBold &&
+      isItalic == other.isItalic &&
+      isUnderline == other.isUnderline &&
+      color == other.color &&
+      highlightColor == other.highlightColor;
+
+  _DocxRunSegment copyWith({required String text}) => _DocxRunSegment(
+        text,
+        isBold: isBold,
+        isItalic: isItalic,
+        isUnderline: isUnderline,
+        color: color,
+        highlightColor: highlightColor,
+      );
 }
 
 class _RtfRun {

@@ -110,8 +110,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 alignment: _toWrapAlignment(
                     paraAlign, settings, firstWord.effectiveRtl),
                 crossAxisAlignment: WrapCrossAlignment.center,
-                children: para.map<Widget>((wordObj) {
-                  final ScriptWord word = wordObj as ScriptWord;
+                children: para.asMap().entries.map<Widget>((entry) {
+                  final localWordIndex = entry.key;
+                  final ScriptWord word = entry.value;
                   final i = word.index;
                   final hasBookmark = bookmarkWordIndexes.contains(i);
                   final isManual = settings.scrollMode == 'manual';
@@ -177,9 +178,34 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         : (word.textColor ?? Color(0xFFFFFFFF));
                   }
 
-                  // Use Container padding instead of trailing space for word gaps.
-                  // Container.color covers padding area → continuous highlight blocks.
+                  // Use colored padding instead of trailing spaces, so imported
+                  // DOCX highlights read as bands instead of separated tiles.
                   final wordGap = effectiveFontSize * 0.28;
+                  final joinsPreviousHighlight = _sameHighlightColor(
+                    userBgColor,
+                    localWordIndex > 0
+                        ? para[localWordIndex - 1].highlight
+                        : null,
+                  );
+                  final joinsNextHighlight = _sameHighlightColor(
+                    userBgColor,
+                    localWordIndex + 1 < para.length
+                        ? para[localWordIndex + 1].highlight
+                        : null,
+                  );
+                  final useSmoothHighlightBand =
+                      userBgColor != null && trackingBgColor == null;
+                  final wordPadding = useSmoothHighlightBand
+                      ? EdgeInsets.symmetric(horizontal: wordGap * 0.5)
+                      : EdgeInsets.only(
+                          right:
+                              wordDirection == TextDirection.rtl ? 0 : wordGap,
+                          left:
+                              wordDirection == TextDirection.rtl ? wordGap : 0,
+                        );
+                  final highlightRadius = Radius.circular(
+                    (effectiveFontSize * 0.08).clamp(2.0, 8.0),
+                  );
                   final speechActive = tState.isListening || tState.isStarting;
                   final wordWidget = GestureDetector(
                     behavior: HitTestBehavior.translucent,
@@ -188,15 +214,22 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       textDirection: wordDirection,
                       child: Container(
                         key: _wordKeys[i],
-                        padding: EdgeInsets.only(
-                          right: wordDirection == TextDirection.rtl
-                              ? 0
-                              : wordGap,
-                          left: wordDirection == TextDirection.rtl
-                              ? wordGap
-                              : 0,
-                        ),
-                        color: effectiveBg,
+                        padding: wordPadding,
+                        decoration: effectiveBg == null
+                            ? null
+                            : BoxDecoration(
+                                color: effectiveBg,
+                                borderRadius: useSmoothHighlightBand
+                                    ? BorderRadiusDirectional.horizontal(
+                                        start: joinsPreviousHighlight
+                                            ? Radius.zero
+                                            : highlightRadius,
+                                        end: joinsNextHighlight
+                                            ? Radius.zero
+                                            : highlightRadius,
+                                      )
+                                    : null,
+                              ),
                         child: Text(
                           displayText,
                           style: TextStyle(
@@ -799,6 +832,11 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     return Alignment.center;
   }
 
+  bool _sameHighlightColor(Color? a, Color? b) {
+    if (a == null || b == null) return false;
+    return a == b;
+  }
+
   TextDirection _wordDirectionForDisplay(
     String text, {
     required TextDirection paragraphDirection,
@@ -816,15 +854,18 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     if (text.isEmpty) return text;
     const lri = '\u2066';
     const rli = '\u2067';
+    const lrm = '\u200E';
+    const rlm = '\u200F';
     const pdi = '\u2069';
     final direction = _wordDirectionForDisplay(
       text,
       paragraphDirection: paragraphDirection,
     );
     final open = direction == TextDirection.rtl ? rli : lri;
-    return '$open$text$pdi';
+    final mark = direction == TextDirection.rtl ? rlm : lrm;
+    return '$open$mark$text$mark$pdi';
   }
 
   String _stripBidiIsolation(String text) =>
-      text.replaceAll(RegExp('[\u2066\u2067\u2068\u2069]'), '');
+      text.replaceAll(RegExp('[\u200E\u200F\u2066\u2067\u2068\u2069]'), '');
 }

@@ -97,6 +97,7 @@ class SpeechService {
   void Function(SpeechResult)? onResult;
   void Function(SpeechStatus)? onStatusChange;
   void Function(String)? onError;
+  void Function(double level)? onSoundLevelChange;
 
   /// Fires when the language is confirmed unavailable (after retries exhausted).
   /// The string is the original requested locale ID.
@@ -111,6 +112,10 @@ class SpeechService {
           final msg = error.errorMsg;
           if (_isAppleUnknownSpeechError(msg)) {
             _handleAppleUnknownSpeechError(msg);
+            return;
+          }
+          if (_isAppleTransientRetryError(msg)) {
+            onError?.call(msg);
             return;
           }
 
@@ -213,6 +218,10 @@ class SpeechService {
   bool _isAppleUnknownSpeechError(String msg) {
     final lower = msg.toLowerCase();
     return lower.contains('error_unknown') || lower.trim() == '7';
+  }
+
+  bool _isAppleTransientRetryError(String msg) {
+    return msg.toLowerCase().contains('error_retry');
   }
 
   void _handleAppleUnknownSpeechError(String msg) {
@@ -468,6 +477,10 @@ class SpeechService {
           if (result.finalResult && _isActive && !_isRestarting) {
             _scheduleRestart(const Duration(milliseconds: 100));
           }
+        },
+        onSoundLevelChange: (level) {
+          if (listenToken != _localeSwitchToken || !_isActive) return;
+          onSoundLevelChange?.call(level);
         },
         listenOptions: SpeechListenOptions(
           partialResults: true,

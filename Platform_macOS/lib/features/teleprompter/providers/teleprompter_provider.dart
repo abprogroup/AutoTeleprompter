@@ -247,13 +247,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _sttService.onResult = (result) {
       if (_disposed || _sessionStopped) return;
+      _lastVolLog = DateTime.now();
       _handleSttResult(result);
     };
 
     _sttService.onSoundLevelChange = (level) {
       if (_useWhisper || _disposed || _sessionStopped) return;
       // Push live level to UI state.
-      _safeSetState((s) => s.copyWith(soundLevel: level.clamp(0.0, 1.0)));
+      _safeSetState(
+        (s) => s.copyWith(soundLevel: _normalizeSoundLevel(level)),
+      );
       _lastVolLog = DateTime.now();
     };
 
@@ -986,6 +989,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
         // Silent-listening detector: STT says listening but no audio level or results received.
         if (!_useWhisper &&
+            _sttService.platformName != 'Apple' &&
             listening &&
             !_silentWarningFired &&
             _lastVolLog == null &&
@@ -1103,6 +1107,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _addDebugLog('🎤 [$platform] STT using locale: ${result.actualLocale}');
       }
     }
+  }
+
+  static double _normalizeSoundLevel(double level) {
+    if (level >= 0.0 && level <= 1.0) return level;
+    if (level > 1.0) return (level / 10.0).clamp(0.0, 1.0).toDouble();
+    return ((level + 60.0) / 60.0).clamp(0.0, 1.0).toDouble();
   }
 
   Future<void> stopSession() async {

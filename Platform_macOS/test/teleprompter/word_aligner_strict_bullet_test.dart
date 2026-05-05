@@ -24,12 +24,25 @@ List<ScriptWord> _words(List<String> raw) {
 
 void main() {
   group('Windows strict bullet/header STT', () {
-    test('normal mode keeps existing local single-word recovery', () {
+    test('normal mode waits for at least three spoken words', () {
       final script = _words(['intro', 'alpha', 'beta', 'gamma', 'delta']);
 
       final result = WordAligner.align(
         script: script,
         transcript: 'delta',
+        lastConfirmedIndex: 0,
+      );
+
+      expect(result.confirmedWordIndex, 0);
+      expect(result.debugInfo, contains('WAIT_MIN_WORDS'));
+    });
+
+    test('normal mode advances after three spoken words confirm position', () {
+      final script = _words(['intro', 'alpha', 'beta', 'gamma', 'delta']);
+
+      final result = WordAligner.align(
+        script: script,
+        transcript: 'beta gamma delta',
         lastConfirmedIndex: 0,
       );
 
@@ -187,6 +200,54 @@ void main() {
           visibleWordEnd: 40,
         ),
         isNull,
+      );
+    });
+
+    test('visible relock ignores stale words before the visible start', () {
+      final script = _words([
+        'intro',
+        'one',
+        'two',
+        'three',
+        'four',
+        'five',
+        'hidden',
+        'target',
+        'phrase',
+        'visible',
+        'safe',
+        'heading',
+      ]);
+
+      final result = WordAligner.align(
+        script: script,
+        transcript: 'hidden target phrase',
+        lastConfirmedIndex: 0,
+        visibleSkipStartIndex: 9,
+        maxSkipTargetIndex: 11,
+        strictBulletMode: false,
+      );
+
+      expect(result.confirmedWordIndex, 0);
+    });
+
+    test('provider trusts only targets inside the visible window', () {
+      expect(
+        TeleprompterNotifier.isTrustedVisibleSkipTarget(
+          alignedIndex: 12,
+          visibleWordStart: 10,
+          visibleWordEnd: 20,
+        ),
+        isTrue,
+      );
+
+      expect(
+        TeleprompterNotifier.isTrustedVisibleSkipTarget(
+          alignedIndex: 8,
+          visibleWordStart: 10,
+          visibleWordEnd: 20,
+        ),
+        isFalse,
       );
     });
 

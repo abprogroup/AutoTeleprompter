@@ -18,6 +18,7 @@ class _ControlBar extends ConsumerWidget {
   final VoidCallback onPreviousBookmark;
   final VoidCallback onNextBookmark;
   final VoidCallback onSearch;
+  final ValueChanged<double> onFontSizeChanged;
 
   const _ControlBar({
     required this.isListening,
@@ -37,6 +38,7 @@ class _ControlBar extends ConsumerWidget {
     required this.onPreviousBookmark,
     required this.onNextBookmark,
     required this.onSearch,
+    required this.onFontSizeChanged,
   });
 
   @override
@@ -49,12 +51,14 @@ class _ControlBar extends ConsumerWidget {
     final isBooting = !isManualMode && isStarting;
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
+      ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
       unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
       unawaited(
         ref.read(scriptProvider.notifier).updateStyleMetadata(
               fontSize: clamped,
             ),
       );
+      onFontSizeChanged(clamped);
     }
 
     return Container(

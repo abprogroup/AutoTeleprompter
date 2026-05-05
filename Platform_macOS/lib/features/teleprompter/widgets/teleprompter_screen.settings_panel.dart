@@ -98,6 +98,29 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
+          const Text('Speech Input', style: sectionStyle),
+          const SizedBox(height: 8),
+          _MacMicSelector(
+            selectedLabel: settings.sttInputDeviceLabel,
+            devices: tState.audioInputDevices,
+            accentColor: Color(settings.currentWordColor),
+            onRefresh: () async {
+              await ref
+                  .read(teleprompterProvider.notifier)
+                  .refreshAudioInputDevices();
+            },
+            onUseDefault: () async {
+              await notifier.setSttInputDevice(
+                '',
+                'System default microphone',
+              );
+              ref
+                  .read(teleprompterProvider.notifier)
+                  .setSttInputDevice('', 'System default microphone');
+            },
+          ),
+          const SizedBox(height: 16),
+
           _SwitchRow(
             icon: Icons.visibility_outlined,
             title: 'Allow visible text skip',

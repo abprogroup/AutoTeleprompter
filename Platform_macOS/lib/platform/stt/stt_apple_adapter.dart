@@ -33,6 +33,21 @@ class SttAppleAdapter extends AbstractSttService {
   void setLocale(String locale) => _inner.setLocale(locale);
 
   @override
+  void setAudioInputDevice(String? deviceId, {String? label}) {
+    // macOS Apple Speech follows the system-selected input device. Do not try
+    // to mutate global Sound settings from inside the app sandbox.
+  }
+
+  @override
+  Future<List<SttAudioInputDevice>> refreshAudioInputDevices() async {
+    const devices = <SttAudioInputDevice>[
+      SttAudioInputDevice(id: '', label: 'System default microphone'),
+    ];
+    onAudioInputDevicesChanged?.call(devices);
+    return devices;
+  }
+
+  @override
   bool get isListening => _inner.isListening;
 
   @override

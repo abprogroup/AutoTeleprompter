@@ -72,8 +72,10 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     } else {
       _closingPresentation = true;
     }
-    await _stopPresentationSession();
-    if (mounted) navigator.pop();
+    try {
+      await _stopPresentationSession().timeout(const Duration(seconds: 2));
+    } catch (_) {}
+    if (mounted && navigator.canPop()) navigator.pop();
   }
 
   void _scheduleHideControls() {
@@ -258,7 +260,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     // On Apple platforms (iOS/macOS), also need speech recognition permission
     if (PlatformPermissions.requiresSpeechPermissionCheck) {
       final speechStatus = await Permission.speech.request();
-      if (!speechStatus.isGranted) {
+      if (!speechStatus.isGranted && !Platform.isMacOS) {
         if (mounted) {
           showDialog(
             context: context,

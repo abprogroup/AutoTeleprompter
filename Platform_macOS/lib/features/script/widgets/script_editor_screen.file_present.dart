@@ -11,8 +11,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     FilePickerResult? result;
     try {
       result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: supportedExts,
+        type: FileType.any,
         allowMultiple: false,
         dialogTitle: 'Load Script',
       );

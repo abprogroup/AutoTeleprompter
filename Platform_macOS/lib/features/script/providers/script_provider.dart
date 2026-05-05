@@ -232,31 +232,35 @@ class ScriptNotifier extends Notifier<Script?> {
 
   Future<_ParsedFile> parseFile(File file) async {
     final lower = file.path.toLowerCase();
-    final rawBytes = await file.readAsBytes();
     _ParsedFile result = _ParsedFile('');
 
     try {
-      if (lower.endsWith('.docx')) {
-        result = _parseDocx(rawBytes);
-      } else if (lower.endsWith('.pages')) {
-        result = _parsePages(rawBytes);
-      } else if (lower.endsWith('.rtf') || lower.endsWith('.doc')) {
-        final raw = utf8.decode(rawBytes, allowMalformed: true);
-        if (raw.trimLeft().startsWith('{\\rtf')) {
-          result = _parseRtf(raw);
-        } else if (lower.endsWith('.rtf')) {
-          // Non-RTF content in a .rtf file (e.g. saved before the fix) — treat as UTF-8
-          result = _ParsedFile(raw.trim());
-        } else {
-          // Legacy .doc binary files — strip non-printable bytes
-          final content = String.fromCharCodes(
-            rawBytes.where(
-                (b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
-          ).replaceAll(RegExp(r'[ \t]{3,}'), '  ').trim();
-          result = _ParsedFile(content);
-        }
+      if (lower.endsWith('.pages') && await Directory(file.path).exists()) {
+        result = await _parsePagesPackage(Directory(file.path));
       } else {
-        result = _ParsedFile(utf8.decode(rawBytes, allowMalformed: true));
+        final rawBytes = await file.readAsBytes();
+        if (lower.endsWith('.docx')) {
+          result = _parseDocx(rawBytes);
+        } else if (lower.endsWith('.pages')) {
+          result = _parsePages(rawBytes);
+        } else if (lower.endsWith('.rtf') || lower.endsWith('.doc')) {
+          final raw = utf8.decode(rawBytes, allowMalformed: true);
+          if (raw.trimLeft().startsWith('{\\rtf')) {
+            result = _parseRtf(raw);
+          } else if (lower.endsWith('.rtf')) {
+            // Non-RTF content in a .rtf file (e.g. saved before the fix) — treat as UTF-8
+            result = _ParsedFile(raw.trim());
+          } else {
+            // Legacy .doc binary files — strip non-printable bytes
+            final content = String.fromCharCodes(
+              rawBytes.where(
+                  (b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
+            ).replaceAll(RegExp(r'[ \t]{3,}'), '  ').trim();
+            result = _ParsedFile(content);
+          }
+        } else {
+          result = _ParsedFile(utf8.decode(rawBytes, allowMalformed: true));
+        }
       }
     } catch (e) {
       final errStr = e.toString();
@@ -316,6 +320,7 @@ class ScriptNotifier extends Notifier<Script?> {
     final document = XmlDocument.parse(xmlStr);
     final paragraphs = document.findAllElements('w:p').toList();
     final parsedParagraphs = <String>[];
+    final numbering = _DocxNumberingResolver.fromArchive(archive);
 
     for (final p in paragraphs) {
       final paragraph = StringBuffer();
@@ -388,6 +393,20 @@ class ScriptNotifier extends Notifier<Script?> {
       }
 
       _mergeDocxNeutralPunctuationSegments(segments);
+      final numberingPrefix = numbering.prefixForParagraph(p);
+      if (numberingPrefix != null) {
+        segments.insert(
+          0,
+          _DocxRunSegment(
+            '$numberingPrefix ',
+            isBold: paragraphRunDefaults.isBold,
+            isItalic: paragraphRunDefaults.isItalic,
+            isUnderline: paragraphRunDefaults.isUnderline,
+            color: paragraphRunDefaults.color,
+            highlightColor: paragraphRunDefaults.highlightColor,
+          ),
+        );
+      }
       for (final segment in segments) {
         paragraph.write(_docxWrapRun(
           segment.text,
@@ -665,6 +684,61 @@ class ScriptNotifier extends Notifier<Script?> {
   static String _normalizeImportedDocxText(String text) =>
       text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trimRight();
 
+  Future<_ParsedFile> _parsePagesPackage(Directory directory) async {
+    final markupFiles = [
+      File('${directory.path}/AutoTeleprompter/raw_markup.txt'),
+      File('${directory.path}/autoteleprompter/raw_markup.txt'),
+    ];
+    for (final file in markupFiles) {
+      if (!await file.exists()) continue;
+      final content = await file.readAsString();
+      if (content.trim().isNotEmpty) {
+        return _ParsedFile(
+          content.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trimRight(),
+        );
+      }
+    }
+
+    final xmlFiles = [
+      File('${directory.path}/index.xml'),
+      File('${directory.path}/index.xml.gz'),
+    ];
+    for (final file in xmlFiles) {
+      if (!await file.exists()) continue;
+      try {
+        final bytes = await file.readAsBytes();
+        final xml = file.path.toLowerCase().endsWith('.gz')
+            ? utf8.decode(gzip.decode(bytes), allowMalformed: true)
+            : utf8.decode(bytes, allowMalformed: true);
+        final parsed = _parsePagesXml(xml);
+        if (parsed.text.trim().isNotEmpty) return parsed;
+      } catch (_) {}
+    }
+
+    await for (final entity in directory.list(recursive: true)) {
+      if (entity is! File) continue;
+      final lower = entity.path.toLowerCase();
+      try {
+        if (lower.endsWith('.zip') || lower.endsWith('.pages')) {
+          final parsed = _parsePages(await entity.readAsBytes());
+          if (!_isUnsupportedPagesResult(parsed)) return parsed;
+        } else if (lower.endsWith('.xml')) {
+          final parsed =
+              _parsePagesXml(await entity.readAsString(encoding: utf8));
+          if (parsed.text.trim().isNotEmpty) return parsed;
+        } else if (lower.endsWith('.xml.gz')) {
+          final parsed = _parsePagesXml(
+            utf8.decode(gzip.decode(await entity.readAsBytes()),
+                allowMalformed: true),
+          );
+          if (parsed.text.trim().isNotEmpty) return parsed;
+        }
+      } catch (_) {}
+    }
+
+    return _unsupportedPagesFile();
+  }
+
   /// Parses Apple Pages files (.pages) — a ZIP archive.
   /// Handles both the old XML-based format (index.xml) and the newer
   /// iWork format by extracting readable text from all XML entries.
@@ -730,6 +804,55 @@ class ScriptNotifier extends Notifier<Script?> {
     }
     return _ParsedFile(result);
   }
+
+  _ParsedFile _parsePagesXml(String xml) {
+    final buf = StringBuffer();
+    try {
+      final doc = XmlDocument.parse(xml);
+      final paragraphs = doc.findAllElements('sf:p').toList();
+      if (paragraphs.isNotEmpty) {
+        for (final p in paragraphs) {
+          final text = p.innerText.trimRight();
+          if (text.trim().isEmpty) {
+            buf.writeln();
+          } else {
+            buf.writeln(text);
+          }
+        }
+        return _ParsedFile(buf.toString().trimRight());
+      }
+    } catch (_) {}
+
+    final paraMatches =
+        RegExp(r'<sf:p\b[^>]*>(.*?)</sf:p>', dotAll: true).allMatches(xml);
+    for (final m in paraMatches) {
+      final inner = m.group(1) ?? '';
+      final text = inner.replaceAll(RegExp(r'<[^>]+>'), '').trimRight();
+      if (text.trim().isEmpty) {
+        buf.writeln();
+      } else {
+        buf.writeln(text);
+      }
+    }
+    if (buf.isNotEmpty) return _ParsedFile(buf.toString().trimRight());
+
+    final genericMatches =
+        RegExp(r'<[^>]*p[^>]*>(.*?)</[^>]*p[^>]*>', dotAll: true)
+            .allMatches(xml);
+    for (final m in genericMatches) {
+      final text =
+          (m.group(1) ?? '').replaceAll(RegExp(r'<[^>]+>'), '').trimRight();
+      if (text.trim().length > 2) buf.writeln(text);
+    }
+    return _ParsedFile(buf.toString().trimRight());
+  }
+
+  _ParsedFile _unsupportedPagesFile() =>
+      _ParsedFile('Could not extract text from this Pages file. '
+          'Please open it in Pages and export as DOCX or TXT first.');
+
+  bool _isUnsupportedPagesResult(_ParsedFile parsed) =>
+      parsed.text.startsWith('Could not extract text from this Pages file.');
 
   /// Parses RTF, extracts text with style markup (bold, color, size).
   _ParsedFile _parseRtf(String raw) {
@@ -1088,6 +1211,127 @@ class _ParsedFile {
   final String text;
   final double? fontSize;
   _ParsedFile(this.text, {this.fontSize});
+}
+
+class _DocxNumberingResolver {
+  final Map<String, String> _numToAbstract;
+  final Map<String, Map<int, _DocxNumberLevel>> _levels;
+  final Map<String, int> _counters = {};
+
+  _DocxNumberingResolver._(this._numToAbstract, this._levels);
+
+  factory _DocxNumberingResolver.empty() => _DocxNumberingResolver._(
+      <String, String>{}, <String, Map<int, _DocxNumberLevel>>{});
+
+  static _DocxNumberingResolver fromArchive(Archive archive) {
+    final entry = archive.findFile('word/numbering.xml');
+    if (entry == null) return _DocxNumberingResolver.empty();
+    try {
+      final xml =
+          utf8.decode(List<int>.from(entry.content), allowMalformed: true);
+      final doc = XmlDocument.parse(xml);
+      final levels = <String, Map<int, _DocxNumberLevel>>{};
+      final numToAbstract = <String, String>{};
+
+      for (final abstractNum in doc.findAllElements('w:abstractNum')) {
+        final abstractId =
+            ScriptNotifier._docxAttr(abstractNum, 'abstractNumId');
+        if (abstractId == null) continue;
+        final abstractLevels = <int, _DocxNumberLevel>{};
+        for (final lvl in abstractNum.findElements('w:lvl')) {
+          final ilvl =
+              int.tryParse(ScriptNotifier._docxAttr(lvl, 'ilvl') ?? '0') ?? 0;
+          final start = int.tryParse(ScriptNotifier._docxAttr(
+                    lvl.getElement('w:start') ?? lvl,
+                    'val',
+                  ) ??
+                  '1') ??
+              1;
+          final numFmt = ScriptNotifier._docxAttr(
+                  lvl.getElement('w:numFmt') ?? lvl, 'val') ??
+              'decimal';
+          final lvlText = ScriptNotifier._docxAttr(
+                  lvl.getElement('w:lvlText') ?? lvl, 'val') ??
+              '%${ilvl + 1}.';
+          abstractLevels[ilvl] = _DocxNumberLevel(
+            start: start,
+            format: numFmt,
+            text: lvlText,
+          );
+        }
+        levels[abstractId] = abstractLevels;
+      }
+
+      for (final num in doc.findAllElements('w:num')) {
+        final numId = ScriptNotifier._docxAttr(num, 'numId');
+        final abstractIdElement = num.getElement('w:abstractNumId');
+        final abstractId = abstractIdElement == null
+            ? null
+            : ScriptNotifier._docxAttr(abstractIdElement, 'val');
+        if (numId != null && abstractId != null) {
+          numToAbstract[numId] = abstractId;
+        }
+      }
+
+      return _DocxNumberingResolver._(numToAbstract, levels);
+    } catch (_) {
+      return _DocxNumberingResolver.empty();
+    }
+  }
+
+  String? prefixForParagraph(XmlElement paragraph) {
+    final numPr = paragraph.getElement('w:pPr')?.getElement('w:numPr');
+    if (numPr == null) return null;
+    final numIdElement = numPr.getElement('w:numId');
+    final numId = numIdElement == null
+        ? null
+        : ScriptNotifier._docxAttr(numIdElement, 'val');
+    if (numId == null) return null;
+    final ilvlElement = numPr.getElement('w:ilvl');
+    final ilvl = int.tryParse(
+          ilvlElement == null
+              ? '0'
+              : ScriptNotifier._docxAttr(ilvlElement, 'val') ?? '0',
+        ) ??
+        0;
+
+    final abstractId = _numToAbstract[numId];
+    final level = abstractId == null ? null : _levels[abstractId]?[ilvl];
+    final counterKey = '$numId:$ilvl';
+    final next = (_counters[counterKey] ?? ((level?.start ?? 1) - 1)) + 1;
+    _counters[counterKey] = next;
+
+    final deeperPrefix = '$numId:';
+    _counters.removeWhere((key, value) {
+      if (!key.startsWith(deeperPrefix)) return false;
+      final parts = key.split(':');
+      final depth = parts.length > 1 ? int.tryParse(parts[1]) : null;
+      return depth != null && depth > ilvl;
+    });
+
+    final format = level?.format ?? 'decimal';
+    if (format == 'bullet') return '•';
+
+    final pattern = level?.text ?? '%${ilvl + 1}.';
+    final rendered = pattern.replaceAllMapped(RegExp(r'%(\d+)'), (match) {
+      final depth = (int.tryParse(match.group(1) ?? '1') ?? 1) - 1;
+      if (depth == ilvl) return next.toString();
+      return _counters['$numId:$depth']?.toString() ?? next.toString();
+    });
+    return rendered.trim().isEmpty ? '${next.toString()}.' : rendered;
+  }
+}
+
+class _DocxNumberLevel {
+  final int start;
+  final String format;
+  final String text;
+
+  const _DocxNumberLevel({
+    required this.start,
+    required this.format,
+    required this.text,
+  });
 }
 
 class _DocxRunStyle {

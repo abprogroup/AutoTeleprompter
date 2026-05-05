@@ -1,4 +1,4 @@
-﻿part of 'script_editor_screen.dart';
+part of 'script_editor_screen.dart';
 
 extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
   Widget _buildBottomActions({bool keyboardVisible = false}) {
@@ -288,7 +288,7 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                                         offset: sel.start),
                                   );
                                 } else if (sel.isValid && sel.isCollapsed) {
-                                  // Check if cursor is at end of line/paragraph â†’ Baseline Mode: clear whole script
+                                  // Check if cursor is at end of line/paragraph.
                                   final plainText =
                                       text.replaceAll(tagPattern, '');
                                   final cursorInPlain =
@@ -496,7 +496,7 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
     );
   }
 
-  // â”€â”€ Screen-level arrow-key cross-block navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Screen-level arrow-key cross-block navigation.
   // HardwareKeyboard handler: fires BEFORE Flutter's focus system, so key-repeat
   // events are never dropped during the async focus-transfer window when crossing
   // a block boundary. Returns true only at boundaries; in-block movement is passed

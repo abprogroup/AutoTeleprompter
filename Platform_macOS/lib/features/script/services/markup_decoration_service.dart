@@ -156,7 +156,7 @@ class MarkupDecorationBoxMerger {
   static List<Rect> merge(
     Iterable<Rect> boxes, {
     double rowTolerance = 4.0,
-    double gapTolerance = 10.0,
+    double gapTolerance = 28.0,
   }) {
     final sorted = boxes.where((box) => !box.isEmpty).toList()
       ..sort((a, b) {
@@ -177,7 +177,9 @@ class MarkupDecorationBoxMerger {
       final last = merged.last;
       final sameRow = (last.center.dy - box.center.dy).abs() <=
           rowTolerance + (last.height + box.height) * 0.08;
-      final closeEnough = box.left <= last.right + gapTolerance;
+      final dynamicGapTolerance =
+          gapTolerance > last.height * 0.75 ? gapTolerance : last.height * 0.75;
+      final closeEnough = box.left <= last.right + dynamicGapTolerance;
       if (sameRow && closeEnough) {
         merged[merged.length - 1] = Rect.fromLTRB(
           last.left < box.left ? last.left : box.left,
@@ -246,7 +248,7 @@ class MarkupTextDecorationPainter extends CustomPainter {
       final merged = MarkupDecorationBoxMerger.merge(
         boxes,
         rowTolerance: 5.0,
-        gapTolerance: 12.0,
+        gapTolerance: 36.0,
       );
       if (type == MarkupDecorationType.background) {
         _paintBackground(canvas, merged, range.color ?? Colors.transparent);

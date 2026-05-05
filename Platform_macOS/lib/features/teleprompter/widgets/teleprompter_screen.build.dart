@@ -377,8 +377,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 }),
               },
               child: GestureDetector(
-                onTap:
-                    (tState.isListening || tState.isStarting) ? null : _showControls,
+                onTap: (tState.isListening || tState.isStarting)
+                    ? null
+                    : _showControls,
                 child: Stack(
                   children: [
                     // Scrollable script
@@ -923,7 +924,7 @@ class _PresenterDecorationPainter extends CustomPainter {
         for (final rect in MarkupDecorationBoxMerger.merge(
           entry.value,
           rowTolerance: 8,
-          gapTolerance: 18,
+          gapTolerance: 54,
         )) {
           final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 8.0));
           canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
@@ -950,7 +951,7 @@ class _PresenterDecorationPainter extends CustomPainter {
     for (final rect in MarkupDecorationBoxMerger.merge(
       underlineRects,
       rowTolerance: 8,
-      gapTolerance: 18,
+      gapTolerance: 54,
     )) {
       final y = rect.bottom - (paint.strokeWidth * 0.5);
       canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);

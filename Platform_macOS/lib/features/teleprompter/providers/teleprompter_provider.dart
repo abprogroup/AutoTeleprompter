@@ -60,6 +60,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _setupRemoteCallbacks();
     _setupSttCallbacks();
     _setupWhisperCallbacks();
+    Future.microtask(refreshAudioInputDevices);
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
@@ -960,7 +961,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog(selectedMicId.isEmpty
           ? '🎙️ [$platform] Microphone: system default input'
           : '🎙️ [$platform] Microphone: $selectedMicLabel');
-      final result = await _sttService.start(localeId: localeId);
+      final result = await _sttService.start(localeId: localeId).timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => SpeechStartResult(
+              success: false,
+              message:
+                  'Speech recognition did not start. Please check macOS Microphone and Speech Recognition permissions, then try again.',
+            ),
+          );
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _sttService.stop();
         return;
@@ -1087,6 +1095,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
   }
 
+  Future<void> refreshAudioInputDevices() async {
+    final devices = await _sttService.refreshAudioInputDevices();
+    if (!_disposed) {
+      state = state.copyWith(audioInputDevices: devices);
+    }
+  }
+
   void setSttInputDevice(String deviceId, String label) {
     final normalizedId = deviceId.trim();
     final normalizedLabel =
@@ -1095,6 +1110,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       normalizedId.isEmpty ? null : normalizedId,
       label: normalizedLabel,
     );
+    unawaited(refreshAudioInputDevices());
     _addDebugLog(normalizedId.isEmpty
         ? '🎙️ Microphone input set to system default'
         : '🎙️ Microphone input set to $normalizedLabel');

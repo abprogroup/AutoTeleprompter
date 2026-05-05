@@ -53,6 +53,10 @@ abstract class AbstractSttService {
   /// Default no-op for Apple-native macOS STT.
   void setAudioInputDevice(String? deviceId, {String? label}) {}
 
+  /// Refresh available input devices/routes for adapters that can expose them.
+  Future<List<SttAudioInputDevice>> refreshAudioInputDevices() async =>
+      const [];
+
   /// Starts speech recognition.
   Future<SpeechStartResult> start({String? localeId});
 

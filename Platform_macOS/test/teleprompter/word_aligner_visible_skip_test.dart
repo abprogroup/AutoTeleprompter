@@ -12,12 +12,14 @@ const _hReturn = '\u05d7\u05d6\u05e8\u05d4';
 const _hSection = '\u05dc\u05de\u05e7\u05d8\u05e2';
 const _hNext = '\u05d4\u05d1\u05d0';
 
-ScriptWord _word(String raw, int index, {bool rtl = false}) {
+ScriptWord _word(String raw, int index,
+    {bool rtl = false, bool newline = false}) {
   return ScriptWord(
     raw: raw,
     normalized: raw.toLowerCase(),
     index: index,
     isRtl: rtl,
+    isNewline: newline,
   );
 }
 
@@ -246,6 +248,30 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test('provider keeps Hebrew STT locale for neutral numbered headings', () {
+      const hSinging = '\u05e9\u05e8\u05d9\u05dd';
+      const hHope = '\u05ea\u05e7\u05d5\u05d5\u05d4';
+      const hTogether = '\u05d1\u05d9\u05d7\u05d3';
+      final script = [
+        _word('15', 0),
+        _word('.', 1),
+        _word('10', 2),
+        _word(hSinging, 3, rtl: true),
+        _word(hHope, 4, rtl: true),
+        _word(hTogether, 5, rtl: true),
+        _word('\n', 6, rtl: true, newline: true),
+        _word('English', 7),
+        _word('closing', 8),
+        _word('section', 9),
+      ];
+
+      final locales =
+          TeleprompterNotifier.resolveSttSectionLocalesForWords(script);
+
+      expect(locales.take(6), everyElement('he_IL'));
+      expect(locales.skip(7), everyElement('en_US'));
     });
   });
 }

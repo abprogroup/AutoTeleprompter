@@ -573,14 +573,98 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
   /// Current v4 metadata safely resolves Hebrew/RTL and English/LTR only.
   /// Universal same-script language support belongs to the v5 language MVP.
-  String _localeForWord(ScriptWord word) => word.isRtl ? 'he_IL' : 'en_US';
-
-  String? _strongLocaleForWord(ScriptWord word) {
+  static String? _strongLocaleForWord(ScriptWord word) {
     if (word.isNewline) return null;
     final visible = word.raw.replaceAll(RegExp(r'\[[^\]]+\]|\*\*'), '');
     if (RegExp(r'[\u0590-\u05FF]').hasMatch(visible)) return 'he_IL';
     if (RegExp(r'[A-Za-z]').hasMatch(visible)) return 'en_US';
     return null;
+  }
+
+  static String _fallbackLocaleForWords(List<ScriptWord> words) {
+    var hebrew = 0;
+    var english = 0;
+    for (final word in words) {
+      final locale = _strongLocaleForWord(word);
+      if (locale == 'he_IL') hebrew++;
+      if (locale == 'en_US') english++;
+    }
+    return hebrew > english ? 'he_IL' : 'en_US';
+  }
+
+  static List<String> resolveSttSectionLocalesForWords(
+    List<ScriptWord> words,
+  ) {
+    const minSectionWords = 3;
+    if (words.isEmpty) return [];
+
+    final fallback = _fallbackLocaleForWords(words);
+    final realWords =
+        words.where((w) => !w.isNewline && w.normalized.isNotEmpty).toList();
+    if (realWords.isEmpty) return [];
+
+    final raw = realWords.map(_strongLocaleForWord).toList();
+    for (var i = 0; i < raw.length; i++) {
+      if (raw[i] != null) continue;
+
+      String? previous;
+      for (var p = i - 1; p >= 0; p--) {
+        if (raw[p] != null) {
+          previous = raw[p];
+          break;
+        }
+      }
+
+      String? next;
+      for (var n = i + 1; n < raw.length; n++) {
+        if (raw[n] != null) {
+          next = raw[n];
+          break;
+        }
+      }
+
+      raw[i] = previous ?? next ?? fallback;
+    }
+
+    final smoothed = raw.map((locale) => locale ?? fallback).toList();
+    var changed = true;
+    while (changed) {
+      changed = false;
+      var i = 0;
+      while (i < smoothed.length) {
+        final locale = smoothed[i];
+        final runStart = i;
+        while (i < smoothed.length && smoothed[i] == locale) {
+          i++;
+        }
+        final runLen = i - runStart;
+        if (runLen < minSectionWords) {
+          final inherit = runStart > 0
+              ? smoothed[runStart - 1]
+              : (i < smoothed.length ? smoothed[i] : locale);
+          if (inherit != locale) {
+            for (var j = runStart; j < i; j++) {
+              smoothed[j] = inherit;
+            }
+            changed = true;
+          }
+        }
+      }
+    }
+
+    final resolved = <String>[];
+    var realIndex = 0;
+    for (final word in words) {
+      if (word.isNewline || word.normalized.isEmpty) {
+        resolved.add(resolved.isNotEmpty ? resolved.last : fallback);
+      } else {
+        resolved.add(
+          realIndex < smoothed.length ? smoothed[realIndex] : fallback,
+        );
+        realIndex++;
+      }
+    }
+    return resolved;
   }
 
   String _startLocaleForIndex(Script script, int startIndex) {
@@ -614,57 +698,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   /// runs inherit surrounding context so names or isolated words do not restart
   /// the recognizer unnecessarily.
   void _precomputeSectionLocales(Script script) {
-    const minSectionWords = 3;
-
-    final realWords = script.words
-        .where((w) => !w.isNewline && w.normalized.isNotEmpty)
-        .toList();
-    if (realWords.isEmpty) {
-      _sectionLocales = [];
-      return;
-    }
-
-    final raw = realWords.map(_localeForWord).toList();
-    final smoothed = List<String>.from(raw);
-    var changed = true;
-    while (changed) {
-      changed = false;
-      var i = 0;
-      while (i < smoothed.length) {
-        final locale = smoothed[i];
-        final runStart = i;
-        while (i < smoothed.length && smoothed[i] == locale) {
-          i++;
-        }
-        final runLen = i - runStart;
-        if (runLen < minSectionWords) {
-          final inherit = runStart > 0
-              ? smoothed[runStart - 1]
-              : (i < smoothed.length ? smoothed[i] : locale);
-          if (inherit != locale) {
-            for (var j = runStart; j < i; j++) {
-              smoothed[j] = inherit;
-            }
-            changed = true;
-          }
-        }
-      }
-    }
-
-    _sectionLocales = [];
-    var realIndex = 0;
-    for (final word in script.words) {
-      if (word.isNewline || word.normalized.isEmpty) {
-        _sectionLocales.add(
-          _sectionLocales.isNotEmpty ? _sectionLocales.last : 'en_US',
-        );
-      } else {
-        _sectionLocales.add(
-          realIndex < smoothed.length ? smoothed[realIndex] : 'en_US',
-        );
-        realIndex++;
-      }
-    }
+    _sectionLocales = resolveSttSectionLocalesForWords(script.words);
   }
 
   int _effectiveSkipThreshold() {

@@ -325,6 +325,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   Future<void> _startSpeechSessionFromCurrentScript() async {
     final script = ref.read(scriptProvider);
     if (script == null) return;
+    _syncVisibleWordWindow(force: true);
     await ref.read(teleprompterProvider.notifier).startSession(script);
     final currentIndex = ref
         .read(teleprompterProvider)

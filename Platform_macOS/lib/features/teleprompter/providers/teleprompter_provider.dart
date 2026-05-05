@@ -598,6 +598,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     return _sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US';
   }
 
+  String? _visibleWindowStartLocale(Script script, int? start, int? end) {
+    if (start == null || end == null || script.words.isEmpty) return null;
+    final windowStart = start.clamp(0, script.words.length - 1).toInt();
+    final windowEnd = end.clamp(windowStart, script.words.length - 1).toInt();
+    for (var i = windowStart; i <= windowEnd; i++) {
+      final locale = _strongLocaleForWord(script.words[i]);
+      if (locale != null) return locale;
+    }
+    return null;
+  }
+
   /// Precompute the STT locale section for every script token. Short foreign
   /// runs inherit surrounding context so names or isolated words do not restart
   /// the recognizer unnecessarily.
@@ -874,8 +885,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sessionStartTime = DateTime.now();
     _silentWarningFired = false;
     _lastVolLog = null;
-    _visibleWordStart = null;
-    _visibleWordEnd = null;
+    final startupVisibleStart = _visibleWordStart;
+    final startupVisibleEnd = _visibleWordEnd;
     _resetVisibleLocaleAssist();
     _precomputeSectionLocales(script);
     final sttEngine = ref.read(settingsProvider).sttEngine;
@@ -896,9 +907,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog(
         '🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
-    final localeId = _startLocaleForIndex(script, startIndex);
+    final visibleLocale = _visibleWindowStartLocale(
+        script, startupVisibleStart, startupVisibleEnd);
+    final localeId = visibleLocale ?? _startLocaleForIndex(script, startIndex);
     _scriptLanguageLocale = localeId;
     _activeLocale = localeId;
+    if (visibleLocale != null) {
+      _visibleLocaleAssistPinnedLocale = localeId;
+      _visibleLocaleAssistPinnedUntil =
+          DateTime.now().add(_visibleLocaleAssistPinDuration);
+      _addDebugLog(
+          'STT START VISIBLE LOCALE: $localeId | window=$startupVisibleStart-$startupVisibleEnd');
+    }
 
     // v4.2: Detect starting locale focusing ONLY on the immediate first words.
     // This prevents a long Hebrew document from forcing English start-text into Hebrew STT.

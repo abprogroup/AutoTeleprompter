@@ -214,7 +214,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         alignedIndex: aligned.confirmedWordIndex,
         currentIndex: state.confirmedWordIndex,
       );
-      _noProgressCount++;
+      _noProgressCount = nextNoProgressCount(
+        currentCount: _noProgressCount,
+        improvising: improvising,
+        visibleAssistThreshold: _visibleLocaleAssistAfterWaits,
+      );
       if (improvising) {
         _addDebugLog(
             '$engineTag IMPROVISING | heard: "${result.words}" | visible relock waiting');
@@ -384,6 +388,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     required int currentIndex,
   }) {
     return strictBulletMode && alignedIndex <= currentIndex;
+  }
+
+  static int nextNoProgressCount({
+    required int currentCount,
+    required bool improvising,
+    required int visibleAssistThreshold,
+  }) {
+    final next = currentCount + 1;
+    if (!improvising) return next;
+    return next.clamp(0, visibleAssistThreshold).toInt();
   }
 
   static int? resolveVisibleSkipTarget({
@@ -1105,6 +1119,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
   }
 
+  Future<void> refreshAudioInputDevices() async {
+    final devices = await _sttService.refreshAudioInputDevices();
+    if (!_disposed) {
+      state = state.copyWith(audioInputDevices: devices);
+    }
+  }
+
   void setSttInputDevice(String deviceId, String label) {
     final normalizedId = deviceId.trim();
     final normalizedLabel =
@@ -1113,6 +1134,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       normalizedId.isEmpty ? null : normalizedId,
       label: normalizedLabel,
     );
+    unawaited(refreshAudioInputDevices());
     _addDebugLog(normalizedId.isEmpty
         ? '🎙️ Microphone input set to system default'
         : '🎙️ Microphone input set to $normalizedLabel');

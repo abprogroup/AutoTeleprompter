@@ -179,6 +179,7 @@
 
 ## 🎙️ Audio Input — Pending Features
 - [ ] **External Microphone / Input Device Selector**: Add cross-platform support for choosing an outer connected microphone for STT and recording workflows. Windows now has the v4 baseline: WebView2/browser STT enumerates `audioinput` devices, persists `sttInputDeviceId` + label, exposes a presenter dropdown, applies live changes without resetting script position, and falls back to system default when the saved mic is unavailable. V5 should port or formally document equivalent behavior for iOS, Android, and macOS, including whether each platform allows app-level input selection or only OS-level routing. (Requested from Windows testing 2026-04-28; Windows baseline implemented 2026-04-28)
+  - *Windows v5 update*: Presenter Speech Input should include the full desktop control set: Refresh devices, Open Input Settings, and Use Default. Other platforms should receive the same user-facing affordances where their OS APIs allow it, or an explicit platform note when routing is system-owned.
 
 ---
 
@@ -323,6 +324,13 @@
 - [ ] **Proactive Multi-Language STT Switching for Long Skips**: Resolve the limitation where users cannot skip to a distant sentence in a different language because the STT engine only switches locales a few words before the transition.
   - *Problem*: If a Hebrew script has an English sentence visible at the bottom, the STT (currently in Hebrew) won't recognize English speech for that distant target until the user reads through the Hebrew text immediately preceding it.
   - *Solution*: The visible viewport skip logic should account for language transitions. If a strong multi-word match is detected in any language present in the visible viewport, the engine should proactively switch locales to complete the jump.
+- [ ] **Mobile V5 - Port Windows v4.1.14 Bullet/Improvisation STT Relock**: Bring the user-verified Windows strict/bullet relock model to iPhone and Android after mobile v4 is sealed.
+  - *Source behavior*: Windows v4.1.14 treats off-script speech as normal improvisation, not STT failure. It keeps listening without force-skip, reset, panic restart, or desperate language switching.
+  - *Relock rule*: Advancement happens only on confident two-or-more-word visible-window phrase/sequence matches. Large single-word jumps stay blocked.
+  - *Language rule*: Mobile should first try active-locale visible matching. If the spoken phrase plausibly belongs to a visible alternate-language section, switch/pin that locale and wait for the next recognizer result before advancing.
+  - *iPhone note*: Port the improvisation/relock model onto the tested Apple STT language switching behavior; do not copy Windows WebView2 mechanics.
+  - *Android note*: Port more carefully because Android `speech_to_text` has fragile locale/error callbacks; preserve missing-language/offline-pack behavior and add phone QA before sealing.
+  - *Default*: Keep normal script reading as default. Bullet/improvisation relock remains an explicit mode/toggle until the future three-mode STT UX is designed.
 - [ ] **V5 Research / V6 Premium Candidate - Three STT Reading Modes**: Design a first-run/presenter-start mode choice with three cards:
   - *Strict Reading*: word-by-word script fidelity, least improvisation, safest for exact scripts.
   - *Flexible Reading*: moderate paraphrase support, normal local recovery, visible-skip behavior when enabled.

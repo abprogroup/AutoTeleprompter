@@ -223,6 +223,26 @@ void main() {
       );
     });
 
+    test('strict improvisation caps standby wait counter', () {
+      expect(
+        TeleprompterNotifier.nextNoProgressCount(
+          currentCount: 20,
+          improvising: true,
+          visibleAssistThreshold: 2,
+        ),
+        2,
+      );
+
+      expect(
+        TeleprompterNotifier.nextNoProgressCount(
+          currentCount: 20,
+          improvising: false,
+          visibleAssistThreshold: 2,
+        ),
+        21,
+      );
+    });
+
     test('visible relock ignores stale words before the visible start', () {
       final script = _words([
         'intro',

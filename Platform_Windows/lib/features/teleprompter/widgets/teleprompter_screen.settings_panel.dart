@@ -116,6 +116,20 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                     .read(teleprompterProvider.notifier)
                     .setSttInputDevice(deviceId, label);
               },
+              onRefresh: () async {
+                await ref
+                    .read(teleprompterProvider.notifier)
+                    .refreshAudioInputDevices();
+              },
+              onUseDefault: () async {
+                await notifier.setSttInputDevice(
+                  '',
+                  'System default microphone',
+                );
+                ref
+                    .read(teleprompterProvider.notifier)
+                    .setSttInputDevice('', 'System default microphone');
+              },
             ),
             const SizedBox(height: 16),
             _SwitchRow(

@@ -53,6 +53,11 @@ abstract class AbstractSttService {
   /// Default no-op; Windows WebView2/browser STT overrides this.
   void setAudioInputDevice(String? deviceId, {String? label}) {}
 
+  /// Refresh available input devices for adapters that can expose them.
+  /// Default empty list for adapters without explicit device enumeration.
+  Future<List<SttAudioInputDevice>> refreshAudioInputDevices() async =>
+      const [];
+
   /// Starts speech recognition.
   Future<SpeechStartResult> start({String? localeId});
 

@@ -27,6 +27,7 @@ class SttBrowserAdapter extends AbstractSttService {
   String _currentLocale = 'en-US';
   String? _selectedAudioInputDeviceId;
   String _selectedAudioInputDeviceLabel = 'System default microphone';
+  List<SttAudioInputDevice> _audioInputDevices = const [];
   int _sessionId = 0;
 
   @override
@@ -82,6 +83,7 @@ class SttBrowserAdapter extends AbstractSttService {
                       })
                       .where((device) => device.id.isNotEmpty)
                       .toList();
+                  _audioInputDevices = devices;
                   onAudioInputDevicesChanged?.call(devices);
                 }
                 break;
@@ -197,6 +199,14 @@ class SttBrowserAdapter extends AbstractSttService {
     } catch (_) {}
   }
 
+  @override
+  Future<List<SttAudioInputDevice>> refreshAudioInputDevices() async {
+    try {
+      _wsClient?.sink.add(jsonEncode({'type': 'refreshAudioInputDevices'}));
+    } catch (_) {}
+    return _audioInputDevices;
+  }
+
   Future<void> _stopServer() async {
     final client = _wsClient;
     _wsClient = null;
@@ -281,6 +291,10 @@ let dataArray;
 let activeStream;
 let animationId;
 let restartTimer;
+let watchdogTimer;
+let lastError = '';
+let lastStartAt = 0;
+let lastResultAt = 0;
 let switchingLocale = false;
 let switchingInput = false;
 let closedByHost = false;
@@ -384,11 +398,13 @@ function draw() {
 ws.onopen = async () => {
   status.textContent = 'Mic Start...';
   await initVisualizer();
+  ensureWatchdog();
   startRec(currentLocale);
 };
 ws.onclose = () => {
   closedByHost = true;
   if(restartTimer) clearTimeout(restartTimer);
+  if(watchdogTimer) clearInterval(watchdogTimer);
   status.textContent = 'Standby';
   dot.classList.remove('on');
   if(rec) rec.abort();
@@ -401,7 +417,7 @@ ws.onmessage = (e) => {
     status.textContent = 'Syncing ' + d.locale;
     if(restartTimer) clearTimeout(restartTimer);
     if(rec) rec.abort();
-    restartTimer = setTimeout(() => startRec(currentLocale), 80);
+    scheduleRestart(80, 'locale-switch');
   }
   if(d.type === 'setAudioInputDevice') {
     selectedDeviceId = d.deviceId || '';
@@ -412,17 +428,48 @@ ws.onmessage = (e) => {
     initVisualizer().finally(() => {
       switchingInput = false;
       if(!closedByHost && ws.readyState === 1) {
-        restartTimer = setTimeout(() => startRec(currentLocale), 250);
+        scheduleRestart(250, 'input-switch');
       }
     });
+  }
+  if(d.type === 'refreshAudioInputDevices') {
+    refreshDevices();
   }
 };
 
 function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o));}
 
+function scheduleRestart(delay, reason) {
+  if(closedByHost || ws.readyState !== 1) return;
+  if(switchingLocale && reason !== 'locale-switch') return;
+  if(switchingInput && reason !== 'input-switch') return;
+  if(restartTimer) clearTimeout(restartTimer);
+  status.textContent = 'Restarting';
+  restartTimer = setTimeout(() => startRec(currentLocale), delay);
+}
+
 function restartDelay() {
-  if(consecutiveFails <= 2) return 300;
-  return Math.min(300 * Math.pow(2, consecutiveFails - 2), 8000);
+  if(lastError === 'no-speech') return 120;
+  if(lastError === 'network') return Math.min(900 + consecutiveFails * 350, 2600);
+  if(consecutiveFails <= 2) return 240;
+  return Math.min(300 * Math.pow(2, consecutiveFails - 2), 3000);
+}
+
+function ensureWatchdog() {
+  if(watchdogTimer) return;
+  watchdogTimer = setInterval(() => {
+    if(closedByHost || ws.readyState !== 1 || switchingLocale || switchingInput) return;
+    if(restartTimer) return;
+    const dotOn = dot.classList.contains('on');
+    const now = Date.now();
+    if(!rec) {
+      scheduleRestart(120, 'watchdog-missing-rec');
+      return;
+    }
+    if(!dotOn && lastStartAt > 0 && now - lastStartAt > 1800) {
+      scheduleRestart(120, 'watchdog-idle');
+    }
+  }, 1000);
 }
 
 function startRec(locale) {
@@ -433,14 +480,14 @@ function startRec(locale) {
   rec = new SR();
   rec.lang = locale; rec.continuous = true; rec.interimResults = true;
   rec.onstart = () => {
-    switchingLocale = false; consecutiveFails = 0; dot.classList.add('on');
+    switchingLocale = false; consecutiveFails = 0; lastError = ''; lastStartAt = Date.now(); dot.classList.add('on');
     status.textContent = '[' + locale.toUpperCase() + '] Active'; 
     // ALWAYS send listening to clear the UI's 'starting' state
     send({type: 'listening'});
     if (audioContext && audioContext.state === 'suspended') audioContext.resume();
   };
   rec.onresult = (e) => {
-    consecutiveFails = 0;
+    consecutiveFails = 0; lastError = ''; lastResultAt = Date.now();
     for(let i = e.resultIndex; i < e.results.length; i++){
       const t = e.results[i][0].transcript;
       const f = e.results[i].isFinal;
@@ -453,24 +500,29 @@ function startRec(locale) {
   rec.onspeechend = () => { send({type: 'level', level: 0.1}); };
   rec.onerror = (e) => {
     if(e.error === 'aborted') return;
+    lastError = e.error || '';
     send({type: 'error', error: e.error});
     if(e.error === 'not-allowed') {
       err.textContent = 'Mic Permission Denied';
       dot.classList.remove('on');
     }
-    consecutiveFails++;
+    if(e.error !== 'no-speech') {
+      consecutiveFails++;
+    } else {
+      consecutiveFails = 0;
+    }
   };
   rec.onend = () => {
     dot.classList.remove('on');
     if(closedByHost || ws.readyState !== 1) return;
     if(switchingLocale) return;
     if(switchingInput) return;
-    restartTimer = setTimeout(() => startRec(currentLocale), restartDelay());
+    scheduleRestart(restartDelay(), 'recognition-ended');
   };
   try{ rec.start(); } catch(ex){
-    consecutiveFails++;
+    lastError = 'start-failed'; consecutiveFails++;
     if(!closedByHost && ws.readyState === 1) {
-      restartTimer = setTimeout(() => startRec(currentLocale), restartDelay());
+      scheduleRestart(restartDelay(), 'start-failed');
     }
   }
 }

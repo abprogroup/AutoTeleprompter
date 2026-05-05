@@ -6,6 +6,8 @@ class _WindowsMicSelector extends StatelessWidget {
   final List<SttAudioInputDevice> devices;
   final Color accentColor;
   final Future<void> Function(String deviceId, String label) onSelected;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function() onUseDefault;
 
   const _WindowsMicSelector({
     required this.selectedDeviceId,
@@ -13,6 +15,8 @@ class _WindowsMicSelector extends StatelessWidget {
     required this.devices,
     required this.accentColor,
     required this.onSelected,
+    required this.onRefresh,
+    required this.onUseDefault,
   });
 
   @override
@@ -90,16 +94,31 @@ class _WindowsMicSelector extends StatelessWidget {
           },
         ),
         const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            icon: const Icon(Icons.settings_input_component, size: 17),
-            label: const Text('Open Windows input settings'),
-            style: TextButton.styleFrom(foregroundColor: accentColor),
-            onPressed: () {
-              Process.run('cmd', ['/c', 'start', 'ms-settings:sound']);
-            },
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            TextButton.icon(
+              icon: const Icon(Icons.refresh, size: 17),
+              label: const Text('Refresh'),
+              style: TextButton.styleFrom(foregroundColor: accentColor),
+              onPressed: () => unawaited(onRefresh()),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.settings_input_component, size: 17),
+              label: const Text('Open Windows input settings'),
+              style: TextButton.styleFrom(foregroundColor: accentColor),
+              onPressed: () {
+                Process.run('cmd', ['/c', 'start', 'ms-settings:sound']);
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.restart_alt, size: 17),
+              label: const Text('Use Default'),
+              style: TextButton.styleFrom(foregroundColor: Colors.white70),
+              onPressed: () => unawaited(onUseDefault()),
+            ),
+          ],
         ),
       ],
     );

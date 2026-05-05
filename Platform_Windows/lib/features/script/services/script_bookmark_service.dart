@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:autoteleprompter/features/script/models/script_word.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ScriptBookmark {
@@ -43,6 +44,8 @@ class ScriptBookmark {
 
 class ScriptBookmarkService {
   static const _prefix = 'scriptBookmarks.v1';
+  static final _tagStripRe = RegExp(r'\[[^\]]+\]');
+  static final _alignTagStripRe = RegExp(r'\[\/?align=[^\]]+\]');
 
   static String scopeKey(String? sessionId, String title) {
     final raw = ((sessionId != null && sessionId.trim().isNotEmpty)
@@ -94,5 +97,45 @@ class ScriptBookmarkService {
       ..add(bookmark)
       ..sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
     return next;
+  }
+
+  static int? nearestBookmarkableWordIndex(
+    List<ScriptWord> words,
+    int candidateIndex,
+  ) {
+    if (words.isEmpty) return null;
+    final bookmarkable = <int>[];
+    for (final word in words) {
+      if (isBookmarkableWord(word)) bookmarkable.add(word.index);
+    }
+    if (bookmarkable.isEmpty) return null;
+
+    final safeIndex = candidateIndex.clamp(0, words.length - 1).toInt();
+    final first = bookmarkable.first;
+    final last = bookmarkable.last;
+    if (safeIndex <= first) return first;
+    if (safeIndex >= last) return last;
+    if (bookmarkable.contains(safeIndex)) return safeIndex;
+
+    int best = first;
+    var bestDistance = (safeIndex - first).abs();
+    for (final index in bookmarkable.skip(1)) {
+      final distance = (safeIndex - index).abs();
+      final isBetter = distance < bestDistance ||
+          (distance == bestDistance && index > safeIndex);
+      if (!isBetter) continue;
+      best = index;
+      bestDistance = distance;
+    }
+    return best;
+  }
+
+  static bool isBookmarkableWord(ScriptWord word) {
+    if (word.isNewline) return false;
+    final visible = word.raw
+        .replaceAll(_tagStripRe, '')
+        .replaceAll(_alignTagStripRe, '')
+        .trim();
+    return visible.isNotEmpty;
   }
 }

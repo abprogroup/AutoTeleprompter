@@ -76,9 +76,36 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     _bookmarkLoadingKey = key;
     _bookmarksLoaded = false;
     final loaded = await ScriptBookmarkService.load(key);
+    var normalized = <ScriptBookmark>[];
+    var changed = false;
+    for (final bookmark in loaded) {
+      final target = ScriptBookmarkService.nearestBookmarkableWordIndex(
+        script.words,
+        bookmark.wordIndex,
+      );
+      if (target == null) {
+        changed = true;
+        continue;
+      }
+      final normalizedBookmark = target == bookmark.wordIndex
+          ? bookmark
+          : ScriptBookmark(
+              id: bookmark.id,
+              label: _bookmarkLabelForWord(script, target),
+              wordIndex: target,
+              blockIndex: bookmark.blockIndex,
+              offset: bookmark.offset,
+              createdAt: bookmark.createdAt,
+            );
+      if (target != bookmark.wordIndex) changed = true;
+      normalized = ScriptBookmarkService.upsert(normalized, normalizedBookmark);
+    }
+    if (changed) {
+      await ScriptBookmarkService.save(key, normalized);
+    }
     if (!mounted || _bookmarkScopeKey != key) return;
     setState(() {
-      _bookmarks = loaded;
+      _bookmarks = normalized;
       _bookmarksLoaded = true;
       _bookmarkLoadingKey = null;
     });
@@ -113,11 +140,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
-    final index = ref
-        .read(teleprompterProvider)
-        .confirmedWordIndex
-        .clamp(0, script.words.length - 1)
-        .toInt();
+    final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
+    final index = ScriptBookmarkService.nearestBookmarkableWordIndex(
+      script.words,
+      currentIndex,
+    );
+    if (index == null) return;
     final bookmark = ScriptBookmark(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       label: _bookmarkLabelForWord(script, index),
@@ -156,19 +184,22 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     }
 
     final current = sttState.confirmedWordIndex;
-    int target;
+    int bookmarkListIndex;
     if (direction >= 0) {
-      target = _bookmarks.indexWhere((b) => b.wordIndex > current);
-      if (target == -1) target = 0;
+      bookmarkListIndex = _bookmarks.indexWhere((b) => b.wordIndex > current);
+      if (bookmarkListIndex == -1) bookmarkListIndex = 0;
     } else {
-      target = _bookmarks.lastIndexWhere((b) => b.wordIndex < current);
-      if (target == -1) target = _bookmarks.length - 1;
+      bookmarkListIndex =
+          _bookmarks.lastIndexWhere((b) => b.wordIndex < current);
+      if (bookmarkListIndex == -1) bookmarkListIndex = _bookmarks.length - 1;
     }
-    final bookmark = _bookmarks[target];
-    _jumpToWordIndex(
-      bookmark.wordIndex.clamp(0, script.words.length - 1).toInt(),
-      immediate: true,
+    final bookmark = _bookmarks[bookmarkListIndex];
+    final target = ScriptBookmarkService.nearestBookmarkableWordIndex(
+      script.words,
+      bookmark.wordIndex,
     );
+    if (target == null) return;
+    _jumpToWordIndex(target, immediate: true);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Bookmark: ${bookmark.label}'),
@@ -183,7 +214,11 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     await _loadBookmarksForScript(script, force: true);
     if (!mounted) return;
 
-    final safeWordIndex = wordIndex.clamp(0, script.words.length - 1).toInt();
+    final safeWordIndex = ScriptBookmarkService.nearestBookmarkableWordIndex(
+      script.words,
+      wordIndex,
+    );
+    if (safeWordIndex == null) return;
     ScriptBookmark? bookmark;
     for (final candidate in _bookmarks) {
       if (candidate.wordIndex == safeWordIndex) {
@@ -240,11 +275,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       );
       return;
     }
-    final current = ref
-        .read(teleprompterProvider)
-        .confirmedWordIndex
-        .clamp(0, script.words.length - 1)
-        .toInt();
+    final currentRaw = ref.read(teleprompterProvider).confirmedWordIndex;
+    final current = ScriptBookmarkService.nearestBookmarkableWordIndex(
+      script.words,
+      currentRaw,
+    );
+    if (current == null) return;
     if (!_bookmarks.any((bookmark) => bookmark.wordIndex == current)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

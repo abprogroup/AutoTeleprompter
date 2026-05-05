@@ -52,7 +52,15 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final presentationFontSize = settings.fontSize * 2.0;
     final debugConsoleHeight =
         settings.debugMode ? (_debugConsoleMinimized ? 36.0 : 220.0) : 0.0;
-    final bookmarkWordIndexes = _bookmarks.map((b) => b.wordIndex).toSet();
+    final bookmarkWordIndexes = _bookmarks
+        .map(
+          (bookmark) => ScriptBookmarkService.nearestBookmarkableWordIndex(
+            script.words,
+            bookmark.wordIndex,
+          ),
+        )
+        .whereType<int>()
+        .toSet();
 
     Widget wordList = Padding(
       key: _presenterContentKey,

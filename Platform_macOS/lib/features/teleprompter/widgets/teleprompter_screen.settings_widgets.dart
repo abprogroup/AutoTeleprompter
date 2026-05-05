@@ -1,9 +1,25 @@
 part of 'teleprompter_screen.dart';
 
 Future<void> _openMacSoundInputSettings() async {
+  try {
+    final result = await Process.run('osascript', [
+      '-e',
+      'tell application "System Preferences"',
+      '-e',
+      'activate',
+      '-e',
+      'reveal anchor "input" of pane id "com.apple.preference.sound"',
+      '-e',
+      'end tell',
+    ]);
+    if (result.exitCode == 0) return;
+  } catch (_) {}
+
   final targets = [
-    'x-apple.systempreferences:com.apple.Sound-Settings.extension?input',
+    '/System/Library/PreferencePanes/Sound.prefPane',
+    'x-apple.systempreferences:com.apple.preference.sound?input',
     'x-apple.systempreferences:com.apple.preference.sound?Input',
+    'x-apple.systempreferences:com.apple.Sound-Settings.extension?Input',
     'x-apple.systempreferences:com.apple.Sound-Settings.extension',
   ];
 

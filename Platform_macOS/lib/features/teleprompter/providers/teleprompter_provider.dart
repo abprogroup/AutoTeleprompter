@@ -305,7 +305,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
           error.contains('error_permission') ||
-          error.contains('not available');
+          error.contains('not available') ||
+          error.contains('error_unknown');
       _safeSetState((s) => s.copyWith(
             statusMessage: isFatal ? error : '',
             hasError: isFatal,

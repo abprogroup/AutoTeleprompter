@@ -89,6 +89,7 @@ class SpeechService {
   DateTime? _localeSwitchGraceUntil;
   Future<void> _engineQueue = Future.value();
   Timer? _restartTimer;
+  DateTime? _engineRecoveryUntil;
 
   int _consecutiveErrors = 0;
   Timer? _errorResetTimer;
@@ -108,6 +109,11 @@ class SpeechService {
           if (!_isActive) return;
 
           final msg = error.errorMsg;
+          if (_isAppleUnknownSpeechError(msg)) {
+            _handleAppleUnknownSpeechError(msg);
+            return;
+          }
+
           final inLocaleSwitchGrace = _localeSwitchGraceUntil != null &&
               DateTime.now().isBefore(_localeSwitchGraceUntil!);
           if (inLocaleSwitchGrace &&
@@ -129,7 +135,6 @@ class SpeechService {
               }
             } else if (_languageRetries == 2) {
               // 2nd retry: try with explicit device locale in case null didn't work
-              final deviceLocale = _stt.lastStatus; // just force one more try
               _localeId = '';
               if (!_isRestarting) {
                 _scheduleRestart(const Duration(milliseconds: 500));
@@ -188,7 +193,9 @@ class SpeechService {
               onStatusChange?.call(SpeechStatus.idle);
             }
           } else if (status == 'listening') {
-            onStatusChange?.call(SpeechStatus.listening);
+            if (_isActive) {
+              onStatusChange?.call(SpeechStatus.listening);
+            }
           }
         },
         debugLogging: true,
@@ -201,6 +208,35 @@ class SpeechService {
       _isInitialized = false;
     }
     return _isInitialized;
+  }
+
+  bool _isAppleUnknownSpeechError(String msg) {
+    final lower = msg.toLowerCase();
+    return lower.contains('error_unknown') || lower.trim() == '7';
+  }
+
+  void _handleAppleUnknownSpeechError(String msg) {
+    _isActive = false;
+    _isRestarting = false;
+    _isInitialized = false;
+    _localeSwitchToken++;
+    _consecutiveErrors = 0;
+    _errorResetTimer?.cancel();
+    _cancelPendingRestart();
+    _engineRecoveryUntil =
+        DateTime.now().add(const Duration(milliseconds: 1600));
+
+    onError?.call(
+      'Apple Speech not available right now ($msg). Wait a moment, then start STT again. '
+      'If it repeats, check macOS Microphone and Speech Recognition permissions.',
+    );
+    onStatusChange?.call(SpeechStatus.error);
+
+    unawaited(_runEngineOperation(() async {
+      await _cancelNativeRecognition(
+        settle: const Duration(milliseconds: 1200),
+      );
+    }));
   }
 
   Future<T> _runEngineOperation<T>(Future<T> Function() operation) {
@@ -345,6 +381,15 @@ class SpeechService {
 
   Future<SpeechStartResult> _startLocked({String? localeId}) async {
     _cancelPendingRestart();
+    final recoveryUntil = _engineRecoveryUntil;
+    if (recoveryUntil != null) {
+      final wait = recoveryUntil.difference(DateTime.now());
+      if (!wait.isNegative) {
+        await Future.delayed(wait);
+      }
+      _engineRecoveryUntil = null;
+    }
+
     final hasPermission = await _stt.hasPermission;
 
     if (!_isInitialized || !hasPermission) {
@@ -382,6 +427,13 @@ class SpeechService {
     _languageRetries = 0;
     _isRestarting = false;
     await _startListeningLocked();
+    if (!_isActive) {
+      return SpeechStartResult(
+        success: false,
+        message:
+            'Apple Speech could not start cleanly. Wait a moment, then try STT again.',
+      );
+    }
 
     return SpeechStartResult(
       success: true,
@@ -427,8 +479,14 @@ class SpeechService {
     } catch (e) {
       onError?.call('Listen failed: $e');
       if (_isActive && !_isRestarting) {
+        _isActive = false;
         _isInitialized = false;
-        _scheduleRestart(const Duration(milliseconds: 600), reinit: true);
+        _engineRecoveryUntil =
+            DateTime.now().add(const Duration(milliseconds: 1200));
+        await _cancelNativeRecognition(
+          settle: const Duration(milliseconds: 1200),
+        );
+        onStatusChange?.call(SpeechStatus.error);
       }
     }
   }

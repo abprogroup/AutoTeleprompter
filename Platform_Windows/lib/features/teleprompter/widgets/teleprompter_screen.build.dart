@@ -118,10 +118,14 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   final isManual = settings.scrollMode == 'manual';
                   final isCurrent = !isManual && i == tState.confirmedWordIndex;
                   final isPast = !isManual && i < tState.confirmedWordIndex;
+                  final visibleWordText = word.raw
+                      .replaceAll(_tagStripRe, '')
+                      .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
+                  final spacedWordText = localWordIndex + 1 < para.length
+                      ? '$visibleWordText '
+                      : visibleWordText;
                   final displayText = _bidiIsolatedDisplayText(
-                    word.raw
-                        .replaceAll(_tagStripRe, '')
-                        .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), ''),
+                    spacedWordText,
                     paragraphDirection: paraDir,
                   );
                   final wordDirection = _wordDirectionForDisplay(
@@ -178,9 +182,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         : (word.textColor ?? Color(0xFFFFFFFF));
                   }
 
-                  // Use colored padding instead of trailing spaces, so imported
-                  // DOCX highlights read as bands instead of separated tiles.
-                  final wordGap = effectiveFontSize * 0.28;
+                  // Keep the visual gap inside the Text itself. External
+                  // padding creates seams in imported highlights and makes
+                  // underlines look chopped between words.
                   final joinsPreviousHighlight = _sameHighlightColor(
                     userBgColor,
                     localWordIndex > 0
@@ -195,14 +199,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   );
                   final useSmoothHighlightBand =
                       userBgColor != null && trackingBgColor == null;
-                  final wordPadding = useSmoothHighlightBand
-                      ? EdgeInsets.symmetric(horizontal: wordGap * 0.5)
-                      : EdgeInsets.only(
-                          right:
-                              wordDirection == TextDirection.rtl ? 0 : wordGap,
-                          left:
-                              wordDirection == TextDirection.rtl ? wordGap : 0,
-                        );
                   final highlightRadius = Radius.circular(
                     (effectiveFontSize * 0.08).clamp(2.0, 8.0),
                   );
@@ -214,7 +210,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       textDirection: wordDirection,
                       child: Container(
                         key: _wordKeys[i],
-                        padding: wordPadding,
+                        padding: EdgeInsets.zero,
                         decoration: effectiveBg == null
                             ? null
                             : BoxDecoration(
@@ -246,6 +242,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             decoration: word.isUnderline
                                 ? TextDecoration.underline
                                 : null,
+                            decorationStyle: TextDecorationStyle.solid,
+                            decorationThickness: word.isUnderline ? 1.5 : null,
                           ),
                         ),
                       ),
@@ -843,7 +841,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
   }) {
     final clean = _stripBidiIsolation(text);
     if (RegExp(r'[\u0590-\u08FF]').hasMatch(clean)) return TextDirection.rtl;
-    if (RegExp(r'[A-Za-z0-9]').hasMatch(clean)) return TextDirection.ltr;
+    if (RegExp(r'[A-Za-z]').hasMatch(clean)) return TextDirection.ltr;
     return paragraphDirection;
   }
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/markup_decoration_service.dart';
+
 /// Premium Highlighting Controller with inline markup rendering.
 /// Renders bold/italic/underline/color/bg/size/font styles while visually
 /// hiding tag characters, and supports multi-block selection highlighting
@@ -341,9 +343,13 @@ class MarkupController extends TextEditingController {
       TextStyle s = style ?? const TextStyle();
       if (bold) s = s.copyWith(fontWeight: FontWeight.bold);
       if (italic) s = s.copyWith(fontStyle: FontStyle.italic);
-      if (underline) s = s.copyWith(decoration: TextDecoration.underline);
+      if (underline && !kUseCustomDocxDecorationPainting) {
+        s = s.copyWith(decoration: TextDecoration.underline);
+      }
       if (textColors.isNotEmpty) s = s.copyWith(color: textColors.last);
-      if (bgColors.isNotEmpty) s = s.copyWith(backgroundColor: bgColors.last);
+      if (bgColors.isNotEmpty && !kUseCustomDocxDecorationPainting) {
+        s = s.copyWith(backgroundColor: bgColors.last);
+      }
       if (sizes.isNotEmpty) s = s.copyWith(fontSize: sizes.last);
       if (fonts.isNotEmpty) s = s.copyWith(fontFamily: fonts.last);
       return s;

@@ -55,6 +55,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final bookmarkWordIndexes = _bookmarks.map((b) => b.wordIndex).toSet();
 
     Widget wordList = Padding(
+      key: _presenterContentKey,
       padding: EdgeInsets.symmetric(
         horizontal: MediaQuery.of(context).size.width * 0.05,
         vertical: MediaQuery.of(context).size.height * 0.45,
@@ -144,8 +145,12 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       isCurrent && settings.showCurrentWordHighlight
                           ? Color(settings.currentWordColor).withOpacity(0.3)
                           : null;
-                  final effectiveBg = trackingBgColor ??
-                      (isPast ? userBgColor?.withOpacity(0.15) : userBgColor);
+                  final effectiveBg = kUseCustomDocxDecorationPainting
+                      ? trackingBgColor
+                      : trackingBgColor ??
+                          (isPast
+                              ? userBgColor?.withOpacity(0.15)
+                              : userBgColor);
 
                   // Text color with graduated opacity for smooth spotlight effect.
                   // Words close to the current position gently transition between
@@ -198,7 +203,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         : null,
                   );
                   final useSmoothHighlightBand =
-                      userBgColor != null && trackingBgColor == null;
+                      !kUseCustomDocxDecorationPainting &&
+                          userBgColor != null &&
+                          trackingBgColor == null;
                   final highlightRadius = Radius.circular(
                     (effectiveFontSize * 0.08).clamp(2.0, 8.0),
                   );
@@ -239,7 +246,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             wordSpacing: settings.wordSpacing,
                             color: textColor,
                             height: settings.lineSpacing,
-                            decoration: word.isUnderline
+                            decoration: word.isUnderline &&
+                                    !kUseCustomDocxDecorationPainting
                                 ? TextDecoration.underline
                                 : null,
                             decorationStyle: TextDecorationStyle.solid,
@@ -291,6 +299,43 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         }).toList(),
       ),
     );
+
+    if (kUseCustomDocxDecorationPainting) {
+      wordList = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _PresenterDecorationPainter(
+                  contentKey: _presenterContentKey,
+                  wordKeys: _wordKeys,
+                  words: script.words,
+                  confirmedWordIndex: tState.confirmedWordIndex,
+                  isManualMode: settings.scrollMode == 'manual',
+                  type: MarkupDecorationType.background,
+                ),
+              ),
+            ),
+          ),
+          wordList,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _PresenterDecorationPainter(
+                  contentKey: _presenterContentKey,
+                  wordKeys: _wordKeys,
+                  words: script.words,
+                  confirmedWordIndex: tState.confirmedWordIndex,
+                  isManualMode: settings.scrollMode == 'manual',
+                  type: MarkupDecorationType.underline,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     if (settings.mirrorHorizontal || settings.mirrorVertical) {
       wordList = Transform.scale(
@@ -866,4 +911,93 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
 
   String _stripBidiIsolation(String text) =>
       text.replaceAll(RegExp('[\u200E\u200F\u2066\u2067\u2068\u2069]'), '');
+}
+
+class _PresenterDecorationPainter extends CustomPainter {
+  final GlobalKey contentKey;
+  final List<GlobalKey> wordKeys;
+  final List<ScriptWord> words;
+  final int confirmedWordIndex;
+  final bool isManualMode;
+  final MarkupDecorationType type;
+
+  const _PresenterDecorationPainter({
+    required this.contentKey,
+    required this.wordKeys,
+    required this.words,
+    required this.confirmedWordIndex,
+    required this.isManualMode,
+    required this.type,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final contentContext = contentKey.currentContext;
+    final contentBox = contentContext?.findRenderObject() as RenderBox?;
+    if (contentBox == null || !contentBox.attached) return;
+
+    if (type == MarkupDecorationType.background) {
+      final rectsByColor = <Color, List<Rect>>{};
+      for (final word in words) {
+        if (word.isNewline || word.index >= wordKeys.length) continue;
+        final highlight = word.highlight;
+        if (highlight == null) continue;
+        final color = !isManualMode && word.index < confirmedWordIndex
+            ? highlight.withValues(alpha: highlight.a * 0.15)
+            : highlight;
+        final rect = _rectForWord(word.index, contentBox);
+        if (rect == null) continue;
+        rectsByColor.putIfAbsent(color, () => <Rect>[]).add(rect);
+      }
+      final paint = Paint()..style = PaintingStyle.fill;
+      for (final entry in rectsByColor.entries) {
+        if (entry.key.a <= 0) continue;
+        paint.color = entry.key;
+        for (final rect in MarkupDecorationBoxMerger.merge(
+          entry.value,
+          rowTolerance: 8,
+          gapTolerance: 18,
+        )) {
+          final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 8.0));
+          canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+        }
+      }
+      return;
+    }
+
+    final underlineRects = <Rect>[];
+    for (final word in words) {
+      if (word.isNewline ||
+          !word.isUnderline ||
+          word.index >= wordKeys.length) {
+        continue;
+      }
+      final rect = _rectForWord(word.index, contentBox);
+      if (rect != null) underlineRects.add(rect);
+    }
+    final paint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.square
+      ..style = PaintingStyle.stroke;
+    for (final rect in MarkupDecorationBoxMerger.merge(
+      underlineRects,
+      rowTolerance: 8,
+      gapTolerance: 18,
+    )) {
+      final y = rect.bottom - (paint.strokeWidth * 0.5);
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+    }
+  }
+
+  Rect? _rectForWord(int index, RenderBox contentBox) {
+    final context = wordKeys[index].currentContext;
+    final box = context?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return null;
+    final topLeft = box.localToGlobal(Offset.zero, ancestor: contentBox);
+    return topLeft & box.size;
+  }
+
+  @override
+  bool shouldRepaint(covariant _PresenterDecorationPainter oldDelegate) => true;
 }

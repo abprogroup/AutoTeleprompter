@@ -61,7 +61,21 @@ class _EditorBlock extends StatelessWidget {
     final isRtl = controller.text.isHebrew;
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
+    final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+    final editorTextStyle = TextStyle(
+      color: Colors.white,
+      fontSize: settings.fontSize,
+      height: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+    );
+    final editorStrutStyle = StrutStyle(
+      fontSize: maxFontSize,
+      height: settings.lineSpacing,
+      forceStrutHeight: true,
+    );
+    const editorContentPadding = EdgeInsets.symmetric(vertical: 2);
 
     return Container(
       decoration: BoxDecoration(
@@ -209,43 +223,95 @@ class _EditorBlock extends StatelessWidget {
                       selectionColor: Colors.transparent,
                     ),
                   ),
-                  child: TextField(
-                    selectionControls: GhostSelectionControls(),
-                    controller: controller,
-                    focusNode: focusNode,
-                    maxLines: null,
-                    onSubmitted: (_) => onSubmitted(),
-                    onTap: onTap,
-                    textDirection:
-                        isRtl ? TextDirection.rtl : TextDirection.ltr,
-                    textAlign: textAlign,
-                    cursorColor: Colors.amber,
-                    cursorHeight: maxFontSize,
-                    strutStyle: StrutStyle(
-                      fontSize: maxFontSize,
-                      height: settings.lineSpacing,
-                      forceStrutHeight: true,
+                  child: CustomPaint(
+                    painter: MarkupTextDecorationPainter(
+                      rawText: controller.text,
+                      textSpan: controller.buildTextSpan(
+                        context: context,
+                        style: editorTextStyle,
+                        withComposing: false,
+                      ),
+                      textDirection: textDirection,
+                      textAlign: textAlign,
+                      strutStyle: editorStrutStyle,
+                      contentPadding: editorContentPadding,
+                      type: MarkupDecorationType.background,
                     ),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: settings.fontSize,
-                      height: settings.lineSpacing,
-                      letterSpacing: settings.letterSpacing,
-                      wordSpacing: settings.wordSpacing,
+                    foregroundPainter: MarkupTextDecorationPainter(
+                      rawText: controller.text,
+                      textSpan: controller.buildTextSpan(
+                        context: context,
+                        style: editorTextStyle,
+                        withComposing: false,
+                      ),
+                      textDirection: textDirection,
+                      textAlign: textAlign,
+                      strutStyle: editorStrutStyle,
+                      contentPadding: editorContentPadding,
+                      type: MarkupDecorationType.underline,
                     ),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 2),
-                    ),
-                    contextMenuBuilder: (context, editableTextState) {
-                      final List<ContextMenuButtonItem> items =
-                          editableTextState.contextMenuButtonItems;
-                      final List<ContextMenuButtonItem> customItems = [];
-                      bool hasSelectAll = false;
-                      for (final item in items) {
-                        if (item.type == ContextMenuButtonType.selectAll) {
-                          hasSelectAll = true;
+                    child: TextField(
+                      selectionControls: GhostSelectionControls(),
+                      controller: controller,
+                      focusNode: focusNode,
+                      maxLines: null,
+                      onSubmitted: (_) => onSubmitted(),
+                      onTap: onTap,
+                      textDirection: textDirection,
+                      textAlign: textAlign,
+                      cursorColor: Colors.amber,
+                      cursorHeight: maxFontSize,
+                      strutStyle: editorStrutStyle,
+                      style: editorTextStyle,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: editorContentPadding,
+                      ),
+                      contextMenuBuilder: (context, editableTextState) {
+                        final List<ContextMenuButtonItem> items =
+                            editableTextState.contextMenuButtonItems;
+                        final List<ContextMenuButtonItem> customItems = [];
+                        bool hasSelectAll = false;
+                        for (final item in items) {
+                          if (item.type == ContextMenuButtonType.selectAll) {
+                            hasSelectAll = true;
+                            customItems.add(ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onSelectAll();
+                              },
+                              type: ContextMenuButtonType.selectAll,
+                            ));
+                          } else if (item.type == ContextMenuButtonType.copy) {
+                            customItems.add(ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onCopy();
+                              },
+                              type: ContextMenuButtonType.copy,
+                            ));
+                          } else if (item.type == ContextMenuButtonType.cut) {
+                            customItems.add(ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onCut();
+                              },
+                              type: ContextMenuButtonType.cut,
+                            ));
+                          } else if (item.type == ContextMenuButtonType.paste) {
+                            customItems.add(ContextMenuButtonItem(
+                              onPressed: () {
+                                ContextMenuController.removeAny();
+                                onPaste();
+                              },
+                              type: ContextMenuButtonType.paste,
+                            ));
+                          } else {
+                            customItems.add(item);
+                          }
+                        }
+                        if (!hasSelectAll) {
                           customItems.add(ContextMenuButtonItem(
                             onPressed: () {
                               ContextMenuController.removeAny();
@@ -253,48 +319,13 @@ class _EditorBlock extends StatelessWidget {
                             },
                             type: ContextMenuButtonType.selectAll,
                           ));
-                        } else if (item.type == ContextMenuButtonType.copy) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onCopy();
-                            },
-                            type: ContextMenuButtonType.copy,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.cut) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onCut();
-                            },
-                            type: ContextMenuButtonType.cut,
-                          ));
-                        } else if (item.type == ContextMenuButtonType.paste) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onPaste();
-                            },
-                            type: ContextMenuButtonType.paste,
-                          ));
-                        } else {
-                          customItems.add(item);
                         }
-                      }
-                      if (!hasSelectAll) {
-                        customItems.add(ContextMenuButtonItem(
-                          onPressed: () {
-                            ContextMenuController.removeAny();
-                            onSelectAll();
-                          },
-                          type: ContextMenuButtonType.selectAll,
-                        ));
-                      }
-                      return AdaptiveTextSelectionToolbar.buttonItems(
-                        anchors: editableTextState.contextMenuAnchors,
-                        buttonItems: customItems,
-                      );
-                    },
+                        return AdaptiveTextSelectionToolbar.buttonItems(
+                          anchors: editableTextState.contextMenuAnchors,
+                          buttonItems: customItems,
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),

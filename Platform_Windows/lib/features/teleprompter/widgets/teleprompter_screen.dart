@@ -12,6 +12,7 @@ import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../script/models/script.dart';
 import '../../script/services/script_bookmark_service.dart';
+import '../../script/services/markup_decoration_service.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../../core/widgets/global_color_picker.dart';
@@ -47,6 +48,7 @@ class TeleprompterScreen extends ConsumerStatefulWidget {
 
 class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _presenterContentKey = GlobalKey();
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
   bool _debugConsoleMinimized = false;

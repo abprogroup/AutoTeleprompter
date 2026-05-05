@@ -52,7 +52,7 @@ jobs:
           du -sh autoteleprompter.app/Contents/* || true
           echo "Frameworks breakdown:"
           du -sh autoteleprompter.app/Contents/Frameworks/* || true
-          zip -r AutoTeleprompter-macOS.zip autoteleprompter.app
+          ditto -c -k --sequesterRsrc --keepParent autoteleprompter.app AutoTeleprompter-macOS.zip
           echo "Zip size:"
           du -sh AutoTeleprompter-macOS.zip
 

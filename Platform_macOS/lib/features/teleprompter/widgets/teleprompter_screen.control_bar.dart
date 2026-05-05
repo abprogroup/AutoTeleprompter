@@ -89,13 +89,13 @@ class _ControlBar extends ConsumerWidget {
             ),
             // Backward button removed in favor of bidirectional slider
             GestureDetector(
-              onTap: isBooting ? null : (isActive ? onStop : onStart),
+              onTap: isBooting ? onStop : (isActive ? onStop : onStart),
               child: Container(
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isActive ? Colors.red : accentColor,
+                  color: isActive || isBooting ? Colors.red : accentColor,
                 ),
                 child: Icon(
                   isManualMode

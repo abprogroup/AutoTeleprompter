@@ -15,7 +15,8 @@ class ScriptGalleryScreen extends ConsumerStatefulWidget {
   const ScriptGalleryScreen({super.key});
 
   @override
-  ConsumerState<ScriptGalleryScreen> createState() => _ScriptGalleryScreenState();
+  ConsumerState<ScriptGalleryScreen> createState() =>
+      _ScriptGalleryScreenState();
 }
 
 class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
@@ -24,7 +25,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
@@ -40,7 +41,8 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('DEBUG MODE: ${isNowDebug ? 'ON' : 'OFF'}'),
-                    backgroundColor: isNowDebug ? Colors.green : Colors.grey[800],
+                    backgroundColor:
+                        isNowDebug ? Colors.green : Colors.grey[800],
                     duration: const Duration(seconds: 2),
                   ),
                 );
@@ -48,7 +50,10 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             }
           },
           child: Text('AutoTeleprompter',
-            style: GoogleFonts.bebasNeue(letterSpacing: 1.5, fontSize: 28, color: const Color(0xFFFFBF00))),
+              style: GoogleFonts.bebasNeue(
+                  letterSpacing: 1.5,
+                  fontSize: 28,
+                  color: const Color(0xFFFFBF00))),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -70,11 +75,14 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Welcome Back, ${settings.displayName}.',
-              style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text('Ready for your next broadcast?', style: TextStyle(color: Colors.white54, fontSize: 15)),
+            const Text('Ready for your next broadcast?',
+                style: TextStyle(color: Colors.white54, fontSize: 15)),
             const SizedBox(height: 40),
-            
             _GalleryActionCard(
               title: 'New Script',
               subtitle: 'Start with a blank canvas',
@@ -95,46 +103,57 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 // eliminating home-to-home flicker.
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const ScriptEditorScreen(shouldAutoLoad: true)),
+                  PageRouteBuilder(
+                    pageBuilder: (_, __, ___) =>
+                        const ScriptEditorScreen(shouldAutoLoad: true),
+                    transitionDuration: Duration.zero,
+                    reverseTransitionDuration: Duration.zero,
+                  ),
                 );
               },
             ),
             const SizedBox(height: 48),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Recent Activity', style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('Recent Activity',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
                 if (settings.recentScripts.length > 3)
-                TextButton(
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      backgroundColor: const Color(0xFF0A0A0A),
-                      isScrollControlled: true,
-                      builder: (_) => const _FullHistorySheet(),
-                    );
-                  },
-                  child: const Text('show more', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 13, fontWeight: FontWeight.bold)),
-                ),
+                  TextButton(
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: const Color(0xFF0A0A0A),
+                        isScrollControlled: true,
+                        builder: (_) => const _FullHistorySheet(),
+                      );
+                    },
+                    child: const Text('show more',
+                        style: TextStyle(
+                            color: Color(0xFFFFBF00),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold)),
+                  ),
               ],
             ),
-            
             const SizedBox(height: 12),
             Column(
-               children: settings.recentScripts.isEmpty 
-                ? [const _EmptyStatePlaceholder()]
-                : settings.recentScripts.take(3).map((metaJson) {
-                    final meta = jsonDecode(metaJson);
-                    return _ScriptListItem(
-                      title: meta['title'] ?? 'Untitled Script',
-                      date: meta['date'] ?? 'Imported',
-                      type: meta['type'] ?? 'FILE',
-                      fullText: meta['fullText'] ?? '',
-                      snippet: meta['snippet'],
-                      sessionId: meta['sessionId'],
-                    );
-                  }).toList(),
+              children: settings.recentScripts.isEmpty
+                  ? [const _EmptyStatePlaceholder()]
+                  : settings.recentScripts.take(3).map((metaJson) {
+                      final meta = jsonDecode(metaJson);
+                      return _ScriptListItem(
+                        title: meta['title'] ?? 'Untitled Script',
+                        date: meta['date'] ?? 'Imported',
+                        type: meta['type'] ?? 'FILE',
+                        fullText: meta['fullText'] ?? '',
+                        snippet: meta['snippet'],
+                        sessionId: meta['sessionId'],
+                      );
+                    }).toList(),
             ),
           ],
         ),
@@ -148,7 +167,8 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Production Title', style: TextStyle(color: Colors.white)),
+        title: const Text('Production Title',
+            style: TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -160,23 +180,30 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
             onPressed: () {
               final name = controller.text.trim();
               Navigator.pop(ctx);
               ref.read(scriptProvider.notifier).clear();
               ref.read(settingsProvider.notifier).resetToDefaultAppearance();
-              ref.read(scriptProvider.notifier).loadText('', title: name.isEmpty ? 'New Script' : name);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
+              ref
+                  .read(scriptProvider.notifier)
+                  .loadText('', title: name.isEmpty ? 'New Script' : name);
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ScriptEditorScreen()));
             },
-            child: const Text('Start Producing', style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
+            child: const Text('Start Producing',
+                style: TextStyle(
+                    color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
-
 }
 
 // v4.0: _ProDashboard, _RemoteDashboard, _RemoteActionBtn removed (premium features)
@@ -189,34 +216,38 @@ class _FullHistorySheet extends ConsumerWidget {
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(color: Color(0xFF0A0A0A), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      decoration: const BoxDecoration(
+          color: Color(0xFF0A0A0A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Complete History', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+          const Text('Complete History',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           Expanded(
-            child: Consumer(
-              builder: (context, ref, _) {
-                final scripts = ref.watch(settingsProvider).recentScripts;
-                return ListView.builder(
-                  cacheExtent: 1000,
-                  itemCount: scripts.length,
-                  itemBuilder: (ctx, idx) {
-                    final meta = jsonDecode(scripts[idx]);
-                    return _ScriptListItem(
-                      key: ValueKey(meta['sessionId'] ?? idx.toString()),
-                      title: meta['title'] ?? 'Untitled Document',
-                      date: meta['date'] ?? 'Imported',
-                      type: meta['type'] ?? 'FILE',
-                      fullText: meta['fullText'] ?? '',
-                      snippet: meta['snippet'],
-                      sessionId: meta['sessionId'],
-                    );
-                  },
-                );
-              }
-            ),
+            child: Consumer(builder: (context, ref, _) {
+              final scripts = ref.watch(settingsProvider).recentScripts;
+              return ListView.builder(
+                cacheExtent: 1000,
+                itemCount: scripts.length,
+                itemBuilder: (ctx, idx) {
+                  final meta = jsonDecode(scripts[idx]);
+                  return _ScriptListItem(
+                    key: ValueKey(meta['sessionId'] ?? idx.toString()),
+                    title: meta['title'] ?? 'Untitled Document',
+                    date: meta['date'] ?? 'Imported',
+                    type: meta['type'] ?? 'FILE',
+                    fullText: meta['fullText'] ?? '',
+                    snippet: meta['snippet'],
+                    sessionId: meta['sessionId'],
+                  );
+                },
+              );
+            }),
           ),
         ],
       ),
@@ -230,7 +261,12 @@ class _GalleryActionCard extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _GalleryActionCard({required this.title, required this.subtitle, required this.icon, required this.color, required this.onTap});
+  const _GalleryActionCard(
+      {required this.title,
+      required this.subtitle,
+      required this.icon,
+      required this.color,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +284,8 @@ class _GalleryActionCard extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                  color: color, borderRadius: BorderRadius.circular(12)),
               child: Icon(icon, color: Colors.black, size: 28),
             ),
             const SizedBox(width: 20),
@@ -256,9 +293,15 @@ class _GalleryActionCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   Text(title, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
-                   const SizedBox(height: 4),
-                   Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                  Text(title,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(subtitle,
+                      style:
+                          const TextStyle(color: Colors.white54, fontSize: 13)),
                 ],
               ),
             ),
@@ -329,7 +372,10 @@ class _ScriptListItem extends ConsumerWidget {
         labelBorderColor = labelColor.withOpacity(0.3);
     }
 
-    final previewText = snippet ?? StylingService.stripTags(fullText.split('\n').first.trim().isNotEmpty ? fullText.split('\n').first : 'No content preview');
+    final previewText = snippet ??
+        StylingService.stripTags(fullText.split('\n').first.trim().isNotEmpty
+            ? fullText.split('\n').first
+            : 'No content preview');
 
     return Material(
       color: Colors.transparent,
@@ -348,51 +394,70 @@ class _ScriptListItem extends ConsumerWidget {
                 onTap: () async {
                   final settingsNotifier = ref.read(settingsProvider.notifier);
                   final scriptNotifier = ref.read(scriptProvider.notifier);
-                  
+
                   try {
-                    final List<String> recentScripts = ref.read(settingsProvider).recentScripts;
+                    final List<String> recentScripts =
+                        ref.read(settingsProvider).recentScripts;
                     String? targetMeta;
                     for (var s in recentScripts) {
                       final decodedJson = jsonDecode(s);
-                      if (sessionId != null && decodedJson['sessionId'] == sessionId) {
+                      if (sessionId != null &&
+                          decodedJson['sessionId'] == sessionId) {
                         targetMeta = s;
                         break;
                       }
-                      if (sessionId == null && decodedJson['title'] == title && decodedJson['fullText'] == fullText) {
+                      if (sessionId == null &&
+                          decodedJson['title'] == title &&
+                          decodedJson['fullText'] == fullText) {
                         targetMeta = s;
                         break;
                       }
                     }
-                    
+
                     Map<String, dynamic>? decodedMeta;
                     if (targetMeta != null) {
                       decodedMeta = jsonDecode(targetMeta);
                       if (decodedMeta!['style'] != null) {
-                        await settingsNotifier.applySessionStyles(decodedMeta['style']);
+                        await settingsNotifier
+                            .applySessionStyles(decodedMeta['style']);
                       }
                     }
 
-                    scriptNotifier.loadText(fullText, 
-                      title: title, 
-                      sourceType: type, 
+                    scriptNotifier.loadText(
+                      fullText,
+                      title: title,
+                      sourceType: type,
                       sessionId: sessionId,
                       historyJson: decodedMeta?['historyJson'],
-                      fontSize: (decodedMeta?['style']?['fontSize'] as num?)?.toDouble(),
+                      fontSize: (decodedMeta?['style']?['fontSize'] as num?)
+                          ?.toDouble(),
                       fontFamily: decodedMeta?['style']?['fontFamily'],
-                      lineSpacing: (decodedMeta?['style']?['lineSpacing'] as num?)?.toDouble(),
-                      letterSpacing: (decodedMeta?['style']?['letterSpacing'] as num?)?.toDouble(),
-                      wordSpacing: (decodedMeta?['style']?['wordSpacing'] as num?)?.toDouble(),
+                      lineSpacing:
+                          (decodedMeta?['style']?['lineSpacing'] as num?)
+                              ?.toDouble(),
+                      letterSpacing:
+                          (decodedMeta?['style']?['letterSpacing'] as num?)
+                              ?.toDouble(),
+                      wordSpacing:
+                          (decodedMeta?['style']?['wordSpacing'] as num?)
+                              ?.toDouble(),
                       textAlign: decodedMeta?['style']?['textAlign'],
                       scriptBgColor: decodedMeta?['style']?['scriptBgColor'],
-                      currentWordColor: decodedMeta?['style']?['currentWordColor'],
-                      futureWordColor: decodedMeta?['style']?['futureWordColor'],
+                      currentWordColor: decodedMeta?['style']
+                          ?['currentWordColor'],
+                      futureWordColor: decodedMeta?['style']
+                          ?['futureWordColor'],
                     );
                   } catch (e) {
                     debugPrint('Session Recovery Error: $e');
-                    scriptNotifier.loadText(fullText, title: title, sourceType: type, sessionId: sessionId);
+                    scriptNotifier.loadText(fullText,
+                        title: title, sourceType: type, sessionId: sessionId);
                   }
                   if (context.mounted) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ScriptEditorScreen()));
                   }
                 },
                 child: Padding(
@@ -402,28 +467,38 @@ class _ScriptListItem extends ConsumerWidget {
                       Container(
                         width: 50,
                         alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 4),
                         decoration: BoxDecoration(
                           color: labelBgColor,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: labelBorderColor),
                         ),
-                        child: Text(type.toUpperCase(), style: TextStyle(
-                          color: labelColor,
-                          fontSize: 9, 
-                          fontWeight: FontWeight.bold
-                        )),
+                        child: Text(type.toUpperCase(),
+                            style: TextStyle(
+                                color: labelColor,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold)),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                            Text(title,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15)),
                             const SizedBox(height: 2),
-                            Text(previewText, maxLines: 1, overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.white38, fontSize: 13)),
-                            Text(date, style: const TextStyle(color: Colors.white24, fontSize: 11)),
+                            Text(previewText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Colors.white38, fontSize: 13)),
+                            Text(date,
+                                style: const TextStyle(
+                                    color: Colors.white24, fontSize: 11)),
                           ],
                         ),
                       ),
@@ -435,10 +510,13 @@ class _ScriptListItem extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 20),
+                icon: const Icon(Icons.delete_outline_rounded,
+                    color: Colors.white24, size: 20),
                 onPressed: () {
                   if (sessionId != null) {
-                    ref.read(settingsProvider.notifier).removeFromRecent(sessionId!);
+                    ref
+                        .read(settingsProvider.notifier)
+                        .removeFromRecent(sessionId!);
                   }
                 },
               ),
@@ -498,20 +576,37 @@ class _AutoSaveCardState extends State<_AutoSaveCard> {
             children: [
               const Icon(Icons.history_rounded, color: Colors.blue, size: 18),
               const SizedBox(width: 10),
-              const Text('RECOVERY AVAILABLE', style: TextStyle(color: Colors.blue, fontSize: 13, fontWeight: FontWeight.bold)),
+              const Text('RECOVERY AVAILABLE',
+                  style: TextStyle(
+                      color: Colors.blue,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold)),
               const Spacer(),
               TextButton(
                 onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ScriptEditorScreen()));
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const ScriptEditorScreen()));
                 },
-                child: const Text('RESTORE SESSION', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                child: const Text('RESTORE SESSION',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12)),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          const Text('Last Session', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          const Text('Last Session',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold)),
           Text(
-            _lastContent!.length > 100 ? '${_lastContent!.substring(0, 100)}...' : _lastContent!,
+            _lastContent!.length > 100
+                ? '${_lastContent!.substring(0, 100)}...'
+                : _lastContent!,
             style: const TextStyle(color: Colors.white38, fontSize: 12),
           ),
         ],
@@ -528,7 +623,8 @@ class _EmptyStatePlaceholder extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 48),
-          const Icon(Icons.description_outlined, color: Colors.white10, size: 64),
+          const Icon(Icons.description_outlined,
+              color: Colors.white10, size: 64),
           const SizedBox(height: 16),
           const Text(
             'Work on you first script now and Choose "New Script"',

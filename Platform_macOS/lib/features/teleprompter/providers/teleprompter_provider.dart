@@ -961,14 +961,27 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog(selectedMicId.isEmpty
           ? '🎙️ [$platform] Microphone: system default input'
           : '🎙️ [$platform] Microphone: $selectedMicLabel');
-      final result = await _sttService.start(localeId: localeId).timeout(
-            const Duration(seconds: 8),
-            onTimeout: () => SpeechStartResult(
-              success: false,
-              message:
-                  'Speech recognition did not start. Please check macOS Microphone and Speech Recognition permissions, then try again.',
-            ),
-          );
+      final SpeechStartResult result;
+      try {
+        result = await _sttService.start(localeId: localeId).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => SpeechStartResult(
+                success: false,
+                message:
+                    'Speech recognition did not start. Please check macOS Microphone and Speech Recognition permissions, then try again.',
+              ),
+            );
+      } catch (error) {
+        _addDebugLog('🎤 [$platform] STT START EXCEPTION: $error');
+        _safeSetState((s) => s.copyWith(
+              statusMessage:
+                  'Speech recognition could not start. Please check macOS Microphone and Speech Recognition permissions, then try again.',
+              hasError: true,
+              isListening: false,
+              isStarting: false,
+            ));
+        return;
+      }
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _sttService.stop();
         return;

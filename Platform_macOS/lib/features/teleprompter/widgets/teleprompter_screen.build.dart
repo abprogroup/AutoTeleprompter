@@ -73,8 +73,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
           }
 
           final firstWord = para.first;
-          final paraDir =
-              firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
+          final paraDir = _paragraphDirectionFor(para);
+          final paragraphIsRtl = paraDir == TextDirection.rtl;
           TextAlign? paraAlign;
           if (settings.showAlignmentOverride) {
             // Override mode: use the settings alignment instead of editor tags
@@ -108,8 +108,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
               textDirection: paraDir,
               child: Wrap(
                 textDirection: paraDir,
-                alignment: _toWrapAlignment(
-                    paraAlign, settings, firstWord.effectiveRtl),
+                alignment:
+                    _toWrapAlignment(paraAlign, settings, paragraphIsRtl),
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: para.asMap().entries.map<Widget>((entry) {
                   final localWordIndex = entry.key;
@@ -865,6 +865,22 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     if (RegExp(r'[\u0590-\u08FF]').hasMatch(clean)) return TextDirection.rtl;
     if (RegExp(r'[A-Za-z]').hasMatch(clean)) return TextDirection.ltr;
     return paragraphDirection;
+  }
+
+  TextDirection _paragraphDirectionFor(List<ScriptWord> paragraph) {
+    for (final word in paragraph) {
+      final clean = word.raw
+          .replaceAll(_tagStripRe, '')
+          .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '')
+          .trim();
+      if (RegExp(r'[\u0590-\u08FF]').hasMatch(clean)) {
+        return TextDirection.rtl;
+      }
+      if (RegExp(r'[A-Za-z]').hasMatch(clean)) {
+        return TextDirection.ltr;
+      }
+    }
+    return paragraph.first.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
   }
 
   String _bidiIsolatedDisplayText(

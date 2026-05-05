@@ -218,6 +218,11 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   Future<void> _requestAndStart() async {
+    if (Platform.isMacOS) {
+      await _startSpeechSessionFromCurrentScript();
+      return;
+    }
+
     // Check current status first
     var micStatus = await Permission.microphone.status;
 
@@ -314,18 +319,21 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       return;
     }
 
+    await _startSpeechSessionFromCurrentScript();
+  }
+
+  Future<void> _startSpeechSessionFromCurrentScript() async {
     final script = ref.read(scriptProvider);
-    if (script != null) {
-      await ref.read(teleprompterProvider.notifier).startSession(script);
-      final currentIndex = ref
-          .read(teleprompterProvider)
-          .confirmedWordIndex
-          .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
-          .toInt();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToWordIndex(currentIndex, anticipate: true);
-      });
-    }
+    if (script == null) return;
+    await ref.read(teleprompterProvider.notifier).startSession(script);
+    final currentIndex = ref
+        .read(teleprompterProvider)
+        .confirmedWordIndex
+        .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
+        .toInt();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToWordIndex(currentIndex, anticipate: true);
+    });
   }
 
   // ── Smooth pixel-based manual scroll ───────────────────────────────────────

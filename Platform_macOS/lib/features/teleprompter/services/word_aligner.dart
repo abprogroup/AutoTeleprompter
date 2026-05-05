@@ -19,8 +19,7 @@ class WordAligner {
   // Nearby phrase window checked before the visible-skip fallback.
   static const int _nearPhrasePriorityWindow = 50;
   static const int _nearPhraseMaxWords = 8;
-  // Max words for a MULTI-WORD sequence match (reliable — multiple words confirmed).
-  static const int _maxSeqJump = 30;
+  static const int _localRecoveryPhraseMaxWords = 5;
   // Minimum similarity for a word to be considered a match
   static const double _matchThreshold = 0.55;
   // Stricter threshold for the fast single-word path
@@ -31,6 +30,9 @@ class WordAligner {
   static const double _crossLangThreshold = 0.45;
   // Hebrew-specific: even more lenient because STT often returns approximate matches
   static const double _hebrewMatchThreshold = 0.50;
+  // Bullet/header prompting must not silently walk through guessed words.
+  static const double _strictMatchThreshold = 0.82;
+  static const double _strictPhraseThreshold = 0.78;
 
   /// Parse raw script text into a list of ScriptWords.
   /// Preserves paragraph breaks as isNewline=true entries.
@@ -58,7 +60,8 @@ class WordAligner {
           final clean = token.text.trim();
           if (clean.isEmpty) continue;
 
-          final parts = clean.split(RegExp(r'\s+'));
+          final parts =
+              _mergeStandaloneNeutralParts(clean.split(RegExp(r'\s+')));
           for (final part in parts) {
             if (part.isEmpty) continue;
             // v3.9.7: Strip residual markup tags before RTL detection AND normalization
@@ -69,6 +72,10 @@ class WordAligner {
                 '');
             final isRtl = cleanPart.isHebrew;
             final normalized = cleanPart.normalizeForMatching();
+            if (normalized.isEmpty &&
+                _isStandaloneNeutralPunctuation(cleanPart)) {
+              continue;
+            }
             if (normalized.isEmpty && cleanPart.trim().isEmpty) continue;
             words.add(ScriptWord(
               raw: part,
@@ -100,6 +107,47 @@ class WordAligner {
       }
     }
     return words;
+  }
+
+  static List<String> _mergeStandaloneNeutralParts(Iterable<String> parts) {
+    final merged = <String>[];
+    var pendingOpen = '';
+    for (final part in parts) {
+      if (part.isEmpty) continue;
+      if (_isStandaloneOpeningNeutral(part)) {
+        pendingOpen += part;
+        continue;
+      }
+      if (_isStandaloneClosingNeutral(part) && merged.isNotEmpty) {
+        merged[merged.length - 1] = merged.last + part;
+        continue;
+      }
+      merged.add(pendingOpen + part);
+      pendingOpen = '';
+    }
+    if (pendingOpen.isNotEmpty && merged.isNotEmpty) {
+      merged[merged.length - 1] = merged.last + pendingOpen;
+    } else if (pendingOpen.isNotEmpty) {
+      merged.add(pendingOpen);
+    }
+    return merged;
+  }
+
+  static bool _isStandaloneNeutralPunctuation(String text) {
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty &&
+        RegExp(r'^[\[\]\(\)\{\}\.,:;!?]+$').hasMatch(trimmed);
+  }
+
+  static bool _isStandaloneOpeningNeutral(String text) {
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty && RegExp(r'^[\[\(\{]+$').hasMatch(trimmed);
+  }
+
+  static bool _isStandaloneClosingNeutral(String text) {
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty &&
+        RegExp(r'^[\]\)\}\.,:;!?]+$').hasMatch(trimmed);
   }
 
   // ── Markup parser ───────────────────────────────────────────────────────────
@@ -306,6 +354,7 @@ class WordAligner {
     required String transcript,
     required int lastConfirmedIndex,
     int? maxSkipTargetIndex,
+    bool strictBulletMode = false,
   }) {
     if (script.isEmpty || transcript.trim().isEmpty) {
       return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY');
@@ -345,8 +394,10 @@ class WordAligner {
     final visibleMaxSkipTargetIndex = maxSkipTargetIndex;
     final visibleSkipEnabled = visibleMaxSkipTargetIndex != null;
     final strictEnd = searchStart + 1;
-    final defaultLocalRecoveryEnd =
-        (searchStart + _maxSingleJump).clamp(strictEnd, script.length);
+    final localRecoveryWords = strictBulletMode ? 1 : _maxSingleJump;
+    final defaultLocalRecoveryEnd = (searchStart + localRecoveryWords)
+        .clamp(strictEnd, script.length)
+        .toInt();
     final allowedEnd = visibleMaxSkipTargetIndex == null
         ? defaultLocalRecoveryEnd
         : (visibleMaxSkipTargetIndex + 1).clamp(strictEnd, script.length);
@@ -363,7 +414,8 @@ class WordAligner {
         final isHebrew = script[searchStart].isRtl;
         final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
         // Hebrew STT is less precise — use a lower threshold for the next word
-        final nextThreshold = isHebrew ? 0.45 : 0.55;
+        final nextThreshold =
+            strictBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
         if (sim >= nextThreshold) {
           return AlignmentResult(searchStart, sim,
               'NEXT_WORD: "${lastSpoken}" ~ "${nextWord}" = ${sim.toStringAsFixed(2)}');
@@ -402,15 +454,34 @@ class WordAligner {
           bestSingleIdx < script.length && script[bestSingleIdx].isRtl;
       final singleThreshold =
           bestIsHebrew ? _hebrewMatchThreshold : _fastMatchThreshold;
-      if (bestSingleSim >= singleThreshold) {
+      final effectiveSingleThreshold =
+          strictBulletMode ? _strictMatchThreshold : singleThreshold;
+      if (bestSingleSim >= effectiveSingleThreshold) {
         final jumpDist = bestSingleIdx - lastConfirmedIndex;
         // Single-word matches only allow small jumps to prevent false skips
-        if (jumpDist <= _maxSingleJump) {
+        final maxSingleJump = strictBulletMode ? 1 : _maxSingleJump;
+        if (jumpDist <= maxSingleJump) {
           return AlignmentResult(bestSingleIdx, bestSingleSim,
               'SINGLE: "${lastSpoken}" → [${bestSingleIdx}]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
         }
       }
     }
+
+    final localPhrase = _nearbyPhrasePriorityMatch(
+      script: script,
+      transcriptWords: transcriptWords,
+      searchStart: searchStart,
+      windowEnd: defaultLocalRecoveryEnd,
+      lastConfirmedIndex: lastConfirmedIndex,
+      maxPhraseWords: _localRecoveryPhraseMaxWords,
+      maxJump: strictBulletMode ? 1 : _maxSingleJump,
+      minPhraseWords: 2,
+      overrideWordThreshold: strictBulletMode ? _strictPhraseThreshold : null,
+      minPhraseScore:
+          strictBulletMode ? _strictPhraseThreshold : _matchThreshold,
+      debugPrefix: 'LOCAL_RECOVERY_PHRASE',
+    );
+    if (localPhrase != null) return localPhrase;
 
     if (visibleSkipEnabled) {
       final nearbyPhrase = _nearbyPhrasePriorityMatch(
@@ -419,6 +490,13 @@ class WordAligner {
         searchStart: searchStart,
         windowEnd: windowEnd,
         lastConfirmedIndex: lastConfirmedIndex,
+        scanFullWindow: true,
+        scanAllTranscriptPhrases: strictBulletMode,
+        minPhraseWords: strictBulletMode ? 2 : 3,
+        overrideWordThreshold: strictBulletMode ? _strictPhraseThreshold : null,
+        minPhraseScore:
+            strictBulletMode ? _strictPhraseThreshold : _matchThreshold,
+        debugPrefix: 'NEAR_PHRASE_PRIORITY',
       );
       if (nearbyPhrase != null) return nearbyPhrase;
     }
@@ -452,8 +530,9 @@ class WordAligner {
         final spokenWord = recentWords[j];
 
         final sim = _wordSimilarity(spokenWord, scriptWord, script[si].isRtl);
-        final threshold =
-            script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
+        final threshold = strictBulletMode
+            ? _strictPhraseThreshold
+            : (script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold);
         if (sim >= threshold) {
           seqScore += sim;
           matchCount++;
@@ -472,12 +551,14 @@ class WordAligner {
       if (normalizedScore > bestSeqScore && matchCount >= 1) {
         final seqJump = (si - 1) - lastConfirmedIndex;
         final maxSeqJump = visibleMaxSkipTargetIndex == null
-            ? _maxSeqJump
+            ? _maxSingleJump
             : (visibleMaxSkipTargetIndex - lastConfirmedIndex)
                 .clamp(0, script.length)
                 .toInt();
         // For large jumps, require at least 2 matching words for confidence
-        final minMatches = seqJump > _maxSingleJump ? 2 : 1;
+        final minMatches = strictBulletMode
+            ? (seqJump > 1 ? 2 : 1)
+            : (seqJump > _maxSingleJump ? 2 : 1);
         if (matchCount >= minMatches && seqJump <= maxSeqJump) {
           bestSeqScore = normalizedScore;
           bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
@@ -487,7 +568,9 @@ class WordAligner {
       }
     }
 
-    if (bestSeqScore >= _matchThreshold && bestSeqEndIdx > lastConfirmedIndex) {
+    final minSeqScore =
+        strictBulletMode ? _strictPhraseThreshold : _matchThreshold;
+    if (bestSeqScore >= minSeqScore && bestSeqEndIdx > lastConfirmedIndex) {
       return AlignmentResult(
           bestSeqEndIdx, bestSeqScore, '$bestSeqDebug\n$debugScans');
     }
@@ -507,73 +590,140 @@ class WordAligner {
     required int searchStart,
     required int windowEnd,
     required int lastConfirmedIndex,
+    int maxPhraseWords = _nearPhraseMaxWords,
+    int? maxJump,
+    int minPhraseWords = 3,
+    bool scanFullWindow = false,
+    bool scanAllTranscriptPhrases = false,
+    double? overrideWordThreshold,
+    double minPhraseScore = _matchThreshold,
+    String debugPrefix = 'NEAR_PHRASE_PRIORITY',
   }) {
-    if (transcriptWords.length < 3) return null;
+    if (transcriptWords.length < minPhraseWords) return null;
 
-    final phraseWindowEnd = (searchStart + _nearPhrasePriorityWindow)
-        .clamp(searchStart, windowEnd)
-        .toInt();
+    final phraseWindowEnd = scanFullWindow
+        ? windowEnd
+        : (searchStart + _nearPhrasePriorityWindow)
+            .clamp(searchStart, windowEnd)
+            .toInt();
     if (phraseWindowEnd <= searchStart) return null;
 
-    final longestPhrase = transcriptWords.length < _nearPhraseMaxWords
+    final longestPhrase = transcriptWords.length < maxPhraseWords
         ? transcriptWords.length
-        : _nearPhraseMaxWords;
+        : maxPhraseWords;
 
-    for (int phraseLen = longestPhrase; phraseLen >= 3; phraseLen--) {
-      final spokenPhrase =
-          transcriptWords.sublist(transcriptWords.length - phraseLen);
-      double bestScore = 0.0;
-      int bestStart = -1;
-      int bestEnd = -1;
+    for (int phraseLen = longestPhrase;
+        phraseLen >= minPhraseWords;
+        phraseLen--) {
+      final phraseStarts = scanAllTranscriptPhrases
+          ? [
+              for (var i = transcriptWords.length - phraseLen; i >= 0; i--) i,
+            ]
+          : [transcriptWords.length - phraseLen];
 
-      for (int i = searchStart; i < phraseWindowEnd; i++) {
-        if (script[i].isNewline || script[i].normalized.isEmpty) continue;
+      double phraseBestScore = 0.0;
+      int phraseBestStart = -1;
+      int phraseBestEnd = -1;
+      int phraseBestTranscriptStart = -1;
 
-        int si = i;
-        int matched = 0;
-        double score = 0.0;
-        int endIdx = i;
+      for (final transcriptStart in phraseStarts) {
+        final spokenPhrase = transcriptWords.sublist(
+          transcriptStart,
+          transcriptStart + phraseLen,
+        );
+        if (!_hasUsefulPhraseWords(spokenPhrase, minPhraseWords)) continue;
 
-        for (int j = 0; j < spokenPhrase.length && si < phraseWindowEnd; si++) {
-          if (script[si].isNewline || script[si].normalized.isEmpty) {
-            continue;
+        double bestScore = 0.0;
+        int bestStart = -1;
+        int bestEnd = -1;
+
+        for (int i = searchStart; i < phraseWindowEnd; i++) {
+          if (script[i].isNewline || script[i].normalized.isEmpty) continue;
+
+          int si = i;
+          int matched = 0;
+          double score = 0.0;
+          int endIdx = i;
+
+          for (int j = 0;
+              j < spokenPhrase.length && si < phraseWindowEnd;
+              si++) {
+            if (script[si].isNewline || script[si].normalized.isEmpty) {
+              continue;
+            }
+
+            final sim = _wordSimilarity(
+                spokenPhrase[j], script[si].normalized, script[si].isRtl);
+            final threshold = overrideWordThreshold ??
+                (script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold);
+            if (sim < threshold) break;
+
+            matched++;
+            score += sim;
+            endIdx = si;
+            j++;
           }
 
-          final sim = _wordSimilarity(
-              spokenPhrase[j], script[si].normalized, script[si].isRtl);
-          final threshold =
-              script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold;
-          if (sim < threshold) break;
+          if (matched != spokenPhrase.length) continue;
 
-          matched++;
-          score += sim;
-          endIdx = si;
-          j++;
+          final distance = i - searchStart;
+          final adjustedScore =
+              (score / spokenPhrase.length) - (distance * 0.006);
+          if (adjustedScore > bestScore ||
+              (adjustedScore == bestScore && i < bestStart)) {
+            bestScore = adjustedScore;
+            bestStart = i;
+            bestEnd = endIdx;
+          }
         }
 
-        if (matched != spokenPhrase.length) continue;
-
-        final distance = i - searchStart;
-        final adjustedScore =
-            (score / spokenPhrase.length) - (distance * 0.006);
-        if (adjustedScore > bestScore ||
-            (adjustedScore == bestScore && i < bestStart)) {
-          bestScore = adjustedScore;
-          bestStart = i;
-          bestEnd = endIdx;
+        if (bestStart >= 0 &&
+            bestEnd > lastConfirmedIndex &&
+            bestScore >= minPhraseScore &&
+            (maxJump == null || bestEnd - lastConfirmedIndex <= maxJump) &&
+            (bestScore > phraseBestScore ||
+                (bestScore == phraseBestScore &&
+                    transcriptStart > phraseBestTranscriptStart))) {
+          phraseBestScore = bestScore;
+          phraseBestStart = bestStart;
+          phraseBestEnd = bestEnd;
+          phraseBestTranscriptStart = transcriptStart;
         }
       }
 
-      if (bestStart >= 0 &&
-          bestEnd > lastConfirmedIndex &&
-          bestScore >= _matchThreshold) {
-        return AlignmentResult(bestEnd, bestScore,
-            'NEAR_PHRASE_PRIORITY@$bestStart: words=$phraseLen end=$bestEnd score=${bestScore.toStringAsFixed(2)}');
+      if (phraseBestStart >= 0) {
+        return AlignmentResult(phraseBestEnd, phraseBestScore,
+            '$debugPrefix@$phraseBestStart: words=$phraseLen transcript=$phraseBestTranscriptStart end=$phraseBestEnd score=${phraseBestScore.toStringAsFixed(2)}');
       }
     }
 
     return null;
   }
+
+  static bool _hasUsefulPhraseWords(List<String> phrase, int minPhraseWords) {
+    var useful = 0;
+    for (final word in phrase) {
+      if (!_phraseStopWords.contains(word)) useful++;
+    }
+    return useful >= (minPhraseWords == 2 ? 1 : 2);
+  }
+
+  static const Set<String> _phraseStopWords = {
+    'a',
+    'an',
+    'and',
+    'as',
+    'at',
+    'for',
+    'in',
+    'is',
+    'of',
+    'or',
+    'the',
+    'to',
+    'we',
+    'you',
+  };
 
   // ── Word similarity helper ─────────────────────────────────────────────────
   /// Compute similarity between a spoken word and a script word,

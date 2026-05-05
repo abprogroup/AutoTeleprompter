@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/markup_decoration_service.dart';
+
 /// Premium Highlighting Controller with inline markup rendering.
 /// Renders bold/italic/underline/color/bg/size/font styles while visually
 /// hiding tag characters, and supports multi-block selection highlighting
@@ -30,6 +32,7 @@ class MarkupController extends TextEditingController {
   );
 
   static const Color _selectionBg = Color(0x66FFBF00);
+  static const int _hiddenTagPlaceholderCodeUnit = 0x2060; // WORD JOINER
 
   static final RegExp _tagRegex = RegExp(
     r'\*\*'
@@ -340,9 +343,13 @@ class MarkupController extends TextEditingController {
       TextStyle s = style ?? const TextStyle();
       if (bold) s = s.copyWith(fontWeight: FontWeight.bold);
       if (italic) s = s.copyWith(fontStyle: FontStyle.italic);
-      if (underline) s = s.copyWith(decoration: TextDecoration.underline);
+      if (underline && !kUseCustomDocxDecorationPainting) {
+        s = s.copyWith(decoration: TextDecoration.underline);
+      }
       if (textColors.isNotEmpty) s = s.copyWith(color: textColors.last);
-      if (bgColors.isNotEmpty) s = s.copyWith(backgroundColor: bgColors.last);
+      if (bgColors.isNotEmpty && !kUseCustomDocxDecorationPainting) {
+        s = s.copyWith(backgroundColor: bgColors.last);
+      }
       if (sizes.isNotEmpty) s = s.copyWith(fontSize: sizes.last);
       if (fonts.isNotEmpty) s = s.copyWith(fontFamily: fonts.last);
       return s;
@@ -379,7 +386,18 @@ class MarkupController extends TextEditingController {
 
     void emitTag(int start, int end) {
       if (start >= end) return;
-      children.add(TextSpan(text: src.substring(start, end), style: _tagStyle));
+      // Keep the rendered span length identical to the raw markup tag length
+      // so caret/selection offsets still map to controller.text, but avoid
+      // painting literal hidden "[bg]" / "[align]" letters. Those invisible
+      // LTR tag characters still participate in Unicode bidi layout and can
+      // split RTL punctuation, underline, and DOCX highlight bands.
+      children.add(TextSpan(
+        text: String.fromCharCodes(List<int>.filled(
+          end - start,
+          _hiddenTagPlaceholderCodeUnit,
+        )),
+        style: _tagStyle,
+      ));
     }
 
     int cursor = 0;

@@ -34,6 +34,7 @@ import '../services/docx_service.dart';
 import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
 import '../services/markup_export_service.dart';
+import '../services/markup_decoration_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../models/script_word.dart';
 import '../../../platform/file_import/platform_file_import.dart';

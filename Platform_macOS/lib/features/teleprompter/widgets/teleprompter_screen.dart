@@ -10,6 +10,7 @@ import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../script/models/script.dart';
 import '../../script/services/script_bookmark_service.dart';
+import '../../script/services/markup_decoration_service.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../../core/widgets/global_color_picker.dart';
@@ -45,6 +46,7 @@ class TeleprompterScreen extends ConsumerStatefulWidget {
 
 class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _presenterContentKey = GlobalKey();
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
   bool _debugConsoleMinimized = false;
@@ -74,6 +76,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<ScriptBookmark> _bookmarks = const [];
   bool _visibleWindowSyncScheduled = false;
   DateTime? _lastVisibleWindowSync;
+  bool _controlsHovering = false;
 
   @override
   void initState() {
@@ -89,6 +92,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
             (prev, next) {
           if (next != null && next.isNotEmpty && mounted)
             _showMissingLanguageDialog(next);
+        });
+        ref.listenManual(
+            teleprompterProvider.select((s) => s.isListening || s.isStarting),
+            (prev, next) {
+          if (!mounted) return;
+          _syncControlsForSpeech(next);
         });
         final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
         if (currentIndex > 0 && !_resumeDialogShown) {

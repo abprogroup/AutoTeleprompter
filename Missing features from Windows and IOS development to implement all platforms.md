@@ -37,6 +37,23 @@ Android parity implementation note - 2026-05-04:
   on this machine because no Android SDK is installed; the GitHub Android
   workflow remains the APK artifact authority.
 
+macOS transfer packet - Windows v4.1.14 updates - 2026-05-05:
+
+- Windows v4.1.14 added post-mac-parity improvements that still need a macOS
+  transfer pass: visible-skip STT repair, strict bullet/improvisation relock,
+  presenter bookmark safety, presenter controls hide/reveal behavior, and DOCX
+  import preservation for underline, Word line breaks, blank rows, and RTL
+  paragraph hints.
+- The macOS transfer authority packet is
+  `_agent/mvp/Platform_macOS/windows_v4_1_14_transfer_packet.md`.
+- Port behavior from Windows commits `590cad3`, `b2c14de`, `a220555`,
+  `faff251`, `250f65d`, `61bd51f`, `3443f66`, and `da99e17`.
+- Exclude Windows-only WebView2 STT plumbing, browser microphone enumeration,
+  Windows speech-pack dialogs, Windows release/version paths, and all Android
+  or iOS mobile-toolbar logic.
+- macOS must keep Apple-native STT; Windows STT behavior is the alignment and
+  session contract reference, not a copy-paste adapter reference.
+
 Goal: port verified Windows v4 behavior into Platform_iOS surgically. Work only inside Platform_iOS/, relevant _agent/mvp/Platform_iOS/*.md, MASTER_TODO_V4.md, and DAILY_LOG.md. Do not touch other platform folders.
 
 Before editing:
@@ -797,3 +814,27 @@ provider strict no-match state is treated as improvisation, heartbeat
 pre-switch is suppressed during strict no-progress stretches, and presenter
 controls use the active-STT bottom hover-zone model. Port only after Windows
 artifact QA confirms the live behavior.
+
+Mobile V5 follow-up from Windows v4.1.14 — 2026-05-05
+
+Do not treat the Windows strict/bullet relock change as a required v4 mobile
+hotfix. Record it as a V5 mobile feature candidate for iPhone and Android. The
+behavior to port is the concept, not the Windows plumbing: off-script speech is
+normal improvisation, visible two-or-more-word phrases own relock, language
+switching only assists visible relock, and large single-word jumps remain
+blocked. iPhone should layer this on top of the tested Apple/mobile language
+flow. Android should port it later with extra phone QA because
+`speech_to_text` locale switching and stale error callbacks are more fragile.
+Keep normal reading as the default until the future three-mode STT UX is
+designed.
+
+macOS v4.1.14 parity implementation — 2026-05-05
+
+macOS has now received the verified Windows v4.1.14 behavior model: deferred
+startup permissions to avoid black screen, DOCX import preservation,
+continuous imported underline/highlight painting in editor and presenter,
+strict bullet/header STT, full visible-window skip, trusted visible-match cap
+bypass, Apple-safe locale switching, bookmark-safe presenter markers, and
+active-STT bottom-hover control reveal. Remaining proof is macOS workflow and
+device QA; do not treat Windows WebView2, Windows mic selector UI, Android SAF,
+or mobile selection-toolbar logic as macOS features.

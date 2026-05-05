@@ -1,4 +1,4 @@
-name: Build macOS App (v4.1.0)
+name: Build macOS App (v4.1.14)
 
 on:
   push:
@@ -46,7 +46,15 @@ jobs:
       - name: Zip App Bundle
         run: |
           cd Platform_macOS/build/macos/Build/Products/Release
+          echo "App bundle size:"
+          du -sh autoteleprompter.app
+          echo "App bundle Contents breakdown:"
+          du -sh autoteleprompter.app/Contents/* || true
+          echo "Frameworks breakdown:"
+          du -sh autoteleprompter.app/Contents/Frameworks/* || true
           zip -r AutoTeleprompter-macOS.zip autoteleprompter.app
+          echo "Zip size:"
+          du -sh AutoTeleprompter-macOS.zip
 
       - name: Upload App
         uses: actions/upload-artifact@v4

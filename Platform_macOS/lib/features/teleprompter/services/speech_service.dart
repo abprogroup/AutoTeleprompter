@@ -60,6 +60,8 @@ class SpeechService {
   bool _isRestarting = false;
   String _localeId = 'en_US';
   int _languageRetries = 0; // Prevent infinite language error loop
+  int _localeSwitchToken = 0;
+  DateTime? _localeSwitchGraceUntil;
 
   int _consecutiveErrors = 0;
   Timer? _errorResetTimer;
@@ -78,6 +80,14 @@ class SpeechService {
           if (!_isActive) return;
 
           final msg = error.errorMsg;
+          final inLocaleSwitchGrace = _localeSwitchGraceUntil != null &&
+              DateTime.now().isBefore(_localeSwitchGraceUntil!);
+          if (inLocaleSwitchGrace &&
+              (msg.contains('error_language') ||
+                  msg.contains('no_match') ||
+                  msg.contains('speech_timeout'))) {
+            return;
+          }
           onError?.call(msg);
 
           // Language error — try fallback, then give up and notify
@@ -177,6 +187,51 @@ class SpeechService {
     });
   }
 
+  void setLocale(String localeId) {
+    unawaited(_switchLocale(localeId));
+  }
+
+  Future<void> _switchLocale(String localeId) async {
+    final normalized = localeId.replaceAll('-', '_');
+    if (normalized.isEmpty) return;
+    if (_localeId.toLowerCase().replaceAll('-', '_') ==
+        normalized.toLowerCase()) {
+      return;
+    }
+
+    _localeSwitchToken++;
+    _localeSwitchGraceUntil =
+        DateTime.now().add(const Duration(milliseconds: 1800));
+    _languageRetries = 0;
+    _consecutiveErrors = 0;
+    _isRestarting = false;
+
+    String? bestMatch;
+    try {
+      if (!_isInitialized) {
+        await initialize();
+      }
+      final locales = await _stt.locales();
+      bestMatch = _findBestLocale(locales, normalized);
+    } catch (_) {
+      bestMatch = null;
+    }
+    _localeId = bestMatch ?? normalized;
+
+    if (!_isActive) return;
+    try {
+      if (_stt.isListening) {
+        await _stt.cancel();
+      }
+      await Future.delayed(const Duration(milliseconds: 120));
+      if (_isActive) {
+        await _startListening();
+      }
+    } catch (e) {
+      onError?.call('Locale switch failed: $e');
+    }
+  }
+
   /// Find the best matching locale from the device's available locales.
   /// Returns null if the requested language isn't available at all.
   String? _findBestLocale(List<LocaleName> locales, String requestedId) {
@@ -265,6 +320,7 @@ class SpeechService {
   Future<void> _startListening() async {
     if (!_isActive) return;
     try {
+      final listenToken = _localeSwitchToken;
       if (_stt.isListening) {
         await _stt.cancel();
         await Future.delayed(const Duration(milliseconds: 80));
@@ -275,6 +331,7 @@ class SpeechService {
       final useLocale = _localeId.isEmpty ? null : _localeId;
       await _stt.listen(
         onResult: (SpeechRecognitionResult result) {
+          if (listenToken != _localeSwitchToken) return;
           _consecutiveErrors = 0;
           if (result.recognizedWords.isNotEmpty) {
             onResult?.call(SpeechResult(result.recognizedWords, result.finalResult));
@@ -302,6 +359,7 @@ class SpeechService {
   Future<void> stop() async {
     _isActive = false;
     _isRestarting = false;
+    _localeSwitchToken++;
     _consecutiveErrors = 0;
     _errorResetTimer?.cancel();
     await _stt.stop();
@@ -311,6 +369,7 @@ class SpeechService {
   Future<void> pause() async {
     _isActive = false;
     _isRestarting = false;
+    _localeSwitchToken++;
     _errorResetTimer?.cancel();
     await _stt.stop();
     onStatusChange?.call(SpeechStatus.paused);

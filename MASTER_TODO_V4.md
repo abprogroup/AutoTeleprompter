@@ -911,3 +911,20 @@
 - [P] **Implementation Status**: Windows runtime slice implemented 2026-05-05.
   Targeted teleprompter tests pass for visible-skip and strict/bullet relock.
   Awaiting Windows workflow/artifact QA for live WebView2 STT behavior.
+
+## 2026-05-05 macOS v4.1.14 Windows-Parity Port
+
+- [P] **macOS Launch Guard**: macOS no longer blocks `runApp()` on microphone /
+  speech permission initialization. Permission failures are logged after first
+  frame so the app can render instead of opening to a black window.
+- [P] **macOS DOCX Import + Rendering**: Ported Windows v4.1.14 DOCX
+  preservation and continuous underline/highlight decoration painting for the
+  editor and presenter. Pages support remains macOS-native.
+- [P] **macOS Strict/Visible STT**: Ported the Windows v4.1.14 visible-window
+  matcher, trusted visible-match cap bypass, strict bullet/header relock, and
+  improvisation no-match behavior through Apple STT.
+- [P] **macOS Presenter Controls/Bookmarks**: Bookmark sign taps no longer
+  delete bookmarks directly; active STT hides presenter controls and bottom
+  hover reveals them without moving the resume point.
+- [P] **macOS Workflow Label**: macOS package/workflow metadata now targets
+  `v4.1.14`; workflow logs include app/zip size breakdown for artifact audit.

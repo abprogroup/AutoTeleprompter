@@ -1880,3 +1880,40 @@
 - Windows presenter controls now hide during active STT and can be revealed
   through a bottom hover hot-zone without tapping the script body or changing
   the resume point.
+
+### 2026-05-05 - Mobile V5 STT Relock Roadmap Captured
+
+- Added a V5 mobile roadmap item to port the Windows v4.1.14
+  bullet/improvisation relock model to iPhone and Android later.
+- The mobile port should copy the behavior contract, not Windows WebView2
+  plumbing: no-match speech is improvisation, visible 2+ word phrases own
+  relock, alternate-language switching is only an assist, and normal reading
+  remains the default.
+
+### 2026-05-05 - macOS Transfer Packet For Windows v4.1.14
+
+- Collected the Windows v4.1.14 post-parity changes for a future macOS port:
+  visible-skip STT repair, strict bullet/improvisation relock, presenter
+  bookmark safety, presenter controls hide/reveal behavior, and DOCX import
+  preservation.
+- Added `_agent/mvp/Platform_macOS/windows_v4_1_14_transfer_packet.md` with
+  authority commits, file mappings, exclusions, implementation slices, gates,
+  and QA checks.
+- Updated macOS STT/File I/O MVP notes and the shared missing-features tracker
+  so macOS can port the behavior without copying Windows-only WebView2,
+  browser microphone, or speech-pack plumbing.
+
+### 2026-05-05 - macOS v4.1.14 Parity Port Implemented
+
+- Removed the macOS black-screen startup risk by moving microphone/speech
+  permission initialization after first frame with recoverable debug logging.
+- Ported Windows v4.1.14 DOCX preservation into macOS and added shared
+  continuous markup decoration painting for editor and presenter underline /
+  highlight rendering.
+- Ported Windows v4.1.14 strict bullet/header STT, full visible-window skip,
+  trusted visible-match cap bypass, improvisation no-match handling, and
+  Apple-safe locale switching.
+- Updated presenter bookmark/control behavior: bookmark markers select/jump
+  instead of deleting, and active STT hides controls until bottom hover.
+- Added macOS script and teleprompter tests copied/adapted from Windows;
+  targeted tests pass locally with `flutter test --no-pub`.

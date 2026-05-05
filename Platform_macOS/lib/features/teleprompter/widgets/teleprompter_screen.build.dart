@@ -55,6 +55,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final bookmarkWordIndexes = _bookmarks.map((b) => b.wordIndex).toSet();
 
     Widget wordList = Padding(
+      key: _presenterContentKey,
       padding: EdgeInsets.symmetric(
         horizontal: MediaQuery.of(context).size.width * 0.05,
         vertical: MediaQuery.of(context).size.height * 0.45,
@@ -110,16 +111,28 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 alignment: _toWrapAlignment(
                     paraAlign, settings, firstWord.effectiveRtl),
                 crossAxisAlignment: WrapCrossAlignment.center,
-                children: para.map<Widget>((wordObj) {
-                  final ScriptWord word = wordObj as ScriptWord;
+                children: para.asMap().entries.map<Widget>((entry) {
+                  final localWordIndex = entry.key;
+                  final ScriptWord word = entry.value;
                   final i = word.index;
                   final hasBookmark = bookmarkWordIndexes.contains(i);
                   final isManual = settings.scrollMode == 'manual';
                   final isCurrent = !isManual && i == tState.confirmedWordIndex;
                   final isPast = !isManual && i < tState.confirmedWordIndex;
-                  final displayText = word.raw
+                  final visibleWordText = word.raw
                       .replaceAll(_tagStripRe, '')
                       .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
+                  final spacedWordText = localWordIndex + 1 < para.length
+                      ? '$visibleWordText '
+                      : visibleWordText;
+                  final displayText = _bidiIsolatedDisplayText(
+                    spacedWordText,
+                    paragraphDirection: paraDir,
+                  );
+                  final wordDirection = _wordDirectionForDisplay(
+                    displayText,
+                    paragraphDirection: paraDir,
+                  );
 
                   final effectiveFontSize = word.fontSize != null
                       ? word.fontSize! * 2.0
@@ -132,8 +145,12 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       isCurrent && settings.showCurrentWordHighlight
                           ? Color(settings.currentWordColor).withOpacity(0.3)
                           : null;
-                  final effectiveBg = trackingBgColor ??
-                      (isPast ? userBgColor?.withOpacity(0.15) : userBgColor);
+                  final effectiveBg = kUseCustomDocxDecorationPainting
+                      ? trackingBgColor
+                      : trackingBgColor ??
+                          (isPast
+                              ? userBgColor?.withOpacity(0.15)
+                              : userBgColor);
 
                   // Text color with graduated opacity for smooth spotlight effect.
                   // Words close to the current position gently transition between
@@ -170,24 +187,52 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         : (word.textColor ?? Color(0xFFFFFFFF));
                   }
 
-                  // Use Container padding instead of trailing space for word gaps.
-                  // Container.color covers padding area → continuous highlight blocks.
-                  final wordGap = effectiveFontSize * 0.28;
+                  // Keep the visual gap inside the Text itself. External
+                  // padding creates seams in imported highlights and makes
+                  // underlines look chopped between words.
+                  final joinsPreviousHighlight = _sameHighlightColor(
+                    userBgColor,
+                    localWordIndex > 0
+                        ? para[localWordIndex - 1].highlight
+                        : null,
+                  );
+                  final joinsNextHighlight = _sameHighlightColor(
+                    userBgColor,
+                    localWordIndex + 1 < para.length
+                        ? para[localWordIndex + 1].highlight
+                        : null,
+                  );
+                  final useSmoothHighlightBand =
+                      !kUseCustomDocxDecorationPainting &&
+                          userBgColor != null &&
+                          trackingBgColor == null;
+                  final highlightRadius = Radius.circular(
+                    (effectiveFontSize * 0.08).clamp(2.0, 8.0),
+                  );
                   final speechActive = tState.isListening || tState.isStarting;
                   final wordWidget = GestureDetector(
                     behavior: HitTestBehavior.translucent,
                     onTap: speechActive ? null : () => _jumpToWordIndex(i),
                     child: Directionality(
-                      textDirection: word.effectiveRtl
-                          ? TextDirection.rtl
-                          : TextDirection.ltr,
+                      textDirection: wordDirection,
                       child: Container(
                         key: _wordKeys[i],
-                        padding: EdgeInsets.only(
-                          right: word.effectiveRtl ? 0 : wordGap,
-                          left: word.effectiveRtl ? wordGap : 0,
-                        ),
-                        color: effectiveBg,
+                        padding: EdgeInsets.zero,
+                        decoration: effectiveBg == null
+                            ? null
+                            : BoxDecoration(
+                                color: effectiveBg,
+                                borderRadius: useSmoothHighlightBand
+                                    ? BorderRadiusDirectional.horizontal(
+                                        start: joinsPreviousHighlight
+                                            ? Radius.zero
+                                            : highlightRadius,
+                                        end: joinsNextHighlight
+                                            ? Radius.zero
+                                            : highlightRadius,
+                                      )
+                                    : null,
+                              ),
                         child: Text(
                           displayText,
                           style: TextStyle(
@@ -201,9 +246,12 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             wordSpacing: settings.wordSpacing,
                             color: textColor,
                             height: settings.lineSpacing,
-                            decoration: word.isUnderline
+                            decoration: word.isUnderline &&
+                                    !kUseCustomDocxDecorationPainting
                                 ? TextDecoration.underline
                                 : null,
+                            decorationStyle: TextDecorationStyle.solid,
+                            decorationThickness: word.isUnderline ? 1.5 : null,
                           ),
                         ),
                       ),
@@ -215,12 +263,12 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Tooltip(
-                        message: 'Delete bookmark',
+                        message: 'Bookmark',
                         child: GestureDetector(
                           behavior: HitTestBehavior.translucent,
                           onTap: speechActive
                               ? null
-                              : () => _deletePresenterBookmark(i),
+                              : () => _tapPresenterBookmarkMarker(i),
                           child: Padding(
                             padding: EdgeInsets.symmetric(
                               horizontal: effectiveFontSize * 0.06,
@@ -251,6 +299,43 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         }).toList(),
       ),
     );
+
+    if (kUseCustomDocxDecorationPainting) {
+      wordList = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _PresenterDecorationPainter(
+                  contentKey: _presenterContentKey,
+                  wordKeys: _wordKeys,
+                  words: script.words,
+                  confirmedWordIndex: tState.confirmedWordIndex,
+                  isManualMode: settings.scrollMode == 'manual',
+                  type: MarkupDecorationType.background,
+                ),
+              ),
+            ),
+          ),
+          wordList,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _PresenterDecorationPainter(
+                  contentKey: _presenterContentKey,
+                  wordKeys: _wordKeys,
+                  words: script.words,
+                  confirmedWordIndex: tState.confirmedWordIndex,
+                  isManualMode: settings.scrollMode == 'manual',
+                  type: MarkupDecorationType.underline,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     if (settings.mirrorHorizontal || settings.mirrorVertical) {
       wordList = Transform.scale(
@@ -292,7 +377,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 }),
               },
               child: GestureDetector(
-                onTap: _showControls,
+                onTap:
+                    (tState.isListening || tState.isStarting) ? null : _showControls,
                 child: Stack(
                   children: [
                     // Scrollable script
@@ -595,111 +681,143 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       child: Center(child: _buildPresenterSearchToolbar()),
                     ),
 
+                    if (tState.isListening || tState.isStarting)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: 92,
+                        child: MouseRegion(
+                          opaque: false,
+                          onEnter: (_) {
+                            _controlsHovering = true;
+                            _showControlsFromHotZone();
+                          },
+                          onExit: (_) {
+                            _controlsHovering = false;
+                            _scheduleHideControls();
+                          },
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+
                     // Controls overlay — control bar + speed slider stacked at bottom
                     Positioned(
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      child: AnimatedOpacity(
-                        opacity: _controlsVisible ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 400),
-                        child: IgnorePointer(
-                          ignoring: !_controlsVisible,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Speed slider — sits just above the control bar, always visible in manual mode
-                              if (settings.scrollMode == 'manual')
-                                Container(
-                                  color: Colors.black.withOpacity(0.75),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 4),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.speed,
-                                          color: Colors.white54, size: 18),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Slider(
-                                          value: settings.scrollSpeed,
-                                          min: -300,
-                                          max: 300,
-                                          divisions: 120, // 5wpm steps
-                                          activeColor:
-                                              Color(settings.currentWordColor),
-                                          inactiveColor: Colors.white24,
-                                          onChanged: (v) {
-                                            ref
-                                                .read(settingsProvider.notifier)
-                                                .setScrollSpeed(v);
-                                            if (_manualScrolling && v != 0) {
-                                              // If already scrolling, update will happen in next tick of timer
-                                              // No need to restart timer if we handle speed dynamically
-                                            } else if (v != 0 &&
-                                                !_manualScrolling) {
-                                              _startManualScroll();
-                                            } else if (v == 0) {
-                                              _stopManualScroll();
-                                            }
-                                          },
+                      child: MouseRegion(
+                        onEnter: (_) {
+                          _controlsHovering = true;
+                          _showControlsFromHotZone();
+                        },
+                        onExit: (_) {
+                          _controlsHovering = false;
+                          _scheduleHideControls();
+                        },
+                        child: AnimatedOpacity(
+                          opacity: _controlsVisible ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 400),
+                          child: IgnorePointer(
+                            ignoring: !_controlsVisible,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Speed slider — sits just above the control bar, always visible in manual mode
+                                if (settings.scrollMode == 'manual')
+                                  Container(
+                                    color: Colors.black.withOpacity(0.75),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 4),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.speed,
+                                            color: Colors.white54, size: 18),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Slider(
+                                            value: settings.scrollSpeed,
+                                            min: -300,
+                                            max: 300,
+                                            divisions: 120, // 5wpm steps
+                                            activeColor: Color(
+                                                settings.currentWordColor),
+                                            inactiveColor: Colors.white24,
+                                            onChanged: (v) {
+                                              ref
+                                                  .read(
+                                                      settingsProvider.notifier)
+                                                  .setScrollSpeed(v);
+                                              if (_manualScrolling && v != 0) {
+                                                // If already scrolling, update will happen in next tick of timer
+                                                // No need to restart timer if we handle speed dynamically
+                                              } else if (v != 0 &&
+                                                  !_manualScrolling) {
+                                                _startManualScroll();
+                                              } else if (v == 0) {
+                                                _stopManualScroll();
+                                              }
+                                            },
+                                          ),
                                         ),
-                                      ),
-                                      SizedBox(
-                                        width: 62,
-                                        child: Text(
-                                            '${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
-                                            style: const TextStyle(
-                                                color: Colors.white54,
-                                                fontSize: 11)),
-                                      ),
-                                    ],
+                                        SizedBox(
+                                          width: 62,
+                                          child: Text(
+                                              '${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
+                                              style: const TextStyle(
+                                                  color: Colors.white54,
+                                                  fontSize: 11)),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
 
-                              // Control bar
-                              _ControlBar(
-                                isListening: tState.isListening,
-                                isStarting: tState.isStarting,
-                                isManualMode: settings.scrollMode == 'manual',
-                                isManualScrolling: _manualScrolling,
-                                isScrollingBackward: _scrollingBackward,
-                                accentColor: Color(settings.currentWordColor),
-                                onStart: settings.scrollMode == 'manual'
-                                    ? _startManualScroll
-                                    : _requestAndStart,
-                                onStartBackward: () =>
-                                    _startManualScroll(backward: true),
-                                onStop: settings.scrollMode == 'manual'
-                                    ? _stopManualScroll
-                                    : () => ref
-                                        .read(teleprompterProvider.notifier)
-                                        .stopSession(),
-                                onReset: () {
-                                  if (settings.scrollMode == 'manual') {
-                                    _resetManual();
-                                  } else {
-                                    ref
-                                        .read(teleprompterProvider.notifier)
-                                        .resetPosition();
-                                    _scrollController.animateTo(0,
-                                        duration:
-                                            const Duration(milliseconds: 400),
-                                        curve: Curves.easeOutCubic);
-                                  }
-                                },
-                                onBack: () {
-                                  _exitPresentation();
-                                },
-                                onSettings: _showSettings,
-                                onAddBookmark: _addPresenterBookmark,
-                                onRemoveBookmark:
-                                    _deletePresenterBookmarkAtCurrentPosition,
-                                onPreviousBookmark: () =>
-                                    _jumpPresenterBookmark(-1),
-                                onNextBookmark: () => _jumpPresenterBookmark(1),
-                                onSearch: _showSearchDialog,
-                              ),
-                            ],
+                                // Control bar
+                                _ControlBar(
+                                  isListening: tState.isListening,
+                                  isStarting: tState.isStarting,
+                                  isManualMode: settings.scrollMode == 'manual',
+                                  isManualScrolling: _manualScrolling,
+                                  isScrollingBackward: _scrollingBackward,
+                                  accentColor: Color(settings.currentWordColor),
+                                  onStart: settings.scrollMode == 'manual'
+                                      ? _startManualScroll
+                                      : _requestAndStart,
+                                  onStartBackward: () =>
+                                      _startManualScroll(backward: true),
+                                  onStop: settings.scrollMode == 'manual'
+                                      ? _stopManualScroll
+                                      : () => ref
+                                          .read(teleprompterProvider.notifier)
+                                          .stopSession(),
+                                  onReset: () {
+                                    if (settings.scrollMode == 'manual') {
+                                      _resetManual();
+                                    } else {
+                                      ref
+                                          .read(teleprompterProvider.notifier)
+                                          .resetPosition();
+                                      _scrollController.animateTo(0,
+                                          duration:
+                                              const Duration(milliseconds: 400),
+                                          curve: Curves.easeOutCubic);
+                                    }
+                                  },
+                                  onBack: () {
+                                    _exitPresentation();
+                                  },
+                                  onSettings: _showSettings,
+                                  onAddBookmark: _addPresenterBookmark,
+                                  onRemoveBookmark:
+                                      _deletePresenterBookmarkAtCurrentPosition,
+                                  onPreviousBookmark: () =>
+                                      _jumpPresenterBookmark(-1),
+                                  onNextBookmark: () =>
+                                      _jumpPresenterBookmark(1),
+                                  onSearch: _showSearchDialog,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -732,4 +850,121 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // Default fallback
     return Alignment.center;
   }
+
+  bool _sameHighlightColor(Color? a, Color? b) {
+    if (a == null || b == null) return false;
+    return a == b;
+  }
+
+  TextDirection _wordDirectionForDisplay(
+    String text, {
+    required TextDirection paragraphDirection,
+  }) {
+    final clean = _stripBidiIsolation(text);
+    if (RegExp(r'[\u0590-\u08FF]').hasMatch(clean)) return TextDirection.rtl;
+    if (RegExp(r'[A-Za-z]').hasMatch(clean)) return TextDirection.ltr;
+    return paragraphDirection;
+  }
+
+  String _bidiIsolatedDisplayText(
+    String text, {
+    required TextDirection paragraphDirection,
+  }) {
+    // Each presenter word is already wrapped in a Directionality widget.
+    // Adding Unicode isolates inside every word over-constrains mixed
+    // Hebrew/English/neutral punctuation and can flip brackets/numbers.
+    return text;
+  }
+
+  String _stripBidiIsolation(String text) =>
+      text.replaceAll(RegExp('[\u200E\u200F\u2066\u2067\u2068\u2069]'), '');
+}
+
+class _PresenterDecorationPainter extends CustomPainter {
+  final GlobalKey contentKey;
+  final List<GlobalKey> wordKeys;
+  final List<ScriptWord> words;
+  final int confirmedWordIndex;
+  final bool isManualMode;
+  final MarkupDecorationType type;
+
+  const _PresenterDecorationPainter({
+    required this.contentKey,
+    required this.wordKeys,
+    required this.words,
+    required this.confirmedWordIndex,
+    required this.isManualMode,
+    required this.type,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final contentContext = contentKey.currentContext;
+    final contentBox = contentContext?.findRenderObject() as RenderBox?;
+    if (contentBox == null || !contentBox.attached) return;
+
+    if (type == MarkupDecorationType.background) {
+      final rectsByColor = <Color, List<Rect>>{};
+      for (final word in words) {
+        if (word.isNewline || word.index >= wordKeys.length) continue;
+        final highlight = word.highlight;
+        if (highlight == null) continue;
+        final color = !isManualMode && word.index < confirmedWordIndex
+            ? highlight.withOpacity(highlight.opacity * 0.15)
+            : highlight;
+        final rect = _rectForWord(word.index, contentBox);
+        if (rect == null) continue;
+        rectsByColor.putIfAbsent(color, () => <Rect>[]).add(rect);
+      }
+      final paint = Paint()..style = PaintingStyle.fill;
+      for (final entry in rectsByColor.entries) {
+        if (entry.key.opacity <= 0) continue;
+        paint.color = entry.key;
+        for (final rect in MarkupDecorationBoxMerger.merge(
+          entry.value,
+          rowTolerance: 8,
+          gapTolerance: 18,
+        )) {
+          final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 8.0));
+          canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+        }
+      }
+      return;
+    }
+
+    final underlineRects = <Rect>[];
+    for (final word in words) {
+      if (word.isNewline ||
+          !word.isUnderline ||
+          word.index >= wordKeys.length) {
+        continue;
+      }
+      final rect = _rectForWord(word.index, contentBox);
+      if (rect != null) underlineRects.add(rect);
+    }
+    final paint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.square
+      ..style = PaintingStyle.stroke;
+    for (final rect in MarkupDecorationBoxMerger.merge(
+      underlineRects,
+      rowTolerance: 8,
+      gapTolerance: 18,
+    )) {
+      final y = rect.bottom - (paint.strokeWidth * 0.5);
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+    }
+  }
+
+  Rect? _rectForWord(int index, RenderBox contentBox) {
+    final context = wordKeys[index].currentContext;
+    final box = context?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return null;
+    final topLeft = box.localToGlobal(Offset.zero, ancestor: contentBox);
+    return topLeft & box.size;
+  }
+
+  @override
+  bool shouldRepaint(covariant _PresenterDecorationPainter oldDelegate) => true;
 }

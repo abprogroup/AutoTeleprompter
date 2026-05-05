@@ -183,8 +183,25 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   void _showControls() {
+    final tState = ref.read(teleprompterProvider);
+    final speechActive = tState.isListening || tState.isStarting;
+    if (speechActive && !_controlsHovering) return;
     setState(() => _controlsVisible = true);
     _scheduleHideControls();
+  }
+
+  void _showControlsFromHotZone() {
+    _hideControlsTimer?.cancel();
+    if (mounted && !_controlsVisible) {
+      setState(() => _controlsVisible = true);
+    }
+  }
+
+  void _syncControlsForSpeech(bool speechActive) {
+    if (!mounted) return;
+    _hideControlsTimer?.cancel();
+    _controlsHovering = false;
+    setState(() => _controlsVisible = !speechActive);
   }
 
   Future<void> _requestAndStart() async {

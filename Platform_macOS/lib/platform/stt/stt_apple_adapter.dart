@@ -30,6 +30,9 @@ class SttAppleAdapter extends AbstractSttService {
   Future<void> stop() => _inner.stop();
 
   @override
+  void setLocale(String locale) => _inner.setLocale(locale);
+
+  @override
   bool get isListening => _inner.isListening;
 
   @override

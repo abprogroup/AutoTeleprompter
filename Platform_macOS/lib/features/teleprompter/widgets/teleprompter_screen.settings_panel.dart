@@ -107,6 +107,16 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             accentColor: Color(settings.currentWordColor),
             onChanged: notifier.setSttVisibleSkipEnabled,
           ),
+          const SizedBox(height: 12),
+          _SwitchRow(
+            icon: Icons.subject_outlined,
+            title: 'Strict bullet/header STT',
+            subtitle:
+                'Use for bullet prompts. Disables guessed auto-skip and requires deliberate next-word or phrase matches.',
+            value: settings.sttStrictBulletMode,
+            accentColor: Color(settings.currentWordColor),
+            onChanged: notifier.setSttStrictBulletMode,
+          ),
           const SizedBox(height: 16),
 
           if (settings.scrollMode == 'manual') ...[

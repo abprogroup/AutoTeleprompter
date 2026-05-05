@@ -176,6 +176,34 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     );
   }
 
+  Future<void> _tapPresenterBookmarkMarker(int wordIndex) async {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+    await _loadBookmarksForScript(script, force: true);
+    if (!mounted) return;
+
+    final safeWordIndex = wordIndex.clamp(0, script.words.length - 1).toInt();
+    ScriptBookmark? bookmark;
+    for (final candidate in _bookmarks) {
+      if (candidate.wordIndex == safeWordIndex) {
+        bookmark = candidate;
+        break;
+      }
+    }
+
+    _jumpToWordIndex(safeWordIndex, immediate: true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          bookmark == null
+              ? 'Bookmark position selected'
+              : 'Bookmark: ${bookmark.label}',
+        ),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
   Future<void> _deletePresenterBookmark(int wordIndex) async {
     final script = ref.read(scriptProvider);
     if (script == null) return;

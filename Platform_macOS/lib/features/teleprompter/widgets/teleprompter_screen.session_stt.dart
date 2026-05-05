@@ -59,23 +59,23 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     return true;
   }
 
-  Future<void> _stopPresentationSession() async {
-    _stopManualScroll();
-    await ref.read(teleprompterProvider.notifier).stopSession();
-  }
-
   Future<void> _exitPresentation() async {
     if (_closingPresentation) return;
     final navigator = Navigator.of(context);
+    _stopManualScroll();
     if (mounted) {
       setState(() => _closingPresentation = true);
     } else {
       _closingPresentation = true;
     }
-    try {
-      await _stopPresentationSession().timeout(const Duration(seconds: 2));
-    } catch (_) {}
     if (mounted && navigator.canPop()) navigator.pop();
+    unawaited(
+      ref
+          .read(teleprompterProvider.notifier)
+          .stopSession()
+          .timeout(const Duration(seconds: 2))
+          .catchError((_) {}),
+    );
   }
 
   void _scheduleHideControls() {

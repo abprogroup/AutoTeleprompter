@@ -10,6 +10,10 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final tState = ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    final manualSttProfile = settings.sttManualProfileEnabled;
+    final visibleSkipControlsEnabled = !manualSttProfile;
+    final hardSkipControlsEnabled =
+        !manualSttProfile && settings.sttVisibleSkipEnabled;
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
@@ -133,24 +137,86 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             _SwitchRow(
-              icon: Icons.visibility_outlined,
-              title: 'Allow visible text skip',
+              icon: Icons.tune_outlined,
+              title: 'Manual Profile',
               subtitle:
-                  'Off by default. When on, STT may jump only to text currently visible on screen.',
+                  'Advanced: set exact STT thresholds yourself. This turns off Bullet, Visible Skip, and Hard Skip buttons.',
+              value: manualSttProfile,
+              accentColor: Color(settings.currentWordColor),
+              onChanged: notifier.setSttManualProfileEnabled,
+            ),
+            const SizedBox(height: 12),
+            _SwitchRow(
+              icon: Icons.visibility_outlined,
+              title: 'Visible Skip',
+              subtitle:
+                  'Allows deliberate jumps only to text currently visible on screen.',
               value: settings.sttVisibleSkipEnabled,
               accentColor: Color(settings.currentWordColor),
+              enabled: visibleSkipControlsEnabled,
               onChanged: notifier.setSttVisibleSkipEnabled,
             ),
             const SizedBox(height: 12),
             _SwitchRow(
-              icon: Icons.subject_outlined,
-              title: 'Strict bullet/header STT',
+              icon: Icons.security_outlined,
+              title: 'Hard Skip',
               subtitle:
-                  'Use for bullet prompts. Disables guessed auto-skip and requires deliberate next-word or phrase matches.',
+                  'Requires more words before visible jumps: 5 small words or 4 big words.',
+              value: settings.sttHardVisibleSkipEnabled &&
+                  settings.sttVisibleSkipEnabled,
+              accentColor: Color(settings.currentWordColor),
+              enabled: hardSkipControlsEnabled,
+              onChanged: notifier.setSttHardVisibleSkipEnabled,
+            ),
+            const SizedBox(height: 12),
+            _SwitchRow(
+              icon: Icons.subject_outlined,
+              title: 'Bullet Mode',
+              subtitle:
+                  'Strict header/bullet reading. Stops on off-script speech instead of guessing ahead.',
               value: settings.sttStrictBulletMode,
               accentColor: Color(settings.currentWordColor),
+              enabled: visibleSkipControlsEnabled,
               onChanged: notifier.setSttStrictBulletMode,
             ),
+            if (manualSttProfile) ...[
+              const SizedBox(height: 12),
+              _SttThresholdSlider(
+                title: 'Words to start advancing',
+                subtitle:
+                    'How much ordered text is needed before normal reading starts moving.',
+                value: settings.sttManualStartAdvanceSmallWords,
+                min: 2,
+                max: 8,
+                allowOff: false,
+                accentColor: Color(settings.currentWordColor),
+                onChanged: notifier.setSttManualStartAdvanceSmallWords,
+              ),
+              const SizedBox(height: 12),
+              _SttThresholdSlider(
+                title: 'Safety recovery',
+                subtitle:
+                    'How much ordered evidence can recover from 1-2 misrecognized words.',
+                value: settings.sttManualSafetySmallWords,
+                min: 1,
+                max: 5,
+                allowOff: false,
+                accentColor: Color(settings.currentWordColor),
+                onChanged: notifier.setSttManualSafetySmallWords,
+              ),
+              const SizedBox(height: 12),
+              _SttThresholdSlider(
+                title: 'Visible-area skip',
+                subtitle:
+                    'Off disables jumping. Higher values make visible jumps stricter.',
+                value: settings.sttManualVisibleSkipSmallWords,
+                min: 2,
+                max: 8,
+                allowOff: true,
+                accentColor: Color(settings.currentWordColor),
+                onChanged: notifier.setSttManualVisibleSkipSmallWords,
+              ),
+            ],
             const SizedBox(height: 16),
           ],
 

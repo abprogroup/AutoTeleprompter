@@ -11,6 +11,7 @@ const _hMiddle = '\u05d0\u05de\u05e6\u05e2';
 const _hReturn = '\u05d7\u05d6\u05e8\u05d4';
 const _hSection = '\u05dc\u05de\u05e7\u05d8\u05e2';
 const _hNext = '\u05d4\u05d1\u05d0';
+const _hSafe = '\u05d1\u05d8\u05d5\u05d7';
 
 ScriptWord _word(String raw, int index, {bool rtl = false}) {
   return ScriptWord(
@@ -56,10 +57,12 @@ List<ScriptWord> _mixedScript({
     add(_hReturn, rtl: true);
     add(_hSection, rtl: true);
     add(_hNext, rtl: true);
+    add(_hSafe, rtl: true);
   } else {
     add('returning');
     add('english');
     add('section');
+    add('finale');
   }
 
   return words;
@@ -113,7 +116,7 @@ void main() {
       final script = _mixedScript(startWithHebrew: false, endWithHebrew: false);
       final result = WordAligner.align(
         script: script,
-        transcript: 'returning english section',
+        transcript: 'returning english section finale',
         lastConfirmedIndex: 0,
         maxSkipTargetIndex: script.length - 1,
       );
@@ -126,7 +129,7 @@ void main() {
       final script = _mixedScript(startWithHebrew: true, endWithHebrew: true);
       final result = WordAligner.align(
         script: script,
-        transcript: '$_hReturn $_hSection $_hNext',
+        transcript: '$_hReturn $_hSection $_hNext $_hSafe',
         lastConfirmedIndex: 0,
         maxSkipTargetIndex: script.length - 1,
       );
@@ -139,7 +142,7 @@ void main() {
       final script = _mixedScript(startWithHebrew: false, endWithHebrew: true);
       final result = WordAligner.align(
         script: script,
-        transcript: '$_hReturn $_hSection $_hNext',
+        transcript: '$_hReturn $_hSection $_hNext $_hSafe',
         lastConfirmedIndex: 0,
         maxSkipTargetIndex: script.length - 1,
       );
@@ -151,7 +154,7 @@ void main() {
       final script = _mixedScript(startWithHebrew: true, endWithHebrew: false);
       final result = WordAligner.align(
         script: script,
-        transcript: 'returning english section',
+        transcript: 'returning english section finale',
         lastConfirmedIndex: 0,
         maxSkipTargetIndex: script.length - 1,
       );
@@ -163,11 +166,37 @@ void main() {
       final script = _mixedScript(startWithHebrew: false, endWithHebrew: false);
       final result = WordAligner.align(
         script: script,
-        transcript: 'returning english section',
+        transcript: 'returning english section finale',
         lastConfirmedIndex: 0,
       );
 
       expect(result.confirmedWordIndex, 0);
+    });
+
+    test('hard visible skip raises the visible phrase threshold', () {
+      final script = _mixedScript(startWithHebrew: false, endWithHebrew: false);
+      final hardPolicy = SttRecognitionPolicy.legacy(
+        visibleSkipEnabled: true,
+        hardVisibleSkipEnabled: true,
+      );
+
+      final tooShort = WordAligner.align(
+        script: script,
+        transcript: 'returning english section',
+        lastConfirmedIndex: 0,
+        maxSkipTargetIndex: script.length - 1,
+        policy: hardPolicy,
+      );
+      final enough = WordAligner.align(
+        script: script,
+        transcript: 'returning english section finale',
+        lastConfirmedIndex: 0,
+        maxSkipTargetIndex: script.length - 1,
+        policy: hardPolicy,
+      );
+
+      expect(tooShort.confirmedWordIndex, 0);
+      expect(enough.confirmedWordIndex, script.length - 1);
     });
 
     test('provider does not cap trusted visible-skip alignments', () {

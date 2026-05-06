@@ -45,6 +45,13 @@ class AppSettings {
       sttVisibleSkipEnabled; // Windows: allow STT to skip only to visible words
   final bool
       sttStrictBulletMode; // Windows: stricter STT for bullet/header prompting
+  final bool
+      sttHardVisibleSkipEnabled; // Windows: stricter visible-skip confirmation
+  final bool
+      sttManualProfileEnabled; // Windows: custom STT recognition thresholds
+  final int sttManualStartAdvanceSmallWords;
+  final int sttManualSafetySmallWords;
+  final int sttManualVisibleSkipSmallWords; // 0 = Off
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -83,6 +90,11 @@ class AppSettings {
     this.sttInputDeviceLabel = 'System default microphone',
     this.sttVisibleSkipEnabled = false,
     this.sttStrictBulletMode = false,
+    this.sttHardVisibleSkipEnabled = false,
+    this.sttManualProfileEnabled = false,
+    this.sttManualStartAdvanceSmallWords = 4,
+    this.sttManualSafetySmallWords = 2,
+    this.sttManualVisibleSkipSmallWords = 0,
   });
 
   AppSettings copyWith({
@@ -122,6 +134,11 @@ class AppSettings {
     String? sttInputDeviceLabel,
     bool? sttVisibleSkipEnabled,
     bool? sttStrictBulletMode,
+    bool? sttHardVisibleSkipEnabled,
+    bool? sttManualProfileEnabled,
+    int? sttManualStartAdvanceSmallWords,
+    int? sttManualSafetySmallWords,
+    int? sttManualVisibleSkipSmallWords,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -164,6 +181,16 @@ class AppSettings {
       sttVisibleSkipEnabled:
           sttVisibleSkipEnabled ?? this.sttVisibleSkipEnabled,
       sttStrictBulletMode: sttStrictBulletMode ?? this.sttStrictBulletMode,
+      sttHardVisibleSkipEnabled:
+          sttHardVisibleSkipEnabled ?? this.sttHardVisibleSkipEnabled,
+      sttManualProfileEnabled:
+          sttManualProfileEnabled ?? this.sttManualProfileEnabled,
+      sttManualStartAdvanceSmallWords: sttManualStartAdvanceSmallWords ??
+          this.sttManualStartAdvanceSmallWords,
+      sttManualSafetySmallWords:
+          sttManualSafetySmallWords ?? this.sttManualSafetySmallWords,
+      sttManualVisibleSkipSmallWords:
+          sttManualVisibleSkipSmallWords ?? this.sttManualVisibleSkipSmallWords,
     );
   }
 }
@@ -204,6 +231,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _sttInputDeviceLabelKey = 'sttInputDeviceLabel';
   static const _sttVisibleSkipEnabledKey = 'sttVisibleSkipEnabled';
   static const _sttStrictBulletModeKey = 'sttStrictBulletMode';
+  static const _sttHardVisibleSkipEnabledKey = 'sttHardVisibleSkipEnabled';
+  static const _sttManualProfileEnabledKey = 'sttManualProfileEnabled';
+  static const _sttManualStartAdvanceSmallWordsKey =
+      'sttManualStartAdvanceSmallWords';
+  static const _sttManualSafetySmallWordsKey = 'sttManualSafetySmallWords';
+  static const _sttManualVisibleSkipSmallWordsKey =
+      'sttManualVisibleSkipSmallWords';
 
   @override
   AppSettings build() {
@@ -307,6 +341,22 @@ class SettingsNotifier extends Notifier<AppSettings> {
           'System default microphone',
       sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
       sttStrictBulletMode: prefs.getBool(_sttStrictBulletModeKey) ?? false,
+      sttHardVisibleSkipEnabled:
+          prefs.getBool(_sttHardVisibleSkipEnabledKey) ?? false,
+      sttManualProfileEnabled:
+          prefs.getBool(_sttManualProfileEnabledKey) ?? false,
+      sttManualStartAdvanceSmallWords:
+          (prefs.getInt(_sttManualStartAdvanceSmallWordsKey) ?? 4)
+              .clamp(2, 8)
+              .toInt(),
+      sttManualSafetySmallWords:
+          (prefs.getInt(_sttManualSafetySmallWordsKey) ?? 2)
+              .clamp(1, 5)
+              .toInt(),
+      sttManualVisibleSkipSmallWords:
+          (prefs.getInt(_sttManualVisibleSkipSmallWordsKey) ?? 0)
+              .clamp(0, 8)
+              .toInt(),
     );
   }
 
@@ -765,15 +815,56 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setSttVisibleSkipEnabled(bool enabled) async {
-    state = state.copyWith(sttVisibleSkipEnabled: enabled);
+    state = state.copyWith(
+      sttVisibleSkipEnabled: enabled,
+      sttHardVisibleSkipEnabled:
+          enabled ? state.sttHardVisibleSkipEnabled : false,
+    );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_sttVisibleSkipEnabledKey, enabled);
+    if (!enabled) {
+      await prefs.setBool(_sttHardVisibleSkipEnabledKey, false);
+    }
   }
 
   Future<void> setSttStrictBulletMode(bool enabled) async {
     state = state.copyWith(sttStrictBulletMode: enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_sttStrictBulletModeKey, enabled);
+  }
+
+  Future<void> setSttHardVisibleSkipEnabled(bool enabled) async {
+    final active = state.sttVisibleSkipEnabled && enabled;
+    state = state.copyWith(sttHardVisibleSkipEnabled: active);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sttHardVisibleSkipEnabledKey, active);
+  }
+
+  Future<void> setSttManualProfileEnabled(bool enabled) async {
+    state = state.copyWith(sttManualProfileEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sttManualProfileEnabledKey, enabled);
+  }
+
+  Future<void> setSttManualStartAdvanceSmallWords(int value) async {
+    final clamped = value.clamp(2, 8).toInt();
+    state = state.copyWith(sttManualStartAdvanceSmallWords: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_sttManualStartAdvanceSmallWordsKey, clamped);
+  }
+
+  Future<void> setSttManualSafetySmallWords(int value) async {
+    final clamped = value.clamp(1, 5).toInt();
+    state = state.copyWith(sttManualSafetySmallWords: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_sttManualSafetySmallWordsKey, clamped);
+  }
+
+  Future<void> setSttManualVisibleSkipSmallWords(int value) async {
+    final normalized = value <= 0 ? 0 : value.clamp(2, 8).toInt();
+    state = state.copyWith(sttManualVisibleSkipSmallWords: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_sttManualVisibleSkipSmallWordsKey, normalized);
   }
 }
 

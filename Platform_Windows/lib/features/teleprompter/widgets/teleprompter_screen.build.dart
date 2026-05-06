@@ -50,6 +50,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // font-size value larger without changing the metadata number shared with
     // the editor.
     final presentationFontSize = settings.fontSize * 2.0;
+    final presenterWordGap = _presenterWordGap(presentationFontSize, settings);
     final debugConsoleHeight =
         settings.debugMode ? (_debugConsoleMinimized ? 36.0 : 220.0) : 0.0;
     final bookmarkWordIndexes = _bookmarks
@@ -81,8 +82,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
           }
 
           final firstWord = para.first;
-          final paraDir =
-              firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
+          final paragraphRtl = _paragraphIsRtl(para);
+          final paraDir = paragraphRtl ? TextDirection.rtl : TextDirection.ltr;
           TextAlign? paraAlign;
           if (settings.showAlignmentOverride) {
             // Override mode: use the settings alignment instead of editor tags
@@ -116,8 +117,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
               textDirection: paraDir,
               child: Wrap(
                 textDirection: paraDir,
-                alignment: _toWrapAlignment(
-                    paraAlign, settings, firstWord.effectiveRtl),
+                alignment: _toWrapAlignment(paraAlign, settings, paragraphRtl),
+                spacing: presenterWordGap,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: para.asMap().entries.map<Widget>((entry) {
                   final localWordIndex = entry.key;
@@ -130,11 +131,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   final visibleWordText = word.raw
                       .replaceAll(_tagStripRe, '')
                       .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
-                  final spacedWordText = localWordIndex + 1 < para.length
-                      ? '$visibleWordText '
-                      : visibleWordText;
                   final displayText = _bidiIsolatedDisplayText(
-                    spacedWordText,
+                    visibleWordText,
                     paragraphDirection: paraDir,
                   );
                   final wordDirection = _wordDirectionForDisplay(
@@ -195,9 +193,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         : (word.textColor ?? Color(0xFFFFFFFF));
                   }
 
-                  // Keep the visual gap inside the Text itself. External
-                  // padding creates seams in imported highlights and makes
-                  // underlines look chopped between words.
+                  // Keep presenter word gaps as physical Wrap spacing, not
+                  // trailing text spaces. Text spaces are neutral bidi
+                  // characters and, in Hebrew paragraphs, can attach to the
+                  // wrong side of one-word Text widgets.
                   final joinsPreviousHighlight = _sameHighlightColor(
                     userBgColor,
                     localWordIndex > 0
@@ -322,6 +321,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   confirmedWordIndex: tState.confirmedWordIndex,
                   isManualMode: settings.scrollMode == 'manual',
                   type: MarkupDecorationType.background,
+                  gapTolerance: _decorationGapTolerance(presenterWordGap),
                 ),
               ),
             ),
@@ -337,6 +337,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   confirmedWordIndex: tState.confirmedWordIndex,
                   isManualMode: settings.scrollMode == 'manual',
                   type: MarkupDecorationType.underline,
+                  gapTolerance: _decorationGapTolerance(presenterWordGap),
                 ),
               ),
             ),
@@ -912,6 +913,26 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
 
   String _stripBidiIsolation(String text) =>
       text.replaceAll(RegExp('[\u200E\u200F\u2066\u2067\u2068\u2069]'), '');
+
+  bool _paragraphIsRtl(List<ScriptWord> words) {
+    for (final word in words) {
+      final clean = word.raw.replaceAll(_tagStripRe, '').trim();
+      if (clean.isEmpty) continue;
+      if (RegExp(r'[\u0590-\u08FF]').hasMatch(clean)) return true;
+      if (RegExp(r'[A-Za-z]').hasMatch(clean)) return false;
+    }
+    return words.isNotEmpty && words.first.effectiveRtl;
+  }
+
+  double _presenterWordGap(double fontSize, AppSettings settings) {
+    final defaultSpace = fontSize * 0.24;
+    return (defaultSpace + settings.wordSpacing).clamp(0.0, 80.0).toDouble();
+  }
+
+  double _decorationGapTolerance(double wordGap) {
+    final dynamicTolerance = wordGap + 8.0;
+    return dynamicTolerance < 18.0 ? 18.0 : dynamicTolerance;
+  }
 }
 
 class _PresenterDecorationPainter extends CustomPainter {
@@ -921,6 +942,7 @@ class _PresenterDecorationPainter extends CustomPainter {
   final int confirmedWordIndex;
   final bool isManualMode;
   final MarkupDecorationType type;
+  final double gapTolerance;
 
   const _PresenterDecorationPainter({
     required this.contentKey,
@@ -929,6 +951,7 @@ class _PresenterDecorationPainter extends CustomPainter {
     required this.confirmedWordIndex,
     required this.isManualMode,
     required this.type,
+    required this.gapTolerance,
   });
 
   @override
@@ -957,7 +980,7 @@ class _PresenterDecorationPainter extends CustomPainter {
         for (final rect in MarkupDecorationBoxMerger.merge(
           entry.value,
           rowTolerance: 8,
-          gapTolerance: 18,
+          gapTolerance: gapTolerance,
         )) {
           final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 8.0));
           canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
@@ -984,7 +1007,7 @@ class _PresenterDecorationPainter extends CustomPainter {
     for (final rect in MarkupDecorationBoxMerger.merge(
       underlineRects,
       rowTolerance: 8,
-      gapTolerance: 18,
+      gapTolerance: gapTolerance,
     )) {
       final y = rect.bottom - (paint.strokeWidth * 0.5);
       canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);

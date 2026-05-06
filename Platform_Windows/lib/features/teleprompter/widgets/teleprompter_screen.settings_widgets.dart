@@ -131,7 +131,8 @@ class _SwitchRow extends StatelessWidget {
   final String subtitle;
   final bool value;
   final Color accentColor;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
+  final bool enabled;
 
   const _SwitchRow({
     required this.icon,
@@ -140,41 +141,135 @@ class _SwitchRow extends StatelessWidget {
     required this.value,
     required this.accentColor,
     required this.onChanged,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: enabled ? 1.0 : 0.42,
+      duration: const Duration(milliseconds: 160),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: accentColor, size: 19),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 11)),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: value,
+              activeColor: accentColor,
+              onChanged: enabled ? onChanged : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SttThresholdSlider extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final int value;
+  final int min;
+  final int max;
+  final bool allowOff;
+  final Color accentColor;
+  final ValueChanged<int> onChanged;
+
+  const _SttThresholdSlider({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.allowOff,
+    required this.accentColor,
+    required this.onChanged,
+  });
+
+  static String labelFor(int smallWords) {
+    if (smallWords <= 0) return 'Off';
+    final bigWords = smallWords <= 2 ? 1 : smallWords - 1;
+    return '$smallWords small words / $bigWords big words';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sliderMin = allowOff ? 0.0 : min.toDouble();
+    final safeValue =
+        value <= 0 && allowOff ? 0.0 : value.clamp(min, max).toDouble();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
         color: const Color(0xFF111111),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white12),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: accentColor, size: 19),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style:
-                        const TextStyle(color: Colors.white38, fontSize: 11)),
-              ],
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                labelFor(value),
+                style: TextStyle(
+                  color: value <= 0 ? Colors.white38 : accentColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-          Switch.adaptive(
-            value: value,
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          Slider(
+            value: safeValue,
+            min: sliderMin,
+            max: max.toDouble(),
+            divisions: max - sliderMin.toInt(),
             activeColor: accentColor,
-            onChanged: onChanged,
+            inactiveColor: Colors.white24,
+            label: labelFor(value),
+            onChanged: (next) {
+              var rounded = next.round();
+              if (allowOff && rounded == 1) rounded = 2;
+              onChanged(rounded);
+            },
           ),
         ],
       ),

@@ -6,8 +6,82 @@ class AlignmentResult {
   final int confirmedWordIndex;
   final double confidence;
   final String debugInfo; // detailed debug info about match decision
+  final SttAlignmentDecision decision;
   AlignmentResult(this.confirmedWordIndex, this.confidence,
-      [this.debugInfo = '']);
+      [this.debugInfo = '', this.decision = SttAlignmentDecision.advance]);
+
+  bool get shouldAdvance => decision == SttAlignmentDecision.advance;
+  bool get shouldEnterStandby => decision == SttAlignmentDecision.standby;
+}
+
+enum SttAlignmentDecision {
+  wait,
+  standby,
+  advance,
+}
+
+class SttEvidenceThreshold {
+  final int smallWords;
+
+  const SttEvidenceThreshold(this.smallWords);
+
+  int get bigWords => smallWords <= 2 ? 1 : smallWords - 1;
+
+  double get _bigWordWeight => smallWords / bigWords;
+
+  bool passes(Iterable<String> normalizedWords) =>
+      evidenceScore(normalizedWords) >= smallWords;
+
+  double evidenceScore(Iterable<String> normalizedWords) {
+    var score = 0.0;
+    for (final word in normalizedWords) {
+      if (word.isEmpty) continue;
+      score += WordAligner.isBigRecognitionWord(word) ? _bigWordWeight : 1.0;
+    }
+    return score;
+  }
+
+  String get label => '$smallWords small / $bigWords big';
+}
+
+class SttRecognitionPolicy {
+  final bool bulletMode;
+  final bool visibleSkipEnabled;
+  final bool hardVisibleSkipEnabled;
+  final SttEvidenceThreshold startAdvance;
+  final SttEvidenceThreshold safetyRecovery;
+  final SttEvidenceThreshold bulletAdvance;
+  final SttEvidenceThreshold visibleSkip;
+
+  const SttRecognitionPolicy({
+    required this.bulletMode,
+    required this.visibleSkipEnabled,
+    required this.hardVisibleSkipEnabled,
+    this.startAdvance = const SttEvidenceThreshold(4),
+    this.safetyRecovery = const SttEvidenceThreshold(2),
+    this.bulletAdvance = const SttEvidenceThreshold(3),
+    SttEvidenceThreshold? visibleSkip,
+  }) : visibleSkip = visibleSkip ??
+            (hardVisibleSkipEnabled
+                ? const SttEvidenceThreshold(5)
+                : const SttEvidenceThreshold(4));
+
+  factory SttRecognitionPolicy.legacy({
+    bool strictBulletMode = false,
+    bool visibleSkipEnabled = false,
+    bool hardVisibleSkipEnabled = false,
+  }) {
+    return SttRecognitionPolicy(
+      bulletMode: strictBulletMode,
+      visibleSkipEnabled: visibleSkipEnabled,
+      hardVisibleSkipEnabled: hardVisibleSkipEnabled && visibleSkipEnabled,
+    );
+  }
+
+  SttEvidenceThreshold localThreshold({required bool readingStandby}) {
+    if (bulletMode) return bulletAdvance;
+    return readingStandby ? safetyRecovery : startAdvance;
+  }
 }
 
 class WordAligner {
@@ -27,13 +101,14 @@ class WordAligner {
   // Penalty applied per word of distance from the current position.
   static const double _distancePenaltyPerWord = 0.025;
   // Cross-language (e.g. Latin word in Hebrew script) — more lenient
-  static const double _crossLangThreshold = 0.45;
   // Hebrew-specific: even more lenient because STT often returns approximate matches
   static const double _hebrewMatchThreshold = 0.50;
   // Bullet/header prompting must not silently walk through guessed words.
   static const double _strictMatchThreshold = 0.82;
   static const double _strictPhraseThreshold = 0.78;
-  static const int _normalModeMinTranscriptWords = 3;
+
+  static bool isBigRecognitionWord(String normalizedWord) =>
+      normalizedWord.trim().length >= 5;
 
   /// Parse raw script text into a list of ScriptWords.
   /// Preserves paragraph breaks as isNewline=true entries.
@@ -115,23 +190,58 @@ class WordAligner {
     var pendingOpen = '';
     for (final part in parts) {
       if (part.isEmpty) continue;
-      if (_isStandaloneOpeningNeutral(part)) {
-        pendingOpen += part;
+      var current = part;
+      final trailingDash = _takeTrailingDashAfterClosingNeutral(current);
+      if (trailingDash != null) {
+        current = current.substring(0, current.length - trailingDash.length);
+      }
+      if (current.isNotEmpty && _isStandaloneOpeningNeutral(current)) {
+        pendingOpen += current;
+        if (trailingDash != null) pendingOpen += '$trailingDash ';
         continue;
       }
-      if (_isStandaloneClosingNeutral(part) && merged.isNotEmpty) {
-        merged[merged.length - 1] = merged.last + part;
+      if (current.isNotEmpty && _isStandaloneDashPrefix(current)) {
+        pendingOpen += '$current ';
+        if (trailingDash != null) pendingOpen += '$trailingDash ';
         continue;
       }
-      merged.add(pendingOpen + part);
-      pendingOpen = '';
+      if (current.isNotEmpty &&
+          _isStandaloneClosingNeutral(current) &&
+          merged.isNotEmpty) {
+        merged[merged.length - 1] = merged.last + current;
+        if (trailingDash != null) pendingOpen += '$trailingDash ';
+        continue;
+      }
+      if (current.isNotEmpty) {
+        merged.add(pendingOpen + current);
+        pendingOpen = '';
+      }
+      if (trailingDash != null) {
+        pendingOpen += '$trailingDash ';
+      }
     }
     if (pendingOpen.isNotEmpty && merged.isNotEmpty) {
-      merged[merged.length - 1] = merged.last + pendingOpen;
+      if (RegExp(r'[-\u2010-\u2015]\s*$').hasMatch(pendingOpen)) {
+        merged.add(pendingOpen.trimRight());
+      } else {
+        merged[merged.length - 1] = merged.last + pendingOpen;
+      }
     } else if (pendingOpen.isNotEmpty) {
-      merged.add(pendingOpen);
+      merged.add(pendingOpen.trimRight());
     }
     return merged;
+  }
+
+  static String? _takeTrailingDashAfterClosingNeutral(String text) {
+    final match = RegExp(r'[\]\)\}\?!\.,:;]+([-\u2010-\u2015]+)$')
+        .firstMatch(text.trimRight());
+    return match?.group(1);
+  }
+
+  static bool _isStandaloneDashPrefix(String text) {
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty &&
+        RegExp(r'^[-\u2010-\u2015]+$').hasMatch(trimmed);
   }
 
   static bool _isStandaloneNeutralPunctuation(String text) {
@@ -357,14 +467,19 @@ class WordAligner {
     int? visibleSkipStartIndex,
     int? maxSkipTargetIndex,
     bool strictBulletMode = false,
+    SttRecognitionPolicy? policy,
+    bool readingStandby = false,
   }) {
     if (script.isEmpty || transcript.trim().isEmpty) {
-      return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY');
+      return AlignmentResult(
+          lastConfirmedIndex, 0.0, 'EMPTY', SttAlignmentDecision.wait);
     }
 
     final nonNL = script.where((w) => !w.isNewline).toList();
-    if (nonNL.isEmpty)
-      return AlignmentResult(lastConfirmedIndex, 0.0, 'NO_WORDS');
+    if (nonNL.isEmpty) {
+      return AlignmentResult(
+          lastConfirmedIndex, 0.0, 'NO_WORDS', SttAlignmentDecision.wait);
+    }
 
     // Preprocess transcript
     final rawWords = transcript
@@ -374,17 +489,23 @@ class WordAligner {
         .toList();
 
     final transcriptWords = _collapseAbbreviations(rawWords);
-    if (transcriptWords.isEmpty)
-      return AlignmentResult(lastConfirmedIndex, 0.0, 'EMPTY_NORM');
-
-    if (!strictBulletMode &&
-        transcriptWords.length < _normalModeMinTranscriptWords) {
+    if (transcriptWords.isEmpty) {
       return AlignmentResult(
-        lastConfirmedIndex,
-        0.0,
-        'WAIT_MIN_WORDS: ${transcriptWords.length}/$_normalModeMinTranscriptWords',
-      );
+          lastConfirmedIndex, 0.0, 'EMPTY_NORM', SttAlignmentDecision.wait);
     }
+
+    final effectivePolicy = policy ??
+        SttRecognitionPolicy.legacy(
+          strictBulletMode: strictBulletMode,
+          visibleSkipEnabled: maxSkipTargetIndex != null,
+        );
+    final policyBulletMode = effectivePolicy.bulletMode || strictBulletMode;
+    final activeStandby = readingStandby || policyBulletMode;
+    final localThreshold =
+        effectivePolicy.localThreshold(readingStandby: activeStandby);
+    final visibleThreshold = effectivePolicy.visibleSkip;
+    final transcriptPassesLocal = localThreshold.passes(transcriptWords);
+    final transcriptPassesVisible = visibleThreshold.passes(transcriptWords);
 
     final lastSpoken = transcriptWords.last;
 
@@ -397,15 +518,17 @@ class WordAligner {
       searchStart++;
     }
     if (searchStart >= script.length) {
-      return AlignmentResult(lastConfirmedIndex, 0.0, 'AT_END');
+      return AlignmentResult(
+          lastConfirmedIndex, 0.0, 'AT_END', SttAlignmentDecision.wait);
     }
 
     // Default allows small local recovery for missed STT words. Larger
     // paragraph/section skips remain opt-in and viewport-bound.
     final visibleMaxSkipTargetIndex = maxSkipTargetIndex;
-    final visibleSkipEnabled = visibleMaxSkipTargetIndex != null;
+    final visibleSkipEnabled =
+        visibleMaxSkipTargetIndex != null && effectivePolicy.visibleSkipEnabled;
     final strictEnd = searchStart + 1;
-    final localRecoveryWords = strictBulletMode ? 1 : _maxSingleJump;
+    final localRecoveryWords = _maxSingleJump;
     final defaultLocalRecoveryEnd = (searchStart + localRecoveryWords)
         .clamp(strictEnd, script.length)
         .toInt();
@@ -421,17 +544,53 @@ class WordAligner {
             .toInt()
         : searchStart;
 
+    if (!transcriptPassesLocal &&
+        !(visibleSkipEnabled && transcriptPassesVisible)) {
+      if (!activeStandby) {
+        final standbyMatch = _nearbyPhrasePriorityMatch(
+          script: script,
+          transcriptWords: transcriptWords,
+          searchStart: searchStart,
+          windowEnd: defaultLocalRecoveryEnd,
+          lastConfirmedIndex: lastConfirmedIndex,
+          maxPhraseWords: 2,
+          maxJump: _maxSingleJump,
+          minPhraseWords: 2,
+          evidenceThreshold: const SttEvidenceThreshold(2),
+          minPhraseScore: _matchThreshold,
+          debugPrefix: 'STANDBY_LOCK',
+        );
+        if (standbyMatch != null) {
+          return AlignmentResult(
+            lastConfirmedIndex,
+            standbyMatch.confidence,
+            standbyMatch.debugInfo,
+            SttAlignmentDecision.standby,
+          );
+        }
+      }
+
+      return AlignmentResult(
+        lastConfirmedIndex,
+        0.0,
+        'WAIT_EVIDENCE: local=${localThreshold.label} visible=${visibleThreshold.label} heard=${transcriptWords.length}',
+        SttAlignmentDecision.wait,
+      );
+    }
+
     // ── STEP 1: NEXT-WORD PRIORITY ──────────────────────────────────────────
     // The most common case: user said the very next word. Check it first with
     // a slightly lower threshold since position makes it very likely.
-    if (searchStart < script.length && !script[searchStart].isNewline) {
+    if (localThreshold.passes([lastSpoken]) &&
+        searchStart < script.length &&
+        !script[searchStart].isNewline) {
       final nextWord = script[searchStart].normalized;
       if (nextWord.isNotEmpty) {
         final isHebrew = script[searchStart].isRtl;
         final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
         // Hebrew STT is less precise — use a lower threshold for the next word
         final nextThreshold =
-            strictBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
+            policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
         if (sim >= nextThreshold) {
           return AlignmentResult(searchStart, sim,
               'NEXT_WORD: "${lastSpoken}" ~ "${nextWord}" = ${sim.toStringAsFixed(2)}');
@@ -471,12 +630,12 @@ class WordAligner {
       final singleThreshold =
           bestIsHebrew ? _hebrewMatchThreshold : _fastMatchThreshold;
       final effectiveSingleThreshold =
-          strictBulletMode ? _strictMatchThreshold : singleThreshold;
+          policyBulletMode ? _strictMatchThreshold : singleThreshold;
       if (bestSingleSim >= effectiveSingleThreshold) {
         final jumpDist = bestSingleIdx - lastConfirmedIndex;
-        // Single-word matches only allow small jumps to prevent false skips
-        final maxSingleJump = strictBulletMode ? 1 : _maxSingleJump;
-        if (jumpDist <= maxSingleJump) {
+        final allowSingleAdvance =
+            activeStandby && localThreshold.passes([lastSpoken]);
+        if (allowSingleAdvance && jumpDist <= _maxSingleJump) {
           return AlignmentResult(bestSingleIdx, bestSingleSim,
               'SINGLE: "${lastSpoken}" → [${bestSingleIdx}]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
         }
@@ -490,11 +649,12 @@ class WordAligner {
       windowEnd: defaultLocalRecoveryEnd,
       lastConfirmedIndex: lastConfirmedIndex,
       maxPhraseWords: _localRecoveryPhraseMaxWords,
-      maxJump: strictBulletMode ? 1 : _maxSingleJump,
-      minPhraseWords: 2,
-      overrideWordThreshold: strictBulletMode ? _strictPhraseThreshold : null,
+      maxJump: _maxSingleJump,
+      minPhraseWords: localThreshold.bigWords,
+      evidenceThreshold: localThreshold,
+      overrideWordThreshold: policyBulletMode ? _strictPhraseThreshold : null,
       minPhraseScore:
-          strictBulletMode ? _strictPhraseThreshold : _matchThreshold,
+          policyBulletMode ? _strictPhraseThreshold : _matchThreshold,
       debugPrefix: 'LOCAL_RECOVERY_PHRASE',
     );
     if (localPhrase != null) return localPhrase;
@@ -507,11 +667,12 @@ class WordAligner {
         windowEnd: windowEnd,
         lastConfirmedIndex: lastConfirmedIndex,
         scanFullWindow: true,
-        scanAllTranscriptPhrases: strictBulletMode,
-        minPhraseWords: strictBulletMode ? 2 : 3,
-        overrideWordThreshold: strictBulletMode ? _strictPhraseThreshold : null,
+        scanAllTranscriptPhrases: policyBulletMode,
+        minPhraseWords: visibleThreshold.bigWords,
+        evidenceThreshold: visibleThreshold,
+        overrideWordThreshold: policyBulletMode ? _strictPhraseThreshold : null,
         minPhraseScore:
-            strictBulletMode ? _strictPhraseThreshold : _matchThreshold,
+            policyBulletMode ? _strictPhraseThreshold : _matchThreshold,
         debugPrefix: 'NEAR_PHRASE_PRIORITY',
       );
       if (nearbyPhrase != null) return nearbyPhrase;
@@ -520,7 +681,9 @@ class WordAligner {
     // ── STEP 3: MULTI-WORD SEQUENCE CONFIRMATION ────────────────────────────
     // Use the last K spoken words to find a matching sequence in the script.
     // This helps confirm position when single words are ambiguous.
-    const k = 3;
+    final k = visibleSkipEnabled
+        ? visibleThreshold.smallWords
+        : localThreshold.smallWords;
     final recentWords = transcriptWords.length > k
         ? transcriptWords.sublist(transcriptWords.length - k)
         : transcriptWords;
@@ -547,7 +710,7 @@ class WordAligner {
         final spokenWord = recentWords[j];
 
         final sim = _wordSimilarity(spokenWord, scriptWord, script[si].isRtl);
-        final threshold = strictBulletMode
+        final threshold = policyBulletMode
             ? _strictPhraseThreshold
             : (script[si].isRtl ? _hebrewMatchThreshold : _matchThreshold);
         if (sim >= threshold) {
@@ -573,10 +736,10 @@ class WordAligner {
                 .clamp(0, script.length)
                 .toInt();
         // For large jumps, require at least 2 matching words for confidence
-        final minMatches = strictBulletMode
-            ? (seqJump > 1 ? 2 : 1)
-            : (seqJump > _maxSingleJump ? 2 : 1);
-        if (matchCount >= minMatches && seqJump <= maxSeqJump) {
+        final thresholdForSeq =
+            visibleSkipEnabled ? visibleThreshold : localThreshold;
+        final matchedWords = recentWords.take(matchCount);
+        if (thresholdForSeq.passes(matchedWords) && seqJump <= maxSeqJump) {
           bestSeqScore = normalizedScore;
           bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
           bestSeqDebug =
@@ -586,7 +749,7 @@ class WordAligner {
     }
 
     final minSeqScore =
-        strictBulletMode ? _strictPhraseThreshold : _matchThreshold;
+        policyBulletMode ? _strictPhraseThreshold : _matchThreshold;
     if (bestSeqScore >= minSeqScore && bestSeqEndIdx > lastConfirmedIndex) {
       return AlignmentResult(
           bestSeqEndIdx, bestSeqScore, '$bestSeqDebug\n$debugScans');
@@ -597,8 +760,12 @@ class WordAligner {
     // during improvisation — the user is saying something not in the script.
     final nextExpected =
         searchStart < script.length ? script[searchStart].normalized : '?';
-    return AlignmentResult(lastConfirmedIndex, bestSingleSim.clamp(0.0, 1.0),
-        'NO_MATCH: heard="${lastSpoken}" expected="${nextExpected}" bestSim=${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
+    return AlignmentResult(
+      lastConfirmedIndex,
+      bestSingleSim.clamp(0.0, 1.0),
+      'NO_MATCH: heard="${lastSpoken}" expected="${nextExpected}" bestSim=${bestSingleSim.toStringAsFixed(2)}\n$debugScans',
+      SttAlignmentDecision.wait,
+    );
   }
 
   static AlignmentResult? _nearbyPhrasePriorityMatch({
@@ -610,6 +777,7 @@ class WordAligner {
     int maxPhraseWords = _nearPhraseMaxWords,
     int? maxJump,
     int minPhraseWords = 3,
+    SttEvidenceThreshold? evidenceThreshold,
     bool scanFullWindow = false,
     bool scanAllTranscriptPhrases = false,
     double? overrideWordThreshold,
@@ -648,7 +816,11 @@ class WordAligner {
           transcriptStart,
           transcriptStart + phraseLen,
         );
-        if (!_hasUsefulPhraseWords(spokenPhrase, minPhraseWords)) continue;
+        if (evidenceThreshold != null) {
+          if (!evidenceThreshold.passes(spokenPhrase)) continue;
+        } else if (!_hasUsefulPhraseWords(spokenPhrase, minPhraseWords)) {
+          continue;
+        }
 
         double bestScore = 0.0;
         int bestStart = -1;

@@ -158,6 +158,45 @@ void main() {
     );
     expect(text, isNot(contains('[align=right][**')));
   });
+
+  test('DOCX import preserves RTL bracket dash paragraph as source truth',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('docx_rtl_dash_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/rtl_dash.docx');
+    await file.writeAsBytes(_docxBytes('''
+<w:p>
+  <w:pPr><w:bidi/></w:pPr>
+  <w:r><w:rPr><w:rtl/></w:rPr><w:t>\u05d0\u05e0\u05d9 \u05d1\u05db\u05dc\u05dc \u05de\u05e8\u05d2\u05d9\u05e9 \u05e9\u05d4\u05db\u05d1\u05d5\u05d3 \u05e9\u05dc\u05d4\u05dd \u05d0\u05dc\u05d9 \u05db\u05d0\u05d1\u05d0 \u05d9\u05e8\u05d3 \u05d1\u05de\u05dc\u05d7\u05de\u05d4.</w:t></w:r>
+  <w:r><w:rPr><w:b/><w:rtl/></w:rPr><w:t>[\u05d0\u05e0\u05d9 \u05dc\u05d0 \u05d9\u05d5\u05e9\u05d1 \u05d1\u05e8\u05d0\u05e9 \u05d4\u05e9\u05d5\u05dc\u05d7\u05df?]- \u05d4\u05d9\u05dc\u05d3\u05d9\u05dd \u05d4\u05d0\u05dc\u05d4 \u05db\u05d1\u05e8 \u05e9\u05e0\u05d9\u05dd \u05dc\u05d0 \u05dc\u05d5\u05de\u05d3\u05d9\u05dd.</w:t></w:r>
+  <w:r><w:rPr><w:b/><w:rtl/></w:rPr><w:t>[\u05de\u05e4\u05d7\u05d3 \u05e9\u05d4\u05dd \u05d9\u05e6\u05d0\u05d5 \u05dc\u05d9 \u05d7\u05d1\u05e8\u05d9 \u05db\u05e0\u05e1\u05ea]</w:t></w:r>
+</w:p>
+'''));
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(text, contains('[align=right]'));
+    expect(
+      text,
+      contains(
+        '[\u05d0\u05e0\u05d9 \u05dc\u05d0 \u05d9\u05d5\u05e9\u05d1 \u05d1\u05e8\u05d0\u05e9 \u05d4\u05e9\u05d5\u05dc\u05d7\u05df?]- \u05d4\u05d9\u05dc\u05d3\u05d9\u05dd',
+      ),
+    );
+    expect(
+      text,
+      contains(
+        '[\u05de\u05e4\u05d7\u05d3 \u05e9\u05d4\u05dd \u05d9\u05e6\u05d0\u05d5 \u05dc\u05d9 \u05d7\u05d1\u05e8\u05d9 \u05db\u05e0\u05e1\u05ea]',
+      ),
+    );
+    expect(text,
+        isNot(contains('\u05dc\u05d5\u05de\u05d3\u05d9\u05dd.\u05dc\u05d0')));
+  });
 }
 
 List<int> _docxBytes(String bodyXml) {

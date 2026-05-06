@@ -1,4 +1,5 @@
 import 'package:autoteleprompter/features/script/models/script_word.dart';
+import 'package:autoteleprompter/features/settings/providers/settings_provider.dart';
 import 'package:autoteleprompter/features/teleprompter/providers/teleprompter_provider.dart';
 import 'package:autoteleprompter/features/teleprompter/services/word_aligner.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,179 +24,177 @@ List<ScriptWord> _words(List<String> raw) {
 }
 
 void main() {
-  group('Windows strict bullet/header STT', () {
-    test('normal mode waits for at least three spoken words', () {
+  group('Windows v5 STT recognition policy', () {
+    test('evidence thresholds use small and big word weights', () {
+      expect(
+        const SttEvidenceThreshold(4).passes(['one', 'two', 'red', 'sun']),
+        isTrue,
+      );
+      expect(
+        const SttEvidenceThreshold(4).passes(['alpha', 'bravo', 'delta']),
+        isTrue,
+      );
+      expect(
+        const SttEvidenceThreshold(4).passes(['one', 'two', 'red']),
+        isFalse,
+      );
+      expect(const SttEvidenceThreshold(2).passes(['alpha']), isTrue);
+      expect(
+        const SttEvidenceThreshold(2).passes(['one', 'two']),
+        isTrue,
+      );
+      expect(
+        const SttEvidenceThreshold(5).passes(['one', 'two', 'red', 'sun']),
+        isFalse,
+      );
+      expect(
+        const SttEvidenceThreshold(5)
+            .passes(['alpha', 'bravo', 'delta', 'gamma']),
+        isTrue,
+      );
+    });
+
+    test('normal mode does not advance from one or two unlocked words', () {
       final script = _words(['intro', 'alpha', 'beta', 'gamma', 'delta']);
 
-      final result = WordAligner.align(
+      final oneWord = WordAligner.align(
         script: script,
-        transcript: 'delta',
+        transcript: 'alpha',
+        lastConfirmedIndex: 0,
+      );
+      final twoWords = WordAligner.align(
+        script: script,
+        transcript: 'alpha beta',
         lastConfirmedIndex: 0,
       );
 
-      expect(result.confirmedWordIndex, 0);
-      expect(result.debugInfo, contains('WAIT_MIN_WORDS'));
+      expect(oneWord.confirmedWordIndex, 0);
+      expect(oneWord.decision, SttAlignmentDecision.wait);
+      expect(twoWords.confirmedWordIndex, 0);
+      expect(twoWords.decision, SttAlignmentDecision.standby);
     });
 
-    test('normal mode advances after three spoken words confirm position', () {
-      final script = _words(['intro', 'alpha', 'beta', 'gamma', 'delta']);
+    test('normal mode advances after the start threshold is met', () {
+      final script = _words(['intro', 'one', 'two', 'red', 'sun']);
 
       final result = WordAligner.align(
         script: script,
-        transcript: 'beta gamma delta',
+        transcript: 'one two red sun',
         lastConfirmedIndex: 0,
       );
 
       expect(result.confirmedWordIndex, 4);
+      expect(result.decision, SttAlignmentDecision.advance);
     });
 
-    test('strict mode blocks local single-word guessed skips', () {
-      final script = _words(['intro', 'alpha', 'beta', 'gamma', 'delta']);
-
-      final result = WordAligner.align(
-        script: script,
-        transcript: 'delta',
-        lastConfirmedIndex: 0,
-        strictBulletMode: true,
-      );
-
-      expect(result.confirmedWordIndex, 0);
-    });
-
-    test('strict mode still advances on deliberate next word', () {
-      final script = _words(['intro', 'alpha', 'beta']);
+    test('normal standby allows local recovery with one big word', () {
+      final script = _words(['intro', 'alpha', 'beta', 'gamma']);
 
       final result = WordAligner.align(
         script: script,
         transcript: 'alpha',
         lastConfirmedIndex: 0,
-        strictBulletMode: true,
+        readingStandby: true,
       );
 
       expect(result.confirmedWordIndex, 1);
-      expect(result.confidence, greaterThanOrEqualTo(0.82));
+      expect(result.decision, SttAlignmentDecision.advance);
     });
 
-    test('strict mode allows visible multi-word bullet jump', () {
-      final script = _words(['intro', 'alpha', 'beta', 'gamma', 'delta']);
+    test('normal off-script speech breaks standby without force-skip', () {
+      final script = _words(['intro', 'alpha', 'beta', 'gamma']);
 
       final result = WordAligner.align(
         script: script,
-        transcript: 'gamma delta',
+        transcript: 'unrelated improvisation',
         lastConfirmedIndex: 0,
-        maxSkipTargetIndex: 4,
-        strictBulletMode: true,
+        readingStandby: true,
       );
 
-      expect(result.confirmedWordIndex, 4);
-      expect(result.confidence, greaterThanOrEqualTo(0.78));
-    });
-
-    test('strict mode relocks to a visible phrase after improvised preface',
-        () {
-      final script = _words([
-        'intro',
-        'alpha',
-        'beta',
-        'story',
-        'of',
-        'the',
-        'Samaritan',
-        'woman',
-        'at',
-        'the',
-        'well',
-      ]);
-
-      final result = WordAligner.align(
-        script: script,
-        transcript:
-            'today I want to explain this with my own words story of the Samaritan woman and then continue',
-        lastConfirmedIndex: 0,
-        maxSkipTargetIndex: script.length - 1,
-        strictBulletMode: true,
-      );
-
-      expect(result.confirmedWordIndex, 7);
-      expect(result.confidence, greaterThanOrEqualTo(0.78));
-    });
-
-    test('strict mode allows visible Hebrew phrase jump', () {
-      final script = [
-        _word('intro', 0),
-        _word(_hOpening, 1, rtl: true),
-        _word(_hBlessing, 2, rtl: true),
-        _word(_hClosing, 3, rtl: true),
-      ];
-
-      final result = WordAligner.align(
-        script: script,
-        transcript: '$_hBlessing $_hClosing',
-        lastConfirmedIndex: 0,
-        maxSkipTargetIndex: 3,
-        strictBulletMode: true,
-      );
-
-      expect(result.confirmedWordIndex, 3);
-      expect(result.confidence, greaterThanOrEqualTo(0.78));
-    });
-
-    test('strict mode relocks to visible Hebrew after improvised preface', () {
-      final script = [
-        _word('intro', 0),
-        _word(_hOpening, 1, rtl: true),
-        _word(_hBlessing, 2, rtl: true),
-        _word(_hClosing, 3, rtl: true),
-      ];
-
-      final result = WordAligner.align(
-        script: script,
-        transcript: 'random words before $_hOpening $_hBlessing after',
-        lastConfirmedIndex: 0,
-        maxSkipTargetIndex: 3,
-        strictBulletMode: true,
-      );
-
-      expect(result.confirmedWordIndex, 2);
-      expect(result.confidence, greaterThanOrEqualTo(0.78));
-    });
-
-    test('strict mode disables provider force-skip', () {
+      expect(result.confirmedWordIndex, 0);
+      expect(result.decision, SttAlignmentDecision.wait);
       expect(
         TeleprompterNotifier.shouldForceSkipAfterNoProgress(
-          strictBulletMode: true,
+          strictBulletMode: false,
           noProgressCount: 100,
           skipThreshold: 45,
         ),
         isFalse,
       );
-
-      expect(
-        TeleprompterNotifier.shouldForceSkipAfterNoProgress(
-          strictBulletMode: false,
-          noProgressCount: 45,
-          skipThreshold: 45,
-        ),
-        isTrue,
-      );
     });
 
-    test('strict mode uses visible window even when visible skip toggle is off',
-        () {
+    test('bullet mode requires two big words or three small words', () {
+      final script = _words(['intro', 'alpha', 'bravo', 'one', 'two', 'red']);
+
+      final singleBig = WordAligner.align(
+        script: script,
+        transcript: 'alpha',
+        lastConfirmedIndex: 0,
+        policy: SttRecognitionPolicy.legacy(strictBulletMode: true),
+      );
+      final twoBig = WordAligner.align(
+        script: script,
+        transcript: 'alpha bravo',
+        lastConfirmedIndex: 0,
+        policy: SttRecognitionPolicy.legacy(strictBulletMode: true),
+      );
+      final threeSmall = WordAligner.align(
+        script: script,
+        transcript: 'one two red',
+        lastConfirmedIndex: 2,
+        policy: SttRecognitionPolicy.legacy(strictBulletMode: true),
+      );
+
+      expect(singleBig.confirmedWordIndex, 0);
+      expect(singleBig.decision, SttAlignmentDecision.wait);
+      expect(twoBig.confirmedWordIndex, 2);
+      expect(twoBig.decision, SttAlignmentDecision.advance);
+      expect(threeSmall.confirmedWordIndex, 5);
+      expect(threeSmall.decision, SttAlignmentDecision.advance);
+    });
+
+    test('bullet mode treats unrelated words as listen-and-wait', () {
+      final script = _words(['intro', 'alpha', 'bravo', 'charlie']);
+
+      final result = WordAligner.align(
+        script: script,
+        transcript: 'unrelated words',
+        lastConfirmedIndex: 0,
+        policy: SttRecognitionPolicy.legacy(strictBulletMode: true),
+      );
+
+      expect(result.confirmedWordIndex, 0);
+      expect(result.decision, SttAlignmentDecision.wait);
+    });
+
+    test('bullet mode can relock to a visible Hebrew phrase', () {
+      final script = [
+        _word('intro', 0),
+        _word(_hOpening, 1, rtl: true),
+        _word(_hBlessing, 2, rtl: true),
+        _word(_hClosing, 3, rtl: true),
+      ];
+
+      final result = WordAligner.align(
+        script: script,
+        transcript: '$_hOpening $_hBlessing $_hClosing',
+        lastConfirmedIndex: 0,
+        maxSkipTargetIndex: 3,
+        policy: SttRecognitionPolicy.legacy(
+          strictBulletMode: true,
+          visibleSkipEnabled: true,
+        ),
+      );
+
+      expect(result.confirmedWordIndex, 3);
+      expect(result.decision, SttAlignmentDecision.advance);
+    });
+
+    test('strict bullet no longer enables visible skip by itself', () {
       expect(
         TeleprompterNotifier.resolveVisibleSkipTarget(
           visibleSkipEnabled: false,
           strictBulletMode: true,
-          visibleWordStart: 10,
-          visibleWordEnd: 40,
-        ),
-        40,
-      );
-
-      expect(
-        TeleprompterNotifier.resolveVisibleSkipTarget(
-          visibleSkipEnabled: false,
-          strictBulletMode: false,
           visibleWordStart: 10,
           visibleWordEnd: 40,
         ),
@@ -203,27 +202,29 @@ void main() {
       );
     });
 
-    test('strict improvisation suppresses normal stuck recovery', () {
-      expect(
-        TeleprompterNotifier.shouldUseImprovisationNoMatch(
-          strictBulletMode: true,
-          alignedIndex: 0,
-          currentIndex: 0,
-        ),
-        isTrue,
+    test('manual profile overrides mode buttons with custom thresholds', () {
+      const settings = AppSettings(
+        sttManualProfileEnabled: true,
+        sttStrictBulletMode: true,
+        sttVisibleSkipEnabled: true,
+        sttHardVisibleSkipEnabled: true,
+        sttManualStartAdvanceSmallWords: 6,
+        sttManualSafetySmallWords: 3,
+        sttManualVisibleSkipSmallWords: 0,
       );
 
-      expect(
-        TeleprompterNotifier.shouldUseImprovisationNoMatch(
-          strictBulletMode: false,
-          alignedIndex: 0,
-          currentIndex: 0,
-        ),
-        isFalse,
+      final policy = TeleprompterNotifier.recognitionPolicyForSettings(
+        settings,
       );
+
+      expect(policy.bulletMode, isFalse);
+      expect(policy.visibleSkipEnabled, isFalse);
+      expect(policy.hardVisibleSkipEnabled, isFalse);
+      expect(policy.startAdvance.smallWords, 6);
+      expect(policy.safetyRecovery.smallWords, 3);
     });
 
-    test('strict improvisation caps standby wait counter', () {
+    test('strict improvisation still caps the visible-assist wait counter', () {
       expect(
         TeleprompterNotifier.nextNoProgressCount(
           currentCount: 20,
@@ -231,63 +232,6 @@ void main() {
           visibleAssistThreshold: 2,
         ),
         2,
-      );
-
-      expect(
-        TeleprompterNotifier.nextNoProgressCount(
-          currentCount: 20,
-          improvising: false,
-          visibleAssistThreshold: 2,
-        ),
-        21,
-      );
-    });
-
-    test('visible relock ignores stale words before the visible start', () {
-      final script = _words([
-        'intro',
-        'one',
-        'two',
-        'three',
-        'four',
-        'five',
-        'hidden',
-        'target',
-        'phrase',
-        'visible',
-        'safe',
-        'heading',
-      ]);
-
-      final result = WordAligner.align(
-        script: script,
-        transcript: 'hidden target phrase',
-        lastConfirmedIndex: 0,
-        visibleSkipStartIndex: 9,
-        maxSkipTargetIndex: 11,
-        strictBulletMode: false,
-      );
-
-      expect(result.confirmedWordIndex, 0);
-    });
-
-    test('provider trusts only targets inside the visible window', () {
-      expect(
-        TeleprompterNotifier.isTrustedVisibleSkipTarget(
-          alignedIndex: 12,
-          visibleWordStart: 10,
-          visibleWordEnd: 20,
-        ),
-        isTrue,
-      );
-
-      expect(
-        TeleprompterNotifier.isTrustedVisibleSkipTarget(
-          alignedIndex: 8,
-          visibleWordStart: 10,
-          visibleWordEnd: 20,
-        ),
-        isFalse,
       );
     });
   });

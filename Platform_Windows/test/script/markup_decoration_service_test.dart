@@ -75,4 +75,21 @@ void main() {
     expect(merged.first.right, 210);
     expect(merged.last.top, 50);
   });
+
+  test('active selection merge gap stays precise', () {
+    final merged = MarkupDecorationBoxMerger.merge(
+      const [
+        Rect.fromLTRB(100, 10, 150, 30),
+        Rect.fromLTRB(162, 10, 220, 30),
+        Rect.fromLTRB(260, 10, 320, 30),
+      ],
+      rowTolerance: 4,
+      gapTolerance: 12,
+    );
+
+    expect(merged, hasLength(2));
+    expect(merged.first.left, 100);
+    expect(merged.first.right, 220);
+    expect(merged.last.left, 260);
+  });
 }

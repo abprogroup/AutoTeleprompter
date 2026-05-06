@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import '../markup_controller.dart';
-import '../../../../../core/extensions/string_extensions.dart';
 
 /// Walk a render tree to find the first RenderEditable.
 RenderEditable? _findRenderEditable(RenderObject obj) {
@@ -1005,8 +1003,16 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       return;
     }
 
-    final startPos = _getPositionInStack(_startBlock!, _startOffset!);
-    final endPos = _getPositionInStack(_endBlock!, _endOffset!);
+    final startPos = _getPositionInStack(
+      _startBlock!,
+      _startOffset!,
+      endpointA: true,
+    );
+    final endPos = _getPositionInStack(
+      _endBlock!,
+      _endOffset!,
+      endpointA: false,
+    );
 
     setState(() {
       _handleStartPos = startPos;
@@ -1014,7 +1020,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     });
   }
 
-  Offset? _getPositionInStack(int blockIdx, int offset) {
+  Offset? _getPositionInStack(
+    int blockIdx,
+    int offset, {
+    required bool endpointA,
+  }) {
     if (blockIdx < 0 || blockIdx >= widget.blockKeys.length) return null;
     final key = widget.blockKeys[blockIdx];
     final renderObj = key.currentContext?.findRenderObject();
@@ -1025,11 +1035,44 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (ourStack == null) return null;
 
     if (editable != null) {
+      final safeOffset =
+          offset.clamp(0, widget.controllers[blockIdx].text.length).toInt();
       final caretOffset = editable.getLocalRectForCaret(
-        TextPosition(offset: offset, affinity: TextAffinity.downstream),
+        TextPosition(offset: safeOffset, affinity: TextAffinity.downstream),
       );
+      var endpointX = caretOffset.left;
+      final range = _normalizedRange();
+      if (range != null) {
+        final isRangeStart = _endpointIsRangeStart(endpointA);
+        final blockTextLength = widget.controllers[blockIdx].text.length;
+        final selection = blockIdx == range.startBlock &&
+                blockIdx == range.endBlock
+            ? TextSelection(
+                baseOffset: range.startOffset.clamp(0, blockTextLength).toInt(),
+                extentOffset: range.endOffset.clamp(0, blockTextLength).toInt(),
+              )
+            : blockIdx == range.startBlock
+                ? TextSelection(
+                    baseOffset:
+                        range.startOffset.clamp(0, blockTextLength).toInt(),
+                    extentOffset: blockTextLength,
+                  )
+                : blockIdx == range.endBlock
+                    ? TextSelection(
+                        baseOffset: 0,
+                        extentOffset:
+                            range.endOffset.clamp(0, blockTextLength).toInt(),
+                      )
+                    : TextSelection(
+                        baseOffset: 0, extentOffset: blockTextLength);
+        final endpoints = editable.getEndpointsForSelection(selection);
+        if (endpoints.isNotEmpty) {
+          endpointX =
+              (isRangeStart ? endpoints.first : endpoints.last).point.dx;
+        }
+      }
       final anchor = Offset(
-        caretOffset.left,
+        endpointX,
         caretOffset.top + caretOffset.height / 2,
       );
       return editable.localToGlobal(anchor, ancestor: ourStack);
@@ -1039,18 +1082,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     return box.localToGlobal(Offset.zero, ancestor: ourStack);
   }
 
-  Offset _handleVisualCenter(Offset caret, bool endpointA) {
-    final isRangeStart = _endpointIsRangeStart(endpointA);
-    final block = endpointA ? _startBlock : _endBlock;
-    final isRtl = block != null &&
-        block >= 0 &&
-        block < widget.controllers.length &&
-        widget.controllers[block].text.isHebrew;
-    final placeLeftOfCaret = isRtl ? !isRangeStart : isRangeStart;
-    final dx = placeLeftOfCaret
-        ? caret.dx - _handleBarWidth / 2 - 2.0
-        : caret.dx + _handleBarWidth / 2 + 2.0;
-    return Offset(dx, caret.dy);
+  Offset _handleVisualCenter(Offset caret, bool _) {
+    return caret;
   }
 
   /// v4.0.8: Called after a style command mutates text so that _startOffset /

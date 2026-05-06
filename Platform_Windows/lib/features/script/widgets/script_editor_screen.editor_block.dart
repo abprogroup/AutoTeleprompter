@@ -83,11 +83,8 @@ class _EditorBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleText = MarkupDecorationParser.visibleText(controller.text);
-    final hasVisibleText = visibleText.trim().isNotEmpty;
-    final isRtl = hasVisibleText
-        ? controller.text.isHebrew
-        : (inheritedRtl ?? controller.text.isHebrew);
+    final isRtl = inheritedRtl ??
+        EditorTextGeometryService.resolveTextRtl(controller.text);
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;

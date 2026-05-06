@@ -627,17 +627,11 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   }) {
     final controller = _controllers[index];
     final settings = ref.read(settingsProvider);
-    final isRtl = controller.text.isHebrew;
-
-    // 1. Determine alignment
-    TextAlign textAlign = isRtl ? TextAlign.right : TextAlign.left;
-    if (RegExp(r'\[(?:align=)?center\]').hasMatch(controller.text)) {
-      textAlign = TextAlign.center;
-    } else if (RegExp(r'\[(?:align=)?right\]').hasMatch(controller.text)) {
-      textAlign = TextAlign.right;
-    } else if (RegExp(r'\[(?:align=)?left\]').hasMatch(controller.text)) {
-      textAlign = TextAlign.left;
-    }
+    final isRtl = _editorBlockResolvedRtl(index);
+    final textAlign = EditorTextGeometryService.resolveTextAlign(
+      controller.text,
+      isRtl: isRtl,
+    );
 
     // 2. Build style
     final style = TextStyle(

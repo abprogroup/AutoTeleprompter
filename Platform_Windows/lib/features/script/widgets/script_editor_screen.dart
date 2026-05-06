@@ -35,6 +35,7 @@ import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
 import '../services/markup_export_service.dart';
 import '../services/markup_decoration_service.dart';
+import '../services/editor_text_geometry_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../models/script_word.dart';
 import '../../../platform/file_import/platform_file_import.dart';
@@ -218,21 +219,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     });
   }
 
-  bool _editorBlockInheritedRtl(int index) {
-    bool hasVisibleText(MarkupController controller) =>
-        MarkupDecorationParser.visibleText(controller.text).trim().isNotEmpty;
+  List<String> get _editorRawBlocks =>
+      _controllers.map((controller) => controller.text).toList(growable: false);
 
-    for (var i = index - 1; i >= 0; i--) {
-      if (hasVisibleText(_controllers[i])) {
-        return _controllers[i].text.isHebrew;
-      }
-    }
-    for (var i = index + 1; i < _controllers.length; i++) {
-      if (hasVisibleText(_controllers[i])) {
-        return _controllers[i].text.isHebrew;
-      }
-    }
-    return false;
+  bool _editorBlockResolvedRtl(int index) {
+    return EditorTextGeometryService.resolveBlockRtl(_editorRawBlocks, index);
   }
 
   @override
@@ -788,7 +779,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                         settings: settings,
                                         isGlobalSelected: _isGlobalSelection,
                                         inheritedRtl:
-                                            _editorBlockInheritedRtl(index),
+                                            _editorBlockResolvedRtl(index),
                                         onSubmitted: () => _addBlock(index + 1),
                                         onTap: () {
                                           // Secondary safety, though Listener should handle it
@@ -1459,7 +1450,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     // arrow-left maps to "logical backward" (offset--), which in RTL displays
     // visually RIGHT — opposite of what users expect. For RTL we override and
     // drive the cursor manually so left=visually-left and right=visually-right.
-    final isRtl = controller.text.isHebrew;
+    final isRtl = _editorBlockResolvedRtl(idx);
     final sel = controller.selection;
     final textLen = controller.text.length;
 
@@ -2014,7 +2005,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     final visibleText = StylingService.stripTags(rawText);
     final visibleLength = visibleText.length;
     if (visibleLength <= 0) {
-      return _horizontalCrossBlockTarget(blockIndex: blockIndex, key: key);
+      return (block: blockIndex, offset: 0);
     }
 
     final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
@@ -2031,7 +2022,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     );
     final painterText = layout.painter.text?.toPlainText() ?? '';
     if (painterText.isEmpty) {
-      return _horizontalCrossBlockTarget(blockIndex: blockIndex, key: key);
+      return (block: blockIndex, offset: 0);
     }
 
     final rawStops = <int>{};
@@ -2134,7 +2125,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   }) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final controller = _controllers[blockIndex];
-    final isRtl = controller.text.isHebrew;
+    final isRtl = _editorBlockResolvedRtl(blockIndex);
     final visibleText = StylingService.stripTags(controller.text);
     final visibleLength = visibleText.length;
     final safeRaw = rawOffset.clamp(0, controller.text.length).toInt();
@@ -2228,22 +2219,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         ),
       ),
     );
-  }
-
-  ({int block, int offset})? _horizontalCrossBlockTarget({
-    required int blockIndex,
-    required LogicalKeyboardKey key,
-  }) {
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (blockIndex <= 0) return null;
-      return (
-        block: blockIndex - 1,
-        offset:
-            MarkupController.safeEndOffset(_controllers[blockIndex - 1].text),
-      );
-    }
-    if (blockIndex >= _controllers.length - 1) return null;
-    return (block: blockIndex + 1, offset: 0);
   }
 
   List<({int raw, int line, double x})> _collapseDuplicateVisualCaretStops(

@@ -382,7 +382,7 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
     final merged = MarkupDecorationBoxMerger.merge(
       boxes,
       rowTolerance: 5.0,
-      gapTolerance: 48.0,
+      gapTolerance: 12.0,
     );
     if (merged.isEmpty) return;
 
@@ -393,9 +393,9 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
     canvas.translate(contentPadding.left, contentPadding.top);
     for (final rect in merged) {
       final band = Rect.fromLTRB(
-        rect.left - 1.0,
+        rect.left - 0.5,
         rect.top,
-        rect.right + 1.0,
+        rect.right + 0.5,
         rect.bottom,
       );
       final radius = Radius.circular((band.height * 0.10).clamp(2.0, 6.0));

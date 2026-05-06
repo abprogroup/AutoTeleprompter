@@ -247,7 +247,7 @@ class MarkupTextDecorationPainter extends CustomPainter {
       final merged = MarkupDecorationBoxMerger.merge(
         boxes,
         rowTolerance: 5.0,
-        gapTolerance: 12.0,
+        gapTolerance: type == MarkupDecorationType.background ? 48.0 : 24.0,
       );
       if (type == MarkupDecorationType.background) {
         _paintBackground(canvas, merged, range.color ?? Colors.transparent);
@@ -296,8 +296,14 @@ class MarkupTextDecorationPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.fill;
     for (final rect in rects) {
-      final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 6.0));
-      canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+      final band = Rect.fromLTRB(
+        rect.left - 1.0,
+        rect.top,
+        rect.right + 1.0,
+        rect.bottom,
+      );
+      final radius = Radius.circular((band.height * 0.10).clamp(2.0, 6.0));
+      canvas.drawRRect(RRect.fromRectAndRadius(band, radius), paint);
     }
   }
 
@@ -376,7 +382,7 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
     final merged = MarkupDecorationBoxMerger.merge(
       boxes,
       rowTolerance: 5.0,
-      gapTolerance: 12.0,
+      gapTolerance: 48.0,
     );
     if (merged.isEmpty) return;
 
@@ -386,8 +392,14 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
     canvas.save();
     canvas.translate(contentPadding.left, contentPadding.top);
     for (final rect in merged) {
-      final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 6.0));
-      canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+      final band = Rect.fromLTRB(
+        rect.left - 1.0,
+        rect.top,
+        rect.right + 1.0,
+        rect.bottom,
+      );
+      final radius = Radius.circular((band.height * 0.10).clamp(2.0, 6.0));
+      canvas.drawRRect(RRect.fromRectAndRadius(band, radius), paint);
     }
     canvas.restore();
   }

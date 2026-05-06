@@ -1654,6 +1654,36 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     return isAsciiLetter || isDigit || isHebrew;
   }
 
+  bool _isKeyboardBidiNeutralStop(String value) {
+    if (value.isEmpty || value == _keyboardBookmarkSign) return false;
+    if (value.trim().isEmpty) return false;
+    return !_isKeyboardNavigationWordChar(value);
+  }
+
+  int _skipBidiNeutralStop({
+    required String visibleText,
+    required int from,
+    required int target,
+    required bool paragraphRtl,
+  }) {
+    if (!paragraphRtl || target == from) return target;
+    final forward = target > from;
+    var adjusted = target.clamp(0, visibleText.length).toInt();
+    if (forward) {
+      while (adjusted < visibleText.length &&
+          _isKeyboardBidiNeutralStop(visibleText[adjusted - 1])) {
+        adjusted++;
+      }
+    } else {
+      while (adjusted > 0 &&
+          adjusted < visibleText.length &&
+          _isKeyboardBidiNeutralStop(visibleText[adjusted])) {
+        adjusted--;
+      }
+    }
+    return adjusted.clamp(0, visibleText.length).toInt();
+  }
+
   ({int block, int offset})? _controlVerticalTarget({
     required int blockIndex,
     required int focusOffset,
@@ -1830,6 +1860,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         rawOffset: offset,
         key: key,
         allowInBlockStep: allowInBlockHorizontalStep,
+        skipBidiNeutralStops: keyboard.isShiftPressed &&
+            !keyboard.isControlPressed &&
+            !keyboard.isAltPressed &&
+            !keyboard.isMetaPressed,
       );
     }
     return null;
@@ -1972,6 +2006,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     required int rawOffset,
     required LogicalKeyboardKey key,
     required bool allowInBlockStep,
+    bool skipBidiNeutralStops = false,
   }) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final controller = _controllers[blockIndex];
@@ -2001,7 +2036,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           block: blockIndex,
           offset: MarkupController.visualToRawOffset(
             controller.text,
-            (visibleOffset - 1).clamp(0, visibleLength).toInt(),
+            _skipBidiNeutralStop(
+              visibleText: visibleText,
+              from: visibleOffset,
+              target: (visibleOffset - 1).clamp(0, visibleLength).toInt(),
+              paragraphRtl: isRtl && skipBidiNeutralStops,
+            ),
           ),
         );
       }
@@ -2014,7 +2054,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         block: blockIndex,
         offset: MarkupController.visualToRawOffset(
           controller.text,
-          (visibleOffset + 1).clamp(0, visibleLength).toInt(),
+          _skipBidiNeutralStop(
+            visibleText: visibleText,
+            from: visibleOffset,
+            target: (visibleOffset + 1).clamp(0, visibleLength).toInt(),
+            paragraphRtl: isRtl && skipBidiNeutralStops,
+          ),
         ),
       );
     }
@@ -2029,7 +2074,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         block: blockIndex,
         offset: MarkupController.visualToRawOffset(
           controller.text,
-          (visibleOffset + 1).clamp(0, visibleLength).toInt(),
+          _skipBidiNeutralStop(
+            visibleText: visibleText,
+            from: visibleOffset,
+            target: (visibleOffset + 1).clamp(0, visibleLength).toInt(),
+            paragraphRtl: skipBidiNeutralStops,
+          ),
         ),
       );
     }
@@ -2046,7 +2096,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       block: blockIndex,
       offset: MarkupController.visualToRawOffset(
         controller.text,
-        (visibleOffset - 1).clamp(0, visibleLength).toInt(),
+        _skipBidiNeutralStop(
+          visibleText: visibleText,
+          from: visibleOffset,
+          target: (visibleOffset - 1).clamp(0, visibleLength).toInt(),
+          paragraphRtl: skipBidiNeutralStops,
+        ),
       ),
     );
   }
@@ -2088,6 +2143,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
             rawOffset: selection.baseOffset,
             key: key,
             allowInBlockStep: manualInBlock,
+            skipBidiNeutralStops: false,
           );
     if (target == null) return KeyEventResult.ignored;
     if (target.block != blockIndex) {

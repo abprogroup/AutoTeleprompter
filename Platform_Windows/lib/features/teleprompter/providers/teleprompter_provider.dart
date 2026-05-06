@@ -460,7 +460,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final visible = <String>[];
     for (var i = scanStart; i <= end; i++) {
       final word = words[i];
-      if (word.isNewline || word.normalized.isEmpty) continue;
+      if (!_wordCarriesLanguage(word)) continue;
       if (sectionLocales[i] != locale) continue;
       visible.add(word.normalized.normalizeForMatching());
     }
@@ -619,26 +619,62 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     });
   }
 
-  /// Current v4 metadata safely resolves Hebrew/RTL and English/LTR only.
-  /// Universal same-script language support belongs to the v5 language MVP.
-  String _localeForWord(ScriptWord word) => word.isRtl ? 'he_IL' : 'en_US';
+  /// Current v5 metadata safely resolves Hebrew/RTL and English/LTR only.
+  /// Neutral tokens such as punctuation, brackets, dashes, dates, and numbers
+  /// do not own a language. They inherit nearby real word context so `15.10`
+  /// starts Hebrew STT in a Hebrew paragraph and English STT in English text.
+  static String? _explicitLocaleForWord(ScriptWord word) {
+    if (word.isNewline) return null;
+    final text = '${word.raw} ${word.normalized}';
+    if (RegExp(r'[\u0590-\u05FF]').hasMatch(text)) return 'he_IL';
+    if (RegExp(r'[A-Za-z]').hasMatch(text)) return 'en_US';
+    return null;
+  }
 
-  /// Precompute the STT locale section for every script token. Short foreign
-  /// runs inherit surrounding context so names or isolated words do not restart
-  /// the recognizer unnecessarily.
-  void _precomputeSectionLocales(Script script) {
-    const minSectionWords = 3;
+  static bool _wordCarriesLanguage(ScriptWord word) =>
+      _explicitLocaleForWord(word) != null;
 
-    final realWords = script.words
-        .where((w) => !w.isNewline && w.normalized.isNotEmpty)
-        .toList();
-    if (realWords.isEmpty) {
-      _sectionLocales = [];
-      return;
+  static String _inheritLocaleForNeutralWord(
+    List<ScriptWord> words,
+    Map<int, String> explicitLocales,
+    int index,
+  ) {
+    String? scan(int step, {required bool stopAtNewline}) {
+      var i = index + step;
+      while (i >= 0 && i < words.length) {
+        if (stopAtNewline && words[i].isNewline) return null;
+        final locale = explicitLocales[i];
+        if (locale != null) return locale;
+        i += step;
+      }
+      return null;
     }
 
-    final raw = realWords.map(_localeForWord).toList();
-    final smoothed = List<String>.from(raw);
+    final previousInParagraph = scan(-1, stopAtNewline: true);
+    final nextInParagraph = scan(1, stopAtNewline: true);
+    if (previousInParagraph != null) return previousInParagraph;
+    if (nextInParagraph != null) return nextInParagraph;
+
+    return scan(-1, stopAtNewline: false) ??
+        scan(1, stopAtNewline: false) ??
+        'en_US';
+  }
+
+  static List<String> resolveSectionLocalesForWords(List<ScriptWord> words) {
+    const minSectionWords = 2;
+
+    final languageEntries = <({int index, String locale})>[];
+    for (var i = 0; i < words.length; i++) {
+      final locale = _explicitLocaleForWord(words[i]);
+      if (locale != null) languageEntries.add((index: i, locale: locale));
+    }
+
+    if (words.isEmpty) return [];
+    if (languageEntries.isEmpty) {
+      return List<String>.filled(words.length, 'en_US');
+    }
+
+    final smoothed = [for (final entry in languageEntries) entry.locale];
     var changed = true;
     while (changed) {
       changed = false;
@@ -664,20 +700,56 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
     }
 
-    _sectionLocales = [];
-    var realIndex = 0;
-    for (final word in script.words) {
-      if (word.isNewline || word.normalized.isEmpty) {
-        _sectionLocales.add(
-          _sectionLocales.isNotEmpty ? _sectionLocales.last : 'en_US',
-        );
+    final explicitLocales = <int, String>{
+      for (var i = 0; i < languageEntries.length; i++)
+        languageEntries[i].index: smoothed[i],
+    };
+
+    return [
+      for (var i = 0; i < words.length; i++)
+        explicitLocales[i] ??
+            _inheritLocaleForNeutralWord(words, explicitLocales, i),
+    ];
+  }
+
+  static String resolveInitialSttLocale(
+    List<ScriptWord> words, {
+    int startIndex = 0,
+    List<String>? sectionLocales,
+  }) {
+    if (words.isEmpty) return 'en_US';
+
+    final safeStart = startIndex.clamp(0, words.length - 1).toInt();
+    var hebrew = 0;
+    var english = 0;
+    String? firstLocale;
+
+    for (var i = safeStart; i < words.length && hebrew + english < 5; i++) {
+      final locale = _explicitLocaleForWord(words[i]);
+      if (locale == null) continue;
+      firstLocale ??= locale;
+      if (locale == 'he_IL') {
+        hebrew++;
       } else {
-        _sectionLocales.add(
-          realIndex < smoothed.length ? smoothed[realIndex] : 'en_US',
-        );
-        realIndex++;
+        english++;
       }
     }
+
+    if (hebrew > english) return 'he_IL';
+    if (english > hebrew) return 'en_US';
+    if (firstLocale != null) return firstLocale;
+
+    if (sectionLocales != null && sectionLocales.isNotEmpty) {
+      return sectionLocales[safeStart.clamp(0, sectionLocales.length - 1)];
+    }
+    return 'en_US';
+  }
+
+  /// Precompute the STT locale section for every script token. Short foreign
+  /// runs inherit surrounding context so names or isolated words do not restart
+  /// the recognizer unnecessarily.
+  void _precomputeSectionLocales(Script script) {
+    _sectionLocales = resolveSectionLocalesForWords(script.words);
   }
 
   void _checkAndSwitchLocale() {
@@ -813,7 +885,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     String? lastSectionLocale;
     for (var i = scanStart; i <= end; i++) {
       final word = script.words[i];
-      if (word.isNewline || word.normalized.isEmpty) continue;
+      if (!_wordCarriesLanguage(word)) continue;
       final locale = _sectionLocales[i];
       if (locale == lastSectionLocale) continue;
       lastSectionLocale = locale;
@@ -897,9 +969,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog(
         '🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
-    final localeId = startIndex < _sectionLocales.length
-        ? _sectionLocales[startIndex]
-        : (_sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US');
+    final localeId = resolveInitialSttLocale(
+      script.words,
+      startIndex: startIndex,
+      sectionLocales: _sectionLocales,
+    );
     _scriptLanguageLocale = localeId;
     _activeLocale = localeId;
 
@@ -908,11 +982,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (script.words.isNotEmpty) {
       final initialLocale = localeId;
 
-      final realWords = script.words.where((w) => !w.isNewline).toList();
-      final hebrewCount = realWords.where((w) => w.isRtl).length;
-      final ratio = hebrewCount / realWords.length;
+      final realWords = script.words.where(_wordCarriesLanguage).toList();
+      final hebrewCount =
+          realWords.where((w) => _explicitLocaleForWord(w) == 'he_IL').length;
+      final ratio = realWords.isEmpty ? 0 : hebrewCount / realWords.length;
       _addDebugLog(
-          '🌐 LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew overall)');
+          '🌐 LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew language words)');
       _addDebugLog(
           'STT START LOCALE: $localeId | sections=${_sectionLocales.toSet().length}');
     }

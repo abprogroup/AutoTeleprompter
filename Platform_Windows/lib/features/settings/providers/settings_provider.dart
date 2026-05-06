@@ -50,8 +50,12 @@ class AppSettings {
   final bool
       sttManualProfileEnabled; // Windows: custom STT recognition thresholds
   final int sttManualStartAdvanceSmallWords;
+  final int sttManualStartAdvanceBigWords;
   final int sttManualSafetySmallWords;
+  final int sttManualSafetyBigWords;
   final int sttManualVisibleSkipSmallWords; // 0 = Off
+  final int sttManualVisibleSkipBigWords; // 0 = Off
+  final int sttManualBigWordMinLetters;
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -93,8 +97,12 @@ class AppSettings {
     this.sttHardVisibleSkipEnabled = false,
     this.sttManualProfileEnabled = false,
     this.sttManualStartAdvanceSmallWords = 4,
+    this.sttManualStartAdvanceBigWords = 3,
     this.sttManualSafetySmallWords = 2,
+    this.sttManualSafetyBigWords = 1,
     this.sttManualVisibleSkipSmallWords = 0,
+    this.sttManualVisibleSkipBigWords = 0,
+    this.sttManualBigWordMinLetters = 5,
   });
 
   AppSettings copyWith({
@@ -137,8 +145,12 @@ class AppSettings {
     bool? sttHardVisibleSkipEnabled,
     bool? sttManualProfileEnabled,
     int? sttManualStartAdvanceSmallWords,
+    int? sttManualStartAdvanceBigWords,
     int? sttManualSafetySmallWords,
+    int? sttManualSafetyBigWords,
     int? sttManualVisibleSkipSmallWords,
+    int? sttManualVisibleSkipBigWords,
+    int? sttManualBigWordMinLetters,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -187,10 +199,18 @@ class AppSettings {
           sttManualProfileEnabled ?? this.sttManualProfileEnabled,
       sttManualStartAdvanceSmallWords: sttManualStartAdvanceSmallWords ??
           this.sttManualStartAdvanceSmallWords,
+      sttManualStartAdvanceBigWords:
+          sttManualStartAdvanceBigWords ?? this.sttManualStartAdvanceBigWords,
       sttManualSafetySmallWords:
           sttManualSafetySmallWords ?? this.sttManualSafetySmallWords,
+      sttManualSafetyBigWords:
+          sttManualSafetyBigWords ?? this.sttManualSafetyBigWords,
       sttManualVisibleSkipSmallWords:
           sttManualVisibleSkipSmallWords ?? this.sttManualVisibleSkipSmallWords,
+      sttManualVisibleSkipBigWords:
+          sttManualVisibleSkipBigWords ?? this.sttManualVisibleSkipBigWords,
+      sttManualBigWordMinLetters:
+          sttManualBigWordMinLetters ?? this.sttManualBigWordMinLetters,
     );
   }
 }
@@ -235,9 +255,15 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _sttManualProfileEnabledKey = 'sttManualProfileEnabled';
   static const _sttManualStartAdvanceSmallWordsKey =
       'sttManualStartAdvanceSmallWords';
+  static const _sttManualStartAdvanceBigWordsKey =
+      'sttManualStartAdvanceBigWords';
   static const _sttManualSafetySmallWordsKey = 'sttManualSafetySmallWords';
+  static const _sttManualSafetyBigWordsKey = 'sttManualSafetyBigWords';
   static const _sttManualVisibleSkipSmallWordsKey =
       'sttManualVisibleSkipSmallWords';
+  static const _sttManualVisibleSkipBigWordsKey =
+      'sttManualVisibleSkipBigWords';
+  static const _sttManualBigWordMinLettersKey = 'sttManualBigWordMinLetters';
 
   @override
   AppSettings build() {
@@ -301,6 +327,35 @@ class SettingsNotifier extends Notifier<AppSettings> {
       await prefs.setStringList(_recentScriptsKey, sanitizedRecents);
     }
 
+    final manualStartSmall =
+        (prefs.getInt(_sttManualStartAdvanceSmallWordsKey) ?? 4)
+            .clamp(2, 8)
+            .toInt();
+    final manualStartBig = (prefs.getInt(_sttManualStartAdvanceBigWordsKey) ??
+            (manualStartSmall <= 2 ? 1 : manualStartSmall - 1))
+        .clamp(1, 8)
+        .toInt();
+    final manualSafetySmall =
+        (prefs.getInt(_sttManualSafetySmallWordsKey) ?? 2).clamp(1, 5).toInt();
+    final manualSafetyBig = (prefs.getInt(_sttManualSafetyBigWordsKey) ??
+            (manualSafetySmall <= 2 ? 1 : manualSafetySmall - 1))
+        .clamp(1, 5)
+        .toInt();
+    final manualVisibleSmall =
+        (prefs.getInt(_sttManualVisibleSkipSmallWordsKey) ?? 0)
+            .clamp(0, 8)
+            .toInt();
+    final manualVisibleBig = (prefs.getInt(_sttManualVisibleSkipBigWordsKey) ??
+            (manualVisibleSmall <= 0
+                ? 0
+                : (manualVisibleSmall <= 2 ? 1 : manualVisibleSmall - 1)))
+        .clamp(0, 8)
+        .toInt();
+    final manualBigWordMinLetters =
+        (prefs.getInt(_sttManualBigWordMinLettersKey) ?? 5)
+            .clamp(3, 10)
+            .toInt();
+
     state = AppSettings(
       fontSize:
           (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(14.0, 120.0).toDouble(),
@@ -345,18 +400,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
           prefs.getBool(_sttHardVisibleSkipEnabledKey) ?? false,
       sttManualProfileEnabled:
           prefs.getBool(_sttManualProfileEnabledKey) ?? false,
-      sttManualStartAdvanceSmallWords:
-          (prefs.getInt(_sttManualStartAdvanceSmallWordsKey) ?? 4)
-              .clamp(2, 8)
-              .toInt(),
-      sttManualSafetySmallWords:
-          (prefs.getInt(_sttManualSafetySmallWordsKey) ?? 2)
-              .clamp(1, 5)
-              .toInt(),
-      sttManualVisibleSkipSmallWords:
-          (prefs.getInt(_sttManualVisibleSkipSmallWordsKey) ?? 0)
-              .clamp(0, 8)
-              .toInt(),
+      sttManualStartAdvanceSmallWords: manualStartSmall,
+      sttManualStartAdvanceBigWords: manualStartBig,
+      sttManualSafetySmallWords: manualSafetySmall,
+      sttManualSafetyBigWords: manualSafetyBig,
+      sttManualVisibleSkipSmallWords: manualVisibleSmall,
+      sttManualVisibleSkipBigWords: manualVisibleBig,
+      sttManualBigWordMinLetters: manualBigWordMinLetters,
     );
   }
 
@@ -853,6 +903,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setInt(_sttManualStartAdvanceSmallWordsKey, clamped);
   }
 
+  Future<void> setSttManualStartAdvanceBigWords(int value) async {
+    final clamped = value.clamp(1, 8).toInt();
+    state = state.copyWith(sttManualStartAdvanceBigWords: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_sttManualStartAdvanceBigWordsKey, clamped);
+  }
+
   Future<void> setSttManualSafetySmallWords(int value) async {
     final clamped = value.clamp(1, 5).toInt();
     state = state.copyWith(sttManualSafetySmallWords: clamped);
@@ -860,11 +917,50 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await prefs.setInt(_sttManualSafetySmallWordsKey, clamped);
   }
 
+  Future<void> setSttManualSafetyBigWords(int value) async {
+    final clamped = value.clamp(1, 5).toInt();
+    state = state.copyWith(sttManualSafetyBigWords: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_sttManualSafetyBigWordsKey, clamped);
+  }
+
   Future<void> setSttManualVisibleSkipSmallWords(int value) async {
     final normalized = value <= 0 ? 0 : value.clamp(2, 8).toInt();
-    state = state.copyWith(sttManualVisibleSkipSmallWords: normalized);
+    final nextBig = normalized <= 0
+        ? 0
+        : (state.sttManualVisibleSkipBigWords <= 0
+            ? 3
+            : state.sttManualVisibleSkipBigWords);
+    state = state.copyWith(
+      sttManualVisibleSkipSmallWords: normalized,
+      sttManualVisibleSkipBigWords: nextBig,
+    );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_sttManualVisibleSkipSmallWordsKey, normalized);
+    await prefs.setInt(_sttManualVisibleSkipBigWordsKey, nextBig);
+  }
+
+  Future<void> setSttManualVisibleSkipBigWords(int value) async {
+    final normalized = value <= 0 ? 0 : value.clamp(1, 8).toInt();
+    final nextSmall = normalized <= 0
+        ? 0
+        : (state.sttManualVisibleSkipSmallWords <= 0
+            ? 4
+            : state.sttManualVisibleSkipSmallWords);
+    state = state.copyWith(
+      sttManualVisibleSkipSmallWords: nextSmall,
+      sttManualVisibleSkipBigWords: normalized,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_sttManualVisibleSkipSmallWordsKey, nextSmall);
+    await prefs.setInt(_sttManualVisibleSkipBigWordsKey, normalized);
+  }
+
+  Future<void> setSttManualBigWordMinLetters(int value) async {
+    final clamped = value.clamp(3, 10).toInt();
+    state = state.copyWith(sttManualBigWordMinLetters: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_sttManualBigWordMinLettersKey, clamped);
   }
 }
 

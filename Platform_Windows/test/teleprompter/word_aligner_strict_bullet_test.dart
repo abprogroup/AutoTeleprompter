@@ -52,6 +52,23 @@ void main() {
             .passes(['alpha', 'bravo', 'delta', 'gamma']),
         isTrue,
       );
+      expect(
+        const SttEvidenceThreshold(6, 4).passes(['alpha', 'bravo', 'delta']),
+        isFalse,
+      );
+      expect(
+        const SttEvidenceThreshold(6, 4)
+            .passes(['alpha', 'bravo', 'delta', 'gamma']),
+        isTrue,
+      );
+      expect(
+        const SttEvidenceThreshold(4, 2, 7).passes(['alpha', 'bravo']),
+        isFalse,
+      );
+      expect(
+        const SttEvidenceThreshold(4, 2, 5).passes(['alpha', 'bravo']),
+        isTrue,
+      );
     });
 
     test('normal mode does not advance from one or two unlocked words', () {
@@ -209,8 +226,12 @@ void main() {
         sttVisibleSkipEnabled: true,
         sttHardVisibleSkipEnabled: true,
         sttManualStartAdvanceSmallWords: 6,
+        sttManualStartAdvanceBigWords: 4,
         sttManualSafetySmallWords: 3,
+        sttManualSafetyBigWords: 2,
         sttManualVisibleSkipSmallWords: 0,
+        sttManualVisibleSkipBigWords: 0,
+        sttManualBigWordMinLetters: 7,
       );
 
       final policy = TeleprompterNotifier.recognitionPolicyForSettings(
@@ -221,7 +242,11 @@ void main() {
       expect(policy.visibleSkipEnabled, isFalse);
       expect(policy.hardVisibleSkipEnabled, isFalse);
       expect(policy.startAdvance.smallWords, 6);
+      expect(policy.startAdvance.bigWords, 4);
+      expect(policy.startAdvance.bigWordMinLetters, 7);
       expect(policy.safetyRecovery.smallWords, 3);
+      expect(policy.safetyRecovery.bigWords, 2);
+      expect(policy.visibleSkipEnabled, isFalse);
     });
 
     test('strict improvisation still caps the visible-assist wait counter', () {

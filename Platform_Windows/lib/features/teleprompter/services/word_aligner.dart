@@ -22,12 +22,14 @@ enum SttAlignmentDecision {
 
 class SttEvidenceThreshold {
   final int smallWords;
+  final int bigWords;
+  final int bigWordMinLetters;
 
-  const SttEvidenceThreshold(this.smallWords);
+  const SttEvidenceThreshold(this.smallWords,
+      [int? bigWords, this.bigWordMinLetters = 5])
+      : bigWords = bigWords ?? (smallWords <= 2 ? 1 : smallWords - 1);
 
-  int get bigWords => smallWords <= 2 ? 1 : smallWords - 1;
-
-  double get _bigWordWeight => smallWords / bigWords;
+  double get _bigWordWeight => smallWords / bigWords.clamp(1, 99);
 
   bool passes(Iterable<String> normalizedWords) =>
       evidenceScore(normalizedWords) >= smallWords;
@@ -36,7 +38,12 @@ class SttEvidenceThreshold {
     var score = 0.0;
     for (final word in normalizedWords) {
       if (word.isEmpty) continue;
-      score += WordAligner.isBigRecognitionWord(word) ? _bigWordWeight : 1.0;
+      score += WordAligner.isBigRecognitionWord(
+        word,
+        minLetters: bigWordMinLetters,
+      )
+          ? _bigWordWeight
+          : 1.0;
     }
     return score;
   }
@@ -107,8 +114,9 @@ class WordAligner {
   static const double _strictMatchThreshold = 0.82;
   static const double _strictPhraseThreshold = 0.78;
 
-  static bool isBigRecognitionWord(String normalizedWord) =>
-      normalizedWord.trim().length >= 5;
+  static bool isBigRecognitionWord(String normalizedWord,
+          {int minLetters = 5}) =>
+      normalizedWord.trim().length >= minLetters.clamp(1, 99);
 
   /// Parse raw script text into a list of ScriptWords.
   /// Preserves paragraph breaks as isNewline=true entries.

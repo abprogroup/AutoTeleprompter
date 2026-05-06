@@ -384,17 +384,30 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static SttRecognitionPolicy recognitionPolicyForSettings(
       AppSettings settings) {
     if (settings.sttManualProfileEnabled) {
-      final manualVisible = settings.sttManualVisibleSkipSmallWords;
+      final manualVisibleSmall = settings.sttManualVisibleSkipSmallWords;
+      final manualVisibleBig = settings.sttManualVisibleSkipBigWords;
+      final manualVisibleEnabled =
+          manualVisibleSmall > 0 && manualVisibleBig > 0;
+      final bigWordMinLetters = settings.sttManualBigWordMinLetters;
       return SttRecognitionPolicy(
         bulletMode: false,
-        visibleSkipEnabled: manualVisible > 0,
+        visibleSkipEnabled: manualVisibleEnabled,
         hardVisibleSkipEnabled: false,
-        startAdvance:
-            SttEvidenceThreshold(settings.sttManualStartAdvanceSmallWords),
-        safetyRecovery:
-            SttEvidenceThreshold(settings.sttManualSafetySmallWords),
-        visibleSkip:
-            SttEvidenceThreshold(manualVisible <= 0 ? 4 : manualVisible),
+        startAdvance: SttEvidenceThreshold(
+          settings.sttManualStartAdvanceSmallWords,
+          settings.sttManualStartAdvanceBigWords,
+          bigWordMinLetters,
+        ),
+        safetyRecovery: SttEvidenceThreshold(
+          settings.sttManualSafetySmallWords,
+          settings.sttManualSafetyBigWords,
+          bigWordMinLetters,
+        ),
+        visibleSkip: SttEvidenceThreshold(
+          manualVisibleEnabled ? manualVisibleSmall : 4,
+          manualVisibleEnabled ? manualVisibleBig : 3,
+          bigWordMinLetters,
+        ),
       );
     }
 

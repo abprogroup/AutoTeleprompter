@@ -188,38 +188,44 @@ class _SwitchRow extends StatelessWidget {
   }
 }
 
-class _SttThresholdSlider extends StatelessWidget {
+class _SttThresholdPairSliders extends StatelessWidget {
   final String title;
   final String subtitle;
-  final int value;
-  final int min;
-  final int max;
+  final int smallValue;
+  final int bigValue;
+  final int smallMin;
+  final int smallMax;
+  final int bigMin;
+  final int bigMax;
   final bool allowOff;
   final Color accentColor;
-  final ValueChanged<int> onChanged;
+  final ValueChanged<int> onSmallChanged;
+  final ValueChanged<int> onBigChanged;
 
-  const _SttThresholdSlider({
+  const _SttThresholdPairSliders({
     required this.title,
     required this.subtitle,
-    required this.value,
-    required this.min,
-    required this.max,
+    required this.smallValue,
+    required this.bigValue,
+    required this.smallMin,
+    required this.smallMax,
+    required this.bigMin,
+    required this.bigMax,
     required this.allowOff,
     required this.accentColor,
-    required this.onChanged,
+    required this.onSmallChanged,
+    required this.onBigChanged,
   });
 
-  static String labelFor(int smallWords) {
-    if (smallWords <= 0) return 'Off';
-    final bigWords = smallWords <= 2 ? 1 : smallWords - 1;
+  static String labelFor(int smallWords, int bigWords) {
+    if (smallWords <= 0 || bigWords <= 0) return 'Off';
     return '$smallWords small words / $bigWords big words';
   }
 
   @override
   Widget build(BuildContext context) {
-    final sliderMin = allowOff ? 0.0 : min.toDouble();
-    final safeValue =
-        value <= 0 && allowOff ? 0.0 : value.clamp(min, max).toDouble();
+    final isOff = smallValue <= 0 || bigValue <= 0;
+    final displayLabel = labelFor(smallValue, bigValue);
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
@@ -243,9 +249,9 @@ class _SttThresholdSlider extends StatelessWidget {
                 ),
               ),
               Text(
-                labelFor(value),
+                displayLabel,
                 style: TextStyle(
-                  color: value <= 0 ? Colors.white38 : accentColor,
+                  color: isOff ? Colors.white38 : accentColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -257,19 +263,138 @@ class _SttThresholdSlider extends StatelessWidget {
             subtitle,
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
-          Slider(
+          const SizedBox(height: 6),
+          _thresholdSliderRow(
+            label: 'Small words',
+            value: smallValue,
+            min: smallMin,
+            max: smallMax,
+            allowOff: allowOff,
+            accentColor: accentColor,
+            onChanged: onSmallChanged,
+          ),
+          _thresholdSliderRow(
+            label: 'Big words',
+            value: bigValue,
+            min: bigMin,
+            max: bigMax,
+            allowOff: allowOff,
+            accentColor: accentColor,
+            onChanged: onBigChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _thresholdSliderRow({
+    required String label,
+    required int value,
+    required int min,
+    required int max,
+    required bool allowOff,
+    required Color accentColor,
+    required ValueChanged<int> onChanged,
+  }) {
+    final sliderMin = allowOff ? 0.0 : min.toDouble();
+    final safeValue =
+        value <= 0 && allowOff ? 0.0 : value.clamp(min, max).toDouble();
+    final displayValue = value <= 0 && allowOff ? 'Off' : value.toString();
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 86,
+          child: Text(
+            '$label: $displayValue',
+            style: TextStyle(
+              color: value <= 0 && allowOff ? Colors.white38 : Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Slider(
             value: safeValue,
             min: sliderMin,
             max: max.toDouble(),
             divisions: max - sliderMin.toInt(),
             activeColor: accentColor,
             inactiveColor: Colors.white24,
-            label: labelFor(value),
+            label: displayValue,
             onChanged: (next) {
               var rounded = next.round();
-              if (allowOff && rounded == 1) rounded = 2;
+              if (allowOff && rounded > 0 && rounded < min) rounded = min;
               onChanged(rounded);
             },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SttBigWordLengthSlider extends StatelessWidget {
+  final int value;
+  final Color accentColor;
+  final ValueChanged<int> onChanged;
+
+  const _SttBigWordLengthSlider({
+    required this.value,
+    required this.accentColor,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final safeValue = value.clamp(3, 10).toDouble();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Big word length',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '$value+ letters',
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Words with this many letters count as big words in all manual thresholds.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          Slider(
+            value: safeValue,
+            min: 3,
+            max: 10,
+            divisions: 7,
+            activeColor: accentColor,
+            inactiveColor: Colors.white24,
+            label: '$value+ letters',
+            onChanged: (next) => onChanged(next.round()),
           ),
         ],
       ),

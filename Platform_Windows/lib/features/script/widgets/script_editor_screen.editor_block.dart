@@ -5,6 +5,7 @@ class _EditorBlock extends StatelessWidget {
   final FocusNode focusNode;
   final AppSettings settings;
   final bool isGlobalSelected;
+  final bool? inheritedRtl;
   final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
@@ -23,6 +24,7 @@ class _EditorBlock extends StatelessWidget {
     required this.focusNode,
     required this.settings,
     required this.isGlobalSelected,
+    this.inheritedRtl,
     required this.onSubmitted,
     required this.onTap,
     required this.onSelectAll,
@@ -56,9 +58,36 @@ class _EditorBlock extends StatelessWidget {
     return maxMatch;
   }
 
+  TextSelection? _selectionForCustomPaint() {
+    final length = controller.text.length;
+    if (length <= 0) return null;
+
+    TextSelection? selection;
+    if (isGlobalSelected || controller.isGlobalSelected) {
+      selection = TextSelection(baseOffset: 0, extentOffset: length);
+    } else if (controller.externalSelection != null) {
+      final external = controller.externalSelection!;
+      if (!external.isValid || external.isCollapsed) return null;
+      selection = external;
+    } else {
+      final native = controller.selection;
+      if (!native.isValid || native.isCollapsed) return null;
+      selection = native;
+    }
+
+    final start = selection.start.clamp(0, length).toInt();
+    final end = selection.end.clamp(start, length).toInt();
+    if (end <= start) return null;
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isRtl = controller.text.isHebrew;
+    final visibleText = MarkupDecorationParser.visibleText(controller.text);
+    final hasVisibleText = visibleText.trim().isNotEmpty;
+    final isRtl = hasVisibleText
+        ? controller.text.isHebrew
+        : (inheritedRtl ?? controller.text.isHebrew);
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
@@ -76,6 +105,12 @@ class _EditorBlock extends StatelessWidget {
       forceStrutHeight: true,
     );
     const editorContentPadding = EdgeInsets.symmetric(vertical: 2);
+    final editorTextSpan = controller.buildTextSpan(
+      context: context,
+      style: editorTextStyle,
+      withComposing: false,
+    );
+    final paintSelection = _selectionForCustomPaint();
 
     return Container(
       decoration: BoxDecoration(
@@ -226,11 +261,7 @@ class _EditorBlock extends StatelessWidget {
                   child: CustomPaint(
                     painter: MarkupTextDecorationPainter(
                       rawText: controller.text,
-                      textSpan: controller.buildTextSpan(
-                        context: context,
-                        style: editorTextStyle,
-                        withComposing: false,
-                      ),
+                      textSpan: editorTextSpan,
                       textDirection: textDirection,
                       textAlign: textAlign,
                       strutStyle: editorStrutStyle,
@@ -239,43 +270,86 @@ class _EditorBlock extends StatelessWidget {
                     ),
                     foregroundPainter: MarkupTextDecorationPainter(
                       rawText: controller.text,
-                      textSpan: controller.buildTextSpan(
-                        context: context,
-                        style: editorTextStyle,
-                        withComposing: false,
-                      ),
+                      textSpan: editorTextSpan,
                       textDirection: textDirection,
                       textAlign: textAlign,
                       strutStyle: editorStrutStyle,
                       contentPadding: editorContentPadding,
                       type: MarkupDecorationType.underline,
                     ),
-                    child: TextField(
-                      selectionControls: GhostSelectionControls(),
-                      controller: controller,
-                      focusNode: focusNode,
-                      maxLines: null,
-                      onSubmitted: (_) => onSubmitted(),
-                      onTap: onTap,
-                      textDirection: textDirection,
-                      textAlign: textAlign,
-                      cursorColor: Colors.amber,
-                      cursorHeight: maxFontSize,
-                      strutStyle: editorStrutStyle,
-                      style: editorTextStyle,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
+                    child: CustomPaint(
+                      painter: MarkupSelectionDecorationPainter(
+                        textSpan: editorTextSpan,
+                        selection: paintSelection,
+                        textDirection: textDirection,
+                        textAlign: textAlign,
+                        strutStyle: editorStrutStyle,
                         contentPadding: editorContentPadding,
                       ),
-                      contextMenuBuilder: (context, editableTextState) {
-                        final List<ContextMenuButtonItem> items =
-                            editableTextState.contextMenuButtonItems;
-                        final List<ContextMenuButtonItem> customItems = [];
-                        bool hasSelectAll = false;
-                        for (final item in items) {
-                          if (item.type == ContextMenuButtonType.selectAll) {
-                            hasSelectAll = true;
+                      child: TextField(
+                        selectionControls: GhostSelectionControls(),
+                        controller: controller,
+                        focusNode: focusNode,
+                        maxLines: null,
+                        onSubmitted: (_) => onSubmitted(),
+                        onTap: onTap,
+                        textDirection: textDirection,
+                        textAlign: textAlign,
+                        cursorColor: Colors.amber,
+                        cursorHeight: maxFontSize,
+                        strutStyle: editorStrutStyle,
+                        style: editorTextStyle,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: editorContentPadding,
+                        ),
+                        contextMenuBuilder: (context, editableTextState) {
+                          final List<ContextMenuButtonItem> items =
+                              editableTextState.contextMenuButtonItems;
+                          final List<ContextMenuButtonItem> customItems = [];
+                          bool hasSelectAll = false;
+                          for (final item in items) {
+                            if (item.type == ContextMenuButtonType.selectAll) {
+                              hasSelectAll = true;
+                              customItems.add(ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onSelectAll();
+                                },
+                                type: ContextMenuButtonType.selectAll,
+                              ));
+                            } else if (item.type ==
+                                ContextMenuButtonType.copy) {
+                              customItems.add(ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onCopy();
+                                },
+                                type: ContextMenuButtonType.copy,
+                              ));
+                            } else if (item.type == ContextMenuButtonType.cut) {
+                              customItems.add(ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onCut();
+                                },
+                                type: ContextMenuButtonType.cut,
+                              ));
+                            } else if (item.type ==
+                                ContextMenuButtonType.paste) {
+                              customItems.add(ContextMenuButtonItem(
+                                onPressed: () {
+                                  ContextMenuController.removeAny();
+                                  onPaste();
+                                },
+                                type: ContextMenuButtonType.paste,
+                              ));
+                            } else {
+                              customItems.add(item);
+                            }
+                          }
+                          if (!hasSelectAll) {
                             customItems.add(ContextMenuButtonItem(
                               onPressed: () {
                                 ContextMenuController.removeAny();
@@ -283,48 +357,13 @@ class _EditorBlock extends StatelessWidget {
                               },
                               type: ContextMenuButtonType.selectAll,
                             ));
-                          } else if (item.type == ContextMenuButtonType.copy) {
-                            customItems.add(ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onCopy();
-                              },
-                              type: ContextMenuButtonType.copy,
-                            ));
-                          } else if (item.type == ContextMenuButtonType.cut) {
-                            customItems.add(ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onCut();
-                              },
-                              type: ContextMenuButtonType.cut,
-                            ));
-                          } else if (item.type == ContextMenuButtonType.paste) {
-                            customItems.add(ContextMenuButtonItem(
-                              onPressed: () {
-                                ContextMenuController.removeAny();
-                                onPaste();
-                              },
-                              type: ContextMenuButtonType.paste,
-                            ));
-                          } else {
-                            customItems.add(item);
                           }
-                        }
-                        if (!hasSelectAll) {
-                          customItems.add(ContextMenuButtonItem(
-                            onPressed: () {
-                              ContextMenuController.removeAny();
-                              onSelectAll();
-                            },
-                            type: ContextMenuButtonType.selectAll,
-                          ));
-                        }
-                        return AdaptiveTextSelectionToolbar.buttonItems(
-                          anchors: editableTextState.contextMenuAnchors,
-                          buttonItems: customItems,
-                        );
-                      },
+                          return AdaptiveTextSelectionToolbar.buttonItems(
+                            anchors: editableTextState.contextMenuAnchors,
+                            buttonItems: customItems,
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),

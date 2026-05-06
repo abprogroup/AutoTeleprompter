@@ -218,6 +218,23 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     });
   }
 
+  bool _editorBlockInheritedRtl(int index) {
+    bool hasVisibleText(MarkupController controller) =>
+        MarkupDecorationParser.visibleText(controller.text).trim().isNotEmpty;
+
+    for (var i = index - 1; i >= 0; i--) {
+      if (hasVisibleText(_controllers[i])) {
+        return _controllers[i].text.isHebrew;
+      }
+    }
+    for (var i = index + 1; i < _controllers.length; i++) {
+      if (hasVisibleText(_controllers[i])) {
+        return _controllers[i].text.isHebrew;
+      }
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -770,6 +787,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                         focusNode: _focusNodes[index],
                                         settings: settings,
                                         isGlobalSelected: _isGlobalSelection,
+                                        inheritedRtl:
+                                            _editorBlockInheritedRtl(index),
                                         onSubmitted: () => _addBlock(index + 1),
                                         onTap: () {
                                           // Secondary safety, though Listener should handle it

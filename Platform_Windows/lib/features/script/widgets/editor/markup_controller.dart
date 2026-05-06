@@ -361,6 +361,7 @@ class MarkupController extends TextEditingController {
       if (start >= end) return;
       final baseStyle = current();
       final hasSelection = !renderSelection.isCollapsed &&
+          !kUseCustomEditorSelectionPainting &&
           renderSelection.end > start &&
           renderSelection.start < end;
       if (!hasSelection) {

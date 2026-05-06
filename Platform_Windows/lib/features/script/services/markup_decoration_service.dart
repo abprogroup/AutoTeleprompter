@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 const bool kUseCustomDocxDecorationPainting = true;
+const bool kUseCustomEditorSelectionPainting = true;
 
 enum MarkupDecorationType { background, underline }
 
@@ -321,4 +322,115 @@ class MarkupTextDecorationPainter extends CustomPainter {
       contentPadding != oldDelegate.contentPadding ||
       strutStyle != oldDelegate.strutStyle ||
       type != oldDelegate.type;
+}
+
+class MarkupSelectionDecorationPainter extends CustomPainter {
+  final InlineSpan textSpan;
+  final TextSelection? selection;
+  final TextDirection textDirection;
+  final TextAlign textAlign;
+  final EdgeInsets contentPadding;
+  final StrutStyle? strutStyle;
+  final Color color;
+
+  const MarkupSelectionDecorationPainter({
+    required this.textSpan,
+    required this.selection,
+    required this.textDirection,
+    required this.textAlign,
+    this.contentPadding = EdgeInsets.zero,
+    this.strutStyle,
+    this.color = const Color(0x66FFBF00),
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!kUseCustomEditorSelectionPainting) return;
+    final activeSelection = selection;
+    if (activeSelection == null ||
+        !activeSelection.isValid ||
+        activeSelection.isCollapsed) {
+      return;
+    }
+
+    final width = size.width - contentPadding.horizontal;
+    if (width <= 0) return;
+
+    final painter = TextPainter(
+      text: textSpan,
+      textDirection: textDirection,
+      textAlign: textAlign,
+      strutStyle: strutStyle,
+    )..layout(maxWidth: width);
+    final lineMetrics = painter.computeLineMetrics();
+    final boxes = painter
+        .getBoxesForSelection(
+          TextSelection(
+            baseOffset: activeSelection.start,
+            extentOffset: activeSelection.end,
+          ),
+          boxHeightStyle: ui.BoxHeightStyle.tight,
+          boxWidthStyle: ui.BoxWidthStyle.tight,
+        )
+        .map((box) => _applyLineAlignment(box.toRect(), lineMetrics, width));
+    final merged = MarkupDecorationBoxMerger.merge(
+      boxes,
+      rowTolerance: 5.0,
+      gapTolerance: 12.0,
+    );
+    if (merged.isEmpty) return;
+
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.save();
+    canvas.translate(contentPadding.left, contentPadding.top);
+    for (final rect in merged) {
+      final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 6.0));
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+    }
+    canvas.restore();
+  }
+
+  Rect _applyLineAlignment(
+    Rect rect,
+    List<ui.LineMetrics> lines,
+    double width,
+  ) {
+    final centerY = rect.center.dy;
+    ui.LineMetrics? best;
+    var bestDistance = double.infinity;
+    for (final line in lines) {
+      final lineCenter = line.baseline - line.ascent + line.height / 2;
+      final distance = (lineCenter - centerY).abs();
+      if (distance < bestDistance) {
+        best = line;
+        bestDistance = distance;
+      }
+    }
+    if (best == null) return rect;
+
+    final desiredLeft = switch (textAlign) {
+      TextAlign.right => width - best.width,
+      TextAlign.center => (width - best.width) / 2,
+      TextAlign.end =>
+        textDirection == TextDirection.rtl ? 0.0 : width - best.width,
+      TextAlign.start =>
+        textDirection == TextDirection.rtl ? width - best.width : 0.0,
+      TextAlign.justify || TextAlign.left => 0.0,
+    };
+    final delta = desiredLeft.clamp(0.0, width) - best.left;
+    if (delta.abs() < 0.01) return rect;
+    return rect.shift(Offset(delta, 0));
+  }
+
+  @override
+  bool shouldRepaint(covariant MarkupSelectionDecorationPainter oldDelegate) =>
+      textSpan != oldDelegate.textSpan ||
+      selection != oldDelegate.selection ||
+      textDirection != oldDelegate.textDirection ||
+      textAlign != oldDelegate.textAlign ||
+      contentPadding != oldDelegate.contentPadding ||
+      strutStyle != oldDelegate.strutStyle ||
+      color != oldDelegate.color;
 }

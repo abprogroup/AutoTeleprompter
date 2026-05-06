@@ -20,6 +20,16 @@ _agent/
 .claude/
 AutoTeleprompter_AGENT_*
 
+# Local planning/governance files are private workspace state.
+Plans/
+AI_PROTOCOL.md
+DAILY_LOG.md
+MASTER_TODO*.md
+Missing\ features\ from\ Windows\ and\ IOS\ development\ to\ implement\ all\ platforms.md
+Missing\ features\ from\ Windows\ development\ to\ implement\ all\ platforms.md
+Win,Mac,Android\ -\ v4\ finalizing.md
+Project\ platforms\ structure.md
+
 # Development SDKs and Tools
 development/
 

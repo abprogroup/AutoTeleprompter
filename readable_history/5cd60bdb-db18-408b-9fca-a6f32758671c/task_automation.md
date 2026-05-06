@@ -1,4 +1,0 @@
-- [x] Install GitHub CLI (`gh`)
-- [x] Create `Automate-iOS.ps1` script
-- [/] One-Time Handshake (`gh auth login`)
-- [ ] Download and Open IPA on Desktop

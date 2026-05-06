@@ -1,4 +1,0 @@
-- [/] Lock Cloud Flutter SDK to `3.24.3` in workflow
-- [ ] Ensure `pub upgrade` and cleanup are present
-- [ ] Push final fix and monitor Build #10
-- [ ] Deliver IPA via automation script

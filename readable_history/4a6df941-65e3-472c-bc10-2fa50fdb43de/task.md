@@ -1,5 +1,0 @@
-- [/] Deep scan of `AutoTeleprompter Backups` for leaked data.
-- [ ] Deep scan of `Desktop/BOT` for leaked data.
-- [ ] Scan `Desktop/Shopping List` and `Desktop OLD files`.
-- [ ] Create `forensic_discovery_report.md` with findings.
-- [ ] Final scope assessment and containment report.

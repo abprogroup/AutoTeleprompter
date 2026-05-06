@@ -20,6 +20,10 @@ _agent/
 .claude/
 AutoTeleprompter_AGENT_*
 
+# NEVER TRACK LOCAL HISTORY OR EXPERIMENT ARCHIVES
+readable_history/
+_v5_archive/
+
 # Local planning/governance files are private workspace state.
 Plans/
 AI_PROTOCOL.md
@@ -35,6 +39,7 @@ development/
 
 # User Folders
 TeleSmart/
+releases/
 releases/v*/
 
 # General Code Ignores

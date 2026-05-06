@@ -201,6 +201,7 @@ class _SttThresholdPairSliders extends StatelessWidget {
   final Color accentColor;
   final ValueChanged<int> onSmallChanged;
   final ValueChanged<int> onBigChanged;
+  final VoidCallback onReset;
 
   const _SttThresholdPairSliders({
     required this.title,
@@ -215,6 +216,7 @@ class _SttThresholdPairSliders extends StatelessWidget {
     required this.accentColor,
     required this.onSmallChanged,
     required this.onBigChanged,
+    required this.onReset,
   });
 
   static String labelFor(int smallWords, int bigWords) {
@@ -254,6 +256,17 @@ class _SttThresholdPairSliders extends StatelessWidget {
                   color: isOff ? Colors.white38 : accentColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Reset to default',
+                child: IconButton(
+                  icon: const Icon(Icons.restart_alt, size: 17),
+                  color: Colors.white70,
+                  splashRadius: 17,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onReset,
                 ),
               ),
             ],
@@ -339,11 +352,13 @@ class _SttBigWordLengthSlider extends StatelessWidget {
   final int value;
   final Color accentColor;
   final ValueChanged<int> onChanged;
+  final VoidCallback onReset;
 
   const _SttBigWordLengthSlider({
     required this.value,
     required this.accentColor,
     required this.onChanged,
+    required this.onReset,
   });
 
   @override
@@ -377,6 +392,17 @@ class _SttBigWordLengthSlider extends StatelessWidget {
                   color: accentColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Reset to default',
+                child: IconButton(
+                  icon: const Icon(Icons.restart_alt, size: 17),
+                  color: Colors.white70,
+                  splashRadius: 17,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onReset,
                 ),
               ),
             ],

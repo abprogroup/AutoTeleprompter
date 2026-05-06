@@ -206,6 +206,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 value: settings.sttManualBigWordMinLetters,
                 accentColor: Color(settings.currentWordColor),
                 onChanged: notifier.setSttManualBigWordMinLetters,
+                onReset: () => notifier.setSttManualBigWordMinLetters(5),
               ),
               const SizedBox(height: 12),
               _SttThresholdPairSliders(
@@ -222,12 +223,16 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 accentColor: Color(settings.currentWordColor),
                 onSmallChanged: notifier.setSttManualStartAdvanceSmallWords,
                 onBigChanged: notifier.setSttManualStartAdvanceBigWords,
+                onReset: () {
+                  unawaited(notifier.setSttManualStartAdvanceSmallWords(4));
+                  unawaited(notifier.setSttManualStartAdvanceBigWords(3));
+                },
               ),
               const SizedBox(height: 12),
               _SttThresholdPairSliders(
                 title: 'Safety recovery',
                 subtitle:
-                    'How much ordered evidence can recover from 1-2 misrecognized words.',
+                    'How much ordered evidence can recover after misrecognized words.',
                 smallValue: settings.sttManualSafetySmallWords,
                 bigValue: settings.sttManualSafetyBigWords,
                 smallMin: 1,
@@ -238,6 +243,10 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 accentColor: Color(settings.currentWordColor),
                 onSmallChanged: notifier.setSttManualSafetySmallWords,
                 onBigChanged: notifier.setSttManualSafetyBigWords,
+                onReset: () {
+                  unawaited(notifier.setSttManualSafetySmallWords(2));
+                  unawaited(notifier.setSttManualSafetyBigWords(1));
+                },
               ),
               const SizedBox(height: 12),
               _SttThresholdPairSliders(
@@ -254,6 +263,10 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 accentColor: Color(settings.currentWordColor),
                 onSmallChanged: notifier.setSttManualVisibleSkipSmallWords,
                 onBigChanged: notifier.setSttManualVisibleSkipBigWords,
+                onReset: () {
+                  unawaited(notifier.setSttManualVisibleSkipSmallWords(0));
+                  unawaited(notifier.setSttManualVisibleSkipBigWords(0));
+                },
               ),
             ],
             const SizedBox(height: 16),

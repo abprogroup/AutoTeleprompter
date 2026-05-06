@@ -63,6 +63,27 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
       return '$sign${delta.toStringAsFixed(1)}';
     }
 
+    Widget sliderWithReset({
+      required Widget slider,
+      required String tooltip,
+      required VoidCallback onReset,
+    }) {
+      return Row(
+        children: [
+          Expanded(child: slider),
+          Tooltip(
+            message: tooltip,
+            child: IconButton(
+              icon: const Icon(Icons.restart_alt, size: 18),
+              color: Colors.white70,
+              splashRadius: 18,
+              onPressed: onReset,
+            ),
+          ),
+        ],
+      );
+    }
+
     const labelStyle = TextStyle(color: Colors.white70, fontSize: 14);
     const sectionStyle = TextStyle(
         color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600);
@@ -329,13 +350,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text('${settings.fontSize.round()}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.fontSize.clamp(14.0, 120.0).toDouble(),
-            min: 14,
-            max: 120,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: applyPresenterFontSize,
+          sliderWithReset(
+            tooltip: 'Reset Font Size',
+            onReset: () => applyPresenterFontSize(20.0),
+            slider: Slider(
+              value: settings.fontSize.clamp(14.0, 120.0).toDouble(),
+              min: 14,
+              max: 120,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: applyPresenterFontSize,
+            ),
           ),
 
           Row(children: [
@@ -344,13 +369,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text(formatDefaultOffset(settings.lineSpacing, 1.2),
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.lineSpacing.clamp(0.5, 3.0).toDouble(),
-            min: 0.5,
-            max: 3.0,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: applyPresenterLineSpacing,
+          sliderWithReset(
+            tooltip: 'Reset Line Spacing',
+            onReset: () => applyPresenterLineSpacing(1.2),
+            slider: Slider(
+              value: settings.lineSpacing.clamp(0.5, 3.0).toDouble(),
+              min: 0.5,
+              max: 3.0,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: applyPresenterLineSpacing,
+            ),
           ),
 
           Row(children: [
@@ -359,13 +388,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text('${settings.wordSpacing.toStringAsFixed(1)}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.wordSpacing.clamp(-5.0, 20.0).toDouble(),
-            min: -5.0,
-            max: 20.0,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: applyPresenterWordSpacing,
+          sliderWithReset(
+            tooltip: 'Reset Word Spacing',
+            onReset: () => applyPresenterWordSpacing(0.0),
+            slider: Slider(
+              value: settings.wordSpacing.clamp(-5.0, 20.0).toDouble(),
+              min: -5.0,
+              max: 20.0,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: applyPresenterWordSpacing,
+            ),
           ),
 
           Row(children: [
@@ -374,13 +407,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text('${settings.letterSpacing.toStringAsFixed(1)}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.letterSpacing.clamp(-2.0, 5.0).toDouble(),
-            min: -2.0,
-            max: 5.0,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: applyPresenterLetterSpacing,
+          sliderWithReset(
+            tooltip: 'Reset Letter Spacing',
+            onReset: () => applyPresenterLetterSpacing(0.0),
+            slider: Slider(
+              value: settings.letterSpacing.clamp(-2.0, 5.0).toDouble(),
+              min: -2.0,
+              max: 5.0,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: applyPresenterLetterSpacing,
+            ),
           ),
 
           Row(children: [
@@ -389,14 +426,18 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text('${(settings.scrollLead * 100).round()}%',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.scrollLead,
-            min: 0.15,
-            max: 0.60,
-            divisions: 18,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setScrollLead(v),
+          sliderWithReset(
+            tooltip: 'Reset Reading Line Position',
+            onReset: () => notifier.setScrollLead(0.32),
+            slider: Slider(
+              value: settings.scrollLead,
+              min: 0.15,
+              max: 0.60,
+              divisions: 18,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: (v) => notifier.setScrollLead(v),
+            ),
           ),
 
           const Divider(color: Colors.white12),

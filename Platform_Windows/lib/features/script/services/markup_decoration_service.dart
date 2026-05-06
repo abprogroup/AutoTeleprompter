@@ -247,7 +247,7 @@ class MarkupTextDecorationPainter extends CustomPainter {
       final merged = MarkupDecorationBoxMerger.merge(
         boxes,
         rowTolerance: 5.0,
-        gapTolerance: type == MarkupDecorationType.background ? 48.0 : 24.0,
+        gapTolerance: type == MarkupDecorationType.background ? 64.0 : 24.0,
       );
       if (type == MarkupDecorationType.background) {
         _paintBackground(canvas, merged, range.color ?? Colors.transparent);
@@ -297,9 +297,9 @@ class MarkupTextDecorationPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     for (final rect in rects) {
       final band = Rect.fromLTRB(
-        rect.left - 1.0,
+        rect.left - 4.0,
         rect.top,
-        rect.right + 1.0,
+        rect.right + 4.0,
         rect.bottom,
       );
       final radius = Radius.circular((band.height * 0.10).clamp(2.0, 6.0));

@@ -702,6 +702,35 @@ class _VerticalLayoutInfo {
     return painter.getOffsetForCaret(pos, Rect.zero).dx;
   }
 
+  double caretXForOffset(int offset) {
+    final text = painter.text?.toPlainText() ?? '';
+    final safeOffset = offset.clamp(0, text.length).toInt();
+    return painter
+        .getOffsetForCaret(TextPosition(offset: safeOffset), Rect.zero)
+        .dx;
+  }
+
+  int lineIndexForOffset(int offset) {
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return 0;
+    final text = painter.text?.toPlainText() ?? '';
+    final safeOffset = offset.clamp(0, text.length).toInt();
+    final caretY = painter
+        .getOffsetForCaret(TextPosition(offset: safeOffset), Rect.zero)
+        .dy;
+    var bestIndex = 0;
+    var bestDistance = double.infinity;
+    for (var i = 0; i < lines.length; i++) {
+      final center = _lineCenterY(i);
+      final distance = (center - caretY).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
   int getPositionAtX(double x, {required bool fromBottom}) {
     if (painter.text?.toPlainText().isEmpty ?? true) return 0;
     final lines = painter.computeLineMetrics();
@@ -722,23 +751,7 @@ class _VerticalLayoutInfo {
   }
 
   int get _currentLineIndex {
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return 0;
-    final text = painter.text?.toPlainText() ?? '';
-    final offset = selection.baseOffset.clamp(0, text.length).toInt();
-    final caretY =
-        painter.getOffsetForCaret(TextPosition(offset: offset), Rect.zero).dy;
-    var bestIndex = 0;
-    var bestDistance = double.infinity;
-    for (var i = 0; i < lines.length; i++) {
-      final center = _lineCenterY(i);
-      final distance = (center - caretY).abs();
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
-      }
-    }
-    return bestIndex;
+    return lineIndexForOffset(selection.baseOffset);
   }
 
   double _lineCenterY(int index) {

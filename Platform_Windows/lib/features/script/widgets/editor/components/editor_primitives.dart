@@ -88,6 +88,7 @@ class SliderRow extends StatelessWidget {
   final double value, min, max;
   final String? displayValue;
   final ValueChanged<double> onChanged;
+  final VoidCallback? onReset;
   const SliderRow({
     super.key,
     required this.label,
@@ -96,6 +97,7 @@ class SliderRow extends StatelessWidget {
     required this.max,
     required this.onChanged,
     this.displayValue,
+    this.onReset,
   });
   @override
   Widget build(BuildContext context) =>
@@ -115,13 +117,29 @@ class SliderRow extends StatelessWidget {
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
           ),
-          child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              activeColor: kEditorAmber,
-              inactiveColor: Colors.white10,
-              onChanged: onChanged),
+          child: Row(
+            children: [
+              Expanded(
+                child: Slider(
+                    value: value,
+                    min: min,
+                    max: max,
+                    activeColor: kEditorAmber,
+                    inactiveColor: Colors.white10,
+                    onChanged: onChanged),
+              ),
+              if (onReset != null)
+                Tooltip(
+                  message: 'Reset $label',
+                  child: IconButton(
+                    icon: const Icon(Icons.restart_alt, size: 18),
+                    color: Colors.white70,
+                    splashRadius: 18,
+                    onPressed: onReset,
+                  ),
+                ),
+            ],
+          ),
         )
       ]);
 }

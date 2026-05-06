@@ -2010,6 +2010,130 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   }) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final controller = _controllers[blockIndex];
+    final rawText = controller.text;
+    final visibleText = StylingService.stripTags(rawText);
+    final visibleLength = visibleText.length;
+    if (visibleLength <= 0) {
+      return _horizontalCrossBlockTarget(blockIndex: blockIndex, key: key);
+    }
+
+    final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
+    final currentVisible = MarkupController.rawToVisualOffset(
+      rawText,
+      safeRaw,
+    ).clamp(0, visibleLength).toInt();
+    final currentRaw =
+        MarkupController.visualToRawOffset(rawText, currentVisible);
+
+    final layout = _getVerticalLayout(
+      blockIndex,
+      selection: TextSelection.collapsed(offset: currentRaw),
+    );
+    final painterText = layout.painter.text?.toPlainText() ?? '';
+    if (painterText.isEmpty) {
+      return _horizontalCrossBlockTarget(blockIndex: blockIndex, key: key);
+    }
+
+    final rawStops = <int>{};
+    for (var visual = 0; visual <= visibleLength; visual++) {
+      rawStops.add(
+        MarkupController.visualToRawOffset(rawText, visual)
+            .clamp(0, painterText.length)
+            .toInt(),
+      );
+    }
+
+    final stops = <({int raw, int line, double x})>[];
+    for (final raw in rawStops) {
+      final safe = raw.clamp(0, painterText.length).toInt();
+      stops.add((
+        raw: safe,
+        line: layout.lineIndexForOffset(safe),
+        x: layout.caretXForOffset(safe),
+      ));
+    }
+    if (stops.length < 2) {
+      return _legacyHorizontalTargetFromPosition(
+        blockIndex: blockIndex,
+        rawOffset: rawOffset,
+        key: key,
+        allowInBlockStep: allowInBlockStep,
+        skipBidiNeutralStops: skipBidiNeutralStops,
+      );
+    }
+
+    stops.sort((a, b) {
+      final lineCompare = a.line.compareTo(b.line);
+      if (lineCompare != 0) return lineCompare;
+      final xCompare = a.x.compareTo(b.x);
+      if (xCompare != 0) return xCompare;
+      return a.raw.compareTo(b.raw);
+    });
+
+    final currentStop = (
+      raw: currentRaw.clamp(0, painterText.length).toInt(),
+      line: layout.lineIndexForOffset(currentRaw),
+      x: layout.caretXForOffset(currentRaw),
+    );
+    final visualStops = _collapseDuplicateVisualCaretStops(
+      stops,
+      currentStop: currentStop,
+    ).where((candidate) => candidate.line == currentStop.line).toList();
+    if (visualStops.length < 2) {
+      return _legacyHorizontalTargetFromPosition(
+        blockIndex: blockIndex,
+        rawOffset: rawOffset,
+        key: key,
+        allowInBlockStep: allowInBlockStep,
+        skipBidiNeutralStops: skipBidiNeutralStops,
+      );
+    }
+    var currentIndex =
+        visualStops.indexWhere((candidate) => candidate.raw == currentStop.raw);
+    if (currentIndex < 0) {
+      var bestDistance = double.infinity;
+      for (var i = 0; i < visualStops.length; i++) {
+        final candidate = visualStops[i];
+        final linePenalty =
+            (candidate.line - currentStop.line).abs().toDouble() * 100000.0;
+        final distance = linePenalty + (candidate.x - currentStop.x).abs();
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          currentIndex = i;
+        }
+      }
+    }
+    if (currentIndex < 0) return null;
+
+    final targetIndex = key == LogicalKeyboardKey.arrowLeft
+        ? currentIndex - 1
+        : currentIndex + 1;
+    if (targetIndex >= 0 && targetIndex < visualStops.length) {
+      if (!allowInBlockStep) return null;
+      final target =
+          visualStops[targetIndex].raw.clamp(0, rawText.length).toInt();
+      if (target == safeRaw) return null;
+      return (block: blockIndex, offset: target);
+    }
+
+    return _legacyHorizontalTargetFromPosition(
+      blockIndex: blockIndex,
+      rawOffset: rawOffset,
+      key: key,
+      allowInBlockStep: allowInBlockStep,
+      skipBidiNeutralStops: skipBidiNeutralStops,
+    );
+  }
+
+  ({int block, int offset})? _legacyHorizontalTargetFromPosition({
+    required int blockIndex,
+    required int rawOffset,
+    required LogicalKeyboardKey key,
+    required bool allowInBlockStep,
+    bool skipBidiNeutralStops = false,
+  }) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
+    final controller = _controllers[blockIndex];
     final isRtl = controller.text.isHebrew;
     final visibleText = StylingService.stripTags(controller.text);
     final visibleLength = visibleText.length;
@@ -2104,6 +2228,47 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         ),
       ),
     );
+  }
+
+  ({int block, int offset})? _horizontalCrossBlockTarget({
+    required int blockIndex,
+    required LogicalKeyboardKey key,
+  }) {
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (blockIndex <= 0) return null;
+      return (
+        block: blockIndex - 1,
+        offset:
+            MarkupController.safeEndOffset(_controllers[blockIndex - 1].text),
+      );
+    }
+    if (blockIndex >= _controllers.length - 1) return null;
+    return (block: blockIndex + 1, offset: 0);
+  }
+
+  List<({int raw, int line, double x})> _collapseDuplicateVisualCaretStops(
+    List<({int raw, int line, double x})> stops, {
+    required ({int raw, int line, double x}) currentStop,
+  }) {
+    const duplicateTolerance = 0.75;
+    final collapsed = <({int raw, int line, double x})>[];
+    for (final stop in stops) {
+      if (collapsed.isEmpty) {
+        collapsed.add(stop);
+        continue;
+      }
+      final last = collapsed.last;
+      final sameVisualStop = last.line == stop.line &&
+          (last.x - stop.x).abs() <= duplicateTolerance;
+      if (!sameVisualStop) {
+        collapsed.add(stop);
+        continue;
+      }
+      final keepLast = (last.raw - currentStop.raw).abs() <=
+          (stop.raw - currentStop.raw).abs();
+      collapsed[collapsed.length - 1] = keepLast ? last : stop;
+    }
+    return collapsed;
   }
 
   KeyEventResult? _handleHorizontalArrowKey({

@@ -81,6 +81,10 @@ class LayoutSuite extends ConsumerWidget {
             notifier.setLineSpacing(v);
             onInteraction('Line Spacing');
           },
+          onReset: () {
+            notifier.setLineSpacing(_defaultLineSpacing);
+            onInteraction('Line Spacing Reset');
+          },
         ),
         // ── Row 3: Letter spacing ───────────────────────────────────────
         SliderRow(
@@ -92,6 +96,10 @@ class LayoutSuite extends ConsumerWidget {
             notifier.setLetterSpacing(v);
             onInteraction('Letter Spacing');
           },
+          onReset: () {
+            notifier.setLetterSpacing(0.0);
+            onInteraction('Letter Spacing Reset');
+          },
         ),
         // ── Row 4: Word spacing ─────────────────────────────────────────
         SliderRow(
@@ -102,6 +110,10 @@ class LayoutSuite extends ConsumerWidget {
           onChanged: (v) {
             notifier.setWordSpacing(v);
             onInteraction('Word Spacing');
+          },
+          onReset: () {
+            notifier.setWordSpacing(0.0);
+            onInteraction('Word Spacing Reset');
           },
         ),
       ],

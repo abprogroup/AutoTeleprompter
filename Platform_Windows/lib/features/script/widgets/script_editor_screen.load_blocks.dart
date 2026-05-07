@@ -793,32 +793,27 @@ class _VerticalLayoutInfo {
         x: caretXForOffset(safe),
       ));
     }
-    stops.sort((a, b) {
-      final lineCompare = a.line.compareTo(b.line);
-      if (lineCompare != 0) return lineCompare;
-      final xCompare = a.x.compareTo(b.x);
-      if (xCompare != 0) return xCompare;
-      return a.raw.compareTo(b.raw);
-    });
+    _sortVisualStops(stops);
 
     final currentStop = (
       raw: currentRaw,
       line: lineIndexForOffset(currentRaw),
       x: caretXForOffset(currentRaw),
     );
-    final lineStops = _collapseDuplicateVisualCaretStops(
+    final orderedStops = _collapseDuplicateVisualCaretStops(
       stops,
       currentStop: currentStop,
-    ).where((candidate) => candidate.line == currentStop.line).toList();
-    if (lineStops.length < 2) return null;
+    );
+    if (orderedStops.length < 2) return null;
 
-    var currentIndex =
-        lineStops.indexWhere((candidate) => candidate.raw == currentStop.raw);
+    var currentIndex = orderedStops
+        .indexWhere((candidate) => candidate.raw == currentStop.raw);
     if (currentIndex < 0) {
       var bestDistance = double.infinity;
-      for (var i = 0; i < lineStops.length; i++) {
-        final candidate = lineStops[i];
-        final distance = (candidate.x - currentStop.x).abs();
+      for (var i = 0; i < orderedStops.length; i++) {
+        final candidate = orderedStops[i];
+        final linePenalty = candidate.line == currentStop.line ? 0.0 : 10000.0;
+        final distance = linePenalty + (candidate.x - currentStop.x).abs();
         if (distance < bestDistance) {
           bestDistance = distance;
           currentIndex = i;
@@ -827,9 +822,9 @@ class _VerticalLayoutInfo {
     }
     if (currentIndex < 0) return null;
 
-    final targetIndex = moveLeft ? currentIndex - 1 : currentIndex + 1;
-    if (targetIndex < 0 || targetIndex >= lineStops.length) return null;
-    return lineStops[targetIndex].raw;
+    final targetIndex = currentIndex + _visualStep(moveLeft: moveLeft);
+    if (targetIndex < 0 || targetIndex >= orderedStops.length) return null;
+    return orderedStops[targetIndex].raw;
   }
 
   int? visualWordTargetRawOffset({
@@ -879,35 +874,38 @@ class _VerticalLayoutInfo {
         x: caretXForOffset(safe),
       ));
     }
-    stops.sort((a, b) {
-      final lineCompare = a.line.compareTo(b.line);
-      if (lineCompare != 0) return lineCompare;
-      final xCompare = a.x.compareTo(b.x);
-      if (xCompare != 0) return xCompare;
-      return a.raw.compareTo(b.raw);
-    });
+    _sortVisualStops(stops);
 
     final currentStop = (
       raw: currentRaw,
       line: lineIndexForOffset(currentRaw),
       x: caretXForOffset(currentRaw),
     );
-    final lineStops = _collapseDuplicateVisualCaretStops(
+    final orderedStops = _collapseDuplicateVisualCaretStops(
       stops,
       currentStop: currentStop,
-    ).where((candidate) => candidate.line == currentStop.line).toList();
-    if (lineStops.length < 2) return null;
+    );
+    if (orderedStops.length < 2) return null;
 
-    const xTolerance = 0.75;
-    final candidates = moveLeft
-        ? lineStops
-            .where((candidate) => candidate.x < currentStop.x - xTolerance)
-            .toList()
-        : lineStops
-            .where((candidate) => candidate.x > currentStop.x + xTolerance)
-            .toList();
-    if (candidates.isEmpty) return null;
-    return moveLeft ? candidates.last.raw : candidates.first.raw;
+    var currentIndex = orderedStops
+        .indexWhere((candidate) => candidate.raw == currentStop.raw);
+    if (currentIndex < 0) {
+      var bestDistance = double.infinity;
+      for (var i = 0; i < orderedStops.length; i++) {
+        final candidate = orderedStops[i];
+        final linePenalty = candidate.line == currentStop.line ? 0.0 : 10000.0;
+        final distance = linePenalty + (candidate.x - currentStop.x).abs();
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          currentIndex = i;
+        }
+      }
+    }
+    if (currentIndex < 0) return null;
+
+    final targetIndex = currentIndex + _visualStep(moveLeft: moveLeft);
+    if (targetIndex < 0 || targetIndex >= orderedStops.length) return null;
+    return orderedStops[targetIndex].raw;
   }
 
   bool _isVisualWordChar(String value) {
@@ -918,6 +916,23 @@ class _VerticalLayoutInfo {
     final isDigit = code >= 0x30 && code <= 0x39;
     final isHebrew = code >= 0x0590 && code <= 0x05FF;
     return isAsciiLetter || isDigit || isHebrew;
+  }
+
+  int _visualStep({required bool moveLeft}) {
+    final isRtl = painter.textDirection == TextDirection.rtl;
+    final moveForward = isRtl ? moveLeft : !moveLeft;
+    return moveForward ? 1 : -1;
+  }
+
+  void _sortVisualStops(List<({int raw, int line, double x})> stops) {
+    final isRtl = painter.textDirection == TextDirection.rtl;
+    stops.sort((a, b) {
+      final lineCompare = a.line.compareTo(b.line);
+      if (lineCompare != 0) return lineCompare;
+      final xCompare = isRtl ? b.x.compareTo(a.x) : a.x.compareTo(b.x);
+      if (xCompare != 0) return xCompare;
+      return a.raw.compareTo(b.raw);
+    });
   }
 
   List<({int raw, int line, double x})> _collapseDuplicateVisualCaretStops(

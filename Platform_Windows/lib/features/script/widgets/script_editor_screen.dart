@@ -1503,88 +1503,26 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       }
     }
 
-    // Left/Right: Hebrew RTL needs special handling because Flutter's default
-    // arrow-left maps to "logical backward" (offset--), which in RTL displays
-    // visually RIGHT — opposite of what users expect. For RTL we override and
-    // drive the cursor manually so left=visually-left and right=visually-right.
+    // Left/Right are routed through the shared visual geometry helper. Keeping
+    // raw/logical fallbacks here caused old RTL behavior to fight the rendered
+    // caret positions.
     final isRtl = _editorBlockResolvedRtl(idx);
     final sel = controller.selection;
     final textLen = controller.text.length;
 
-    final horizontal = _handleHorizontalArrowKey(
-      key: key,
-      controller: controller,
-      blockIndex: idx,
-      isRtl: isRtl,
-      selection: sel,
-      textLength: textLen,
-      manualInBlock: !keyboard.isControlPressed &&
-          !keyboard.isAltPressed &&
-          !keyboard.isMetaPressed &&
-          !keyboard.isShiftPressed,
-    );
-    if (horizontal != null) return horizontal;
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (isRtl) {
-        if (!sel.isCollapsed) {
-          // Selection collapse rule: pressing left in Hebrew lands the cursor
-          // at the visually-leftmost end of the selection (the higher offset).
-          controller.selection = TextSelection.collapsed(offset: sel.end);
-          return KeyEventResult.handled;
-        }
-        if (sel.baseOffset >= textLen) {
-          if (idx < _controllers.length - 1) {
-            _crossToBlock(idx + 1, atOffset: 0);
-            return KeyEventResult.handled;
-          }
-          // No next block — let Flutter's default run (it will also do nothing,
-          // but returning `ignored` keeps behaviour consistent with the LTR side
-          // and avoids blocking any future platform shortcut dispatch).
-          return KeyEventResult.ignored;
-        }
-        controller.selection =
-            TextSelection.collapsed(offset: sel.baseOffset + 1);
-        return KeyEventResult.handled;
-      }
-      // LTR: let Flutter default move within the block; only intercept at
-      // the leftmost boundary so a long-press chains across blocks.
-      if (sel.isCollapsed && sel.baseOffset == 0 && idx > 0) {
-        _crossToBlock(idx - 1, atOffset: _controllers[idx - 1].text.length);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if (isRtl) {
-        if (!sel.isCollapsed) {
-          controller.selection = TextSelection.collapsed(offset: sel.start);
-          return KeyEventResult.handled;
-        }
-        if (sel.baseOffset <= 0) {
-          if (idx > 0) {
-            _crossToBlock(idx - 1, atOffset: _controllers[idx - 1].text.length);
-            return KeyEventResult.handled;
-          }
-          // No previous block — let Flutter's default run (symmetric with LTR).
-          return KeyEventResult.ignored;
-        }
-        controller.selection =
-            TextSelection.collapsed(offset: sel.baseOffset - 1);
-        return KeyEventResult.handled;
-      }
-      // LTR: let Flutter default handle in-block; intercept at the right edge.
-      if (sel.isCollapsed &&
-          sel.baseOffset == textLen &&
-          idx < _controllers.length - 1) {
-        _crossToBlock(idx + 1, atOffset: 0);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-
-    return KeyEventResult.ignored;
+    return _handleHorizontalArrowKey(
+          key: key,
+          controller: controller,
+          blockIndex: idx,
+          isRtl: isRtl,
+          selection: sel,
+          textLength: textLen,
+          manualInBlock: !keyboard.isControlPressed &&
+              !keyboard.isAltPressed &&
+              !keyboard.isMetaPressed &&
+              !keyboard.isShiftPressed,
+        ) ??
+        KeyEventResult.ignored;
   }
 
   KeyEventResult _handleControlVerticalArrowKey({
@@ -1700,36 +1638,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     final isDigit = code >= 0x30 && code <= 0x39;
     final isHebrew = code >= 0x0590 && code <= 0x05FF;
     return isAsciiLetter || isDigit || isHebrew;
-  }
-
-  bool _isKeyboardBidiNeutralStop(String value) {
-    if (value.isEmpty || value == _keyboardBookmarkSign) return false;
-    if (value.trim().isEmpty) return false;
-    return !_isKeyboardNavigationWordChar(value);
-  }
-
-  int _skipBidiNeutralStop({
-    required String visibleText,
-    required int from,
-    required int target,
-    required bool paragraphRtl,
-  }) {
-    if (!paragraphRtl || target == from) return target;
-    final forward = target > from;
-    var adjusted = target.clamp(0, visibleText.length).toInt();
-    if (forward) {
-      while (adjusted < visibleText.length &&
-          _isKeyboardBidiNeutralStop(visibleText[adjusted - 1])) {
-        adjusted++;
-      }
-    } else {
-      while (adjusted > 0 &&
-          adjusted < visibleText.length &&
-          _isKeyboardBidiNeutralStop(visibleText[adjusted])) {
-        adjusted--;
-      }
-    }
-    return adjusted.clamp(0, visibleText.length).toInt();
   }
 
   ({int block, int offset})? _controlVerticalTarget({
@@ -1907,10 +1815,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         rawOffset: offset,
         key: key,
         allowInBlockStep: allowInBlockHorizontalStep,
-        skipBidiNeutralStops: keyboard.isShiftPressed &&
-            !keyboard.isControlPressed &&
-            !keyboard.isAltPressed &&
-            !keyboard.isMetaPressed,
       );
     }
     return null;
@@ -2074,22 +1978,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     required int rawOffset,
     required LogicalKeyboardKey key,
     required bool allowInBlockStep,
-    bool skipBidiNeutralStops = false,
   }) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
-    final controller = _controllers[blockIndex];
-    final rawText = controller.text;
+    final rawText = _controllers[blockIndex].text;
     final visibleText = StylingService.stripTags(rawText);
-    final visibleLength = visibleText.length;
-    if (visibleLength <= 0) {
-      return (block: blockIndex, offset: 0);
-    }
+    if (visibleText.isEmpty) return (block: blockIndex, offset: 0);
 
     final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
     final currentVisible = MarkupController.rawToVisualOffset(
       rawText,
       safeRaw,
-    ).clamp(0, visibleLength).toInt();
+    ).clamp(0, visibleText.length).toInt();
     final currentRaw =
         MarkupController.visualToRawOffset(rawText, currentVisible);
 
@@ -2097,11 +1996,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       blockIndex,
       selection: TextSelection.collapsed(offset: currentRaw),
     );
-    final painterText = layout.painter.text?.toPlainText() ?? '';
-    if (painterText.isEmpty) {
-      return (block: blockIndex, offset: 0);
-    }
-
     final targetRaw = layout.visualHorizontalTargetRawOffset(
       rawText: rawText,
       rawOffset: currentRaw,
@@ -2114,21 +2008,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return (block: blockIndex, offset: target);
     }
 
-    return _legacyHorizontalTargetFromPosition(
+    return _horizontalBoundaryTargetFromPosition(
       blockIndex: blockIndex,
       rawOffset: rawOffset,
       key: key,
-      allowInBlockStep: allowInBlockStep,
-      skipBidiNeutralStops: skipBidiNeutralStops,
     );
   }
 
-  ({int block, int offset})? _legacyHorizontalTargetFromPosition({
+  ({int block, int offset})? _horizontalBoundaryTargetFromPosition({
     required int blockIndex,
     required int rawOffset,
     required LogicalKeyboardKey key,
-    required bool allowInBlockStep,
-    bool skipBidiNeutralStops = false,
   }) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final controller = _controllers[blockIndex];
@@ -2145,86 +2035,29 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
     if (!isRtl) {
       if (key == LogicalKeyboardKey.arrowLeft) {
-        if (atVisibleStart) {
-          if (blockIndex <= 0) return null;
-          return (
-            block: blockIndex - 1,
-            offset: MarkupController.safeEndOffset(
-                _controllers[blockIndex - 1].text),
-          );
-        }
-        if (!allowInBlockStep) return null;
+        if (!atVisibleStart) return null;
+        if (blockIndex <= 0) return null;
         return (
-          block: blockIndex,
-          offset: MarkupController.visualToRawOffset(
-            controller.text,
-            _skipBidiNeutralStop(
-              visibleText: visibleText,
-              from: visibleOffset,
-              target: (visibleOffset - 1).clamp(0, visibleLength).toInt(),
-              paragraphRtl: isRtl && skipBidiNeutralStops,
-            ),
-          ),
+          block: blockIndex - 1,
+          offset:
+              MarkupController.safeEndOffset(_controllers[blockIndex - 1].text),
         );
       }
-      if (atVisibleEnd) {
-        if (blockIndex >= _controllers.length - 1) return null;
-        return (block: blockIndex + 1, offset: 0);
-      }
-      if (!allowInBlockStep) return null;
-      return (
-        block: blockIndex,
-        offset: MarkupController.visualToRawOffset(
-          controller.text,
-          _skipBidiNeutralStop(
-            visibleText: visibleText,
-            from: visibleOffset,
-            target: (visibleOffset + 1).clamp(0, visibleLength).toInt(),
-            paragraphRtl: isRtl && skipBidiNeutralStops,
-          ),
-        ),
-      );
+      if (!atVisibleEnd) return null;
+      if (blockIndex >= _controllers.length - 1) return null;
+      return (block: blockIndex + 1, offset: 0);
     }
 
     if (key == LogicalKeyboardKey.arrowLeft) {
-      if (atVisibleEnd) {
-        if (blockIndex >= _controllers.length - 1) return null;
-        return (block: blockIndex + 1, offset: 0);
-      }
-      if (!allowInBlockStep) return null;
-      return (
-        block: blockIndex,
-        offset: MarkupController.visualToRawOffset(
-          controller.text,
-          _skipBidiNeutralStop(
-            visibleText: visibleText,
-            from: visibleOffset,
-            target: (visibleOffset + 1).clamp(0, visibleLength).toInt(),
-            paragraphRtl: skipBidiNeutralStops,
-          ),
-        ),
-      );
+      if (!atVisibleEnd) return null;
+      if (blockIndex >= _controllers.length - 1) return null;
+      return (block: blockIndex + 1, offset: 0);
     }
-    if (atVisibleStart) {
-      if (blockIndex <= 0) return null;
-      return (
-        block: blockIndex - 1,
-        offset:
-            MarkupController.safeEndOffset(_controllers[blockIndex - 1].text),
-      );
-    }
-    if (!allowInBlockStep) return null;
+    if (!atVisibleStart) return null;
+    if (blockIndex <= 0) return null;
     return (
-      block: blockIndex,
-      offset: MarkupController.visualToRawOffset(
-        controller.text,
-        _skipBidiNeutralStop(
-          visibleText: visibleText,
-          from: visibleOffset,
-          target: (visibleOffset - 1).clamp(0, visibleLength).toInt(),
-          paragraphRtl: skipBidiNeutralStops,
-        ),
-      ),
+      block: blockIndex - 1,
+      offset: MarkupController.safeEndOffset(_controllers[blockIndex - 1].text),
     );
   }
 
@@ -2273,9 +2106,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                 rawOffset: selection.baseOffset,
                 key: key,
                 allowInBlockStep: manualInBlock,
-                skipBidiNeutralStops: false,
               );
-    if (target == null) return KeyEventResult.ignored;
+    if (target == null) {
+      return isRtl ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
     if (target.block != blockIndex) {
       _crossToBlock(target.block, atOffset: target.offset);
       return KeyEventResult.handled;

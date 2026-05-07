@@ -194,6 +194,84 @@ class MarkupDecorationBoxMerger {
   }
 }
 
+class MarkupTextLayoutGeometry {
+  final TextPainter painter;
+  final double width;
+  final TextAlign textAlign;
+  final TextDirection textDirection;
+  late final List<ui.LineMetrics> _lineMetrics = painter.computeLineMetrics();
+
+  MarkupTextLayoutGeometry({
+    required InlineSpan textSpan,
+    required this.width,
+    required this.textAlign,
+    required this.textDirection,
+    StrutStyle? strutStyle,
+  }) : painter = TextPainter(
+          text: textSpan,
+          textDirection: textDirection,
+          textAlign: textAlign,
+          strutStyle: strutStyle,
+        )..layout(maxWidth: width);
+
+  List<Rect> selectionRects(
+    TextSelection selection, {
+    ui.BoxHeightStyle boxHeightStyle = ui.BoxHeightStyle.tight,
+    ui.BoxWidthStyle boxWidthStyle = ui.BoxWidthStyle.tight,
+    bool alignToVisualLine = true,
+  }) {
+    return painter
+        .getBoxesForSelection(
+          selection,
+          boxHeightStyle: boxHeightStyle,
+          boxWidthStyle: boxWidthStyle,
+        )
+        .map((box) => alignToVisualLine
+            ? _alignRectToVisualLine(box.toRect())
+            : box.toRect())
+        .where((rect) => !rect.isEmpty)
+        .toList(growable: false);
+  }
+
+  Rect _alignRectToVisualLine(Rect rect) {
+    final line = _nearestLineFor(rect);
+    if (line == null) return rect;
+    final desiredLeft = _visualLineLeft(line);
+    final delta = desiredLeft - line.left;
+    if (delta.abs() < 0.01) return rect;
+    return rect.shift(Offset(delta, 0));
+  }
+
+  ui.LineMetrics? _nearestLineFor(Rect rect) {
+    ui.LineMetrics? best;
+    var bestDistance = double.infinity;
+    final centerY = rect.center.dy;
+    for (final line in _lineMetrics) {
+      final lineCenter = line.baseline - line.ascent + line.height / 2;
+      final distance = (lineCenter - centerY).abs();
+      if (distance < bestDistance) {
+        best = line;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  double _visualLineLeft(ui.LineMetrics line) {
+    final left = switch (textAlign) {
+      TextAlign.left => 0.0,
+      TextAlign.right => width - line.width,
+      TextAlign.center => (width - line.width) / 2,
+      TextAlign.start =>
+        textDirection == TextDirection.rtl ? width - line.width : 0.0,
+      TextAlign.end =>
+        textDirection == TextDirection.rtl ? 0.0 : width - line.width,
+      TextAlign.justify => 0.0,
+    };
+    return left.clamp(0.0, width).toDouble();
+  }
+}
+
 class MarkupTextDecorationPainter extends CustomPainter {
   final String rawText;
   final InlineSpan textSpan;
@@ -219,12 +297,13 @@ class MarkupTextDecorationPainter extends CustomPainter {
     final width = size.width - contentPadding.horizontal;
     if (width <= 0) return;
 
-    final painter = TextPainter(
-      text: textSpan,
-      textDirection: textDirection,
+    final geometry = MarkupTextLayoutGeometry(
+      textSpan: textSpan,
+      width: width,
       textAlign: textAlign,
+      textDirection: textDirection,
       strutStyle: strutStyle,
-    )..layout(maxWidth: width);
+    );
 
     canvas.save();
     canvas.translate(contentPadding.left, contentPadding.top);
@@ -233,20 +312,16 @@ class MarkupTextDecorationPainter extends CustomPainter {
       final paintableRange =
           MarkupDecorationParser.paintableContentRange(rawText, range);
       if (paintableRange == null) continue;
-      final boxes = painter
-          .getBoxesForSelection(
-            TextSelection(
-              baseOffset: paintableRange.start,
-              extentOffset: paintableRange.end,
-            ),
-            boxHeightStyle: ui.BoxHeightStyle.tight,
-            boxWidthStyle: ui.BoxWidthStyle.tight,
-          )
-          .map((box) => box.toRect());
+      final boxes = geometry.selectionRects(
+        TextSelection(
+          baseOffset: paintableRange.start,
+          extentOffset: paintableRange.end,
+        ),
+      );
       final merged = MarkupDecorationBoxMerger.merge(
         boxes,
         rowTolerance: 5.0,
-        gapTolerance: type == MarkupDecorationType.background ? 64.0 : 24.0,
+        gapTolerance: type == MarkupDecorationType.background ? 48.0 : 24.0,
       );
       if (type == MarkupDecorationType.background) {
         _paintBackground(canvas, merged, range.color ?? Colors.transparent);
@@ -329,22 +404,19 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
     final width = size.width - contentPadding.horizontal;
     if (width <= 0) return;
 
-    final painter = TextPainter(
-      text: textSpan,
-      textDirection: textDirection,
+    final geometry = MarkupTextLayoutGeometry(
+      textSpan: textSpan,
+      width: width,
       textAlign: textAlign,
+      textDirection: textDirection,
       strutStyle: strutStyle,
-    )..layout(maxWidth: width);
-    final boxes = painter
-        .getBoxesForSelection(
-          TextSelection(
-            baseOffset: activeSelection.start,
-            extentOffset: activeSelection.end,
-          ),
-          boxHeightStyle: ui.BoxHeightStyle.tight,
-          boxWidthStyle: ui.BoxWidthStyle.tight,
-        )
-        .map((box) => box.toRect());
+    );
+    final boxes = geometry.selectionRects(
+      TextSelection(
+        baseOffset: activeSelection.start,
+        extentOffset: activeSelection.end,
+      ),
+    );
     final merged = MarkupDecorationBoxMerger.merge(
       boxes,
       rowTolerance: 5.0,

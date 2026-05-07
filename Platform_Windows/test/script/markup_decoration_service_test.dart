@@ -1,4 +1,5 @@
 import 'package:autoteleprompter/features/script/services/markup_decoration_service.dart';
+import 'package:autoteleprompter/features/script/widgets/editor/markup_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -91,5 +92,97 @@ void main() {
     expect(merged.first.left, 100);
     expect(merged.first.right, 220);
     expect(merged.last.left, 260);
+  });
+
+  testWidgets('RTL right-aligned decoration boxes stay on visual text',
+      (tester) async {
+    late BuildContext capturedContext;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) {
+          capturedContext = context;
+          return const SizedBox.shrink();
+        },
+      ),
+    ));
+
+    const raw = '[align=right][u]\u05e9\u05dc\u05d5\u05dd '
+        '\u05e2\u05d5\u05dc\u05dd[/u][/align=right]';
+    final controller = MarkupController(text: raw);
+    addTearDown(controller.dispose);
+
+    final range = MarkupDecorationParser.decorationRanges(raw)
+        .singleWhere((item) => item.type == MarkupDecorationType.underline);
+    final paintable = MarkupDecorationParser.paintableContentRange(raw, range)!;
+    final geometry = MarkupTextLayoutGeometry(
+      textSpan: controller.buildTextSpan(
+        context: capturedContext,
+        style: const TextStyle(fontSize: 24),
+        withComposing: false,
+      ),
+      width: 500,
+      textAlign: TextAlign.right,
+      textDirection: TextDirection.rtl,
+    );
+
+    final aligned = geometry.selectionRects(
+      TextSelection(baseOffset: paintable.start, extentOffset: paintable.end),
+    );
+    final leftMost = aligned
+        .map((rect) => rect.left)
+        .reduce((value, element) => value < element ? value : element);
+    final rightMost = aligned
+        .map((rect) => rect.right)
+        .reduce((value, element) => value > element ? value : element);
+
+    expect(aligned, isNotEmpty);
+    expect(leftMost, greaterThan(250));
+    expect(rightMost, lessThanOrEqualTo(500));
+  });
+
+  testWidgets('LTR left-aligned decoration geometry is not shifted',
+      (tester) async {
+    late BuildContext capturedContext;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) {
+          capturedContext = context;
+          return const SizedBox.shrink();
+        },
+      ),
+    ));
+
+    const raw = '[u]English underline check[/u]';
+    final controller = MarkupController(text: raw);
+    addTearDown(controller.dispose);
+
+    final range = MarkupDecorationParser.decorationRanges(raw).single;
+    final paintable = MarkupDecorationParser.paintableContentRange(raw, range)!;
+    final geometry = MarkupTextLayoutGeometry(
+      textSpan: controller.buildTextSpan(
+        context: capturedContext,
+        style: const TextStyle(fontSize: 24),
+        withComposing: false,
+      ),
+      width: 500,
+      textAlign: TextAlign.left,
+      textDirection: TextDirection.ltr,
+    );
+    final selection = TextSelection(
+      baseOffset: paintable.start,
+      extentOffset: paintable.end,
+    );
+
+    final aligned = geometry.selectionRects(selection);
+    final rawBoxes = geometry.selectionRects(
+      selection,
+      alignToVisualLine: false,
+    );
+
+    expect(aligned, hasLength(rawBoxes.length));
+    for (var i = 0; i < aligned.length; i++) {
+      expect(aligned[i].left, closeTo(rawBoxes[i].left, 0.01));
+      expect(aligned[i].right, closeTo(rawBoxes[i].right, 0.01));
+    }
   });
 }

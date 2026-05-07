@@ -225,7 +225,6 @@ class MarkupTextDecorationPainter extends CustomPainter {
       textAlign: textAlign,
       strutStyle: strutStyle,
     )..layout(maxWidth: width);
-    final lineMetrics = painter.computeLineMetrics();
 
     canvas.save();
     canvas.translate(contentPadding.left, contentPadding.top);
@@ -243,7 +242,7 @@ class MarkupTextDecorationPainter extends CustomPainter {
             boxHeightStyle: ui.BoxHeightStyle.tight,
             boxWidthStyle: ui.BoxWidthStyle.tight,
           )
-          .map((box) => _applyLineAlignment(box.toRect(), lineMetrics, width));
+          .map((box) => box.toRect());
       final merged = MarkupDecorationBoxMerger.merge(
         boxes,
         rowTolerance: 5.0,
@@ -256,38 +255,6 @@ class MarkupTextDecorationPainter extends CustomPainter {
       }
     }
     canvas.restore();
-  }
-
-  Rect _applyLineAlignment(
-    Rect rect,
-    List<ui.LineMetrics> lines,
-    double width,
-  ) {
-    final centerY = rect.center.dy;
-    ui.LineMetrics? best;
-    var bestDistance = double.infinity;
-    for (final line in lines) {
-      final lineCenter = line.baseline - line.ascent + line.height / 2;
-      final distance = (lineCenter - centerY).abs();
-      if (distance < bestDistance) {
-        best = line;
-        bestDistance = distance;
-      }
-    }
-    if (best == null) return rect;
-
-    final desiredLeft = switch (textAlign) {
-      TextAlign.right => width - best.width,
-      TextAlign.center => (width - best.width) / 2,
-      TextAlign.end =>
-        textDirection == TextDirection.rtl ? 0.0 : width - best.width,
-      TextAlign.start =>
-        textDirection == TextDirection.rtl ? width - best.width : 0.0,
-      TextAlign.justify || TextAlign.left => 0.0,
-    };
-    final delta = desiredLeft.clamp(0.0, width) - best.left;
-    if (delta.abs() < 0.01) return rect;
-    return rect.shift(Offset(delta, 0));
   }
 
   void _paintBackground(Canvas canvas, List<Rect> rects, Color color) {
@@ -368,7 +335,6 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
       textAlign: textAlign,
       strutStyle: strutStyle,
     )..layout(maxWidth: width);
-    final lineMetrics = painter.computeLineMetrics();
     final boxes = painter
         .getBoxesForSelection(
           TextSelection(
@@ -378,7 +344,7 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
           boxHeightStyle: ui.BoxHeightStyle.tight,
           boxWidthStyle: ui.BoxWidthStyle.tight,
         )
-        .map((box) => _applyLineAlignment(box.toRect(), lineMetrics, width));
+        .map((box) => box.toRect());
     final merged = MarkupDecorationBoxMerger.merge(
       boxes,
       rowTolerance: 5.0,
@@ -402,38 +368,6 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
       canvas.drawRRect(RRect.fromRectAndRadius(band, radius), paint);
     }
     canvas.restore();
-  }
-
-  Rect _applyLineAlignment(
-    Rect rect,
-    List<ui.LineMetrics> lines,
-    double width,
-  ) {
-    final centerY = rect.center.dy;
-    ui.LineMetrics? best;
-    var bestDistance = double.infinity;
-    for (final line in lines) {
-      final lineCenter = line.baseline - line.ascent + line.height / 2;
-      final distance = (lineCenter - centerY).abs();
-      if (distance < bestDistance) {
-        best = line;
-        bestDistance = distance;
-      }
-    }
-    if (best == null) return rect;
-
-    final desiredLeft = switch (textAlign) {
-      TextAlign.right => width - best.width,
-      TextAlign.center => (width - best.width) / 2,
-      TextAlign.end =>
-        textDirection == TextDirection.rtl ? 0.0 : width - best.width,
-      TextAlign.start =>
-        textDirection == TextDirection.rtl ? width - best.width : 0.0,
-      TextAlign.justify || TextAlign.left => 0.0,
-    };
-    final delta = desiredLeft.clamp(0.0, width) - best.left;
-    if (delta.abs() < 0.01) return rect;
-    return rect.shift(Offset(delta, 0));
   }
 
   @override

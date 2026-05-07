@@ -100,7 +100,7 @@ class ScriptEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
-    with StylingLogicMixin<ScriptEditorScreen> {
+    with WidgetsBindingObserver, StylingLogicMixin<ScriptEditorScreen> {
   // Dummy node for HardwareKeyboard → _handleEditorArrowKey bridge
   // (_handleEditorArrowKey never uses the node parameter).
   static final _arrowKeyDummyNode = FocusNode();
@@ -130,6 +130,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final List<FocusNode> _focusNodes = [];
   final List<GlobalKey> _blockKeys = [];
   final ScrollController _editorScrollController = ScrollController();
+  double? _editorScrollOffsetBeforeWindowHide;
   String _currentTitle = 'New Project';
 
   TextSelection? _lastSelection;
@@ -229,6 +230,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onGlobalArrowKey);
     _startAutoSave();
     if (widget.pendingFile != null) {
@@ -243,6 +245,32 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _isPendingLoad = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _importFile());
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      if (_editorScrollController.hasClients) {
+        _editorScrollOffsetBeforeWindowHide = _editorScrollController.offset;
+      }
+      return;
+    }
+    if (state != AppLifecycleState.resumed) return;
+    final restoreOffset = _editorScrollOffsetBeforeWindowHide;
+    if (restoreOffset == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_editorScrollController.hasClients) return;
+      final max = _editorScrollController.position.maxScrollExtent;
+      _editorScrollController.jumpTo(restoreOffset.clamp(0.0, max));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_editorScrollController.hasClients) return;
+        final max = _editorScrollController.position.maxScrollExtent;
+        _editorScrollController.jumpTo(restoreOffset.clamp(0.0, max));
+      });
+    });
   }
 
   @override
@@ -349,6 +377,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
     _clipboardGuardTimer?.cancel();
     _historyTimer?.cancel();
@@ -1430,6 +1459,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       if (shifted) return KeyEventResult.handled;
     }
 
+    if (!keyboard.isControlPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isShiftPressed &&
+        (key == LogicalKeyboardKey.arrowUp ||
+            key == LogicalKeyboardKey.arrowDown)) {
+      final safeOffset = controller.selection.extentOffset
+          .clamp(0, controller.text.length)
+          .toInt();
+      final target = _plainShiftVerticalLineTarget(
+        block: idx,
+        offset: safeOffset,
+        key: key,
+      );
+      if (target == null) return KeyEventResult.handled;
+      if (target.block == idx) {
+        controller.selection = TextSelection.collapsed(
+          offset: target.offset.clamp(0, controller.text.length).toInt(),
+        );
+        _lastArrowDecision = 'visual ${key.keyLabel}: $idx:${target.offset}';
+      } else {
+        _crossToBlock(target.block, atOffset: target.offset);
+        _lastArrowDecision =
+            'visual ${key.keyLabel}: ${target.block}:${target.offset}';
+      }
+      return KeyEventResult.handled;
+    }
+
     if (key == LogicalKeyboardKey.arrowUp && idx > 0) {
       final layout = _getVerticalLayout(idx);
       if (layout.isAtTop) {
@@ -1828,7 +1885,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (key == LogicalKeyboardKey.arrowLeft ||
         key == LogicalKeyboardKey.arrowRight) {
       if (keyboard.isControlPressed &&
-          keyboard.isShiftPressed &&
           !keyboard.isAltPressed &&
           !keyboard.isMetaPressed) {
         return _controlShiftHorizontalTarget(
@@ -1866,7 +1922,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     required LogicalKeyboardKey key,
   }) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
-    final moveLeft = key == LogicalKeyboardKey.arrowLeft;
+    final isRtl = _editorBlockResolvedRtl(blockIndex);
+    final moveTowardLogicalStart = isRtl
+        ? key == LogicalKeyboardKey.arrowRight
+        : key == LogicalKeyboardKey.arrowLeft;
     final text = _controllers[blockIndex].text;
     final navigationText = _keyboardVisibleNavigationText(text);
     final navigationOffset = _keyboardRawToVisibleNavigationOffset(
@@ -1874,7 +1933,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       rawOffset,
     ).clamp(0, navigationText.length).toInt();
 
-    if (moveLeft) {
+    if (moveTowardLogicalStart) {
       if (navigationOffset <= 0) {
         if (blockIndex <= 0) return null;
         final previousText = _controllers[blockIndex - 1].text;
@@ -2270,21 +2329,29 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
 
     final keyboard = HardwareKeyboard.instance;
-    final target = keyboard.isAltPressed &&
-            !keyboard.isControlPressed &&
+    final target = keyboard.isControlPressed &&
+            !keyboard.isAltPressed &&
             !keyboard.isMetaPressed
-        ? _altHorizontalTarget(
+        ? _controlShiftHorizontalTarget(
             blockIndex: blockIndex,
             rawOffset: selection.baseOffset,
             key: key,
           )
-        : _horizontalTargetFromPosition(
-            blockIndex: blockIndex,
-            rawOffset: selection.baseOffset,
-            key: key,
-            allowInBlockStep: manualInBlock,
-            skipBidiNeutralStops: false,
-          );
+        : keyboard.isAltPressed &&
+                !keyboard.isControlPressed &&
+                !keyboard.isMetaPressed
+            ? _altHorizontalTarget(
+                blockIndex: blockIndex,
+                rawOffset: selection.baseOffset,
+                key: key,
+              )
+            : _horizontalTargetFromPosition(
+                blockIndex: blockIndex,
+                rawOffset: selection.baseOffset,
+                key: key,
+                allowInBlockStep: manualInBlock,
+                skipBidiNeutralStops: false,
+              );
     if (target == null) return KeyEventResult.ignored;
     if (target.block != blockIndex) {
       _crossToBlock(target.block, atOffset: target.offset);

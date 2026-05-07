@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import '../../../services/editor_text_geometry_service.dart';
 import '../markup_controller.dart';
 
 /// Walk a render tree to find the first RenderEditable.
@@ -1041,8 +1042,13 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         TextPosition(offset: safeOffset, affinity: TextAffinity.downstream),
       );
       var endpointX = caretOffset.left;
+      var endpointY = caretOffset.top + caretOffset.height / 2;
       final range = _normalizedRange();
       if (range != null) {
+        final blockRtl = EditorTextGeometryService.resolveBlockRtl(
+          widget.controllers.map((controller) => controller.text).toList(),
+          blockIdx,
+        );
         final isRangeStart = _endpointIsRangeStart(endpointA);
         final blockTextLength = widget.controllers[blockIdx].text.length;
         final selection = blockIdx == range.startBlock &&
@@ -1067,19 +1073,46 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
                         baseOffset: 0, extentOffset: blockTextLength);
         final endpoints = editable.getEndpointsForSelection(selection);
         if (endpoints.isNotEmpty) {
-          endpointX =
-              (isRangeStart ? endpoints.first : endpoints.last).point.dx;
+          final endpoint = blockRtl
+              ? _rtlSelectionEndpoint(endpoints, isRangeStart: isRangeStart)
+              : (isRangeStart ? endpoints.first : endpoints.last);
+          endpointX = endpoint.point.dx;
+          endpointY = endpoint.point.dy;
         }
       }
       final anchor = Offset(
         endpointX,
-        caretOffset.top + caretOffset.height / 2,
+        endpointY,
       );
       return editable.localToGlobal(anchor, ancestor: ourStack);
     }
 
     final box = renderObj as RenderBox;
     return box.localToGlobal(Offset.zero, ancestor: ourStack);
+  }
+
+  TextSelectionPoint _rtlSelectionEndpoint(
+    List<TextSelectionPoint> endpoints, {
+    required bool isRangeStart,
+  }) {
+    const lineTolerance = 4.0;
+    if (endpoints.length == 1) return endpoints.single;
+    final sortedByLine = [...endpoints]..sort((a, b) {
+        final yCompare = a.point.dy.compareTo(b.point.dy);
+        if (yCompare != 0) return yCompare;
+        return a.point.dx.compareTo(b.point.dx);
+      });
+    final anchorY =
+        isRangeStart ? sortedByLine.first.point.dy : sortedByLine.last.point.dy;
+    final sameLine = sortedByLine
+        .where(
+            (endpoint) => (endpoint.point.dy - anchorY).abs() <= lineTolerance)
+        .toList();
+    if (sameLine.isEmpty) {
+      return isRangeStart ? sortedByLine.first : sortedByLine.last;
+    }
+    sameLine.sort((a, b) => a.point.dx.compareTo(b.point.dx));
+    return isRangeStart ? sameLine.last : sameLine.first;
   }
 
   Offset _handleVisualCenter(Offset caret, bool _) {

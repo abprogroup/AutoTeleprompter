@@ -157,6 +157,9 @@ class MarkupDecorationBoxMerger {
   static const double styleBackgroundGapTolerance = 28.0;
   static const double styleUnderlineGapTolerance = 14.0;
   static const double activeSelectionGapTolerance = 2.0;
+  static const double styleBackgroundInnerTail = 2.0;
+  static const double styleBackgroundVisualEndTail = 6.0;
+  static const double styleUnderlineVisualEndTail = 3.0;
 
   static List<Rect> merge(
     Iterable<Rect> boxes, {
@@ -371,10 +374,16 @@ class MarkupTextDecorationPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.fill;
     for (final rect in rects) {
+      final leftTail = textDirection == TextDirection.rtl
+          ? MarkupDecorationBoxMerger.styleBackgroundVisualEndTail
+          : MarkupDecorationBoxMerger.styleBackgroundInnerTail;
+      final rightTail = textDirection == TextDirection.rtl
+          ? MarkupDecorationBoxMerger.styleBackgroundInnerTail
+          : MarkupDecorationBoxMerger.styleBackgroundVisualEndTail;
       final band = Rect.fromLTRB(
-        (rect.left - 1.5).clamp(0.0, width).toDouble(),
+        (rect.left - leftTail).clamp(0.0, width).toDouble(),
         rect.top,
-        (rect.right + 1.5).clamp(0.0, width).toDouble(),
+        (rect.right + rightTail).clamp(0.0, width).toDouble(),
         rect.bottom,
       );
       if (band.width <= 0) continue;
@@ -390,8 +399,14 @@ class MarkupTextDecorationPainter extends CustomPainter {
       ..strokeCap = StrokeCap.square
       ..style = PaintingStyle.stroke;
     for (final rect in rects) {
-      final left = rect.left.clamp(0.0, width).toDouble();
-      final right = rect.right.clamp(0.0, width).toDouble();
+      final leftTail = textDirection == TextDirection.rtl
+          ? MarkupDecorationBoxMerger.styleUnderlineVisualEndTail
+          : 0.0;
+      final rightTail = textDirection == TextDirection.rtl
+          ? 0.0
+          : MarkupDecorationBoxMerger.styleUnderlineVisualEndTail;
+      final left = (rect.left - leftTail).clamp(0.0, width).toDouble();
+      final right = (rect.right + rightTail).clamp(0.0, width).toDouble();
       if (right <= left) continue;
       final y = rect.bottom - (paint.strokeWidth * 0.5);
       canvas.drawLine(Offset(left, y), Offset(right, y), paint);

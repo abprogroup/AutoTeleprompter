@@ -1922,15 +1922,33 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     required LogicalKeyboardKey key,
   }) {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
+    final rawText = _controllers[blockIndex].text;
+    final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
+    final layout = _getVerticalLayout(
+      blockIndex,
+      selection: TextSelection.collapsed(offset: safeRaw),
+    );
+    final visualTarget = layout.visualWordTargetRawOffset(
+      rawText: rawText,
+      rawOffset: safeRaw,
+      moveLeft: key == LogicalKeyboardKey.arrowLeft,
+    );
+    if (visualTarget != null) {
+      final safeTarget = visualTarget.clamp(0, rawText.length).toInt();
+      if (safeTarget != safeRaw) {
+        return (block: blockIndex, offset: safeTarget);
+      }
+    }
+
     final isRtl = _editorBlockResolvedRtl(blockIndex);
     final moveTowardLogicalStart = isRtl
         ? key == LogicalKeyboardKey.arrowRight
         : key == LogicalKeyboardKey.arrowLeft;
-    final text = _controllers[blockIndex].text;
+    final text = rawText;
     final navigationText = _keyboardVisibleNavigationText(text);
     final navigationOffset = _keyboardRawToVisibleNavigationOffset(
       text,
-      rawOffset,
+      safeRaw,
     ).clamp(0, navigationText.length).toInt();
 
     if (moveTowardLogicalStart) {

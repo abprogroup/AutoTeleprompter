@@ -832,6 +832,94 @@ class _VerticalLayoutInfo {
     return lineStops[targetIndex].raw;
   }
 
+  int? visualWordTargetRawOffset({
+    required String rawText,
+    required int rawOffset,
+    required bool moveLeft,
+  }) {
+    final plainText = painter.text?.toPlainText() ?? '';
+    if (rawText.isEmpty || plainText.isEmpty) return 0;
+    final visibleText = StylingService.stripTags(rawText);
+    if (visibleText.isEmpty) return 0;
+    final visibleLength = visibleText.length;
+    final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
+    final currentVisible = MarkupController.rawToVisualOffset(
+      rawText,
+      safeRaw,
+    ).clamp(0, visibleLength).toInt();
+    final currentRaw = MarkupController.visualToRawOffset(
+      rawText,
+      currentVisible,
+    ).clamp(0, plainText.length).toInt();
+
+    final rawStops = <int>{
+      0,
+      MarkupController.visualToRawOffset(rawText, visibleLength)
+    };
+    for (var i = 1; i < visibleLength; i++) {
+      final beforeWord = _isVisualWordChar(visibleText[i - 1]);
+      final afterWord = _isVisualWordChar(visibleText[i]);
+      if (beforeWord != afterWord) {
+        rawStops.add(
+          MarkupController.visualToRawOffset(rawText, i)
+              .clamp(0, plainText.length)
+              .toInt(),
+        );
+      }
+    }
+    rawStops.add(currentRaw);
+    if (rawStops.length < 2) return null;
+
+    final stops = <({int raw, int line, double x})>[];
+    for (final raw in rawStops) {
+      final safe = raw.clamp(0, plainText.length).toInt();
+      stops.add((
+        raw: safe,
+        line: lineIndexForOffset(safe),
+        x: caretXForOffset(safe),
+      ));
+    }
+    stops.sort((a, b) {
+      final lineCompare = a.line.compareTo(b.line);
+      if (lineCompare != 0) return lineCompare;
+      final xCompare = a.x.compareTo(b.x);
+      if (xCompare != 0) return xCompare;
+      return a.raw.compareTo(b.raw);
+    });
+
+    final currentStop = (
+      raw: currentRaw,
+      line: lineIndexForOffset(currentRaw),
+      x: caretXForOffset(currentRaw),
+    );
+    final lineStops = _collapseDuplicateVisualCaretStops(
+      stops,
+      currentStop: currentStop,
+    ).where((candidate) => candidate.line == currentStop.line).toList();
+    if (lineStops.length < 2) return null;
+
+    const xTolerance = 0.75;
+    final candidates = moveLeft
+        ? lineStops
+            .where((candidate) => candidate.x < currentStop.x - xTolerance)
+            .toList()
+        : lineStops
+            .where((candidate) => candidate.x > currentStop.x + xTolerance)
+            .toList();
+    if (candidates.isEmpty) return null;
+    return moveLeft ? candidates.last.raw : candidates.first.raw;
+  }
+
+  bool _isVisualWordChar(String value) {
+    if (value.isEmpty || value.trim().isEmpty) return false;
+    final code = value.codeUnitAt(0);
+    final isAsciiLetter =
+        (code >= 0x41 && code <= 0x5A) || (code >= 0x61 && code <= 0x7A);
+    final isDigit = code >= 0x30 && code <= 0x39;
+    final isHebrew = code >= 0x0590 && code <= 0x05FF;
+    return isAsciiLetter || isDigit || isHebrew;
+  }
+
   List<({int raw, int line, double x})> _collapseDuplicateVisualCaretStops(
     List<({int raw, int line, double x})> stops, {
     required ({int raw, int line, double x}) currentStop,

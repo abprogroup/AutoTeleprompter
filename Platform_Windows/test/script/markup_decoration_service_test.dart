@@ -164,6 +164,64 @@ void main() {
     expect(rightMost, lessThanOrEqualTo(500));
   });
 
+  testWidgets('RTL decoration alignment is not double shifted', (tester) async {
+    late BuildContext capturedContext;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) {
+          capturedContext = context;
+          return const SizedBox.shrink();
+        },
+      ),
+    ));
+
+    const raw = '[align=right][bg=#00FF00]\u05d5\u05d4\u05d1\u05ea '
+        '\u05e9\u05dc\u05d9 \u05d2\u05dd \u05d0\u05d9\u05df '
+        '\u05dc\u05d4 \u05d1\u05e2\u05d9\u05d4 '
+        '\u05dc\u05e9\u05e7\u05e8 \u05dc\u05d9 '
+        '\u05d1\u05e4\u05e8\u05e6\u05d5\u05e3. '
+        '\u05d0\u05d9\u05d6\u05d4 \u05d9\u05d5\u05dd '
+        '\u05d4\u05d9\u05d0 \u05e9\u05d9\u05d7\u05e7\u05d4[/bg]'
+        '[/align=right]';
+    final controller = MarkupController(text: raw);
+    addTearDown(controller.dispose);
+
+    final range = MarkupDecorationParser.decorationRanges(raw).single;
+    final paintable = MarkupDecorationParser.paintableContentRange(raw, range)!;
+    final geometry = MarkupTextLayoutGeometry(
+      textSpan: controller.buildTextSpan(
+        context: capturedContext,
+        style: const TextStyle(fontSize: 34),
+        withComposing: false,
+      ),
+      width: 700,
+      textAlign: TextAlign.right,
+      textDirection: TextDirection.rtl,
+    );
+    final selection = TextSelection(
+      baseOffset: paintable.start,
+      extentOffset: paintable.end,
+    );
+
+    final rawBoxes = geometry.selectionRects(
+      selection,
+      alignToVisualLine: false,
+    );
+    final alignedBoxes = geometry.selectionRects(selection);
+
+    expect(rawBoxes, isNotEmpty);
+    expect(alignedBoxes, hasLength(rawBoxes.length));
+    for (var i = 0; i < rawBoxes.length; i++) {
+      expect(
+        alignedBoxes[i].center.dx,
+        closeTo(rawBoxes[i].center.dx, 0.01),
+        reason:
+            'Flutter already returns visual RTL selection boxes; shifting them '
+            'again creates the right-heavy highlight tails seen in the editor.',
+      );
+    }
+  });
+
   testWidgets('LTR left-aligned decoration geometry is not shifted',
       (tester) async {
     late BuildContext capturedContext;

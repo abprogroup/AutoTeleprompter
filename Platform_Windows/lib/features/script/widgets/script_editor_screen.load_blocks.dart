@@ -635,10 +635,20 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
     // 2. Build style
     final style = TextStyle(
+      color: Colors.white,
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,
       wordSpacing: settings.wordSpacing,
+    );
+    final maxFontSize = EditorTextGeometryService.maxFontSize(
+      controller.text,
+      settings.fontSize,
+    );
+    final strutStyle = StrutStyle(
+      fontSize: maxFontSize,
+      height: settings.lineSpacing,
+      forceStrutHeight: true,
     );
 
     // 3. Get width
@@ -663,6 +673,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       text: span,
       textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
       textAlign: textAlign,
+      strutStyle: strutStyle,
     );
     painter.layout(maxWidth: width > 0 ? width : 800);
 
@@ -742,6 +753,108 @@ class _VerticalLayoutInfo {
     return painter
         .getPositionForOffset(Offset(x, _lineCenterY(targetLine)))
         .offset;
+  }
+
+  int? visualHorizontalTargetRawOffset({
+    required String rawText,
+    required int rawOffset,
+    required bool moveLeft,
+  }) {
+    final plainText = painter.text?.toPlainText() ?? '';
+    if (rawText.isEmpty || plainText.isEmpty) return 0;
+    final visibleText = StylingService.stripTags(rawText);
+    if (visibleText.isEmpty) return 0;
+    final visibleLength = visibleText.length;
+    final currentVisible = MarkupController.rawToVisualOffset(
+      rawText,
+      rawOffset.clamp(0, rawText.length).toInt(),
+    ).clamp(0, visibleLength).toInt();
+    final currentRaw = MarkupController.visualToRawOffset(
+      rawText,
+      currentVisible,
+    ).clamp(0, plainText.length).toInt();
+
+    final rawStops = <int>{};
+    for (var visual = 0; visual <= visibleLength; visual++) {
+      rawStops.add(
+        MarkupController.visualToRawOffset(rawText, visual)
+            .clamp(0, plainText.length)
+            .toInt(),
+      );
+    }
+    if (rawStops.length < 2) return null;
+
+    final stops = <({int raw, int line, double x})>[];
+    for (final raw in rawStops) {
+      final safe = raw.clamp(0, plainText.length).toInt();
+      stops.add((
+        raw: safe,
+        line: lineIndexForOffset(safe),
+        x: caretXForOffset(safe),
+      ));
+    }
+    stops.sort((a, b) {
+      final lineCompare = a.line.compareTo(b.line);
+      if (lineCompare != 0) return lineCompare;
+      final xCompare = a.x.compareTo(b.x);
+      if (xCompare != 0) return xCompare;
+      return a.raw.compareTo(b.raw);
+    });
+
+    final currentStop = (
+      raw: currentRaw,
+      line: lineIndexForOffset(currentRaw),
+      x: caretXForOffset(currentRaw),
+    );
+    final lineStops = _collapseDuplicateVisualCaretStops(
+      stops,
+      currentStop: currentStop,
+    ).where((candidate) => candidate.line == currentStop.line).toList();
+    if (lineStops.length < 2) return null;
+
+    var currentIndex =
+        lineStops.indexWhere((candidate) => candidate.raw == currentStop.raw);
+    if (currentIndex < 0) {
+      var bestDistance = double.infinity;
+      for (var i = 0; i < lineStops.length; i++) {
+        final candidate = lineStops[i];
+        final distance = (candidate.x - currentStop.x).abs();
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          currentIndex = i;
+        }
+      }
+    }
+    if (currentIndex < 0) return null;
+
+    final targetIndex = moveLeft ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= lineStops.length) return null;
+    return lineStops[targetIndex].raw;
+  }
+
+  List<({int raw, int line, double x})> _collapseDuplicateVisualCaretStops(
+    List<({int raw, int line, double x})> stops, {
+    required ({int raw, int line, double x}) currentStop,
+  }) {
+    const duplicateTolerance = 0.75;
+    final collapsed = <({int raw, int line, double x})>[];
+    for (final stop in stops) {
+      if (collapsed.isEmpty) {
+        collapsed.add(stop);
+        continue;
+      }
+      final last = collapsed.last;
+      final sameVisualStop = last.line == stop.line &&
+          (last.x - stop.x).abs() <= duplicateTolerance;
+      if (!sameVisualStop) {
+        collapsed.add(stop);
+        continue;
+      }
+      final keepLast = (last.raw - currentStop.raw).abs() <=
+          (stop.raw - currentStop.raw).abs();
+      collapsed[collapsed.length - 1] = keepLast ? last : stop;
+    }
+    return collapsed;
   }
 
   int get _currentLineIndex {

@@ -94,6 +94,30 @@ void main() {
     expect(merged.last.left, 260);
   });
 
+  test('style highlight can bridge nearby spaces but selection stays tight',
+      () {
+    const boxes = [
+      Rect.fromLTRB(120, 10, 180, 30),
+      Rect.fromLTRB(192, 10, 260, 30),
+    ];
+
+    final styleMerged = MarkupDecorationBoxMerger.merge(
+      boxes,
+      rowTolerance: 4,
+      gapTolerance: MarkupDecorationBoxMerger.styleBackgroundGapTolerance,
+    );
+    final selectionMerged = MarkupDecorationBoxMerger.merge(
+      boxes,
+      rowTolerance: 4,
+      gapTolerance: MarkupDecorationBoxMerger.activeSelectionGapTolerance,
+    );
+
+    expect(styleMerged, hasLength(1));
+    expect(styleMerged.single.left, 120);
+    expect(styleMerged.single.right, 260);
+    expect(selectionMerged, hasLength(2));
+  });
+
   testWidgets('RTL right-aligned decoration boxes stay on visual text',
       (tester) async {
     late BuildContext capturedContext;

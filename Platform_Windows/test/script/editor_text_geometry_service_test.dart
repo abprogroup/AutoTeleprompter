@@ -1,3 +1,4 @@
+import 'package:autoteleprompter/features/script/models/editor_state.dart';
 import 'package:autoteleprompter/features/script/services/editor_text_geometry_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,5 +45,73 @@ void main() {
       EditorTextGeometryService.resolveTextAlign('', isRtl: false),
       TextAlign.left,
     );
+  });
+
+  test('max font size comes from the same markup rule used by layout', () {
+    expect(
+      EditorTextGeometryService.maxFontSize('[size=64]big[/size] small', 42),
+      64,
+    );
+    expect(
+      EditorTextGeometryService.maxFontSize('[size=36]small[/size]', 42),
+      42,
+    );
+  });
+
+  EditorState stateWithHistoryMetadata({
+    int? focusBlockIndex,
+    int? selectionBaseOffset,
+    int? selectionExtentOffset,
+    double? scrollOffset,
+  }) {
+    return EditorState(
+      text: 'first\nsecond',
+      timestamp: DateTime.utc(2026, 5, 7),
+      description: 'Edit Text',
+      fontSize: 42,
+      fontFamily: 'Inter',
+      lineSpacing: 1.2,
+      letterSpacing: 0,
+      wordSpacing: 0,
+      scriptBgColor: 0xFF000000,
+      currentWordColor: 0xFFFFBF00,
+      futureWordColor: 0xFFFFFFFF,
+      textAlign: 'left',
+      focusBlockIndex: focusBlockIndex,
+      selectionBaseOffset: selectionBaseOffset,
+      selectionExtentOffset: selectionExtentOffset,
+      scrollOffset: scrollOffset,
+    );
+  }
+
+  test('history focus metadata round-trips', () {
+    final state = stateWithHistoryMetadata(
+      focusBlockIndex: 1,
+      selectionBaseOffset: 4,
+      selectionExtentOffset: 7,
+      scrollOffset: 220.5,
+    );
+    final restored = EditorState.fromJson(state.toJson());
+
+    expect(restored.focusBlockIndex, 1);
+    expect(restored.selectionBaseOffset, 4);
+    expect(restored.selectionExtentOffset, 7);
+    expect(restored.scrollOffset, 220.5);
+  });
+
+  test('old history JSON remains backwards-compatible', () {
+    final json = stateWithHistoryMetadata().toJson()
+      ..remove('focusBlockIndex')
+      ..remove('selectionBaseOffset')
+      ..remove('selectionExtentOffset')
+      ..remove('scrollOffset');
+
+    final restored = EditorState.fromJson(json);
+
+    expect(restored.text, 'first\nsecond');
+    expect(restored.focusBlockIndex, isNull);
+    expect(restored.selectionBaseOffset, isNull);
+    expect(restored.selectionExtentOffset, isNull);
+    expect(restored.scrollOffset, isNull);
   });
 }

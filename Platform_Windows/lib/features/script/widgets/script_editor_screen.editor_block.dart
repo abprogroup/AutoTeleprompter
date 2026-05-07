@@ -46,18 +46,6 @@ class _EditorBlock extends StatelessWidget {
     return null;
   }
 
-  double _getMaxFontSize(String text, double defaultSize) {
-    if (text.isEmpty) return defaultSize;
-    final matches = RegExp(r'\[size=(\d+)\]').allMatches(text);
-    if (matches.isEmpty) return defaultSize;
-    double maxMatch = defaultSize;
-    for (final m in matches) {
-      final size = double.tryParse(m.group(1)!) ?? defaultSize;
-      if (size > maxMatch) maxMatch = size;
-    }
-    return maxMatch;
-  }
-
   TextSelection? _selectionForCustomPaint() {
     final length = controller.text.length;
     if (length <= 0) return null;
@@ -88,7 +76,8 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
-    final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+    final maxFontSize = EditorTextGeometryService.maxFontSize(
+        controller.text, settings.fontSize);
     final editorTextStyle = TextStyle(
       color: Colors.white,
       fontSize: settings.fontSize,

@@ -256,6 +256,9 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     }
 
     final settings = ref.read(settingsProvider);
+    final focusIndex = _focusedBlockIndexForHistory();
+    final focusSelection =
+        focusIndex == null ? null : _controllers[focusIndex].selection;
     final state = EditorState(
       text: currentText,
       timestamp: DateTime.now(),
@@ -269,6 +272,12 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       currentWordColor: settings.currentWordColor,
       futureWordColor: settings.futureWordColor,
       textAlign: settings.textAlign,
+      focusBlockIndex: focusIndex,
+      selectionBaseOffset: focusSelection?.baseOffset,
+      selectionExtentOffset: focusSelection?.extentOffset,
+      scrollOffset: _editorScrollController.hasClients
+          ? _editorScrollController.offset
+          : null,
     );
     setState(() {
       if (_historyIndex < _history.length - 1)
@@ -278,6 +287,22 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       _historyIndex = _history.length - 1;
     });
     _scheduleRecentUpdate();
+  }
+
+  int? _focusedBlockIndexForHistory() {
+    final active = _lastFocusedController ?? _activeController;
+    if (active == null) return _controllers.isEmpty ? null : 0;
+    final index = _controllers.indexOf(active);
+    if (index >= 0) return index;
+    return _controllers.isEmpty ? null : 0;
+  }
+
+  void _flushPendingTypingHistoryForTraversal() {
+    if (_isCleaning) return;
+    final hasPendingTyping =
+        _typingCharCount > 0 || (_typingBulkTimer?.isActive ?? false);
+    if (!hasPendingTyping) return;
+    _commitHistory('Edit Text');
   }
 
   /// Legacy-compatible entry point used by style commands and explicit saves.
@@ -335,56 +360,43 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   }
 
   void _undo() {
+    _flushPendingTypingHistoryForTraversal();
     if (_historyIndex > 0) {
       _isCommandExecuting = true;
       _isDirty = false;
-      final preFocusIdx = _lastFocusedController != null
-          ? _controllers.indexOf(_lastFocusedController!)
-          : 0;
+      final sourceState = _history[_historyIndex];
+      final targetState = _history[_historyIndex - 1];
       setState(() {
         _historyIndex--;
-        _applyState(_history[_historyIndex]);
+        _applyState(targetState);
       });
       unawaited(_syncBookmarksFromEditorSigns(notify: false, save: true));
-      // Two-phase restore: focus immediately, then scroll after TextField's own
-      // auto-scroll fires (which would otherwise override our ensureVisible).
-      Future.delayed(const Duration(milliseconds: 150), () {
-        if (!mounted) return;
-        _isCommandExecuting = false;
-        _isDirty = false;
-        final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
-        _focusNodes[targetIdx].requestFocus();
-        // Additional frame lets TextField's internal makeVisible() settle first.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _scrollEditorBlockIntoView(targetIdx);
-        });
-      });
+      _restoreHistoryFocusAndScroll(
+        targetState,
+        previousState: sourceState,
+        focusState: sourceState,
+      );
       _forceRecentUpdate();
     }
   }
 
   void _redo() {
+    _flushPendingTypingHistoryForTraversal();
     if (_historyIndex < _history.length - 1) {
       _isCommandExecuting = true;
       _isDirty = false;
-      final preFocusIdx = _lastFocusedController != null
-          ? _controllers.indexOf(_lastFocusedController!)
-          : 0;
+      final sourceState = _history[_historyIndex];
+      final targetState = _history[_historyIndex + 1];
       setState(() {
         _historyIndex++;
-        _applyState(_history[_historyIndex]);
+        _applyState(targetState);
       });
       unawaited(_syncBookmarksFromEditorSigns(notify: false, save: true));
-      Future.delayed(const Duration(milliseconds: 150), () {
-        if (!mounted) return;
-        _isCommandExecuting = false;
-        _isDirty = false;
-        final targetIdx = preFocusIdx.clamp(0, _controllers.length - 1);
-        _focusNodes[targetIdx].requestFocus();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _scrollEditorBlockIntoView(targetIdx);
-        });
-      });
+      _restoreHistoryFocusAndScroll(
+        targetState,
+        previousState: sourceState,
+        focusState: targetState,
+      );
       _forceRecentUpdate();
     }
   }
@@ -433,6 +445,78 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   void _applyState(EditorState state) {
     _loadText(state.text);
     _applySettingsFromState(state);
+  }
+
+  void _restoreHistoryFocusAndScroll(
+    EditorState targetState, {
+    EditorState? previousState,
+    EditorState? focusState,
+  }) {
+    // Two-phase restore: focus immediately after controllers rebuild, then let
+    // EditableText's internal makeVisible() settle before applying our scroll.
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (!mounted || _controllers.isEmpty) return;
+      _isCommandExecuting = false;
+      _isDirty = false;
+
+      final fallbackBlock =
+          _firstChangedBlockIndex(previousState?.text, targetState.text);
+      final rawTarget = focusState?.focusBlockIndex ??
+          targetState.focusBlockIndex ??
+          fallbackBlock ??
+          0;
+      final targetIdx = rawTarget.clamp(0, _controllers.length - 1).toInt();
+      final controller = _controllers[targetIdx];
+      final base = (focusState?.selectionBaseOffset ??
+              targetState.selectionBaseOffset ??
+              0)
+          .clamp(0, controller.text.length)
+          .toInt();
+      final extent = (focusState?.selectionExtentOffset ??
+              focusState?.selectionBaseOffset ??
+              targetState.selectionExtentOffset ??
+              targetState.selectionBaseOffset ??
+              base)
+          .clamp(0, controller.text.length)
+          .toInt();
+
+      _lastFocusedController = controller;
+      _focusNodes[targetIdx].requestFocus();
+      controller.selection = TextSelection(
+        baseOffset: base,
+        extentOffset: extent,
+      );
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final restoreScrollOffset =
+            focusState?.scrollOffset ?? targetState.scrollOffset;
+        if (restoreScrollOffset != null && _editorScrollController.hasClients) {
+          final max = _editorScrollController.position.maxScrollExtent;
+          _editorScrollController.jumpTo(
+            restoreScrollOffset.clamp(0.0, max).toDouble(),
+          );
+        }
+        _scrollEditorBlockIntoView(targetIdx);
+      });
+    });
+  }
+
+  int? _firstChangedBlockIndex(String? previousText, String targetText) {
+    if (previousText == null) return null;
+    final previousBlocks = previousText.split('\n');
+    final targetBlocks = targetText.split('\n');
+    final maxLength = previousBlocks.length > targetBlocks.length
+        ? previousBlocks.length
+        : targetBlocks.length;
+    for (var i = 0; i < maxLength; i++) {
+      final previous = i < previousBlocks.length ? previousBlocks[i] : null;
+      final target = i < targetBlocks.length ? targetBlocks[i] : null;
+      if (previous != target) {
+        return i.clamp(0, targetBlocks.length - 1).toInt();
+      }
+    }
+    return null;
   }
 
   MarkupController? get _activeController {

@@ -154,6 +154,10 @@ class MarkupDecorationParser {
 }
 
 class MarkupDecorationBoxMerger {
+  static const double styleBackgroundGapTolerance = 28.0;
+  static const double styleUnderlineGapTolerance = 14.0;
+  static const double activeSelectionGapTolerance = 2.0;
+
   static List<Rect> merge(
     Iterable<Rect> boxes, {
     double rowTolerance = 4.0,
@@ -231,6 +235,29 @@ class MarkupTextLayoutGeometry {
             : box.toRect())
         .where((rect) => !rect.isEmpty)
         .toList(growable: false);
+  }
+
+  List<Rect> mergedDecorationRects(
+    TextSelection selection, {
+    required MarkupDecorationType type,
+  }) {
+    final boxes = selectionRects(selection);
+    return MarkupDecorationBoxMerger.merge(
+      boxes,
+      rowTolerance: 5.0,
+      gapTolerance: type == MarkupDecorationType.background
+          ? MarkupDecorationBoxMerger.styleBackgroundGapTolerance
+          : MarkupDecorationBoxMerger.styleUnderlineGapTolerance,
+    );
+  }
+
+  List<Rect> mergedActiveSelectionRects(TextSelection selection) {
+    final boxes = selectionRects(selection);
+    return MarkupDecorationBoxMerger.merge(
+      boxes,
+      rowTolerance: 5.0,
+      gapTolerance: MarkupDecorationBoxMerger.activeSelectionGapTolerance,
+    );
   }
 
   Rect _alignRectToVisualLine(Rect rect) {
@@ -312,52 +339,62 @@ class MarkupTextDecorationPainter extends CustomPainter {
       final paintableRange =
           MarkupDecorationParser.paintableContentRange(rawText, range);
       if (paintableRange == null) continue;
-      final boxes = geometry.selectionRects(
+      final merged = geometry.mergedDecorationRects(
         TextSelection(
           baseOffset: paintableRange.start,
           extentOffset: paintableRange.end,
         ),
-      );
-      final merged = MarkupDecorationBoxMerger.merge(
-        boxes,
-        rowTolerance: 5.0,
-        gapTolerance: type == MarkupDecorationType.background ? 48.0 : 24.0,
+        type: type,
       );
       if (type == MarkupDecorationType.background) {
-        _paintBackground(canvas, merged, range.color ?? Colors.transparent);
+        _paintBackground(
+          canvas,
+          merged,
+          range.color ?? Colors.transparent,
+          width,
+        );
       } else {
-        _paintUnderline(canvas, merged);
+        _paintUnderline(canvas, merged, width);
       }
     }
     canvas.restore();
   }
 
-  void _paintBackground(Canvas canvas, List<Rect> rects, Color color) {
+  void _paintBackground(
+    Canvas canvas,
+    List<Rect> rects,
+    Color color,
+    double width,
+  ) {
     if (color.a <= 0) return;
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
     for (final rect in rects) {
       final band = Rect.fromLTRB(
-        rect.left - 4.0,
+        (rect.left - 1.5).clamp(0.0, width).toDouble(),
         rect.top,
-        rect.right + 4.0,
+        (rect.right + 1.5).clamp(0.0, width).toDouble(),
         rect.bottom,
       );
+      if (band.width <= 0) continue;
       final radius = Radius.circular((band.height * 0.10).clamp(2.0, 6.0));
       canvas.drawRRect(RRect.fromRectAndRadius(band, radius), paint);
     }
   }
 
-  void _paintUnderline(Canvas canvas, List<Rect> rects) {
+  void _paintUnderline(Canvas canvas, List<Rect> rects, double width) {
     final paint = Paint()
       ..color = Colors.white
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.square
       ..style = PaintingStyle.stroke;
     for (final rect in rects) {
+      final left = rect.left.clamp(0.0, width).toDouble();
+      final right = rect.right.clamp(0.0, width).toDouble();
+      if (right <= left) continue;
       final y = rect.bottom - (paint.strokeWidth * 0.5);
-      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+      canvas.drawLine(Offset(left, y), Offset(right, y), paint);
     }
   }
 
@@ -411,16 +448,11 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
       textDirection: textDirection,
       strutStyle: strutStyle,
     );
-    final boxes = geometry.selectionRects(
+    final merged = geometry.mergedActiveSelectionRects(
       TextSelection(
         baseOffset: activeSelection.start,
         extentOffset: activeSelection.end,
       ),
-    );
-    final merged = MarkupDecorationBoxMerger.merge(
-      boxes,
-      rowTolerance: 5.0,
-      gapTolerance: 12.0,
     );
     if (merged.isEmpty) return;
 
@@ -431,11 +463,12 @@ class MarkupSelectionDecorationPainter extends CustomPainter {
     canvas.translate(contentPadding.left, contentPadding.top);
     for (final rect in merged) {
       final band = Rect.fromLTRB(
-        rect.left - 0.5,
+        rect.left.clamp(0.0, width).toDouble(),
         rect.top,
-        rect.right + 0.5,
+        rect.right.clamp(0.0, width).toDouble(),
         rect.bottom,
       );
+      if (band.width <= 0) continue;
       final radius = Radius.circular((band.height * 0.10).clamp(2.0, 6.0));
       canvas.drawRRect(RRect.fromRectAndRadius(band, radius), paint);
     }

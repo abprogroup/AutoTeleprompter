@@ -38,4 +38,14 @@ class EditorTextGeometryService {
     }
     return isRtl ? TextAlign.right : TextAlign.left;
   }
+
+  static double maxFontSize(String rawText, double defaultSize) {
+    var maxSize = defaultSize;
+    for (final match
+        in RegExp(r'\[size=(\d+(?:\.\d+)?)\]').allMatches(rawText)) {
+      final size = double.tryParse(match.group(1)!) ?? defaultSize;
+      if (size > maxSize) maxSize = size;
+    }
+    return maxSize;
+  }
 }

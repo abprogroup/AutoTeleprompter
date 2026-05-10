@@ -167,19 +167,15 @@ class EditorTextGeometryService {
     }
     if (rawStops.length < 2) return null;
 
-    final currentLineStops = <({int raw, int line, double x})>[];
-    final targetStops = <({int raw, int line, double x})>[];
+    final currentLineStops = <_VisualCaretStop>[];
+    final targetStops = <_VisualCaretStop>[];
     for (final raw in rawStops) {
       final safe = raw.clamp(0, plainText.length).toInt();
-      final line = _lineIndexForOffset(painter, safe);
-      final stop = (
-        raw: safe,
-        line: line,
-        x: _caretXForOffset(painter, safe),
-      );
-      if (line == currentStop.line) currentLineStops.add(stop);
-      if (line != targetLine) continue;
-      targetStops.add(stop);
+      for (final stop in _caretStopsForOffset(painter, safe)) {
+        if (stop.line == currentStop.line) currentLineStops.add(stop);
+        if (stop.line != targetLine) continue;
+        targetStops.add(stop);
+      }
     }
     if (currentLineStops.isEmpty || targetStops.isEmpty) return null;
     _sortVisualStops(painter, currentLineStops);
@@ -189,7 +185,7 @@ class EditorTextGeometryService {
       targetLineStops: targetStops,
       currentX: currentStop.x,
     );
-    ({int raw, int line, double x})? best;
+    _VisualCaretStop? best;
     var bestDistance = double.infinity;
     for (final stop in targetStops) {
       final distance = (stop.x - targetX).abs();
@@ -202,17 +198,17 @@ class EditorTextGeometryService {
   }
 
   static double _clampedVisualTargetX({
-    required List<({int raw, int line, double x})> targetLineStops,
+    required List<_VisualCaretStop> targetLineStops,
     required double currentX,
   }) {
-    double minX(Iterable<({int raw, int line, double x})> stops) =>
+    double minX(Iterable<_VisualCaretStop> stops) =>
         stops.map((stop) => stop.x).reduce((a, b) => a < b ? a : b);
-    double maxX(Iterable<({int raw, int line, double x})> stops) =>
+    double maxX(Iterable<_VisualCaretStop> stops) =>
         stops.map((stop) => stop.x).reduce((a, b) => a > b ? a : b);
     return currentX.clamp(minX(targetLineStops), maxX(targetLineStops));
   }
 
-  static ({int raw, int line, double x}) _currentVisualStop({
+  static _VisualCaretStop _currentVisualStop({
     required TextPainter painter,
     required String rawText,
     required int rawOffset,
@@ -228,29 +224,21 @@ class EditorTextGeometryService {
     final currentRaw = visibleToRawOffset(rawText, currentVisible)
         .clamp(0, plainTextLength)
         .toInt();
-    return (
-      raw: currentRaw,
-      line: _lineIndexForOffset(painter, currentRaw),
-      x: _caretXForOffset(painter, currentRaw),
-    );
+    return _bestCaretStopForOffset(painter, currentRaw);
   }
 
   static int? _targetFromVisualStops({
     required TextPainter painter,
     required Set<int> rawStops,
-    required ({int raw, int line, double x}) currentStop,
+    required _VisualCaretStop currentStop,
     required bool moveLeft,
   }) {
     if (rawStops.length < 2) return null;
     final plainLength = painter.text?.toPlainText().length ?? 0;
-    final stops = <({int raw, int line, double x})>[];
+    final stops = <_VisualCaretStop>[];
     for (final raw in rawStops) {
       final safe = raw.clamp(0, plainLength).toInt();
-      stops.add((
-        raw: safe,
-        line: _lineIndexForOffset(painter, safe),
-        x: _caretXForOffset(painter, safe),
-      ));
+      stops.addAll(_caretStopsForOffset(painter, safe));
     }
     _sortVisualStops(painter, stops);
     final orderedStops = _collapseDuplicateVisualCaretStops(
@@ -275,28 +263,68 @@ class EditorTextGeometryService {
     }
     if (currentIndex < 0) return null;
 
-    final targetIndex =
-        currentIndex + _visualStep(painter: painter, moveLeft: moveLeft);
+    final step = _visualStep(painter: painter, moveLeft: moveLeft);
+    var targetIndex = currentIndex + step;
+    while (targetIndex >= 0 &&
+        targetIndex < orderedStops.length &&
+        orderedStops[targetIndex].raw == currentStop.raw) {
+      targetIndex += step;
+    }
     if (targetIndex < 0 || targetIndex >= orderedStops.length) return null;
     return orderedStops[targetIndex].raw;
   }
 
-  static double _caretXForOffset(TextPainter painter, int offset) {
-    final text = painter.text?.toPlainText() ?? '';
-    final safeOffset = offset.clamp(0, text.length).toInt();
-    return painter
-        .getOffsetForCaret(TextPosition(offset: safeOffset), Rect.zero)
-        .dx;
+  static _VisualCaretStop _bestCaretStopForOffset(
+    TextPainter painter,
+    int offset,
+  ) {
+    final stops = _caretStopsForOffset(painter, offset);
+    if (stops.isEmpty) return _VisualCaretStop(raw: offset, line: 0, x: 0);
+    return stops.first;
   }
 
-  static int _lineIndexForOffset(TextPainter painter, int offset) {
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return 0;
+  static List<_VisualCaretStop> _caretStopsForOffset(
+    TextPainter painter,
+    int offset,
+  ) {
     final text = painter.text?.toPlainText() ?? '';
     final safeOffset = offset.clamp(0, text.length).toInt();
-    final caretY = painter
-        .getOffsetForCaret(TextPosition(offset: safeOffset), Rect.zero)
-        .dy;
+    final stops = <_VisualCaretStop>[];
+    for (final affinity in const [
+      TextAffinity.downstream,
+      TextAffinity.upstream,
+    ]) {
+      final caret = painter.getOffsetForCaret(
+        TextPosition(offset: safeOffset, affinity: affinity),
+        Rect.zero,
+      );
+      stops.add(_VisualCaretStop(
+        raw: safeOffset,
+        line: _lineIndexForCaretY(painter, caret.dy),
+        x: caret.dx,
+      ));
+    }
+    return _dedupeCaretStops(stops);
+  }
+
+  static List<_VisualCaretStop> _dedupeCaretStops(
+    List<_VisualCaretStop> stops,
+  ) {
+    const tolerance = 0.75;
+    final deduped = <_VisualCaretStop>[];
+    for (final stop in stops) {
+      final duplicate = deduped.any((existing) =>
+          existing.raw == stop.raw &&
+          existing.line == stop.line &&
+          (existing.x - stop.x).abs() <= tolerance);
+      if (!duplicate) deduped.add(stop);
+    }
+    return deduped;
+  }
+
+  static int _lineIndexForCaretY(TextPainter painter, double caretY) {
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return 0;
     var bestIndex = 0;
     var bestDistance = double.infinity;
     for (var i = 0; i < lines.length; i++) {
@@ -334,7 +362,7 @@ class EditorTextGeometryService {
 
   static void _sortVisualStops(
     TextPainter painter,
-    List<({int raw, int line, double x})> stops,
+    List<_VisualCaretStop> stops,
   ) {
     final isRtl = painter.textDirection == TextDirection.rtl;
     stops.sort((a, b) {
@@ -346,13 +374,12 @@ class EditorTextGeometryService {
     });
   }
 
-  static List<({int raw, int line, double x})>
-      _collapseDuplicateVisualCaretStops(
-    List<({int raw, int line, double x})> stops, {
-    required ({int raw, int line, double x}) currentStop,
+  static List<_VisualCaretStop> _collapseDuplicateVisualCaretStops(
+    List<_VisualCaretStop> stops, {
+    required _VisualCaretStop currentStop,
   }) {
     const duplicateTolerance = 0.75;
-    final collapsed = <({int raw, int line, double x})>[];
+    final collapsed = <_VisualCaretStop>[];
     for (final stop in stops) {
       if (collapsed.isEmpty) {
         collapsed.add(stop);
@@ -371,4 +398,16 @@ class EditorTextGeometryService {
     }
     return collapsed;
   }
+}
+
+class _VisualCaretStop {
+  final int raw;
+  final int line;
+  final double x;
+
+  const _VisualCaretStop({
+    required this.raw,
+    required this.line,
+    required this.x,
+  });
 }

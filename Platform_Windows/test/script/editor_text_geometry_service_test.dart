@@ -156,6 +156,30 @@ void main() {
     }
   });
 
+  test('wrapped Hebrew arrow-left walks pure RTL text without loops', () {
+    const text =
+        '\u05d0\u05ea \u05d0\u05d5\u05de\u05e8\u05ea \u05e0\u05d2\u05de\u05e8\u05d5 \u05d4\u05de\u05e9\u05d7\u05e7\u05d9\u05dd \u05e0\u05d5\u05e4\u05dc\u05ea \u05db\u05d5\u05e1 \u05e2\u05dc \u05d4\u05e1\u05d3\u05d9\u05e0\u05d9\u05dd \u05d0\u05e0\u05d9 \u05e0\u05d5\u05d7\u05e8 \u05db\u05de\u05d5 \u05db\u05dc\u05d1 \u05d1\u05d0\u05d9\u05d2\u05d5\u05d3 \u05d4\u05e0\u05d5\u05db\u05dc\u05d9\u05dd \u05d0\u05d9\u05df \u05d9\u05d5\u05ea\u05e8 \u05de\u05d5\u05e2\u05d3\u05d5\u05e0\u05d9\u05dd';
+    final painter = painterFor(text, direction: TextDirection.rtl, width: 360);
+
+    var offset = 0;
+    final visited = <int>{offset};
+    for (var i = 0; i < text.length + 12 && offset < text.length; i++) {
+      final next = EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: offset,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      );
+      expect(next, isNotNull);
+      expect(next, isNot(offset));
+      expect(visited.add(next!), isTrue);
+      offset = next;
+    }
+    expect(offset, text.length);
+  });
+
   test('wrapped Hebrew vertical arrows choose adjacent visual-line caret stops',
       () {
     const text =
@@ -185,6 +209,40 @@ void main() {
       visibleToRawOffset: identityVisibleToRaw,
     );
     expect(sourceAgain, sourceOffset);
+  });
+
+  test('wrapped Hebrew vertical arrows preserve screen column', () {
+    const text =
+        '\u05d0\u05ea \u05d0\u05d5\u05de\u05e8\u05ea \u05e0\u05d2\u05de\u05e8\u05d5 \u05d4\u05de\u05e9\u05d7\u05e7\u05d9\u05dd \u05e0\u05d5\u05e4\u05dc\u05ea \u05db\u05d5\u05e1 \u05e2\u05dc \u05d4\u05e1\u05d3\u05d9\u05e0\u05d9\u05dd \u05d0\u05e0\u05d9 \u05e0\u05d5\u05d7\u05e8 \u05db\u05de\u05d5 \u05db\u05dc\u05d1 \u05d1\u05d0\u05d9\u05d2\u05d5\u05d3 \u05d4\u05e0\u05d5\u05db\u05dc\u05d9\u05dd \u05d0\u05d9\u05df \u05d9\u05d5\u05ea\u05e8 \u05de\u05d5\u05e2\u05d3\u05d5\u05e0\u05d9\u05dd';
+    final painter = painterFor(text, direction: TextDirection.rtl, width: 360);
+    final lowerWord = text.indexOf(
+      '\u05de\u05d5\u05e2\u05d3\u05d5\u05e0\u05d9\u05dd',
+    );
+    final sourceOffset = lowerWord + 1;
+    final targetOffset =
+        EditorTextGeometryService.visualVerticalTargetRawOffset(
+      painter: painter,
+      rawText: text,
+      rawOffset: sourceOffset,
+      moveUp: true,
+      rawToVisibleOffset: identityRawToVisible,
+      visibleToRawOffset: identityVisibleToRaw,
+    );
+
+    expect(targetOffset, isNotNull);
+    final sourceX = painter
+        .getOffsetForCaret(
+          TextPosition(offset: sourceOffset),
+          Rect.zero,
+        )
+        .dx;
+    final targetX = painter
+        .getOffsetForCaret(
+          TextPosition(offset: targetOffset!),
+          Rect.zero,
+        )
+        .dx;
+    expect((sourceX - targetX).abs(), lessThan(24));
   });
 
   test('visual word navigation keeps English Ctrl arrows LTR', () {

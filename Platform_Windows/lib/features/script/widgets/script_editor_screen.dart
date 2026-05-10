@@ -908,6 +908,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         key != LogicalKeyboardKey.arrowRight) {
       return false;
     }
+    if (hasEditorFocus && !hasAppSelectionForKeyboard) return false;
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isShiftPressed) {
       return _extendAppSelectionForArrow(key, keyboard);

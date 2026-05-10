@@ -162,13 +162,13 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent)
           return KeyEventResult.ignored;
 
-        // Arrow-key cross-block navigation is owned entirely by the screen-level
-        // Focus (_handleEditorArrowKey). Handling arrows here via requestFocus()
-        // caused a race condition: requestFocus() is async, so multiple KeyRepeat
-        // events arrived at the old block before focus transferred, each trying to
-        // jump one more block. The screen-level handler avoids this by updating
-        // _lastFocusedController synchronously before requestFocus(), so
-        // subsequent events use the new controller even during the async transition.
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+            event.logicalKey == LogicalKeyboardKey.arrowDown ||
+            event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+            event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          return _handleEditorArrowKey(node, event);
+        }
+
         if (event.logicalKey == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);

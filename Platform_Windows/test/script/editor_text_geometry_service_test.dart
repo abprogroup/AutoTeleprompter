@@ -136,6 +136,26 @@ void main() {
     );
   });
 
+  test('wrapped Hebrew arrow-left walks the visual line without row bouncing',
+      () {
+    const text =
+        '\u05d5\u05d4\u05d1\u05ea \u05e9\u05dc\u05d9 \u05d2\u05dd \u05d0\u05d9\u05df \u05dc\u05d4 \u05d1\u05e2\u05d9\u05d4 \u05dc\u05e9\u05e7\u05e8 \u05dc\u05d9 \u05d1\u05e4\u05e8\u05e6\u05d5\u05e3';
+    final painter = painterFor(text, direction: TextDirection.rtl, width: 360);
+
+    var offset = 0;
+    for (var expected = 1; expected <= 12; expected++) {
+      offset = EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: offset,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      )!;
+      expect(offset, expected);
+    }
+  });
+
   test('visual word navigation keeps English Ctrl arrows LTR', () {
     const text = 'hello world';
     final painter = painterFor(text, direction: TextDirection.ltr);

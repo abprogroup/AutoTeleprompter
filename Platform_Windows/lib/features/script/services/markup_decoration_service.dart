@@ -263,6 +263,57 @@ class MarkupTextLayoutGeometry {
     );
   }
 
+  Offset? activeSelectionEndpoint(
+    TextSelection selection, {
+    required bool isRangeStart,
+  }) {
+    final rects = mergedActiveSelectionRects(selection);
+    if (rects.isEmpty) return null;
+    return endpointForRects(
+      rects,
+      isRangeStart: isRangeStart,
+      textDirection: textDirection,
+    );
+  }
+
+  static Offset endpointForRects(
+    List<Rect> rects, {
+    required bool isRangeStart,
+    required TextDirection textDirection,
+  }) {
+    const lineTolerance = 4.0;
+    final sorted = rects.where((rect) => !rect.isEmpty).toList()
+      ..sort((a, b) {
+        final yCompare = a.center.dy.compareTo(b.center.dy);
+        if (yCompare != 0 &&
+            (a.center.dy - b.center.dy).abs() > lineTolerance) {
+          return yCompare;
+        }
+        return a.left.compareTo(b.left);
+      });
+    if (sorted.isEmpty) return Offset.zero;
+
+    final targetY =
+        isRangeStart ? sorted.first.center.dy : sorted.last.center.dy;
+    final sameLine = sorted
+        .where((rect) => (rect.center.dy - targetY).abs() <= lineTolerance)
+        .toList();
+    final lineRects = sameLine.isEmpty ? sorted : sameLine;
+    final rtl = textDirection == TextDirection.rtl;
+    final x = rtl
+        ? isRangeStart
+            ? lineRects
+                .map((rect) => rect.right)
+                .reduce((a, b) => a > b ? a : b)
+            : lineRects.map((rect) => rect.left).reduce((a, b) => a < b ? a : b)
+        : isRangeStart
+            ? lineRects.map((rect) => rect.left).reduce((a, b) => a < b ? a : b)
+            : lineRects
+                .map((rect) => rect.right)
+                .reduce((a, b) => a > b ? a : b);
+    return Offset(x, targetY);
+  }
+
   Rect _alignRectToVisualLine(Rect rect) {
     final line = _nearestLineFor(rect);
     if (line == null) return rect;

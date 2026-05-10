@@ -118,6 +118,39 @@ void main() {
     expect(selectionMerged, hasLength(2));
   });
 
+  test('selection endpoints follow painted LTR and RTL rectangle edges', () {
+    const rects = [
+      Rect.fromLTRB(420, 10, 520, 40),
+      Rect.fromLTRB(320, 50, 480, 80),
+    ];
+
+    final ltrStart = MarkupTextLayoutGeometry.endpointForRects(
+      rects,
+      isRangeStart: true,
+      textDirection: TextDirection.ltr,
+    );
+    final ltrEnd = MarkupTextLayoutGeometry.endpointForRects(
+      rects,
+      isRangeStart: false,
+      textDirection: TextDirection.ltr,
+    );
+    final rtlStart = MarkupTextLayoutGeometry.endpointForRects(
+      rects,
+      isRangeStart: true,
+      textDirection: TextDirection.rtl,
+    );
+    final rtlEnd = MarkupTextLayoutGeometry.endpointForRects(
+      rects,
+      isRangeStart: false,
+      textDirection: TextDirection.rtl,
+    );
+
+    expect(ltrStart, const Offset(420, 25));
+    expect(ltrEnd, const Offset(480, 65));
+    expect(rtlStart, const Offset(520, 25));
+    expect(rtlEnd, const Offset(320, 65));
+  });
+
   testWidgets('RTL right-aligned decoration boxes stay on visual text',
       (tester) async {
     late BuildContext capturedContext;

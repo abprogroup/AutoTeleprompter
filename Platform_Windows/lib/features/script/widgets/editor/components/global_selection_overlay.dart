@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../services/editor_text_geometry_service.dart';
+import '../../../services/markup_decoration_service.dart';
 import '../markup_controller.dart';
 
 /// Walk a render tree to find the first RenderEditable.
@@ -1071,13 +1072,23 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
                       )
                     : TextSelection(
                         baseOffset: 0, extentOffset: blockTextLength);
-        final endpoints = editable.getEndpointsForSelection(selection);
-        if (endpoints.isNotEmpty) {
-          final endpoint = blockRtl
-              ? _rtlSelectionEndpoint(endpoints, isRangeStart: isRangeStart)
-              : (isRangeStart ? endpoints.first : endpoints.last);
-          endpointX = endpoint.point.dx;
-          endpointY = endpoint.point.dy;
+        final paintedEndpoint = _paintedSelectionEndpoint(
+          editable,
+          selection,
+          isRangeStart: isRangeStart,
+        );
+        if (paintedEndpoint != null) {
+          endpointX = paintedEndpoint.dx;
+          endpointY = paintedEndpoint.dy;
+        } else {
+          final endpoints = editable.getEndpointsForSelection(selection);
+          if (endpoints.isNotEmpty) {
+            final endpoint = blockRtl
+                ? _rtlSelectionEndpoint(endpoints, isRangeStart: isRangeStart)
+                : (isRangeStart ? endpoints.first : endpoints.last);
+            endpointX = endpoint.point.dx;
+            endpointY = endpoint.point.dy;
+          }
         }
       }
       final anchor = Offset(
@@ -1089,6 +1100,31 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
     final box = renderObj as RenderBox;
     return box.localToGlobal(Offset.zero, ancestor: ourStack);
+  }
+
+  Offset? _paintedSelectionEndpoint(
+    RenderEditable editable,
+    TextSelection selection, {
+    required bool isRangeStart,
+  }) {
+    if (!selection.isValid || selection.isCollapsed) return null;
+    final textSpan = editable.text;
+    final width = editable.size.width;
+    if (textSpan == null || width <= 0) return null;
+    final geometry = MarkupTextLayoutGeometry(
+      textSpan: textSpan,
+      width: width,
+      textAlign: editable.textAlign,
+      textDirection: editable.textDirection,
+      strutStyle: editable.strutStyle,
+    );
+    return geometry.activeSelectionEndpoint(
+      TextSelection(
+        baseOffset: selection.start,
+        extentOffset: selection.end,
+      ),
+      isRangeStart: isRangeStart,
+    );
   }
 
   TextSelectionPoint _rtlSelectionEndpoint(

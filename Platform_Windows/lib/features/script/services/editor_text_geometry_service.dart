@@ -65,6 +65,18 @@ class EditorTextGeometryService {
     final visible = visibleText(rawText);
     if (visible.isEmpty) return 0;
 
+    if (painter.textDirection == TextDirection.rtl) {
+      return _rtlLogicalHorizontalTargetRawOffset(
+        rawText: rawText,
+        rawOffset: rawOffset,
+        moveLeft: moveLeft,
+        plainTextLength: plainText.length,
+        visibleLength: visible.length,
+        rawToVisibleOffset: rawToVisibleOffset,
+        visibleToRawOffset: visibleToRawOffset,
+      );
+    }
+
     final currentStop = _currentVisualStop(
       painter: painter,
       rawText: rawText,
@@ -147,6 +159,19 @@ class EditorTextGeometryService {
     final visible = visibleText(rawText);
     if (visible.isEmpty) return null;
 
+    if (painter.textDirection == TextDirection.rtl) {
+      return _rtlBoxVerticalTargetRawOffset(
+        painter: painter,
+        rawText: rawText,
+        rawOffset: rawOffset,
+        plainTextLength: plainText.length,
+        visibleLength: visible.length,
+        rawToVisibleOffset: rawToVisibleOffset,
+        visibleToRawOffset: visibleToRawOffset,
+        moveUp: moveUp,
+      );
+    }
+
     final currentStop = _currentVisualStop(
       painter: painter,
       rawText: rawText,
@@ -195,6 +220,148 @@ class EditorTextGeometryService {
       }
     }
     return best?.raw;
+  }
+
+  static int? _rtlLogicalHorizontalTargetRawOffset({
+    required String rawText,
+    required int rawOffset,
+    required bool moveLeft,
+    required int plainTextLength,
+    required int visibleLength,
+    required RawToVisibleOffset rawToVisibleOffset,
+    required VisibleToRawOffset visibleToRawOffset,
+  }) {
+    final currentVisible = rawToVisibleOffset(
+      rawText,
+      rawOffset.clamp(0, rawText.length).toInt(),
+    ).clamp(0, visibleLength).toInt();
+    final targetVisible = currentVisible + (moveLeft ? 1 : -1);
+    if (targetVisible < 0 || targetVisible > visibleLength) return null;
+    return visibleToRawOffset(rawText, targetVisible)
+        .clamp(0, plainTextLength)
+        .toInt();
+  }
+
+  static int? _rtlBoxVerticalTargetRawOffset({
+    required TextPainter painter,
+    required String rawText,
+    required int rawOffset,
+    required int plainTextLength,
+    required int visibleLength,
+    required RawToVisibleOffset rawToVisibleOffset,
+    required VisibleToRawOffset visibleToRawOffset,
+    required bool moveUp,
+  }) {
+    final stops = _rtlBoxCaretStops(
+      painter: painter,
+      rawText: rawText,
+      visibleLength: visibleLength,
+      plainTextLength: plainTextLength,
+      visibleToRawOffset: visibleToRawOffset,
+    );
+    if (stops.isEmpty) return null;
+
+    final currentVisible = rawToVisibleOffset(
+      rawText,
+      rawOffset.clamp(0, rawText.length).toInt(),
+    ).clamp(0, visibleLength).toInt();
+    final currentCandidates =
+        stops.where((stop) => stop.visible == currentVisible).toList();
+    if (currentCandidates.isEmpty) return null;
+    final oldCaret = _bestCaretStopForOffset(
+      painter,
+      visibleToRawOffset(rawText, currentVisible)
+          .clamp(0, plainTextLength)
+          .toInt(),
+    );
+    currentCandidates.sort((a, b) {
+      final lineCompare = (a.line - oldCaret.line)
+          .abs()
+          .compareTo((b.line - oldCaret.line).abs());
+      if (lineCompare != 0) return lineCompare;
+      return (a.x - oldCaret.x).abs().compareTo((b.x - oldCaret.x).abs());
+    });
+    final currentStop = currentCandidates.first;
+    final targetLine = currentStop.line + (moveUp ? -1 : 1);
+    if (targetLine < 0) return null;
+    final targetStops = stops.where((stop) => stop.line == targetLine).toList();
+    if (targetStops.isEmpty) return null;
+    final targetX = currentStop.x.clamp(
+      targetStops.map((stop) => stop.x).reduce((a, b) => a < b ? a : b),
+      targetStops.map((stop) => stop.x).reduce((a, b) => a > b ? a : b),
+    );
+    targetStops.sort((a, b) {
+      final distanceCompare =
+          (a.x - targetX).abs().compareTo((b.x - targetX).abs());
+      if (distanceCompare != 0) return distanceCompare;
+      return a.visible.compareTo(b.visible);
+    });
+    return targetStops.first.raw;
+  }
+
+  static List<_VisibleCaretStop> _rtlBoxCaretStops({
+    required TextPainter painter,
+    required String rawText,
+    required int visibleLength,
+    required int plainTextLength,
+    required VisibleToRawOffset visibleToRawOffset,
+  }) {
+    final stops = <_VisibleCaretStop>[];
+    for (var visible = 0; visible < visibleLength; visible++) {
+      final rawStart = visibleToRawOffset(rawText, visible)
+          .clamp(0, plainTextLength)
+          .toInt();
+      final rawEnd = visibleToRawOffset(rawText, visible + 1)
+          .clamp(rawStart, plainTextLength)
+          .toInt();
+      if (rawEnd <= rawStart) continue;
+      final boxes = painter.getBoxesForSelection(
+        TextSelection(baseOffset: rawStart, extentOffset: rawEnd),
+      );
+      if (boxes.isEmpty) continue;
+      final box = boxes.reduce((best, next) {
+        final bestArea = best.toRect().width * best.toRect().height;
+        final nextArea = next.toRect().width * next.toRect().height;
+        return nextArea > bestArea ? next : best;
+      }).toRect();
+      if (box.width <= 0.1 || box.height <= 0.1) continue;
+      final line = _lineIndexForCaretY(painter, box.center.dy);
+      stops.add(_VisibleCaretStop(
+        visible: visible,
+        raw: rawStart,
+        line: line,
+        x: box.right,
+      ));
+      stops.add(_VisibleCaretStop(
+        visible: visible + 1,
+        raw: rawEnd,
+        line: line,
+        x: box.left,
+      ));
+    }
+    stops.sort((a, b) {
+      final lineCompare = a.line.compareTo(b.line);
+      if (lineCompare != 0) return lineCompare;
+      final xCompare = b.x.compareTo(a.x);
+      if (xCompare != 0) return xCompare;
+      return a.visible.compareTo(b.visible);
+    });
+    return _dedupeVisibleCaretStops(stops);
+  }
+
+  static List<_VisibleCaretStop> _dedupeVisibleCaretStops(
+    List<_VisibleCaretStop> stops,
+  ) {
+    const tolerance = 0.75;
+    final deduped = <_VisibleCaretStop>[];
+    for (final stop in stops) {
+      final duplicate = deduped.any((existing) =>
+          existing.visible == stop.visible &&
+          existing.line == stop.line &&
+          (existing.x - stop.x).abs() <= tolerance);
+      if (!duplicate) deduped.add(stop);
+    }
+    return deduped;
   }
 
   static double _clampedVisualTargetX({
@@ -406,6 +573,20 @@ class _VisualCaretStop {
   final double x;
 
   const _VisualCaretStop({
+    required this.raw,
+    required this.line,
+    required this.x,
+  });
+}
+
+class _VisibleCaretStop {
+  final int visible;
+  final int raw;
+  final int line;
+  final double x;
+
+  const _VisibleCaretStop({
+    required this.visible,
     required this.raw,
     required this.line,
     required this.x,

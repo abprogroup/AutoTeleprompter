@@ -1499,17 +1499,19 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         block: idx,
         offset: safeOffset,
         key: key,
+        crossBlockOnly: true,
       );
-      if (target == null) return KeyEventResult.handled;
+      if (target == null) return KeyEventResult.ignored;
       if (target.block == idx) {
         controller.selection = TextSelection.collapsed(
           offset: target.offset.clamp(0, controller.text.length).toInt(),
         );
-        _lastArrowDecision = 'visual ${key.keyLabel}: $idx:${target.offset}';
+        _lastArrowDecision =
+            'vertical boundary ${key.keyLabel}: $idx:${target.offset}';
       } else {
         _crossToBlock(target.block, atOffset: target.offset);
         _lastArrowDecision =
-            'visual ${key.keyLabel}: ${target.block}:${target.offset}';
+            'vertical boundary ${key.keyLabel}: ${target.block}:${target.offset}';
       }
       return KeyEventResult.handled;
     }

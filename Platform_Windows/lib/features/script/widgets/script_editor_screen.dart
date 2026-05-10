@@ -1348,7 +1348,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     required bool moveUp,
     required double preferredX,
   }) {
-    final targetBlock = _nextVerticalTextBlock(fromBlock, moveUp: moveUp);
+    final targetBlock = fromBlock + (moveUp ? -1 : 1);
     if (targetBlock < 0 || targetBlock >= _controllers.length) return null;
     final targetController = _controllers[targetBlock];
     if (StylingService.stripTags(targetController.text).trim().isEmpty) {
@@ -1365,19 +1365,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         .clamp(0, targetController.text.length)
         .toInt();
     return (block: targetBlock, offset: offset);
-  }
-
-  int _nextVerticalTextBlock(int fromBlock, {required bool moveUp}) {
-    final step = moveUp ? -1 : 1;
-    var candidate = fromBlock + step;
-    var nearestEmpty = -1;
-    while (candidate >= 0 && candidate < _controllers.length) {
-      final visible = StylingService.stripTags(_controllers[candidate].text);
-      if (visible.trim().isNotEmpty) return candidate;
-      nearestEmpty = candidate;
-      candidate += step;
-    }
-    return nearestEmpty;
   }
 
   bool _sameEndpoint(SelectionEndpoint a, SelectionEndpoint b) =>

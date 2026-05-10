@@ -185,9 +185,7 @@ class EditorTextGeometryService {
     _sortVisualStops(painter, currentLineStops);
     _sortVisualStops(painter, targetStops);
 
-    final targetX = _lineRelativeTargetX(
-      painter: painter,
-      currentLineStops: currentLineStops,
+    final targetX = _clampedVisualTargetX(
       targetLineStops: targetStops,
       currentX: currentStop.x,
     );
@@ -203,26 +201,15 @@ class EditorTextGeometryService {
     return best?.raw;
   }
 
-  static double _lineRelativeTargetX({
-    required TextPainter painter,
-    required List<({int raw, int line, double x})> currentLineStops,
+  static double _clampedVisualTargetX({
     required List<({int raw, int line, double x})> targetLineStops,
     required double currentX,
   }) {
-    final isRtl = painter.textDirection == TextDirection.rtl;
     double minX(Iterable<({int raw, int line, double x})> stops) =>
         stops.map((stop) => stop.x).reduce((a, b) => a < b ? a : b);
     double maxX(Iterable<({int raw, int line, double x})> stops) =>
         stops.map((stop) => stop.x).reduce((a, b) => a > b ? a : b);
-
-    if (isRtl) {
-      final currentRight = maxX(currentLineStops);
-      final targetRight = maxX(targetLineStops);
-      return targetRight - (currentRight - currentX);
-    }
-    final currentLeft = minX(currentLineStops);
-    final targetLeft = minX(targetLineStops);
-    return targetLeft + (currentX - currentLeft);
+    return currentX.clamp(minX(targetLineStops), maxX(targetLineStops));
   }
 
   static ({int raw, int line, double x}) _currentVisualStop({

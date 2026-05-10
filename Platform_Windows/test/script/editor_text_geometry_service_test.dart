@@ -166,6 +166,38 @@ void main() {
     );
   });
 
+  test('visual horizontal navigation carries punctuation with English island',
+      () {
+    const text =
+        '\u05de\u05d4 \u05d6\u05d4 \u05de - TEMU? \u05de\u05d2\u05d4\u05d5\u05dc\u05d4?';
+    final painter = painterFor(text, direction: TextDirection.rtl);
+    final englishStart = text.indexOf('TEMU');
+    final questionAfterEnglish = text.indexOf('?') + 1;
+
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: englishStart + 4,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      questionAfterEnglish,
+    );
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: questionAfterEnglish,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      questionAfterEnglish - 1,
+    );
+  });
+
   test('wrapped Hebrew arrow-left walks the visual line without row bouncing',
       () {
     const text =
@@ -273,6 +305,27 @@ void main() {
         )
         .dx;
     expect((sourceX - targetX).abs(), lessThan(24));
+  });
+
+  test('RTL line target from right edge uses visual caret stops', () {
+    const text =
+        '\u05d0\u05ea \u05d0\u05d5\u05de\u05e8\u05ea \u05e0\u05d2\u05de\u05e8\u05d5 \u05d4\u05de\u05e9\u05d7\u05e7\u05d9\u05dd \u05e0\u05d5\u05e4\u05dc\u05ea \u05db\u05d5\u05e1 \u05e2\u05dc \u05d4\u05e1\u05d3\u05d9\u05e0\u05d9\u05dd \u05d0\u05e0\u05d9 \u05e0\u05d5\u05d7\u05e8 \u05db\u05de\u05d5 \u05db\u05dc\u05d1 \u05d1\u05d0\u05d9\u05d2\u05d5\u05d3 \u05d4\u05e0\u05d5\u05db\u05dc\u05d9\u05dd \u05d0\u05d9\u05df \u05d9\u05d5\u05ea\u05e8 \u05de\u05d5\u05e2\u05d3\u05d5\u05e0\u05d9\u05dd';
+    const width = 360.0;
+    final painter =
+        painterFor(text, direction: TextDirection.rtl, width: width);
+
+    final target = EditorTextGeometryService.visualLineTargetRawOffset(
+      painter: painter,
+      rawText: text,
+      x: width,
+      fromBottom: true,
+      visibleToRawOffset: identityVisibleToRaw,
+    );
+
+    expect(target, isNotNull);
+    final targetX =
+        painter.getOffsetForCaret(TextPosition(offset: target!), Rect.zero).dx;
+    expect((targetX - width).abs(), lessThan(32));
   });
 
   test('visual word navigation keeps English Ctrl arrows LTR', () {

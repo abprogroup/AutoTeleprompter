@@ -233,6 +233,48 @@ class EditorTextGeometryService {
     return best?.raw;
   }
 
+  static int? visualLineTargetRawOffset({
+    required TextPainter painter,
+    required String rawText,
+    required double x,
+    required bool fromBottom,
+    required VisibleToRawOffset visibleToRawOffset,
+  }) {
+    final plainTextLength = painter.text?.toPlainText().length ?? 0;
+    if (rawText.isEmpty || plainTextLength <= 0) return 0;
+    final visible = visibleText(rawText);
+    if (visible.isEmpty) return 0;
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return 0;
+    final targetLine = fromBottom ? lines.length - 1 : 0;
+    if (painter.textDirection != TextDirection.rtl) {
+      return painter
+          .getPositionForOffset(Offset(x, _lineCenterY(painter, targetLine)))
+          .offset
+          .clamp(0, plainTextLength)
+          .toInt();
+    }
+
+    final stops = _bidiCaretStops(
+      painter: painter,
+      rawText: rawText,
+      visible: visible,
+      plainTextLength: plainTextLength,
+      visibleToRawOffset: visibleToRawOffset,
+    ).where((stop) => stop.line == targetLine).toList();
+    if (stops.isEmpty) return null;
+    final minX = stops.map((stop) => stop.x).reduce((a, b) => a < b ? a : b);
+    final maxX = stops.map((stop) => stop.x).reduce((a, b) => a > b ? a : b);
+    final targetX = x.clamp(minX, maxX);
+    stops.sort((a, b) {
+      final distanceCompare =
+          (a.x - targetX).abs().compareTo((b.x - targetX).abs());
+      if (distanceCompare != 0) return distanceCompare;
+      return a.visible.compareTo(b.visible);
+    });
+    return stops.first.raw;
+  }
+
   static int? _bidiHorizontalTargetRawOffset({
     required TextPainter painter,
     required String rawText,
@@ -501,12 +543,12 @@ class EditorTextGeometryService {
     int boundary,
   ) {
     var start = boundary;
-    while (start > 0 && _isAsciiLetterOrDigit(visible.codeUnitAt(start - 1))) {
+    while (start > 0 && _isLtrIslandCodeUnit(visible.codeUnitAt(start - 1))) {
       start--;
     }
     var end = boundary;
-    while (end < visible.length &&
-        _isAsciiLetterOrDigit(visible.codeUnitAt(end))) {
+    while (
+        end < visible.length && _isLtrIslandCodeUnit(visible.codeUnitAt(end))) {
       end++;
     }
     if (end <= start) return null;
@@ -531,6 +573,22 @@ class EditorTextGeometryService {
   static bool _isAsciiLetter(int codeUnit) =>
       (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
       (codeUnit >= 0x61 && codeUnit <= 0x7A);
+
+  static bool _isLtrIslandCodeUnit(int codeUnit) {
+    if (_isAsciiLetterOrDigit(codeUnit)) return true;
+    return codeUnit == 0x0021 || // !
+        codeUnit == 0x0022 || // "
+        codeUnit == 0x0027 || // '
+        codeUnit == 0x0028 || // (
+        codeUnit == 0x0029 || // )
+        codeUnit == 0x002C || // ,
+        codeUnit == 0x002D || // -
+        codeUnit == 0x002E || // .
+        codeUnit == 0x002F || // /
+        codeUnit == 0x003A || // :
+        codeUnit == 0x003B || // ;
+        codeUnit == 0x003F; // ?
+  }
 
   static _TextFlow _flowForVisibleChar(
     String visible,
@@ -747,6 +805,16 @@ class EditorTextGeometryService {
       }
     }
     return bestIndex;
+  }
+
+  static double _lineCenterY(TextPainter painter, int index) {
+    final lines = painter.computeLineMetrics();
+    if (lines.isEmpty) return 0;
+    final safeIndex = index.clamp(0, lines.length - 1).toInt();
+    final line = lines[safeIndex];
+    final top = line.baseline - line.ascent;
+    final bottom = line.baseline + line.descent;
+    return (top + bottom) / 2;
   }
 
   static bool _isVisualWordChar(String value) {

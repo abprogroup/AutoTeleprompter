@@ -750,10 +750,24 @@ class _VerticalLayoutInfo {
     return bestIndex;
   }
 
-  int getPositionAtX(double x, {required bool fromBottom}) {
+  int getPositionAtX(
+    double x, {
+    required bool fromBottom,
+    required String rawText,
+  }) {
     if (painter.text?.toPlainText().isEmpty ?? true) return 0;
     final lines = painter.computeLineMetrics();
     if (lines.isEmpty) return 0;
+    if (isRtl) {
+      final offset = EditorTextGeometryService.visualLineTargetRawOffset(
+        painter: painter,
+        rawText: rawText,
+        x: x,
+        fromBottom: fromBottom,
+        visibleToRawOffset: MarkupController.visualToRawOffset,
+      );
+      if (offset != null) return offset;
+    }
     final y = _lineCenterY(fromBottom ? lines.length - 1 : 0);
     return painter.getPositionForOffset(Offset(x, y)).offset;
   }

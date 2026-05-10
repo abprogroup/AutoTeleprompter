@@ -1361,7 +1361,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       selection: TextSelection.collapsed(offset: fallbackOffset),
     );
     final offset = layout
-        .getPositionAtX(preferredX, fromBottom: moveUp)
+        .getPositionAtX(
+          preferredX,
+          fromBottom: moveUp,
+          rawText: targetController.text,
+        )
         .clamp(0, targetController.text.length)
         .toInt();
     return (block: targetBlock, offset: offset);
@@ -2095,11 +2099,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     final text = _controllers[blockIndex].text;
     if (!text.startsWith(_keyboardBookmarkSign)) return null;
     final safeRaw = rawOffset.clamp(0, text.length).toInt();
-    var afterLeadingBookmarks = 0;
-    while (afterLeadingBookmarks < text.length &&
-        text[afterLeadingBookmarks] == _keyboardBookmarkSign) {
-      afterLeadingBookmarks++;
-    }
+    final afterLeadingBookmarks = _firstRawOffsetAfterLeadingBookmarkCluster(
+      text,
+    );
     if (key == LogicalKeyboardKey.arrowRight &&
         safeRaw < afterLeadingBookmarks) {
       return (block: blockIndex, offset: afterLeadingBookmarks);
@@ -2110,6 +2112,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return (block: blockIndex, offset: 0);
     }
     return null;
+  }
+
+  int _firstRawOffsetAfterLeadingBookmarkCluster(String text) {
+    var offset = 0;
+    var moved = true;
+    while (moved && offset < text.length) {
+      moved = false;
+      while (offset < text.length && text[offset] == _keyboardBookmarkSign) {
+        offset++;
+        moved = true;
+      }
+      final tagMatch = MarkupDecorationParser.tagRegex.matchAsPrefix(
+        text,
+        offset,
+      );
+      if (tagMatch != null && tagMatch.start == offset) {
+        offset = tagMatch.end;
+        moved = true;
+      }
+    }
+    return offset;
   }
 
   ({int block, int offset})? _keyboardAwareHorizontalBoundaryTarget({
@@ -2165,7 +2188,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           : raw;
     } else if (x != null) {
       final layout = _getVerticalLayout(targetIdx);
-      offset = layout.getPositionAtX(x, fromBottom: atEnd ?? false);
+      offset = layout.getPositionAtX(
+        x,
+        fromBottom: atEnd ?? false,
+        rawText: text,
+      );
     } else {
       final raw = atEnd == true ? text.length : 0;
       offset = atEnd == true ? MarkupController.safeEndOffset(text) : raw;

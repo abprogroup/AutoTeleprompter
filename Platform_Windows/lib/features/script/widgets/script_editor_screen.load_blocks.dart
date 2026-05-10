@@ -755,6 +755,21 @@ class _VerticalLayoutInfo {
         .offset;
   }
 
+  int? visualVerticalTargetRawOffset({
+    required String rawText,
+    required int rawOffset,
+    required bool moveUp,
+  }) {
+    return EditorTextGeometryService.visualVerticalTargetRawOffset(
+      painter: painter,
+      rawText: rawText,
+      rawOffset: rawOffset,
+      moveUp: moveUp,
+      rawToVisibleOffset: MarkupController.rawToVisualOffset,
+      visibleToRawOffset: MarkupController.visualToRawOffset,
+    );
+  }
+
   int? visualHorizontalTargetRawOffset({
     required String rawText,
     required int rawOffset,

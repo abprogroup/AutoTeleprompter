@@ -134,6 +134,65 @@ class EditorTextGeometryService {
     );
   }
 
+  static int? visualVerticalTargetRawOffset({
+    required TextPainter painter,
+    required String rawText,
+    required int rawOffset,
+    required bool moveUp,
+    required RawToVisibleOffset rawToVisibleOffset,
+    required VisibleToRawOffset visibleToRawOffset,
+  }) {
+    final plainText = painter.text?.toPlainText() ?? '';
+    if (rawText.isEmpty || plainText.isEmpty) return null;
+    final visible = visibleText(rawText);
+    if (visible.isEmpty) return null;
+
+    final currentStop = _currentVisualStop(
+      painter: painter,
+      rawText: rawText,
+      rawOffset: rawOffset,
+      plainTextLength: plainText.length,
+      visibleLength: visible.length,
+      rawToVisibleOffset: rawToVisibleOffset,
+      visibleToRawOffset: visibleToRawOffset,
+    );
+    final targetLine = currentStop.line + (moveUp ? -1 : 1);
+    if (targetLine < 0) return null;
+
+    final rawStops = <int>{};
+    for (var visual = 0; visual <= visible.length; visual++) {
+      rawStops.add(
+        visibleToRawOffset(rawText, visual).clamp(0, plainText.length).toInt(),
+      );
+    }
+    if (rawStops.length < 2) return null;
+
+    final targetStops = <({int raw, int line, double x})>[];
+    for (final raw in rawStops) {
+      final safe = raw.clamp(0, plainText.length).toInt();
+      final line = _lineIndexForOffset(painter, safe);
+      if (line != targetLine) continue;
+      targetStops.add((
+        raw: safe,
+        line: line,
+        x: _caretXForOffset(painter, safe),
+      ));
+    }
+    if (targetStops.isEmpty) return null;
+    _sortVisualStops(painter, targetStops);
+
+    ({int raw, int line, double x})? best;
+    var bestDistance = double.infinity;
+    for (final stop in targetStops) {
+      final distance = (stop.x - currentStop.x).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = stop;
+      }
+    }
+    return best?.raw;
+  }
+
   static ({int raw, int line, double x}) _currentVisualStop({
     required TextPainter painter,
     required String rawText,

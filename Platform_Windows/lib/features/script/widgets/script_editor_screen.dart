@@ -1292,7 +1292,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       selection: TextSelection.collapsed(offset: safeOffset),
     );
     final preferredX = layout.currentX;
-    if (controller.text.isEmpty) {
+    final visibleText = StylingService.stripTags(controller.text);
+    if (visibleText.trim().isEmpty) {
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: moveUp,
@@ -1330,7 +1331,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (crossBlockOnly) return null;
 
     final targetOffset = layout
-        .getPositionOnAdjacentLineAtX(preferredX, moveUp: moveUp)
+        .visualVerticalTargetRawOffset(
+          rawText: controller.text,
+          rawOffset: safeOffset,
+          moveUp: moveUp,
+        )
         ?.clamp(0, controller.text.length)
         .toInt();
     if (targetOffset == null) return null;

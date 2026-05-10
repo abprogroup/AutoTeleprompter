@@ -156,6 +156,37 @@ void main() {
     }
   });
 
+  test('wrapped Hebrew vertical arrows choose adjacent visual-line caret stops',
+      () {
+    const text =
+        '\u05d0\u05ea \u05d0\u05d5\u05de\u05e8\u05ea \u05e0\u05d2\u05de\u05e8\u05d5 \u05d4\u05de\u05e9\u05d7\u05e7\u05d9\u05dd \u05e0\u05d5\u05e4\u05dc\u05ea \u05db\u05d5\u05e1 \u05e2\u05dc \u05d4\u05e1\u05d3\u05d9\u05e0\u05d9\u05dd \u05d0\u05e0\u05d9 \u05e0\u05d5\u05d7\u05e8 \u05db\u05de\u05d5 \u05db\u05dc\u05d1 \u05d1\u05d0\u05d9\u05d2\u05d5\u05d3 \u05d4\u05e0\u05d5\u05db\u05dc\u05d9\u05dd \u05d0\u05d9\u05df \u05d9\u05d5\u05ea\u05e8 \u05de\u05d5\u05e2\u05d3\u05d5\u05e0\u05d9\u05dd';
+    final painter = painterFor(text, direction: TextDirection.rtl, width: 360);
+    final lowerWord = text.indexOf(
+      '\u05de\u05d5\u05e2\u05d3\u05d5\u05e0\u05d9\u05dd',
+    );
+    final sourceOffset = lowerWord + 1;
+    final targetOffset =
+        EditorTextGeometryService.visualVerticalTargetRawOffset(
+      painter: painter,
+      rawText: text,
+      rawOffset: sourceOffset,
+      moveUp: true,
+      rawToVisibleOffset: identityRawToVisible,
+      visibleToRawOffset: identityVisibleToRaw,
+    );
+
+    expect(targetOffset, isNotNull);
+    final sourceAgain = EditorTextGeometryService.visualVerticalTargetRawOffset(
+      painter: painter,
+      rawText: text,
+      rawOffset: targetOffset!,
+      moveUp: false,
+      rawToVisibleOffset: identityRawToVisible,
+      visibleToRawOffset: identityVisibleToRaw,
+    );
+    expect(sourceAgain, sourceOffset);
+  });
+
   test('visual word navigation keeps English Ctrl arrows LTR', () {
     const text = 'hello world';
     final painter = painterFor(text, direction: TextDirection.ltr);

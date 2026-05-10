@@ -1495,12 +1495,16 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       final safeOffset = controller.selection.extentOffset
           .clamp(0, controller.text.length)
           .toInt();
+      final isRtl = _editorBlockResolvedRtl(idx);
       final target = _plainShiftVerticalLineTarget(
         block: idx,
         offset: safeOffset,
         key: key,
+        crossBlockOnly: !isRtl,
       );
-      if (target == null) return KeyEventResult.handled;
+      if (target == null) {
+        return isRtl ? KeyEventResult.handled : KeyEventResult.ignored;
+      }
       if (target.block == idx) {
         controller.selection = TextSelection.collapsed(
           offset: target.offset.clamp(0, controller.text.length).toInt(),
@@ -2006,6 +2010,22 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
 
     final keyboard = HardwareKeyboard.instance;
+    if (!isRtl) {
+      final plainArrow = !keyboard.isControlPressed &&
+          !keyboard.isAltPressed &&
+          !keyboard.isMetaPressed &&
+          !keyboard.isShiftPressed;
+      if (!plainArrow) return KeyEventResult.ignored;
+      final boundaryTarget = _horizontalBoundaryTargetFromPosition(
+        blockIndex: blockIndex,
+        rawOffset: selection.baseOffset,
+        key: key,
+      );
+      if (boundaryTarget == null) return KeyEventResult.ignored;
+      _crossToBlock(boundaryTarget.block, atOffset: boundaryTarget.offset);
+      return KeyEventResult.handled;
+    }
+
     final target = keyboard.isControlPressed &&
             !keyboard.isAltPressed &&
             !keyboard.isMetaPressed

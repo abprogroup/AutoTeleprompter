@@ -456,6 +456,19 @@ class EditorTextGeometryService {
   ) {
     final text = painter.text?.toPlainText() ?? '';
     final safeOffset = offset.clamp(0, text.length).toInt();
+    if (painter.textDirection != TextDirection.rtl) {
+      final caret = painter.getOffsetForCaret(
+        TextPosition(offset: safeOffset),
+        Rect.zero,
+      );
+      return [
+        _VisualCaretStop(
+          raw: safeOffset,
+          line: _lineIndexForCaretY(painter, caret.dy),
+          x: caret.dx,
+        ),
+      ];
+    }
     final stops = <_VisualCaretStop>[];
     for (final affinity in const [
       TextAffinity.downstream,

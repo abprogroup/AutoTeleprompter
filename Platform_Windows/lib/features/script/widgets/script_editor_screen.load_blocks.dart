@@ -677,15 +677,27 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     );
     painter.layout(maxWidth: width > 0 ? width : 800);
 
-    return _VerticalLayoutInfo(painter, selection ?? controller.selection);
+    return _VerticalLayoutInfo(
+      painter,
+      selection ?? controller.selection,
+      isRtl: isRtl,
+      layoutWidth: width > 0 ? width : 800,
+    );
   }
 }
 
 class _VerticalLayoutInfo {
   final TextPainter painter;
   final TextSelection selection;
+  final bool isRtl;
+  final double layoutWidth;
 
-  _VerticalLayoutInfo(this.painter, this.selection);
+  _VerticalLayoutInfo(
+    this.painter,
+    this.selection, {
+    required this.isRtl,
+    required this.layoutWidth,
+  });
 
   bool get isAtTop {
     if (!selection.isCollapsed) return false;
@@ -702,6 +714,8 @@ class _VerticalLayoutInfo {
   }
 
   double get currentX {
+    final plain = painter.text?.toPlainText() ?? '';
+    if (plain.trim().isEmpty) return isRtl ? layoutWidth : 0;
     if (selection.baseOffset < 0) return 0;
     final pos = TextPosition(offset: selection.baseOffset);
     return painter.getOffsetForCaret(pos, Rect.zero).dx;

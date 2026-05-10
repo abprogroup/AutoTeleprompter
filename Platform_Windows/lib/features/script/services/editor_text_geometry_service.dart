@@ -66,12 +66,11 @@ class EditorTextGeometryService {
     if (visible.isEmpty) return 0;
 
     if (painter.textDirection == TextDirection.rtl) {
-      return _rtlLogicalHorizontalTargetRawOffset(
+      return _bidiHorizontalTargetRawOffset(
+        painter: painter,
         rawText: rawText,
         rawOffset: rawOffset,
         moveLeft: moveLeft,
-        plainTextLength: plainText.length,
-        visibleLength: visible.length,
         rawToVisibleOffset: rawToVisibleOffset,
         visibleToRawOffset: visibleToRawOffset,
       );
@@ -112,6 +111,18 @@ class EditorTextGeometryService {
     if (rawText.isEmpty || plainText.isEmpty) return 0;
     final visible = visibleText(rawText);
     if (visible.isEmpty) return 0;
+
+    if (painter.textDirection == TextDirection.rtl) {
+      return _bidiWordTargetRawOffset(
+        rawText: rawText,
+        rawOffset: rawOffset,
+        moveLeft: moveLeft,
+        plainTextLength: plainText.length,
+        visible: visible,
+        rawToVisibleOffset: rawToVisibleOffset,
+        visibleToRawOffset: visibleToRawOffset,
+      );
+    }
 
     final currentStop = _currentVisualStop(
       painter: painter,
@@ -160,12 +171,12 @@ class EditorTextGeometryService {
     if (visible.isEmpty) return null;
 
     if (painter.textDirection == TextDirection.rtl) {
-      return _rtlBoxVerticalTargetRawOffset(
+      return _bidiVerticalTargetRawOffset(
         painter: painter,
         rawText: rawText,
         rawOffset: rawOffset,
         plainTextLength: plainText.length,
-        visibleLength: visible.length,
+        visible: visible,
         rawToVisibleOffset: rawToVisibleOffset,
         visibleToRawOffset: visibleToRawOffset,
         moveUp: moveUp,
@@ -222,40 +233,99 @@ class EditorTextGeometryService {
     return best?.raw;
   }
 
-  static int? _rtlLogicalHorizontalTargetRawOffset({
+  static int? _bidiHorizontalTargetRawOffset({
+    required TextPainter painter,
+    required String rawText,
+    required int rawOffset,
+    required bool moveLeft,
+    required RawToVisibleOffset rawToVisibleOffset,
+    required VisibleToRawOffset visibleToRawOffset,
+  }) {
+    final plainTextLength = painter.text?.toPlainText().length ?? 0;
+    final visible = visibleText(rawText);
+    final stops = _bidiCaretStops(
+      painter: painter,
+      rawText: rawText,
+      visible: visible,
+      plainTextLength: plainTextLength,
+      visibleToRawOffset: visibleToRawOffset,
+    );
+    if (stops.isEmpty) return null;
+    final currentVisible = rawToVisibleOffset(
+      rawText,
+      rawOffset.clamp(0, rawText.length).toInt(),
+    ).clamp(0, visible.length).toInt();
+    final ltrRun = _ltrRunContainingBoundary(visible, currentVisible);
+    if (ltrRun != null) {
+      final targetVisible = !moveLeft && currentVisible < ltrRun.end
+          ? currentVisible + 1
+          : moveLeft && currentVisible > ltrRun.start
+              ? currentVisible - 1
+              : null;
+      if (targetVisible != null) {
+        return visibleToRawOffset(rawText, targetVisible)
+            .clamp(0, plainTextLength)
+            .toInt();
+      }
+    }
+    return _targetFromVisibleStops(
+      stops: stops,
+      currentVisible: currentVisible,
+      moveLeft: moveLeft,
+    )?.raw;
+  }
+
+  static int? _bidiWordTargetRawOffset({
     required String rawText,
     required int rawOffset,
     required bool moveLeft,
     required int plainTextLength,
-    required int visibleLength,
+    required String visible,
     required RawToVisibleOffset rawToVisibleOffset,
     required VisibleToRawOffset visibleToRawOffset,
   }) {
     final currentVisible = rawToVisibleOffset(
       rawText,
       rawOffset.clamp(0, rawText.length).toInt(),
-    ).clamp(0, visibleLength).toInt();
-    final targetVisible = currentVisible + (moveLeft ? 1 : -1);
-    if (targetVisible < 0 || targetVisible > visibleLength) return null;
+    ).clamp(0, visible.length).toInt();
+    final ltrRun = _ltrRunContainingBoundary(visible, currentVisible);
+    if (ltrRun != null) {
+      final targetVisible = !moveLeft ? ltrRun.end : ltrRun.start;
+      if (targetVisible != currentVisible) {
+        return visibleToRawOffset(rawText, targetVisible)
+            .clamp(0, plainTextLength)
+            .toInt();
+      }
+    }
+    final flow = _flowNearVisibleBoundary(
+      visible,
+      currentVisible,
+      paragraphRtl: true,
+    );
+    final moveForward = flow == _TextFlow.rtl ? moveLeft : !moveLeft;
+    final targetVisible = moveForward
+        ? _nextVisualWordBoundary(visible, currentVisible)
+        : _previousVisualWordBoundary(visible, currentVisible);
+    if (targetVisible == null || targetVisible == currentVisible) return null;
     return visibleToRawOffset(rawText, targetVisible)
         .clamp(0, plainTextLength)
         .toInt();
   }
 
-  static int? _rtlBoxVerticalTargetRawOffset({
+  static int? _bidiVerticalTargetRawOffset({
     required TextPainter painter,
     required String rawText,
     required int rawOffset,
     required int plainTextLength,
-    required int visibleLength,
+    required String visible,
     required RawToVisibleOffset rawToVisibleOffset,
     required VisibleToRawOffset visibleToRawOffset,
     required bool moveUp,
   }) {
-    final stops = _rtlBoxCaretStops(
+    final stops = _bidiCaretStops(
       painter: painter,
       rawText: rawText,
-      visibleLength: visibleLength,
+      visible: visible,
       plainTextLength: plainTextLength,
       visibleToRawOffset: visibleToRawOffset,
     );
@@ -264,7 +334,7 @@ class EditorTextGeometryService {
     final currentVisible = rawToVisibleOffset(
       rawText,
       rawOffset.clamp(0, rawText.length).toInt(),
-    ).clamp(0, visibleLength).toInt();
+    ).clamp(0, visible.length).toInt();
     final currentCandidates =
         stops.where((stop) => stop.visible == currentVisible).toList();
     if (currentCandidates.isEmpty) return null;
@@ -299,19 +369,19 @@ class EditorTextGeometryService {
     return targetStops.first.raw;
   }
 
-  static List<_VisibleCaretStop> _rtlBoxCaretStops({
+  static List<_VisibleCaretStop> _bidiCaretStops({
     required TextPainter painter,
     required String rawText,
-    required int visibleLength,
+    required String visible,
     required int plainTextLength,
     required VisibleToRawOffset visibleToRawOffset,
   }) {
     final stops = <_VisibleCaretStop>[];
-    for (var visible = 0; visible < visibleLength; visible++) {
-      final rawStart = visibleToRawOffset(rawText, visible)
-          .clamp(0, plainTextLength)
-          .toInt();
-      final rawEnd = visibleToRawOffset(rawText, visible + 1)
+    final visibleLength = visible.length;
+    for (var index = 0; index < visibleLength; index++) {
+      final rawStart =
+          visibleToRawOffset(rawText, index).clamp(0, plainTextLength).toInt();
+      final rawEnd = visibleToRawOffset(rawText, index + 1)
           .clamp(rawStart, plainTextLength)
           .toInt();
       if (rawEnd <= rawStart) continue;
@@ -326,27 +396,185 @@ class EditorTextGeometryService {
       }).toRect();
       if (box.width <= 0.1 || box.height <= 0.1) continue;
       final line = _lineIndexForCaretY(painter, box.center.dy);
+      final flow = _flowForVisibleChar(
+        visible,
+        index,
+        paragraphRtl: true,
+      );
+      final startX = flow == _TextFlow.ltr ? box.left : box.right;
+      final endX = flow == _TextFlow.ltr ? box.right : box.left;
       stops.add(_VisibleCaretStop(
-        visible: visible,
+        visible: index,
         raw: rawStart,
         line: line,
-        x: box.right,
+        x: startX,
       ));
       stops.add(_VisibleCaretStop(
-        visible: visible + 1,
+        visible: index + 1,
         raw: rawEnd,
         line: line,
-        x: box.left,
+        x: endX,
       ));
     }
     stops.sort((a, b) {
       final lineCompare = a.line.compareTo(b.line);
       if (lineCompare != 0) return lineCompare;
-      final xCompare = b.x.compareTo(a.x);
+      final xCompare = a.x.compareTo(b.x);
       if (xCompare != 0) return xCompare;
       return a.visible.compareTo(b.visible);
     });
     return _dedupeVisibleCaretStops(stops);
+  }
+
+  static _VisibleCaretStop? _targetFromVisibleStops({
+    required List<_VisibleCaretStop> stops,
+    required int currentVisible,
+    required bool moveLeft,
+  }) {
+    final candidates =
+        stops.where((stop) => stop.visible == currentVisible).toList();
+    if (candidates.isEmpty) return null;
+
+    _VisibleCaretStop? bestTarget;
+    var bestDistance = double.infinity;
+    for (final candidate in candidates) {
+      final lineStops =
+          stops.where((stop) => stop.line == candidate.line).toList()
+            ..sort((a, b) {
+              final xCompare = a.x.compareTo(b.x);
+              if (xCompare != 0) return xCompare;
+              return a.visible.compareTo(b.visible);
+            });
+      final index = lineStops.indexWhere((stop) =>
+          stop.visible == candidate.visible &&
+          stop.raw == candidate.raw &&
+          (stop.x - candidate.x).abs() <= 0.75);
+      if (index < 0) continue;
+      final step = moveLeft ? -1 : 1;
+      var targetIndex = index + step;
+      while (targetIndex >= 0 && targetIndex < lineStops.length) {
+        final target = lineStops[targetIndex];
+        if (target.visible != currentVisible) {
+          final distance = (target.x - candidate.x).abs();
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestTarget = target;
+          }
+          break;
+        }
+        targetIndex += step;
+      }
+    }
+    return bestTarget;
+  }
+
+  static int? _nextVisualWordBoundary(String visible, int current) {
+    final boundaries = _visualWordBoundaries(visible);
+    for (final boundary in boundaries) {
+      if (boundary > current) return boundary;
+    }
+    return null;
+  }
+
+  static int? _previousVisualWordBoundary(String visible, int current) {
+    final boundaries = _visualWordBoundaries(visible);
+    for (var i = boundaries.length - 1; i >= 0; i--) {
+      final boundary = boundaries[i];
+      if (boundary < current) return boundary;
+    }
+    return null;
+  }
+
+  static List<int> _visualWordBoundaries(String visible) {
+    final boundaries = <int>{0, visible.length};
+    for (var i = 1; i < visible.length; i++) {
+      final beforeWord = _isVisualWordChar(visible[i - 1]);
+      final afterWord = _isVisualWordChar(visible[i]);
+      if (beforeWord != afterWord) boundaries.add(i);
+    }
+    final sorted = boundaries.toList()..sort();
+    return sorted;
+  }
+
+  static ({int start, int end})? _ltrRunContainingBoundary(
+    String visible,
+    int boundary,
+  ) {
+    var start = boundary;
+    while (start > 0 && _isAsciiLetterOrDigit(visible.codeUnitAt(start - 1))) {
+      start--;
+    }
+    var end = boundary;
+    while (end < visible.length &&
+        _isAsciiLetterOrDigit(visible.codeUnitAt(end))) {
+      end++;
+    }
+    if (end <= start) return null;
+    var hasAsciiLetter = false;
+    for (var i = start; i < end; i++) {
+      if (_isAsciiLetter(visible.codeUnitAt(i))) {
+        hasAsciiLetter = true;
+        break;
+      }
+    }
+    if (!hasAsciiLetter) return null;
+    if (boundary < start || boundary > end) return null;
+    return (start: start, end: end);
+  }
+
+  static bool _isAsciiLetterOrDigit(int codeUnit) {
+    final isAsciiLetter = _isAsciiLetter(codeUnit);
+    final isDigit = codeUnit >= 0x30 && codeUnit <= 0x39;
+    return isAsciiLetter || isDigit;
+  }
+
+  static bool _isAsciiLetter(int codeUnit) =>
+      (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
+      (codeUnit >= 0x61 && codeUnit <= 0x7A);
+
+  static _TextFlow _flowForVisibleChar(
+    String visible,
+    int index, {
+    required bool paragraphRtl,
+  }) {
+    if (index < 0 || index >= visible.length) {
+      return paragraphRtl ? _TextFlow.rtl : _TextFlow.ltr;
+    }
+    final strong = _strongFlowForCodeUnit(visible.codeUnitAt(index));
+    if (strong != null) return strong;
+    return _flowNearVisibleBoundary(
+      visible,
+      index,
+      paragraphRtl: paragraphRtl,
+    );
+  }
+
+  static _TextFlow _flowNearVisibleBoundary(
+    String visible,
+    int boundary, {
+    required bool paragraphRtl,
+  }) {
+    _TextFlow? before;
+    _TextFlow? after;
+    for (var i = boundary - 1; i >= 0; i--) {
+      before = _strongFlowForCodeUnit(visible.codeUnitAt(i));
+      if (before != null) break;
+    }
+    for (var i = boundary; i < visible.length; i++) {
+      after = _strongFlowForCodeUnit(visible.codeUnitAt(i));
+      if (after != null) break;
+    }
+    if (before != null && after != null && before == after) return before;
+    return before ?? after ?? (paragraphRtl ? _TextFlow.rtl : _TextFlow.ltr);
+  }
+
+  static _TextFlow? _strongFlowForCodeUnit(int codeUnit) {
+    final isHebrew = codeUnit >= 0x0590 && codeUnit <= 0x05FF;
+    if (isHebrew) return _TextFlow.rtl;
+    final isAsciiLetter = (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
+        (codeUnit >= 0x61 && codeUnit <= 0x7A);
+    if (isAsciiLetter) return _TextFlow.ltr;
+    return null;
   }
 
   static List<_VisibleCaretStop> _dedupeVisibleCaretStops(
@@ -605,3 +833,5 @@ class _VisibleCaretStop {
     required this.x,
   });
 }
+
+enum _TextFlow { ltr, rtl }

@@ -136,6 +136,36 @@ void main() {
     );
   });
 
+  test('visual horizontal navigation keeps English run LTR inside Hebrew RTL',
+      () {
+    const text = '\u05d0\u05d1\u05d2 abc \u05d3\u05d4\u05d5';
+    final painter = painterFor(text, direction: TextDirection.rtl);
+    final englishStart = text.indexOf('abc');
+
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: englishStart,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      englishStart + 1,
+    );
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: englishStart + 1,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      englishStart,
+    );
+  });
+
   test('wrapped Hebrew arrow-left walks the visual line without row bouncing',
       () {
     const text =
@@ -298,6 +328,36 @@ void main() {
         visibleToRawOffset: identityVisibleToRaw,
       ),
       0,
+    );
+  });
+
+  test('visual word navigation keeps English Ctrl arrows inside Hebrew RTL',
+      () {
+    const text = '\u05d0\u05d1\u05d2 abc \u05d3\u05d4\u05d5';
+    final painter = painterFor(text, direction: TextDirection.rtl);
+    final englishStart = text.indexOf('abc');
+
+    expect(
+      EditorTextGeometryService.visualWordTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: englishStart,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      englishStart + 3,
+    );
+    expect(
+      EditorTextGeometryService.visualWordTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: englishStart + 3,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      englishStart,
     );
   });
 

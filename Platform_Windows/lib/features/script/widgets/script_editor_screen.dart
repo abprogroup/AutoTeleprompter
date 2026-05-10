@@ -2015,7 +2015,34 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           !keyboard.isAltPressed &&
           !keyboard.isMetaPressed &&
           !keyboard.isShiftPressed;
-      if (!plainArrow) return KeyEventResult.ignored;
+      if (plainArrow) {
+        final bookmarkTarget = _leadingBookmarkPlainHorizontalTarget(
+          blockIndex: blockIndex,
+          rawOffset: selection.baseOffset,
+          key: key,
+        );
+        if (bookmarkTarget != null) {
+          controller.selection =
+              TextSelection.collapsed(offset: bookmarkTarget.offset);
+          return KeyEventResult.handled;
+        }
+      }
+      if (!plainArrow) {
+        if (keyboard.isControlPressed &&
+            !keyboard.isAltPressed &&
+            !keyboard.isMetaPressed &&
+            !keyboard.isShiftPressed) {
+          final boundaryTarget = _keyboardAwareHorizontalBoundaryTarget(
+            blockIndex: blockIndex,
+            rawOffset: selection.baseOffset,
+            key: key,
+          );
+          if (boundaryTarget == null) return KeyEventResult.ignored;
+          _crossToBlock(boundaryTarget.block, atOffset: boundaryTarget.offset);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
       final boundaryTarget = _horizontalBoundaryTargetFromPosition(
         blockIndex: blockIndex,
         rawOffset: selection.baseOffset,
@@ -2057,6 +2084,61 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
     controller.selection = TextSelection.collapsed(offset: target.offset);
     return KeyEventResult.handled;
+  }
+
+  ({int block, int offset})? _leadingBookmarkPlainHorizontalTarget({
+    required int blockIndex,
+    required int rawOffset,
+    required LogicalKeyboardKey key,
+  }) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
+    final text = _controllers[blockIndex].text;
+    if (!text.startsWith(_keyboardBookmarkSign)) return null;
+    final safeRaw = rawOffset.clamp(0, text.length).toInt();
+    var afterLeadingBookmarks = 0;
+    while (afterLeadingBookmarks < text.length &&
+        text[afterLeadingBookmarks] == _keyboardBookmarkSign) {
+      afterLeadingBookmarks++;
+    }
+    if (key == LogicalKeyboardKey.arrowRight &&
+        safeRaw < afterLeadingBookmarks) {
+      return (block: blockIndex, offset: afterLeadingBookmarks);
+    }
+    if (key == LogicalKeyboardKey.arrowLeft &&
+        safeRaw > 0 &&
+        safeRaw <= afterLeadingBookmarks) {
+      return (block: blockIndex, offset: 0);
+    }
+    return null;
+  }
+
+  ({int block, int offset})? _keyboardAwareHorizontalBoundaryTarget({
+    required int blockIndex,
+    required int rawOffset,
+    required LogicalKeyboardKey key,
+  }) {
+    if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
+    final text = _controllers[blockIndex].text;
+    final navigationText = _keyboardNavigationText(text);
+    final safeRaw = rawOffset.clamp(0, text.length).toInt();
+    final navigationOffset =
+        _keyboardRawToNavigationOffset(text, safeRaw).clamp(
+      0,
+      navigationText.length,
+    );
+    final navigationEnd = _keyboardNavigationSafeEndOffset(text);
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (navigationOffset > 0) return null;
+      if (blockIndex <= 0) return null;
+      return (
+        block: blockIndex - 1,
+        offset:
+            MarkupController.safeEndOffset(_controllers[blockIndex - 1].text),
+      );
+    }
+    if (navigationOffset < navigationEnd) return null;
+    if (blockIndex >= _controllers.length - 1) return null;
+    return (block: blockIndex + 1, offset: 0);
   }
 
   /// Moves focus and the caret to [targetIdx]. Updates `_lastFocusedController`

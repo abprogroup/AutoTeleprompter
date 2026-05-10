@@ -1348,10 +1348,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     required bool moveUp,
     required double preferredX,
   }) {
-    final targetBlock = moveUp ? fromBlock - 1 : fromBlock + 1;
+    final targetBlock = _nextVerticalTextBlock(fromBlock, moveUp: moveUp);
     if (targetBlock < 0 || targetBlock >= _controllers.length) return null;
     final targetController = _controllers[targetBlock];
-    if (targetController.text.isEmpty) {
+    if (StylingService.stripTags(targetController.text).trim().isEmpty) {
       return (block: targetBlock, offset: 0);
     }
     final fallbackOffset =
@@ -1365,6 +1365,19 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         .clamp(0, targetController.text.length)
         .toInt();
     return (block: targetBlock, offset: offset);
+  }
+
+  int _nextVerticalTextBlock(int fromBlock, {required bool moveUp}) {
+    final step = moveUp ? -1 : 1;
+    var candidate = fromBlock + step;
+    var nearestEmpty = -1;
+    while (candidate >= 0 && candidate < _controllers.length) {
+      final visible = StylingService.stripTags(_controllers[candidate].text);
+      if (visible.trim().isNotEmpty) return candidate;
+      nearestEmpty = candidate;
+      candidate += step;
+    }
+    return nearestEmpty;
   }
 
   bool _sameEndpoint(SelectionEndpoint a, SelectionEndpoint b) =>
@@ -1897,7 +1910,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final rawText = _controllers[blockIndex].text;
     final visibleText = StylingService.stripTags(rawText);
-    if (visibleText.isEmpty) return (block: blockIndex, offset: 0);
+    if (visibleText.trim().isEmpty) {
+      return _horizontalBoundaryTargetFromPosition(
+        blockIndex: blockIndex,
+        rawOffset: rawOffset,
+        key: key,
+      );
+    }
 
     final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
     final currentVisible = MarkupController.rawToVisualOffset(

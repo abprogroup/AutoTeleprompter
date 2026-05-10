@@ -167,30 +167,62 @@ class EditorTextGeometryService {
     }
     if (rawStops.length < 2) return null;
 
+    final currentLineStops = <({int raw, int line, double x})>[];
     final targetStops = <({int raw, int line, double x})>[];
     for (final raw in rawStops) {
       final safe = raw.clamp(0, plainText.length).toInt();
       final line = _lineIndexForOffset(painter, safe);
-      if (line != targetLine) continue;
-      targetStops.add((
+      final stop = (
         raw: safe,
         line: line,
         x: _caretXForOffset(painter, safe),
-      ));
+      );
+      if (line == currentStop.line) currentLineStops.add(stop);
+      if (line != targetLine) continue;
+      targetStops.add(stop);
     }
-    if (targetStops.isEmpty) return null;
+    if (currentLineStops.isEmpty || targetStops.isEmpty) return null;
+    _sortVisualStops(painter, currentLineStops);
     _sortVisualStops(painter, targetStops);
 
+    final targetX = _lineRelativeTargetX(
+      painter: painter,
+      currentLineStops: currentLineStops,
+      targetLineStops: targetStops,
+      currentX: currentStop.x,
+    );
     ({int raw, int line, double x})? best;
     var bestDistance = double.infinity;
     for (final stop in targetStops) {
-      final distance = (stop.x - currentStop.x).abs();
+      final distance = (stop.x - targetX).abs();
       if (distance < bestDistance) {
         bestDistance = distance;
         best = stop;
       }
     }
     return best?.raw;
+  }
+
+  static double _lineRelativeTargetX({
+    required TextPainter painter,
+    required List<({int raw, int line, double x})> currentLineStops,
+    required List<({int raw, int line, double x})> targetLineStops,
+    required double currentX,
+  }) {
+    final isRtl = painter.textDirection == TextDirection.rtl;
+    double minX(Iterable<({int raw, int line, double x})> stops) =>
+        stops.map((stop) => stop.x).reduce((a, b) => a < b ? a : b);
+    double maxX(Iterable<({int raw, int line, double x})> stops) =>
+        stops.map((stop) => stop.x).reduce((a, b) => a > b ? a : b);
+
+    if (isRtl) {
+      final currentRight = maxX(currentLineStops);
+      final targetRight = maxX(targetLineStops);
+      return targetRight - (currentRight - currentX);
+    }
+    final currentLeft = minX(currentLineStops);
+    final targetLeft = minX(targetLineStops);
+    return targetLeft + (currentX - currentLeft);
   }
 
   static ({int raw, int line, double x}) _currentVisualStop({

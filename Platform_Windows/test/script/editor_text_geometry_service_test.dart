@@ -4,6 +4,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  int identityRawToVisible(String _, int offset) => offset;
+  int identityVisibleToRaw(String _, int offset) => offset;
+
+  TextPainter painterFor(
+    String text, {
+    required TextDirection direction,
+    double width = 700,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(fontSize: 28, height: 1.2),
+      ),
+      textDirection: direction,
+      textAlign:
+          direction == TextDirection.rtl ? TextAlign.right : TextAlign.left,
+    )..layout(maxWidth: width);
+    return painter;
+  }
+
   test('Hebrew empty row between Hebrew blocks resolves RTL', () {
     final blocks = [
       '\u05e9\u05d5\u05e8\u05d4 \u05e8\u05d0\u05e9\u05d5\u05e0\u05d4',
@@ -55,6 +77,118 @@ void main() {
     expect(
       EditorTextGeometryService.maxFontSize('[size=36]small[/size]', 42),
       42,
+    );
+  });
+
+  test('visual horizontal navigation keeps English LTR arrow behavior', () {
+    const text = 'hello world';
+    final painter = painterFor(text, direction: TextDirection.ltr);
+
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 0,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      1,
+    );
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 1,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      0,
+    );
+  });
+
+  test('visual horizontal navigation inverts correctly for Hebrew RTL', () {
+    const text = '\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd';
+    final painter = painterFor(text, direction: TextDirection.rtl);
+
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 0,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      1,
+    );
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 1,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      0,
+    );
+  });
+
+  test('visual word navigation keeps English Ctrl arrows LTR', () {
+    const text = 'hello world';
+    final painter = painterFor(text, direction: TextDirection.ltr);
+
+    expect(
+      EditorTextGeometryService.visualWordTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 0,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      5,
+    );
+    expect(
+      EditorTextGeometryService.visualWordTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 5,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      0,
+    );
+  });
+
+  test('visual word navigation inverts Hebrew Ctrl arrows by visual order', () {
+    const text = '\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd';
+    final painter = painterFor(text, direction: TextDirection.rtl);
+
+    expect(
+      EditorTextGeometryService.visualWordTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 0,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      4,
+    );
+    expect(
+      EditorTextGeometryService.visualWordTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 4,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      0,
     );
   });
 

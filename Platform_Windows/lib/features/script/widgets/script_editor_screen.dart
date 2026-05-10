@@ -1059,8 +1059,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (!_isGlobalSelection && !hasOverlay) return false;
     _shiftSelectionAnchor = null;
     _shiftSelectionFocus = null;
-    final collapseToEnd = key == LogicalKeyboardKey.arrowRight ||
-        key == LogicalKeyboardKey.arrowDown;
+    final collapseToEnd = _collapseSelectionToEndForArrow(key);
     final target = _appSelectionEdge(collapseToEnd: collapseToEnd);
     _overlayKey.currentState?.clearSelection();
     for (final c in _controllers) {
@@ -1089,6 +1088,28 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _scrollEditorBlockIntoView(target.block);
     }
     return true;
+  }
+
+  bool _collapseSelectionToEndForArrow(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.arrowDown) return true;
+    if (key == LogicalKeyboardKey.arrowUp) return false;
+    if (key != LogicalKeyboardKey.arrowLeft &&
+        key != LogicalKeyboardKey.arrowRight) {
+      return false;
+    }
+
+    final session = _overlayKey.currentState?.selectionSessionSnapshot;
+    final focusBlock = session?.focus.block;
+    final active = _activeController ?? _lastFocusedController;
+    final activeIndex = active == null ? -1 : _controllers.indexOf(active);
+    final blockIndex = focusBlock != null &&
+            focusBlock >= 0 &&
+            focusBlock < _controllers.length
+        ? focusBlock
+        : activeIndex;
+    final isRtl = blockIndex >= 0 ? _editorBlockResolvedRtl(blockIndex) : false;
+    if (key == LogicalKeyboardKey.arrowLeft) return isRtl;
+    return !isRtl;
   }
 
   ({int block, int offset})? _appSelectionEdge({
@@ -1593,53 +1614,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     return MarkupController.safeEndOffset(navigationText);
   }
 
-  String _keyboardVisibleNavigationText(String rawText) =>
-      StylingService.stripTags(rawText).replaceAll(_keyboardBookmarkSign, '');
-
-  int _keyboardRawToVisibleNavigationOffset(String rawText, int rawOffset) {
-    final visibleText = StylingService.stripTags(rawText);
-    final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
-    final visibleOffset = MarkupController.rawToVisualOffset(
-      rawText,
-      safeRaw,
-    ).clamp(0, visibleText.length).toInt();
-    var navigationOffset = 0;
-    for (var i = 0; i < visibleOffset; i++) {
-      if (visibleText[i] == _keyboardBookmarkSign) continue;
-      navigationOffset++;
-    }
-    return navigationOffset;
-  }
-
-  int _keyboardVisibleNavigationToRawOffset(
-    String rawText,
-    int navigationOffset,
-  ) {
-    final visibleText = StylingService.stripTags(rawText);
-    if (navigationOffset <= 0) {
-      return MarkupController.visualToRawOffset(rawText, 0);
-    }
-    var seen = 0;
-    for (var i = 0; i < visibleText.length; i++) {
-      if (visibleText[i] == _keyboardBookmarkSign) continue;
-      seen++;
-      if (seen >= navigationOffset) {
-        return MarkupController.visualToRawOffset(rawText, i + 1);
-      }
-    }
-    return MarkupController.visualToRawOffset(rawText, visibleText.length);
-  }
-
-  bool _isKeyboardNavigationWordChar(String value) {
-    if (value.isEmpty || value == _keyboardBookmarkSign) return false;
-    final code = value.codeUnitAt(0);
-    final isAsciiLetter =
-        (code >= 0x41 && code <= 0x5A) || (code >= 0x61 && code <= 0x7A);
-    final isDigit = code >= 0x30 && code <= 0x39;
-    final isHebrew = code >= 0x0590 && code <= 0x05FF;
-    return isAsciiLetter || isDigit || isHebrew;
-  }
-
   ({int block, int offset})? _controlVerticalTarget({
     required int blockIndex,
     required int focusOffset,
@@ -1844,75 +1818,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       }
     }
 
-    final isRtl = _editorBlockResolvedRtl(blockIndex);
-    final moveTowardLogicalStart = isRtl
-        ? key == LogicalKeyboardKey.arrowRight
-        : key == LogicalKeyboardKey.arrowLeft;
-    final text = rawText;
-    final navigationText = _keyboardVisibleNavigationText(text);
-    final navigationOffset = _keyboardRawToVisibleNavigationOffset(
-      text,
-      safeRaw,
-    ).clamp(0, navigationText.length).toInt();
-
-    if (moveTowardLogicalStart) {
-      if (navigationOffset <= 0) {
-        if (blockIndex <= 0) return null;
-        final previousText = _controllers[blockIndex - 1].text;
-        return (
-          block: blockIndex - 1,
-          offset: _keyboardVisibleNavigationToRawOffset(
-            previousText,
-            _keyboardVisibleNavigationText(previousText).length,
-          ),
-        );
-      }
-
-      var target = navigationOffset - 1;
-      while (target >= 0 &&
-          !_isKeyboardNavigationWordChar(navigationText[target])) {
-        target--;
-      }
-      if (target < 0) {
-        return (
-          block: blockIndex,
-          offset: _keyboardVisibleNavigationToRawOffset(text, 0),
-        );
-      }
-      while (target > 0 &&
-          _isKeyboardNavigationWordChar(navigationText[target - 1])) {
-        target--;
-      }
-      return (
-        block: blockIndex,
-        offset: _keyboardVisibleNavigationToRawOffset(text, target),
-      );
-    }
-
-    if (navigationOffset >= navigationText.length) {
-      if (blockIndex >= _controllers.length - 1) return null;
-      return (block: blockIndex + 1, offset: 0);
-    }
-
-    var target = navigationOffset;
-    if (_isKeyboardNavigationWordChar(navigationText[target])) {
-      while (target < navigationText.length &&
-          _isKeyboardNavigationWordChar(navigationText[target])) {
-        target++;
-      }
-    } else {
-      while (target < navigationText.length &&
-          !_isKeyboardNavigationWordChar(navigationText[target])) {
-        target++;
-      }
-      while (target < navigationText.length &&
-          _isKeyboardNavigationWordChar(navigationText[target])) {
-        target++;
-      }
-    }
-    return (
-      block: blockIndex,
-      offset: _keyboardVisibleNavigationToRawOffset(text, target),
+    return _horizontalBoundaryTargetFromPosition(
+      blockIndex: blockIndex,
+      rawOffset: safeRaw,
+      key: key,
     );
   }
 

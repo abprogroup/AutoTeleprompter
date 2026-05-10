@@ -760,71 +760,14 @@ class _VerticalLayoutInfo {
     required int rawOffset,
     required bool moveLeft,
   }) {
-    final plainText = painter.text?.toPlainText() ?? '';
-    if (rawText.isEmpty || plainText.isEmpty) return 0;
-    final visibleText = StylingService.stripTags(rawText);
-    if (visibleText.isEmpty) return 0;
-    final visibleLength = visibleText.length;
-    final currentVisible = MarkupController.rawToVisualOffset(
-      rawText,
-      rawOffset.clamp(0, rawText.length).toInt(),
-    ).clamp(0, visibleLength).toInt();
-    final currentRaw = MarkupController.visualToRawOffset(
-      rawText,
-      currentVisible,
-    ).clamp(0, plainText.length).toInt();
-
-    final rawStops = <int>{};
-    for (var visual = 0; visual <= visibleLength; visual++) {
-      rawStops.add(
-        MarkupController.visualToRawOffset(rawText, visual)
-            .clamp(0, plainText.length)
-            .toInt(),
-      );
-    }
-    if (rawStops.length < 2) return null;
-
-    final stops = <({int raw, int line, double x})>[];
-    for (final raw in rawStops) {
-      final safe = raw.clamp(0, plainText.length).toInt();
-      stops.add((
-        raw: safe,
-        line: lineIndexForOffset(safe),
-        x: caretXForOffset(safe),
-      ));
-    }
-    _sortVisualStops(stops);
-
-    final currentStop = (
-      raw: currentRaw,
-      line: lineIndexForOffset(currentRaw),
-      x: caretXForOffset(currentRaw),
+    return EditorTextGeometryService.visualHorizontalTargetRawOffset(
+      painter: painter,
+      rawText: rawText,
+      rawOffset: rawOffset,
+      moveLeft: moveLeft,
+      rawToVisibleOffset: MarkupController.rawToVisualOffset,
+      visibleToRawOffset: MarkupController.visualToRawOffset,
     );
-    final orderedStops = _collapseDuplicateVisualCaretStops(
-      stops,
-      currentStop: currentStop,
-    );
-    if (orderedStops.length < 2) return null;
-
-    var currentIndex = orderedStops
-        .indexWhere((candidate) => candidate.raw == currentStop.raw);
-    if (currentIndex < 0) {
-      var bestDistance = double.infinity;
-      for (var i = 0; i < orderedStops.length; i++) {
-        final candidate = orderedStops[i];
-        final linePenalty = candidate.line == currentStop.line ? 0.0 : 10000.0;
-        final distance = linePenalty + (candidate.x - currentStop.x).abs();
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          currentIndex = i;
-        }
-      }
-    }
-    if (currentIndex < 0) return null;
-
-    final targetIndex = currentIndex + _visualStep(moveLeft: moveLeft);
-    if (targetIndex < 0 || targetIndex >= orderedStops.length) return null;
-    return orderedStops[targetIndex].raw;
   }
 
   int? visualWordTargetRawOffset({
@@ -832,132 +775,14 @@ class _VerticalLayoutInfo {
     required int rawOffset,
     required bool moveLeft,
   }) {
-    final plainText = painter.text?.toPlainText() ?? '';
-    if (rawText.isEmpty || plainText.isEmpty) return 0;
-    final visibleText = StylingService.stripTags(rawText);
-    if (visibleText.isEmpty) return 0;
-    final visibleLength = visibleText.length;
-    final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
-    final currentVisible = MarkupController.rawToVisualOffset(
-      rawText,
-      safeRaw,
-    ).clamp(0, visibleLength).toInt();
-    final currentRaw = MarkupController.visualToRawOffset(
-      rawText,
-      currentVisible,
-    ).clamp(0, plainText.length).toInt();
-
-    final rawStops = <int>{
-      0,
-      MarkupController.visualToRawOffset(rawText, visibleLength)
-    };
-    for (var i = 1; i < visibleLength; i++) {
-      final beforeWord = _isVisualWordChar(visibleText[i - 1]);
-      final afterWord = _isVisualWordChar(visibleText[i]);
-      if (beforeWord != afterWord) {
-        rawStops.add(
-          MarkupController.visualToRawOffset(rawText, i)
-              .clamp(0, plainText.length)
-              .toInt(),
-        );
-      }
-    }
-    rawStops.add(currentRaw);
-    if (rawStops.length < 2) return null;
-
-    final stops = <({int raw, int line, double x})>[];
-    for (final raw in rawStops) {
-      final safe = raw.clamp(0, plainText.length).toInt();
-      stops.add((
-        raw: safe,
-        line: lineIndexForOffset(safe),
-        x: caretXForOffset(safe),
-      ));
-    }
-    _sortVisualStops(stops);
-
-    final currentStop = (
-      raw: currentRaw,
-      line: lineIndexForOffset(currentRaw),
-      x: caretXForOffset(currentRaw),
+    return EditorTextGeometryService.visualWordTargetRawOffset(
+      painter: painter,
+      rawText: rawText,
+      rawOffset: rawOffset,
+      moveLeft: moveLeft,
+      rawToVisibleOffset: MarkupController.rawToVisualOffset,
+      visibleToRawOffset: MarkupController.visualToRawOffset,
     );
-    final orderedStops = _collapseDuplicateVisualCaretStops(
-      stops,
-      currentStop: currentStop,
-    );
-    if (orderedStops.length < 2) return null;
-
-    var currentIndex = orderedStops
-        .indexWhere((candidate) => candidate.raw == currentStop.raw);
-    if (currentIndex < 0) {
-      var bestDistance = double.infinity;
-      for (var i = 0; i < orderedStops.length; i++) {
-        final candidate = orderedStops[i];
-        final linePenalty = candidate.line == currentStop.line ? 0.0 : 10000.0;
-        final distance = linePenalty + (candidate.x - currentStop.x).abs();
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          currentIndex = i;
-        }
-      }
-    }
-    if (currentIndex < 0) return null;
-
-    final targetIndex = currentIndex + _visualStep(moveLeft: moveLeft);
-    if (targetIndex < 0 || targetIndex >= orderedStops.length) return null;
-    return orderedStops[targetIndex].raw;
-  }
-
-  bool _isVisualWordChar(String value) {
-    if (value.isEmpty || value.trim().isEmpty) return false;
-    final code = value.codeUnitAt(0);
-    final isAsciiLetter =
-        (code >= 0x41 && code <= 0x5A) || (code >= 0x61 && code <= 0x7A);
-    final isDigit = code >= 0x30 && code <= 0x39;
-    final isHebrew = code >= 0x0590 && code <= 0x05FF;
-    return isAsciiLetter || isDigit || isHebrew;
-  }
-
-  int _visualStep({required bool moveLeft}) {
-    final isRtl = painter.textDirection == TextDirection.rtl;
-    final moveForward = isRtl ? moveLeft : !moveLeft;
-    return moveForward ? 1 : -1;
-  }
-
-  void _sortVisualStops(List<({int raw, int line, double x})> stops) {
-    final isRtl = painter.textDirection == TextDirection.rtl;
-    stops.sort((a, b) {
-      final lineCompare = a.line.compareTo(b.line);
-      if (lineCompare != 0) return lineCompare;
-      final xCompare = isRtl ? b.x.compareTo(a.x) : a.x.compareTo(b.x);
-      if (xCompare != 0) return xCompare;
-      return a.raw.compareTo(b.raw);
-    });
-  }
-
-  List<({int raw, int line, double x})> _collapseDuplicateVisualCaretStops(
-    List<({int raw, int line, double x})> stops, {
-    required ({int raw, int line, double x}) currentStop,
-  }) {
-    const duplicateTolerance = 0.75;
-    final collapsed = <({int raw, int line, double x})>[];
-    for (final stop in stops) {
-      if (collapsed.isEmpty) {
-        collapsed.add(stop);
-        continue;
-      }
-      final last = collapsed.last;
-      final sameVisualStop = last.line == stop.line &&
-          (last.x - stop.x).abs() <= duplicateTolerance;
-      if (!sameVisualStop) {
-        collapsed.add(stop);
-        continue;
-      }
-      final keepLast = (last.raw - currentStop.raw).abs() <=
-          (stop.raw - currentStop.raw).abs();
-      collapsed[collapsed.length - 1] = keepLast ? last : stop;
-    }
-    return collapsed;
   }
 
   int get _currentLineIndex {

@@ -276,6 +276,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         }
         lastText = controller.text;
         _isDirty = true;
+        _verticalArrowPreferredX = null;
         // v4.1.2: When the user edits text (not inside a style command), clear
         // any pinned externalSelection so stale amber doesn't linger after typing.
         if (!_isCommandExecuting && controller.externalSelection != null) {
@@ -787,6 +788,7 @@ class _VerticalLayoutInfo {
     required String rawText,
     required int rawOffset,
     required bool moveUp,
+    double? preferredX,
   }) {
     return EditorTextGeometryService.visualVerticalTargetRawOffset(
       painter: painter,
@@ -795,6 +797,7 @@ class _VerticalLayoutInfo {
       moveUp: moveUp,
       rawToVisibleOffset: MarkupController.rawToVisualOffset,
       visibleToRawOffset: MarkupController.visualToRawOffset,
+      preferredX: preferredX,
     );
   }
 

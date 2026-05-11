@@ -164,6 +164,7 @@ class EditorTextGeometryService {
     required bool moveUp,
     required RawToVisibleOffset rawToVisibleOffset,
     required VisibleToRawOffset visibleToRawOffset,
+    double? preferredX,
   }) {
     final plainText = painter.text?.toPlainText() ?? '';
     if (rawText.isEmpty || plainText.isEmpty) return null;
@@ -180,6 +181,7 @@ class EditorTextGeometryService {
         rawToVisibleOffset: rawToVisibleOffset,
         visibleToRawOffset: visibleToRawOffset,
         moveUp: moveUp,
+        preferredX: preferredX,
       );
     }
 
@@ -219,7 +221,7 @@ class EditorTextGeometryService {
 
     final targetX = _clampedVisualTargetX(
       targetLineStops: targetStops,
-      currentX: currentStop.x,
+      currentX: preferredX ?? currentStop.x,
     );
     _VisualCaretStop? best;
     var bestDistance = double.infinity;
@@ -363,6 +365,7 @@ class EditorTextGeometryService {
     required RawToVisibleOffset rawToVisibleOffset,
     required VisibleToRawOffset visibleToRawOffset,
     required bool moveUp,
+    double? preferredX,
   }) {
     final stops = _bidiCaretStops(
       painter: painter,
@@ -377,28 +380,17 @@ class EditorTextGeometryService {
       rawText,
       rawOffset.clamp(0, rawText.length).toInt(),
     ).clamp(0, visible.length).toInt();
-    final currentCandidates =
-        stops.where((stop) => stop.visible == currentVisible).toList();
-    if (currentCandidates.isEmpty) return null;
-    final oldCaret = _bestCaretStopForOffset(
+    final currentCaret = _bestCaretStopForOffset(
       painter,
       visibleToRawOffset(rawText, currentVisible)
           .clamp(0, plainTextLength)
           .toInt(),
     );
-    currentCandidates.sort((a, b) {
-      final lineCompare = (a.line - oldCaret.line)
-          .abs()
-          .compareTo((b.line - oldCaret.line).abs());
-      if (lineCompare != 0) return lineCompare;
-      return (a.x - oldCaret.x).abs().compareTo((b.x - oldCaret.x).abs());
-    });
-    final currentStop = currentCandidates.first;
-    final targetLine = currentStop.line + (moveUp ? -1 : 1);
+    final targetLine = currentCaret.line + (moveUp ? -1 : 1);
     if (targetLine < 0) return null;
     final targetStops = stops.where((stop) => stop.line == targetLine).toList();
     if (targetStops.isEmpty) return null;
-    final targetX = currentStop.x.clamp(
+    final targetX = (preferredX ?? currentCaret.x).clamp(
       targetStops.map((stop) => stop.x).reduce((a, b) => a < b ? a : b),
       targetStops.map((stop) => stop.x).reduce((a, b) => a > b ? a : b),
     );

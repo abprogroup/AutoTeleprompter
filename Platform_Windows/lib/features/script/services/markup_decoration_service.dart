@@ -320,6 +320,10 @@ class MarkupTextLayoutGeometry {
     final desiredLeft = _visualLineLeft(line);
     final delta = desiredLeft - line.left;
     if (delta.abs() < 0.01) return rect;
+    final desiredRight = desiredLeft + line.width;
+    final alreadyInVisualLine =
+        rect.left >= desiredLeft - 1.0 && rect.right <= desiredRight + 1.0;
+    if (alreadyInVisualLine) return rect;
     return rect.shift(Offset(delta, 0));
   }
 

@@ -262,6 +262,7 @@ void main() {
     );
 
     expect(targetOffset, isNotNull);
+    expect(targetOffset, 81);
     final sourceAgain = EditorTextGeometryService.visualVerticalTargetRawOffset(
       painter: painter,
       rawText: text,

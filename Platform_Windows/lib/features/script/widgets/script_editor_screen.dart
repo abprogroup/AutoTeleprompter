@@ -156,6 +156,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   List<_EditorSearchMatch> _editorSearchMatches = const [];
   int _editorSearchMatchIndex = -1;
   String _lastArrowDecision = 'idle';
+  double? _verticalArrowPreferredX;
   SelectionEndpoint? _shiftSelectionAnchor;
   SelectionEndpoint? _shiftSelectionFocus;
   String? _bookmarkScopeKey;
@@ -790,6 +791,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                     _controllers.length,
                                     (index) => Listener(
                                       onPointerDown: (event) {
+                                        _verticalArrowPreferredX = null;
                                         if (_isGlobalSelection ||
                                             _controllers.any(
                                                 (c) => c.isGlobalSelected) ||
@@ -811,6 +813,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
                                             _editorBlockResolvedRtl(index),
                                         onSubmitted: () => _addBlock(index + 1),
                                         onTap: () {
+                                          _verticalArrowPreferredX = null;
                                           // Secondary safety, though Listener should handle it
                                           if (_isGlobalSelection) {
                                             _clearGlobalSelection();
@@ -1301,6 +1304,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     required int offset,
     required LogicalKeyboardKey key,
     bool crossBlockOnly = false,
+    double? preferredX,
   }) {
     if (block < 0 || block >= _controllers.length) return null;
     final moveUp = key == LogicalKeyboardKey.arrowUp;
@@ -1310,13 +1314,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       block,
       selection: TextSelection.collapsed(offset: safeOffset),
     );
-    final preferredX = layout.currentX;
+    final targetX = preferredX ?? layout.currentX;
     final visibleText = StylingService.stripTags(controller.text);
     if (visibleText.trim().isEmpty) {
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: moveUp,
-        preferredX: preferredX,
+        preferredX: targetX,
       );
     }
 
@@ -1325,7 +1329,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: moveUp,
-        preferredX: preferredX,
+        preferredX: targetX,
       );
     }
 
@@ -1337,14 +1341,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: true,
-        preferredX: preferredX,
+        preferredX: targetX,
       );
     }
     if (!moveUp && line.end >= plainText.length) {
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: false,
-        preferredX: preferredX,
+        preferredX: targetX,
       );
     }
     if (crossBlockOnly) return null;
@@ -1354,6 +1358,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           rawText: controller.text,
           rawOffset: safeOffset,
           moveUp: moveUp,
+          preferredX: targetX,
         )
         ?.clamp(0, controller.text.length)
         .toInt();
@@ -1485,9 +1490,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (idx < 0) return KeyEventResult.ignored;
 
     final keyboard = HardwareKeyboard.instance;
-    if (_isControlArrowModifierState(keyboard) &&
-        (key == LogicalKeyboardKey.arrowUp ||
-            key == LogicalKeyboardKey.arrowDown)) {
+    final isVerticalArrow = key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown;
+    final isPlainVerticalArrow =
+        _isPlainArrowModifierState(keyboard) && isVerticalArrow;
+    if (!isPlainVerticalArrow) {
+      _verticalArrowPreferredX = null;
+    }
+    if (_isControlArrowModifierState(keyboard) && isVerticalArrow) {
       return _handleControlVerticalArrowKey(
         key: key,
         controller: controller,
@@ -1507,18 +1517,26 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       if (shifted) return KeyEventResult.handled;
     }
 
-    if (_isPlainArrowModifierState(keyboard) &&
-        (key == LogicalKeyboardKey.arrowUp ||
-            key == LogicalKeyboardKey.arrowDown)) {
+    if (isPlainVerticalArrow) {
       final safeOffset = controller.selection.extentOffset
           .clamp(0, controller.text.length)
           .toInt();
       final isRtl = _editorBlockResolvedRtl(idx);
+      final layout = _getVerticalLayout(
+        idx,
+        selection: TextSelection.collapsed(
+          offset: safeOffset,
+          affinity: controller.selection.affinity,
+        ),
+      );
+      final preferredX = _verticalArrowPreferredX ?? layout.currentX;
+      _verticalArrowPreferredX = preferredX;
       final target = _plainShiftVerticalLineTarget(
         block: idx,
         offset: safeOffset,
         key: key,
         crossBlockOnly: !isRtl,
+        preferredX: preferredX,
       );
       if (target == null) {
         return isRtl ? KeyEventResult.handled : KeyEventResult.ignored;
@@ -1526,6 +1544,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       if (target.block == idx) {
         controller.selection = TextSelection.collapsed(
           offset: target.offset.clamp(0, controller.text.length).toInt(),
+          affinity: key == LogicalKeyboardKey.arrowUp
+              ? TextAffinity.upstream
+              : TextAffinity.downstream,
         );
         _lastArrowDecision = 'visual ${key.keyLabel}: $idx:${target.offset}';
       } else {

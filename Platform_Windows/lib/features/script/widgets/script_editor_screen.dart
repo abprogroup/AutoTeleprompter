@@ -2042,20 +2042,25 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
 
     final keyboard = HardwareKeyboard.instance;
-    if (!isRtl) {
-      final plainArrow = _isPlainArrowModifierState(keyboard);
-      if (plainArrow) {
-        final bookmarkTarget = _leadingBookmarkPlainHorizontalTarget(
-          blockIndex: blockIndex,
-          rawOffset: selection.baseOffset,
-          key: key,
-        );
-        if (bookmarkTarget != null) {
+    final plainArrow = _isPlainArrowModifierState(keyboard);
+    if (plainArrow) {
+      final bookmarkTarget = _leadingBookmarkPlainHorizontalTarget(
+        blockIndex: blockIndex,
+        rawOffset: selection.baseOffset,
+        key: key,
+      );
+      if (bookmarkTarget != null) {
+        if (bookmarkTarget.block == blockIndex) {
           controller.selection =
               TextSelection.collapsed(offset: bookmarkTarget.offset);
-          return KeyEventResult.handled;
+        } else {
+          _crossToBlock(bookmarkTarget.block, atOffset: bookmarkTarget.offset);
         }
+        return KeyEventResult.handled;
       }
+    }
+
+    if (!isRtl) {
       if (!plainArrow) {
         if (_isControlArrowModifierState(keyboard, allowShift: false)) {
           final boundaryTarget = _ltrControlHorizontalBoundaryTarget(
@@ -2120,8 +2125,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     final afterLeadingBookmarks = _firstRawOffsetAfterLeadingBookmarkCluster(
       text,
     );
-    if (key == LogicalKeyboardKey.arrowRight &&
-        safeRaw < afterLeadingBookmarks) {
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (afterLeadingBookmarks >= text.length &&
+          safeRaw >= afterLeadingBookmarks &&
+          blockIndex < _controllers.length - 1) {
+        return (block: blockIndex + 1, offset: 0);
+      }
+      if (safeRaw >= afterLeadingBookmarks) return null;
+      if (afterLeadingBookmarks >= text.length &&
+          blockIndex < _controllers.length - 1) {
+        return (block: blockIndex + 1, offset: 0);
+      }
       return (block: blockIndex, offset: afterLeadingBookmarks);
     }
     if (key == LogicalKeyboardKey.arrowLeft &&

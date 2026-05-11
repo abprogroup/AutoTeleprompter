@@ -914,10 +914,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return _extendAppSelectionForArrow(key, keyboard);
     }
     if (_clearAppSelectionForArrow(key)) return true;
-    final hasModifier = keyboard.isControlPressed ||
-        keyboard.isShiftPressed ||
-        keyboard.isAltPressed ||
-        keyboard.isMetaPressed;
+    final hasModifier = _hasAnyArrowModifier(keyboard);
     final routeModifiedArrow = _shouldRouteModifiedArrow(key, keyboard);
     if (hasModifier && !routeModifiedArrow) return false;
     _lastArrowDecision = 'arrow ${key.keyLabel}: route';
@@ -1010,10 +1007,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     LogicalKeyboardKey key,
     HardwareKeyboard keyboard,
   ) {
-    if (!keyboard.isControlPressed &&
-        !keyboard.isShiftPressed &&
-        !keyboard.isAltPressed &&
-        !keyboard.isMetaPressed) {
+    if (_isPlainArrowModifierState(keyboard)) {
       return true;
     }
     if (keyboard.isMetaPressed) return false;
@@ -1021,6 +1015,31 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         key == LogicalKeyboardKey.arrowDown ||
         key == LogicalKeyboardKey.arrowLeft ||
         key == LogicalKeyboardKey.arrowRight;
+  }
+
+  bool _hasAnyArrowModifier(HardwareKeyboard keyboard) =>
+      keyboard.isControlPressed ||
+      keyboard.isShiftPressed ||
+      keyboard.isAltPressed ||
+      keyboard.isMetaPressed;
+
+  bool _isPlainArrowModifierState(HardwareKeyboard keyboard) =>
+      !_hasAnyArrowModifier(keyboard);
+
+  bool _isControlArrowModifierState(
+    HardwareKeyboard keyboard, {
+    bool allowShift = true,
+  }) {
+    return keyboard.isControlPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed &&
+        (allowShift || !keyboard.isShiftPressed);
+  }
+
+  bool _isAltArrowModifierState(HardwareKeyboard keyboard) {
+    return keyboard.isAltPressed &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed;
   }
 
   bool _handleGlobalEditingShortcut(KeyEvent event) {
@@ -1466,9 +1485,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (idx < 0) return KeyEventResult.ignored;
 
     final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isControlPressed &&
-        !keyboard.isAltPressed &&
-        !keyboard.isMetaPressed &&
+    if (_isControlArrowModifierState(keyboard) &&
         (key == LogicalKeyboardKey.arrowUp ||
             key == LogicalKeyboardKey.arrowDown)) {
       return _handleControlVerticalArrowKey(
@@ -1490,10 +1507,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       if (shifted) return KeyEventResult.handled;
     }
 
-    if (!keyboard.isControlPressed &&
-        !keyboard.isAltPressed &&
-        !keyboard.isMetaPressed &&
-        !keyboard.isShiftPressed &&
+    if (_isPlainArrowModifierState(keyboard) &&
         (key == LogicalKeyboardKey.arrowUp ||
             key == LogicalKeyboardKey.arrowDown)) {
       final safeOffset = controller.selection.extentOffset
@@ -1552,10 +1566,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           isRtl: isRtl,
           selection: sel,
           textLength: textLen,
-          manualInBlock: !keyboard.isControlPressed &&
-              !keyboard.isAltPressed &&
-              !keyboard.isMetaPressed &&
-              !keyboard.isShiftPressed,
+          manualInBlock: _isPlainArrowModifierState(keyboard),
         ) ??
         KeyEventResult.ignored;
   }
@@ -1780,18 +1791,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     }
     if (key == LogicalKeyboardKey.arrowLeft ||
         key == LogicalKeyboardKey.arrowRight) {
-      if (keyboard.isControlPressed &&
-          !keyboard.isAltPressed &&
-          !keyboard.isMetaPressed) {
-        return _controlShiftHorizontalTarget(
+      if (_isControlArrowModifierState(keyboard)) {
+        return _controlHorizontalWordTarget(
           blockIndex: block,
           rawOffset: offset,
           key: key,
         );
       }
-      if (keyboard.isAltPressed &&
-          !keyboard.isControlPressed &&
-          !keyboard.isMetaPressed) {
+      if (_isAltArrowModifierState(keyboard)) {
         return _altHorizontalTarget(
           blockIndex: block,
           rawOffset: offset,
@@ -1808,7 +1815,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     return null;
   }
 
-  ({int block, int offset})? _controlShiftHorizontalTarget({
+  ({int block, int offset})? _controlHorizontalWordTarget({
     required int blockIndex,
     required int rawOffset,
     required LogicalKeyboardKey key,
@@ -2015,10 +2022,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
     final keyboard = HardwareKeyboard.instance;
     if (!isRtl) {
-      final plainArrow = !keyboard.isControlPressed &&
-          !keyboard.isAltPressed &&
-          !keyboard.isMetaPressed &&
-          !keyboard.isShiftPressed;
+      final plainArrow = _isPlainArrowModifierState(keyboard);
       if (plainArrow) {
         final bookmarkTarget = _leadingBookmarkPlainHorizontalTarget(
           blockIndex: blockIndex,
@@ -2032,11 +2036,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         }
       }
       if (!plainArrow) {
-        if (keyboard.isControlPressed &&
-            !keyboard.isAltPressed &&
-            !keyboard.isMetaPressed &&
-            !keyboard.isShiftPressed) {
-          final boundaryTarget = _keyboardAwareHorizontalBoundaryTarget(
+        if (_isControlArrowModifierState(keyboard, allowShift: false)) {
+          final boundaryTarget = _ltrControlHorizontalBoundaryTarget(
             blockIndex: blockIndex,
             rawOffset: selection.baseOffset,
             key: key,
@@ -2057,17 +2058,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       return KeyEventResult.handled;
     }
 
-    final target = keyboard.isControlPressed &&
-            !keyboard.isAltPressed &&
-            !keyboard.isMetaPressed
-        ? _controlShiftHorizontalTarget(
+    final target = _isControlArrowModifierState(keyboard)
+        ? _controlHorizontalWordTarget(
             blockIndex: blockIndex,
             rawOffset: selection.baseOffset,
             key: key,
           )
-        : keyboard.isAltPressed &&
-                !keyboard.isControlPressed &&
-                !keyboard.isMetaPressed
+        : _isAltArrowModifierState(keyboard)
             ? _altHorizontalTarget(
                 blockIndex: blockIndex,
                 rawOffset: selection.baseOffset,
@@ -2135,11 +2132,14 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     return offset;
   }
 
-  ({int block, int offset})? _keyboardAwareHorizontalBoundaryTarget({
+  ({int block, int offset})? _ltrControlHorizontalBoundaryTarget({
     required int blockIndex,
     required int rawOffset,
     required LogicalKeyboardKey key,
   }) {
+    // Native EditableText keeps normal LTR word jumps inside the block. This
+    // helper only catches cross-block movement after hidden tags/bookmarks are
+    // removed from the boundary calculation.
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final text = _controllers[blockIndex].text;
     final navigationText = _keyboardNavigationText(text);

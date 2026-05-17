@@ -7,9 +7,9 @@ class Script {
   final List<ScriptWord> words;
   final bool isRtl;
   final String sourceType; // 'TEMP', 'RTF', 'PDF', 'TXT', etc.
-  final String sessionId;   // Unique session key for Deep Memory style recovery
+  final String sessionId; // Unique session key for Deep Memory style recovery
   final String? historyJson; // Persisted Undo/Redo stack for v3.5.4
-  final int historyIndex;     // v3.8 persistence
+  final int historyIndex; // v3.8 persistence
 
   // v3.9.5.46: Absolute Metadata Parity
   final double fontSize;
@@ -44,11 +44,11 @@ class Script {
   });
 
   Script copyWith({
-    String? title, 
-    String? rawText, 
-    List<ScriptWord>? words, 
-    bool? isRtl, 
-    String? sourceType, 
+    String? title,
+    String? rawText,
+    List<ScriptWord>? words,
+    bool? isRtl,
+    String? sourceType,
     String? sessionId,
     String? historyJson,
     int? historyIndex,

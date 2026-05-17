@@ -23,6 +23,7 @@ AutoTeleprompter_AGENT_*
 # NEVER TRACK LOCAL HISTORY OR EXPERIMENT ARCHIVES
 readable_history/
 _v5_archive/
+_debug/
 
 # Local planning/governance files are private workspace state.
 Plans/

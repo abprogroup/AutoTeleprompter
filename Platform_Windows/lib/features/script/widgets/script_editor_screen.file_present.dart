@@ -131,6 +131,12 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     if (!mounted) return;
 
     final name = finalPath.split(RegExp(r'[\\/]')).last;
+    await _adoptSavedExportAsActiveScript(
+      fileName: name,
+      format: format,
+      text: text,
+    );
+    if (!mounted) return;
     if (!savedPath.endsWith('.$format')) {
       // OS stripped the extension — we added it back, but warn the user
       ScaffoldMessenger.of(context).showSnackBar(
@@ -155,6 +161,67 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         ),
       );
     }
+  }
+
+  Future<void> _adoptSavedExportAsActiveScript({
+    required String fileName,
+    required String format,
+    required String text,
+  }) async {
+    final exportType = format.toUpperCase();
+    final identityChanged =
+        _currentTitle != fileName || _sourceType.toUpperCase() != exportType;
+
+    if (identityChanged) {
+      await _forceRecentUpdate();
+      if (!mounted) return;
+      setState(() {
+        _currentTitle = fileName;
+        _sourceType = exportType;
+        _currentSessionId =
+            'save_${DateTime.now().microsecondsSinceEpoch.toString()}';
+      });
+    } else {
+      _sourceType = exportType;
+    }
+
+    final settings = ref.read(settingsProvider);
+    final historyJson = jsonEncode(_history.map((e) => e.toJson()).toList());
+    await ref.read(settingsProvider.notifier).saveScript(
+          text,
+          title: _currentTitle,
+          type: _sourceType,
+          sessionId: _currentSessionId,
+          historyIndex: _historyIndex,
+          fontSize: settings.fontSize,
+          fontFamily: settings.fontFamily,
+          lineSpacing: settings.lineSpacing,
+          letterSpacing: settings.letterSpacing,
+          wordSpacing: settings.wordSpacing,
+          textAlign: settings.textAlign,
+          scriptBgColor: settings.scriptBgColor,
+          currentWordColor: settings.currentWordColor,
+          futureWordColor: settings.futureWordColor,
+          historyJson: historyJson,
+        );
+
+    ref.read(scriptProvider.notifier).loadText(
+          text,
+          title: _currentTitle,
+          sourceType: _sourceType,
+          sessionId: _currentSessionId,
+          historyIndex: _historyIndex,
+          historyJson: historyJson,
+          fontSize: settings.fontSize,
+          fontFamily: settings.fontFamily,
+          lineSpacing: settings.lineSpacing,
+          letterSpacing: settings.letterSpacing,
+          wordSpacing: settings.wordSpacing,
+          textAlign: settings.textAlign,
+          scriptBgColor: settings.scriptBgColor,
+          currentWordColor: settings.currentWordColor,
+          futureWordColor: settings.futureWordColor,
+        );
   }
 
   void _clearScript() {

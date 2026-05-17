@@ -9,6 +9,13 @@ set(BINARY_NAME "AutoTeleprompter")
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)
+if(POLICY CMP0175)
+  # webview_windows 0.4.0 still passes DEPENDS to add_custom_command(TARGET),
+  # which newer CMake warns about under CMP0175. Keep the plugin compatible
+  # without vendoring the package while upstream has no newer release.
+  cmake_policy(SET CMP0175 OLD)
+  set(CMAKE_POLICY_DEFAULT_CMP0175 OLD)
+endif()
 
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)

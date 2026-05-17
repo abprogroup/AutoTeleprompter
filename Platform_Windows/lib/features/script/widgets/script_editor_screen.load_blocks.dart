@@ -162,14 +162,12 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent)
           return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
-            event.logicalKey == LogicalKeyboardKey.arrowDown ||
-            event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-            event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        final key = event.logicalKey;
+        if (_isArrowKey(key) || _isHomeEndKey(key)) {
           return _handleEditorArrowKey(node, event);
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.enter &&
+        if (key == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);
           final text = controller.text;
@@ -191,8 +189,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.backspace &&
-            controller.text.isEmpty) {
+        if (key == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
           if (_controllers.length > 1 && idx != -1) {
             setState(() {
@@ -231,7 +228,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           // On focus loss, suppress any lingering native selection highlight
           // (set via TextField drag-select). MarkupController otherwise falls
           // through to controller.selection and renders amber on the now-
-          // unfocused block — which is the "two highlights at once" bug.
+          // unfocused block â€” which is the "two highlights at once" bug.
           // Skip while a global multi-block selection or overlay drag is active
           // (their externalSelection values must not be overwritten here).
           final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
@@ -259,7 +256,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             // Escalate native full-block select to global Select All.
             // Catches all paths: context menu, keyboard, platform menu.
             // Skip when overlay has active handles (refine mode) to avoid
-            // infinite loop: refine clears isGlobal → escalation re-selects → loop.
+            // infinite loop: refine clears isGlobal â†’ escalation re-selects â†’ loop.
             final overlayActive =
                 _overlayKey.currentState?.hasSelection ?? false;
             if (!_isGlobalSelection &&
@@ -321,7 +318,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       });
     }
     // Sync toolbar state after load. Non-empty blocks don't auto-request focus,
-    // so _onSelectionChanged never fires — cursorStyleProvider stays at its
+    // so _onSelectionChanged never fires â€” cursorStyleProvider stays at its
     // default 'left'. Point lastFocusedController at the first block so
     // _detectAlignAtCursor reads the right text, then run detection.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -343,7 +340,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         // (i.e. the notification came from our own _selectAllBlocks).
         // Any other selection state (collapsed tap, partial drag) clears it.
         // Guard: if the overlay has active handles (e.g. alignment was just applied
-        // or drag is in progress), do NOT clear — focus events fire before
+        // or drag is in progress), do NOT clear â€” focus events fire before
         // _isCommandExecuting is set and would prematurely destroy the selection.
         if (_overlayKey.currentState?.hasSelection ?? false) return;
         final textLen = controller.text.length;
@@ -684,164 +681,5 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       isRtl: isRtl,
       layoutWidth: width > 0 ? width : 800,
     );
-  }
-}
-
-class _VerticalLayoutInfo {
-  final TextPainter painter;
-  final TextSelection selection;
-  final bool isRtl;
-  final double layoutWidth;
-
-  _VerticalLayoutInfo(
-    this.painter,
-    this.selection, {
-    required this.isRtl,
-    required this.layoutWidth,
-  });
-
-  bool get isAtTop {
-    if (!selection.isCollapsed) return false;
-    if (painter.text?.toPlainText().isEmpty ?? true) return true;
-    return _currentLineIndex <= 0;
-  }
-
-  bool get isAtBottom {
-    if (!selection.isCollapsed) return false;
-    if (painter.text?.toPlainText().isEmpty ?? true) return true;
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return true;
-    return _currentLineIndex >= lines.length - 1;
-  }
-
-  double get currentX {
-    final plain = painter.text?.toPlainText() ?? '';
-    if (plain.trim().isEmpty) return isRtl ? layoutWidth : 0;
-    if (selection.baseOffset < 0) return 0;
-    final pos = TextPosition(offset: selection.baseOffset);
-    return painter.getOffsetForCaret(pos, Rect.zero).dx;
-  }
-
-  double caretXForOffset(int offset) {
-    final text = painter.text?.toPlainText() ?? '';
-    final safeOffset = offset.clamp(0, text.length).toInt();
-    return painter
-        .getOffsetForCaret(TextPosition(offset: safeOffset), Rect.zero)
-        .dx;
-  }
-
-  int lineIndexForOffset(int offset) {
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return 0;
-    final text = painter.text?.toPlainText() ?? '';
-    final safeOffset = offset.clamp(0, text.length).toInt();
-    final caretY = painter
-        .getOffsetForCaret(TextPosition(offset: safeOffset), Rect.zero)
-        .dy;
-    var bestIndex = 0;
-    var bestDistance = double.infinity;
-    for (var i = 0; i < lines.length; i++) {
-      final center = _lineCenterY(i);
-      final distance = (center - caretY).abs();
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
-      }
-    }
-    return bestIndex;
-  }
-
-  int getPositionAtX(
-    double x, {
-    required bool fromBottom,
-    required String rawText,
-  }) {
-    if (painter.text?.toPlainText().isEmpty ?? true) return 0;
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return 0;
-    if (isRtl) {
-      final offset = EditorTextGeometryService.visualLineTargetRawOffset(
-        painter: painter,
-        rawText: rawText,
-        x: x,
-        fromBottom: fromBottom,
-        visibleToRawOffset: MarkupController.visualToRawOffset,
-      );
-      if (offset != null) return offset;
-    }
-    final y = _lineCenterY(fromBottom ? lines.length - 1 : 0);
-    return painter.getPositionForOffset(Offset(x, y)).offset;
-  }
-
-  int? getPositionOnAdjacentLineAtX(double x, {required bool moveUp}) {
-    if (painter.text?.toPlainText().isEmpty ?? true) return null;
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return null;
-    final targetLine = _currentLineIndex + (moveUp ? -1 : 1);
-    if (targetLine < 0 || targetLine >= lines.length) return null;
-    return painter
-        .getPositionForOffset(Offset(x, _lineCenterY(targetLine)))
-        .offset;
-  }
-
-  int? visualVerticalTargetRawOffset({
-    required String rawText,
-    required int rawOffset,
-    required bool moveUp,
-    double? preferredX,
-  }) {
-    return EditorTextGeometryService.visualVerticalTargetRawOffset(
-      painter: painter,
-      rawText: rawText,
-      rawOffset: rawOffset,
-      moveUp: moveUp,
-      rawToVisibleOffset: MarkupController.rawToVisualOffset,
-      visibleToRawOffset: MarkupController.visualToRawOffset,
-      preferredX: preferredX,
-    );
-  }
-
-  int? visualHorizontalTargetRawOffset({
-    required String rawText,
-    required int rawOffset,
-    required bool moveLeft,
-  }) {
-    return EditorTextGeometryService.visualHorizontalTargetRawOffset(
-      painter: painter,
-      rawText: rawText,
-      rawOffset: rawOffset,
-      moveLeft: moveLeft,
-      rawToVisibleOffset: MarkupController.rawToVisualOffset,
-      visibleToRawOffset: MarkupController.visualToRawOffset,
-    );
-  }
-
-  int? visualWordTargetRawOffset({
-    required String rawText,
-    required int rawOffset,
-    required bool moveLeft,
-  }) {
-    return EditorTextGeometryService.visualWordTargetRawOffset(
-      painter: painter,
-      rawText: rawText,
-      rawOffset: rawOffset,
-      moveLeft: moveLeft,
-      rawToVisibleOffset: MarkupController.rawToVisualOffset,
-      visibleToRawOffset: MarkupController.visualToRawOffset,
-    );
-  }
-
-  int get _currentLineIndex {
-    return lineIndexForOffset(selection.baseOffset);
-  }
-
-  double _lineCenterY(int index) {
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return 0;
-    final safeIndex = index.clamp(0, lines.length - 1).toInt();
-    final line = lines[safeIndex];
-    final top = line.baseline - line.ascent;
-    final bottom = line.baseline + line.descent;
-    return (top + bottom) / 2;
   }
 }

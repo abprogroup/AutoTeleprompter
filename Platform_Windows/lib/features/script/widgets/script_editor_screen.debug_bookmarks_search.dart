@@ -2,6 +2,51 @@ part of 'script_editor_screen.dart';
 
 extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
   Widget _buildDebugSentry() {
+    if (_debugSentryCollapsed) {
+      return Material(
+        color: Colors.transparent,
+        child: Tooltip(
+          message: 'Show Editor Sentry',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => setState(() => _debugSentryCollapsed = false),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withOpacity(0.6)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black54,
+                    blurRadius: 4,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.bug_report_outlined,
+                      color: Colors.amber, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'SENTRY',
+                    style: TextStyle(
+                      color: Colors.amber,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final activeIdx = _focusNodes.indexWhere((n) => n.hasFocus);
     final sel = _activeController?.selection;
     return Container(
@@ -14,33 +59,112 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
           BoxShadow(color: Colors.black54, blurRadius: 4, spreadRadius: 1)
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('⚙️ EDITOR SENTRY',
-              style: TextStyle(
-                  color: Colors.amber,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                  letterSpacing: 1.5)),
-          const SizedBox(height: 8),
-          Text('Blocks: ${_controllers.length}',
-              style: const TextStyle(color: Colors.white, fontSize: 10)),
-          Text('Active Block: ${activeIdx != -1 ? activeIdx : "None"}',
-              style: const TextStyle(color: Colors.white, fontSize: 10)),
-          if (sel != null)
-            Text('Cursor: [${sel.baseOffset}, ${sel.extentOffset}]',
-                style: const TextStyle(color: Colors.white, fontSize: 10)),
-          Text('Global Selection: $_isGlobalSelection',
-              style: const TextStyle(color: Colors.white, fontSize: 10)),
-          Text('Overlay: ${_overlayKey.currentState?.debugSelectionSummary ?? "None"}',
-              style: const TextStyle(color: Colors.white, fontSize: 10)),
-          Text('Arrow: $_lastArrowDecision',
-              style: const TextStyle(color: Colors.white, fontSize: 10)),
-          Text('History States: ${_history.length}',
-              style: const TextStyle(color: Colors.white, fontSize: 10)),
-        ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 360),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('⚙️ EDITOR SENTRY',
+                  style: TextStyle(
+                      color: Colors.amber,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                      letterSpacing: 1.5)),
+              const SizedBox(height: 8),
+              Text('Blocks: ${_controllers.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text('Active Block: ${activeIdx != -1 ? activeIdx : "None"}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              if (sel != null)
+                Text('Cursor: [${sel.baseOffset}, ${sel.extentOffset}]',
+                    style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text('Global Selection: $_isGlobalSelection',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text(
+                  'Overlay: ${_overlayKey.currentState?.debugSelectionSummary ?? "None"}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text('Arrow: $_lastArrowDecision',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text(
+                  'Arrow Trace PNG: ${_lastArrowTraceScreenshotPath ?? "None"}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text('Arrow Trace Log: ${_lastArrowTraceLogPath ?? "None"}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text('History States: ${_history.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.amber,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () =>
+                        setState(() => _debugSentryCollapsed = true),
+                    icon: const Icon(Icons.expand_more, size: 14),
+                    label: const Text(
+                      'Minimize',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.amber,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: _copyLastArrowTrace,
+                    icon: const Icon(Icons.copy, size: 14),
+                    label: const Text(
+                      'Copy Trace',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.amber,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: _openArrowTraceFolder,
+                    icon: const Icon(Icons.folder_open, size: 14),
+                    label: const Text(
+                      'Open Trace Folder',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _lastArrowTrace,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 9,
+                  height: 1.25,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -80,15 +204,16 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
       return;
     }
     final controller = _controllers[blockIndex];
-    final selection  = controller.selection;
+    final selection = controller.selection;
     if (!selection.isValid || selection.isCollapsed) return;
     final start = selection.start.clamp(0, controller.text.length).toInt();
-    final end   = selection.end  .clamp(0, controller.text.length).toInt();
+    final end = selection.end.clamp(0, controller.text.length).toInt();
     if (start == end) return;
     if (start == 0 && end == controller.text.length) return;
     _lastFocusedController = controller;
     overlay.extendNativeBlockSelection(
-      blockIndex, TextSelection(baseOffset: start, extentOffset: end),
+      blockIndex,
+      TextSelection(baseOffset: start, extentOffset: end),
     );
   }
 
@@ -102,7 +227,8 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
         final c = _controllers[i];
         final sel = c.externalSelection;
         String slice;
-        if (c.isGlobalSelected || (sel != null && sel.isValid && !sel.isCollapsed)) {
+        if (c.isGlobalSelected ||
+            (sel != null && sel.isValid && !sel.isCollapsed)) {
           if (c.isGlobalSelected || sel == null || !sel.isValid) {
             slice = c.text;
           } else {
@@ -168,8 +294,8 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
           c.text = before + after;
           // Place cursor at the start of the deleted range so it stays at
           // the cut point rather than jumping to the native selection endpoint.
-          final cursorAt = (sel.start + openPrefix.length)
-              .clamp(0, c.text.length);
+          final cursorAt =
+              (sel.start + openPrefix.length).clamp(0, c.text.length);
           c.selection = TextSelection.collapsed(offset: cursorAt);
           c.externalSelection = null;
           c.refresh();
@@ -217,7 +343,8 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     // buffer uses \n. Without normalization, multi-block pastes (and any text
     // the OS canonicalizes) miss the match and lose styling.
     String text = data!.text!;
-    final normalizedClipboard = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final normalizedClipboard =
+        text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     final internalMarkup = RichClipboard.internalMarkup;
     if (internalMarkup != null) {
       final cleanInternal = StylingService.stripTags(internalMarkup);
@@ -227,7 +354,8 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
       final cmpInternal = cleanInternal.trimRight();
       final cmpClipboard = normalizedClipboard.trimRight();
       if (cmpInternal == cmpClipboard) {
-        text = internalMarkup; // use full markup including any trailing empty block
+        text =
+            internalMarkup; // use full markup including any trailing empty block
       } else {
         text = normalizedClipboard;
       }
@@ -239,7 +367,8 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
     if (_isGlobalSelection ||
         hasOverlay ||
-        (_activeController != null && !_activeController!.selection.isCollapsed)) {
+        (_activeController != null &&
+            !_activeController!.selection.isCollapsed)) {
       _deleteSelection();
     }
 
@@ -288,8 +417,6 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
     }
   }
 
-
-
   void _selectAllBlocks() {
     _overlayKey.currentState?.selectAll();
     _isGlobalSelection = true;
@@ -304,7 +431,6 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
       c.refresh();
     }
   }
-
 
   /// Re-sync externalSelection after a global style operation changes text lengths.
   void _resyncGlobalSelection() {

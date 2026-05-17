@@ -9,7 +9,7 @@ class CursorStyle {
   final int fontSize;
   final String fontFamily, textAlign;
   final Color? textColor, highlightColor;
-  
+
   CursorStyle({
     this.isBold = false,
     this.isItalic = false,
@@ -21,11 +21,15 @@ class CursorStyle {
     this.highlightColor,
   });
 
-  CursorStyle copyWith({
-    bool? isBold, bool? isItalic, bool? isUnderline,
-    int? fontSize, String? fontFamily, String? textAlign,
-    Color? textColor, Color? highlightColor
-  }) {
+  CursorStyle copyWith(
+      {bool? isBold,
+      bool? isItalic,
+      bool? isUnderline,
+      int? fontSize,
+      String? fontFamily,
+      String? textAlign,
+      Color? textColor,
+      Color? highlightColor}) {
     return CursorStyle(
       isBold: isBold ?? this.isBold,
       isItalic: isItalic ?? this.isItalic,
@@ -54,7 +58,12 @@ class CursorStyle {
 
   @override
   int get hashCode =>
-      isBold.hashCode ^ isItalic.hashCode ^ isUnderline.hashCode ^
-      fontSize.hashCode ^ fontFamily.hashCode ^ textAlign.hashCode ^
-      textColor.hashCode ^ highlightColor.hashCode;
+      isBold.hashCode ^
+      isItalic.hashCode ^
+      isUnderline.hashCode ^
+      fontSize.hashCode ^
+      fontFamily.hashCode ^
+      textAlign.hashCode ^
+      textColor.hashCode ^
+      highlightColor.hashCode;
 }

@@ -52,6 +52,13 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final presentationFontSize = settings.fontSize * 2.0;
     final debugConsoleHeight =
         settings.debugMode ? (_debugConsoleMinimized ? 36.0 : 220.0) : 0.0;
+    final controlsReservedHeight =
+        settings.scrollMode == 'manual' ? 150.0 : 104.0;
+    final debugConsoleBottom =
+        settings.debugMode ? controlsReservedHeight : 10.0;
+    final soundLevelBottom = settings.debugMode
+        ? debugConsoleBottom + debugConsoleHeight + 10.0
+        : 12.0;
     final bookmarkWordIndexes = _bookmarks.map((b) => b.wordIndex).toSet();
 
     Widget wordList = Padding(
@@ -337,7 +344,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     Positioned(
                       left: 12,
                       right: 12,
-                      bottom: settings.debugMode ? debugConsoleHeight + 20 : 12,
+                      bottom: soundLevelBottom,
                       child: Opacity(
                         opacity: settings.debugMode ? 1.0 : 0.0,
                         child: IgnorePointer(
@@ -365,7 +372,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     // Technical Debug Overlay
                     if (settings.debugMode)
                       Positioned(
-                        bottom: 10,
+                        bottom: debugConsoleBottom,
                         left: 6,
                         right: 6,
                         child: AnimatedContainer(

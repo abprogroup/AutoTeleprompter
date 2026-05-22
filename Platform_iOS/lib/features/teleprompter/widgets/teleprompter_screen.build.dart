@@ -50,6 +50,11 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // Presentation mode uses 2x font size for readability.
     // The editor shows smaller text for fluid editing; the teleprompter enlarges it.
     final presentationFontSize = settings.fontSize * 2.0;
+    final debugConsoleHeight = settings.debugMode ? 220.0 : 0.0;
+    final controlsReservedHeight =
+        settings.scrollMode == 'manual' ? 150.0 : 104.0;
+    final debugConsoleBottom =
+        settings.debugMode ? controlsReservedHeight : 10.0;
 
     Widget wordList = Padding(
       padding: EdgeInsets.symmetric(
@@ -323,11 +328,11 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 // Technical Debug Overlay
                 if (settings.debugMode)
                   Positioned(
-                    bottom: 10,
+                    bottom: debugConsoleBottom,
                     left: 6,
                     right: 6,
                     child: Container(
-                      height: 220,
+                      height: debugConsoleHeight,
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.92),
                         borderRadius: BorderRadius.circular(10),

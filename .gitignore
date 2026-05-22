@@ -27,6 +27,7 @@ _debug/
 
 # Local planning/governance files are private workspace state.
 Plans/
+PLATFORM_TESTING_README.md
 AI_PROTOCOL.md
 DAILY_LOG.md
 MASTER_TODO*.md
@@ -64,3 +65,4 @@ releases/v*/
 CHANGELOG.md
 PROTOCOL.md
 README.md
+*.code-workspace

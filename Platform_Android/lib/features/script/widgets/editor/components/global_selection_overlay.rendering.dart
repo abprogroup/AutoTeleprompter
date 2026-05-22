@@ -1,4 +1,4 @@
-﻿part of 'global_selection_overlay.dart';
+part of 'global_selection_overlay.dart';
 
 extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
   void _updateControllers() {
@@ -49,8 +49,16 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
       return;
     }
 
-    final startPos = _getPositionInStack(_startBlock!, _startOffset!);
-    final endPos = _getPositionInStack(_endBlock!, _endOffset!);
+    final startPos = _getPositionInStack(
+      _startBlock!,
+      _startOffset!,
+      endpointA: true,
+    );
+    final endPos = _getPositionInStack(
+      _endBlock!,
+      _endOffset!,
+      endpointA: false,
+    );
 
     setState(() {
       _handleStartPos = startPos;
@@ -58,7 +66,11 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
     });
   }
 
-  Offset? _getPositionInStack(int blockIdx, int offset) {
+  Offset? _getPositionInStack(
+    int blockIdx,
+    int offset, {
+    required bool endpointA,
+  }) {
     if (blockIdx < 0 || blockIdx >= widget.blockKeys.length) return null;
     final key = widget.blockKeys[blockIdx];
     final renderObj = key.currentContext?.findRenderObject();
@@ -69,13 +81,61 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
     if (ourStack == null) return null;
 
     if (editable != null) {
+      final controller = widget.controllers[blockIdx];
+      final safeOffset = offset.clamp(0, controller.text.length).toInt();
       final caretOffset = editable.getLocalRectForCaret(
-        TextPosition(offset: offset, affinity: TextAffinity.downstream),
+        TextPosition(offset: safeOffset, affinity: TextAffinity.downstream),
       );
-      final anchor = Offset(
-        caretOffset.left,
-        caretOffset.top + caretOffset.height / 2,
-      );
+      var endpointX = caretOffset.left;
+      var endpointY = caretOffset.top + caretOffset.height / 2;
+      final range = _normalizedRange();
+      if (range != null) {
+        final blockRtl = EditorTextGeometryService.resolveBlockRtl(
+          widget.controllers.map((controller) => controller.text).toList(),
+          blockIdx,
+        );
+        final isRangeStart = _endpointIsRangeStart(endpointA);
+        final blockTextLength = controller.text.length;
+        final selection = blockIdx == range.startBlock &&
+                blockIdx == range.endBlock
+            ? TextSelection(
+                baseOffset: range.startOffset.clamp(0, blockTextLength).toInt(),
+                extentOffset: range.endOffset.clamp(0, blockTextLength).toInt(),
+              )
+            : blockIdx == range.startBlock
+                ? TextSelection(
+                    baseOffset:
+                        range.startOffset.clamp(0, blockTextLength).toInt(),
+                    extentOffset: blockTextLength,
+                  )
+                : blockIdx == range.endBlock
+                    ? TextSelection(
+                        baseOffset: 0,
+                        extentOffset:
+                            range.endOffset.clamp(0, blockTextLength).toInt(),
+                      )
+                    : TextSelection(
+                        baseOffset: 0, extentOffset: blockTextLength);
+        final paintedEndpoint = _paintedSelectionEndpoint(
+          editable,
+          selection,
+          isRangeStart: isRangeStart,
+        );
+        if (paintedEndpoint != null) {
+          endpointX = paintedEndpoint.dx;
+          endpointY = paintedEndpoint.dy;
+        } else {
+          final endpoints = editable.getEndpointsForSelection(selection);
+          if (endpoints.isNotEmpty) {
+            final endpoint = blockRtl
+                ? _rtlSelectionEndpoint(endpoints, isRangeStart: isRangeStart)
+                : (isRangeStart ? endpoints.first : endpoints.last);
+            endpointX = endpoint.point.dx;
+            endpointY = endpoint.point.dy;
+          }
+        }
+      }
+      final anchor = Offset(endpointX, endpointY);
       return editable.localToGlobal(anchor, ancestor: ourStack);
     }
 
@@ -83,18 +143,44 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
     return box.localToGlobal(Offset.zero, ancestor: ourStack);
   }
 
-  Offset _handleVisualCenter(Offset caret, bool endpointA) {
-    final isRangeStart = _endpointIsRangeStart(endpointA);
-    final block = endpointA ? _startBlock : _endBlock;
-    final isRtl = block != null &&
-        block >= 0 &&
-        block < widget.controllers.length &&
-        widget.controllers[block].text.isHebrew;
-    final placeLeftOfCaret = isRtl ? !isRangeStart : isRangeStart;
-    final dx = placeLeftOfCaret
-        ? caret.dx - GlobalSelectionOverlayState._handleBarWidth / 2 - 2.0
-        : caret.dx + GlobalSelectionOverlayState._handleBarWidth / 2 + 2.0;
-    return Offset(dx, caret.dy);
+  Offset? _paintedSelectionEndpoint(
+    RenderEditable editable,
+    TextSelection selection, {
+    required bool isRangeStart,
+  }) {
+    return MarkupRenderEditableGeometry.endpointForSelection(
+      editable,
+      selection,
+      isRangeStart: isRangeStart,
+    );
+  }
+
+  TextSelectionPoint _rtlSelectionEndpoint(
+    List<TextSelectionPoint> endpoints, {
+    required bool isRangeStart,
+  }) {
+    const lineTolerance = 4.0;
+    if (endpoints.length == 1) return endpoints.single;
+    final sortedByLine = [...endpoints]..sort((a, b) {
+        final yCompare = a.point.dy.compareTo(b.point.dy);
+        if (yCompare != 0) return yCompare;
+        return a.point.dx.compareTo(b.point.dx);
+      });
+    final anchorY =
+        isRangeStart ? sortedByLine.first.point.dy : sortedByLine.last.point.dy;
+    final sameLine = sortedByLine
+        .where(
+            (endpoint) => (endpoint.point.dy - anchorY).abs() <= lineTolerance)
+        .toList();
+    if (sameLine.isEmpty) {
+      return isRangeStart ? sortedByLine.first : sortedByLine.last;
+    }
+    sameLine.sort((a, b) => a.point.dx.compareTo(b.point.dx));
+    return isRangeStart ? sameLine.last : sameLine.first;
+  }
+
+  Offset _handleVisualCenter(Offset caret, bool _) {
+    return caret;
   }
 
   /// v4.0.8: Called after a style command mutates text so that _startOffset /

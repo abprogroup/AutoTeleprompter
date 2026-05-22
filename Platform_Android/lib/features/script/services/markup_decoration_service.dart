@@ -165,7 +165,7 @@ class MarkupDecorationBoxMerger {
   static List<Rect> merge(
     Iterable<Rect> boxes, {
     double rowTolerance = 4.0,
-    double gapTolerance = 28.0,
+    double gapTolerance = 10.0,
   }) {
     final sorted = boxes.where((box) => !box.isEmpty).toList()
       ..sort((a, b) {
@@ -186,9 +186,7 @@ class MarkupDecorationBoxMerger {
       final last = merged.last;
       final sameRow = (last.center.dy - box.center.dy).abs() <=
           rowTolerance + (last.height + box.height) * 0.08;
-      final dynamicGapTolerance =
-          gapTolerance > last.height * 0.75 ? gapTolerance : last.height * 0.75;
-      final closeEnough = box.left <= last.right + dynamicGapTolerance;
+      final closeEnough = box.left <= last.right + gapTolerance;
       if (sameRow && closeEnough) {
         merged[merged.length - 1] = Rect.fromLTRB(
           last.left < box.left ? last.left : box.left,
@@ -201,6 +199,162 @@ class MarkupDecorationBoxMerger {
       }
     }
     return merged;
+  }
+}
+
+class MarkupTextLayoutGeometry {
+  final TextPainter painter;
+  final double width;
+  final TextAlign textAlign;
+  final TextDirection textDirection;
+  late final List<ui.LineMetrics> _lineMetrics = painter.computeLineMetrics();
+
+  MarkupTextLayoutGeometry({
+    required InlineSpan textSpan,
+    required this.width,
+    required this.textAlign,
+    required this.textDirection,
+    StrutStyle? strutStyle,
+  }) : painter = TextPainter(
+          text: textSpan,
+          textDirection: textDirection,
+          textAlign: textAlign,
+          strutStyle: strutStyle,
+        )..layout(maxWidth: width);
+
+  List<Rect> selectionRects(
+    TextSelection selection, {
+    ui.BoxHeightStyle boxHeightStyle = ui.BoxHeightStyle.tight,
+    ui.BoxWidthStyle boxWidthStyle = ui.BoxWidthStyle.tight,
+    bool alignToVisualLine = true,
+  }) {
+    return painter
+        .getBoxesForSelection(
+          selection,
+          boxHeightStyle: boxHeightStyle,
+          boxWidthStyle: boxWidthStyle,
+        )
+        .map((box) => alignToVisualLine
+            ? _alignRectToVisualLine(box.toRect())
+            : box.toRect())
+        .where((rect) => !rect.isEmpty)
+        .toList(growable: false);
+  }
+
+  List<Rect> mergedDecorationRects(
+    TextSelection selection, {
+    required MarkupDecorationType type,
+  }) {
+    final boxes = selectionRects(selection);
+    return MarkupDecorationBoxMerger.merge(
+      boxes,
+      rowTolerance: 5.0,
+      gapTolerance: type == MarkupDecorationType.background
+          ? MarkupDecorationBoxMerger.styleBackgroundGapTolerance
+          : MarkupDecorationBoxMerger.styleUnderlineGapTolerance,
+    );
+  }
+
+  List<Rect> mergedActiveSelectionRects(TextSelection selection) {
+    final boxes = selectionRects(selection);
+    return MarkupDecorationBoxMerger.merge(
+      boxes,
+      rowTolerance: 5.0,
+      gapTolerance: MarkupDecorationBoxMerger.activeSelectionGapTolerance,
+    );
+  }
+
+  Offset? activeSelectionEndpoint(
+    TextSelection selection, {
+    required bool isRangeStart,
+  }) {
+    final rects = mergedActiveSelectionRects(selection);
+    if (rects.isEmpty) return null;
+    return endpointForRects(
+      rects,
+      isRangeStart: isRangeStart,
+      textDirection: textDirection,
+    );
+  }
+
+  static Offset endpointForRects(
+    List<Rect> rects, {
+    required bool isRangeStart,
+    required TextDirection textDirection,
+  }) {
+    const lineTolerance = 4.0;
+    final sorted = rects.where((rect) => !rect.isEmpty).toList()
+      ..sort((a, b) {
+        final yCompare = a.center.dy.compareTo(b.center.dy);
+        if (yCompare != 0 &&
+            (a.center.dy - b.center.dy).abs() > lineTolerance) {
+          return yCompare;
+        }
+        return a.left.compareTo(b.left);
+      });
+    if (sorted.isEmpty) return Offset.zero;
+
+    final targetY =
+        isRangeStart ? sorted.first.center.dy : sorted.last.center.dy;
+    final sameLine = sorted
+        .where((rect) => (rect.center.dy - targetY).abs() <= lineTolerance)
+        .toList();
+    final lineRects = sameLine.isEmpty ? sorted : sameLine;
+    final rtl = textDirection == TextDirection.rtl;
+    final x = rtl
+        ? isRangeStart
+            ? lineRects
+                .map((rect) => rect.right)
+                .reduce((a, b) => a > b ? a : b)
+            : lineRects.map((rect) => rect.left).reduce((a, b) => a < b ? a : b)
+        : isRangeStart
+            ? lineRects.map((rect) => rect.left).reduce((a, b) => a < b ? a : b)
+            : lineRects
+                .map((rect) => rect.right)
+                .reduce((a, b) => a > b ? a : b);
+    return Offset(x, targetY);
+  }
+
+  Rect _alignRectToVisualLine(Rect rect) {
+    final line = _nearestLineFor(rect);
+    if (line == null) return rect;
+    final desiredLeft = _visualLineLeft(line);
+    final delta = desiredLeft - line.left;
+    if (delta.abs() < 0.01) return rect;
+    final desiredRight = desiredLeft + line.width;
+    final alreadyInVisualLine =
+        rect.left >= desiredLeft - 1.0 && rect.right <= desiredRight + 1.0;
+    if (alreadyInVisualLine) return rect;
+    return rect.shift(Offset(delta, 0));
+  }
+
+  ui.LineMetrics? _nearestLineFor(Rect rect) {
+    ui.LineMetrics? best;
+    var bestDistance = double.infinity;
+    final centerY = rect.center.dy;
+    for (final line in _lineMetrics) {
+      final lineCenter = line.baseline - line.ascent + line.height / 2;
+      final distance = (lineCenter - centerY).abs();
+      if (distance < bestDistance) {
+        best = line;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  double _visualLineLeft(ui.LineMetrics line) {
+    final left = switch (textAlign) {
+      TextAlign.left => 0.0,
+      TextAlign.right => width - line.width,
+      TextAlign.center => (width - line.width) / 2,
+      TextAlign.start =>
+        textDirection == TextDirection.rtl ? width - line.width : 0.0,
+      TextAlign.end =>
+        textDirection == TextDirection.rtl ? 0.0 : width - line.width,
+      TextAlign.justify => 0.0,
+    };
+    return left.clamp(0.0, width).toDouble();
   }
 }
 
@@ -229,13 +383,13 @@ class MarkupTextDecorationPainter extends CustomPainter {
     final width = size.width - contentPadding.horizontal;
     if (width <= 0) return;
 
-    final painter = TextPainter(
-      text: textSpan,
-      textDirection: textDirection,
+    final geometry = MarkupTextLayoutGeometry(
+      textSpan: textSpan,
+      width: width,
       textAlign: textAlign,
+      textDirection: textDirection,
       strutStyle: strutStyle,
-    )..layout(maxWidth: width);
-    final lineMetrics = painter.computeLineMetrics();
+    );
 
     canvas.save();
     canvas.translate(contentPadding.left, contentPadding.top);
@@ -244,82 +398,74 @@ class MarkupTextDecorationPainter extends CustomPainter {
       final paintableRange =
           MarkupDecorationParser.paintableContentRange(rawText, range);
       if (paintableRange == null) continue;
-      final boxes = painter
-          .getBoxesForSelection(
-            TextSelection(
-              baseOffset: paintableRange.start,
-              extentOffset: paintableRange.end,
-            ),
-            boxHeightStyle: ui.BoxHeightStyle.tight,
-            boxWidthStyle: ui.BoxWidthStyle.tight,
-          )
-          .map((box) => _applyLineAlignment(box.toRect(), lineMetrics, width));
-      final merged = MarkupDecorationBoxMerger.merge(
-        boxes,
-        rowTolerance: 5.0,
-        gapTolerance: 36.0,
+      final merged = geometry.mergedDecorationRects(
+        TextSelection(
+          baseOffset: paintableRange.start,
+          extentOffset: paintableRange.end,
+        ),
+        type: type,
       );
       if (type == MarkupDecorationType.background) {
-        _paintBackground(canvas, merged, range.color ?? Colors.transparent);
+        _paintBackground(
+          canvas,
+          merged,
+          range.color ?? Colors.transparent,
+          width,
+        );
       } else {
-        _paintUnderline(canvas, merged);
+        _paintUnderline(canvas, merged, width);
       }
     }
     canvas.restore();
   }
 
-  Rect _applyLineAlignment(
-    Rect rect,
-    List<ui.LineMetrics> lines,
+  void _paintBackground(
+    Canvas canvas,
+    List<Rect> rects,
+    Color color,
     double width,
   ) {
-    final centerY = rect.center.dy;
-    ui.LineMetrics? best;
-    var bestDistance = double.infinity;
-    for (final line in lines) {
-      final lineCenter = line.baseline - line.ascent + line.height / 2;
-      final distance = (lineCenter - centerY).abs();
-      if (distance < bestDistance) {
-        best = line;
-        bestDistance = distance;
-      }
-    }
-    if (best == null) return rect;
-
-    final desiredLeft = switch (textAlign) {
-      TextAlign.right => width - best.width,
-      TextAlign.center => (width - best.width) / 2,
-      TextAlign.end =>
-        textDirection == TextDirection.rtl ? 0.0 : width - best.width,
-      TextAlign.start =>
-        textDirection == TextDirection.rtl ? width - best.width : 0.0,
-      TextAlign.justify || TextAlign.left => 0.0,
-    };
-    final delta = desiredLeft.clamp(0.0, width) - best.left;
-    if (delta.abs() < 0.01) return rect;
-    return rect.shift(Offset(delta, 0));
-  }
-
-  void _paintBackground(Canvas canvas, List<Rect> rects, Color color) {
-    if (color.opacity <= 0) return;
+    if (color.a <= 0) return;
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
     for (final rect in rects) {
-      final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 6.0));
-      canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+      final leftTail = textDirection == TextDirection.rtl
+          ? MarkupDecorationBoxMerger.styleBackgroundVisualEndTail
+          : MarkupDecorationBoxMerger.styleBackgroundInnerTail;
+      final rightTail = textDirection == TextDirection.rtl
+          ? MarkupDecorationBoxMerger.styleBackgroundInnerTail
+          : MarkupDecorationBoxMerger.styleBackgroundVisualEndTail;
+      final band = Rect.fromLTRB(
+        (rect.left - leftTail).clamp(0.0, width).toDouble(),
+        rect.top,
+        (rect.right + rightTail).clamp(0.0, width).toDouble(),
+        rect.bottom,
+      );
+      if (band.width <= 0) continue;
+      final radius = Radius.circular((band.height * 0.10).clamp(2.0, 6.0));
+      canvas.drawRRect(RRect.fromRectAndRadius(band, radius), paint);
     }
   }
 
-  void _paintUnderline(Canvas canvas, List<Rect> rects) {
+  void _paintUnderline(Canvas canvas, List<Rect> rects, double width) {
     final paint = Paint()
       ..color = Colors.white
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.square
       ..style = PaintingStyle.stroke;
     for (final rect in rects) {
+      final leftTail = textDirection == TextDirection.rtl
+          ? MarkupDecorationBoxMerger.styleUnderlineVisualEndTail
+          : 0.0;
+      final rightTail = textDirection == TextDirection.rtl
+          ? 0.0
+          : MarkupDecorationBoxMerger.styleUnderlineVisualEndTail;
+      final left = (rect.left - leftTail).clamp(0.0, width).toDouble();
+      final right = (rect.right + rightTail).clamp(0.0, width).toDouble();
+      if (right <= left) continue;
       final y = rect.bottom - (paint.strokeWidth * 0.5);
-      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+      canvas.drawLine(Offset(left, y), Offset(right, y), paint);
     }
   }
 

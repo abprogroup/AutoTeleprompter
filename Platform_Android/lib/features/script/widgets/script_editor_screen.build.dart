@@ -417,6 +417,7 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                                     _controllers.length,
                                     (index) => Listener(
                                       onPointerDown: (event) {
+                                        _verticalArrowPreferredX = null;
                                         if (_isGlobalSelection ||
                                             _controllers.any(
                                                 (c) => c.isGlobalSelected) ||
@@ -437,6 +438,8 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                                         hasOverlaySelection: _overlayKey
                                                 .currentState?.hasSelection ??
                                             false,
+                                        inheritedRtl:
+                                            _editorBlockResolvedRtl(index),
                                         onSubmitted: () => _addBlock(index + 1),
                                         onTap: () {
                                           // Secondary safety, though Listener should handle it

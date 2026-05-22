@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../markup_controller.dart';
-import '../../../../../core/extensions/string_extensions.dart';
+import '../../../services/editor_text_geometry_service.dart';
+import '../../../services/markup_decoration_service.dart';
 
 /// Walk a render tree to find the first RenderEditable.
 RenderEditable? _findRenderEditable(RenderObject obj) {
@@ -12,6 +13,50 @@ RenderEditable? _findRenderEditable(RenderObject obj) {
     result ??= _findRenderEditable(child);
   });
   return result;
+}
+
+enum SelectionSessionMode {
+  none,
+  overlaySelection,
+  handleDrag,
+  keyboardExtend,
+}
+
+enum SelectionPointerState {
+  inside,
+  edgeZone,
+  outside,
+  stale,
+}
+
+class SelectionEndpoint {
+  final int block;
+  final int offset;
+
+  const SelectionEndpoint({required this.block, required this.offset});
+
+  @override
+  String toString() => '$block:$offset';
+}
+
+class SelectionSessionSnapshot {
+  final SelectionSessionMode mode;
+  final SelectionPointerState pointerState;
+  final SelectionEndpoint endpointA;
+  final SelectionEndpoint endpointB;
+  final SelectionEndpoint anchor;
+  final SelectionEndpoint focus;
+  final bool focusEndpointIsA;
+
+  const SelectionSessionSnapshot({
+    required this.mode,
+    required this.pointerState,
+    required this.endpointA,
+    required this.endpointB,
+    required this.anchor,
+    required this.focus,
+    required this.focusEndpointIsA,
+  });
 }
 
 /// v3.9.5.66: Global Multi-Paragraph Selection Manager
@@ -44,6 +89,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Offset? _handleStartPos, _handleEndPos;
   bool _draggingStart = false;
   bool _draggingEnd = false;
+  bool _keyboardFocusEndpointIsStart = false;
   bool _hasHandleRefinedSelection = false;
   Size _stackSize = Size.zero;
 
@@ -63,6 +109,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (!_isSelecting) return;
     setState(() {
       _isSelecting = false;
+      _keyboardFocusEndpointIsStart = false;
+      _draggingStart = false;
+      _draggingEnd = false;
       _hasHandleRefinedSelection = false;
       _startBlock = _endBlock = null;
       _startOffset = _endOffset = null;
@@ -73,6 +122,14 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
       }
     });
     widget.onSelectionChanged();
+  }
+
+  void endDragging() {
+    if (!_draggingStart && !_draggingEnd) return;
+    setState(() {
+      _draggingStart = false;
+      _draggingEnd = false;
+    });
   }
 
   void selectAll() {
@@ -105,6 +162,77 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   bool get hasSelection =>
       _isSelecting && _startBlock != null && _endBlock != null;
+
+  SelectionSessionSnapshot? get selectionSessionSnapshot {
+    if (!hasSelection ||
+        _startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) {
+      return null;
+    }
+    final endpointA = SelectionEndpoint(
+      block: _startBlock!,
+      offset: _clampEndpointOffset(_startBlock!, _startOffset!),
+    );
+    final endpointB = SelectionEndpoint(
+      block: _endBlock!,
+      offset: _clampEndpointOffset(_endBlock!, _endOffset!),
+    );
+    return SelectionSessionSnapshot(
+      mode: _draggingStart || _draggingEnd
+          ? SelectionSessionMode.handleDrag
+          : SelectionSessionMode.overlaySelection,
+      pointerState: SelectionPointerState.inside,
+      endpointA: endpointA,
+      endpointB: endpointB,
+      anchor: _keyboardFocusEndpointIsStart ? endpointB : endpointA,
+      focus: _keyboardFocusEndpointIsStart ? endpointA : endpointB,
+      focusEndpointIsA: _keyboardFocusEndpointIsStart,
+    );
+  }
+
+  void setKeyboardSelection({
+    required int anchorBlock,
+    required int anchorOffset,
+    required int focusBlock,
+    required int focusOffset,
+  }) {
+    if (anchorBlock < 0 ||
+        anchorBlock >= widget.controllers.length ||
+        focusBlock < 0 ||
+        focusBlock >= widget.controllers.length) {
+      return;
+    }
+    setState(() {
+      _isSelecting = true;
+      _hasHandleRefinedSelection = true;
+      _draggingStart = false;
+      _draggingEnd = false;
+      _startBlock = anchorBlock;
+      _startOffset = _clampEndpointOffset(anchorBlock, anchorOffset);
+      _endBlock = focusBlock;
+      _endOffset = _clampEndpointOffset(focusBlock, focusOffset);
+      _keyboardFocusEndpointIsStart = false;
+      for (final c in widget.controllers) {
+        c.isGlobalSelected = false;
+      }
+      _updateBlockHighlights();
+      for (final c in widget.controllers) {
+        c.refresh();
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _calculateHandlePositions());
+    });
+    widget.onSelectionChanged();
+  }
+
+  int _clampEndpointOffset(int block, int offset) {
+    if (block < 0 || block >= widget.controllers.length) return 0;
+    return offset.clamp(0, widget.controllers[block].text.length).toInt();
+  }
 
   bool get isRefinedSelection => _hasHandleRefinedSelection;
 
@@ -251,11 +379,23 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
         _startOffset == null ||
         _endOffset == null) return;
 
-    _handleStartPos = _getOffsetForPosition(_startBlock!, _startOffset!);
-    _handleEndPos = _getOffsetForPosition(_endBlock!, _endOffset!);
+    _handleStartPos = _getOffsetForPosition(
+      _startBlock!,
+      _startOffset!,
+      endpointA: true,
+    );
+    _handleEndPos = _getOffsetForPosition(
+      _endBlock!,
+      _endOffset!,
+      endpointA: false,
+    );
   }
 
-  Offset? _getOffsetForPosition(int blockIdx, int offset) {
+  Offset? _getOffsetForPosition(
+    int blockIdx,
+    int offset, {
+    required bool endpointA,
+  }) {
     if (blockIdx < 0 || blockIdx >= widget.blockKeys.length) return null;
     final context = widget.blockKeys[blockIdx].currentContext;
     if (context == null) return null;
@@ -276,18 +416,136 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (ourStack == null) return null;
 
     if (editable != null) {
-      // v4.1.0: Use downstream affinity so a position at a line-wrap boundary
-      // resolves to the START of the next line, not the end of the previous line.
-      // Without this, handles at wrap boundaries always snapped back to line 1.
+      final controller = widget.controllers[blockIdx];
+      final safeOffset = offset.clamp(0, controller.text.length).toInt();
       final caretOffset = editable.getLocalRectForCaret(
-        TextPosition(offset: offset, affinity: TextAffinity.downstream),
+        TextPosition(offset: safeOffset, affinity: TextAffinity.downstream),
       );
-      return editable.localToGlobal(caretOffset.topLeft, ancestor: ourStack);
+      var endpointX = caretOffset.left;
+      var endpointY = caretOffset.top + caretOffset.height / 2;
+      final range = _normalizedRawRange();
+      if (range != null) {
+        final blockRtl = EditorTextGeometryService.resolveBlockRtl(
+          widget.controllers.map((controller) => controller.text).toList(),
+          blockIdx,
+        );
+        final isRangeStart = _endpointIsRangeStart(endpointA);
+        final blockTextLength = controller.text.length;
+        final selection = blockIdx == range.startBlock &&
+                blockIdx == range.endBlock
+            ? TextSelection(
+                baseOffset: range.startOffset.clamp(0, blockTextLength).toInt(),
+                extentOffset: range.endOffset.clamp(0, blockTextLength).toInt(),
+              )
+            : blockIdx == range.startBlock
+                ? TextSelection(
+                    baseOffset:
+                        range.startOffset.clamp(0, blockTextLength).toInt(),
+                    extentOffset: blockTextLength,
+                  )
+                : blockIdx == range.endBlock
+                    ? TextSelection(
+                        baseOffset: 0,
+                        extentOffset:
+                            range.endOffset.clamp(0, blockTextLength).toInt(),
+                      )
+                    : TextSelection(
+                        baseOffset: 0, extentOffset: blockTextLength);
+        final paintedEndpoint =
+            MarkupRenderEditableGeometry.endpointForSelection(
+          editable,
+          selection,
+          isRangeStart: isRangeStart,
+        );
+        if (paintedEndpoint != null) {
+          endpointX = paintedEndpoint.dx;
+          endpointY = paintedEndpoint.dy;
+        } else {
+          final endpoints = editable.getEndpointsForSelection(selection);
+          if (endpoints.isNotEmpty) {
+            final endpoint = blockRtl
+                ? _rtlSelectionEndpoint(endpoints, isRangeStart: isRangeStart)
+                : (isRangeStart ? endpoints.first : endpoints.last);
+            endpointX = endpoint.point.dx;
+            endpointY = endpoint.point.dy;
+          }
+        }
+      }
+      return editable.localToGlobal(Offset(endpointX, endpointY),
+          ancestor: ourStack);
     }
 
     // Fallback: use the block's top-left corner
     final box = renderObj as RenderBox;
     return box.localToGlobal(Offset.zero, ancestor: ourStack);
+  }
+
+  ({
+    int startBlock,
+    int startOffset,
+    int endBlock,
+    int endOffset,
+  })? _normalizedRawRange() {
+    if (_startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) {
+      return null;
+    }
+    var sB = _startBlock!;
+    var eB = _endBlock!;
+    var sO = _startOffset!;
+    var eO = _endOffset!;
+    if (sB > eB || (sB == eB && sO > eO)) {
+      final tB = sB;
+      sB = eB;
+      eB = tB;
+      final tO = sO;
+      sO = eO;
+      eO = tO;
+    }
+    return (
+      startBlock: sB,
+      startOffset: _clampEndpointOffset(sB, sO),
+      endBlock: eB,
+      endOffset: _clampEndpointOffset(eB, eO),
+    );
+  }
+
+  bool _endpointIsRangeStart(bool endpointA) {
+    if (_startBlock == null ||
+        _endBlock == null ||
+        _startOffset == null ||
+        _endOffset == null) {
+      return endpointA;
+    }
+    final startBeforeEnd = _startBlock! < _endBlock! ||
+        (_startBlock == _endBlock && _startOffset! <= _endOffset!);
+    return startBeforeEnd ? endpointA : !endpointA;
+  }
+
+  TextSelectionPoint _rtlSelectionEndpoint(
+    List<TextSelectionPoint> endpoints, {
+    required bool isRangeStart,
+  }) {
+    const lineTolerance = 4.0;
+    if (endpoints.length == 1) return endpoints.single;
+    final sortedByLine = [...endpoints]..sort((a, b) {
+        final yCompare = a.point.dy.compareTo(b.point.dy);
+        if (yCompare != 0) return yCompare;
+        return a.point.dx.compareTo(b.point.dx);
+      });
+    final anchorY =
+        isRangeStart ? sortedByLine.first.point.dy : sortedByLine.last.point.dy;
+    final sameLine = sortedByLine
+        .where(
+            (endpoint) => (endpoint.point.dy - anchorY).abs() <= lineTolerance)
+        .toList();
+    if (sameLine.isEmpty) {
+      return isRangeStart ? sortedByLine.first : sortedByLine.last;
+    }
+    sameLine.sort((a, b) => a.point.dx.compareTo(b.point.dx));
+    return isRangeStart ? sameLine.last : sameLine.first;
   }
 
   void _enterRefineMode() {

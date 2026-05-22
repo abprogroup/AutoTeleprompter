@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/markup_decoration_service.dart';
+
 /// Premium Highlighting Controller with inline markup rendering.
 /// Renders bold/italic/underline/color/bg/size/font styles while visually
 /// hiding tag characters, and supports multi-block selection highlighting
@@ -30,6 +32,7 @@ class MarkupController extends TextEditingController {
   );
 
   static const Color _selectionBg = Color(0x66FFBF00);
+  static const int _hiddenTagPlaceholderCodeUnit = 0x2060; // WORD JOINER
 
   static final RegExp _tagRegex = RegExp(
     r'\*\*'
@@ -43,6 +46,24 @@ class MarkupController extends TextEditingController {
     r'|\[(center|left|right)\]|\[\/(?:center|left|right)\]'
     r'|\[rtl\]|\[\/rtl\]|\[ltr\]|\[\/ltr\]',
   );
+
+  /// Returns the nearest raw cursor end that is outside trailing hidden tags.
+  static int safeEndOffset(String text, [int? from]) {
+    var pos = from ?? text.length;
+    if (pos <= 0) return 0;
+    var moved = true;
+    while (moved && pos > 0) {
+      moved = false;
+      for (final match in _tagRegex.allMatches(text)) {
+        if (match.end == pos) {
+          pos = match.start;
+          moved = true;
+          break;
+        }
+      }
+    }
+    return pos;
+  }
 
   /// Tag-Skipping Backspace Guardian.
   /// Backspace over a hidden tag boundary walks past the tag(s) and
@@ -58,7 +79,8 @@ class MarkupController extends TextEditingController {
 
     if (newText != oldText) {
       int prefix = 0;
-      final minLen = oldText.length < newText.length ? oldText.length : newText.length;
+      final minLen =
+          oldText.length < newText.length ? oldText.length : newText.length;
       while (prefix < minLen &&
           oldText.codeUnitAt(prefix) == newText.codeUnitAt(prefix)) {
         prefix++;
@@ -110,7 +132,8 @@ class MarkupController extends TextEditingController {
           }
         }
         if (victim != null) {
-          newText = oldText.substring(0, victim) + oldText.substring(victim + 1);
+          newText =
+              oldText.substring(0, victim) + oldText.substring(victim + 1);
           newSelection = TextSelection.collapsed(offset: victim);
         } else {
           return;
@@ -123,11 +146,17 @@ class MarkupController extends TextEditingController {
     if (newSelection.isValid && !newSelection.isCollapsed) {
       final matches = _tagRegex.allMatches(newText);
       int s = newSelection.start; // normalized min
-      int e = newSelection.end;   // normalized max
+      int e = newSelection.end; // normalized max
       bool shifted = false;
       for (final m in matches) {
-        if (s > m.start && s < m.end) { s = m.start; shifted = true; }
-        if (e > m.start && e < m.end) { e = m.end; shifted = true; }
+        if (s > m.start && s < m.end) {
+          s = m.start;
+          shifted = true;
+        }
+        if (e > m.start && e < m.end) {
+          e = m.end;
+          shifted = true;
+        }
       }
       if (shifted) {
         // Preserve the original direction (RTL selections have base > extent)
@@ -139,7 +168,8 @@ class MarkupController extends TextEditingController {
       }
     } else if (newSelection.isCollapsed && newSelection.baseOffset > 0) {
       for (final m in _tagRegex.allMatches(newText)) {
-        if (newSelection.baseOffset > m.start && newSelection.baseOffset < m.end) {
+        if (newSelection.baseOffset > m.start &&
+            newSelection.baseOffset < m.end) {
           final toStart = (newSelection.baseOffset - m.start).abs();
           final toEnd = (newSelection.baseOffset - m.end).abs();
           final target = (toStart <= toEnd) ? m.start : m.end;
@@ -244,9 +274,13 @@ class MarkupController extends TextEditingController {
       TextStyle s = style ?? const TextStyle();
       if (bold) s = s.copyWith(fontWeight: FontWeight.bold);
       if (italic) s = s.copyWith(fontStyle: FontStyle.italic);
-      if (underline) s = s.copyWith(decoration: TextDecoration.underline);
+      if (underline && !kUseCustomDocxDecorationPainting) {
+        s = s.copyWith(decoration: TextDecoration.underline);
+      }
       if (textColors.isNotEmpty) s = s.copyWith(color: textColors.last);
-      if (bgColors.isNotEmpty) s = s.copyWith(backgroundColor: bgColors.last);
+      if (bgColors.isNotEmpty && !kUseCustomDocxDecorationPainting) {
+        s = s.copyWith(backgroundColor: bgColors.last);
+      }
       if (sizes.isNotEmpty) s = s.copyWith(fontSize: sizes.last);
       if (fonts.isNotEmpty) s = s.copyWith(fontFamily: fonts.last);
       return s;
@@ -257,30 +291,40 @@ class MarkupController extends TextEditingController {
     void emitContent(int start, int end) {
       if (start >= end) return;
       final baseStyle = current();
-      final hasSelection = !renderSelection.isCollapsed &&
+      final hasSelection = !kUseCustomEditorSelectionPainting &&
+          !renderSelection.isCollapsed &&
           renderSelection.end > start &&
           renderSelection.start < end;
       if (!hasSelection) {
-        children.add(TextSpan(text: src.substring(start, end), style: baseStyle));
+        children
+            .add(TextSpan(text: src.substring(start, end), style: baseStyle));
         return;
       }
       final selStart = renderSelection.start.clamp(start, end);
       final selEnd = renderSelection.end.clamp(start, end);
       if (selStart > start) {
-        children.add(TextSpan(text: src.substring(start, selStart), style: baseStyle));
+        children.add(
+            TextSpan(text: src.substring(start, selStart), style: baseStyle));
       }
       children.add(TextSpan(
         text: src.substring(selStart, selEnd),
         style: baseStyle.copyWith(backgroundColor: _selectionBg),
       ));
       if (selEnd < end) {
-        children.add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
+        children
+            .add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
       }
     }
 
     void emitTag(int start, int end) {
       if (start >= end) return;
-      children.add(TextSpan(text: src.substring(start, end), style: _tagStyle));
+      children.add(TextSpan(
+        text: String.fromCharCodes(List<int>.filled(
+          end - start,
+          _hiddenTagPlaceholderCodeUnit,
+        )),
+        style: _tagStyle,
+      ));
     }
 
     int cursor = 0;

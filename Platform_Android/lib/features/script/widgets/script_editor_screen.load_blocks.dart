@@ -663,24 +663,28 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   }) {
     final controller = _controllers[index];
     final settings = ref.read(settingsProvider);
-    final isRtl = controller.text.isHebrew;
-
-    // 1. Determine alignment
-    TextAlign textAlign = isRtl ? TextAlign.right : TextAlign.left;
-    if (RegExp(r'\[(?:align=)?center\]').hasMatch(controller.text)) {
-      textAlign = TextAlign.center;
-    } else if (RegExp(r'\[(?:align=)?right\]').hasMatch(controller.text)) {
-      textAlign = TextAlign.right;
-    } else if (RegExp(r'\[(?:align=)?left\]').hasMatch(controller.text)) {
-      textAlign = TextAlign.left;
-    }
+    final isRtl = _editorBlockResolvedRtl(index);
+    final textAlign = EditorTextGeometryService.resolveTextAlign(
+      controller.text,
+      isRtl: isRtl,
+    );
 
     // 2. Build style
     final style = TextStyle(
+      color: Colors.white,
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,
       wordSpacing: settings.wordSpacing,
+    );
+    final maxFontSize = EditorTextGeometryService.maxFontSize(
+      controller.text,
+      settings.fontSize,
+    );
+    final strutStyle = StrutStyle(
+      fontSize: maxFontSize,
+      height: settings.lineSpacing,
+      forceStrutHeight: true,
     );
 
     // 3. Get width
@@ -705,85 +709,15 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       text: span,
       textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
       textAlign: textAlign,
+      strutStyle: strutStyle,
     );
     painter.layout(maxWidth: width > 0 ? width : 800);
 
-    return _VerticalLayoutInfo(painter, selection ?? controller.selection);
-  }
-}
-
-class _VerticalLayoutInfo {
-  final TextPainter painter;
-  final TextSelection selection;
-
-  _VerticalLayoutInfo(this.painter, this.selection);
-
-  bool get isAtTop {
-    if (!selection.isCollapsed) return false;
-    if (painter.text?.toPlainText().isEmpty ?? true) return true;
-    return _currentLineIndex <= 0;
-  }
-
-  bool get isAtBottom {
-    if (!selection.isCollapsed) return false;
-    if (painter.text?.toPlainText().isEmpty ?? true) return true;
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return true;
-    return _currentLineIndex >= lines.length - 1;
-  }
-
-  double get currentX {
-    if (selection.baseOffset < 0) return 0;
-    final pos = TextPosition(offset: selection.baseOffset);
-    return painter.getOffsetForCaret(pos, Rect.zero).dx;
-  }
-
-  int getPositionAtX(double x, {required bool fromBottom}) {
-    if (painter.text?.toPlainText().isEmpty ?? true) return 0;
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return 0;
-    final y = _lineCenterY(fromBottom ? lines.length - 1 : 0);
-    return painter.getPositionForOffset(Offset(x, y)).offset;
-  }
-
-  int? getPositionOnAdjacentLineAtX(double x, {required bool moveUp}) {
-    if (painter.text?.toPlainText().isEmpty ?? true) return null;
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return null;
-    final targetLine = _currentLineIndex + (moveUp ? -1 : 1);
-    if (targetLine < 0 || targetLine >= lines.length) return null;
-    return painter
-        .getPositionForOffset(Offset(x, _lineCenterY(targetLine)))
-        .offset;
-  }
-
-  int get _currentLineIndex {
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return 0;
-    final text = painter.text?.toPlainText() ?? '';
-    final offset = selection.baseOffset.clamp(0, text.length).toInt();
-    final caretY =
-        painter.getOffsetForCaret(TextPosition(offset: offset), Rect.zero).dy;
-    var bestIndex = 0;
-    var bestDistance = double.infinity;
-    for (var i = 0; i < lines.length; i++) {
-      final center = _lineCenterY(i);
-      final distance = (center - caretY).abs();
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
-      }
-    }
-    return bestIndex;
-  }
-
-  double _lineCenterY(int index) {
-    final lines = painter.computeLineMetrics();
-    if (lines.isEmpty) return 0;
-    final safeIndex = index.clamp(0, lines.length - 1).toInt();
-    final line = lines[safeIndex];
-    final top = line.baseline - line.ascent;
-    final bottom = line.baseline + line.descent;
-    return (top + bottom) / 2;
+    return _VerticalLayoutInfo(
+      painter,
+      selection ?? controller.selection,
+      isRtl: isRtl,
+      layoutWidth: width > 0 ? width : 800,
+    );
   }
 }

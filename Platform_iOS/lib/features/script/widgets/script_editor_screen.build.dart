@@ -266,8 +266,11 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                     settings: settings,
                                     isGlobalSelected: _isGlobalSelection,
                                     hasOverlaySelection: overlayHasSelection,
+                                    inheritedRtl:
+                                        _editorBlockResolvedRtl(index),
                                     onSubmitted: () => _addBlock(index + 1),
                                     onTap: () {
+                                      _verticalArrowPreferredX = null;
                                       _keyboardDismissedForSelection = false;
                                       _dismissEditorSelectionForUserNavigation(
                                           'block-tap');

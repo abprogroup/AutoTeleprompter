@@ -429,6 +429,7 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                                     _controllers.length,
                                     (index) => Listener(
                                       onPointerDown: (event) {
+                                        _verticalArrowPreferredX = null;
                                         if (_isGlobalSelection ||
                                             _controllers.any(
                                                 (c) => c.isGlobalSelected) ||
@@ -446,6 +447,8 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                                         focusNode: _focusNodes[index],
                                         settings: settings,
                                         isGlobalSelected: _isGlobalSelection,
+                                        inheritedRtl:
+                                            _editorBlockResolvedRtl(index),
                                         onSubmitted: () => _addBlock(index + 1),
                                         onTap: () {
                                           // Secondary safety, though Listener should handle it

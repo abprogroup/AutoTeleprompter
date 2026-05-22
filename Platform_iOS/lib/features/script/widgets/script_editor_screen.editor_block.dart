@@ -6,6 +6,7 @@ class _EditorBlock extends StatelessWidget {
   final AppSettings settings;
   final bool isGlobalSelected;
   final bool hasOverlaySelection;
+  final bool? inheritedRtl;
   final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
@@ -25,6 +26,7 @@ class _EditorBlock extends StatelessWidget {
     required this.settings,
     required this.isGlobalSelected,
     required this.hasOverlaySelection,
+    this.inheritedRtl,
     required this.onSubmitted,
     required this.onTap,
     required this.onSelectAll,
@@ -46,6 +48,29 @@ class _EditorBlock extends StatelessWidget {
     return null;
   }
 
+  TextSelection? _selectionForCustomPaint() {
+    final length = controller.text.length;
+    if (length <= 0) return null;
+
+    TextSelection? selection;
+    if (isGlobalSelected || controller.isGlobalSelected) {
+      selection = TextSelection(baseOffset: 0, extentOffset: length);
+    } else if (controller.externalSelection != null) {
+      final external = controller.externalSelection!;
+      if (!external.isValid || external.isCollapsed) return null;
+      selection = external;
+    } else {
+      final native = controller.selection;
+      if (!native.isValid || native.isCollapsed) return null;
+      selection = native;
+    }
+
+    final start = selection.start.clamp(0, length).toInt();
+    final end = selection.end.clamp(start, length).toInt();
+    if (end <= start) return null;
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
   double _getMaxFontSize(String text, double defaultSize) {
     if (text.isEmpty) return defaultSize;
     final matches = RegExp(r'\[size=(\d+)\]').allMatches(text);
@@ -60,10 +85,26 @@ class _EditorBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isRtl = controller.text.isHebrew;
+    final isRtl = inheritedRtl ??
+        EditorTextGeometryService.resolveTextRtl(controller.text);
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+    final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
+    final editorTextStyle = TextStyle(
+      color: Colors.white,
+      fontSize: settings.fontSize,
+      height: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+    );
+    final editorStrutStyle = StrutStyle(
+      fontSize: maxFontSize,
+      height: settings.lineSpacing,
+      forceStrutHeight: true,
+    );
+    const editorContentPadding = EdgeInsets.symmetric(vertical: 2);
+    final paintSelection = _selectionForCustomPaint();
     final externalSelection = controller.externalSelection;
     final hasExternalRange = controller.isGlobalSelected ||
         (externalSelection != null &&
@@ -135,81 +176,75 @@ class _EditorBlock extends StatelessWidget {
                       selectionColor: Colors.transparent,
                     ),
                   ),
-                  child: TextField(
-                    selectionControls: GhostSelectionControls(),
+                  child: _EditorRenderEditableDecorations(
                     controller: controller,
-                    focusNode: focusNode,
-                    maxLines: null,
-                    onSubmitted: (_) => onSubmitted(),
-                    onTap: onTap,
-                    textDirection:
-                        isRtl ? TextDirection.rtl : TextDirection.ltr,
-                    textAlign: textAlign,
-                    cursorColor: Colors.amber,
-                    cursorHeight: maxFontSize,
-                    strutStyle: StrutStyle(
-                      fontSize: maxFontSize,
-                      height: settings.lineSpacing,
-                      forceStrutHeight: true,
-                    ),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: settings.fontSize,
-                      height: settings.lineSpacing,
-                      letterSpacing: settings.letterSpacing,
-                      wordSpacing: settings.wordSpacing,
-                    ),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 2),
-                    ),
-                    contextMenuBuilder: (_, editableTextState) {
-                      editableTextState.hideToolbar(false);
-                      ContextMenuController.removeAny();
-                      final selection = controller.selection;
-                      final hasPartialNativeSelection = selection.isValid &&
-                          !selection.isCollapsed &&
-                          !(selection.start == 0 &&
-                              selection.end == controller.text.length);
+                    selection: paintSelection,
+                    textDirection: textDirection,
+                    child: TextField(
+                      selectionControls: GhostSelectionControls(),
+                      controller: controller,
+                      focusNode: focusNode,
+                      maxLines: null,
+                      onSubmitted: (_) => onSubmitted(),
+                      onTap: onTap,
+                      textDirection: textDirection,
+                      textAlign: textAlign,
+                      cursorColor: Colors.amber,
+                      cursorHeight: maxFontSize,
+                      strutStyle: editorStrutStyle,
+                      style: editorTextStyle,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: editorContentPadding,
+                      ),
+                      contextMenuBuilder: (_, editableTextState) {
+                        editableTextState.hideToolbar(false);
+                        ContextMenuController.removeAny();
+                        final selection = controller.selection;
+                        final hasPartialNativeSelection = selection.isValid &&
+                            !selection.isCollapsed &&
+                            !(selection.start == 0 &&
+                                selection.end == controller.text.length);
 
-                      void adoptPartialSelectionAfterMenuBuild() {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          onExtendSelection();
+                        void adoptPartialSelectionAfterMenuBuild() {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            onExtendSelection();
+                            ContextMenuController.removeAny();
+                          });
+                        }
+
+                        // When the block is globally selected, bypass editableTextState
+                        // entirely. iOS asynchronously resets the native selection back
+                        // to the original double-tapped word after Select All, so
+                        // any native selected-text menu would serve word-scoped
+                        // Cut/Copy actions instead of our global ones. The visible
+                        // command surface is the app-owned selection toolbar in the
+                        // parent Stack; native selected-text menus are suppressed
+                        // while app selection is active.
+                        if (isGlobalSelected ||
+                            hasOverlaySelection ||
+                            hasExternalRange) {
                           ContextMenuController.removeAny();
-                        });
-                      }
+                          return const SizedBox.shrink();
+                        }
 
-                      // When the block is globally selected, bypass editableTextState
-                      // entirely. iOS asynchronously resets the native selection back
-                      // to the original double-tapped word after Select All, so
-                      // any native selected-text menu would serve word-scoped
-                      // Cut/Copy actions instead of our global ones. The visible
-                      // command surface is the app-owned selection toolbar in the
-                      // parent Stack; native selected-text menus are suppressed
-                      // while app selection is active.
-                      if (isGlobalSelected ||
-                          hasOverlaySelection ||
-                          hasExternalRange) {
+                        // Native iOS selection detects the user's one-block
+                        // intent, then the app overlay becomes the handle owner.
+                        // The parent guards this handoff during Select All so a
+                        // late word-selection event cannot downgrade full-script
+                        // selection back to the originally double-tapped word.
+                        if (hasPartialNativeSelection) {
+                          adoptPartialSelectionAfterMenuBuild();
+                        }
+
+                        // The script editor owns Cut/Copy/Paste/Select All through
+                        // _buildAppSelectionToolbar. UIKit may seed focus or a
+                        // one-block range, but its native toolbar is never shown.
                         ContextMenuController.removeAny();
                         return const SizedBox.shrink();
-                      }
-
-                      // Native iOS selection detects the user's one-block
-                      // intent, then the app overlay becomes the handle owner.
-                      // The parent guards this handoff during Select All so a
-                      // late word-selection event cannot downgrade full-script
-                      // selection back to the originally double-tapped word.
-                      if (hasPartialNativeSelection) {
-                        adoptPartialSelectionAfterMenuBuild();
-                      }
-
-                      // The script editor owns Cut/Copy/Paste/Select All through
-                      // _buildAppSelectionToolbar. UIKit may seed focus or a
-                      // one-block range, but its native toolbar is never shown.
-                      ContextMenuController.removeAny();
-                      return const SizedBox.shrink();
-                    },
+                      },
+                    ),
                   ),
                 ),
               ),

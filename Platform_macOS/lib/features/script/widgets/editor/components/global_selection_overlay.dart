@@ -1,12 +1,14 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../markup_controller.dart';
-import '../../../../../core/extensions/string_extensions.dart';
+import '../../../services/editor_text_geometry_service.dart';
+import '../../../services/markup_decoration_service.dart';
 
 part 'global_selection_overlay.body_drag.dart';
 part 'global_selection_overlay.rendering.dart';
+
 /// Walk a render tree to find the first RenderEditable.
 RenderEditable? _findRenderEditable(RenderObject obj) {
   if (obj is RenderEditable) return obj;
@@ -708,7 +710,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   Offset? _getPositionInStack(int blockIndex, int offset) =>
       _GlobalSelectionOverlayRenderingParts(this)
-          ._getPositionInStack(blockIndex, offset);
+          ._getPositionInStack(blockIndex, offset, endpointA: true);
 
   Offset _handleVisualCenter(Offset caret, bool endpointA) =>
       _GlobalSelectionOverlayRenderingParts(this)

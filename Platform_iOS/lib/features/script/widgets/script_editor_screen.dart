@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -32,19 +33,29 @@ import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
 import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
+import '../services/markup_decoration_service.dart';
+import '../services/editor_text_geometry_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
 part 'script_editor_screen.load_blocks.dart';
+part 'script_editor_screen.vertical_layout.dart';
 part 'script_editor_screen.dialogs_history.dart';
 part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';
 part 'script_editor_screen.build.dart';
 part 'script_editor_screen.selection_clipboard.dart';
 part 'script_editor_screen.editor_block.dart';
+part 'script_editor_screen.render_decorations.dart';
 part 'script_editor_screen.bookmarks.dart';
 part 'script_editor_screen.search.dart';
+part 'script_editor_screen.keyboard_navigation.dart';
+part 'script_editor_screen.keyboard_selection.dart';
+part 'script_editor_screen.keyboard_vertical.dart';
+part 'script_editor_screen.keyboard_horizontal.dart';
+part 'script_editor_screen.keyboard_focus.dart';
+part 'script_editor_screen.arrow_trace_stub.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // ── Switchboard Orchestrator ──────────────────────────────────────────────────
@@ -76,6 +87,8 @@ class ScriptEditorScreen extends ConsumerStatefulWidget {
   ConsumerState<ScriptEditorScreen> createState() => _ScriptEditorScreenState();
 }
 
+const String _keyboardBookmarkSign = '\u00BB';
+
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     with StylingLogicMixin<ScriptEditorScreen>, WidgetsBindingObserver {
   // ── Mixin Implementation for StylingLogicMixin ────────────────────────────
@@ -103,6 +116,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final List<FocusNode> _focusNodes = [];
   final List<GlobalKey> _blockKeys = [];
   String _currentTitle = 'New Project';
+  static final _arrowKeyDummyNode = FocusNode();
 
   TextSelection? _lastSelection;
 
@@ -149,6 +163,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _editorSearchToolbarVisible = false;
   List<_EditorSearchMatch> _editorSearchMatches = const [];
   int _editorSearchMatchIndex = -1;
+  String _lastArrowDecision = 'idle';
+  String? _activeArrowEventSignature;
+  String? _suppressDuplicateArrowEventSignature;
+  int _keyboardFocusRepairToken = 0;
+  double? _verticalArrowPreferredX;
+  SelectionEndpoint? _shiftSelectionAnchor;
+  SelectionEndpoint? _shiftSelectionFocus;
   bool _searchWholeWord = false;
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
@@ -165,10 +186,18 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
 
+  List<String> get _editorRawBlocks =>
+      _controllers.map((controller) => controller.text).toList(growable: false);
+
+  bool _editorBlockResolvedRtl(int index) {
+    return EditorTextGeometryService.resolveBlockRtl(_editorRawBlocks, index);
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_onGlobalArrowKey);
     _startAutoSave();
     if (widget.pendingFile != null) {
       _isInit = true;
@@ -182,6 +211,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _isPendingLoad = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _importFile());
     }
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _resetArrowTraceSession('hot reload');
   }
 
   @override
@@ -219,6 +254,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
     _mobileSelectionRefreshTimer?.cancel();
     _disposeScriptEditorScreenBody();
     super.dispose();

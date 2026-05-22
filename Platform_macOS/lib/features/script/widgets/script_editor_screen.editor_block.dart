@@ -5,6 +5,7 @@ class _EditorBlock extends StatelessWidget {
   final FocusNode focusNode;
   final AppSettings settings;
   final bool isGlobalSelected;
+  final bool? inheritedRtl;
   final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
@@ -23,6 +24,7 @@ class _EditorBlock extends StatelessWidget {
     required this.focusNode,
     required this.settings,
     required this.isGlobalSelected,
+    this.inheritedRtl,
     required this.onSubmitted,
     required this.onTap,
     required this.onSelectAll,
@@ -44,6 +46,29 @@ class _EditorBlock extends StatelessWidget {
     return null;
   }
 
+  TextSelection? _selectionForCustomPaint() {
+    final length = controller.text.length;
+    if (length <= 0) return null;
+
+    TextSelection? selection;
+    if (isGlobalSelected || controller.isGlobalSelected) {
+      selection = TextSelection(baseOffset: 0, extentOffset: length);
+    } else if (controller.externalSelection != null) {
+      final external = controller.externalSelection!;
+      if (!external.isValid || external.isCollapsed) return null;
+      selection = external;
+    } else {
+      final native = controller.selection;
+      if (!native.isValid || native.isCollapsed) return null;
+      selection = native;
+    }
+
+    final start = selection.start.clamp(0, length).toInt();
+    final end = selection.end.clamp(start, length).toInt();
+    if (end <= start) return null;
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
   double _getMaxFontSize(String text, double defaultSize) {
     if (text.isEmpty) return defaultSize;
     final matches = RegExp(r'\[size=(\d+)\]').allMatches(text);
@@ -58,7 +83,8 @@ class _EditorBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isRtl = controller.text.isHebrew;
+    final isRtl = inheritedRtl ??
+        EditorTextGeometryService.resolveTextRtl(controller.text);
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
@@ -76,6 +102,7 @@ class _EditorBlock extends StatelessWidget {
       forceStrutHeight: true,
     );
     const editorContentPadding = EdgeInsets.symmetric(vertical: 2);
+    final paintSelection = _selectionForCustomPaint();
 
     return Container(
       decoration: BoxDecoration(
@@ -223,33 +250,10 @@ class _EditorBlock extends StatelessWidget {
                       selectionColor: Colors.transparent,
                     ),
                   ),
-                  child: CustomPaint(
-                    painter: MarkupTextDecorationPainter(
-                      rawText: controller.text,
-                      textSpan: controller.buildTextSpan(
-                        context: context,
-                        style: editorTextStyle,
-                        withComposing: false,
-                      ),
-                      textDirection: textDirection,
-                      textAlign: textAlign,
-                      strutStyle: editorStrutStyle,
-                      contentPadding: editorContentPadding,
-                      type: MarkupDecorationType.background,
-                    ),
-                    foregroundPainter: MarkupTextDecorationPainter(
-                      rawText: controller.text,
-                      textSpan: controller.buildTextSpan(
-                        context: context,
-                        style: editorTextStyle,
-                        withComposing: false,
-                      ),
-                      textDirection: textDirection,
-                      textAlign: textAlign,
-                      strutStyle: editorStrutStyle,
-                      contentPadding: editorContentPadding,
-                      type: MarkupDecorationType.underline,
-                    ),
+                  child: _EditorRenderEditableDecorations(
+                    controller: controller,
+                    selection: paintSelection,
+                    textDirection: textDirection,
                     child: TextField(
                       selectionControls: GhostSelectionControls(),
                       controller: controller,

@@ -176,6 +176,10 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
       key == LogicalKeyboardKey.arrowLeft ||
       key == LogicalKeyboardKey.arrowRight;
 
+  void _onCut() => _onCutClean();
+
+  Future<void> _onPaste() async => _pasteFromGlobalClipboard();
+
   bool _handleGlobalEditingShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     final keyboard = HardwareKeyboard.instance;

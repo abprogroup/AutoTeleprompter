@@ -6,6 +6,7 @@ class _EditorBlock extends StatelessWidget {
   final AppSettings settings;
   final bool isGlobalSelected;
   final bool hasOverlaySelection;
+  final bool? inheritedRtl;
   final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
@@ -26,6 +27,7 @@ class _EditorBlock extends StatelessWidget {
     required this.settings,
     required this.isGlobalSelected,
     required this.hasOverlaySelection,
+    this.inheritedRtl,
     required this.onSubmitted,
     required this.onTap,
     required this.onSelectAll,
@@ -48,6 +50,29 @@ class _EditorBlock extends StatelessWidget {
     return null;
   }
 
+  TextSelection? _selectionForCustomPaint() {
+    final length = controller.text.length;
+    if (length <= 0) return null;
+
+    TextSelection? selection;
+    if (isGlobalSelected || controller.isGlobalSelected) {
+      selection = TextSelection(baseOffset: 0, extentOffset: length);
+    } else if (controller.externalSelection != null) {
+      final external = controller.externalSelection!;
+      if (!external.isValid || external.isCollapsed) return null;
+      selection = external;
+    } else {
+      final native = controller.selection;
+      if (!native.isValid || native.isCollapsed) return null;
+      selection = native;
+    }
+
+    final start = selection.start.clamp(0, length).toInt();
+    final end = selection.end.clamp(start, length).toInt();
+    if (end <= start) return null;
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
   double _getMaxFontSize(String text, double defaultSize) {
     if (text.isEmpty) return defaultSize;
     final matches = RegExp(r'\[size=(\d+)\]').allMatches(text);
@@ -62,10 +87,26 @@ class _EditorBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isRtl = controller.text.isHebrew;
+    final isRtl = inheritedRtl ??
+        EditorTextGeometryService.resolveTextRtl(controller.text);
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+    final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
+    final editorTextStyle = TextStyle(
+      color: Colors.white,
+      fontSize: settings.fontSize,
+      height: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+    );
+    final editorStrutStyle = StrutStyle(
+      fontSize: maxFontSize,
+      height: settings.lineSpacing,
+      forceStrutHeight: true,
+    );
+    const editorContentPadding = EdgeInsets.symmetric(vertical: 2);
+    final paintSelection = _selectionForCustomPaint();
     final externalSelection = controller.externalSelection;
     final hasExternalRange = controller.isGlobalSelected ||
         (externalSelection != null &&
@@ -217,62 +258,56 @@ class _EditorBlock extends StatelessWidget {
                       selectionColor: Colors.transparent,
                     ),
                   ),
-                  child: TextField(
-                    // Android native handles/toolbars may seed a cursor/range,
-                    // but all script Cut/Copy/Paste/Select All commands belong
-                    // to the app-owned toolbar. Keep ghost controls installed
-                    // from first touch so native UI cannot appear for one frame
-                    // before overlay promotion catches up.
-                    selectionControls: GhostSelectionControls(),
+                  child: _EditorRenderEditableDecorations(
                     controller: controller,
-                    focusNode: focusNode,
-                    maxLines: null,
-                    onSubmitted: (_) => onSubmitted(),
-                    onTap: onTap,
-                    textDirection:
-                        isRtl ? TextDirection.rtl : TextDirection.ltr,
-                    textAlign: textAlign,
-                    cursorColor: Colors.amber,
-                    cursorHeight: maxFontSize,
-                    strutStyle: StrutStyle(
-                      fontSize: maxFontSize,
-                      height: settings.lineSpacing,
-                      forceStrutHeight: true,
-                    ),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: settings.fontSize,
-                      height: settings.lineSpacing,
-                      letterSpacing: settings.letterSpacing,
-                      wordSpacing: settings.wordSpacing,
-                    ),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 2),
-                    ),
-                    contextMenuBuilder: (_, editableTextState) {
-                      editableTextState.hideToolbar(false);
-                      ContextMenuController.removeAny();
-                      final selection = controller.selection;
-                      final hasPartialNativeSelection = selection.isValid &&
-                          !selection.isCollapsed &&
-                          !(selection.start == 0 &&
-                              selection.end == controller.text.length);
+                    selection: paintSelection,
+                    textDirection: textDirection,
+                    child: TextField(
+                      // Android native handles/toolbars may seed a cursor/range,
+                      // but all script Cut/Copy/Paste/Select All commands belong
+                      // to the app-owned toolbar. Keep ghost controls installed
+                      // from first touch so native UI cannot appear for one frame
+                      // before overlay promotion catches up.
+                      selectionControls: GhostSelectionControls(),
+                      controller: controller,
+                      focusNode: focusNode,
+                      maxLines: null,
+                      onSubmitted: (_) => onSubmitted(),
+                      onTap: onTap,
+                      textDirection: textDirection,
+                      textAlign: textAlign,
+                      cursorColor: Colors.amber,
+                      cursorHeight: maxFontSize,
+                      strutStyle: editorStrutStyle,
+                      style: editorTextStyle,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: editorContentPadding,
+                      ),
+                      contextMenuBuilder: (_, editableTextState) {
+                        editableTextState.hideToolbar(false);
+                        ContextMenuController.removeAny();
+                        final selection = controller.selection;
+                        final hasPartialNativeSelection = selection.isValid &&
+                            !selection.isCollapsed &&
+                            !(selection.start == 0 &&
+                                selection.end == controller.text.length);
 
-                      if (hasPartialNativeSelection &&
-                          !isGlobalSelected &&
-                          !hasOverlaySelection &&
-                          !hasExternalRange) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          onExtendSelection();
-                          ContextMenuController.removeAny();
-                        });
-                      }
+                        if (hasPartialNativeSelection &&
+                            !isGlobalSelected &&
+                            !hasOverlaySelection &&
+                            !hasExternalRange) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            onExtendSelection();
+                            ContextMenuController.removeAny();
+                          });
+                        }
 
-                      ContextMenuController.removeAny();
-                      return const SizedBox.shrink();
-                    },
+                        ContextMenuController.removeAny();
+                        return const SizedBox.shrink();
+                      },
+                    ),
                   ),
                 ),
               ),

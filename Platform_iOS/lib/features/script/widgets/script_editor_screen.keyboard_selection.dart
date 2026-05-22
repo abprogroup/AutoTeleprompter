@@ -1,210 +1,7 @@
 part of 'script_editor_screen.dart';
 
-extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
-  bool _onGlobalArrowKey(KeyEvent event) {
-    if (!mounted || _controllers.isEmpty) return false;
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
-    if (_handleGlobalEditingShortcut(event)) return true;
-    final hasEditorFocus = _focusNodes.any((n) => n.hasFocus);
-    final hasAppSelectionForKeyboard =
-        _isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false);
-    if (!hasEditorFocus && !hasAppSelectionForKeyboard) return false;
-    final key = event.logicalKey;
-    if (key != LogicalKeyboardKey.arrowUp &&
-        key != LogicalKeyboardKey.arrowDown &&
-        key != LogicalKeyboardKey.arrowLeft &&
-        key != LogicalKeyboardKey.arrowRight) {
-      return false;
-    }
-    final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isShiftPressed) {
-      return _extendAppSelectionForArrow(key, keyboard);
-    }
-    if (_clearAppSelectionForArrow(key)) return true;
-    final hasModifier = keyboard.isControlPressed ||
-        keyboard.isShiftPressed ||
-        keyboard.isAltPressed ||
-        keyboard.isMetaPressed;
-    final routeModifiedArrow = _shouldRouteModifiedArrow(key, keyboard);
-    if (hasModifier && !routeModifiedArrow) return false;
-    _lastArrowDecision = 'arrow ${key.keyLabel}: route';
-    return _handleEditorArrowKey(
-          _ScriptEditorScreenState._arrowKeyDummyNode,
-          event,
-        ) ==
-        KeyEventResult.handled;
-  }
-
-  bool _clearStaleOverlaySelectionForShift(HardwareKeyboard keyboard) {
-    if (!keyboard.isShiftPressed || _isGlobalSelection) return false;
-    final overlay = _overlayKey.currentState;
-    final session = overlay?.selectionSessionSnapshot;
-    if (overlay == null || !(overlay.hasSelection)) return false;
-    // Use the editor's synchronous focus authority, not FocusNode iteration.
-    // FocusNode ownership can lag for one key repeat after app-owned
-    // Ctrl/Shift selection crosses a block, which made the stale-overlay guard
-    // clear a valid overlay and restart selection in the next block.
-    final controller = _lastFocusedController;
-    if (controller == null) {
-      _shiftSelectionAnchor = null;
-      _shiftSelectionFocus = null;
-      overlay.clearSelection();
-      for (final c in _controllers) {
-        c.isGlobalSelected = false;
-        c.externalSelection = null;
-        c.refresh();
-      }
-      setState(() {
-        _isGlobalSelection = false;
-        _lastArrowDecision = 'shift stale overlay cleared: no focus';
-      });
-      return true;
-    }
-    final block = _controllers.indexOf(controller);
-    if (block < 0) return false;
-    final selection = controller.selection;
-    if (!selection.isValid) {
-      _shiftSelectionAnchor = null;
-      _shiftSelectionFocus = null;
-      overlay.clearSelection();
-      for (final c in _controllers) {
-        c.isGlobalSelected = false;
-        c.externalSelection = null;
-        c.refresh();
-      }
-      setState(() {
-        _isGlobalSelection = false;
-        _lastArrowDecision = 'shift stale overlay cleared: invalid selection';
-      });
-      return true;
-    }
-    final offset =
-        selection.extentOffset.clamp(0, controller.text.length).toInt();
-    final visibleOverlayRange = _hasVisibleAppSelectionRange();
-    if (session != null &&
-        visibleOverlayRange &&
-        session.focus.block == block &&
-        session.focus.offset == offset) {
-      return false;
-    }
-    _shiftSelectionAnchor = null;
-    _shiftSelectionFocus = null;
-    overlay.clearSelection();
-    for (final c in _controllers) {
-      c.isGlobalSelected = false;
-      c.externalSelection = null;
-      c.refresh();
-    }
-    setState(() {
-      _isGlobalSelection = false;
-      _lastArrowDecision = visibleOverlayRange
-          ? 'shift stale overlay cleared focus ${session?.focus} != $block:$offset'
-          : 'shift stale overlay cleared invisible at $block:$offset';
-    });
-    return true;
-  }
-
-  bool _hasVisibleAppSelectionRange() {
-    if (_isGlobalSelection) return true;
-    for (final c in _controllers) {
-      if (c.isGlobalSelected) return true;
-      final selection = c.externalSelection;
-      if (selection != null && selection.isValid && !selection.isCollapsed) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool _shouldRouteModifiedArrow(
-    LogicalKeyboardKey key,
-    HardwareKeyboard keyboard,
-  ) {
-    if (!keyboard.isControlPressed &&
-        !keyboard.isShiftPressed &&
-        !keyboard.isAltPressed &&
-        !keyboard.isMetaPressed) {
-      return true;
-    }
-    if (keyboard.isMetaPressed) return false;
-    return key == LogicalKeyboardKey.arrowUp ||
-        key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.arrowLeft ||
-        key == LogicalKeyboardKey.arrowRight;
-  }
-
-  bool _handleGlobalEditingShortcut(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    final keyboard = HardwareKeyboard.instance;
-    final hasShortcutModifier =
-        keyboard.isControlPressed || keyboard.isMetaPressed;
-    if (!hasShortcutModifier || keyboard.isAltPressed) return false;
-    final hasAppSelection =
-        _isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false);
-    if (!hasAppSelection) return false;
-
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.keyC) {
-      _overlayKey.currentState?.endDragging();
-      _onCopyClean();
-      _lastArrowDecision = 'shortcut copy: app selection';
-      return true;
-    }
-    if (key == LogicalKeyboardKey.keyX) {
-      _overlayKey.currentState?.endDragging();
-      _onCut();
-      _lastArrowDecision = 'shortcut cut: app selection';
-      return true;
-    }
-    if (key == LogicalKeyboardKey.keyV) {
-      _overlayKey.currentState?.endDragging();
-      unawaited(_onPaste());
-      _lastArrowDecision = 'shortcut paste: app selection';
-      return true;
-    }
-    return false;
-  }
-
-  bool _clearAppSelectionForArrow(LogicalKeyboardKey key) {
-    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
-    if (!_isGlobalSelection && !hasOverlay) return false;
-    _shiftSelectionAnchor = null;
-    _shiftSelectionFocus = null;
-    final collapseToEnd = key == LogicalKeyboardKey.arrowRight ||
-        key == LogicalKeyboardKey.arrowDown;
-    final target = _appSelectionEdge(collapseToEnd: collapseToEnd);
-    _overlayKey.currentState?.clearSelection();
-    for (final c in _controllers) {
-      final selection = c.selection;
-      if (selection.isValid && !selection.isCollapsed) {
-        final offset = collapseToEnd
-            ? selection.end.clamp(0, c.text.length).toInt()
-            : selection.start.clamp(0, c.text.length).toInt();
-        c.selection = TextSelection.collapsed(offset: offset);
-      }
-      c.isGlobalSelected = false;
-      c.externalSelection = null;
-      c.refresh();
-    }
-    setState(() {
-      _isGlobalSelection = false;
-      _lastArrowDecision = target == null
-          ? 'clear selection ${key.keyLabel}: no target'
-          : 'clear selection ${key.keyLabel}: ${target.block}:${target.offset}';
-    });
-    if (target != null) {
-      _lastFocusedController = _controllers[target.block];
-      _focusNodes[target.block].requestFocus();
-      _controllers[target.block].selection =
-          TextSelection.collapsed(offset: target.offset);
-      _scrollEditorBlockIntoView(target.block);
-    }
-    return true;
-  }
-
-  ({int block, int offset})? _appSelectionEdge({
-    required bool collapseToEnd,
-  }) {
+extension _ScriptEditorKeyboardSelectionParts on _ScriptEditorScreenState {
+  ({int block, int offset})? _appSelectionEdge({required bool collapseToEnd}) {
     ({int block, int offset})? first;
     ({int block, int offset})? last;
     for (var i = 0; i < _controllers.length; i++) {
@@ -268,8 +65,10 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
       target: SelectionEndpoint(block: target.block, offset: target.offset),
     );
     if (_sameEndpoint(anchor, adjusted)) {
-      _collapseAppSelectionTo(anchor,
-          reason: 'extend-collapse ${key.keyLabel}');
+      _collapseAppSelectionTo(
+        anchor,
+        reason: 'extend-collapse ${key.keyLabel}',
+      );
       return true;
     }
     _setAppSelectionFromAnchorToFocus(anchor, adjusted);
@@ -348,8 +147,7 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
       block: focus.block,
       offset: focus.offset,
       keyboard: keyboard,
-      allowInBlockHorizontalStep:
-          !keyboard.isControlPressed && !keyboard.isAltPressed,
+      allowInBlockHorizontalStep: !keyboard.isControlPressed,
       allowInBlockVerticalStep: true,
     );
   }
@@ -360,7 +158,6 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
   ) {
     return keyboard.isShiftPressed &&
         !keyboard.isControlPressed &&
-        !keyboard.isAltPressed &&
         !keyboard.isMetaPressed &&
         (key == LogicalKeyboardKey.arrowUp ||
             key == LogicalKeyboardKey.arrowDown);
@@ -371,21 +168,32 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
     required int offset,
     required LogicalKeyboardKey key,
     bool crossBlockOnly = false,
+    double? preferredX,
   }) {
     if (block < 0 || block >= _controllers.length) return null;
     final moveUp = key == LogicalKeyboardKey.arrowUp;
+    final renderedTarget = _renderEditableVerticalTarget(
+      block: block,
+      offset: offset,
+      moveUp: moveUp,
+      crossBlockOnly: crossBlockOnly,
+      preferredX: preferredX,
+    );
+    if (renderedTarget != null) return renderedTarget;
+
     final controller = _controllers[block];
     final safeOffset = offset.clamp(0, controller.text.length).toInt();
     final layout = _getVerticalLayout(
       block,
       selection: TextSelection.collapsed(offset: safeOffset),
     );
-    final preferredX = layout.currentX;
-    if (controller.text.isEmpty) {
+    final targetX = preferredX ?? layout.currentX;
+    final visibleText = StylingService.stripTags(controller.text);
+    if (visibleText.trim().isEmpty) {
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: moveUp,
-        preferredX: preferredX,
+        preferredX: targetX,
       );
     }
 
@@ -394,7 +202,7 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: moveUp,
-        preferredX: preferredX,
+        preferredX: targetX,
       );
     }
 
@@ -406,20 +214,25 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: true,
-        preferredX: preferredX,
+        preferredX: targetX,
       );
     }
     if (!moveUp && line.end >= plainText.length) {
       return _plainShiftVerticalCrossBlockTarget(
         fromBlock: block,
         moveUp: false,
-        preferredX: preferredX,
+        preferredX: targetX,
       );
     }
     if (crossBlockOnly) return null;
 
     final targetOffset = layout
-        .getPositionOnAdjacentLineAtX(preferredX, moveUp: moveUp)
+        .visualVerticalTargetRawOffset(
+          rawText: controller.text,
+          rawOffset: safeOffset,
+          moveUp: moveUp,
+          preferredX: targetX,
+        )
         ?.clamp(0, controller.text.length)
         .toInt();
     if (targetOffset == null) return null;
@@ -432,10 +245,10 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
     required bool moveUp,
     required double preferredX,
   }) {
-    final targetBlock = moveUp ? fromBlock - 1 : fromBlock + 1;
+    final targetBlock = fromBlock + (moveUp ? -1 : 1);
     if (targetBlock < 0 || targetBlock >= _controllers.length) return null;
     final targetController = _controllers[targetBlock];
-    if (targetController.text.isEmpty) {
+    if (StylingService.stripTags(targetController.text).trim().isEmpty) {
       return (block: targetBlock, offset: 0);
     }
     final fallbackOffset =
@@ -445,10 +258,218 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
       selection: TextSelection.collapsed(offset: fallbackOffset),
     );
     final offset = layout
-        .getPositionAtX(preferredX, fromBottom: moveUp)
+        .getPositionAtX(
+          preferredX,
+          fromBottom: moveUp,
+          rawText: targetController.text,
+        )
         .clamp(0, targetController.text.length)
         .toInt();
     return (block: targetBlock, offset: offset);
+  }
+
+  ({int block, int offset})? _renderEditableVerticalTarget({
+    required int block,
+    required int offset,
+    required bool moveUp,
+    required bool crossBlockOnly,
+    double? preferredX,
+  }) {
+    if (block < 0 || block >= _controllers.length) return null;
+    final targetX =
+        preferredX ?? _renderEditableCaretX(blockIndex: block, offset: offset);
+    if (targetX == null) return null;
+
+    final candidates = _renderEditableCaretCandidatesForBlock(block);
+    if (candidates.isNotEmpty) {
+      final lines = _groupRenderCaretCandidatesByLine(candidates);
+      final currentLine = _renderEditableLineIndexForOffset(
+        block: block,
+        offset: offset,
+        lines: lines,
+      );
+      if (currentLine != null) {
+        final targetLine = currentLine + (moveUp ? -1 : 1);
+        if (targetLine >= 0 && targetLine < lines.length) {
+          if (crossBlockOnly) return null;
+          final target = _nearestRenderCaretCandidate(
+            lines[targetLine],
+            targetX,
+          );
+          return target == null ? null : (block: block, offset: target.raw);
+        }
+      }
+    }
+
+    return _renderEditableCrossBlockVerticalTarget(
+      fromBlock: block,
+      moveUp: moveUp,
+      preferredX: targetX,
+    );
+  }
+
+  ({int block, int offset})? _renderEditableCrossBlockVerticalTarget({
+    required int fromBlock,
+    required bool moveUp,
+    required double preferredX,
+  }) {
+    final targetBlock = fromBlock + (moveUp ? -1 : 1);
+    if (targetBlock < 0 || targetBlock >= _controllers.length) return null;
+    final targetText = _controllers[targetBlock].text;
+    if (StylingService.stripTags(targetText).trim().isEmpty) {
+      return (block: targetBlock, offset: 0);
+    }
+    final candidates = _renderEditableCaretCandidatesForBlock(targetBlock);
+    if (candidates.isEmpty) return null;
+    final lines = _groupRenderCaretCandidatesByLine(candidates);
+    if (lines.isEmpty) return null;
+    final targetLine = moveUp ? lines.length - 1 : 0;
+    final target = _nearestRenderCaretCandidate(
+      lines[targetLine],
+      preferredX,
+    );
+    return target == null ? null : (block: targetBlock, offset: target.raw);
+  }
+
+  double? _renderEditableCaretX({
+    required int blockIndex,
+    required int offset,
+  }) {
+    final editable = _renderEditableForBlock(blockIndex);
+    if (editable == null) return null;
+    final textLength = _controllers[blockIndex].text.length;
+    final safeOffset = offset.clamp(0, textLength).toInt();
+    final endpoints = editable.getEndpointsForSelection(
+      TextSelection.collapsed(offset: safeOffset),
+    );
+    if (endpoints.isEmpty) return null;
+    return endpoints.first.point.dx;
+  }
+
+  RenderEditable? _renderEditableForBlock(int blockIndex) {
+    if (blockIndex < 0 || blockIndex >= _blockKeys.length) return null;
+    return _findRenderEditable(
+      _blockKeys[blockIndex].currentContext?.findRenderObject(),
+    );
+  }
+
+  List<_RenderCaretCandidate> _renderEditableCaretCandidatesForBlock(
+    int blockIndex,
+  ) {
+    final editable = _renderEditableForBlock(blockIndex);
+    if (editable == null) return const [];
+    final rawText = _controllers[blockIndex].text;
+    final visible = EditorTextGeometryService.visibleText(rawText);
+    if (visible.isEmpty) return const [];
+    final rawStops = <int>{};
+    for (var visibleOffset = 0;
+        visibleOffset <= visible.length;
+        visibleOffset++) {
+      rawStops.add(
+        MarkupController.visualToRawOffset(rawText, visibleOffset)
+            .clamp(0, rawText.length)
+            .toInt(),
+      );
+    }
+
+    final candidates = <_RenderCaretCandidate>[];
+    for (final raw in rawStops) {
+      for (final affinity in const [
+        TextAffinity.downstream,
+        TextAffinity.upstream,
+      ]) {
+        final endpoints = editable.getEndpointsForSelection(
+          TextSelection.collapsed(offset: raw, affinity: affinity),
+        );
+        if (endpoints.isEmpty) continue;
+        final point = endpoints.first.point;
+        final duplicate = candidates.any((existing) =>
+            existing.raw == raw &&
+            (existing.x - point.dx).abs() <= 0.75 &&
+            (existing.y - point.dy).abs() <= 0.75);
+        if (duplicate) continue;
+        candidates.add(_RenderCaretCandidate(
+          raw: raw,
+          x: point.dx,
+          y: point.dy,
+        ));
+      }
+    }
+    candidates.sort((a, b) {
+      final yCompare = a.y.compareTo(b.y);
+      if (yCompare != 0) return yCompare;
+      final xCompare = a.x.compareTo(b.x);
+      if (xCompare != 0) return xCompare;
+      return a.raw.compareTo(b.raw);
+    });
+    return candidates;
+  }
+
+  List<List<_RenderCaretCandidate>> _groupRenderCaretCandidatesByLine(
+    List<_RenderCaretCandidate> candidates,
+  ) {
+    if (candidates.isEmpty) return const [];
+    const tolerance = 3.0;
+    final sorted = [...candidates]..sort((a, b) => a.y.compareTo(b.y));
+    final lines = <List<_RenderCaretCandidate>>[];
+    for (final candidate in sorted) {
+      if (lines.isEmpty ||
+          (lines.last.first.y - candidate.y).abs() > tolerance) {
+        lines.add([candidate]);
+      } else {
+        lines.last.add(candidate);
+      }
+    }
+    for (final line in lines) {
+      line.sort((a, b) {
+        final xCompare = a.x.compareTo(b.x);
+        if (xCompare != 0) return xCompare;
+        return a.raw.compareTo(b.raw);
+      });
+    }
+    return lines;
+  }
+
+  int? _renderEditableLineIndexForOffset({
+    required int block,
+    required int offset,
+    required List<List<_RenderCaretCandidate>> lines,
+  }) {
+    final editable = _renderEditableForBlock(block);
+    if (editable == null || lines.isEmpty) return null;
+    final safeOffset = offset.clamp(0, _controllers[block].text.length).toInt();
+    final endpoints = editable.getEndpointsForSelection(
+      TextSelection.collapsed(offset: safeOffset),
+    );
+    if (endpoints.isEmpty) return null;
+    final y = endpoints.first.point.dy;
+    var bestIndex = 0;
+    var bestDistance = double.infinity;
+    for (var i = 0; i < lines.length; i++) {
+      final distance = (lines[i].first.y - y).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
+  _RenderCaretCandidate? _nearestRenderCaretCandidate(
+    List<_RenderCaretCandidate> line,
+    double preferredX,
+  ) {
+    if (line.isEmpty) return null;
+    _RenderCaretCandidate? best;
+    var bestDistance = double.infinity;
+    for (final candidate in line) {
+      final distance = (candidate.x - preferredX).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = candidate;
+      }
+    }
+    return best;
   }
 
   bool _sameEndpoint(SelectionEndpoint a, SelectionEndpoint b) =>
@@ -482,8 +503,9 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
     _shiftSelectionFocus = focus;
     _lastFocusedController = _controllers[focus.block];
     _focusNodes[focus.block].requestFocus();
-    _controllers[focus.block].selection =
-        TextSelection.collapsed(offset: focus.offset);
+    _controllers[focus.block].selection = TextSelection.collapsed(
+      offset: focus.offset,
+    );
     _overlayKey.currentState?.setKeyboardSelection(
       anchorBlock: anchor.block,
       anchorOffset: anchor.offset,
@@ -493,8 +515,10 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
     _scrollEditorBlockIntoView(focus.block);
   }
 
-  void _collapseAppSelectionTo(SelectionEndpoint target,
-      {required String reason}) {
+  void _collapseAppSelectionTo(
+    SelectionEndpoint target, {
+    required String reason,
+  }) {
     _shiftSelectionAnchor = null;
     _shiftSelectionFocus = null;
     _overlayKey.currentState?.clearSelection();
@@ -509,9 +533,9 @@ extension _ScriptEditorScreenKeyboardParts on _ScriptEditorScreenState {
     });
     _lastFocusedController = _controllers[target.block];
     _focusNodes[target.block].requestFocus();
-    _controllers[target.block].selection =
-        TextSelection.collapsed(offset: target.offset);
+    _controllers[target.block].selection = TextSelection.collapsed(
+      offset: target.offset,
+    );
     _scrollEditorBlockIntoView(target.block);
   }
-
 }

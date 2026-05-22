@@ -680,6 +680,65 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     return defaultValue;
   }
 
+  _VerticalLayoutInfo _getVerticalLayout(
+    int index, {
+    TextSelection? selection,
+  }) {
+    final controller = _controllers[index];
+    final settings = ref.read(settingsProvider);
+    final isRtl = _editorBlockResolvedRtl(index);
+    final textAlign = EditorTextGeometryService.resolveTextAlign(
+      controller.text,
+      isRtl: isRtl,
+    );
+
+    final style = TextStyle(
+      color: Colors.white,
+      fontSize: settings.fontSize,
+      height: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+    );
+    final maxFontSize = EditorTextGeometryService.maxFontSize(
+      controller.text,
+      settings.fontSize,
+    );
+    final strutStyle = StrutStyle(
+      fontSize: maxFontSize,
+      height: settings.lineSpacing,
+      forceStrutHeight: true,
+    );
+
+    var width = 800.0;
+    final context = _blockKeys[index].currentContext;
+    if (context != null) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null) width = box.size.width - 30;
+    }
+
+    final span = controller.text.isEmpty
+        ? TextSpan(text: ' ', style: style)
+        : controller.buildTextSpan(
+            context: context ?? this.context,
+            style: style,
+            withComposing: false,
+          );
+    final painter = TextPainter(
+      text: span,
+      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+      textAlign: textAlign,
+      strutStyle: strutStyle,
+    );
+    painter.layout(maxWidth: width > 0 ? width : 800);
+
+    return _VerticalLayoutInfo(
+      painter,
+      selection ?? controller.selection,
+      isRtl: isRtl,
+      layoutWidth: width > 0 ? width : 800,
+    );
+  }
+
   void _disposeScriptEditorScreenBody() {
     _historyTimer?.cancel();
     _recentTimer?.cancel();

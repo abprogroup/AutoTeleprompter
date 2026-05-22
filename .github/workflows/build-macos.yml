@@ -32,6 +32,10 @@ jobs:
         run: flutter pub get
         working-directory: Platform_macOS
 
+      - name: Verify macOS v5.0.0 metadata
+        run: grep -Fxq 'version: 5.0.0+11' pubspec.yaml
+        working-directory: Platform_macOS
+
       - name: Patch Podfile Deployment Target
         # flutter pub get generates macos/Podfile with the old platform version.
         # whisper_flutter_new requires macOS 10.15. Force it here before pod install runs.

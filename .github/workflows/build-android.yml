@@ -41,6 +41,10 @@ jobs:
         run: flutter pub get
         working-directory: Platform_Android
 
+      - name: Verify Android v5.0.0 metadata
+        run: grep -Fxq 'version: 5.0.0+1' pubspec.yaml
+        working-directory: Platform_Android
+
       - name: Build Android APK (Release, split ABI)
         run: flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi
         working-directory: Platform_Android

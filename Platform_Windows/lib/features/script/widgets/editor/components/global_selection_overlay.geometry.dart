@@ -10,10 +10,15 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
       if (i < range.startBlock || i > range.endBlock) {
         c.isGlobalSelected = false;
         c.externalSelection = const TextSelection.collapsed(offset: 0);
+        c.externalVisibleSelection = null;
       } else if (i > range.startBlock && i < range.endBlock) {
         c.isGlobalSelected = true;
         c.externalSelection =
             TextSelection(baseOffset: 0, extentOffset: c.text.length);
+        c.externalVisibleSelection = TextSelection(
+          baseOffset: 0,
+          extentOffset: MarkupDecorationParser.visibleText(c.text).length,
+        );
       } else if (i == range.startBlock && i == range.endBlock) {
         c.isGlobalSelected = false;
         final start = range.startOffset < range.endOffset
@@ -24,14 +29,30 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
             : range.endOffset;
         c.externalSelection =
             TextSelection(baseOffset: start, extentOffset: end);
+        c.externalVisibleSelection =
+            MarkupDecorationParser.rawToVisibleSelection(
+          c.text,
+          TextSelection(baseOffset: start, extentOffset: end),
+        );
       } else if (i == range.startBlock) {
         c.isGlobalSelected = c.text.isEmpty;
         c.externalSelection = TextSelection(
             baseOffset: range.startOffset, extentOffset: c.text.length);
+        c.externalVisibleSelection =
+            MarkupDecorationParser.rawToVisibleSelection(
+          c.text,
+          TextSelection(
+              baseOffset: range.startOffset, extentOffset: c.text.length),
+        );
       } else if (i == range.endBlock) {
         c.isGlobalSelected = c.text.isEmpty;
         c.externalSelection =
             TextSelection(baseOffset: 0, extentOffset: range.endOffset);
+        c.externalVisibleSelection =
+            MarkupDecorationParser.rawToVisibleSelection(
+          c.text,
+          TextSelection(baseOffset: 0, extentOffset: range.endOffset),
+        );
       }
       c.refresh();
     }
@@ -81,8 +102,8 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
     if (ourStack == null) return null;
 
     if (editable != null) {
-      final safeOffset =
-          offset.clamp(0, widget.controllers[blockIdx].text.length).toInt();
+      final controller = widget.controllers[blockIdx];
+      final safeOffset = offset.clamp(0, controller.text.length).toInt();
       final caretOffset = editable.getLocalRectForCaret(
         TextPosition(offset: safeOffset, affinity: TextAffinity.downstream),
       );
@@ -95,7 +116,7 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
           blockIdx,
         );
         final isRangeStart = _endpointIsRangeStart(endpointA);
-        final blockTextLength = widget.controllers[blockIdx].text.length;
+        final blockTextLength = controller.text.length;
         final selection = blockIdx == range.startBlock &&
                 blockIdx == range.endBlock
             ? TextSelection(
@@ -151,22 +172,9 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
     TextSelection selection, {
     required bool isRangeStart,
   }) {
-    if (!selection.isValid || selection.isCollapsed) return null;
-    final textSpan = editable.text;
-    final width = editable.size.width;
-    if (textSpan == null || width <= 0) return null;
-    final geometry = MarkupTextLayoutGeometry(
-      textSpan: textSpan,
-      width: width,
-      textAlign: editable.textAlign,
-      textDirection: editable.textDirection,
-      strutStyle: editable.strutStyle,
-    );
-    return geometry.activeSelectionEndpoint(
-      TextSelection(
-        baseOffset: selection.start,
-        extentOffset: selection.end,
-      ),
+    return MarkupRenderEditableGeometry.endpointForSelection(
+      editable,
+      selection,
       isRangeStart: isRangeStart,
     );
   }
@@ -231,7 +239,9 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
     if (_startBlock == null ||
         _endBlock == null ||
         _startOffset == null ||
-        _endOffset == null) return;
+        _endOffset == null) {
+      return;
+    }
 
     // Ensure start is before end
     int sB = _startBlock!, eB = _endBlock!;

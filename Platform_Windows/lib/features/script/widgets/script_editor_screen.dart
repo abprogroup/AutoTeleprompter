@@ -54,6 +54,7 @@ part 'script_editor_screen.search.dart';
 part 'script_editor_screen.editor_block.dart';
 part 'script_editor_screen.build.dart';
 part 'script_editor_screen.arrow_trace.dart';
+part 'script_editor_screen.highlight_trace.dart';
 part 'script_editor_screen.keyboard_navigation.dart';
 part 'script_editor_screen.keyboard_selection.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
@@ -174,6 +175,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String _lastArrowTrace = 'No arrow trace captured yet.';
   String? _lastArrowTraceScreenshotPath;
   String? _lastArrowTraceLogPath;
+  String _lastHighlightTrace = 'No highlight trace captured yet.';
+  String? _lastHighlightTraceScreenshotPath;
+  String? _lastHighlightTraceLogPath;
+  int _highlightTraceSequence = 0;
+  Timer? _highlightTraceTimer;
   int _arrowTraceSequence = 0;
   String _arrowTraceSessionId = DateTime.now().toIso8601String().replaceAll(
         RegExp(r'[:.]'),
@@ -221,6 +227,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       for (final c in _controllers) {
         c.isGlobalSelected = false;
         c.externalSelection = null;
+        c.externalVisibleSelection = null;
         // Collapse native selection to prevent residual highlight in buildTextSpan.
         if (!c.selection.isCollapsed) {
           final collapseAt = c.selection.baseOffset.clamp(0, c.text.length);
@@ -237,6 +244,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       for (final c in _controllers) {
         if (c.externalSelection != null || c.isGlobalSelected) {
           c.externalSelection = null;
+          c.externalVisibleSelection = null;
           c.isGlobalSelected = false;
           needsRefresh = true;
         }
@@ -387,7 +395,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       } else {
         _saveHistory(description: 'Initial Load');
       }
-      _forceRecentUpdate();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_forceRecentUpdate());
+      });
       unawaited(_loadBookmarksForCurrentScript());
       // Migrate old metadata-only bookmarks â†’ insert Â» signs into text.
       // Safe to re-run: strips existing signs first, then re-inserts in order.
@@ -419,6 +429,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _autoSaveTimer?.cancel();
     _typingBulkTimer?.cancel();
     _suiteAutoSaveTimer?.cancel();
+    _highlightTraceTimer?.cancel();
     _editorScrollController.dispose();
     _clearControllers();
     super.dispose();

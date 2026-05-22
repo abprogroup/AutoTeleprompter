@@ -92,6 +92,12 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
                   style: const TextStyle(color: Colors.white, fontSize: 10)),
               Text('Arrow Trace Log: ${_lastArrowTraceLogPath ?? "None"}',
                   style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text(
+                  'Highlight Trace PNG: ${_lastHighlightTraceScreenshotPath ?? "None"}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
+              Text(
+                  'Highlight Trace Log: ${_lastHighlightTraceLogPath ?? "None"}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10)),
               Text('History States: ${_history.length}',
                   style: const TextStyle(color: Colors.white, fontSize: 10)),
               const SizedBox(height: 8),
@@ -151,7 +157,50 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
                       style: TextStyle(fontSize: 10),
                     ),
                   ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.amber,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: _captureCurrentHighlightTrace,
+                    icon: const Icon(Icons.highlight_alt, size: 14),
+                    label: const Text(
+                      'Highlight Trace',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.amber,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: _copyLastHighlightTrace,
+                    icon: const Icon(Icons.copy_all, size: 14),
+                    label: const Text(
+                      'Copy Highlight',
+                      style: TextStyle(fontSize: 10),
+                    ),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _lastHighlightTrace,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 9,
+                  height: 1.25,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -424,12 +473,17 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
       c.isGlobalSelected = true;
       c.externalSelection =
           TextSelection(baseOffset: 0, extentOffset: c.text.length);
+      c.externalVisibleSelection = TextSelection(
+        baseOffset: 0,
+        extentOffset: MarkupDecorationParser.visibleText(c.text).length,
+      );
     }
     setState(() {});
     // Refresh after setState so TextFields repaint with new flags.
     for (final c in _controllers) {
       c.refresh();
     }
+    _scheduleHighlightTrace('select-all');
   }
 
   /// Re-sync externalSelection after a global style operation changes text lengths.
@@ -443,10 +497,15 @@ extension _ScriptEditorDebugBookmarkSearchParts on _ScriptEditorScreenState {
       c.isGlobalSelected = true;
       c.externalSelection =
           TextSelection(baseOffset: 0, extentOffset: c.text.length);
+      c.externalVisibleSelection = TextSelection(
+        baseOffset: 0,
+        extentOffset: MarkupDecorationParser.visibleText(c.text).length,
+      );
     }
     setState(() {});
     for (final c in _controllers) {
       c.refresh();
     }
+    _scheduleHighlightTrace('resync-global-selection');
   }
 }

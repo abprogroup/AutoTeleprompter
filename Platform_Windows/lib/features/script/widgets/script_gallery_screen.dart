@@ -9,7 +9,7 @@ import 'script_editor_screen.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../providers/script_provider.dart';
-import '../../../core/services/styling_service.dart';
+import '../services/styling_service.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {
   const ScriptGalleryScreen({super.key});

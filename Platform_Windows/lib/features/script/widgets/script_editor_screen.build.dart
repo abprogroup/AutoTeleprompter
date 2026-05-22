@@ -1,4 +1,4 @@
-﻿part of 'script_editor_screen.dart';
+part of 'script_editor_screen.dart';
 
 extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
   Widget _buildBottomActions({bool keyboardVisible = false}) {
@@ -439,14 +439,20 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 key: _overlayKey,
                                 controllers: _controllers,
                                 blockKeys: _blockKeys,
+                                settings: settings,
                                 scrollController: _editorScrollController,
-                                onSelectionChanged: () => setState(() {
-                                  _isGlobalSelection =
-                                      _controllers.isNotEmpty &&
-                                          _controllers.every(
-                                            (c) => c.isGlobalSelected,
-                                          );
-                                }),
+                                onSelectionChanged: () {
+                                  setState(() {
+                                    _isGlobalSelection =
+                                        _controllers.isNotEmpty &&
+                                            _controllers.every(
+                                              (c) => c.isGlobalSelected,
+                                            );
+                                  });
+                                  _scheduleHighlightTrace(
+                                    'overlay-selection',
+                                  );
+                                },
                                 child: SingleChildScrollView(
                                   controller: _editorScrollController,
                                   padding: const EdgeInsets.fromLTRB(

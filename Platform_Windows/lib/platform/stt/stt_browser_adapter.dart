@@ -114,6 +114,12 @@ class SttBrowserAdapter extends AbstractSttService {
                 onDiagnostic?.call(
                     '🎙️ [Browser STT] Input ready: $_selectedAudioInputDeviceLabel');
                 break;
+              case 'watchdogRestart':
+                final reason = data['reason'] as String? ?? 'stale';
+                final ageMs = (data['ageMs'] as num?)?.toInt() ?? 0;
+                onDiagnostic?.call(
+                    '[Browser STT] Restarting recognizer after ${ageMs ~/ 1000}s without speech events ($reason)');
+                break;
               case 'error':
                 final err = data['error'] as String? ?? 'unknown';
                 if (err == 'input-device-missing') {
@@ -295,6 +301,9 @@ let watchdogTimer;
 let lastError = '';
 let lastStartAt = 0;
 let lastResultAt = 0;
+let lastSpeechEventAt = 0;
+let lastHeartbeatAt = 0;
+let lastStaleRestartAt = 0;
 let switchingLocale = false;
 let switchingInput = false;
 let closedByHost = false;
@@ -462,12 +471,30 @@ function ensureWatchdog() {
     if(restartTimer) return;
     const dotOn = dot.classList.contains('on');
     const now = Date.now();
+    if(now - lastHeartbeatAt > 5000) {
+      lastHeartbeatAt = now;
+      send({
+        type: 'heartbeat',
+        listening: dotOn,
+        locale: currentLocale,
+        ageMs: lastSpeechEventAt > 0 ? now - lastSpeechEventAt : 0,
+        failures: consecutiveFails
+      });
+    }
     if(!rec) {
       scheduleRestart(120, 'watchdog-missing-rec');
       return;
     }
     if(!dotOn && lastStartAt > 0 && now - lastStartAt > 1800) {
       scheduleRestart(120, 'watchdog-idle');
+      return;
+    }
+    if(dotOn && lastSpeechEventAt > 0 && now - lastSpeechEventAt > 25000 &&
+       now - lastStaleRestartAt > 30000) {
+      lastStaleRestartAt = now;
+      send({type: 'watchdogRestart', reason: 'stale-speech-events', ageMs: now - lastSpeechEventAt});
+      try { rec.abort(); } catch(e) {}
+      scheduleRestart(250, 'watchdog-stale');
     }
   }, 1000);
 }
@@ -480,14 +507,14 @@ function startRec(locale) {
   rec = new SR();
   rec.lang = locale; rec.continuous = true; rec.interimResults = true;
   rec.onstart = () => {
-    switchingLocale = false; consecutiveFails = 0; lastError = ''; lastStartAt = Date.now(); dot.classList.add('on');
+    switchingLocale = false; consecutiveFails = 0; lastError = ''; lastStartAt = Date.now(); lastSpeechEventAt = lastStartAt; dot.classList.add('on');
     status.textContent = '[' + locale.toUpperCase() + '] Active'; 
     // ALWAYS send listening to clear the UI's 'starting' state
     send({type: 'listening'});
     if (audioContext && audioContext.state === 'suspended') audioContext.resume();
   };
   rec.onresult = (e) => {
-    consecutiveFails = 0; lastError = ''; lastResultAt = Date.now();
+    consecutiveFails = 0; lastError = ''; lastResultAt = Date.now(); lastSpeechEventAt = lastResultAt;
     for(let i = e.resultIndex; i < e.results.length; i++){
       const t = e.results[i][0].transcript;
       const f = e.results[i].isFinal;
@@ -496,10 +523,13 @@ function startRec(locale) {
       words.textContent = t.length > 30 ? '...' + t.slice(-30) : t;
     }
   };
-  rec.onspeechstart = () => { send({type: 'level', level: 0.7}); };
-  rec.onspeechend = () => { send({type: 'level', level: 0.1}); };
+  rec.onaudiostart = () => { lastSpeechEventAt = Date.now(); };
+  rec.onsoundstart = () => { lastSpeechEventAt = Date.now(); };
+  rec.onspeechstart = () => { lastSpeechEventAt = Date.now(); send({type: 'level', level: 0.7}); };
+  rec.onspeechend = () => { lastSpeechEventAt = Date.now(); send({type: 'level', level: 0.1}); };
   rec.onerror = (e) => {
     if(e.error === 'aborted') return;
+    lastSpeechEventAt = Date.now();
     lastError = e.error || '';
     send({type: 'error', error: e.error});
     if(e.error === 'not-allowed') {

@@ -224,7 +224,7 @@ extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final rawText = _controllers[blockIndex].text;
     final visibleText = StylingService.stripTags(rawText);
-    if (visibleText.trim().isEmpty) {
+    if (visibleText.isEmpty) {
       return _horizontalBoundaryTargetFromPosition(
         blockIndex: blockIndex,
         rawOffset: rawOffset,

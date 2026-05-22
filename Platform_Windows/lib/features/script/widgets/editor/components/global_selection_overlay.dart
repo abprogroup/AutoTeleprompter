@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import '../../../../settings/models/app_settings.dart';
 import '../../../services/editor_text_geometry_service.dart';
 import '../../../services/markup_decoration_service.dart';
 import '../markup_controller.dart';
@@ -121,6 +123,7 @@ class _HandleDragSession {
 class GlobalSelectionOverlay extends StatefulWidget {
   final List<MarkupController> controllers;
   final List<GlobalKey> blockKeys;
+  final AppSettings settings;
   final Widget child;
   final VoidCallback onSelectionChanged;
 
@@ -133,6 +136,7 @@ class GlobalSelectionOverlay extends StatefulWidget {
     super.key,
     required this.controllers,
     required this.blockKeys,
+    required this.settings,
     required this.child,
     required this.onSelectionChanged,
     this.scrollController,

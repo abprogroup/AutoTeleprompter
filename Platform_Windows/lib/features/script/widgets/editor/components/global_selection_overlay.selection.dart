@@ -19,6 +19,7 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
       _anchorBlock = _anchorOffset = null;
       for (final c in widget.controllers) {
         c.externalSelection = null;
+        c.externalVisibleSelection = null;
         c.isGlobalSelected = false;
         c.refresh();
       }
@@ -40,6 +41,10 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
       _endOffset = widget.controllers.last.text.length;
       for (final c in widget.controllers) {
         c.isGlobalSelected = true;
+        c.externalVisibleSelection = TextSelection(
+          baseOffset: 0,
+          extentOffset: MarkupDecorationParser.visibleText(c.text).length,
+        );
       }
       _updateBlockHighlights();
       // v3.9.5.73: Trust parent setState for initial draw,
@@ -85,6 +90,7 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
       _endOffset = _clampEndpointOffset(focusBlock, focusOffset);
       for (final c in widget.controllers) {
         c.isGlobalSelected = false;
+        c.externalVisibleSelection = null;
       }
       _updateControllers();
     });

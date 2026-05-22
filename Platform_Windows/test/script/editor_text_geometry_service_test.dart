@@ -136,6 +136,64 @@ void main() {
     );
   });
 
+  test('visual horizontal navigation steps through whitespace-only LTR row',
+      () {
+    const text = ' ';
+    final painter = painterFor(text, direction: TextDirection.ltr);
+
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 0,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      1,
+    );
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 1,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      0,
+    );
+  });
+
+  test('visual horizontal navigation steps through whitespace-only RTL row',
+      () {
+    const text = ' ';
+    final painter = painterFor(text, direction: TextDirection.rtl);
+
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 0,
+        moveLeft: true,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      1,
+    );
+    expect(
+      EditorTextGeometryService.visualHorizontalTargetRawOffset(
+        painter: painter,
+        rawText: text,
+        rawOffset: 1,
+        moveLeft: false,
+        rawToVisibleOffset: identityRawToVisible,
+        visibleToRawOffset: identityVisibleToRaw,
+      ),
+      0,
+    );
+  });
+
   test('visual horizontal navigation keeps English run LTR inside Hebrew RTL',
       () {
     const text = '\u05d0\u05d1\u05d2 abc \u05d3\u05d4\u05d5';

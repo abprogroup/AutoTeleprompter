@@ -12,6 +12,11 @@ const _hReturn = '\u05d7\u05d6\u05e8\u05d4';
 const _hSection = '\u05dc\u05de\u05e7\u05d8\u05e2';
 const _hNext = '\u05d4\u05d1\u05d0';
 const _hSafe = '\u05d1\u05d8\u05d5\u05d7';
+const _hCome = '\u05d1\u05d5\u05d0\u05d5';
+const _hAdvance = '\u05e0\u05ea\u05e7\u05d3\u05dd';
+const _hCeremony = '\u05d1\u05d8\u05e7\u05e1';
+const _hStage = '\u05e9\u05dc\u05d1';
+const _hRings = '\u05d4\u05d8\u05d1\u05e2\u05d5\u05ea';
 
 ScriptWord _word(String raw, int index, {bool rtl = false}) {
   return ScriptWord(
@@ -197,6 +202,34 @@ void main() {
 
       expect(tooShort.confirmedWordIndex, 0);
       expect(enough.confirmedWordIndex, script.length - 1);
+    });
+
+    test('visible Hebrew phrase can bridge one missed script word', () {
+      final words = <ScriptWord>[];
+
+      void add(String raw, {bool rtl = false}) {
+        words.add(_word(raw, words.length, rtl: rtl));
+      }
+
+      add('intro');
+      add('setup');
+      add(_hCome, rtl: true);
+      add(_hAdvance, rtl: true);
+      add(_hCeremony, rtl: true);
+      add(_hStage, rtl: true);
+      add(_hRings, rtl: true);
+
+      final result = WordAligner.align(
+        script: words,
+        transcript: '$_hCome $_hAdvance $_hStage $_hRings',
+        lastConfirmedIndex: 0,
+        visibleSkipStartIndex: 0,
+        maxSkipTargetIndex: words.length - 1,
+        policy: SttRecognitionPolicy.legacy(visibleSkipEnabled: true),
+      );
+
+      expect(result.confirmedWordIndex, words.length - 1);
+      expect(result.debugInfo, contains('gapCost=1.0'));
     });
 
     test('provider does not cap trusted visible-skip alignments', () {

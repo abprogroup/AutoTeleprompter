@@ -16,6 +16,13 @@ class MarkupController extends TextEditingController {
   /// The selection range mapped to this block from the global overlay.
   TextSelection? externalSelection;
 
+  /// Visible-text version of [externalSelection] for search/debug traces.
+  ///
+  /// Painting stays raw-offset based so it matches the real TextField layout,
+  /// but visible offsets are still useful for search result bookkeeping and
+  /// highlight trace diagnostics.
+  TextSelection? externalVisibleSelection;
+
   /// Whether the entire block is selected (e.g. during Select All).
   bool isGlobalSelected = false;
 
@@ -31,7 +38,6 @@ class MarkupController extends TextEditingController {
     height: 0,
   );
 
-  static const Color _selectionBg = Color(0x66FFBF00);
   static const int _hiddenTagPlaceholderCodeUnit = 0x2060; // WORD JOINER
 
   static final RegExp _tagRegex = RegExp(
@@ -164,7 +170,7 @@ class MarkupController extends TextEditingController {
     super.value = newValue.copyWith(text: newText, selection: newSelection);
   }
 
-  // ── Visual-offset conversion helpers ─────────────────────────────────────
+  // â”€â”€ Visual-offset conversion helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Tags occupy raw character positions but render at zero visible width.
   // These helpers let callers track selections by VISIBLE character count so
   // that inserting or removing tags (B/I/U/size/color/font) never shifts the
@@ -178,7 +184,7 @@ class MarkupController extends TextEditingController {
   /// placing the cursor at [text.length] can trap it between the end of the
   /// raw string and the end of a trailing invisible tag. Flutter's default
   /// cursor-left then increments the position INTO the tag; MarkupController's
-  /// value-setter snaps it back to the end of the tag — forever stuck.
+  /// value-setter snaps it back to the end of the tag â€” forever stuck.
   ///
   /// Placing the cursor at safeEndOffset instead lands just before those
   /// trailing tags, so the very next arrowLeft moves past a real character.
@@ -260,40 +266,13 @@ class MarkupController extends TextEditingController {
   }
 
   static int rawToVisualOffset(String text, int rawOffset) {
-    int visual = 0;
-    int cursor = 0;
-    for (final m in _tagRegex.allMatches(text)) {
-      if (m.start >= rawOffset) break;
-      final segEnd = m.start < rawOffset ? m.start : rawOffset;
-      visual += segEnd - cursor;
-      cursor = m.end;
-    }
-    if (cursor < rawOffset) visual += rawOffset - cursor;
-    return visual;
+    return MarkupDecorationParser.rawToVisibleOffset(text, rawOffset);
   }
 
   /// Raw offset of the [visualOffset]-th visible character in [text].
   /// Returns [text.length] when [visualOffset] exceeds the visible char count.
   static int visualToRawOffset(String text, int visualOffset) {
-    int visual = 0;
-    int cursor = 0;
-    for (final m in _tagRegex.allMatches(text)) {
-      if (m.start > cursor) {
-        final segLen = m.start - cursor;
-        if (visual + segLen >= visualOffset) {
-          return cursor + (visualOffset - visual);
-        }
-        visual += segLen;
-      }
-      cursor = m.end;
-    }
-    if (cursor < text.length) {
-      final segLen = text.length - cursor;
-      if (visual + segLen >= visualOffset) {
-        return cursor + (visualOffset - visual);
-      }
-    }
-    return text.length;
+    return MarkupDecorationParser.visibleToRawOffset(text, visualOffset);
   }
 
   static Color? _parseHex(String raw) {
@@ -310,25 +289,6 @@ class MarkupController extends TextEditingController {
     required bool withComposing,
   }) {
     final src = text;
-    TextSelection renderSelection;
-    if (isGlobalSelected) {
-      renderSelection = TextSelection(baseOffset: 0, extentOffset: src.length);
-    } else if (externalSelection != null) {
-      // externalSelection is authoritative whenever it is set:
-      //   - range  → show amber highlight for that range
-      //   - collapsed (offset: 0) → suppress all highlight (block is outside
-      //     the global selection range). Do NOT fall through to the native
-      //     controller.selection, which may hold a stale range from a prior
-      //     user gesture and would leak an amber highlight.
-      final s = externalSelection!.start;
-      final e = externalSelection!.end;
-      renderSelection = TextSelection(baseOffset: s, extentOffset: e);
-    } else {
-      // null → not in global-selection mode; show native cursor/selection.
-      final s = selection.start.clamp(0, src.length);
-      final e = selection.end.clamp(0, src.length);
-      renderSelection = TextSelection(baseOffset: s, extentOffset: e);
-    }
 
     // Style stack state
     bool bold = false;
@@ -359,30 +319,7 @@ class MarkupController extends TextEditingController {
 
     void emitContent(int start, int end) {
       if (start >= end) return;
-      final baseStyle = current();
-      final hasSelection = !renderSelection.isCollapsed &&
-          !kUseCustomEditorSelectionPainting &&
-          renderSelection.end > start &&
-          renderSelection.start < end;
-      if (!hasSelection) {
-        children
-            .add(TextSpan(text: src.substring(start, end), style: baseStyle));
-        return;
-      }
-      final selStart = renderSelection.start.clamp(start, end);
-      final selEnd = renderSelection.end.clamp(start, end);
-      if (selStart > start) {
-        children.add(
-            TextSpan(text: src.substring(start, selStart), style: baseStyle));
-      }
-      children.add(TextSpan(
-        text: src.substring(selStart, selEnd),
-        style: baseStyle.copyWith(backgroundColor: _selectionBg),
-      ));
-      if (selEnd < end) {
-        children
-            .add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
-      }
+      children.add(TextSpan(text: src.substring(start, end), style: current()));
     }
 
     void emitTag(int start, int end) {

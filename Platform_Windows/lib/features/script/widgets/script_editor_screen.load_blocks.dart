@@ -214,6 +214,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
               !_isGlobalSelection &&
               !(_overlayKey.currentState?.hasSelection ?? false)) {
             controller.externalSelection = null;
+            controller.externalVisibleSelection = null;
             controller.refresh();
           }
           _onSelectionChanged();
@@ -235,9 +236,11 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           if (!_isGlobalSelection &&
               !overlayActive &&
               !controller.isGlobalSelected &&
+              controller.externalVisibleSelection == null &&
               !controller.selection.isCollapsed) {
             controller.externalSelection =
                 const TextSelection.collapsed(offset: 0);
+            controller.externalVisibleSelection = null;
             controller.refresh();
           }
         }
@@ -278,6 +281,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         // any pinned externalSelection so stale amber doesn't linger after typing.
         if (!_isCommandExecuting && controller.externalSelection != null) {
           controller.externalSelection = null;
+          controller.externalVisibleSelection = null;
           controller.refresh();
         }
         _onBlockChanged();
@@ -370,6 +374,9 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         );
         ref.read(cursorStyleProvider.notifier).state = styles;
       });
+      if (controller.selection.isValid && !controller.selection.isCollapsed) {
+        _scheduleHighlightTrace('native-selection');
+      }
     }
   }
 

@@ -205,7 +205,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     Color color, {
     required bool applyBackgroundTail,
   }) {
-    if (color.a <= 0 || bands.isEmpty) return;
+    if (color == color.withAlpha(0) || bands.isEmpty) return;
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;

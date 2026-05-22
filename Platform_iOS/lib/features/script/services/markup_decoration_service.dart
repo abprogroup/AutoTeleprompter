@@ -425,7 +425,7 @@ class MarkupTextDecorationPainter extends CustomPainter {
     Color color,
     double width,
   ) {
-    if (color.a <= 0) return;
+    if (color == color.withAlpha(0)) return;
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;

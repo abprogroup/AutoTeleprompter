@@ -1,4 +1,5 @@
 name: Build iOS IPA (v5.0.0)
+run-name: iOS v5.0.0 IPA - ${{ github.event_name }} on ${{ github.ref_name }}
 
 on:
   push:

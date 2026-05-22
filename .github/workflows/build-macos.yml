@@ -1,4 +1,5 @@
 name: Build macOS App (v5.0.0)
+run-name: macOS v5.0.0 App - ${{ github.event_name }} on ${{ github.ref_name }}
 
 on:
   push:

@@ -44,7 +44,8 @@ jobs:
         working-directory: Platform_iOS
 
       - name: Verify iOS v5.0.0 metadata
-        run: grep -Fxq 'version: 5.0.0+8' pubspec.yaml
+        run: |
+          grep -Fxq 'version: 5.0.0+8' pubspec.yaml
         working-directory: Platform_iOS
 
       - name: Install Cocoapods (iOS only)

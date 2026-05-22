@@ -33,7 +33,8 @@ jobs:
         working-directory: Platform_macOS
 
       - name: Verify macOS v5.0.0 metadata
-        run: grep -Fxq 'version: 5.0.0+11' pubspec.yaml
+        run: |
+          grep -Fxq 'version: 5.0.0+11' pubspec.yaml
         working-directory: Platform_macOS
 
       - name: Patch Podfile Deployment Target

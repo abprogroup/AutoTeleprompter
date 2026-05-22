@@ -42,7 +42,8 @@ jobs:
         working-directory: Platform_Android
 
       - name: Verify Android v5.0.0 metadata
-        run: grep -Fxq 'version: 5.0.0+1' pubspec.yaml
+        run: |
+          grep -Fxq 'version: 5.0.0+1' pubspec.yaml
         working-directory: Platform_Android
 
       - name: Build Android APK (Release, split ABI)

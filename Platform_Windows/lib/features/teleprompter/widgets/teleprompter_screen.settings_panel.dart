@@ -301,7 +301,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             const Spacer(),
             Switch.adaptive(
               value: settings.showAlignmentOverride,
-              activeThumbColor: Color(settings.currentWordColor),
+              thumbColor: WidgetStatePropertyAll<Color>(
+                  Color(settings.currentWordColor)),
               onChanged: (v) => notifier.setShowAlignmentOverride(v),
             ),
           ]),
@@ -473,7 +474,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             const Spacer(),
             Switch.adaptive(
               value: settings.showCurrentWordHighlight,
-              activeThumbColor: Color(settings.currentWordColor),
+              thumbColor: WidgetStatePropertyAll<Color>(
+                  Color(settings.currentWordColor)),
               onChanged: (v) => notifier.setShowCurrentWordHighlight(v),
             ),
           ]),
@@ -489,7 +491,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             const Spacer(),
             Switch.adaptive(
               value: settings.showUpcomingWordColor,
-              activeThumbColor: Color(settings.currentWordColor),
+              thumbColor: WidgetStatePropertyAll<Color>(
+                  Color(settings.currentWordColor)),
               onChanged: (v) => notifier.setShowUpcomingWordColor(v),
             ),
           ]),
@@ -545,7 +548,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               const Spacer(),
               Switch(
                 value: settings.mirrorHorizontal,
-                activeThumbColor: Color(settings.currentWordColor),
+                thumbColor: WidgetStatePropertyAll<Color>(
+                    Color(settings.currentWordColor)),
                 onChanged: (v) => notifier.setMirrorHorizontal(v),
               ),
             ],
@@ -556,7 +560,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               const Spacer(),
               Switch(
                 value: settings.mirrorVertical,
-                activeThumbColor: Color(settings.currentWordColor),
+                thumbColor: WidgetStatePropertyAll<Color>(
+                    Color(settings.currentWordColor)),
                 onChanged: (v) => notifier.setMirrorVertical(v),
               ),
             ],

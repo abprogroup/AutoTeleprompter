@@ -62,27 +62,67 @@ extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final rawText = _controllers[blockIndex].text;
     final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
+    final effectiveRaw = _effectiveVisibleCaretRawOffset(rawText, safeRaw);
     final layout = _getVerticalLayout(
       blockIndex,
-      selection: TextSelection.collapsed(offset: safeRaw),
+      selection: TextSelection.collapsed(offset: effectiveRaw),
     );
     final visualTarget = layout.visualWordTargetRawOffset(
       rawText: rawText,
-      rawOffset: safeRaw,
+      rawOffset: effectiveRaw,
       moveLeft: key == LogicalKeyboardKey.arrowLeft,
     );
     if (visualTarget != null) {
       final safeTarget = visualTarget.clamp(0, rawText.length).toInt();
-      if (safeTarget != safeRaw) {
+      if (safeTarget != effectiveRaw || effectiveRaw != safeRaw) {
+        if (!_renderOffsetsShareVisualLine(
+          blockIndex: blockIndex,
+          firstRaw: effectiveRaw,
+          secondRaw: safeTarget,
+        )) {
+          final edgeTarget = _lineEdgeTargetInBlock(
+            blockIndex: blockIndex,
+            rawOffset: effectiveRaw,
+            visualRight: key == LogicalKeyboardKey.arrowRight,
+          );
+          if (edgeTarget != null && edgeTarget.offset != effectiveRaw) {
+            return edgeTarget;
+          }
+          return _horizontalBoundaryTargetFromPosition(
+            blockIndex: blockIndex,
+            rawOffset: effectiveRaw,
+            key: key,
+          );
+        }
         return (block: blockIndex, offset: safeTarget);
       }
     }
 
     return _horizontalBoundaryTargetFromPosition(
       blockIndex: blockIndex,
-      rawOffset: safeRaw,
+      rawOffset: effectiveRaw,
       key: key,
     );
+  }
+
+  bool _renderOffsetsShareVisualLine({
+    required int blockIndex,
+    required int firstRaw,
+    required int secondRaw,
+  }) {
+    final lines = _renderEditableLinesForBlock(blockIndex);
+    if (lines.isEmpty) return true;
+    final firstLine = _renderEditableLineIndexForOffset(
+      block: blockIndex,
+      offset: firstRaw,
+      lines: lines,
+    );
+    final secondLine = _renderEditableLineIndexForOffset(
+      block: blockIndex,
+      offset: secondRaw,
+      lines: lines,
+    );
+    return firstLine == null || secondLine == null || firstLine == secondLine;
   }
 
   ({int block, int offset})? _lineEdgeTargetInBlock({
@@ -224,7 +264,7 @@ extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
     if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
     final rawText = _controllers[blockIndex].text;
     final visibleText = StylingService.stripTags(rawText);
-    if (visibleText.trim().isEmpty) {
+    if (visibleText.isEmpty) {
       return _horizontalBoundaryTargetFromPosition(
         blockIndex: blockIndex,
         rawOffset: rawOffset,
@@ -329,6 +369,19 @@ extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
 
     final keyboard = HardwareKeyboard.instance;
     if (!selection.isCollapsed) {
+      if (_isControlArrowModifierState(keyboard, allowShift: false)) {
+        final collapseToEnd = isRtl == (key == LogicalKeyboardKey.arrowLeft);
+        final edge = collapseToEnd ? selection.end : selection.start;
+        final offset = edge.clamp(0, textLength).toInt();
+        _recordNativeArrowTrace(event,
+            mode: 'ctrlOnlyNativeCollapse -> $offset');
+        controller.selection = TextSelection.collapsed(offset: offset);
+        _shiftSelectionAnchor = null;
+        _shiftSelectionFocus = null;
+        _lastFocusedController = controller;
+        _focusNodes[blockIndex].requestFocus();
+        return KeyEventResult.handled;
+      }
       if (!isRtl) {
         if (keyboard.isAltPressed &&
             !keyboard.isShiftPressed &&
@@ -445,13 +498,27 @@ extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
       }
       if (!plainArrow) {
         if (_isControlArrowModifierState(keyboard, allowShift: false)) {
-          final boundaryTarget = _ltrControlHorizontalBoundaryTarget(
+          final target = _controlHorizontalWordTarget(
             blockIndex: blockIndex,
             rawOffset: selection.baseOffset,
             key: key,
           );
-          if (boundaryTarget == null) return KeyEventResult.ignored;
-          _crossToBlock(boundaryTarget.block, atOffset: boundaryTarget.offset);
+          _recordNativeArrowTrace(
+            event,
+            mode: target == null
+                ? 'ctrlWordMove no-op'
+                : 'ctrlWordMove -> ${target.block}:${target.offset}',
+          );
+          if (target == null) return KeyEventResult.handled;
+          if (target.block != blockIndex) {
+            _crossToBlock(target.block, atOffset: target.offset);
+          } else {
+            controller.selection = TextSelection.collapsed(
+              offset: target.offset,
+            );
+            _lastFocusedController = controller;
+            _focusNodes[blockIndex].requestFocus();
+          }
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -484,7 +551,8 @@ extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
       return KeyEventResult.handled;
     }
 
-    final target = _isControlArrowModifierState(keyboard)
+    final isControlWordMove = _isControlArrowModifierState(keyboard);
+    final target = isControlWordMove
         ? _controlHorizontalWordTarget(
             blockIndex: blockIndex,
             rawOffset: selection.baseOffset,
@@ -497,7 +565,16 @@ extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
             allowInBlockStep: manualInBlock,
           );
     if (target == null) {
+      if (isControlWordMove) {
+        _recordNativeArrowTrace(event, mode: 'ctrlWordMove no-op');
+      }
       return isRtl ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
+    if (isControlWordMove) {
+      _recordNativeArrowTrace(
+        event,
+        mode: 'ctrlWordMove -> ${target.block}:${target.offset}',
+      );
     }
     if (target.block != blockIndex) {
       _crossToBlock(target.block, atOffset: target.offset);
@@ -720,44 +797,4 @@ extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
     }
     return offset;
   }
-
-  ({int block, int offset})? _ltrControlHorizontalBoundaryTarget({
-    required int blockIndex,
-    required int rawOffset,
-    required LogicalKeyboardKey key,
-  }) {
-    // Native EditableText keeps normal LTR word jumps inside the block. This
-    // helper only catches cross-block movement after hidden tags/bookmarks are
-    // removed from the boundary calculation.
-    if (blockIndex < 0 || blockIndex >= _controllers.length) return null;
-    final text = _controllers[blockIndex].text;
-    final navigationText = _keyboardNavigationText(text);
-    final safeRaw = rawOffset.clamp(0, text.length).toInt();
-    final navigationOffset = _keyboardRawToNavigationOffset(
-      text,
-      safeRaw,
-    ).clamp(0, navigationText.length);
-    final navigationEnd = _keyboardNavigationSafeEndOffset(text);
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (navigationOffset > 0) return null;
-      if (blockIndex <= 0) return null;
-      return (
-        block: blockIndex - 1,
-        offset: MarkupController.safeEndOffset(
-          _controllers[blockIndex - 1].text,
-        ),
-      );
-    }
-    if (navigationOffset < navigationEnd) return null;
-    if (blockIndex >= _controllers.length - 1) return null;
-    return (block: blockIndex + 1, offset: 0);
-  }
-
-  /// Moves focus and the caret to [targetIdx]. Updates `_lastFocusedController`
-  /// SYNCHRONOUSLY before requesting focus, so the very next KeyRepeatEvent
-  /// finds the correct controller â€” without that sync update, a long-press
-  /// can stall at a paragraph boundary because the FocusNode listener that
-  /// updates `_lastFocusedController` only fires on the next microtask.
-  ///
-  /// Provide either [atOffset] (exact char offset) or [x] (preserve x-position
 }

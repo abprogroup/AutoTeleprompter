@@ -64,33 +64,15 @@ extension _ScriptEditorKeyboardVerticalParts on _ScriptEditorScreenState {
     return KeyEventResult.handled;
   }
 
-  String _keyboardNavigationText(String text) =>
-      text.replaceAll(_keyboardBookmarkSign, '');
-
-  int _keyboardRawToNavigationOffset(String text, int rawOffset) {
-    final safeRaw = rawOffset.clamp(0, text.length).toInt();
-    var navigationOffset = 0;
-    for (var i = 0; i < safeRaw; i++) {
-      if (text[i] == _keyboardBookmarkSign) continue;
-      navigationOffset++;
-    }
-    return navigationOffset;
-  }
-
-  int _keyboardNavigationToRawOffset(String text, int navigationOffset) {
-    if (navigationOffset <= 0) return 0;
-    var seen = 0;
-    for (var i = 0; i < text.length; i++) {
-      if (text[i] == _keyboardBookmarkSign) continue;
-      seen++;
-      if (seen >= navigationOffset) return i + 1;
-    }
-    return text.length;
-  }
-
-  int _keyboardNavigationSafeEndOffset(String text) {
-    final navigationText = _keyboardNavigationText(text);
-    return MarkupController.safeEndOffset(navigationText);
+  int _effectiveVisibleCaretRawOffset(String rawText, int rawOffset) {
+    final visible = EditorTextGeometryService.visibleText(rawText);
+    if (visible.isEmpty) return 0;
+    final safeRaw = rawOffset.clamp(0, rawText.length).toInt();
+    final visibleOffset = MarkupController.rawToVisualOffset(rawText, safeRaw)
+        .clamp(0, visible.length)
+        .toInt();
+    final raw = MarkupController.visualToRawOffset(rawText, visibleOffset);
+    return raw.clamp(0, rawText.length).toInt();
   }
 
   ({int block, int offset})? _controlVerticalTarget({
@@ -134,6 +116,106 @@ extension _ScriptEditorKeyboardVerticalParts on _ScriptEditorScreenState {
         block: blockIndex + 1,
         offset: MarkupController.safeEndOffset(nextText),
       );
+    }
+    return null;
+  }
+
+  ({int block, int offset})? _ctrlShiftVerticalTarget({
+    required SelectionEndpoint anchor,
+    required SelectionEndpoint focus,
+    required bool moveUp,
+  }) {
+    if (focus.block < 0 || focus.block >= _controllers.length) return null;
+    final focusSide = _compareEndpoints(focus, anchor);
+    final towardAnchor =
+        (focusSide > 0 && moveUp) || (focusSide < 0 && !moveUp);
+
+    if (_isEditorBlockVisiblyBlank(focus.block)) {
+      return _ctrlShiftAdjacentNonBlankGroupTarget(
+        fromBlock: focus.block,
+        moveUp: moveUp,
+        towardAnchor: towardAnchor,
+      );
+    }
+
+    final group = _nonBlankParagraphGroupForBlock(focus.block);
+    final startText = _controllers[group.start].text;
+    final endText = _controllers[group.end].text;
+    final groupStartOffset = _blockEntryStartRawOffset(startText);
+    final groupEndOffset = MarkupController.safeEndOffset(endText);
+    final focusText = _controllers[focus.block].text;
+    final safeFocus = focus.offset.clamp(0, focusText.length).toInt();
+
+    if (moveUp) {
+      final atGroupEnd =
+          focus.block == group.end && safeFocus >= groupEndOffset;
+      if (towardAnchor && atGroupEnd) {
+        return _ctrlShiftAdjacentNonBlankGroupTarget(
+          fromBlock: group.start,
+          moveUp: true,
+          towardAnchor: true,
+        );
+      }
+      if (focus.block != group.start || safeFocus > groupStartOffset) {
+        return (block: group.start, offset: groupStartOffset);
+      }
+      return _ctrlShiftAdjacentNonBlankGroupTarget(
+        fromBlock: group.start,
+        moveUp: true,
+        towardAnchor: towardAnchor,
+      );
+    }
+
+    final atGroupStart =
+        focus.block == group.start && safeFocus <= groupStartOffset;
+    if (towardAnchor && atGroupStart) {
+      return _ctrlShiftAdjacentNonBlankGroupTarget(
+        fromBlock: group.end,
+        moveUp: false,
+        towardAnchor: true,
+      );
+    }
+    if (focus.block != group.end || safeFocus < groupEndOffset) {
+      return (block: group.end, offset: groupEndOffset);
+    }
+    return _ctrlShiftAdjacentNonBlankGroupTarget(
+      fromBlock: group.end,
+      moveUp: false,
+      towardAnchor: towardAnchor,
+    );
+  }
+
+  ({int block, int offset})? _ctrlShiftAdjacentNonBlankGroupTarget({
+    required int fromBlock,
+    required bool moveUp,
+    required bool towardAnchor,
+  }) {
+    final group = _nearestNonBlankGroup(
+      startBlock: fromBlock + (moveUp ? -1 : 1),
+      moveUp: moveUp,
+    );
+    if (group == null) return null;
+    final useStartEdge = moveUp ? !towardAnchor : towardAnchor;
+    final targetBlock = useStartEdge ? group.start : group.end;
+    final targetText = _controllers[targetBlock].text;
+    return (
+      block: targetBlock,
+      offset: useStartEdge
+          ? _blockEntryStartRawOffset(targetText)
+          : MarkupController.safeEndOffset(targetText),
+    );
+  }
+
+  ({int start, int end})? _nearestNonBlankGroup({
+    required int startBlock,
+    required bool moveUp,
+  }) {
+    var block = startBlock;
+    while (block >= 0 && block < _controllers.length) {
+      if (!_isEditorBlockVisiblyBlank(block)) {
+        return _nonBlankParagraphGroupForBlock(block);
+      }
+      block += moveUp ? -1 : 1;
     }
     return null;
   }
@@ -251,64 +333,6 @@ extension _ScriptEditorKeyboardVerticalParts on _ScriptEditorScreenState {
       focusOffset: targetOffset,
     );
     _scrollEditorBlockIntoView(targetBlock);
-  }
-
-  bool _extendNativeShiftSelectionAcrossBlockIfNeeded({
-    required LogicalKeyboardKey key,
-    required HardwareKeyboard keyboard,
-    required MarkupController controller,
-    required int blockIndex,
-    required TextSelection selection,
-  }) {
-    if (!selection.isValid) return false;
-    final focusOffset =
-        selection.extentOffset.clamp(0, controller.text.length).toInt();
-    final target = _isPlainShiftVerticalArrow(key, keyboard)
-        ? _plainShiftVerticalLineTarget(
-            block: blockIndex,
-            offset: focusOffset,
-            key: key,
-            crossBlockOnly: true,
-          )
-        : _arrowTargetFromPosition(
-            key: key,
-            block: blockIndex,
-            offset: focusOffset,
-            keyboard: keyboard,
-            allowInBlockHorizontalStep: false,
-            allowInBlockVerticalStep: false,
-          );
-    final anchorOffset =
-        selection.baseOffset.clamp(0, controller.text.length).toInt();
-    if (target == null) return false;
-    if (target.block == blockIndex) {
-      if (target.offset == focusOffset) return false;
-      controller.selection = TextSelection(
-        baseOffset: anchorOffset,
-        extentOffset: target.offset.clamp(0, controller.text.length).toInt(),
-      );
-      _lastFocusedController = controller;
-      _focusNodes[blockIndex].requestFocus();
-      _scrollEditorBlockIntoView(blockIndex);
-      _lastArrowDecision =
-          'shift same ${key.keyLabel}: $blockIndex:$anchorOffset-$blockIndex:${target.offset}';
-      return true;
-    }
-    _lastFocusedController = _controllers[target.block];
-    _focusNodes[target.block].requestFocus();
-    _controllers[target.block].selection = TextSelection.collapsed(
-      offset: target.offset,
-    );
-    _overlayKey.currentState?.setKeyboardSelection(
-      anchorBlock: blockIndex,
-      anchorOffset: anchorOffset,
-      focusBlock: target.block,
-      focusOffset: target.offset,
-    );
-    _scrollEditorBlockIntoView(target.block);
-    _lastArrowDecision =
-        'shift cross ${key.keyLabel}: $blockIndex:$anchorOffset-${target.block}:${target.offset}';
-    return true;
   }
 
   KeyEventResult _handleHomeEndKey({

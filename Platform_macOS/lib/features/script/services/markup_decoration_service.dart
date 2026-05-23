@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 const bool kUseCustomDocxDecorationPainting = true;
@@ -84,6 +83,77 @@ class MarkupDecorationParser {
 
   static String visibleText(String rawText) => rawText.replaceAll(tagRegex, '');
 
+  static TextSpan visibleTextSpan(
+    String rawText, {
+    TextStyle? style,
+  }) {
+    bool bold = false;
+    bool italic = false;
+    final textColors = <Color>[];
+    final sizes = <double>[];
+    final fonts = <String>[];
+    final children = <InlineSpan>[];
+
+    TextStyle currentStyle() {
+      var next = style ?? const TextStyle();
+      if (bold) next = next.copyWith(fontWeight: FontWeight.bold);
+      if (italic) next = next.copyWith(fontStyle: FontStyle.italic);
+      if (textColors.isNotEmpty) {
+        next = next.copyWith(color: textColors.last);
+      }
+      if (sizes.isNotEmpty) next = next.copyWith(fontSize: sizes.last);
+      if (fonts.isNotEmpty) next = next.copyWith(fontFamily: fonts.last);
+      return next;
+    }
+
+    void emitContent(int start, int end) {
+      if (start >= end) return;
+      children.add(TextSpan(
+        text: rawText.substring(start, end),
+        style: currentStyle(),
+      ));
+    }
+
+    var cursor = 0;
+    for (final m in tagRegex.allMatches(rawText)) {
+      emitContent(cursor, m.start);
+      final tag = m.group(0)!;
+      if (tag == '**') {
+        bold = !bold;
+      } else if (tag == '[i]') {
+        italic = true;
+      } else if (tag == '[/i]') {
+        italic = false;
+      } else if (m.group(1) != null) {
+        final color = parseHexColor(m.group(1)!);
+        if (color != null) textColors.add(color);
+      } else if (tag == '[/color]') {
+        if (textColors.isNotEmpty) textColors.removeLast();
+      } else if (m.group(3) != null) {
+        final size = double.tryParse(m.group(3)!);
+        if (size != null) sizes.add(size);
+      } else if (tag == '[/size]') {
+        if (sizes.isNotEmpty) sizes.removeLast();
+      } else if (m.group(4) != null) {
+        fonts.add(m.group(4)!);
+      } else if (tag == '[/font]') {
+        if (fonts.isNotEmpty) fonts.removeLast();
+      }
+      cursor = m.end;
+    }
+    emitContent(cursor, rawText.length);
+    return TextSpan(style: style, children: children);
+  }
+
+  static TextSelection rawToVisibleSelection(
+    String rawText,
+    TextSelection rawSelection,
+  ) {
+    final start = rawToVisibleOffset(rawText, rawSelection.start);
+    final end = rawToVisibleOffset(rawText, rawSelection.end);
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
   static TextRange? paintableContentRange(
     String rawText,
     MarkupDecorationRange range,
@@ -165,7 +235,7 @@ class MarkupDecorationBoxMerger {
   static List<Rect> merge(
     Iterable<Rect> boxes, {
     double rowTolerance = 4.0,
-    double gapTolerance = 28.0,
+    double gapTolerance = 10.0,
   }) {
     final sorted = boxes.where((box) => !box.isEmpty).toList()
       ..sort((a, b) {
@@ -186,9 +256,7 @@ class MarkupDecorationBoxMerger {
       final last = merged.last;
       final sameRow = (last.center.dy - box.center.dy).abs() <=
           rowTolerance + (last.height + box.height) * 0.08;
-      final dynamicGapTolerance =
-          gapTolerance > last.height * 0.75 ? gapTolerance : last.height * 0.75;
-      final closeEnough = box.left <= last.right + dynamicGapTolerance;
+      final closeEnough = box.left <= last.right + gapTolerance;
       if (sameRow && closeEnough) {
         merged[merged.length - 1] = Rect.fromLTRB(
           last.left < box.left ? last.left : box.left,
@@ -204,142 +272,309 @@ class MarkupDecorationBoxMerger {
   }
 }
 
-class MarkupTextDecorationPainter extends CustomPainter {
-  final String rawText;
-  final InlineSpan textSpan;
-  final TextDirection textDirection;
+class MarkupTextLayoutGeometry {
+  final TextPainter painter;
+  final double width;
   final TextAlign textAlign;
-  final EdgeInsets contentPadding;
-  final StrutStyle? strutStyle;
-  final MarkupDecorationType type;
+  final TextDirection textDirection;
+  final TextScaler textScaler;
+  late final List<ui.LineMetrics> _lineMetrics = painter.computeLineMetrics();
 
-  const MarkupTextDecorationPainter({
-    required this.rawText,
-    required this.textSpan,
-    required this.textDirection,
+  MarkupTextLayoutGeometry({
+    required InlineSpan textSpan,
+    required this.width,
     required this.textAlign,
-    required this.type,
-    this.contentPadding = EdgeInsets.zero,
-    this.strutStyle,
-  });
+    required this.textDirection,
+    this.textScaler = TextScaler.noScaling,
+    StrutStyle? strutStyle,
+  }) : painter = TextPainter(
+          text: textSpan,
+          textDirection: textDirection,
+          textAlign: textAlign,
+          textScaler: textScaler,
+          strutStyle: strutStyle,
+        )..layout(maxWidth: width);
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (!kUseCustomDocxDecorationPainting || rawText.isEmpty) return;
-    final width = size.width - contentPadding.horizontal;
-    if (width <= 0) return;
-
-    final painter = TextPainter(
-      text: textSpan,
-      textDirection: textDirection,
-      textAlign: textAlign,
-      strutStyle: strutStyle,
-    )..layout(maxWidth: width);
-    final lineMetrics = painter.computeLineMetrics();
-
-    canvas.save();
-    canvas.translate(contentPadding.left, contentPadding.top);
-    for (final range in MarkupDecorationParser.decorationRanges(rawText)) {
-      if (range.type != type) continue;
-      final paintableRange =
-          MarkupDecorationParser.paintableContentRange(rawText, range);
-      if (paintableRange == null) continue;
-      final boxes = painter
-          .getBoxesForSelection(
-            TextSelection(
-              baseOffset: paintableRange.start,
-              extentOffset: paintableRange.end,
-            ),
-            boxHeightStyle: ui.BoxHeightStyle.tight,
-            boxWidthStyle: ui.BoxWidthStyle.tight,
-          )
-          .map((box) => _applyLineAlignment(box.toRect(), lineMetrics, width));
-      final merged = MarkupDecorationBoxMerger.merge(
-        boxes,
-        rowTolerance: 5.0,
-        gapTolerance: 36.0,
-      );
-      if (type == MarkupDecorationType.background) {
-        _paintBackground(canvas, merged, range.color ?? Colors.transparent);
-      } else {
-        _paintUnderline(canvas, merged);
-      }
-    }
-    canvas.restore();
+  List<Rect> selectionRects(
+    TextSelection selection, {
+    ui.BoxHeightStyle boxHeightStyle = ui.BoxHeightStyle.tight,
+    ui.BoxWidthStyle boxWidthStyle = ui.BoxWidthStyle.tight,
+    bool alignToVisualLine = true,
+  }) {
+    return painter
+        .getBoxesForSelection(
+          selection,
+          boxHeightStyle: boxHeightStyle,
+          boxWidthStyle: boxWidthStyle,
+        )
+        .map((box) => alignToVisualLine
+            ? _alignRectToVisualLine(box.toRect())
+            : box.toRect())
+        .where((rect) => !rect.isEmpty)
+        .toList(growable: false);
   }
 
-  Rect _applyLineAlignment(
-    Rect rect,
-    List<ui.LineMetrics> lines,
-    double width,
+  List<Rect> mergedDecorationRects(
+    TextSelection selection, {
+    required MarkupDecorationType type,
+    List<TextSelection>? unitSelections,
+  }) {
+    final boxes = _rectsForSelectionUnits(
+      unitSelections,
+      fallbackSelection: selection,
+    );
+    final gapTolerance = type == MarkupDecorationType.background
+        ? MarkupDecorationBoxMerger.styleBackgroundGapTolerance
+        : MarkupDecorationBoxMerger.styleUnderlineGapTolerance;
+    final grouped = _boxesByVisualLine(boxes);
+    if (grouped.isEmpty) return const [];
+    final indexes = grouped.keys.toList()..sort();
+    return [
+      for (final index in indexes)
+        ...MarkupDecorationBoxMerger.merge(
+          grouped[index]!,
+          rowTolerance: 5.0,
+          gapTolerance: gapTolerance,
+        ),
+    ];
+  }
+
+  List<Rect> mergedActiveSelectionRects(
+    TextSelection selection, {
+    List<TextSelection>? unitSelections,
+    bool fluidFullLine = false,
+  }) {
+    if (fluidFullLine) {
+      final ownershipBoxes = _rectsForSelectionUnits(
+        unitSelections,
+        fallbackSelection: selection,
+      );
+      return _activeSelectionLineBands(ownershipBoxes, selection);
+    }
+    final boxes = _rectsForSelectionUnits(
+      unitSelections,
+      fallbackSelection: selection,
+      boxHeightStyle: ui.BoxHeightStyle.strut,
+    );
+    return MarkupDecorationBoxMerger.merge(
+      boxes,
+      rowTolerance: 5.0,
+      gapTolerance: MarkupDecorationBoxMerger.activeSelectionGapTolerance,
+    );
+  }
+
+  List<Rect> _activeSelectionLineBands(
+    List<Rect> boxes,
+    TextSelection selection,
   ) {
-    final centerY = rect.center.dy;
+    final nonEmpty = boxes.where((box) => !box.isEmpty).toList();
+    if (nonEmpty.isEmpty || _lineMetrics.isEmpty) return const [];
+    final textLength = painter.text?.toPlainText().length ?? 0;
+    final fullSelection =
+        selection.start <= 0 && textLength > 0 && selection.end >= textLength;
+    final buckets = <int, Rect>{};
+    for (final box in nonEmpty) {
+      final lineIndex = _overlappingLineIndexFor(box);
+      if (lineIndex == null) continue;
+      final current = buckets[lineIndex];
+      buckets[lineIndex] = current == null ? box : current.expandToInclude(box);
+    }
+    if (buckets.isEmpty) return const [];
+
+    final indexes = buckets.keys.toList()..sort();
+    final rows = <Rect>[];
+    for (final index in indexes) {
+      final line = _lineMetrics[index];
+      final top = line.baseline - line.ascent;
+      final bottom = top + line.height;
+      final selected = buckets[index]!;
+      final lineLeft = _visualLineLeft(line);
+      final lineRight = (lineLeft + line.width).clamp(0.0, width).toDouble();
+      final left = fullSelection
+          ? (selected.left < lineLeft ? selected.left : lineLeft)
+          : selected.left;
+      final right = fullSelection
+          ? (selected.right > lineRight ? selected.right : lineRight)
+          : selected.right;
+      rows.add(Rect.fromLTRB(
+        left.clamp(0.0, width).toDouble(),
+        top,
+        right.clamp(0.0, width).toDouble(),
+        bottom,
+      ));
+    }
+    return rows.where((row) => row.width > 0 && row.height > 0).toList();
+  }
+
+  List<Rect> _rectsForSelectionUnits(
+    List<TextSelection>? unitSelections, {
+    required TextSelection fallbackSelection,
+    ui.BoxHeightStyle boxHeightStyle = ui.BoxHeightStyle.tight,
+  }) {
+    final units = unitSelections ?? const <TextSelection>[];
+    if (units.isEmpty) {
+      return selectionRects(
+        fallbackSelection,
+        boxHeightStyle: boxHeightStyle,
+      );
+    }
+    return [
+      for (final unit in units)
+        ...selectionRects(
+          unit,
+          boxHeightStyle: boxHeightStyle,
+        ),
+    ];
+  }
+
+  Map<int, List<Rect>> _boxesByVisualLine(List<Rect> boxes) {
+    final grouped = <int, List<Rect>>{};
+    for (final box in boxes.where((box) => !box.isEmpty)) {
+      final lineIndex = _overlappingLineIndexFor(box);
+      if (lineIndex == null) continue;
+      grouped.putIfAbsent(lineIndex, () => <Rect>[]).add(box);
+    }
+    return grouped;
+  }
+
+  Offset? activeSelectionEndpoint(
+    TextSelection selection, {
+    required bool isRangeStart,
+  }) {
+    final rects = mergedActiveSelectionRects(
+      selection,
+      fluidFullLine: true,
+    );
+    if (rects.isEmpty) return null;
+    return endpointForRects(
+      rects,
+      isRangeStart: isRangeStart,
+      textDirection: textDirection,
+    );
+  }
+
+  static Offset endpointForRects(
+    List<Rect> rects, {
+    required bool isRangeStart,
+    required TextDirection textDirection,
+  }) {
+    const lineTolerance = 4.0;
+    final sorted = rects.where((rect) => !rect.isEmpty).toList()
+      ..sort((a, b) {
+        final yCompare = a.center.dy.compareTo(b.center.dy);
+        if (yCompare != 0 &&
+            (a.center.dy - b.center.dy).abs() > lineTolerance) {
+          return yCompare;
+        }
+        return a.left.compareTo(b.left);
+      });
+    if (sorted.isEmpty) return Offset.zero;
+
+    final targetY =
+        isRangeStart ? sorted.first.center.dy : sorted.last.center.dy;
+    final sameLine = sorted
+        .where((rect) => (rect.center.dy - targetY).abs() <= lineTolerance)
+        .toList();
+    final lineRects = sameLine.isEmpty ? sorted : sameLine;
+    final rtl = textDirection == TextDirection.rtl;
+    final x = rtl
+        ? isRangeStart
+            ? lineRects
+                .map((rect) => rect.right)
+                .reduce((a, b) => a > b ? a : b)
+            : lineRects.map((rect) => rect.left).reduce((a, b) => a < b ? a : b)
+        : isRangeStart
+            ? lineRects.map((rect) => rect.left).reduce((a, b) => a < b ? a : b)
+            : lineRects
+                .map((rect) => rect.right)
+                .reduce((a, b) => a > b ? a : b);
+    return Offset(x, targetY);
+  }
+
+  Rect _alignRectToVisualLine(Rect rect) {
+    final lineIndex = _overlappingLineIndexFor(rect);
+    if (lineIndex == null) return rect;
+    final line = _lineMetrics[lineIndex];
+    final desiredLeft = _visualLineLeft(line);
+    final delta = desiredLeft - line.left;
+    if (delta.abs() < 0.01) return rect;
+    final desiredRight = desiredLeft + line.width;
+    final alreadyInVisualLine =
+        rect.left >= desiredLeft - 1.0 && rect.right <= desiredRight + 1.0;
+    if (alreadyInVisualLine) return rect;
+    return rect.shift(Offset(delta, 0));
+  }
+
+  int? _nearestLineIndexFor(Rect rect) {
     ui.LineMetrics? best;
+    int? bestIndex;
     var bestDistance = double.infinity;
-    for (final line in lines) {
+    final centerY = rect.center.dy;
+    for (var i = 0; i < _lineMetrics.length; i++) {
+      final line = _lineMetrics[i];
       final lineCenter = line.baseline - line.ascent + line.height / 2;
       final distance = (lineCenter - centerY).abs();
       if (distance < bestDistance) {
         best = line;
+        bestIndex = i;
         bestDistance = distance;
       }
     }
-    if (best == null) return rect;
+    return best == null ? null : bestIndex;
+  }
 
-    final desiredLeft = switch (textAlign) {
-      TextAlign.right => width - best.width,
-      TextAlign.center => (width - best.width) / 2,
-      TextAlign.end =>
-        textDirection == TextDirection.rtl ? 0.0 : width - best.width,
+  int? _overlappingLineIndexFor(Rect rect) {
+    int? bestIndex;
+    var bestOverlap = 0.0;
+    var bestCenterDistance = double.infinity;
+    final centerY = rect.center.dy;
+    for (var i = 0; i < _lineMetrics.length; i++) {
+      final line = _lineMetrics[i];
+      final top = line.baseline - line.ascent;
+      final bottom = top + line.height;
+      final overlap = (rect.bottom < top || rect.top > bottom)
+          ? 0.0
+          : (rect.bottom < bottom ? rect.bottom : bottom) -
+              (rect.top > top ? rect.top : top);
+      final lineCenter = top + line.height / 2;
+      final centerDistance = (lineCenter - centerY).abs();
+      final winsByOverlap = overlap > bestOverlap + 0.01;
+      final winsTie = (overlap - bestOverlap).abs() <= 0.01 &&
+          centerDistance < bestCenterDistance;
+      if (winsByOverlap || winsTie) {
+        bestIndex = i;
+        bestOverlap = overlap;
+        bestCenterDistance = centerDistance;
+      }
+    }
+    if (bestIndex != null && bestOverlap > 0.01) return bestIndex;
+    return _nearestLineIndexFor(rect);
+  }
+
+  double _visualLineLeft(ui.LineMetrics line) {
+    final left = switch (textAlign) {
+      TextAlign.left => 0.0,
+      TextAlign.right => width - line.width,
+      TextAlign.center => (width - line.width) / 2,
       TextAlign.start =>
-        textDirection == TextDirection.rtl ? width - best.width : 0.0,
-      TextAlign.justify || TextAlign.left => 0.0,
+        textDirection == TextDirection.rtl ? width - line.width : 0.0,
+      TextAlign.end =>
+        textDirection == TextDirection.rtl ? 0.0 : width - line.width,
+      TextAlign.justify => 0.0,
     };
-    final delta = desiredLeft.clamp(0.0, width) - best.left;
-    if (delta.abs() < 0.01) return rect;
-    return rect.shift(Offset(delta, 0));
+    return left.clamp(0.0, width).toDouble();
   }
-
-  void _paintBackground(Canvas canvas, List<Rect> rects, Color color) {
-    if (color.opacity <= 0) return;
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    for (final rect in rects) {
-      final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 6.0));
-      canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
-    }
-  }
-
-  void _paintUnderline(Canvas canvas, List<Rect> rects) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.square
-      ..style = PaintingStyle.stroke;
-    for (final rect in rects) {
-      final y = rect.bottom - (paint.strokeWidth * 0.5);
-      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant MarkupTextDecorationPainter oldDelegate) =>
-      rawText != oldDelegate.rawText ||
-      textSpan != oldDelegate.textSpan ||
-      textDirection != oldDelegate.textDirection ||
-      textAlign != oldDelegate.textAlign ||
-      contentPadding != oldDelegate.contentPadding ||
-      strutStyle != oldDelegate.strutStyle ||
-      type != oldDelegate.type;
 }
 
 class MarkupRenderEditableGeometry {
   static List<Rect> selectionRects(
-    RenderEditable editable,
-    TextSelection selection,
-  ) {
-    final normalized = normalizedSelection(editable, selection);
+      RenderEditable editable, TextSelection selection,
+      {String? rawText}) {
+    final normalized = normalizedSelection(
+      editable,
+      selection,
+      rawText: rawText,
+    );
     if (normalized == null) return const [];
     return editable
         .getBoxesForSelection(normalized)
@@ -351,10 +586,11 @@ class MarkupRenderEditableGeometry {
   static List<Rect> mergedBandsForSelection(
     RenderEditable editable,
     TextSelection selection, {
+    String? rawText,
     double gapTolerance = MarkupDecorationBoxMerger.styleBackgroundGapTolerance,
   }) {
     return mergedBandsForRects(
-      selectionRects(editable, selection),
+      selectionRects(editable, selection, rawText: rawText),
       gapTolerance: gapTolerance,
     );
   }
@@ -373,52 +609,114 @@ class MarkupRenderEditableGeometry {
   static Offset? endpointForSelection(
     RenderEditable editable,
     TextSelection selection, {
+    String? rawText,
     required bool isRangeStart,
   }) {
-    final bands = mergedBandsForSelection(editable, selection);
+    final bands = mergedBandsForSelection(
+      editable,
+      selection,
+      rawText: rawText,
+    );
     if (bands.isNotEmpty) {
-      return _endpointForRects(
+      return MarkupTextLayoutGeometry.endpointForRects(
         bands,
         isRangeStart: isRangeStart,
         textDirection: editable.textDirection,
       );
     }
-    final normalized = normalizedSelection(editable, selection);
-    if (normalized == null) return null;
+    final normalized = normalizedSelection(
+      editable,
+      selection,
+      rawText: rawText,
+    );
+    if (normalized == null) {
+      return _visibleBoundaryCaret(
+        editable,
+        selection,
+        rawText: rawText,
+        isRangeStart: isRangeStart,
+      );
+    }
     final endpoints = editable.getEndpointsForSelection(normalized);
     if (endpoints.isEmpty) return null;
     return (isRangeStart ? endpoints.first : endpoints.last).point;
   }
 
-  static Offset _endpointForRects(
-    List<Rect> rects, {
+  static Offset? _visibleBoundaryCaret(
+    RenderEditable editable,
+    TextSelection selection, {
+    required String? rawText,
     required bool isRangeStart,
-    required TextDirection textDirection,
   }) {
-    final sorted = [...rects]..sort((a, b) {
-        final topCompare = a.top.compareTo(b.top);
-        if (topCompare != 0 && (a.top - b.top).abs() > 4.0) {
-          return topCompare;
-        }
-        return a.left.compareTo(b.left);
-      });
-    final rect = isRangeStart ? sorted.first : sorted.last;
-    final x = textDirection == TextDirection.rtl
-        ? (isRangeStart ? rect.right : rect.left)
-        : (isRangeStart ? rect.left : rect.right);
-    return Offset(x, rect.center.dy);
+    final textLength = editable.text?.toPlainText().length ?? 0;
+    if (textLength <= 0) return null;
+    final rawBoundary = isRangeStart ? selection.start : selection.end;
+    var caretOffset = rawBoundary.clamp(0, textLength).toInt();
+    if (rawText != null && rawText.isNotEmpty) {
+      final rawLength = rawText.length.clamp(0, textLength).toInt();
+      final visible = MarkupDecorationParser.rawToVisibleOffset(
+        rawText,
+        caretOffset.clamp(0, rawLength).toInt(),
+      );
+      caretOffset = MarkupDecorationParser.visibleToRawOffset(rawText, visible)
+          .clamp(0, textLength)
+          .toInt();
+      caretOffset = _visibleToPaintStartRawOffset(rawText, visible)
+          .clamp(0, textLength)
+          .toInt();
+    }
+    final rect = editable.getLocalRectForCaret(
+      TextPosition(offset: caretOffset, affinity: TextAffinity.downstream),
+    );
+    return Offset(rect.left, rect.top + rect.height / 2);
   }
 
   static TextSelection? normalizedSelection(
-    RenderEditable editable,
-    TextSelection selection,
-  ) {
+      RenderEditable editable, TextSelection selection,
+      {String? rawText}) {
     if (!selection.isValid || selection.isCollapsed) return null;
     final textLength = editable.text?.toPlainText().length ?? 0;
     if (textLength <= 0) return null;
-    final start = selection.start.clamp(0, textLength).toInt();
-    final end = selection.end.clamp(start, textLength).toInt();
+    var start = selection.start.clamp(0, textLength).toInt();
+    var end = selection.end.clamp(start, textLength).toInt();
+    if (rawText != null && rawText.isNotEmpty) {
+      final rawLength = rawText.length.clamp(0, textLength).toInt();
+      final visibleStart = MarkupDecorationParser.rawToVisibleOffset(
+        rawText,
+        start.clamp(0, rawLength).toInt(),
+      );
+      final visibleEnd = MarkupDecorationParser.rawToVisibleOffset(
+        rawText,
+        end.clamp(0, rawLength).toInt(),
+      );
+      if (visibleEnd <= visibleStart) return null;
+      start = _visibleToPaintStartRawOffset(rawText, visibleStart)
+          .clamp(0, textLength)
+          .toInt();
+      end = MarkupDecorationParser.visibleToRawOffset(rawText, visibleEnd)
+          .clamp(start, textLength)
+          .toInt();
+    }
     if (end <= start) return null;
     return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
+  static int _visibleToPaintStartRawOffset(
+    String rawText,
+    int visibleOffset,
+  ) {
+    var raw = MarkupDecorationParser.visibleToRawOffset(rawText, visibleOffset)
+        .clamp(0, rawText.length)
+        .toInt();
+    while (raw < rawText.length) {
+      final match = MarkupDecorationParser.tagRegex.matchAsPrefix(rawText, raw);
+      if (match == null) break;
+      final before = MarkupDecorationParser.rawToVisibleOffset(rawText, raw);
+      final after =
+          MarkupDecorationParser.rawToVisibleOffset(rawText, match.end);
+      if (before != visibleOffset || after != visibleOffset) break;
+      raw = match.end;
+    }
+    return raw;
   }
 }

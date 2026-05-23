@@ -141,6 +141,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
       final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
         editable,
         TextSelection(baseOffset: paintable.start, extentOffset: paintable.end),
+        rawText: _rawText,
         gapTolerance: MarkupDecorationBoxMerger.styleBackgroundGapTolerance,
       );
       _paintBands(canvas, editable, bands, range.color ?? Colors.transparent,
@@ -159,6 +160,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
       editable,
       activeSelection,
+      rawText: _rawText,
       gapTolerance: MarkupDecorationBoxMerger.activeSelectionGapTolerance,
     );
     _paintBands(canvas, editable, bands, const Color(0x66FFBF00),
@@ -180,6 +182,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
       final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
         editable,
         TextSelection(baseOffset: paintable.start, extentOffset: paintable.end),
+        rawText: _rawText,
         gapTolerance: MarkupDecorationBoxMerger.styleUnderlineGapTolerance,
       );
       for (final rect in bands) {

@@ -46,6 +46,8 @@ part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';
 part 'script_editor_screen.build.dart';
 part 'script_editor_screen.selection_clipboard.dart';
+part 'script_editor_screen.selection_clipboard_commands.dart';
+part 'script_editor_screen.selection_clipboard_paste.dart';
 part 'script_editor_screen.editor_block.dart';
 part 'script_editor_screen.render_decorations.dart';
 part 'script_editor_screen.bookmarks.dart';
@@ -55,6 +57,7 @@ part 'script_editor_screen.keyboard_selection.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
 part 'script_editor_screen.keyboard_horizontal.dart';
 part 'script_editor_screen.keyboard_focus.dart';
+part 'script_editor_screen.selection_trace_stub.dart';
 part 'script_editor_screen.arrow_trace_stub.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
@@ -166,6 +169,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String _lastArrowDecision = 'idle';
   String? _activeArrowEventSignature;
   String? _suppressDuplicateArrowEventSignature;
+  String? _handledShiftSelectionEventSignature;
   int _keyboardFocusRepairToken = 0;
   double? _verticalArrowPreferredX;
   SelectionEndpoint? _shiftSelectionAnchor;
@@ -185,6 +189,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _suiteSection; // current function section within a suite (e.g. 'Bold', 'Font Size')
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
+
+  void _setEditorState(VoidCallback fn) => setState(fn);
 
   List<String> get _editorRawBlocks =>
       _controllers.map((controller) => controller.text).toList(growable: false);

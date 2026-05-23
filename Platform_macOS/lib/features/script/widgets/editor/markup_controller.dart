@@ -16,6 +16,12 @@ class MarkupController extends TextEditingController {
   /// The selection range mapped to this block from the global overlay.
   TextSelection? externalSelection;
 
+  /// Visible-text version of [externalSelection] for search/debug bookkeeping.
+  ///
+  /// Live paint stays raw-offset based against the rendered editor span; this
+  /// field only preserves the visible selection contract shared with Windows.
+  TextSelection? externalVisibleSelection;
+
   /// Whether the entire block is selected (e.g. during Select All).
   bool isGlobalSelected = false;
 

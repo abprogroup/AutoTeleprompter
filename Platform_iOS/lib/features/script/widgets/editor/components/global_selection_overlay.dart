@@ -455,6 +455,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
             MarkupRenderEditableGeometry.endpointForSelection(
           editable,
           selection,
+          rawText: controller.text,
           isRangeStart: isRangeStart,
         );
         if (paintedEndpoint != null) {

@@ -58,6 +58,7 @@ part 'script_editor_screen.keyboard_selection.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
 part 'script_editor_screen.keyboard_horizontal.dart';
 part 'script_editor_screen.keyboard_focus.dart';
+part 'script_editor_screen.selection_trace_stub.dart';
 part 'script_editor_screen.arrow_trace_stub.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
@@ -170,6 +171,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String _lastArrowDecision = 'idle';
   String? _activeArrowEventSignature;
   String? _suppressDuplicateArrowEventSignature;
+  String? _handledShiftSelectionEventSignature;
   int _keyboardFocusRepairToken = 0;
   double? _verticalArrowPreferredX;
   SelectionEndpoint? _shiftSelectionAnchor;
@@ -201,6 +203,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
 
+  void _setEditorState(VoidCallback fn) => setState(fn);
+
   void _clearGlobalSelection() {
     if (!mounted) return;
     setState(() {
@@ -209,6 +213,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       for (final c in _controllers) {
         c.isGlobalSelected = false;
         c.externalSelection = null;
+        c.externalVisibleSelection = null;
         // Collapse native selection to prevent residual highlight in buildTextSpan.
         if (!c.selection.isCollapsed) {
           final collapseAt = c.selection.baseOffset.clamp(0, c.text.length);
@@ -225,6 +230,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       for (final c in _controllers) {
         if (c.externalSelection != null || c.isGlobalSelected) {
           c.externalSelection = null;
+          c.externalVisibleSelection = null;
           c.isGlobalSelected = false;
           needsRefresh = true;
         }

@@ -119,6 +119,7 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
         final paintedEndpoint = _paintedSelectionEndpoint(
           editable,
           selection,
+          rawText: controller.text,
           isRangeStart: isRangeStart,
         );
         if (paintedEndpoint != null) {
@@ -146,11 +147,13 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
   Offset? _paintedSelectionEndpoint(
     RenderEditable editable,
     TextSelection selection, {
+    required String rawText,
     required bool isRangeStart,
   }) {
     return MarkupRenderEditableGeometry.endpointForSelection(
       editable,
       selection,
+      rawText: rawText,
       isRangeStart: isRangeStart,
     );
   }

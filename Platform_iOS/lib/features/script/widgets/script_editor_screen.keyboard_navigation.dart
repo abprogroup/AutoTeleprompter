@@ -7,7 +7,8 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
     if (_handleGlobalEditingShortcut(event)) return true;
     final hasEditorFocus = _focusNodes.any((n) => n.hasFocus);
     final hasAppSelectionForKeyboard =
-        _isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false);
+        (_overlayKey.currentState?.hasSelection ?? false) ||
+            _hasVisibleAppSelectionRange();
     if (!hasEditorFocus && !hasAppSelectionForKeyboard) return false;
     final key = event.logicalKey;
     final isArrowKey = _isArrowKey(key);
@@ -37,7 +38,11 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
       return false;
     }
     if (keyboard.isShiftPressed) {
-      return _extendAppSelectionForArrow(key, keyboard);
+      return _extendAppSelectionForArrow(
+        key,
+        keyboard,
+        eventSignature: _arrowEventSignature(event),
+      );
     }
     if (_clearAppSelectionForArrow(key)) return true;
     final hasModifier = _hasAnyArrowModifier(keyboard);
@@ -47,75 +52,6 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
     return _handleEditorArrowKey(
             _ScriptEditorScreenState._arrowKeyDummyNode, event) ==
         KeyEventResult.handled;
-  }
-
-  bool _clearStaleOverlaySelectionForShift(HardwareKeyboard keyboard) {
-    if (!keyboard.isShiftPressed || _isGlobalSelection) return false;
-    final overlay = _overlayKey.currentState;
-    final session = overlay?.selectionSessionSnapshot;
-    if (overlay == null || !(overlay.hasSelection)) return false;
-    // Use the editor's synchronous focus authority, not FocusNode iteration.
-    // FocusNode ownership can lag for one key repeat after app-owned
-    // Ctrl/Shift selection crosses a block, which made the stale-overlay guard
-    // clear a valid overlay and restart selection in the next block.
-    final controller = _lastFocusedController;
-    if (controller == null) {
-      _shiftSelectionAnchor = null;
-      _shiftSelectionFocus = null;
-      overlay.clearSelection();
-      for (final c in _controllers) {
-        c.isGlobalSelected = false;
-        c.externalSelection = null;
-        c.refresh();
-      }
-      setState(() {
-        _isGlobalSelection = false;
-        _lastArrowDecision = 'shift stale overlay cleared: no focus';
-      });
-      return true;
-    }
-    final block = _controllers.indexOf(controller);
-    if (block < 0) return false;
-    final selection = controller.selection;
-    if (!selection.isValid) {
-      _shiftSelectionAnchor = null;
-      _shiftSelectionFocus = null;
-      overlay.clearSelection();
-      for (final c in _controllers) {
-        c.isGlobalSelected = false;
-        c.externalSelection = null;
-        c.refresh();
-      }
-      setState(() {
-        _isGlobalSelection = false;
-        _lastArrowDecision = 'shift stale overlay cleared: invalid selection';
-      });
-      return true;
-    }
-    final offset =
-        selection.extentOffset.clamp(0, controller.text.length).toInt();
-    final visibleOverlayRange = _hasVisibleAppSelectionRange();
-    if (session != null &&
-        visibleOverlayRange &&
-        session.focus.block == block &&
-        session.focus.offset == offset) {
-      return false;
-    }
-    _shiftSelectionAnchor = null;
-    _shiftSelectionFocus = null;
-    overlay.clearSelection();
-    for (final c in _controllers) {
-      c.isGlobalSelected = false;
-      c.externalSelection = null;
-      c.refresh();
-    }
-    setState(() {
-      _isGlobalSelection = false;
-      _lastArrowDecision = visibleOverlayRange
-          ? 'shift stale overlay cleared focus ${session?.focus} != $block:$offset'
-          : 'shift stale overlay cleared invisible at $block:$offset';
-    });
-    return true;
   }
 
   bool _hasVisibleAppSelectionRange() {
@@ -176,18 +112,14 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
       key == LogicalKeyboardKey.arrowLeft ||
       key == LogicalKeyboardKey.arrowRight;
 
-  void _onCut() => _onCutClean();
-
-  Future<void> _onPaste() async => _pasteFromGlobalClipboard();
-
   bool _handleGlobalEditingShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     final keyboard = HardwareKeyboard.instance;
     final hasShortcutModifier =
         keyboard.isControlPressed || keyboard.isMetaPressed;
     if (!hasShortcutModifier || keyboard.isAltPressed) return false;
-    final hasAppSelection =
-        _isGlobalSelection || (_overlayKey.currentState?.hasSelection ?? false);
+    final hasAppSelection = (_overlayKey.currentState?.hasSelection ?? false) ||
+        _hasVisibleAppSelectionRange();
     if (!hasAppSelection) return false;
 
     final key = event.logicalKey;
@@ -199,13 +131,13 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
     }
     if (key == LogicalKeyboardKey.keyX) {
       _overlayKey.currentState?.endDragging();
-      _onCut();
+      _onCutClean();
       _lastArrowDecision = 'shortcut cut: app selection';
       return true;
     }
     if (key == LogicalKeyboardKey.keyV) {
       _overlayKey.currentState?.endDragging();
-      unawaited(_onPaste());
+      _pasteFromGlobalClipboard();
       _lastArrowDecision = 'shortcut paste: app selection';
       return true;
     }
@@ -214,7 +146,12 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
 
   bool _clearAppSelectionForArrow(LogicalKeyboardKey key) {
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
-    if (!_isGlobalSelection && !hasOverlay) return false;
+    final hasVisibleAppSelection = _hasVisibleAppSelectionRange();
+    if (!hasOverlay && !hasVisibleAppSelection) return false;
+    final keyboard = HardwareKeyboard.instance;
+    final ctrlOnly = keyboard.isControlPressed &&
+        !keyboard.isShiftPressed &&
+        !keyboard.isMetaPressed;
     _shiftSelectionAnchor = null;
     _shiftSelectionFocus = null;
     final collapseToEnd = _collapseSelectionToEndForArrow(key);
@@ -230,9 +167,10 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
       }
       c.isGlobalSelected = false;
       c.externalSelection = null;
+      c.externalVisibleSelection = null;
       c.refresh();
     }
-    setState(() {
+    _setEditorState(() {
       _isGlobalSelection = false;
       _lastArrowDecision = target == null
           ? 'clear selection ${key.keyLabel}: no target'
@@ -245,6 +183,13 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
         offset: target.offset,
       );
       _scrollEditorBlockIntoView(target.block);
+    }
+    if (ctrlOnly) {
+      _recordSelectionTrace(
+        'ctrlOnlyCollapse ${key.keyLabel}',
+        key: key,
+        targetMode: 'ctrlOnlyCollapse',
+      );
     }
     return true;
   }
@@ -331,6 +276,19 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
         '${event.timeStamp.inMicroseconds}';
   }
 
+  bool _shiftSelectionEventWasHandled(String eventSignature) =>
+      _handledShiftSelectionEventSignature == eventSignature;
+
+  void _markShiftSelectionEventHandled(String eventSignature) {
+    _handledShiftSelectionEventSignature = eventSignature;
+    Future<void>.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      if (_handledShiftSelectionEventSignature == eventSignature) {
+        _handledShiftSelectionEventSignature = null;
+      }
+    });
+  }
+
   KeyEventResult _handleEditorArrowKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -345,6 +303,31 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
       return KeyEventResult.handled;
     }
     _activeArrowEventSignature = eventSignature;
+    final keyboard = HardwareKeyboard.instance;
+
+    final hasAppSelectionForKeyboard =
+        (_overlayKey.currentState?.hasSelection ?? false) ||
+            _hasVisibleAppSelectionRange();
+    if (keyboard.isShiftPressed &&
+        _isArrowKey(key) &&
+        !keyboard.isMetaPressed &&
+        hasAppSelectionForKeyboard) {
+      if (_shiftSelectionEventWasHandled(eventSignature)) {
+        _lastArrowDecision = 'shift duplicate suppressed ${key.keyLabel}';
+        return KeyEventResult.handled;
+      }
+      _recordNativeArrowTrace(
+        event,
+        mode:
+            'focused ${_shiftSelectionActionLabel(key, keyboard)} app-selection route',
+      );
+      _extendAppSelectionForArrow(
+        key,
+        keyboard,
+        eventSignature: eventSignature,
+      );
+      return KeyEventResult.handled;
+    }
 
     // Global selection short-circuit: any arrow collapses + repositions cursor.
     if (_isGlobalSelection) {
@@ -365,7 +348,6 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
     final idx = _controllers.indexOf(controller);
     if (idx < 0) return KeyEventResult.ignored;
 
-    final keyboard = HardwareKeyboard.instance;
     if (_isHomeEndKey(key)) {
       return _handleHomeEndKey(
         key: key,
@@ -376,6 +358,26 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
 
     final isVerticalArrow = key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown;
+    if (keyboard.isShiftPressed &&
+        _isArrowKey(key) &&
+        !keyboard.isMetaPressed) {
+      if (_shiftSelectionEventWasHandled(eventSignature)) {
+        _lastArrowDecision = 'shift duplicate suppressed ${key.keyLabel}';
+        return KeyEventResult.handled;
+      }
+      _recordNativeArrowTrace(
+        event,
+        mode:
+            'focused ${_shiftSelectionActionLabel(key, keyboard)} app-selection route',
+      );
+      _extendAppSelectionForArrow(
+        key,
+        keyboard,
+        eventSignature: eventSignature,
+      );
+      return KeyEventResult.handled;
+    }
+
     final isAltOnlyArrow = _isAltOnlyArrowModifierState(keyboard);
     final isPlainVerticalArrow =
         _isPlainArrowModifierState(keyboard) && isVerticalArrow;
@@ -390,21 +392,6 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
         extendSelection: keyboard.isShiftPressed,
       );
     }
-    if (keyboard.isShiftPressed) {
-      final shifted = _extendNativeShiftSelectionAcrossBlockIfNeeded(
-        key: key,
-        keyboard: keyboard,
-        controller: controller,
-        blockIndex: idx,
-        selection: controller.selection,
-      );
-      if (shifted) return KeyEventResult.handled;
-      if (keyboard.isAltPressed && _isArrowKey(key)) {
-        _extendAppSelectionForArrow(key, keyboard);
-        return KeyEventResult.handled;
-      }
-    }
-
     if (isPlainVerticalArrow) {
       final safeOffset = controller.selection.extentOffset
           .clamp(0, controller.text.length)

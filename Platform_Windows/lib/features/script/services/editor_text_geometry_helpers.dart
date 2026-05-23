@@ -20,9 +20,9 @@ int? _previousVisualWordBoundary(String visible, int current) {
 List<int> _visualWordBoundaries(String visible) {
   final boundaries = <int>{0, visible.length};
   for (var i = 1; i < visible.length; i++) {
-    final beforeWord = _isVisualWordChar(visible[i - 1]);
-    final afterWord = _isVisualWordChar(visible[i]);
-    if (beforeWord != afterWord) boundaries.add(i);
+    if (!_isVisualWordChar(visible[i - 1]) && _isVisualWordChar(visible[i])) {
+      boundaries.add(i);
+    }
   }
   final sorted = boundaries.toList()..sort();
   return sorted;

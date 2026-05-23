@@ -1,4 +1,4 @@
-﻿part of 'teleprompter_screen.dart';
+part of 'teleprompter_screen.dart';
 
 extension _TeleprompterAlignmentHelperParts on _TeleprompterScreenState {
   WrapAlignment _toWrapAlignment(
@@ -19,44 +19,11 @@ extension _TeleprompterAlignmentHelperParts on _TeleprompterScreenState {
     return WrapAlignment.center;
   }
 
-  WrapAlignment _parseWrapAlignment(String align, bool isRtl) {
-    if (isRtl) {
-      switch (align) {
-        case 'right':
-          return WrapAlignment.start;
-        case 'left':
-          return WrapAlignment.end;
-        default:
-          return WrapAlignment.center;
-      }
-    }
-    switch (align) {
-      case 'left':
-        return WrapAlignment.start;
-      case 'right':
-        return WrapAlignment.end;
-      default:
-        return WrapAlignment.center;
-    }
-  }
-
   TextAlign _toTextAlign(
       TextAlign? paraAlign, AppSettings settings, bool isRtl) {
     if (paraAlign != null) return paraAlign;
     // v3.8: Source of Truth - If no tag, Hebrew defaults to Right, English to Left
     return isRtl ? TextAlign.right : TextAlign.left;
-  }
-
-  Alignment _toAlignment(
-      TextAlign? paraAlign, AppSettings settings, bool isRtl) {
-    final textAlign = _toTextAlign(paraAlign, settings, isRtl);
-    if (textAlign == TextAlign.center) return Alignment.center;
-
-    if (textAlign == TextAlign.right) return Alignment.centerRight;
-    if (textAlign == TextAlign.left) return Alignment.centerLeft;
-
-    // Default fallback
-    return Alignment.center;
   }
 
   bool _sameHighlightColor(Color? a, Color? b) {

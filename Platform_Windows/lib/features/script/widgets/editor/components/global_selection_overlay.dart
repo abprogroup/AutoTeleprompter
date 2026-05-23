@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../settings/models/app_settings.dart';
@@ -126,6 +125,7 @@ class GlobalSelectionOverlay extends StatefulWidget {
   final AppSettings settings;
   final Widget child;
   final VoidCallback onSelectionChanged;
+  final ValueChanged<String>? onSelectionDebugEvent;
 
   /// Editor scroll controller. When provided, dragging a selection handle
   /// near the top or bottom of the viewport automatically scrolls the list,
@@ -139,6 +139,7 @@ class GlobalSelectionOverlay extends StatefulWidget {
     required this.settings,
     required this.child,
     required this.onSelectionChanged,
+    this.onSelectionDebugEvent,
     this.scrollController,
   });
 
@@ -161,10 +162,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   SelectionSessionMode _sessionMode = SelectionSessionMode.none;
   SelectionPointerState _pointerState = SelectionPointerState.inside;
 
-  // Anchor state for body-drag to prevent jumping
-  int? _anchorBlock;
-  int? _anchorOffset;
-
   final GlobalKey _stackKey = GlobalKey();
 
   int? _candidateBlock;
@@ -173,6 +170,8 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Timer? _bodyAutoScrollTimer;
   bool _bodyDragActive = false;
   Offset? _latestBodyDragGlobal;
+  SelectionEndpoint? _lastBodyDragFocusTrace;
+  String _lastSelectionDebugEvent = 'idle';
 
   @override
   void dispose() {
@@ -183,4 +182,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   @override
   Widget build(BuildContext context) => _buildOverlay(context);
+
+  void _setOverlayState(VoidCallback fn) => setState(fn);
+
+  void _debugSelectionEvent(String reason) {
+    _lastSelectionDebugEvent = reason;
+    widget.onSelectionDebugEvent?.call(reason);
+  }
 }

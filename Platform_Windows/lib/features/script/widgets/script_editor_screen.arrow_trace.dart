@@ -1,4 +1,4 @@
-﻿part of 'script_editor_screen.dart';
+part of 'script_editor_screen.dart';
 
 extension _ScriptEditorArrowTraceParts on _ScriptEditorScreenState {
   bool get _shouldCaptureArrowTrace {
@@ -29,7 +29,7 @@ extension _ScriptEditorArrowTraceParts on _ScriptEditorScreenState {
       target: target,
     );
 
-    setState(() {
+    _setEditorState(() {
       _lastArrowTrace = '$beforeTrace\n\nAFTER: waiting for next frame...';
       _lastArrowTraceScreenshotPath = null;
       _lastArrowTraceLogPath = null;
@@ -83,7 +83,7 @@ extension _ScriptEditorArrowTraceParts on _ScriptEditorScreenState {
             mode: mode,
           );
 
-    setState(() {
+    _setEditorState(() {
       _lastArrowTrace = '$beforeTrace\n\nAFTER: waiting for next frame...';
       _lastArrowTraceScreenshotPath = null;
       _lastArrowTraceLogPath = null;
@@ -193,10 +193,14 @@ extension _ScriptEditorArrowTraceParts on _ScriptEditorScreenState {
     String beforeTrace,
   ) async {
     await Future<void>.delayed(const Duration(milliseconds: 90));
-    if (!mounted) return;
+    if (!mounted || !_shouldCaptureArrowTrace) return;
 
     final afterTrace = _buildPostArrowTrace();
-    final directory = await _ensureArrowTraceDirectory();
+    final directory = await _ensureDebugArtifactDirectory(
+      _EditorDebugArtifactType.arrowTraces,
+      _arrowTraceSessionId,
+    );
+    if (directory == null) return;
     final screenshotPath = await _captureArrowTraceScreenshot(
       directory: directory,
       sequence: sequence,
@@ -214,7 +218,7 @@ extension _ScriptEditorArrowTraceParts on _ScriptEditorScreenState {
     );
 
     if (!mounted) return;
-    setState(() {
+    _setEditorState(() {
       _lastArrowTrace = [
         beforeTrace,
         '',
@@ -260,6 +264,7 @@ extension _ScriptEditorArrowTraceParts on _ScriptEditorScreenState {
     return [
       'AFTER:',
       _debugFocusAuthorityLine(),
+      _debugSelectionAuthorityLine(),
       'activeBlock=$activeBlock raw=$safeOffset visible=$visibleOffset',
       'selection=[${selection.baseOffset}, ${selection.extentOffset}] affinity=${selection.affinity.name}',
       'line=${layout.lineIndexForOffset(safeOffset)} x=${layout.currentX.toStringAsFixed(2)} preferredX=${_verticalArrowPreferredX?.toStringAsFixed(2) ?? "null"}',
@@ -319,104 +324,33 @@ extension _ScriptEditorArrowTraceParts on _ScriptEditorScreenState {
     return result;
   }
 
-  Future<Directory> _ensureArrowTraceDirectory() async {
-    final projectRoot = _resolveProjectRootForDebugArtifacts();
-    final directory = Directory(
-      '${projectRoot.path}${Platform.pathSeparator}_debug'
-      '${Platform.pathSeparator}Windows'
-      '${Platform.pathSeparator}arrow_traces'
-      '${Platform.pathSeparator}session_$_arrowTraceSessionId',
-    );
-    if (!await directory.exists()) {
-      await directory.create(recursive: true);
-    }
-    return directory;
-  }
-
-  Directory _resolveProjectRootForDebugArtifacts() {
-    final starts = <Directory>[
-      Directory.current,
-      File(Platform.resolvedExecutable).parent,
-    ];
-
-    for (final start in starts) {
-      final root = _findAutoTeleprompterRoot(start);
-      if (root != null) return root;
-    }
-
-    return Directory.current;
-  }
-
-  Directory? _findAutoTeleprompterRoot(Directory start) {
-    var current = start.absolute;
-    for (var depth = 0; depth < 10; depth++) {
-      final windowsPlatform = Directory(
-        '${current.path}${Platform.pathSeparator}Platform_Windows',
-      );
-      if (windowsPlatform.existsSync()) return current;
-
-      final pubspec = File(
-        '${current.path}${Platform.pathSeparator}pubspec.yaml',
-      );
-      if (pubspec.existsSync() &&
-          current.path.split(Platform.pathSeparator).last ==
-              'Platform_Windows') {
-        return current.parent;
-      }
-
-      final parent = current.parent;
-      if (parent.path == current.path) break;
-      current = parent;
-    }
-
-    return null;
-  }
-
   Future<String?> _captureArrowTraceScreenshot({
     required Directory directory,
     required int sequence,
   }) async {
-    try {
-      final boundary = _editorArrowTraceBoundaryKey.currentContext
-          ?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return null;
-      final image = await boundary.toImage(pixelRatio: 1.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return null;
-      final path = _arrowTracePath(directory, sequence, 'png');
-      final file = File(path);
-      await file.writeAsBytes(byteData.buffer.asUint8List(), flush: true);
-      return path;
-    } catch (error) {
-      return 'capture failed: $error';
-    }
+    return _captureEditorDebugScreenshot(
+      directory: directory,
+      prefix: 'arrow',
+      sequence: sequence,
+    );
   }
 
-  Future<String> _writeArrowTraceLog({
+  Future<String?> _writeArrowTraceLog({
     required Directory directory,
     required int sequence,
     required String trace,
   }) async {
-    final path = _arrowTracePath(directory, sequence, 'txt');
-    await File(path).writeAsString(trace, flush: true);
-    return path;
-  }
-
-  String _arrowTracePath(Directory directory, int sequence, String extension) {
-    final timestamp = DateTime.now().toIso8601String().replaceAll(
-          RegExp(r'[:.]'),
-          '-',
-        );
-    return '${directory.path}${Platform.pathSeparator}'
-        'arrow_${sequence.toString().padLeft(4, "0")}_$timestamp.$extension';
+    return _writeDebugArtifactLog(
+      directory: directory,
+      prefix: 'arrow',
+      sequence: sequence,
+      trace: trace,
+    );
   }
 
   void _resetArrowTraceSession(String reason) {
     _arrowTraceSequence = 0;
-    _arrowTraceSessionId = DateTime.now().toIso8601String().replaceAll(
-          RegExp(r'[:.]'),
-          '-',
-        );
+    _arrowTraceSessionId = _newEditorDebugSessionId();
     _lastArrowTrace = 'Arrow trace session reset: $reason';
     _lastArrowTraceScreenshotPath = null;
     _lastArrowTraceLogPath = null;
@@ -450,11 +384,9 @@ extension _ScriptEditorArrowTraceParts on _ScriptEditorScreenState {
   }
 
   Future<void> _openArrowTraceFolder() async {
-    final directory = await _ensureArrowTraceDirectory();
-    if (Platform.isWindows) {
-      await Process.start('explorer.exe', [directory.path]);
-      return;
-    }
-    await Process.start('open', [directory.path]);
+    await _openDebugArtifactFolder(
+      _EditorDebugArtifactType.arrowTraces,
+      _arrowTraceSessionId,
+    );
   }
 }

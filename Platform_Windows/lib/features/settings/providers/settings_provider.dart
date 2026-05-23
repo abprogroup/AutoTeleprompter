@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_settings.dart';
@@ -78,13 +78,15 @@ class SettingsNotifier extends Notifier<AppSettings> {
         if (decoded['type'] == null || decoded['type'] == 'FILE') {
           final String title = (decoded['title'] ?? '').toLowerCase();
           String guessedType = 'FILE';
-          if (title.endsWith('.pdf'))
+          if (title.endsWith('.pdf')) {
             guessedType = 'PDF';
-          else if (title.endsWith('.docx') || title.endsWith('.doc'))
+          } else if (title.endsWith('.docx') || title.endsWith('.doc')) {
             guessedType = 'DOCX';
-          else if (title.endsWith('.rtf'))
+          } else if (title.endsWith('.rtf')) {
             guessedType = 'RTF';
-          else if (title.endsWith('.txt')) guessedType = 'TXT';
+          } else if (title.endsWith('.txt')) {
+            guessedType = 'TXT';
+          }
 
           decoded['type'] = guessedType;
           itemModified = true;
@@ -257,7 +259,6 @@ class SettingsNotifier extends Notifier<AppSettings> {
     // v3.9.8.1: Mandatory recentList sync to preserve Undo state
     final recentList = List<String>.from(state.recentScripts);
     bool updated = false;
-    final matchKey = sessionId ?? (historyIndex != null ? null : currentTitle);
 
     for (int i = 0; i < recentList.length; i++) {
       try {
@@ -288,10 +289,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
           if (wordSpacing != null) styleMap['wordSpacing'] = wordSpacing;
           if (textAlign != null) styleMap['textAlign'] = textAlign;
           if (scriptBgColor != null) styleMap['scriptBgColor'] = scriptBgColor;
-          if (currentWordColor != null)
+          if (currentWordColor != null) {
             styleMap['currentWordColor'] = currentWordColor;
-          if (futureWordColor != null)
+          }
+          if (futureWordColor != null) {
             styleMap['futureWordColor'] = futureWordColor;
+          }
 
           if (styleMap.isNotEmpty) decoded['style'] = styleMap;
 
@@ -442,12 +445,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final list = List<String>.from(state.recentScripts);
     final Map<String, dynamic> newData = jsonDecode(metadataJson);
     final String? newSessionId = newData['sessionId'] as String?;
-    final String? newFullText = newData['fullText'] as String?;
     final String? newTitle = newData['title'] as String?;
-
-    // Text Normalization Helper
-    String normalize(String? t) => (t ?? '').replaceAll('\r', '').trim();
-    final String normalizedNewText = normalize(newFullText);
 
     // Smart Upsert: Deduplicate by sessionId OR (fullText + title)
     // Smart Upsert: Deduplicate by title (Primary) or sessionId
@@ -546,26 +544,34 @@ class SettingsNotifier extends Notifier<AppSettings> {
       fontFamily: styles['fontFamily'] ?? state.fontFamily,
     );
     final prefs = await SharedPreferences.getInstance();
-    if (styles.containsKey('scriptBgColor'))
+    if (styles.containsKey('scriptBgColor')) {
       await prefs.setInt(_scriptBgColorKey, styles['scriptBgColor']);
-    if (styles.containsKey('currentWordColor'))
+    }
+    if (styles.containsKey('currentWordColor')) {
       await prefs.setInt(_currentWordColorKey, styles['currentWordColor']);
-    if (styles.containsKey('futureWordColor'))
+    }
+    if (styles.containsKey('futureWordColor')) {
       await prefs.setInt(_futureWordColorKey, styles['futureWordColor']);
-    if (styles.containsKey('lineSpacing'))
+    }
+    if (styles.containsKey('lineSpacing')) {
       await prefs.setDouble(
           _lineSpacingKey, (styles['lineSpacing'] as num).toDouble());
-    if (styles.containsKey('wordSpacing'))
+    }
+    if (styles.containsKey('wordSpacing')) {
       await prefs.setDouble(
           _wordSpacingKey, (styles['wordSpacing'] as num).toDouble());
-    if (styles.containsKey('letterSpacing'))
+    }
+    if (styles.containsKey('letterSpacing')) {
       await prefs.setDouble(
           _letterSpacingKey, (styles['letterSpacing'] as num).toDouble());
-    if (styles.containsKey('fontSize'))
+    }
+    if (styles.containsKey('fontSize')) {
       await prefs.setDouble(
           _fontSizeKey, (styles['fontSize'] as num).toDouble());
-    if (styles.containsKey('fontFamily'))
+    }
+    if (styles.containsKey('fontFamily')) {
       await prefs.setString(_fontFamilyKey, styles['fontFamily']);
+    }
   }
 
   Future<void> setFontFamily(String family) async {

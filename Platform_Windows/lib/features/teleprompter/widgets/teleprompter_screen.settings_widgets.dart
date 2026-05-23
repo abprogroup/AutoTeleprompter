@@ -43,7 +43,7 @@ class _WindowsMicSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           dropdownColor: const Color(0xFF1A1A1A),
           iconEnabledColor: accentColor,
           style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -178,7 +178,7 @@ class _SwitchRow extends StatelessWidget {
             ),
             Switch.adaptive(
               value: value,
-              activeColor: accentColor,
+              activeThumbColor: accentColor,
               onChanged: enabled ? onChanged : null,
             ),
           ],

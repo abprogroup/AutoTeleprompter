@@ -68,7 +68,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     if (_closingPresentation) return;
     final navigator = Navigator.of(context);
     if (mounted) {
-      setState(() => _closingPresentation = true);
+      _setTeleprompterState(() => _closingPresentation = true);
     } else {
       _closingPresentation = true;
     }
@@ -92,7 +92,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       final controller = WebviewController();
       await controller.initialize();
 
-      if (mounted) setState(() => _webviewController = controller);
+      if (mounted) _setTeleprompterState(() => _webviewController = controller);
     } catch (_) {}
   }
 
@@ -111,19 +111,19 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       final speechActive = tState.isListening || tState.isStarting;
       if (!speechActive) {
         if (mounted && !_controlsVisible) {
-          setState(() => _controlsVisible = true);
+          _setTeleprompterState(() => _controlsVisible = true);
         }
         return;
       }
       _hideControlsTimer = Timer(const Duration(milliseconds: 1400), () {
         if (!mounted || _windowsControlsHovering) return;
-        setState(() => _controlsVisible = false);
+        _setTeleprompterState(() => _controlsVisible = false);
       });
       return;
     }
     _hideControlsTimer?.cancel();
     _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _controlsVisible = false);
+      if (mounted) _setTeleprompterState(() => _controlsVisible = false);
     });
   }
 
@@ -136,12 +136,11 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
           backgroundColor: const Color(0xFF1A1A1A),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
+          title: const Row(
             children: [
-              const Icon(Icons.settings_voice,
-                  color: Color(0xFFFFBF00), size: 24),
-              const SizedBox(width: 10),
-              const Expanded(
+              Icon(Icons.settings_voice, color: Color(0xFFFFBF00), size: 24),
+              SizedBox(width: 10),
+              Expanded(
                 child: Text('Windows Built-In STT',
                     style: TextStyle(color: Colors.white, fontSize: 18)),
               ),
@@ -316,11 +315,11 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       final tState = ref.read(teleprompterProvider);
       final speechActive = tState.isListening || tState.isStarting;
       if (speechActive && !_windowsControlsHovering) return;
-      setState(() => _controlsVisible = true);
+      _setTeleprompterState(() => _controlsVisible = true);
       if (speechActive) _scheduleHideControls();
       return;
     }
-    setState(() => _controlsVisible = true);
+    _setTeleprompterState(() => _controlsVisible = true);
     _scheduleHideControls();
   }
 
@@ -331,7 +330,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     }
     _hideControlsTimer?.cancel();
     if (mounted && !_controlsVisible) {
-      setState(() => _controlsVisible = true);
+      _setTeleprompterState(() => _controlsVisible = true);
     }
   }
 
@@ -339,7 +338,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     if (!Platform.isWindows || !mounted) return;
     _hideControlsTimer?.cancel();
     _windowsControlsHovering = false;
-    setState(() => _controlsVisible = !speechActive);
+    _setTeleprompterState(() => _controlsVisible = !speechActive);
   }
 
   Future<void> _requestAndStart() async {

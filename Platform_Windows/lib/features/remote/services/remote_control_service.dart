@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 import 'dart:async';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
@@ -28,10 +27,12 @@ class RemoteControlService {
       return Response.ok(_html, headers: {'content-type': 'text/html'});
     });
 
-    final handler = Pipeline().addMiddleware(logRequests()).addHandler(router.call);
-    
+    final handler =
+        const Pipeline().addMiddleware(logRequests()).addHandler(router.call);
+
     _server = await io.serve(handler, InternetAddress.anyIPv4, 8080);
-    debugPrint('V3 Remote Server active at http://${_server!.address.address}:8080');
+    debugPrint(
+        'V3 Remote Server active at http://${_server!.address.address}:8080');
   }
 
   Future<void> stop() async {

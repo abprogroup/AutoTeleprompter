@@ -278,7 +278,7 @@ class WordAligner {
             policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
         if (sim >= nextThreshold) {
           return AlignmentResult(searchStart, sim,
-              'NEXT_WORD: "${lastSpoken}" ~ "${nextWord}" = ${sim.toStringAsFixed(2)}');
+              'NEXT_WORD: "$lastSpoken" ~ "$nextWord" = ${sim.toStringAsFixed(2)}');
         }
       }
     }
@@ -300,7 +300,7 @@ class WordAligner {
       final adjustedSim = sim - (distance * _distancePenaltyPerWord);
 
       debugScans +=
-          '  [${i}]"${scriptWord}" sim=${sim.toStringAsFixed(2)} adj=${adjustedSim.toStringAsFixed(2)}\n';
+          '  [$i]"$scriptWord" sim=${sim.toStringAsFixed(2)} adj=${adjustedSim.toStringAsFixed(2)}\n';
 
       if (adjustedSim > bestSingleSim) {
         bestSingleSim = adjustedSim;
@@ -322,7 +322,7 @@ class WordAligner {
             activeStandby && localThreshold.passes([lastSpoken]);
         if (allowSingleAdvance && jumpDist <= _maxSingleJump) {
           return AlignmentResult(bestSingleIdx, bestSingleSim,
-              'SINGLE: "${lastSpoken}" â†’ [${bestSingleIdx}]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
+              'SINGLE: "$lastSpoken" â†’ [$bestSingleIdx]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
         }
       }
     }
@@ -450,7 +450,7 @@ class WordAligner {
     return AlignmentResult(
       lastConfirmedIndex,
       bestSingleSim.clamp(0.0, 1.0),
-      'NO_MATCH: heard="${lastSpoken}" expected="${nextExpected}" bestSim=${bestSingleSim.toStringAsFixed(2)}\n$debugScans',
+      'NO_MATCH: heard="$lastSpoken" expected="$nextExpected" bestSim=${bestSingleSim.toStringAsFixed(2)}\n$debugScans',
       SttAlignmentDecision.wait,
     );
   }

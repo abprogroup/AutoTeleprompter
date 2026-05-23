@@ -29,7 +29,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           // ── Profile ──
-          _SectionHeader(title: 'PROFILE'),
+          const _SectionHeader(title: 'PROFILE'),
           const SizedBox(height: 8),
           _SettingsTile(
             icon: Icons.person_outline,
@@ -40,7 +40,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
           if (Platform.isWindows) ...[
             const SizedBox(height: 22),
-            _SectionHeader(title: 'SPEECH INPUT'),
+            const _SectionHeader(title: 'SPEECH INPUT'),
             const SizedBox(height: 8),
             _SettingsTile(
               icon: Icons.mic_external_on_outlined,
@@ -151,7 +151,7 @@ class _SettingsTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           ),
           child: Row(
             children: [

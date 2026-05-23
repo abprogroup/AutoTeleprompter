@@ -53,7 +53,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 12,
-                    shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+                    shadowColor: const Color(0xFFFFBF00).withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -63,6 +63,32 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
         ),
       ],
     );
+  }
+
+  bool get _hasAnyActiveEditorSelection {
+    if (_isGlobalSelection ||
+        (_overlayKey.currentState?.hasSelection ?? false)) {
+      return true;
+    }
+    for (final c in _controllers) {
+      if (c.isGlobalSelected) return true;
+      final external = c.externalSelection;
+      if (external != null && external.isValid && !external.isCollapsed) {
+        return true;
+      }
+      final native = c.selection;
+      if (native.isValid && !native.isCollapsed) return true;
+    }
+    return false;
+  }
+
+  bool _isPointInsideAppSelectionToolbar(Offset globalPosition) {
+    final context = _appSelectionToolbarKey.currentContext;
+    if (context == null) return false;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return false;
+    final topLeft = box.localToGlobal(Offset.zero);
+    return (topLeft & box.size).contains(globalPosition);
   }
 
   Widget _buildEditorScreen(BuildContext context) {
@@ -126,15 +152,29 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
         },
         child: Listener(
           onPointerDown: (event) {
+            if (_isPointInsideAppSelectionToolbar(event.position)) {
+              return;
+            }
             if (event.buttons == kPrimaryButton) {
               final overlay = _overlayKey.currentState;
               if (overlay?.isPointInsideHandle(event.position) ?? false) {
                 return;
               }
-              overlay?.startDragging(event.position);
+              final replacingAppSelection =
+                  _hasAppSelectionForPointerReplacement();
+              if (replacingAppSelection) {
+                _clearAppSelectionForPointerReplacement(
+                  reason: 'pointerDownReplaceAppSelection',
+                );
+              }
+              final startedInsideEditable =
+                  overlay?.startDragging(event.position) ?? false;
+              if (!startedInsideEditable) return;
+              _registerEditorPrimaryClick(event);
             }
           },
           onPointerMove: (event) {
+            if (_isPointInsideAppSelectionToolbar(event.position)) return;
             if (event.buttons == kPrimaryButton) {
               final overlay = _overlayKey.currentState;
               if (overlay?.isHandleInteractionActive ?? false) {
@@ -144,18 +184,32 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
               overlay?.updateDragging(event.position);
             }
           },
-          onPointerUp: (_) {
-            _overlayKey.currentState?.endDragging();
+          onPointerUp: (event) {
+            if (_isPointInsideAppSelectionToolbar(event.position)) {
+              return;
+            }
+            final overlayOwnedDrag =
+                _overlayKey.currentState?.endDragging() ?? false;
+            final gestureKind =
+                _pendingNativeSelectionGestureKind ?? 'nativeDrag';
+            _pendingNativeSelectionGestureKind = null;
             // After any gesture ends, promote a native single-block partial
             // selection to overlay handles. Doing this on pointer-up (not in the
             // controller listener) prevents the "one letter selected" bug: during
             // a drag the controller fires continuously and the overlay would freeze
             // at the first-delta selection once overlayActive becomes true.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _promoteNativeSelectionToOverlay();
-            });
+            if (!overlayOwnedDrag) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _promoteNativeSelectionToOverlay(
+                    gestureKind: gestureKind,
+                  );
+                }
+              });
+            }
           },
           onPointerCancel: (_) {
+            _pendingNativeSelectionGestureKind = null;
             _overlayKey.currentState?.endDragging();
           },
           behavior: HitTestBehavior.translucent,
@@ -290,7 +344,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                           onUnderline: _onUnderline,
                           onItalic: _onItalic,
                           onClear: () {
-                            setState(() => _isCommandExecuting = true);
+                            _setEditorState(() => _isCommandExecuting = true);
                             final tagPattern = RegExp(
                               r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*',
                             );
@@ -335,10 +389,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                   );
                                 } else if (sel.isValid && sel.isCollapsed) {
                                   // Check if cursor is at end of line/paragraph â†’ Baseline Mode: clear whole script
-                                  final plainText = text.replaceAll(
-                                    tagPattern,
-                                    '',
-                                  );
                                   final cursorInPlain =
                                       sel.start >= text.length ||
                                           text
@@ -361,7 +411,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                               }
                             }
                             _isDirty = false;
-                            setState(() => _isCommandExecuting = false);
+                            _setEditorState(() => _isCommandExecuting = false);
                             _saveHistory(description: 'Clear Format');
                             // v4.1.4: After stripping alignment tags the text layout shifts,
                             // but cursorStyleProvider and the overlay handles still hold the
@@ -416,7 +466,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                               _isSuiteDirty = false;
                               _suiteSection = null;
                             }
-                            setState(() {
+                            _setEditorState(() {
                               _activeSuite = (_activeSuite == suite)
                                   ? EditorSuite.none
                                   : suite;
@@ -427,7 +477,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                           },
                           onLayoutInteraction: (section) {
                             _trackSuiteSection(section);
-                            setState(() => _isSuiteDirty = true);
+                            _setEditorState(() => _isSuiteDirty = true);
                           },
                         ),
                         Expanded(
@@ -441,8 +491,11 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 blockKeys: _blockKeys,
                                 settings: settings,
                                 scrollController: _editorScrollController,
+                                onSelectionDebugEvent: (reason) {
+                                  _recordSelectionTrace(reason);
+                                },
                                 onSelectionChanged: () {
-                                  setState(() {
+                                  _setEditorState(() {
                                     _isGlobalSelection =
                                         _controllers.isNotEmpty &&
                                             _controllers.every(
@@ -467,19 +520,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                       (index) => Listener(
                                         onPointerDown: (event) {
                                           _verticalArrowPreferredX = null;
-                                          if (_isGlobalSelection ||
-                                              _controllers.any(
-                                                (c) => c.isGlobalSelected,
-                                              ) ||
-                                              (_overlayKey.currentState
-                                                      ?.hasSelection ??
-                                                  false) ||
-                                              _controllers.any(
-                                                (c) =>
-                                                    c.externalSelection != null,
-                                              )) {
-                                            _clearGlobalSelection();
-                                          }
                                         },
                                         child: _EditorBlock(
                                           key: _blockKeys[index],
@@ -531,6 +571,19 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                   right: 16,
                   child: _buildEditorSearchToolbar(),
                 ),
+                Positioned(
+                  right: 20,
+                  bottom: 24,
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge(_controllers),
+                    builder: (context, child) {
+                      if (_isPendingLoad || !_hasAnyActiveEditorSelection) {
+                        return const SizedBox.shrink();
+                      }
+                      return _buildAppSelectionToolbar();
+                    },
+                  ),
+                ),
                 if (_isPendingLoad)
                   Positioned.fill(
                     child: Container(
@@ -568,6 +621,102 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppSelectionToolbar() {
+    Widget action({
+      required IconData icon,
+      required String label,
+      required VoidCallback onPressed,
+    }) {
+      return Tooltip(
+        message: label,
+        child: TextButton.icon(
+          onPressed: () {
+            ContextMenuController.removeAny();
+            onPressed();
+          },
+          icon: Icon(icon, size: 18, color: const Color(0xFFFFBF00)),
+          label: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            minimumSize: const Size(0, 36),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      key: _appSelectionToolbarKey,
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xF21A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0x99FFBF00)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black54,
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            action(
+              icon: Icons.content_cut_rounded,
+              label: 'Cut',
+              onPressed: _onCut,
+            ),
+            action(
+              icon: Icons.content_copy_rounded,
+              label: 'Copy',
+              onPressed: _onCopyClean,
+            ),
+            action(
+              icon: Icons.content_paste_rounded,
+              label: 'Paste',
+              onPressed: () => unawaited(_onPaste()),
+            ),
+            action(
+              icon: Icons.select_all_rounded,
+              label: 'All',
+              onPressed: _selectAllBlocks,
+            ),
+            IconButton(
+              tooltip: 'Clear selection',
+              onPressed: () {
+                ContextMenuController.removeAny();
+                _clearGlobalSelection();
+              },
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Colors.white70,
+                size: 18,
+              ),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(
+                width: 30,
+                height: 30,
+              ),
+            ),
+          ],
         ),
       ),
     );

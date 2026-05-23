@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'script_editor_screen.dart';
@@ -37,16 +36,16 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               setState(() => _logoTaps = 0);
               await ref.read(settingsProvider.notifier).toggleDebugMode();
               final isNowDebug = ref.read(settingsProvider).debugMode;
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('DEBUG MODE: ${isNowDebug ? 'ON' : 'OFF'}'),
-                    backgroundColor:
-                        isNowDebug ? Colors.green : Colors.grey[800],
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
+              if (!context.mounted) {
+                return;
               }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('DEBUG MODE: ${isNowDebug ? 'ON' : 'OFF'}'),
+                  backgroundColor: isNowDebug ? Colors.green : Colors.grey[800],
+                  duration: const Duration(seconds: 2),
+                ),
+              );
             }
           },
           child: Text('AutoTeleprompter',
@@ -209,7 +208,6 @@ class _FullHistorySheet extends ConsumerWidget {
   const _FullHistorySheet();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scripts = ref.watch(settingsProvider).recentScripts;
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       padding: const EdgeInsets.all(24),
@@ -273,9 +271,9 @@ class _GalleryActionCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
         ),
         child: Row(
           children: [
@@ -339,8 +337,8 @@ class _ScriptListItem extends ConsumerWidget {
         break;
       case 'TEMP':
         labelColor = const Color(0xFF64B5F6);
-        labelBgColor = labelColor.withOpacity(0.15);
-        labelBorderColor = labelColor.withOpacity(0.3);
+        labelBgColor = labelColor.withValues(alpha: 0.15);
+        labelBorderColor = labelColor.withValues(alpha: 0.3);
         break;
       case 'RTF':
       case 'DOCX':
@@ -348,13 +346,13 @@ class _ScriptListItem extends ConsumerWidget {
       case 'ODT':
       case 'PAGES':
         labelColor = const Color(0xFF81C784); // Greenish for documents
-        labelBgColor = labelColor.withOpacity(0.15);
-        labelBorderColor = labelColor.withOpacity(0.3);
+        labelBgColor = labelColor.withValues(alpha: 0.15);
+        labelBorderColor = labelColor.withValues(alpha: 0.3);
         break;
       case 'PDF':
         labelColor = const Color(0xFFE57373); // Reddish for PDF
-        labelBgColor = labelColor.withOpacity(0.15);
-        labelBorderColor = labelColor.withOpacity(0.3);
+        labelBgColor = labelColor.withValues(alpha: 0.15);
+        labelBorderColor = labelColor.withValues(alpha: 0.3);
         break;
       case 'TXT':
       case 'MD':
@@ -365,8 +363,8 @@ class _ScriptListItem extends ConsumerWidget {
         break;
       default:
         labelColor = const Color(0xFFCE93D8); // Purple for others
-        labelBgColor = labelColor.withOpacity(0.15);
-        labelBorderColor = labelColor.withOpacity(0.3);
+        labelBgColor = labelColor.withValues(alpha: 0.15);
+        labelBorderColor = labelColor.withValues(alpha: 0.3);
     }
 
     final previewText = snippet ??
@@ -381,7 +379,7 @@ class _ScriptListItem extends ConsumerWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         clipBehavior: Clip.antiAlias,
         child: Row(
@@ -530,7 +528,7 @@ class _ScriptListItem extends ConsumerWidget {
 }
 
 class _AutoSaveCard extends StatefulWidget {
-  const _AutoSaveCard({super.key});
+  const _AutoSaveCard();
   @override
   State<_AutoSaveCard> createState() => _AutoSaveCardState();
 }
@@ -562,9 +560,9 @@ class _AutoSaveCardState extends State<_AutoSaveCard> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.1),
+        color: Colors.blue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -616,14 +614,13 @@ class _EmptyStatePlaceholder extends StatelessWidget {
   const _EmptyStatePlaceholder();
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Column(
         children: [
-          const SizedBox(height: 48),
-          const Icon(Icons.description_outlined,
-              color: Colors.white10, size: 64),
-          const SizedBox(height: 16),
-          const Text(
+          SizedBox(height: 48),
+          Icon(Icons.description_outlined, color: Colors.white10, size: 64),
+          SizedBox(height: 16),
+          Text(
             'Work on you first script now and Choose "New Script"',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white38, fontSize: 13),

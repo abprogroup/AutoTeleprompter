@@ -253,6 +253,7 @@ class _EditorBlock extends StatelessWidget {
                       onTap: onTap,
                       textDirection: textDirection,
                       textAlign: textAlign,
+                      selectionWidthStyle: ui.BoxWidthStyle.tight,
                       cursorColor: Colors.amber,
                       cursorHeight: maxFontSize,
                       strutStyle: editorStrutStyle,
@@ -479,6 +480,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
           baseOffset: paintable.start,
           extentOffset: paintable.end,
         ),
+        rawText: _rawText,
         gapTolerance: MarkupDecorationBoxMerger.styleBackgroundGapTolerance,
       );
       _paintBands(
@@ -502,6 +504,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
       editable,
       activeSelection,
+      rawText: _rawText,
       gapTolerance: MarkupDecorationBoxMerger.styleBackgroundGapTolerance,
     );
     _paintBands(
@@ -533,6 +536,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
           baseOffset: paintable.start,
           extentOffset: paintable.end,
         ),
+        rawText: _rawText,
         gapTolerance: MarkupDecorationBoxMerger.styleUnderlineGapTolerance,
       );
       for (final rect in bands) {

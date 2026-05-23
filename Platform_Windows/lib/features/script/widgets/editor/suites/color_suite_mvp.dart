@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../components/editor_primitives.dart';
 import '../../../../../core/widgets/global_color_picker.dart';
 import '../../../../settings/providers/settings_provider.dart';
 import '../../../models/cursor_style.dart';
@@ -38,15 +37,15 @@ class ColorSuite extends ConsumerWidget {
           _ColorPickerItem(
             label: 'TEXT',
             color: activeTextColor,
-            onChanged: (c) => onTextColor('#' +
-                c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()),
+            onChanged: (c) => onTextColor(
+                '#${c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}'),
             title: 'TEXT COLOR PICKER',
           ),
           _ColorPickerItem(
             label: 'HIGHLIGHT',
             color: activeHighlightColor,
-            onChanged: (c) => onBgColor('#' +
-                c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()),
+            onChanged: (c) => onBgColor(
+                '#${c.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}'),
             title: 'HIGHLIGHT PICKER',
           ),
           _ColorPickerItem(
@@ -79,7 +78,7 @@ class _ColorPickerItem extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         GlobalColorButton(
-          color: color.value,
+          color: color.toARGB32(),
           onColorChanged: onChanged,
           title: title,
           showNoneAsWhite: label == 'TEXT',

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 class GhostSelectionControls extends MaterialTextSelectionControls {
   @override
   Widget buildHandle(
-      BuildContext context, TextSelectionHandleType type, double textLineHeight,
+      BuildContext context, TextSelectionHandleType type, double textHeight,
       [VoidCallback? onTap, double? startGlyphHeight, double? endGlyphHeight]) {
     // Return an empty box to hide the native handle
     return const SizedBox.shrink();

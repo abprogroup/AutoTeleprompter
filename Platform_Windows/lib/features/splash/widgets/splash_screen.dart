@@ -39,7 +39,7 @@ class _V3SplashScreenState extends State<V3SplashScreen> {
                 border: Border.all(color: const Color(0xFFFFBF00), width: 2),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFFBF00).withOpacity(0.2),
+                    color: const Color(0xFFFFBF00).withValues(alpha: 0.2),
                     blurRadius: 40,
                     spreadRadius: 2,
                   ),
@@ -51,12 +51,10 @@ class _V3SplashScreenState extends State<V3SplashScreen> {
                 size: 64,
               ),
             )
-            .animate()
-            .scale(duration: 800.ms, curve: Curves.elasticOut)
-            .shimmer(delay: 1.seconds, duration: 1.5.seconds),
-            
+                .animate()
+                .scale(duration: 800.ms, curve: Curves.elasticOut)
+                .shimmer(delay: 1.seconds, duration: 1.5.seconds),
             const SizedBox(height: 32),
-            
             Text(
               'AUTOTELEPROMPTER',
               style: GoogleFonts.inter(
@@ -65,10 +63,7 @@ class _V3SplashScreenState extends State<V3SplashScreen> {
                 fontWeight: FontWeight.w900,
                 letterSpacing: 3,
               ),
-            )
-            .animate()
-            .fadeIn(delay: 400.ms)
-            .slideY(begin: 0.2, end: 0),
+            ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2, end: 0),
           ],
         ),
       ),

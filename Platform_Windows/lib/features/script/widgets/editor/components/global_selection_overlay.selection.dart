@@ -12,11 +12,12 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
     _sessionMode = SelectionSessionMode.none;
     _pointerState = SelectionPointerState.inside;
     if (!_isSelecting) return;
-    setState(() {
+    _setOverlayState(() {
       _isSelecting = false;
       _startBlock = _endBlock = null;
       _startOffset = _endOffset = null;
-      _anchorBlock = _anchorOffset = null;
+      _handleStartPos = null;
+      _handleEndPos = null;
       for (final c in widget.controllers) {
         c.externalSelection = null;
         c.externalVisibleSelection = null;
@@ -30,7 +31,7 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
   void selectAll() {
     if (widget.controllers.isEmpty) return;
     _discardHandleDragSession();
-    setState(() {
+    _setOverlayState(() {
       _isSelecting = true;
       _sessionMode = SelectionSessionMode.overlaySelection;
       _pointerState = SelectionPointerState.inside;
@@ -39,6 +40,8 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
       _startOffset = 0;
       _endBlock = widget.controllers.length - 1;
       _endOffset = widget.controllers.last.text.length;
+      _handleStartPos = null;
+      _handleEndPos = null;
       for (final c in widget.controllers) {
         c.isGlobalSelected = true;
         c.externalVisibleSelection = TextSelection(
@@ -79,7 +82,7 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
     }
     _discardHandleDragSession();
     _resetDragState();
-    setState(() {
+    _setOverlayState(() {
       _isSelecting = true;
       _sessionMode = SelectionSessionMode.keyboardExtend;
       _pointerState = SelectionPointerState.inside;
@@ -88,6 +91,8 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
       _startOffset = _clampEndpointOffset(anchorBlock, anchorOffset);
       _endBlock = focusBlock;
       _endOffset = _clampEndpointOffset(focusBlock, focusOffset);
+      _handleStartPos = null;
+      _handleEndPos = null;
       for (final c in widget.controllers) {
         c.isGlobalSelected = false;
         c.externalVisibleSelection = null;
@@ -116,7 +121,16 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
     final focus = session == null
         ? 'focus:-'
         : 'anchor:${session.anchor} focus:${session.focus}';
-    return '$a $b $active $focus mode:${_sessionMode.name} pointer:${_pointerState.name} $normalized';
+    final handles =
+        'handles:${_formatDebugOffset(_handleStartPos)}-${_formatDebugOffset(_handleEndPos)}';
+    return '$a $b $active $focus mode:${_sessionMode.name} '
+        'pointer:${_pointerState.name} $normalized $handles '
+        'lastEvent=$_lastSelectionDebugEvent';
+  }
+
+  String _formatDebugOffset(Offset? offset) {
+    if (offset == null) return '-';
+    return '${offset.dx.toStringAsFixed(1)},${offset.dy.toStringAsFixed(1)}';
   }
 
   int _clampEndpointOffset(int block, int offset) {
@@ -184,24 +198,37 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
   /// Converts a native single-block partial selection (e.g. from double-click
   /// or drag-to-select inside one TextField) into the app overlay handles.
   /// Full-block selections are ignored here â€” Select All owns those.
-  void extendNativeBlockSelection(int blockIndex, TextSelection selection) {
+  void extendNativeBlockSelection(
+    int blockIndex,
+    TextSelection selection, {
+    bool allowFullBlock = false,
+  }) {
     if (blockIndex < 0 || blockIndex >= widget.controllers.length) return;
     if (!selection.isValid || selection.isCollapsed) return;
     final controller = widget.controllers[blockIndex];
-    final start = selection.start.clamp(0, controller.text.length).toInt();
-    final end = selection.end.clamp(0, controller.text.length).toInt();
+    final base = selection.baseOffset.clamp(0, controller.text.length).toInt();
+    final extent =
+        selection.extentOffset.clamp(0, controller.text.length).toInt();
+    final start = base < extent ? base : extent;
+    final end = base > extent ? base : extent;
     if (start == end) return;
-    if (start == 0 && end == controller.text.length) return;
-    setState(() {
+    if (!allowFullBlock && start == 0 && end == controller.text.length) {
+      return;
+    }
+    _setOverlayState(() {
       _isSelecting = true;
       _sessionMode = SelectionSessionMode.overlaySelection;
       _pointerState = SelectionPointerState.inside;
       _focusEndpointIsStart = false;
       _startBlock = blockIndex;
       _endBlock = blockIndex;
-      _startOffset = start;
-      _endOffset = end;
-      for (final c in widget.controllers) c.isGlobalSelected = false;
+      _startOffset = base;
+      _endOffset = extent;
+      _handleStartPos = null;
+      _handleEndPos = null;
+      for (final c in widget.controllers) {
+        c.isGlobalSelected = false;
+      }
       _updateControllers();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -209,22 +236,5 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
       refreshPositions();
     });
     widget.onSelectionChanged();
-  }
-
-  /// Returns the block index whose render box contains [globalPos], or null.
-  int? _blockAtPosition(Offset globalPos) {
-    for (int i = 0; i < widget.blockKeys.length; i++) {
-      final box =
-          widget.blockKeys[i].currentContext?.findRenderObject() as RenderBox?;
-      if (box == null) continue;
-      final local = box.globalToLocal(globalPos);
-      if (local.dx >= 0 &&
-          local.dx <= box.size.width &&
-          local.dy >= 0 &&
-          local.dy <= box.size.height) {
-        return i;
-      }
-    }
-    return null;
   }
 }

@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:archive/archive.dart';
@@ -45,22 +45,29 @@ class ScriptNotifier extends Notifier<Script?> {
           // v3.9.5.70: Extract styling metadata (Nested for Gallery Compatibility)
           final style = meta['style'] as Map<String, dynamic>?;
           if (style != null) {
-            if (style['fontSize'] != null)
+            if (style['fontSize'] != null) {
               fontSize = (style['fontSize'] as num).toDouble();
+            }
             if (style['fontFamily'] != null) fontFamily = style['fontFamily'];
-            if (style['lineSpacing'] != null)
+            if (style['lineSpacing'] != null) {
               lineSpacing = (style['lineSpacing'] as num).toDouble();
-            if (style['letterSpacing'] != null)
+            }
+            if (style['letterSpacing'] != null) {
               letterSpacing = (style['letterSpacing'] as num).toDouble();
-            if (style['wordSpacing'] != null)
+            }
+            if (style['wordSpacing'] != null) {
               wordSpacing = (style['wordSpacing'] as num).toDouble();
+            }
             if (style['textAlign'] != null) textAlign = style['textAlign'];
-            if (style['scriptBgColor'] != null)
+            if (style['scriptBgColor'] != null) {
               scriptBgColor = style['scriptBgColor'];
-            if (style['currentWordColor'] != null)
+            }
+            if (style['currentWordColor'] != null) {
               currentWordColor = style['currentWordColor'];
-            if (style['futureWordColor'] != null)
+            }
+            if (style['futureWordColor'] != null) {
               futureWordColor = style['futureWordColor'];
+            }
           }
 
           break;
@@ -236,10 +243,10 @@ class ScriptNotifier extends Notifier<Script?> {
         );
   }
 
-  Future<_ParsedFile> parseFile(File file) async {
+  Future<ParsedFile> parseFile(File file) async {
     final lower = file.path.toLowerCase();
     final rawBytes = await file.readAsBytes();
-    _ParsedFile result = _ParsedFile('');
+    ParsedFile result = ParsedFile('');
 
     try {
       if (lower.endsWith('.docx')) {
@@ -252,17 +259,17 @@ class ScriptNotifier extends Notifier<Script?> {
           result = _parseRtf(raw);
         } else if (lower.endsWith('.rtf')) {
           // Non-RTF content in a .rtf file (e.g. saved before the fix) â€” treat as UTF-8
-          result = _ParsedFile(raw.trim());
+          result = ParsedFile(raw.trim());
         } else {
           // Legacy .doc binary files â€” strip non-printable bytes
           final content = String.fromCharCodes(
             rawBytes.where(
                 (b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
           ).replaceAll(RegExp(r'[ \t]{3,}'), '  ').trim();
-          result = _ParsedFile(content);
+          result = ParsedFile(content);
         }
       } else {
-        result = _ParsedFile(utf8.decode(rawBytes, allowMalformed: true));
+        result = ParsedFile(utf8.decode(rawBytes, allowMalformed: true));
       }
     } catch (e) {
       final errStr = e.toString();
@@ -273,7 +280,7 @@ class ScriptNotifier extends Notifier<Script?> {
       } else {
         errContent = 'Error loading file: $errStr';
       }
-      result = _ParsedFile(errContent);
+      result = ParsedFile(errContent);
     }
     return result;
   }

@@ -47,7 +47,7 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
             !controller.externalSelection!.isCollapsed)
         ? controller.externalSelection!
         : controller.selection;
-    if (selection == null || !selection.isValid) return;
+    if (!selection.isValid) return;
 
     final start = selection.start;
     final end = selection.end;
@@ -124,7 +124,7 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
             !controller.externalSelection!.isCollapsed)
         ? controller.externalSelection!
         : controller.selection;
-    if (selection == null || !selection.isValid) return;
+    if (!selection.isValid) return;
 
     final start = selection.start;
     final end = selection.end;

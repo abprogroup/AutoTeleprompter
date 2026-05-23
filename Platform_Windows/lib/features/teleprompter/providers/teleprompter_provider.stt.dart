@@ -18,8 +18,9 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         return;
       } else if (words.contains('start prompt') || words.contains('×‘×•×')) {
         _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: START');
-        if (settings.scrollSpeed == 0)
+        if (settings.scrollSpeed == 0) {
           ref.read(settingsProvider.notifier).setScrollSpeed(100);
+        }
         return;
       } else if (words.contains('speed up') || words.contains('×ž×”×¨')) {
         _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: FASTER');
@@ -51,7 +52,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     final aligned = WordAligner.align(
       script: script.words,
       transcript: _accumulatedTranscript,
-      lastConfirmedIndex: state.confirmedWordIndex,
+      lastConfirmedIndex: _currentState.confirmedWordIndex,
       visibleSkipStartIndex:
           maxSkipTargetIndex == null ? null : _visibleWordStart,
       maxSkipTargetIndex: maxSkipTargetIndex,
@@ -60,7 +61,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       readingStandby: _sttReadingStandby,
     );
 
-    final currentIdx = state.confirmedWordIndex;
+    final currentIdx = _currentState.confirmedWordIndex;
     final nextExpected = (currentIdx + 1 < script.words.length)
         ? script.words
             .skip(currentIdx + 1)
@@ -80,7 +81,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     }
 
     if (aligned.shouldAdvance &&
-        aligned.confirmedWordIndex > state.confirmedWordIndex) {
+        aligned.confirmedWordIndex > _currentState.confirmedWordIndex) {
       _sttReadingStandby = true;
       _noProgressCount = 0;
       _resetVisibleLocaleAssist();
@@ -91,7 +92,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         visibleWordEnd: _visibleWordEnd,
       );
       final target = TeleprompterNotifier.resolveAdvanceTarget(
-        currentIndex: state.confirmedWordIndex,
+        currentIndex: _currentState.confirmedWordIndex,
         alignedIndex: aligned.confirmedWordIndex,
         visibleMaxSkipTargetIndex:
             visibleSkipTargetTrusted ? maxSkipTargetIndex : null,
@@ -103,7 +104,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
       // Fluid advancement: if jumping more than 3 words, animate
       // through intermediate words so the user's eye can follow.
-      final jump = target - state.confirmedWordIndex;
+      final jump = target - _currentState.confirmedWordIndex;
       if (visibleSkipTargetTrusted || jump <= 3) {
         // Small jumps and trusted visible-skip targets are instant.
         _fluidAdvanceTimer?.cancel();
@@ -117,7 +118,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       final improvising = TeleprompterNotifier.shouldUseImprovisationNoMatch(
         strictBulletMode: strictBulletMode,
         alignedIndex: aligned.confirmedWordIndex,
-        currentIndex: state.confirmedWordIndex,
+        currentIndex: _currentState.confirmedWordIndex,
       );
       if (!strictBulletMode) {
         _sttReadingStandby = false;
@@ -153,7 +154,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
     _sttService.onSoundLevelChange = (level) {
       if (_useWhisper || _disposed || _sessionStopped) return;
-      // Push live level to UI state.
+      // Push live level to UI _currentState.
       _safeSetState((s) => s.copyWith(soundLevel: level.clamp(0.0, 1.0)));
       _lastVolLog = DateTime.now();
     };
@@ -283,40 +284,6 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     };
   }
 
-  /// Auto-fallback to Whisper when Google STT is completely blocked
-  /// (e.g., ColorOS devices where mic permission is restricted)
-  Future<void> _autoFallbackToWhisper(String langName) async {
-    if (_disposed || _sessionStopped) return;
-
-    // Try Whisper models in order: tiny (fastest), base, small
-    const fallbackModels = ['whisper_tiny', 'whisper_base', 'whisper_small'];
-
-    for (final engineKey in fallbackModels) {
-      final model = whisperModelFromEngine(engineKey);
-      final downloaded = await _whisperService.isModelDownloaded(model);
-      if (downloaded) {
-        _addDebugLog('ðŸ¤– WHISPER FALLBACK: Found $engineKey, switching...');
-        _useWhisper = true;
-        await _whisperService.start(
-          localeId: _scriptLanguageLocale,
-          model: model,
-        );
-        return;
-      }
-    }
-
-    // No Whisper model available â€” show error with guidance
-    _addDebugLog('âŒ NO WHISPER MODEL â€” cannot fallback, showing error');
-    _safeSetState((s) => s.copyWith(
-          missingLanguage: langName,
-          hasError: true,
-          isListening: false,
-          isStarting: false,
-          statusMessage: 'Google speech blocked on this device. '
-              'Go to Settings and download a Whisper model for offline recognition.',
-        ));
-  }
-
   /// Animate word advancement from current position to [target],
   /// advancing one word every ~80ms so the eye can follow.
   void _startFluidAdvance(int target, Script script) {
@@ -329,7 +296,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         timer.cancel();
         return;
       }
-      final current = state.confirmedWordIndex;
+      final current = _currentState.confirmedWordIndex;
 
       // If a newer result pushed the target further, follow it
       final effectiveTarget = _fluidTarget;
@@ -365,7 +332,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     if (_useWhisper || _disposed || _sessionStopped) return;
     if (_visibleLocaleAssistPinActive()) return;
     if (_sectionLocales.isEmpty) return;
-    final currentIdx = state.confirmedWordIndex;
+    final currentIdx = _currentState.confirmedWordIndex;
     if (currentIdx < 0 || currentIdx >= _sectionLocales.length) return;
 
     final lookIdx =
@@ -429,7 +396,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
           transcript: heard,
           visibleStart: _visibleWordStart!,
           visibleEnd: _visibleWordEnd!,
-          currentIndex: state.confirmedWordIndex,
+          currentIndex: _currentState.confirmedWordIndex,
         )) {
       _pendingVisibleLocaleAssistLocale = null;
       return false;
@@ -490,11 +457,12 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     }
     if (_sectionLocales.isEmpty || script.words.isEmpty) return null;
 
-    final rawStart = _visibleWordStart ?? state.confirmedWordIndex + 1;
+    final rawStart = _visibleWordStart ?? _currentState.confirmedWordIndex + 1;
     final rawEnd = _visibleWordEnd ?? rawStart;
     final start = rawStart.clamp(0, script.words.length - 1).toInt();
     final end = rawEnd.clamp(start, script.words.length - 1).toInt();
-    final minIndex = (state.confirmedWordIndex + 1).clamp(0, end).toInt();
+    final minIndex =
+        (_currentState.confirmedWordIndex + 1).clamp(0, end).toInt();
     final scanStart = start < minIndex ? minIndex : start;
     if (scanStart > end) return null;
 

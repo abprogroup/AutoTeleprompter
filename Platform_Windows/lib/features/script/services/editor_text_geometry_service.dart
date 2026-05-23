@@ -142,14 +142,12 @@ class EditorTextGeometryService {
           .toInt(),
       currentStop.raw,
     };
-    for (var i = 1; i < visible.length; i++) {
-      final beforeWord = _isVisualWordChar(visible[i - 1]);
-      final afterWord = _isVisualWordChar(visible[i]);
-      if (beforeWord != afterWord) {
-        rawStops.add(
-          visibleToRawOffset(rawText, i).clamp(0, plainText.length).toInt(),
-        );
-      }
+    for (final boundary in _visualWordBoundaries(visible)) {
+      rawStops.add(
+        visibleToRawOffset(rawText, boundary)
+            .clamp(0, plainText.length)
+            .toInt(),
+      );
     }
     return _targetFromVisualStops(
       painter: painter,
@@ -336,7 +334,9 @@ class EditorTextGeometryService {
     ).clamp(0, visible.length).toInt();
     final ltrRun = _ltrRunContainingBoundary(visible, currentVisible);
     if (ltrRun != null) {
-      final targetVisible = !moveLeft ? ltrRun.end : ltrRun.start;
+      final targetVisible = !moveLeft
+          ? _nextVisualWordBoundary(visible, ltrRun.start) ?? ltrRun.end
+          : ltrRun.start;
       if (targetVisible != currentVisible) {
         return visibleToRawOffset(rawText, targetVisible)
             .clamp(0, plainTextLength)

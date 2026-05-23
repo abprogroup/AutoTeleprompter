@@ -301,7 +301,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             const Spacer(),
             Switch.adaptive(
               value: settings.showAlignmentOverride,
-              activeColor: Color(settings.currentWordColor),
+              activeThumbColor: Color(settings.currentWordColor),
               onChanged: (v) => notifier.setShowAlignmentOverride(v),
             ),
           ]),
@@ -473,7 +473,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             const Spacer(),
             Switch.adaptive(
               value: settings.showCurrentWordHighlight,
-              activeColor: Color(settings.currentWordColor),
+              activeThumbColor: Color(settings.currentWordColor),
               onChanged: (v) => notifier.setShowCurrentWordHighlight(v),
             ),
           ]),
@@ -489,7 +489,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             const Spacer(),
             Switch.adaptive(
               value: settings.showUpcomingWordColor,
-              activeColor: Color(settings.currentWordColor),
+              activeThumbColor: Color(settings.currentWordColor),
               onChanged: (v) => notifier.setShowUpcomingWordColor(v),
             ),
           ]),
@@ -545,7 +545,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               const Spacer(),
               Switch(
                 value: settings.mirrorHorizontal,
-                activeColor: Color(settings.currentWordColor),
+                activeThumbColor: Color(settings.currentWordColor),
                 onChanged: (v) => notifier.setMirrorHorizontal(v),
               ),
             ],
@@ -556,7 +556,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               const Spacer(),
               Switch(
                 value: settings.mirrorVertical,
-                activeColor: Color(settings.currentWordColor),
+                activeThumbColor: Color(settings.currentWordColor),
                 onChanged: (v) => notifier.setMirrorVertical(v),
               ),
             ],
@@ -584,8 +584,9 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   ButtonStyle _segmentStyle(AppSettings settings) {
     return ButtonStyle(
       backgroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected))
+        if (states.contains(WidgetState.selected)) {
           return Color(settings.currentWordColor);
+        }
         return const Color(0xFF2A2A2A);
       }),
       foregroundColor: WidgetStateProperty.resolveWith((states) {

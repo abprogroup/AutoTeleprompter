@@ -1,9 +1,9 @@
-﻿part of 'script_provider.dart';
+part of 'script_provider.dart';
 
-class _ParsedFile {
+class ParsedFile {
   final String text;
   final double? fontSize;
-  _ParsedFile(this.text, {this.fontSize});
+  ParsedFile(this.text, {this.fontSize});
 }
 
 class _DocxRunStyle {

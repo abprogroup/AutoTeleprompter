@@ -1,7 +1,7 @@
-﻿part of 'script_provider.dart';
+part of 'script_provider.dart';
 
 extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
-  _ParsedFile _parsePages(List<int> rawBytes) {
+  ParsedFile _parsePages(List<int> rawBytes) {
     final archive = ZipDecoder().decodeBytes(rawBytes);
     final buf = StringBuffer();
 
@@ -19,7 +19,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
         final text = inner.replaceAll(RegExp(r'<[^>]+>'), '').trim();
         if (text.isNotEmpty) buf.writeln(text);
       }
-      if (buf.isNotEmpty) return _ParsedFile(buf.toString().trim());
+      if (buf.isNotEmpty) return ParsedFile(buf.toString().trim());
     }
 
     // Newer Pages format: scan all XML files in the archive for text content
@@ -44,14 +44,14 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
 
     final result = buf.toString().trim();
     if (result.isEmpty) {
-      return _ParsedFile('Could not extract text from this Pages file. '
+      return ParsedFile('Could not extract text from this Pages file. '
           'Please open it in Pages and export as DOCX or TXT first.');
     }
-    return _ParsedFile(result);
+    return ParsedFile(result);
   }
 
   /// Parses RTF, extracts text with style markup (bold, color, size).
-  _ParsedFile _parseRtf(String raw) {
+  ParsedFile _parseRtf(String raw) {
     double? detectedFontSize;
     // â”€â”€ Step 1: Extract color table â”€â”€
     final colorTable = <String>['000000']; // index 0 = auto/default
@@ -222,14 +222,18 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
           if (i < raw.length &&
               raw[i] != '\\' &&
               raw[i] != '{' &&
-              raw[i] != '}') i++;
+              raw[i] != '}') {
+            i++;
+          }
           continue;
         }
 
         // Control word
         if (_isAlpha(raw.codeUnitAt(i))) {
           final ws = i;
-          while (i < raw.length && _isAlpha(raw.codeUnitAt(i))) i++;
+          while (i < raw.length && _isAlpha(raw.codeUnitAt(i))) {
+            i++;
+          }
           final word = raw.substring(ws, i);
 
           // Optional numeric parameter
@@ -241,7 +245,9 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
             if (raw[i] == '-') i++;
             while (i < raw.length &&
                 raw.codeUnitAt(i) >= 0x30 &&
-                raw.codeUnitAt(i) <= 0x39) i++;
+                raw.codeUnitAt(i) <= 0x39) {
+              i++;
+            }
             param = raw.substring(ps, i);
           }
           if (i < raw.length && raw[i] == ' ') i++;
@@ -258,8 +264,9 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
             case 'fs':
               if (detectedFontSize == null) {
                 final halfPoints = double.tryParse(param);
-                if (halfPoints != null && halfPoints > 0)
+                if (halfPoints != null && halfPoints > 0) {
                   detectedFontSize = halfPoints / 2.0;
+                }
               }
               break;
             case 'cf':
@@ -318,7 +325,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
     }
 
     final result = buf.toString();
-    return _ParsedFile(result.trim(), fontSize: detectedFontSize);
+    return ParsedFile(result.trim(), fontSize: detectedFontSize);
   }
 
   static bool _isAlpha(int codeUnit) =>

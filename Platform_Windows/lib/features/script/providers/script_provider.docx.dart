@@ -1,11 +1,11 @@
-﻿part of 'script_provider.dart';
+part of 'script_provider.dart';
 
 extension _ScriptProviderDocxParsing on ScriptNotifier {
-  _ParsedFile _parseDocx(List<int> rawBytes) {
+  ParsedFile _parseDocx(List<int> rawBytes) {
     final archive = ZipDecoder().decodeBytes(rawBytes);
     double? detectedFontSize;
 
-    // Find document.xml â€” try common paths
+    // Find document.xml — try common paths
     ArchiveFile? docEntry;
     for (final candidate in ['word/document.xml', 'word/Document.xml']) {
       docEntry = archive.findFile(candidate);
@@ -21,7 +21,7 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     }
     if (docEntry == null) throw Exception('No document.xml in DOCX');
 
-    // Get bytes safely â€” archive 3.x content can be List<int> or InputStream
+    // Get bytes safely — archive 3.x content can be List<int> or InputStream
     final dynamic rawContent = docEntry.content;
     final List<int> bytes;
     if (rawContent is List<int>) {
@@ -142,7 +142,7 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       }
     } catch (_) {}
 
-    return _ParsedFile(
+    return ParsedFile(
       _normalizeImportedDocxText(parsedParagraphs.join('\n')),
       fontSize: detectedFontSize,
     );
@@ -383,7 +383,7 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
   static String _normalizeImportedDocxText(String text) =>
       text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trimRight();
 
-  /// Parses Apple Pages files (.pages) â€” a ZIP archive.
+  /// Parses Apple Pages files (.pages) — a ZIP archive.
   /// Handles both the old XML-based format (index.xml) and the newer
   /// iWork format by extracting readable text from all XML entries.
 }

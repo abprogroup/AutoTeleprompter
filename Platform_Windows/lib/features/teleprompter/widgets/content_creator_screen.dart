@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
 import 'package:gal/gal.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -16,7 +14,8 @@ class ContentCreatorScreen extends ConsumerStatefulWidget {
   const ContentCreatorScreen({super.key});
 
   @override
-  ConsumerState<ContentCreatorScreen> createState() => _ContentCreatorScreenState();
+  ConsumerState<ContentCreatorScreen> createState() =>
+      _ContentCreatorScreenState();
 }
 
 class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
@@ -28,7 +27,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   int _countdown = 0;
   int _recordSeconds = 0;
   Timer? _recordTimer;
-  
+
   @override
   void initState() {
     super.initState();
@@ -38,17 +37,20 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   Future<void> _initializeCamera() async {
     final cameras = await availableCameras();
     if (cameras.isEmpty) return;
-    
+
     // Find front camera
     final front = cameras.firstWhere(
       (c) => c.lensDirection == CameraLensDirection.front,
       orElse: () => cameras.first,
     );
-    
+
     final settings = ref.read(settingsProvider);
     ResolutionPreset preset = ResolutionPreset.medium; // 720p
-    if (settings.videoResolution.contains('1080')) preset = ResolutionPreset.high;
-    else if (settings.videoResolution.contains('480')) preset = ResolutionPreset.low;
+    if (settings.videoResolution.contains('1080')) {
+      preset = ResolutionPreset.high;
+    } else if (settings.videoResolution.contains('480')) {
+      preset = ResolutionPreset.low;
+    }
 
     _cameraController = CameraController(front, preset, enableAudio: true);
     try {
@@ -68,7 +70,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   }
 
   Future<void> _toggleRecording() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
 
     if (_isRecording) {
       final file = await _cameraController!.stopVideoRecording();
@@ -80,9 +84,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       try {
         await Gal.putVideo(file.path);
         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-             const SnackBar(content: Text('Video saved to gallery!'), backgroundColor: Colors.green),
-           );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Video saved to gallery!'),
+                backgroundColor: Colors.green),
+          );
         }
       } catch (e) {
         debugPrint('Save error: $e');
@@ -111,7 +117,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     final h = totalSeconds ~/ 3600;
     final m = (totalSeconds % 3600) ~/ 60;
     final s = totalSeconds % 60;
-    if (h > 0) return "${h}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
+    if (h > 0) {
+      return "$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
+    }
     return "${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
   }
 
@@ -138,68 +146,86 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                 const Spacer(flex: 6),
                 Expanded(
                   flex: 4,
-                  child: _isInit 
-                    ? Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ClipRect(
-                            child: FittedBox(
-                              fit: BoxFit.cover,
-                              child: SizedBox(
-                                width: _cameraController!.value.previewSize!.height,
-                                height: _cameraController!.value.previewSize!.width,
-                                child: CameraPreview(_cameraController!),
-                              ),
-                            ),
-                          ),
-                          // V3 Pro: Enhanced Eye-Contact Radial Vignette
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: RadialGradient(
-                                center: Alignment.center,
-                                radius: 0.85,
-                                colors: [
-                                  Colors.transparent,
-                                  Colors.black.withOpacity(0.5),
-                                  Colors.black.withOpacity(0.9),
-                                ],
-                                stops: const [0.4, 0.7, 1.0],
-                              ),
-                            ),
-                          ),
-                          // V3 Pro: Camera Lens HUD Painter
-                          CustomPaint(
-                            painter: _LensHUDPainter(),
-                            child: Container(),
-                          ),
-                          // V3 Pro: Session Timer HUD
-                          if (_isRecording)
-                            Positioned(
-                              top: 20, right: 20,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.circle, color: Colors.white, size: 8),
-                                    const SizedBox(width: 6),
-                                    Text(_formatTimer(_recordSeconds), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                                  ],
+                  child: _isInit
+                      ? Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRect(
+                              child: FittedBox(
+                                fit: BoxFit.cover,
+                                child: SizedBox(
+                                  width: _cameraController!
+                                      .value.previewSize!.height,
+                                  height: _cameraController!
+                                      .value.previewSize!.width,
+                                  child: CameraPreview(_cameraController!),
                                 ),
                               ),
                             ),
-                          // V3 Pro: Countdown Overlay
-                          if (_countdown > 0)
-                            Center(
-                              child: Container(
-                                padding: const EdgeInsets.all(40),
-                                decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle),
-                                child: Text('$_countdown', style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 80, fontWeight: FontWeight.bold)),
+                            // V3 Pro: Enhanced Eye-Contact Radial Vignette
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: RadialGradient(
+                                  center: Alignment.center,
+                                  radius: 0.85,
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.black.withValues(alpha: 0.5),
+                                    Colors.black.withValues(alpha: 0.9),
+                                  ],
+                                  stops: const [0.4, 0.7, 1.0],
+                                ),
                               ),
                             ),
-                        ],
-                      )
-                    : const Center(child: CircularProgressIndicator()),
+                            // V3 Pro: Camera Lens HUD Painter
+                            CustomPaint(
+                              painter: _LensHUDPainter(),
+                              child: Container(),
+                            ),
+                            // V3 Pro: Session Timer HUD
+                            if (_isRecording)
+                              Positioned(
+                                top: 20,
+                                right: 20,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(6)),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.circle,
+                                          color: Colors.white, size: 8),
+                                      const SizedBox(width: 6),
+                                      Text(_formatTimer(_recordSeconds),
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            // V3 Pro: Countdown Overlay
+                            if (_countdown > 0)
+                              Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(40),
+                                  decoration: BoxDecoration(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.4),
+                                      shape: BoxShape.circle),
+                                  child: Text('$_countdown',
+                                      style: const TextStyle(
+                                          color: Color(0xFFFFBF00),
+                                          fontSize: 80,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                          ],
+                        )
+                      : const Center(child: CircularProgressIndicator()),
                 ),
               ],
             ),
@@ -244,10 +270,13 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                       border: Border.all(color: Colors.white, width: 3),
                     ),
                     child: Container(
-                      width: 60, height: 60,
+                      width: 60,
+                      height: 60,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _isRecording ? Colors.red : Colors.red.withOpacity(0.5),
+                        color: _isRecording
+                            ? Colors.red
+                            : Colors.red.withValues(alpha: 0.5),
                       ),
                       child: Icon(
                         _isRecording ? Icons.stop : Icons.videocam,
@@ -294,9 +323,12 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     );
   }
 
-  Widget _buildPrompterContent(Script? script, AppSettings settings, dynamic tState) {
+  Widget _buildPrompterContent(
+      Script? script, AppSettings settings, dynamic tState) {
     if (script == null || script.isEmpty) {
-      return const Center(child: Text('No script loaded.', style: TextStyle(color: Colors.white)));
+      return const Center(
+          child:
+              Text('No script loaded.', style: TextStyle(color: Colors.white)));
     }
 
     final paragraphs = <List<ScriptWord>>[];
@@ -317,85 +349,114 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     return Container(
       color: Color(settings.scriptBgColor),
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: paragraphs.map<Widget>((para) {
-        if (para.length == 1 && para[0].isNewline) {
-          return SizedBox(
-            key: para[0].index < _wordKeys.length ? _wordKeys[para[0].index] : null,
-            height: settings.fontSize * 1.5 + (settings.lineSpacing * 4),
-          );
-        }
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: paragraphs.map<Widget>((para) {
+          if (para.length == 1 && para[0].isNewline) {
+            return SizedBox(
+              key: para[0].index < _wordKeys.length
+                  ? _wordKeys[para[0].index]
+                  : null,
+              height: settings.fontSize * 1.5 + (settings.lineSpacing * 4),
+            );
+          }
 
-        final firstWord = para.first;
-        final paraDir = firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
-        final paraAlign = firstWord.alignment;
+          final firstWord = para.first;
+          final paraDir =
+              firstWord.effectiveRtl ? TextDirection.rtl : TextDirection.ltr;
+          final paraAlign = firstWord.alignment;
 
-        return Padding(
-          padding: EdgeInsetsDirectional.only(bottom: settings.lineSpacing * 6),
-          child: Align(
-            alignment: _toAlignment(paraAlign, settings),
-            child: Directionality(
-              textDirection: paraDir,
-              child: Wrap(
+          return Padding(
+            padding:
+                EdgeInsetsDirectional.only(bottom: settings.lineSpacing * 6),
+            child: Align(
+              alignment: _toAlignment(paraAlign, settings),
+              child: Directionality(
                 textDirection: paraDir,
-                alignment: _toWrapAlignment(paraAlign, settings),
-                children: para.map<Widget>((word) {
-                  final i = word.index;
-                  final isCurrent = i == tState.confirmedWordIndex;
-                  final isPast = i < tState.confirmedWordIndex;
-                  final displayText = word.raw.replaceAll(RegExp(r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg)(?:=[^\]]+)?\]|\*\*'), '');
+                child: Wrap(
+                  textDirection: paraDir,
+                  alignment: _toWrapAlignment(paraAlign, settings),
+                  children: para.map<Widget>((word) {
+                    final i = word.index;
+                    final isCurrent = i == tState.confirmedWordIndex;
+                    final isPast = i < tState.confirmedWordIndex;
+                    final displayText = word.raw.replaceAll(
+                        RegExp(
+                            r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg)(?:=[^\]]+)?\]|\*\*'),
+                        '');
 
-                  Color wordColor;
-                  final futureColor = word.textColor ?? Color(settings.futureWordColor);
-                  if (isCurrent) {
-                    wordColor = Color(settings.currentWordColor);
-                  } else if (isPast) {
-                    wordColor = futureColor.withOpacity(settings.pastWordOpacity);
-                  } else {
-                    wordColor = futureColor;
-                  }
+                    Color wordColor;
+                    final futureColor =
+                        word.textColor ?? Color(settings.futureWordColor);
+                    if (isCurrent) {
+                      wordColor = Color(settings.currentWordColor);
+                    } else if (isPast) {
+                      wordColor = futureColor.withValues(
+                          alpha: settings.pastWordOpacity);
+                    } else {
+                      wordColor = futureColor;
+                    }
 
-                  final effectiveFontSize = word.fontSize != null
-                      ? settings.fontSize * (word.fontSize! / 17.0)
-                      : settings.fontSize;
+                    final effectiveFontSize = word.fontSize != null
+                        ? settings.fontSize * (word.fontSize! / 17.0)
+                        : settings.fontSize;
 
-                  return Directionality(
-                    textDirection: word.effectiveRtl ? TextDirection.rtl : TextDirection.ltr,
-                    child: Container(
-                      key: i < _wordKeys.length ? _wordKeys[i] : null,
-                      padding: EdgeInsets.only(right: settings.wordSpacing),
-                      child: Text(
-                        '$displayText ',
-                        style: TextStyle(
-                          fontSize: effectiveFontSize,
-                          fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
-                          fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
-                          letterSpacing: settings.letterSpacing,
-                          color: wordColor,
-                          decoration: word.isUnderline ? TextDecoration.underline : null,
+                    return Directionality(
+                      textDirection: word.effectiveRtl
+                          ? TextDirection.rtl
+                          : TextDirection.ltr,
+                      child: Container(
+                        key: i < _wordKeys.length ? _wordKeys[i] : null,
+                        padding: EdgeInsets.only(right: settings.wordSpacing),
+                        child: Text(
+                          '$displayText ',
+                          style: TextStyle(
+                            fontSize: effectiveFontSize,
+                            fontWeight:
+                                word.isBold ? FontWeight.bold : FontWeight.w500,
+                            fontStyle: word.isItalic
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            letterSpacing: settings.letterSpacing,
+                            color: wordColor,
+                            decoration: word.isUnderline
+                                ? TextDecoration.underline
+                                : null,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                    );
+                  }).toList(),
+                ),
               ),
             ),
-          ),
-        );
-      }).toList(),
-    ),);
+          );
+        }).toList(),
+      ),
+    );
   }
 
   // Helper methods duplicated from TeleprompterScreen for isolation
   Alignment _toAlignment(TextAlign? paraAlign, AppSettings settings) {
-    if (paraAlign == TextAlign.center || (paraAlign == null && settings.textAlign == 'center')) return Alignment.center;
-    if (paraAlign == TextAlign.right || (paraAlign == null && settings.textAlign == 'right')) return Alignment.centerRight;
+    if (paraAlign == TextAlign.center ||
+        (paraAlign == null && settings.textAlign == 'center')) {
+      return Alignment.center;
+    }
+    if (paraAlign == TextAlign.right ||
+        (paraAlign == null && settings.textAlign == 'right')) {
+      return Alignment.centerRight;
+    }
     return Alignment.centerLeft;
   }
 
   WrapAlignment _toWrapAlignment(TextAlign? paraAlign, AppSettings settings) {
-    if (paraAlign == TextAlign.center || (paraAlign == null && settings.textAlign == 'center')) return WrapAlignment.center;
-    if (paraAlign == TextAlign.right || (paraAlign == null && settings.textAlign == 'right')) return WrapAlignment.end;
+    if (paraAlign == TextAlign.center ||
+        (paraAlign == null && settings.textAlign == 'center')) {
+      return WrapAlignment.center;
+    }
+    if (paraAlign == TextAlign.right ||
+        (paraAlign == null && settings.textAlign == 'right')) {
+      return WrapAlignment.end;
+    }
     return WrapAlignment.start;
   }
 }
@@ -404,7 +465,7 @@ class _LensHUDPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFFFBF00).withOpacity(0.3)
+      ..color = const Color(0xFFFFBF00).withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
@@ -415,20 +476,28 @@ class _LensHUDPainter extends CustomPainter {
 
     // Drawing 4 corners of a focus square
     // Top-Left
-    canvas.drawLine(Offset(centerX - radius, centerY - radius), Offset(centerX - radius + bracketSize, centerY - radius), paint);
-    canvas.drawLine(Offset(centerX - radius, centerY - radius), Offset(centerX - radius, centerY - radius + bracketSize), paint);
-    
+    canvas.drawLine(Offset(centerX - radius, centerY - radius),
+        Offset(centerX - radius + bracketSize, centerY - radius), paint);
+    canvas.drawLine(Offset(centerX - radius, centerY - radius),
+        Offset(centerX - radius, centerY - radius + bracketSize), paint);
+
     // Top-Right
-    canvas.drawLine(Offset(centerX + radius, centerY - radius), Offset(centerX + radius - bracketSize, centerY - radius), paint);
-    canvas.drawLine(Offset(centerX + radius, centerY - radius), Offset(centerX + radius, centerY - radius + bracketSize), paint);
-    
+    canvas.drawLine(Offset(centerX + radius, centerY - radius),
+        Offset(centerX + radius - bracketSize, centerY - radius), paint);
+    canvas.drawLine(Offset(centerX + radius, centerY - radius),
+        Offset(centerX + radius, centerY - radius + bracketSize), paint);
+
     // Bottom-Left
-    canvas.drawLine(Offset(centerX - radius, centerY + radius), Offset(centerX - radius + bracketSize, centerY + radius), paint);
-    canvas.drawLine(Offset(centerX - radius, centerY + radius), Offset(centerX - radius, centerY + radius - bracketSize), paint);
-    
+    canvas.drawLine(Offset(centerX - radius, centerY + radius),
+        Offset(centerX - radius + bracketSize, centerY + radius), paint);
+    canvas.drawLine(Offset(centerX - radius, centerY + radius),
+        Offset(centerX - radius, centerY + radius - bracketSize), paint);
+
     // Bottom-Right
-    canvas.drawLine(Offset(centerX + radius, centerY + radius), Offset(centerX + radius - bracketSize, centerY + radius), paint);
-    canvas.drawLine(Offset(centerX + radius, centerY + radius), Offset(centerX + radius, centerY + radius - bracketSize), paint);
+    canvas.drawLine(Offset(centerX + radius, centerY + radius),
+        Offset(centerX + radius - bracketSize, centerY + radius), paint);
+    canvas.drawLine(Offset(centerX + radius, centerY + radius),
+        Offset(centerX + radius, centerY + radius - bracketSize), paint);
   }
 
   @override

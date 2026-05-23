@@ -63,7 +63,7 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
   /// RenderEditable has been laid out with the new textAlign/textDirection.
   void refreshPositions() {
     if (!hasSelection) {
-      setState(() {
+      _setOverlayState(() {
         _handleStartPos = null;
         _handleEndPos = null;
       });
@@ -81,10 +81,24 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
       endpointA: false,
     );
 
-    setState(() {
+    final previousStart = _handleStartPos;
+    final previousEnd = _handleEndPos;
+    _setOverlayState(() {
       _handleStartPos = startPos;
       _handleEndPos = endPos;
     });
+    if (_handlePositionsChanged(previousStart, startPos) ||
+        _handlePositionsChanged(previousEnd, endPos)) {
+      _debugSelectionEvent(
+        'handleRefresh start=${_formatDebugOffset(startPos)} '
+        'end=${_formatDebugOffset(endPos)}',
+      );
+    }
+  }
+
+  bool _handlePositionsChanged(Offset? a, Offset? b) {
+    if (a == null || b == null) return a != b;
+    return (a - b).distance > 0.5;
   }
 
   Offset? _getPositionInStack(
@@ -110,7 +124,14 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
       var endpointX = caretOffset.left;
       var endpointY = caretOffset.top + caretOffset.height / 2;
       final range = _normalizedRange();
-      if (range != null) {
+      final visibleText = MarkupDecorationParser.visibleText(controller.text);
+      if (visibleText.isEmpty) {
+        final blockRtl = EditorTextGeometryService.resolveBlockRtl(
+          widget.controllers.map((controller) => controller.text).toList(),
+          blockIdx,
+        );
+        endpointX = blockRtl ? editable.size.width : 0.0;
+      } else if (range != null) {
         final blockRtl = EditorTextGeometryService.resolveBlockRtl(
           widget.controllers.map((controller) => controller.text).toList(),
           blockIdx,
@@ -140,6 +161,7 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
         final paintedEndpoint = _paintedSelectionEndpoint(
           editable,
           selection,
+          rawText: controller.text,
           isRangeStart: isRangeStart,
         );
         if (paintedEndpoint != null) {
@@ -170,11 +192,13 @@ extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
   Offset? _paintedSelectionEndpoint(
     RenderEditable editable,
     TextSelection selection, {
+    required String rawText,
     required bool isRangeStart,
   }) {
     return MarkupRenderEditableGeometry.endpointForSelection(
       editable,
       selection,
+      rawText: rawText,
       isRangeStart: isRangeStart,
     );
   }

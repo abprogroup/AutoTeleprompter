@@ -239,7 +239,7 @@ extension GlobalSelectionOverlayHandles on GlobalSelectionOverlayState {
       session.cancelStale();
     }
     if (!mounted) return;
-    setState(() {
+    _setOverlayState(() {
       _ignoreBodyDragUntilPointerUp = true;
       _sessionMode = SelectionSessionMode.handleDrag;
       _pointerState = pointerState;
@@ -280,7 +280,7 @@ extension GlobalSelectionOverlayHandles on GlobalSelectionOverlayState {
     session.cancelTimers();
     _handleDrag = null;
     if (!mounted) return;
-    setState(() {
+    _setOverlayState(() {
       _ignoreBodyDragUntilPointerUp = suppressBodyDragUntilPointerUp;
       _sessionMode = hasSelection
           ? SelectionSessionMode.overlaySelection

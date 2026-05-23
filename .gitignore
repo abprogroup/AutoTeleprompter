@@ -9,8 +9,10 @@ AutoTeleprompter_BACKUP_*
 /macos-baseline/
 /windows-baseline/
 
-# NEVER TRACK TESTS - THEY ARE NOT NEEDED
+# Root/manual QA test artifacts stay private. Platform automated tests are source.
 test/
+!Platform_*/test/
+!Platform_*/test/**
 schemes/
 guidelines_and_planning/
 AutoTeleprompter_TEST_*
@@ -24,6 +26,7 @@ AutoTeleprompter_AGENT_*
 readable_history/
 _v5_archive/
 _debug/
+debug/
 
 # Local planning/governance files are private workspace state.
 Plans/

@@ -20,8 +20,8 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.history, color: Color(0xFFFFBF00), size: 20),
             SizedBox(width: 8),
             Text('Resume reading?',
@@ -104,7 +104,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       await ScriptBookmarkService.save(key, normalized);
     }
     if (!mounted || _bookmarkScopeKey != key) return;
-    setState(() {
+    _setTeleprompterState(() {
       _bookmarks = normalized;
       _bookmarksLoaded = true;
       _bookmarkLoadingKey = null;
@@ -154,7 +154,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       offset: 0,
       createdAt: DateTime.now(),
     );
-    setState(() {
+    _setTeleprompterState(() {
       _bookmarks = ScriptBookmarkService.upsert(_bookmarks, bookmark);
     });
     await _saveBookmarksForScript(script);
@@ -249,7 +249,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
         .toList();
     final deleted = before - next.length;
     if (deleted <= 0) return;
-    setState(() => _bookmarks = next);
+    _setTeleprompterState(() => _bookmarks = next);
     await _saveBookmarksForScript(script);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -400,16 +400,17 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     }
 
     if (matches.isEmpty) {
-      if (mounted)
-        setState(() {
+      if (mounted) {
+        _setTeleprompterState(() {
           _presenterSearchToolbarVisible = false;
           _presenterSearchMatches = const [];
           _presenterSearchMatchIndex = -1;
         });
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No match for "$query"'),
-          backgroundColor: Colors.black.withOpacity(0.9),
+          backgroundColor: Colors.black.withValues(alpha: 0.9),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -423,12 +424,13 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
         .toInt();
     final nextIndex = matches.indexWhere((m) => m.wordIndex > current);
     final initialIndex = nextIndex >= 0 ? nextIndex : 0;
-    if (mounted)
-      setState(() {
+    if (mounted) {
+      _setTeleprompterState(() {
         _presenterSearchToolbarVisible = true;
         _presenterSearchMatches = matches;
         _presenterSearchMatchIndex = initialIndex;
       });
+    }
     _jumpToPresenterSearchMatchAt(initialIndex);
   }
 
@@ -437,11 +439,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     final count = _presenterSearchMatches.length;
     final next = (_presenterSearchMatchIndex + delta) % count;
     final normalized = next < 0 ? next + count : next;
-    if (mounted)
-      setState(() {
+    if (mounted) {
+      _setTeleprompterState(() {
         _presenterSearchMatchIndex = normalized;
         _presenterSearchToolbarVisible = true;
       });
+    }
     _jumpToPresenterSearchMatchAt(normalized);
   }
 
@@ -450,7 +453,9 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     if (script == null ||
         _presenterSearchMatches.isEmpty ||
         matchIndex < 0 ||
-        matchIndex >= _presenterSearchMatches.length) return;
+        matchIndex >= _presenterSearchMatches.length) {
+      return;
+    }
     final wordIndex = _presenterSearchMatches[matchIndex]
         .wordIndex
         .clamp(0, script.words.length - 1)
@@ -461,12 +466,13 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
   }
 
   void _closePresenterSearchToolbar() {
-    if (mounted)
-      setState(() {
+    if (mounted) {
+      _setTeleprompterState(() {
         _presenterSearchToolbarVisible = false;
         _presenterSearchMatches = const [];
         _presenterSearchMatchIndex = -1;
       });
+    }
   }
 
   Widget _buildPresenterSearchToolbar() {
@@ -481,12 +487,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.88),
+          color: Colors.black.withValues(alpha: 0.88),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: const Color(0x66FFBF00), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.45),
+              color: Colors.black.withValues(alpha: 0.45),
               blurRadius: 18,
               offset: const Offset(0, 6),
             ),
@@ -627,8 +633,9 @@ class _PresenterSearchText {
 
   int? wordIndexForChar(int charIndex) {
     for (final span in spans) {
-      if (charIndex >= span.start && charIndex < span.end)
+      if (charIndex >= span.start && charIndex < span.end) {
         return span.wordIndex;
+      }
       if (charIndex < span.start) return span.wordIndex;
     }
     return spans.isEmpty ? null : spans.last.wordIndex;

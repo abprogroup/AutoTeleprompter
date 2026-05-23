@@ -1,5 +1,6 @@
 import 'package:autoteleprompter/features/script/models/editor_state.dart';
 import 'package:autoteleprompter/features/script/services/editor_text_geometry_service.dart';
+import 'package:autoteleprompter/features/script/widgets/editor/markup_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,6 +25,44 @@ void main() {
           direction == TextDirection.rtl ? TextAlign.right : TextAlign.left,
     )..layout(maxWidth: width);
     return painter;
+  }
+
+  TextPainter painterForRenderedMarkup(
+    String raw, {
+    required TextDirection direction,
+    double width = 700,
+  }) {
+    final tagRegex = RegExp(
+      r'\*\*|\[\/?u\]|\[\/?i\]|\[color=([^\]]+)\]|\[\/color\]'
+      r'|\[bg=([^\]]+)\]|\[\/bg\]|\[size=(\d+(?:\.\d+)?)\]|\[\/size\]'
+      r'|\[font=([^\]]+)\]|\[\/font\]',
+    );
+    final children = <InlineSpan>[];
+    var cursor = 0;
+    for (final match in tagRegex.allMatches(raw)) {
+      if (match.start > cursor) {
+        children.add(TextSpan(text: raw.substring(cursor, match.start)));
+      }
+      children.add(TextSpan(
+        text: String.fromCharCodes(
+          List<int>.filled(match.end - match.start, 0x2060),
+        ),
+        style: const TextStyle(fontSize: 0.1, height: 0),
+      ));
+      cursor = match.end;
+    }
+    if (cursor < raw.length) {
+      children.add(TextSpan(text: raw.substring(cursor)));
+    }
+    return TextPainter(
+      text: TextSpan(
+        style: const TextStyle(fontSize: 28, height: 1.2),
+        children: children,
+      ),
+      textDirection: direction,
+      textAlign:
+          direction == TextDirection.rtl ? TextAlign.right : TextAlign.left,
+    )..layout(maxWidth: width);
   }
 
   test('Hebrew empty row between Hebrew blocks resolves RTL', () {
@@ -400,7 +439,7 @@ void main() {
         rawToVisibleOffset: identityRawToVisible,
         visibleToRawOffset: identityVisibleToRaw,
       ),
-      5,
+      6,
     );
     expect(
       EditorTextGeometryService.visualWordTargetRawOffset(
@@ -412,6 +451,25 @@ void main() {
         visibleToRawOffset: identityVisibleToRaw,
       ),
       0,
+    );
+  });
+
+  test('visual word navigation skips hidden markup prefix before first word',
+      () {
+    const raw = '[bg=#806000][u]hello world[/u][/bg]';
+    final painter = painterForRenderedMarkup(raw, direction: TextDirection.ltr);
+    final firstVisibleRaw = MarkupController.visualToRawOffset(raw, 0);
+
+    expect(
+      EditorTextGeometryService.visualWordTargetRawOffset(
+        painter: painter,
+        rawText: raw,
+        rawOffset: firstVisibleRaw,
+        moveLeft: false,
+        rawToVisibleOffset: MarkupController.rawToVisualOffset,
+        visibleToRawOffset: MarkupController.visualToRawOffset,
+      ),
+      raw.indexOf('hello') + 'hello '.length,
     );
   });
 
@@ -428,7 +486,7 @@ void main() {
         rawToVisibleOffset: identityRawToVisible,
         visibleToRawOffset: identityVisibleToRaw,
       ),
-      4,
+      5,
     );
     expect(
       EditorTextGeometryService.visualWordTargetRawOffset(
@@ -458,7 +516,7 @@ void main() {
         rawToVisibleOffset: identityRawToVisible,
         visibleToRawOffset: identityVisibleToRaw,
       ),
-      englishStart + 3,
+      englishStart + 4,
     );
     expect(
       EditorTextGeometryService.visualWordTargetRawOffset(

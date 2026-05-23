@@ -51,15 +51,20 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // the editor.
     final presentationFontSize = settings.fontSize * 2.0;
     final presenterWordGap = _presenterWordGap(presentationFontSize, settings);
-    final debugConsoleHeight =
-        settings.debugMode ? (_debugConsoleMinimized ? 36.0 : 220.0) : 0.0;
     final controlsReservedHeight =
         settings.scrollMode == 'manual' ? 150.0 : 104.0;
-    final debugConsoleBottom =
-        settings.debugMode ? controlsReservedHeight : 10.0;
-    final soundLevelBottom = settings.debugMode
-        ? debugConsoleBottom + debugConsoleHeight + 10.0
-        : 12.0;
+    final debugConsoleExpanded = settings.debugMode &&
+        !_debugConsoleMinimized &&
+        (_controlsVisible || _debugConsolePinned);
+    final debugConsoleHeight =
+        settings.debugMode ? (debugConsoleExpanded ? 220.0 : 38.0) : 0.0;
+    final debugConsoleBottom = settings.debugMode
+        ? (debugConsoleExpanded
+            ? (_debugConsolePinned && !_controlsVisible
+                ? 10.0
+                : controlsReservedHeight)
+            : (_controlsVisible ? controlsReservedHeight : 10.0))
+        : 10.0;
     final bookmarkWordIndexes = _bookmarks
         .map(
           (bookmark) => ScriptBookmarkService.nearestBookmarkableWordIndex(
@@ -154,15 +159,15 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   // User-applied highlight (from tokenizer-parsed [bg=] tags)
                   final userBgColor = word.highlight;
                   // Word-tracking highlight (current word)
-                  final trackingBgColor =
-                      isCurrent && settings.showCurrentWordHighlight
-                          ? Color(settings.currentWordColor).withOpacity(0.3)
-                          : null;
+                  final trackingBgColor = isCurrent &&
+                          settings.showCurrentWordHighlight
+                      ? Color(settings.currentWordColor).withValues(alpha: 0.3)
+                      : null;
                   final effectiveBg = kUseCustomDocxDecorationPainting
                       ? trackingBgColor
                       : trackingBgColor ??
                           (isPast
-                              ? userBgColor?.withOpacity(0.15)
+                              ? userBgColor?.withValues(alpha: 0.15)
                               : userBgColor);
 
                   // Text color with graduated opacity for smooth spotlight effect.
@@ -192,12 +197,13 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 (1.0 - pastDist / 3.0) *
                                 0.5
                         : settings.pastWordOpacity;
-                    textColor = base.withOpacity(gradOpacity.clamp(0.0, 1.0));
+                    textColor =
+                        base.withValues(alpha: gradOpacity.clamp(0.0, 1.0));
                   } else {
                     // Toggle ON: uniform override color. Toggle OFF: use per-word markup color.
                     textColor = settings.showUpcomingWordColor
                         ? Color(settings.futureWordColor)
-                        : (word.textColor ?? Color(0xFFFFFFFF));
+                        : (word.textColor ?? const Color(0xFFFFFFFF));
                   }
 
                   // Keep presenter word gaps as physical Wrap spacing, not
@@ -426,10 +432,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  Color(settings.scriptBgColor)
-                                      .withOpacity(settings.readFadeIntensity),
-                                  Color(settings.scriptBgColor).withOpacity(
-                                      settings.readFadeIntensity * 0.6),
+                                  Color(settings.scriptBgColor).withValues(
+                                      alpha: settings.readFadeIntensity),
+                                  Color(settings.scriptBgColor).withValues(
+                                      alpha: settings.readFadeIntensity * 0.6),
                                   Colors.transparent,
                                 ],
                                 stops: const [0.0, 0.7, 1.0],
@@ -438,23 +444,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                           ),
                         ),
                       ),
-                    Positioned(
-                      left: 12,
-                      right: 12,
-                      bottom: soundLevelBottom,
-                      child: Opacity(
-                        opacity: settings.debugMode ? 1.0 : 0.0,
-                        child: IgnorePointer(
-                          ignoring: !settings.debugMode,
-                          child: _SoundLevelBar(
-                            level: tState.soundLevel,
-                            isListening: tState.isListening,
-                            isStarting: tState.isStarting,
-                            accentColor: Color(settings.currentWordColor),
-                          ),
-                        ),
-                      ),
-                    ),
                     if (tState.isStarting && !tState.hasError)
                       Positioned(
                         top: 22,
@@ -472,6 +461,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         tState,
                         bottom: debugConsoleBottom,
                         height: debugConsoleHeight,
+                        expanded: debugConsoleExpanded,
+                        accentColor: Color(settings.currentWordColor),
                         wordCount:
                             script.words.where((w) => !w.isNewline).length,
                       ),
@@ -502,8 +493,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       right: 0,
                       child: Container(
                         height: 3,
-                        color:
-                            Color(settings.currentWordColor).withOpacity(0.35),
+                        color: Color(settings.currentWordColor)
+                            .withValues(alpha: 0.35),
                       ),
                     ),
 
@@ -525,7 +516,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.9),
+                              color: Colors.red.withValues(alpha: 0.9),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Column(
@@ -610,7 +601,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 // Speed slider â€” sits just above the control bar, always visible in manual mode
                                 if (settings.scrollMode == 'manual')
                                   Container(
-                                    color: Colors.black.withOpacity(0.75),
+                                    color: Colors.black.withValues(alpha: 0.75),
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 16, vertical: 4),
                                     child: Row(

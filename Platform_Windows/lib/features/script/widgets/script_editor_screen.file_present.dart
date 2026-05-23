@@ -9,7 +9,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     if (result == null || result.files.single.path == null) {
       // v3.9.5.59: Fluid navigation fallback
       if (widget.shouldAutoLoad) Navigator.pop(context);
-      setState(() => _isPendingLoad = false);
+      _setEditorState(() => _isPendingLoad = false);
       return;
     }
     final selectedFile = File(result.files.single.path!);
@@ -175,7 +175,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     if (identityChanged) {
       await _forceRecentUpdate();
       if (!mounted) return;
-      setState(() {
+      _setEditorState(() {
         _currentTitle = fileName;
         _sourceType = exportType;
         _currentSessionId =
@@ -225,7 +225,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   void _clearScript() {
-    setState(() {
+    _setEditorState(() {
       _loadText('');
       _saveHistory(description: 'Clear');
     });

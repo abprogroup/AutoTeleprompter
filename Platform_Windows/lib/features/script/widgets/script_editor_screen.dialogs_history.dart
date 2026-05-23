@@ -21,7 +21,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
                     onPressed: () {
                       final newName = controller.text.trim();
                       if (newName.isNotEmpty) {
-                        setState(() => _currentTitle = newName);
+                        _setEditorState(() => _currentTitle = newName);
                         _forceRecentUpdate();
                         Navigator.pop(ctx);
                       }
@@ -247,7 +247,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       final settings = ref.read(settingsProvider);
       if (head.text == currentText &&
           head.fontSize == settings.fontSize &&
-          head.fontFamily == (settings.fontFamily ?? 'Inter') &&
+          head.fontFamily == settings.fontFamily &&
           head.lineSpacing == settings.lineSpacing &&
           head.letterSpacing == settings.letterSpacing &&
           head.wordSpacing == settings.wordSpacing) {
@@ -264,7 +264,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       timestamp: DateTime.now(),
       description: description,
       fontSize: settings.fontSize,
-      fontFamily: settings.fontFamily ?? 'Inter',
+      fontFamily: settings.fontFamily,
       lineSpacing: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,
       wordSpacing: settings.wordSpacing,
@@ -279,11 +279,14 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
           ? _editorScrollController.offset
           : null,
     );
-    setState(() {
-      if (_historyIndex < _history.length - 1)
+    _setEditorState(() {
+      if (_historyIndex < _history.length - 1) {
         _history.removeRange(_historyIndex + 1, _history.length);
+      }
       _history.add(state);
-      if (_history.length > 50) _history.removeAt(0);
+      if (_history.length > _ScriptEditorScreenState._maxHistory) {
+        _history.removeAt(0);
+      }
       _historyIndex = _history.length - 1;
     });
     _scheduleRecentUpdate();
@@ -366,7 +369,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       _isDirty = false;
       final sourceState = _history[_historyIndex];
       final targetState = _history[_historyIndex - 1];
-      setState(() {
+      _setEditorState(() {
         _historyIndex--;
         _applyState(targetState);
       });
@@ -387,7 +390,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       _isDirty = false;
       final sourceState = _history[_historyIndex];
       final targetState = _history[_historyIndex + 1];
-      setState(() {
+      _setEditorState(() {
         _historyIndex++;
         _applyState(targetState);
       });
@@ -405,7 +408,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     if (idx < 0 || idx >= _history.length || idx == _historyIndex) return;
     _isCommandExecuting = true;
     _isDirty = false;
-    setState(() {
+    _setEditorState(() {
       _historyIndex = idx;
       _applyState(_history[idx]);
     });
@@ -520,8 +523,9 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   }
 
   MarkupController? get _activeController {
-    for (var i = 0; i < _focusNodes.length; i++)
+    for (var i = 0; i < _focusNodes.length; i++) {
       if (_focusNodes[i].hasFocus) return _controllers[i];
+    }
     return _lastFocusedController ??
         (_controllers.isNotEmpty ? _controllers.last : null);
   }
@@ -533,7 +537,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     if (_activeSuite == EditorSuite.none) {
       _saveHistory(description: 'Change Background', debounce: true);
     }
-    if (mounted) setState(() {});
+    if (mounted) _setEditorState(() {});
   }
 
   /// Returns the list of controllers that should receive a style command,

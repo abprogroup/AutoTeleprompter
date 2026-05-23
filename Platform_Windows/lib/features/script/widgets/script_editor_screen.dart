@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -9,14 +8,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/widgets/global_color_picker.dart';
 import '../models/script.dart';
 import '../models/cursor_style.dart';
 import '../models/editor_state.dart';
 import './editor/editor_dialogs.dart';
-import './editor/lobby_settings_panel.dart';
 import './editor/suites/project_actions_mvp.dart';
 import './editor/suites/formatting_toolbar_mvp.dart';
 import './editor/components/editor_primitives.dart';
@@ -28,7 +24,6 @@ import '../providers/script_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
-import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
 import '../services/script_bookmark_service.dart';
 import '../../../core/services/rich_clipboard.dart';
@@ -53,8 +48,10 @@ part 'script_editor_screen.bookmarks.dart';
 part 'script_editor_screen.search.dart';
 part 'script_editor_screen.editor_block.dart';
 part 'script_editor_screen.build.dart';
+part 'script_editor_screen.debug_artifacts.dart';
 part 'script_editor_screen.arrow_trace.dart';
 part 'script_editor_screen.highlight_trace.dart';
+part 'script_editor_screen.selection_trace.dart';
 part 'script_editor_screen.keyboard_navigation.dart';
 part 'script_editor_screen.keyboard_selection.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
@@ -82,14 +79,6 @@ class _PasteIntent extends Intent {
 
 class _SearchIntent extends Intent {
   const _SearchIntent();
-}
-
-class _MoveLeftIntent extends Intent {
-  const _MoveLeftIntent();
-}
-
-class _MoveRightIntent extends Intent {
-  const _MoveRightIntent();
 }
 
 class _UndoIntent extends Intent {
@@ -149,8 +138,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   double? _editorScrollOffsetBeforeWindowHide;
   String _currentTitle = 'New Project';
 
-  TextSelection? _lastSelection;
-
   /// Preserved non-collapsed selection â€” survives focus loss from dialogs.
   /// Updated only when the selection is non-collapsed, so opening a dialog
   /// (which collapses the selection) doesn't overwrite this.
@@ -179,19 +166,27 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String? _lastHighlightTraceScreenshotPath;
   String? _lastHighlightTraceLogPath;
   int _highlightTraceSequence = 0;
+  String _highlightTraceSessionId = _newEditorDebugSessionId();
   Timer? _highlightTraceTimer;
+  String _lastSelectionTrace = 'No selection trace captured yet.';
+  String? _lastSelectionTraceScreenshotPath;
+  String? _lastSelectionTraceLogPath;
+  int _selectionTraceSequence = 0;
+  String _selectionTraceSessionId = _newEditorDebugSessionId();
   int _arrowTraceSequence = 0;
-  String _arrowTraceSessionId = DateTime.now().toIso8601String().replaceAll(
-        RegExp(r'[:.]'),
-        '-',
-      );
+  String _arrowTraceSessionId = _newEditorDebugSessionId();
   bool _debugSentryCollapsed = false;
   String? _activeArrowEventSignature;
   String? _suppressDuplicateArrowEventSignature;
+  String? _handledShiftSelectionEventSignature;
   int _keyboardFocusRepairToken = 0;
   double? _verticalArrowPreferredX;
   SelectionEndpoint? _shiftSelectionAnchor;
   SelectionEndpoint? _shiftSelectionFocus;
+  int _editorPrimaryClickCount = 0;
+  Offset? _lastEditorPrimaryClickPosition;
+  Duration? _lastEditorPrimaryClickTime;
+  String? _pendingNativeSelectionGestureKind;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
@@ -218,6 +213,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _suiteSection; // current function section within a suite (e.g. 'Bold', 'Font Size')
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
+  final GlobalKey _appSelectionToolbarKey = GlobalKey();
 
   void _clearGlobalSelection() {
     if (!mounted) return;
@@ -250,7 +246,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         }
       }
       if (needsRefresh) {
-        for (final c in _controllers) c.refresh();
+        for (final c in _controllers) {
+          c.refresh();
+        }
         setState(() {});
       }
     });
@@ -286,7 +284,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void reassemble() {
     super.reassemble();
-    _resetArrowTraceSession('hot reload');
+    _resetDebugArtifactSessions('hot reload');
   }
 
   @override
@@ -437,4 +435,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
   @override
   Widget build(BuildContext context) => _buildEditorScreen(context);
+
+  void _setEditorState(VoidCallback fn) => setState(fn);
 }

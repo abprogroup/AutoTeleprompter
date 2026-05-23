@@ -14,16 +14,22 @@ extension _ScriptEditorHighlightTraceParts on _ScriptEditorScreenState {
   Future<void> _captureCurrentHighlightTrace({
     String reason = 'manual',
   }) async {
+    if (!mounted || !ref.read(settingsProvider).debugMode) return;
     final sequence = ++_highlightTraceSequence;
     final trace = _buildHighlightTrace(sequence, reason);
-    setState(() {
+    _setEditorState(() {
       _lastHighlightTrace = '$trace\n\nscreenshot=waiting...';
       _lastHighlightTraceScreenshotPath = null;
       _lastHighlightTraceLogPath = null;
     });
 
     await Future<void>.delayed(const Duration(milliseconds: 90));
-    final directory = await _ensureHighlightTraceDirectory();
+    if (!mounted || !ref.read(settingsProvider).debugMode) return;
+    final directory = await _ensureDebugArtifactDirectory(
+      _EditorDebugArtifactType.highlightTraces,
+      _highlightTraceSessionId,
+    );
+    if (directory == null) return;
     final screenshotPath = await _captureHighlightTraceScreenshot(
       directory: directory,
       sequence: sequence,
@@ -39,7 +45,7 @@ extension _ScriptEditorHighlightTraceParts on _ScriptEditorScreenState {
     );
 
     if (!mounted) return;
-    setState(() {
+    _setEditorState(() {
       _lastHighlightTrace = [
         trace,
         '',
@@ -178,12 +184,14 @@ extension _ScriptEditorHighlightTraceParts on _ScriptEditorScreenState {
         : MarkupRenderEditableGeometry.selectionRects(
             editable,
             rawSelection,
+            rawText: raw,
           );
     final finalRenderBands = rawSelection == null || editable == null
         ? const <Rect>[]
         : MarkupRenderEditableGeometry.mergedBandsForSelection(
             editable,
             rawSelection,
+            rawText: raw,
           );
     final rawPainterBoxes = rawSelection == null
         ? const <Rect>[]
@@ -410,62 +418,39 @@ extension _ScriptEditorHighlightTraceParts on _ScriptEditorScreenState {
     return rects.length > 8 ? '$shown ... total=${rects.length}' : shown;
   }
 
-  Future<Directory> _ensureHighlightTraceDirectory() async {
-    final projectRoot = _resolveProjectRootForDebugArtifacts();
-    final directory = Directory(
-      '${projectRoot.path}${Platform.pathSeparator}_debug'
-      '${Platform.pathSeparator}Windows'
-      '${Platform.pathSeparator}highlight_traces',
-    );
-    if (!await directory.exists()) {
-      await directory.create(recursive: true);
-    }
-    return directory;
-  }
-
   Future<String?> _captureHighlightTraceScreenshot({
     required Directory directory,
     required int sequence,
   }) async {
-    try {
-      final boundary = _editorArrowTraceBoundaryKey.currentContext
-          ?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return null;
-      final image = await boundary.toImage(pixelRatio: 1.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return null;
-      final path = _highlightTracePath(directory, sequence, 'png');
-      await File(path).writeAsBytes(byteData.buffer.asUint8List(), flush: true);
-      return path;
-    } catch (error) {
-      return 'capture failed: $error';
-    }
+    return _captureEditorDebugScreenshot(
+      directory: directory,
+      prefix: 'highlight',
+      sequence: sequence,
+    );
   }
 
-  Future<String> _writeHighlightTraceLog({
+  Future<String?> _writeHighlightTraceLog({
     required Directory directory,
     required int sequence,
     required String trace,
   }) async {
-    final path = _highlightTracePath(directory, sequence, 'txt');
-    await File(path).writeAsString(trace, flush: true);
-    return path;
-  }
-
-  String _highlightTracePath(
-    Directory directory,
-    int sequence,
-    String extension,
-  ) {
-    final timestamp = DateTime.now().toIso8601String().replaceAll(
-          RegExp(r'[:.]'),
-          '-',
-        );
-    return '${directory.path}${Platform.pathSeparator}'
-        'highlight_${sequence.toString().padLeft(4, "0")}_$timestamp.$extension';
+    return _writeDebugArtifactLog(
+      directory: directory,
+      prefix: 'highlight',
+      sequence: sequence,
+      trace: trace,
+    );
   }
 
   Future<void> _copyLastHighlightTrace() async {
     await Clipboard.setData(ClipboardData(text: _lastHighlightTrace));
+  }
+
+  void _resetHighlightTraceSession(String reason) {
+    _highlightTraceSequence = 0;
+    _highlightTraceSessionId = _newEditorDebugSessionId();
+    _lastHighlightTrace = 'Highlight trace session reset: $reason';
+    _lastHighlightTraceScreenshotPath = null;
+    _lastHighlightTraceLogPath = null;
   }
 }

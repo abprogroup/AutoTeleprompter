@@ -19,7 +19,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     _bookmarksLoaded = false;
     final loaded = await ScriptBookmarkService.load(key);
     if (!mounted || _bookmarkScopeKey != key) return;
-    setState(() {
+    _setEditorState(() {
       _bookmarks = loaded;
       _bookmarksLoaded = true;
       _bookmarkLoadingKey = null;
@@ -92,7 +92,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
       }
     }
     if (notify) {
-      setState(() => _bookmarks = rebuilt);
+      _setEditorState(() => _bookmarks = rebuilt);
     } else {
       _bookmarks = rebuilt;
     }
@@ -468,7 +468,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     }
     controller.selection = selection;
     _lastFocusedController = controller;
-    setState(() => _isGlobalSelection = false);
+    _setEditorState(() => _isGlobalSelection = false);
     _focusNodes[position.block].requestFocus();
     _scrollEditorBlockIntoView(position.block, alignment: 0.28);
     ScaffoldMessenger.of(context).showSnackBar(

@@ -55,6 +55,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
   bool _debugConsoleMinimized = false;
+  bool _debugConsolePinned = false;
   Timer? _manualScrollTimer;
   Timer? _wordTrackTimer;
   Timer? _hideControlsTimer;
@@ -97,8 +98,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         _initRemoteListener();
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage),
             (prev, next) {
-          if (next != null && next.isNotEmpty && mounted)
+          if (next != null && next.isNotEmpty && mounted) {
             _showMissingLanguageDialog(next);
+          }
         });
         // Watch for STT Dashboard URL
         ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl),
@@ -150,6 +152,30 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _webviewController?.dispose();
     super.dispose();
   }
+
+  void _setPresenterDebugPinned(bool value) {
+    setState(() {
+      _debugConsolePinned = value;
+      if (_debugConsolePinned) {
+        _debugConsoleMinimized = false;
+      }
+    });
+  }
+
+  void _setPresenterDebugExpanded(bool expanded) {
+    setState(() {
+      if (expanded) {
+        _debugConsoleMinimized = false;
+        if (!_controlsVisible) {
+          _debugConsolePinned = true;
+        }
+      } else {
+        _debugConsoleMinimized = true;
+      }
+    });
+  }
+
+  void _setTeleprompterState(VoidCallback fn) => setState(fn);
 
   @override
   Widget build(BuildContext context) => _buildTeleprompterScreen(context);

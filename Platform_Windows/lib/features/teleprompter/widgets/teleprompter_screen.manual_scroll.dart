@@ -4,7 +4,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   void _startManualScroll({bool backward = false}) {
     if (!_scrollController.hasClients) return;
     _scrollingBackward = backward;
-    setState(() => _manualScrolling = true);
+    _setTeleprompterState(() => _manualScrolling = true);
     _manualScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
 
@@ -71,7 +71,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
 
     if (bestIndex != _manualWordIndex) {
-      setState(() => _manualWordIndex = bestIndex);
+      _setTeleprompterState(() => _manualWordIndex = bestIndex);
     }
   }
 
@@ -79,7 +79,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _manualScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
     _scrollingBackward = false;
-    if (mounted) setState(() => _manualScrolling = false);
+    if (mounted) _setTeleprompterState(() => _manualScrolling = false);
   }
 
   void _cancelSmoothScroll() {
@@ -107,8 +107,11 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _lastVisibleWindowSync = now;
 
     final script = ref.read(scriptProvider);
-    if (script == null || script.words.isEmpty || !_scrollController.hasClients)
+    if (script == null ||
+        script.words.isEmpty ||
+        !_scrollController.hasClients) {
       return;
+    }
     final viewportH = MediaQuery.of(context).size.height;
     int? firstVisible;
     int? lastVisible;
@@ -206,7 +209,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final script = ref.read(scriptProvider);
     if (script == null) return;
     _stopManualScroll();
-    setState(() => _manualWordIndex = index);
+    _setTeleprompterState(() => _manualWordIndex = index);
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(index, script: script);
@@ -276,8 +279,11 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _syncResumePointToReadingLine() {
     final script = ref.read(scriptProvider);
-    if (script == null || script.words.isEmpty || !_scrollController.hasClients)
+    if (script == null ||
+        script.words.isEmpty ||
+        !_scrollController.hasClients) {
       return;
+    }
     final settings = ref.read(settingsProvider);
     final targetScreenY =
         MediaQuery.of(context).size.height * settings.scrollLead;
@@ -300,7 +306,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
     final targetIndex = bestIndex;
     if (targetIndex == null) return;
-    setState(() => _manualWordIndex = targetIndex);
+    _setTeleprompterState(() => _manualWordIndex = targetIndex);
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(targetIndex, script: script);

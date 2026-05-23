@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:autoteleprompter/features/script/services/markup_decoration_service.dart';
 import 'package:autoteleprompter/features/script/widgets/editor/markup_controller.dart';
 import 'package:flutter/material.dart';
@@ -103,6 +105,168 @@ void main() {
     }
   });
 
+  testWidgets('hidden markup prefix is not selectable paint', (tester) async {
+    const raw = '[bg=#806000][u]\u05d0\u05ea\u05d4 \u05e8\u05e9\u05d0\u05d9 '
+        '\u05dc\u05e0\u05e9\u05e0\u05e9 \u05d0\u05ea '
+        '\u05d4\u05db\u05dc\u05d4![/u][/bg]';
+    final controller = MarkupController(text: raw);
+
+    await _pumpField(
+      tester,
+      controller,
+      width: 760,
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.right,
+      style: style,
+    );
+
+    final editable = _editable(tester);
+    final firstVisibleRaw = raw.indexOf('\u05d0\u05ea\u05d4');
+    final firstWordAndSpaceRaw = MarkupController.visualToRawOffset(raw, 4);
+
+    expect(
+      MarkupRenderEditableGeometry.normalizedSelection(
+        editable,
+        TextSelection(baseOffset: 0, extentOffset: firstWordAndSpaceRaw),
+        rawText: raw,
+      )!
+          .start,
+      firstVisibleRaw,
+    );
+
+    expect(
+      MarkupRenderEditableGeometry.selectionRects(
+        editable,
+        TextSelection(baseOffset: 0, extentOffset: firstVisibleRaw),
+        rawText: raw,
+      ),
+      isEmpty,
+    );
+
+    final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
+      editable,
+      TextSelection(baseOffset: 0, extentOffset: firstWordAndSpaceRaw),
+      rawText: raw,
+    );
+
+    expect(bands, isNotEmpty);
+    expect(
+      bands.map((band) => band.width).reduce((a, b) => a > b ? a : b),
+      lessThan(220),
+    );
+  });
+
+  testWidgets('hidden-only selection endpoint uses visible caret',
+      (tester) async {
+    const raw = '[bg=#806000][u]\u05d0\u05ea\u05d4 \u05e8\u05e9\u05d0\u05d9 '
+        '\u05dc\u05e0\u05e9\u05e0\u05e9 \u05d0\u05ea '
+        '\u05d4\u05db\u05dc\u05d4![/u][/bg]';
+    final controller = MarkupController(text: raw);
+
+    await _pumpField(
+      tester,
+      controller,
+      width: 760,
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.right,
+      style: style,
+    );
+
+    final editable = _editable(tester);
+    final firstVisibleRaw = raw.indexOf('\u05d0\u05ea\u05d4');
+    final endpoint = MarkupRenderEditableGeometry.endpointForSelection(
+      editable,
+      TextSelection(baseOffset: 0, extentOffset: firstVisibleRaw),
+      rawText: raw,
+      isRangeStart: false,
+    );
+    final caret = editable.getLocalRectForCaret(
+      TextPosition(
+        offset: firstVisibleRaw,
+        affinity: TextAffinity.downstream,
+      ),
+    );
+    final expected = Offset(caret.left, caret.top + caret.height / 2);
+
+    expect(endpoint, isNotNull);
+    expect(endpoint!.dx, closeTo(expected.dx, 0.1));
+    expect(endpoint.dy, closeTo(expected.dy, 0.1));
+  });
+
+  testWidgets('single Hebrew visible step after hidden tags stays tight',
+      (tester) async {
+    const raw = '[bg=#806000][u]\u05d0\u05ea\u05d4 \u05e8\u05e9\u05d0\u05d9 '
+        '\u05dc\u05e0\u05e9\u05e0\u05e9 \u05d0\u05ea '
+        '\u05d4\u05db\u05dc\u05d4![/u][/bg]';
+    final controller = MarkupController(text: raw);
+
+    await _pumpField(
+      tester,
+      controller,
+      width: 760,
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.right,
+      style: style,
+    );
+
+    final visible = MarkupDecorationParser.visibleText(raw);
+    final visibleSeed = visible.indexOf('\u05dc\u05e0\u05e9\u05e0\u05e9');
+    expect(visibleSeed, isNonNegative);
+
+    final selection = TextSelection(
+      baseOffset: MarkupController.visualToRawOffset(raw, visibleSeed),
+      extentOffset: MarkupController.visualToRawOffset(raw, visibleSeed + 1),
+    );
+    final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
+      _editable(tester),
+      selection,
+      rawText: raw,
+    );
+
+    expect(bands, isNotEmpty);
+    expect(
+      bands.map((band) => band.width).reduce((a, b) => a > b ? a : b),
+      lessThan(120),
+      reason: 'One visible caret step must not paint as a full RTL row.',
+    );
+  });
+
+  testWidgets('single English visible step after hidden tags stays tight',
+      (tester) async {
+    const raw = '[bg=#806000][u]hello world from markup[/u][/bg]';
+    final controller = MarkupController(text: raw);
+
+    await _pumpField(
+      tester,
+      controller,
+      width: 620,
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.left,
+      style: style,
+    );
+
+    final visible = MarkupDecorationParser.visibleText(raw);
+    final visibleSeed = visible.indexOf('world');
+    expect(visibleSeed, isNonNegative);
+
+    final selection = TextSelection(
+      baseOffset: MarkupController.visualToRawOffset(raw, visibleSeed),
+      extentOffset: MarkupController.visualToRawOffset(raw, visibleSeed + 1),
+    );
+    final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
+      _editable(tester),
+      selection,
+      rawText: raw,
+    );
+
+    expect(bands, isNotEmpty);
+    expect(
+      bands.map((band) => band.width).reduce((a, b) => a > b ? a : b),
+      lessThan(80),
+      reason: 'One visible caret step must not paint as a full LTR row.',
+    );
+  });
+
   testWidgets('RenderEditable bands cover English wrapped markup selection',
       (tester) async {
     final controller = MarkupController(
@@ -161,6 +325,7 @@ Future<void> _pumpField(
               maxLines: null,
               textDirection: textDirection,
               textAlign: textAlign,
+              selectionWidthStyle: ui.BoxWidthStyle.tight,
               style: style,
               strutStyle: const StrutStyle(
                 fontSize: 28,

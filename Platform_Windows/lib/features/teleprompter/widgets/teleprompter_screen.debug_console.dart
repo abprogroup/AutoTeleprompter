@@ -6,25 +6,27 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
     TeleprompterState tState, {
     required double bottom,
     required double height,
+    required bool expanded,
+    required Color accentColor,
     required int wordCount,
   }) {
     return Positioned(
       bottom: bottom,
-      left: 6,
+      left: expanded ? 6 : null,
       right: 6,
+      width: expanded ? null : 360,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
         height: height,
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.92),
+          color: Colors.black.withValues(alpha: 0.92),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.orange, width: 1.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header bar with current status
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
               decoration: const BoxDecoration(
@@ -49,65 +51,97 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                       fontFamily: 'monospace',
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    'POS: ${tState.confirmedWordIndex}/${wordCount}',
-                    style: const TextStyle(
-                      color: Colors.orange,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _SoundLevelBar(
+                      level: tState.soundLevel,
+                      isListening: tState.isListening,
+                      isStarting: tState.isStarting,
+                      accentColor: accentColor,
+                      compact: !expanded,
                     ),
                   ),
-                  const Spacer(),
-                  const Text(
-                    'ðŸ”§ DEV',
-                    style: TextStyle(color: Colors.orange, fontSize: 10),
+                  if (expanded) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      'POS: ${tState.confirmedWordIndex}/$wordCount',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 8),
+                  Text(
+                    _debugConsolePinned ? 'PIN DEV' : 'DEV',
+                    style: const TextStyle(color: Colors.orange, fontSize: 10),
                   ),
                   const SizedBox(width: 4),
                   Tooltip(
-                    message: _debugConsoleMinimized
-                        ? 'Expand debug output'
-                        : 'Minimize debug output',
+                    message: _debugConsolePinned
+                        ? 'Unpin debug output'
+                        : 'Pin debug output',
                     child: IconButton(
                       icon: Icon(
-                        _debugConsoleMinimized
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
+                        _debugConsolePinned
+                            ? Icons.push_pin
+                            : Icons.push_pin_outlined,
+                        color: Colors.orange,
+                        size: 16,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 24, minHeight: 28),
+                      onPressed: () =>
+                          _setPresenterDebugPinned(!_debugConsolePinned),
+                    ),
+                  ),
+                  Tooltip(
+                    message: expanded
+                        ? 'Minimize debug output'
+                        : 'Expand debug output',
+                    child: IconButton(
+                      icon: Icon(
+                        expanded
+                            ? Icons.keyboard_arrow_down_rounded
+                            : Icons.keyboard_arrow_up_rounded,
                         color: Colors.orange,
                         size: 18,
                       ),
                       padding: EdgeInsets.zero,
                       constraints:
                           const BoxConstraints(minWidth: 28, minHeight: 28),
-                      onPressed: () => setState(() {
-                        _debugConsoleMinimized = !_debugConsoleMinimized;
-                      }),
+                      onPressed: () => _setPresenterDebugExpanded(!expanded),
                     ),
                   ),
-                  IconButton(
-                    icon:
-                        const Icon(Icons.copy, color: Colors.orange, size: 16),
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
-                    onPressed: () {
-                      final text = tState.debugLogs.reversed.join('\n');
-                      Clipboard.setData(ClipboardData(text: text));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Debug logs copied to clipboard',
-                                style: TextStyle(color: Colors.black)),
+                  if (expanded)
+                    IconButton(
+                      icon: const Icon(Icons.copy,
+                          color: Colors.orange, size: 16),
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 28, minHeight: 28),
+                      onPressed: () {
+                        final text = tState.debugLogs.reversed.join('\n');
+                        Clipboard.setData(ClipboardData(text: text));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Debug logs copied to clipboard',
+                              style: TextStyle(color: Colors.black),
+                            ),
                             backgroundColor: Colors.orange,
-                            duration: Duration(seconds: 2)),
-                      );
-                    },
-                  ),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
-            // Log list
-            if (!_debugConsoleMinimized)
+            if (expanded)
               Expanded(
                 child: ListView.builder(
                   reverse: true,
@@ -117,21 +151,7 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                   itemBuilder: (context, idx) {
                     final log =
                         tState.debugLogs[tState.debugLogs.length - 1 - idx];
-                    Color logColor = Colors.greenAccent;
-                    if (log.contains('â¸') || log.contains('WAIT')) {
-                      logColor = Colors.yellow.shade200;
-                    } else if (log.contains('âŒ') ||
-                        log.contains('SKIP') ||
-                        log.contains('â­')) {
-                      logColor = Colors.redAccent.shade100;
-                    } else if (log.contains('ðŸŽ¤') || log.contains('STATUS')) {
-                      logColor = Colors.cyan.shade200;
-                    } else if (log.contains('ðŸ’“') ||
-                        log.contains('HEARTBEAT')) {
-                      logColor = Colors.purple.shade200;
-                    } else if (log.contains('ðŸš€') || log.contains('ðŸŒ')) {
-                      logColor = Colors.blue.shade200;
-                    }
+                    final logColor = _debugLogColor(log);
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 1),
                       child: Text(
@@ -151,5 +171,30 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
         ),
       ),
     );
+  }
+
+  Color _debugLogColor(String log) {
+    if (log.contains('[WAIT]') || log.contains('WAIT')) {
+      return Colors.yellow.shade200;
+    }
+    if (log.contains('[ERROR]') ||
+        log.contains('[WARN]') ||
+        log.contains('SKIP') ||
+        log.contains('FAILED')) {
+      return Colors.redAccent.shade100;
+    }
+    if (log.contains('[STT]') || log.contains('STATUS')) {
+      return Colors.cyan.shade200;
+    }
+    if (log.contains('[HEARTBEAT]') || log.contains('HEARTBEAT')) {
+      return Colors.purple.shade200;
+    }
+    if (log.contains('[SESSION]') || log.contains('[LANG]')) {
+      return Colors.blue.shade200;
+    }
+    if (log.contains('[MIC]')) {
+      return Colors.greenAccent.shade100;
+    }
+    return Colors.greenAccent;
   }
 }

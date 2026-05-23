@@ -96,7 +96,7 @@ extension GlobalSelectionOverlayBuild on GlobalSelectionOverlayState {
             latestPointerGlobal: details.globalPosition,
             latestHandleGlobal: caretGlobal ?? details.globalPosition,
           );
-          setState(() {
+          _setOverlayState(() {
             _handleDrag = session;
             _sessionMode = SelectionSessionMode.handleDrag;
             _pointerState = SelectionPointerState.inside;
@@ -130,7 +130,7 @@ extension GlobalSelectionOverlayBuild on GlobalSelectionOverlayState {
                 borderRadius: BorderRadius.circular(3),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: 0.5),
                       blurRadius: 4,
                       offset: const Offset(0, 2)),
                 ],

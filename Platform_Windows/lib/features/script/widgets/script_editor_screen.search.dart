@@ -13,12 +13,12 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       color: Colors.transparent,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.9),
+          color: Colors.black.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: const Color(0x66FFBF00), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.45),
+              color: Colors.black.withValues(alpha: 0.45),
               blurRadius: 18,
               offset: const Offset(0, 6),
             ),
@@ -147,7 +147,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     }
 
     if (matches.isEmpty) {
-      setState(() {
+      _setEditorState(() {
         _editorSearchToolbarVisible = false;
         _editorSearchMatches = const [];
         _editorSearchMatchIndex = -1;
@@ -155,7 +155,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No match for "$query"'),
-          backgroundColor: Colors.black.withOpacity(0.9),
+          backgroundColor: Colors.black.withValues(alpha: 0.9),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -177,7 +177,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     final initialIndex = matches.indexWhere((match) =>
         match.blockIndex > startBlock ||
         (match.blockIndex == startBlock && match.visibleStart >= startVisible));
-    setState(() {
+    _setEditorState(() {
       _editorSearchToolbarVisible = true;
       _editorSearchMatches = matches;
       _editorSearchMatchIndex = initialIndex >= 0 ? initialIndex : 0;
@@ -187,7 +187,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
 
   void _toggleEditorWholeWordSearch() {
     if (_lastSearchQuery.isEmpty) return;
-    setState(() {
+    _setEditorState(() {
       _searchWholeWord = !_searchWholeWord;
     });
     _setEditorSearchQuery(_lastSearchQuery);
@@ -233,7 +233,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     final count = _editorSearchMatches.length;
     final next = (_editorSearchMatchIndex + delta) % count;
     final normalized = next < 0 ? next + count : next;
-    setState(() {
+    _setEditorState(() {
       _editorSearchMatchIndex = normalized;
       _editorSearchToolbarVisible = true;
     });
@@ -282,13 +282,14 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       _focusNodes[match.blockIndex].unfocus();
     }
     controller.refresh();
-    setState(() {});
+    _setEditorState(() {});
     _scrollEditorBlockIntoView(match.blockIndex, alignment: 0.25);
     _scheduleHighlightTrace('search-result');
+    _recordSelectionTrace('search-result');
   }
 
   void _closeEditorSearchToolbar() {
-    setState(() {
+    _setEditorState(() {
       _editorSearchToolbarVisible = false;
       _editorSearchMatches = const [];
       _editorSearchMatchIndex = -1;

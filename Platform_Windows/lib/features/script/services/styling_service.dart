@@ -41,10 +41,11 @@ class StylingService {
     for (final match in regex.allMatches(p1)) {
       final tag = match.group(0)!;
       if (tag == '**') {
-        if (stack.contains('**'))
+        if (stack.contains('**')) {
           stack.remove('**');
-        else
+        } else {
           stack.add('**');
+        }
       } else if (tag.startsWith('[/')) {
         final family = tag.substring(2, tag.indexOf(']'));
         for (int i = stack.length - 1; i >= 0; i--) {

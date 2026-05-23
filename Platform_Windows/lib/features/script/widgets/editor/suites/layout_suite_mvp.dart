@@ -156,7 +156,7 @@ class _AlignBtn extends StatelessWidget {
             color: active ? Colors.white12 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: active
-                ? Border.all(color: amber.withOpacity(0.4), width: 1)
+                ? Border.all(color: amber.withValues(alpha: 0.4), width: 1)
                 : Border.all(color: Colors.white10, width: 1),
           ),
           child: Icon(icon, size: 24, color: active ? amber : Colors.white70),

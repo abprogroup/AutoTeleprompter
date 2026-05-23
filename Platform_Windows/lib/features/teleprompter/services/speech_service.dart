@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 
@@ -13,10 +14,11 @@ class SpeechResult {
 /// Result of starting the speech service — tells the caller what happened.
 class SpeechStartResult {
   final bool success;
-  final String? actualLocale;       // The locale that was actually used
-  final String? requestedLocale;    // What was requested
-  final bool languageMissing;       // True if requested language wasn't available
-  final String? missingLanguageName; // Human-readable name of the missing language
+  final String? actualLocale; // The locale that was actually used
+  final String? requestedLocale; // What was requested
+  final bool languageMissing; // True if requested language wasn't available
+  final String?
+      missingLanguageName; // Human-readable name of the missing language
   final String? message;
 
   SpeechStartResult({
@@ -32,14 +34,38 @@ class SpeechStartResult {
   static String languageNameFromLocale(String localeId) {
     final lang = localeId.toLowerCase().split(RegExp(r'[_-]')).first;
     const names = {
-      'he': 'Hebrew', 'en': 'English', 'ar': 'Arabic', 'fr': 'French',
-      'de': 'German', 'es': 'Spanish', 'it': 'Italian', 'pt': 'Portuguese',
-      'ru': 'Russian', 'zh': 'Chinese', 'ja': 'Japanese', 'ko': 'Korean',
-      'hi': 'Hindi', 'tr': 'Turkish', 'pl': 'Polish', 'nl': 'Dutch',
-      'sv': 'Swedish', 'da': 'Danish', 'fi': 'Finnish', 'no': 'Norwegian',
-      'th': 'Thai', 'vi': 'Vietnamese', 'uk': 'Ukrainian', 'cs': 'Czech',
-      'ro': 'Romanian', 'hu': 'Hungarian', 'el': 'Greek', 'id': 'Indonesian',
-      'ms': 'Malay', 'fa': 'Persian', 'bn': 'Bengali', 'ta': 'Tamil',
+      'he': 'Hebrew',
+      'en': 'English',
+      'ar': 'Arabic',
+      'fr': 'French',
+      'de': 'German',
+      'es': 'Spanish',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ru': 'Russian',
+      'zh': 'Chinese',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'hi': 'Hindi',
+      'tr': 'Turkish',
+      'pl': 'Polish',
+      'nl': 'Dutch',
+      'sv': 'Swedish',
+      'da': 'Danish',
+      'fi': 'Finnish',
+      'no': 'Norwegian',
+      'th': 'Thai',
+      'vi': 'Vietnamese',
+      'uk': 'Ukrainian',
+      'cs': 'Czech',
+      'ro': 'Romanian',
+      'hu': 'Hungarian',
+      'el': 'Greek',
+      'id': 'Indonesian',
+      'ms': 'Malay',
+      'fa': 'Persian',
+      'bn': 'Bengali',
+      'ta': 'Tamil',
     };
     return names[lang] ?? localeId;
   }
@@ -67,10 +93,12 @@ class SpeechService {
   void Function(SpeechResult)? onResult;
   void Function(SpeechStatus)? onStatusChange;
   void Function(String)? onError;
+
   /// Fires when the language is confirmed unavailable (after retries exhausted).
   /// The string is the original requested locale ID.
   void Function(String requestedLocale)? onLanguageUnavailable;
   void Function(double level)? onSoundLevelChange;
+
   /// Fires with diagnostic messages (init results, locale list, etc.) for the debug panel.
   void Function(String)? onDiagnostic;
   bool debugLogging = true;
@@ -96,7 +124,6 @@ class SpeechService {
               }
             } else if (_languageRetries == 2) {
               // 2nd retry: try with explicit device locale in case null didn't work
-              final deviceLocale = _stt.lastStatus; // just force one more try
               _localeId = '';
               if (!_isRestarting) {
                 _scheduleRestart(const Duration(milliseconds: 500));
@@ -132,7 +159,8 @@ class SpeechService {
 
           if (_isRestarting) return;
 
-          final isTimeout = msg == 'error_no_match' || msg.contains('no_match') ||
+          final isTimeout = msg == 'error_no_match' ||
+              msg.contains('no_match') ||
               msg.contains('speech_timeout');
 
           if (_consecutiveErrors >= 8) {
@@ -161,7 +189,8 @@ class SpeechService {
             onStatusChange?.call(SpeechStatus.listening);
           }
         },
-        debugLogging: true, // v4.1.5: Force trace to debug Windows native STT silently failing
+        debugLogging:
+            true, // v4.1.5: Force trace to debug Windows native STT silently failing
       );
     } catch (e) {
       onError?.call('STT init failed: $e');
@@ -205,7 +234,7 @@ class SpeechService {
 
     // 2. Language match (e.g. requested en-US, found en-GB)
     for (final l in locales) {
-      if (l.localeId.toLowerCase().replaceAll('_', '-').startsWith('${lang}-')) {
+      if (l.localeId.toLowerCase().replaceAll('_', '-').startsWith('$lang-')) {
         return l.localeId;
       }
     }
@@ -225,32 +254,37 @@ class SpeechService {
   Future<SpeechStartResult> start({String? localeId}) async {
     final hasPermission = await _stt.hasPermission;
 
-    onDiagnostic?.call('🔧 hasPermission=$hasPermission, initialized=$_isInitialized');
+    onDiagnostic
+        ?.call('🔧 hasPermission=$hasPermission, initialized=$_isInitialized');
     if (!_isInitialized || !hasPermission) {
       final ok = await initialize();
       if (!ok) {
         return SpeechStartResult(
           success: false,
-          message: 'Speech recognition failed to start.\n\nOn Windows, check:\n1. Settings → Privacy → Microphone → allow desktop apps\n2. Settings → Time & Language → Speech → install a speech language pack',
+          message:
+              'Speech recognition failed to start.\n\nOn Windows, check:\n1. Settings → Privacy → Microphone → allow desktop apps\n2. Settings → Time & Language → Speech → install a speech language pack',
         );
       }
     }
 
     // Get available locales from the device
     final locales = await _stt.locales();
-    onDiagnostic?.call('🌐 Available STT locales (${locales.length}): ${locales.map((l) => l.localeId).take(8).join(', ')}${locales.length > 8 ? '...' : ''}');
+    onDiagnostic?.call(
+        '🌐 Available STT locales (${locales.length}): ${locales.map((l) => l.localeId).take(8).join(', ')}${locales.length > 8 ? '...' : ''}');
     bool languageMissing = false;
     String? requestedLang = localeId;
 
     if (localeId != null && localeId.isNotEmpty) {
       final bestMatch = _findBestLocale(locales, localeId);
       final systemLocale = (await _stt.systemLocale())?.localeId;
-      
-      // OPTIMIZATION: On Windows, passing null (system default) to listen() 
-      // is significantly more stable than passing an explicit locale ID string 
+
+      // OPTIMIZATION: On Windows, passing null (system default) to listen()
+      // is significantly more stable than passing an explicit locale ID string
       // like 'en-US' or 'he-IL', especially if it's the device's main language.
-      if (bestMatch != null && systemLocale != null && 
-          bestMatch.toLowerCase().replaceAll('_', '-') == systemLocale.toLowerCase().replaceAll('_', '-')) {
+      if (bestMatch != null &&
+          systemLocale != null &&
+          bestMatch.toLowerCase().replaceAll('_', '-') ==
+              systemLocale.toLowerCase().replaceAll('_', '-')) {
         _localeId = ''; // Force system default path
       } else if (bestMatch != null) {
         _localeId = bestMatch;
@@ -259,7 +293,6 @@ class SpeechService {
         languageMissing = true;
         _localeId = '';
       }
-
     } else {
       // No locale specified — use device default
       _localeId = '';
@@ -298,10 +331,13 @@ class SpeechService {
           _consecutiveErrors = 0;
           // Verbose logging for recognition shards (helps debug "silent" Windows engines)
           if (debugLogging) {
-             print('[SpeechService] onResult: words="${result.recognizedWords}", final=${result.finalResult}');
+            debugPrint(
+              '[SpeechService] onResult: words="${result.recognizedWords}", final=${result.finalResult}',
+            );
           }
           if (result.recognizedWords.isNotEmpty) {
-            onResult?.call(SpeechResult(result.recognizedWords, result.finalResult));
+            onResult?.call(
+                SpeechResult(result.recognizedWords, result.finalResult));
           }
           if (result.finalResult && _isActive && !_isRestarting) {
             _scheduleRestart(const Duration(milliseconds: 100));

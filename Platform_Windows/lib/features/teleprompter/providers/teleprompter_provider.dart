@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
+import '../services/debug_log_formatter.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
 import '../services/word_aligner.dart';
@@ -90,54 +91,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
   TeleprompterState get _currentState => state;
 
-  String _normalizeDebugLog(String log) {
-    var value = log;
-    const replacements = <String, String>{
-      '🎤': '[STT]',
-      '🎙️': '[MIC]',
-      '🔧': '[DEV]',
-      '🚀': '[SESSION]',
-      '🌐': '[LANG]',
-      '💓': '[HEARTBEAT]',
-      '🚨': '[WARN]',
-      '👉': '[FIX]',
-      '✅': '[OK]',
-      '❌': '[ERROR]',
-      '⚠️': '[WARN]',
-      '🗣️': '[VOICE]',
-      '🤖': '[WHISPER]',
-      '📍': '[POS]',
-      '🔄': '[RESET]',
-      '⏸': '[WAIT]',
-      '➡': '->',
-      '→': '->',
-      '—': '-',
-      'Ã°Å¸Å½Â¤': '[STT]',
-      'Ã°Å¸Å½â„¢Ã¯Â¸Â': '[MIC]',
-      'Ã°Å¸â€Â§': '[DEV]',
-      'Ã°Å¸Å¡â‚¬': '[SESSION]',
-      'Ã°Å¸Å’Â': '[LANG]',
-      'Ã°Å¸â€™â€œ': '[HEARTBEAT]',
-      'Ã°Å¸Å¡Â¨': '[WARN]',
-      'Ã°Å¸â€˜â€°': '[FIX]',
-      'Ã¢Å“â€¦': '[OK]',
-      'Ã¢ÂÅ’': '[ERROR]',
-      'Ã¢Å¡Â Ã¯Â¸Â': '[WARN]',
-      'Ã°Å¸â€”Â£Ã¯Â¸Â': '[VOICE]',
-      'Ã°Å¸Â¤â€“': '[WHISPER]',
-      'Ã¢ÂÂ¸': '[WAIT]',
-      'Ã¢ÂÂ­': '[SKIP]',
-      'Ã¢â€ â€™': '->',
-      'Ã¢â‚¬â€': '-',
-      'â†’': '->',
-      'â€”': '-',
-    };
-    for (final entry in replacements.entries) {
-      value = value.replaceAll(entry.key, entry.value);
-    }
-    return value;
-  }
-
   void _addDebugLog(String log) {
     if (_disposed) return;
     try {
@@ -149,7 +102,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final now = DateTime.now();
     final ts =
         "${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}";
-    final entry = "[$ts] ${_normalizeDebugLog(log)}";
+    final entry = "[$ts] ${DebugLogFormatter.normalize(log)}";
     final logs = [...state.debugLogs, entry];
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
     _safeSetState((s) => s.copyWith(debugLogs: logs));

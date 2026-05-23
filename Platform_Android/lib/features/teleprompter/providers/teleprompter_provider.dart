@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
+import '../services/debug_log_formatter.dart';
 import '../services/speech_service.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
@@ -93,7 +94,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final now = DateTime.now();
     final ts =
         "${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}";
-    final entry = "[$ts] $log";
+    final entry = "[$ts] ${DebugLogFormatter.normalize(log)}";
     final logs = [...state.debugLogs, entry];
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
     _safeSetState((s) => s.copyWith(debugLogs: logs));

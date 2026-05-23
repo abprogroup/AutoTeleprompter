@@ -367,10 +367,10 @@ class _ScriptListItem extends ConsumerWidget {
         labelBorderColor = labelColor.withValues(alpha: 0.3);
     }
 
-    final previewText = snippet ??
-        StylingService.stripTags(fullText.split('\n').first.trim().isNotEmpty
-            ? fullText.split('\n').first
-            : 'No content preview');
+    final previewText = StylingService.recentScriptPreviewText(
+      fullText: fullText,
+      snippet: snippet,
+    );
 
     return Material(
       color: Colors.transparent,
@@ -487,7 +487,7 @@ class _ScriptListItem extends ConsumerWidget {
                                     fontSize: 15)),
                             const SizedBox(height: 2),
                             Text(previewText,
-                                maxLines: 1,
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                     color: Colors.white38, fontSize: 13)),

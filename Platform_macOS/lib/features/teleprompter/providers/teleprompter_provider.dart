@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
+import '../services/debug_log_formatter.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
 import '../services/word_aligner.dart';
@@ -102,7 +103,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final now = DateTime.now();
     final ts =
         "${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}";
-    final entry = "[$ts] $log";
+    final entry = "[$ts] ${DebugLogFormatter.normalize(log)}";
     final logs = [...state.debugLogs, entry];
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
     _safeSetState((s) => s.copyWith(debugLogs: logs));
@@ -126,8 +127,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         return;
       } else if (words.contains('start prompt') || words.contains('×‘×•×')) {
         _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: START');
-        if (settings.scrollSpeed == 0)
+        if (settings.scrollSpeed == 0) {
           ref.read(settingsProvider.notifier).setScrollSpeed(100);
+        }
         return;
       } else if (words.contains('speed up') || words.contains('×ž×”×¨')) {
         _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: FASTER');

@@ -11,6 +11,25 @@ class StylingService {
     return text.replaceAll(regex, '');
   }
 
+  static String recentScriptPreviewText({
+    required String fullText,
+    String? snippet,
+  }) {
+    final explicitSnippet = snippet == null
+        ? ''
+        : stripTags(snippet).replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (explicitSnippet.isNotEmpty) return explicitSnippet;
+
+    final lines = fullText
+        .split('\n')
+        .map((line) => stripTags(line).replaceAll(RegExp(r'\s+'), ' ').trim())
+        .where((line) => line.isNotEmpty)
+        .take(2)
+        .toList();
+    if (lines.isEmpty) return 'No content preview';
+    return lines.join('\n');
+  }
+
   /// Alignment is paragraph-level and mutually exclusive.
   /// Strips ALL existing alignment tags from the entire text, then re-wraps.
   static String applyLayout(String text, TextSelection selection, String layout) {
@@ -41,8 +60,11 @@ class StylingService {
     for (final match in regex.allMatches(p1)) {
       final tag = match.group(0)!;
       if (tag == '**') {
-        if (stack.contains('**')) stack.remove('**');
-        else stack.add('**');
+        if (stack.contains('**')) {
+          stack.remove('**');
+        } else {
+          stack.add('**');
+        }
       } else if (tag.startsWith('[/')) {
         final family = tag.substring(2, tag.indexOf(']'));
         for (int i = stack.length - 1; i >= 0; i--) {

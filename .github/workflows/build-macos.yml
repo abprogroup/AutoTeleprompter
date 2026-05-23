@@ -1,5 +1,5 @@
 name: Build macOS App (v5.0.0)
-run-name: macOS v5.0.0 App - ${{ github.event_name }} on ${{ github.ref_name }}
+run-name: macOS v5.0.0 App - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -63,7 +63,7 @@ jobs:
           du -sh AutoTeleprompter-macOS-v5.0.0.zip
 
       - name: Upload App
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: AutoTeleprompter-macOS-v5.0.0
           path: Platform_macOS/build/macos/Build/Products/Release/AutoTeleprompter-macOS-v5.0.0.zip

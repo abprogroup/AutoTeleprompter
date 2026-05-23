@@ -1,5 +1,5 @@
 name: Build Windows EXE (v5.0.1)
-run-name: Windows v5.0.1 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+run-name: Windows v5.0.1 EXE #${{ github.run_number }} - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   push:

@@ -1,5 +1,5 @@
 name: Build iOS IPA (v5.0.0)
-run-name: iOS v5.0.0 IPA - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+run-name: iOS v5.0.0 IPA #${{ github.run_number }} - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   push:

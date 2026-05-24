@@ -543,7 +543,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         ),
                       ),
 
-                    // Compact search toolbar â€” floats at top, prev/next, count
+                    // Compact search toolbar floats at top: prev/next/count.
                     Positioned(
                       top: 8,
                       left: 0,
@@ -572,131 +572,14 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         ),
                       ),
 
-                    // Controls overlay â€” control bar + speed slider stacked at bottom
+                    // Controls overlay: control bar + speed slider stacked at bottom.
                     Positioned(
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      child: MouseRegion(
-                        onEnter: (_) {
-                          if (Platform.isWindows) {
-                            _windowsControlsHovering = true;
-                            _showWindowsControlsFromHotZone();
-                          }
-                        },
-                        onExit: (_) {
-                          if (Platform.isWindows) {
-                            _windowsControlsHovering = false;
-                            _scheduleHideControls();
-                          }
-                        },
-                        child: AnimatedOpacity(
-                          opacity: _controlsVisible ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 400),
-                          child: IgnorePointer(
-                            ignoring: !_controlsVisible,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Speed slider â€” sits just above the control bar, always visible in manual mode
-                                if (settings.scrollMode == 'manual')
-                                  Container(
-                                    color: Colors.black.withValues(alpha: 0.75),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 4),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.speed,
-                                            color: Colors.white54, size: 18),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Slider(
-                                            value: settings.scrollSpeed,
-                                            min: -300,
-                                            max: 300,
-                                            divisions: 120, // 5wpm steps
-                                            activeColor: Color(
-                                                settings.currentWordColor),
-                                            inactiveColor: Colors.white24,
-                                            onChanged: (v) {
-                                              ref
-                                                  .read(
-                                                      settingsProvider.notifier)
-                                                  .setScrollSpeed(v);
-                                              if (_manualScrolling && v != 0) {
-                                                // If already scrolling, update will happen in next tick of timer
-                                                // No need to restart timer if we handle speed dynamically
-                                              } else if (v != 0 &&
-                                                  !_manualScrolling) {
-                                                _startManualScroll();
-                                              } else if (v == 0) {
-                                                _stopManualScroll();
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                        SizedBox(
-                                          width: 62,
-                                          child: Text(
-                                              '${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
-                                              style: const TextStyle(
-                                                  color: Colors.white54,
-                                                  fontSize: 11)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                // Control bar
-                                _ControlBar(
-                                  isListening: tState.isListening,
-                                  isStarting: tState.isStarting,
-                                  isManualMode: settings.scrollMode == 'manual',
-                                  isManualScrolling: _manualScrolling,
-                                  isScrollingBackward: _scrollingBackward,
-                                  accentColor: Color(settings.currentWordColor),
-                                  onStart: settings.scrollMode == 'manual'
-                                      ? _startManualScroll
-                                      : _requestAndStart,
-                                  onStartBackward: () =>
-                                      _startManualScroll(backward: true),
-                                  onStop: settings.scrollMode == 'manual'
-                                      ? _stopManualScroll
-                                      : () => ref
-                                          .read(teleprompterProvider.notifier)
-                                          .stopSession(),
-                                  onReset: () {
-                                    if (settings.scrollMode == 'manual') {
-                                      _resetManual();
-                                    } else {
-                                      ref
-                                          .read(teleprompterProvider.notifier)
-                                          .resetPosition();
-                                      _scrollController.animateTo(0,
-                                          duration:
-                                              const Duration(milliseconds: 400),
-                                          curve: Curves.easeOutCubic);
-                                    }
-                                  },
-                                  onBack: () {
-                                    _exitPresentation();
-                                  },
-                                  onSettings: _showSettings,
-                                  onAddBookmark: _addPresenterBookmark,
-                                  onRemoveBookmark:
-                                      _deletePresenterBookmarkAtCurrentPosition,
-                                  onPreviousBookmark: () =>
-                                      _jumpPresenterBookmark(-1),
-                                  onNextBookmark: () =>
-                                      _jumpPresenterBookmark(1),
-                                  onSearch: _showSearchDialog,
-                                  onFontSizeChanged:
-                                      _preserveReadingPositionAfterLayoutChange,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      child: _buildPresenterControlsOverlay(
+                        settings: settings,
+                        tState: tState,
                       ),
                     ),
                   ],

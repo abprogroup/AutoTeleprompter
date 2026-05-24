@@ -190,14 +190,14 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     if (inSuite) _trackSuiteSection('Alignment');
 
     if (_isGlobalSelection) {
-      broadcastAlign(dir, open: '[$dir]', close: '[/$dir]');
+      broadcastDirection(dir, open: '[$dir]', close: '[/$dir]');
       _resyncGlobalSelection();
     } else {
       final targets = _styleTargets();
       for (final controller in targets) {
-        // v4.1.3: Alignment strips/replaces the outer tag, shifting all raw
-        // offsets by the tag-length delta. Capture visual offsets (invariant
-        // to tag changes) before applying, then re-pin externalSelection after.
+        // Direction strips/replaces only RTL/LTR tags, shifting raw offsets by
+        // the tag-length delta. Capture visual offsets before applying, then
+        // re-pin externalSelection after.
         final hadSel = controller.externalSelection != null &&
             controller.externalSelection!.isValid &&
             !controller.externalSelection!.isCollapsed;
@@ -210,7 +210,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
                 controller.text, controller.externalSelection!.end)
             : 0;
         controller.value = TextEditingValue(
-          text: StylingService.applyLayout(
+          text: StylingService.applyDirection(
               controller.text, controller.selection, dir),
           selection: const TextSelection.collapsed(offset: 0),
         );
@@ -240,6 +240,8 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     _onSelectionChanged();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(cursorStyleProvider.notifier).state =
+          ref.read(cursorStyleProvider).copyWith(textDirection: dir);
       _overlayKey.currentState?.refreshPositions();
     });
     _setEditorState(() => _isCommandExecuting = false);

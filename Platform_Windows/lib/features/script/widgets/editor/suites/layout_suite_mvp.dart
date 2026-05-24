@@ -5,7 +5,7 @@ import '../../../models/cursor_style.dart';
 import '../../../../settings/providers/settings_provider.dart';
 
 // v3.9.5.60: Sovereign Layout MVP
-// — Alignment via icons (format_align_*), RTL/LTR deferred
+// — Alignment and explicit RTL/LTR direction via icons
 // — Column layout: each group stacked vertically, no overflow
 class LayoutSuite extends ConsumerWidget {
   final ValueChanged<String> onAlign, onDirection;
@@ -68,6 +68,33 @@ class LayoutSuite extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         // ── Row 2: Line spacing ─────────────────────────────────────────
+        Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _AlignBtn(
+                icon: Icons.format_textdirection_l_to_r_rounded,
+                tooltip: 'Force LTR',
+                active: style.textDirection == 'ltr',
+                onTap: () {
+                  onDirection('ltr');
+                  onInteraction('Text Direction');
+                },
+              ),
+              const SizedBox(width: 8),
+              _AlignBtn(
+                icon: Icons.format_textdirection_r_to_l_rounded,
+                tooltip: 'Force RTL',
+                active: style.textDirection == 'rtl',
+                onTap: () {
+                  onDirection('rtl');
+                  onInteraction('Text Direction');
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
         SliderRow(
           label: 'Line Spacing',
           value: settings.lineSpacing.clamp(0.5, 3.0),

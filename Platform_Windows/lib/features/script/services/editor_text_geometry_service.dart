@@ -15,11 +15,28 @@ class EditorTextGeometryService {
   static bool hasVisibleContent(String rawText) =>
       visibleText(rawText).trim().isNotEmpty;
 
-  static bool resolveTextRtl(String rawText) => visibleText(rawText).isHebrew;
+  static String? explicitTextDirection(String rawText) {
+    String? direction;
+    for (final match in RegExp(r'\[(rtl|ltr)\]').allMatches(rawText)) {
+      final value = match.group(1);
+      if (value == null) continue;
+      final close = rawText.indexOf('[/$value]', match.end);
+      if (close == -1 || close >= match.end) direction = value;
+    }
+    return direction;
+  }
+
+  static bool resolveTextRtl(String rawText) {
+    final explicit = explicitTextDirection(rawText);
+    if (explicit != null) return explicit == 'rtl';
+    return visibleText(rawText).isHebrew;
+  }
 
   static bool resolveBlockRtl(List<String> rawBlocks, int index) {
     if (index < 0 || index >= rawBlocks.length) return false;
     final current = rawBlocks[index];
+    final explicit = explicitTextDirection(current);
+    if (explicit != null) return explicit == 'rtl';
     if (hasVisibleContent(current)) return resolveTextRtl(current);
 
     for (var i = index - 1; i >= 0; i--) {

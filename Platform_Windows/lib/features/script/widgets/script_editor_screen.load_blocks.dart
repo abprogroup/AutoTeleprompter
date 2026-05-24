@@ -397,6 +397,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           fontSize: _detectIntAtCursor('size=', settings.fontSize.toInt()),
           fontFamily: _detectStringAtCursor('font=', 'Inter'),
           textAlign: _detectAlignAtCursor(),
+          textDirection: _detectDirectionAtCursor(),
           textColor: _detectColorAtCursor(textColor: true),
           highlightColor: _detectColorAtCursor(textColor: false),
         );
@@ -575,6 +576,15 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     // the text is predominantly Hebrew, treat it as right-aligned.
     if (found == 'left' && text.isHebrew) found = 'right';
     return found;
+  }
+
+  String _detectDirectionAtCursor() {
+    final controller = _activeController;
+    if (controller == null) return 'ltr';
+    final text = controller.text;
+    final explicit = EditorTextGeometryService.explicitTextDirection(text);
+    if (explicit != null) return explicit;
+    return EditorTextGeometryService.resolveTextRtl(text) ? 'rtl' : 'ltr';
   }
 
   bool _detectStyleAtCursor(String open, String close) {

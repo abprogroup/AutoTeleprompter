@@ -90,6 +90,28 @@ void main() {
     expect(EditorTextGeometryService.resolveBlockRtl(['', '   '], 1), isFalse);
   });
 
+  test('explicit direction tags override language detection', () {
+    expect(
+      EditorTextGeometryService.resolveTextRtl(
+          '[ltr]\u05e9\u05dc\u05d5\u05dd[/ltr]'),
+      isFalse,
+    );
+    expect(
+      EditorTextGeometryService.resolveTextRtl('[rtl]English text[/rtl]'),
+      isTrue,
+    );
+  });
+
+  test('explicit direction tag owns empty block direction', () {
+    final blocks = [
+      '\u05e9\u05d5\u05e8\u05d4',
+      '[ltr][/ltr]',
+      '\u05e9\u05d5\u05e8\u05d4',
+    ];
+
+    expect(EditorTextGeometryService.resolveBlockRtl(blocks, 1), isFalse);
+  });
+
   test('explicit alignment overrides resolved direction alignment', () {
     expect(
       EditorTextGeometryService.resolveTextAlign(

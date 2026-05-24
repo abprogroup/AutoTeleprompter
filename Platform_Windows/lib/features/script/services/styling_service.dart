@@ -32,20 +32,37 @@ class StylingService {
   }
 
   /// Alignment is paragraph-level and mutually exclusive.
-  /// Strips ALL existing alignment tags from the entire text, then re-wraps.
+  /// Strips existing alignment tags from the entire text, then re-wraps.
   static String applyLayout(
       String text, TextSelection selection, String layout) {
     if (text.isEmpty) return text;
 
-    // v3.9.5.60: Total-text reconciler — strip ALL alignment tags everywhere
+    // Strip alignment only; RTL/LTR tags are handled by applyDirection.
     final clean = text.replaceAll(
-      RegExp(r'\[\/?(center|left|right|rtl|ltr|align)(?:=[^\]]+)?\]'),
+      RegExp(
+        r'\[(?:align=)?(?:center|left|right)\]'
+        r'|\[\/(?:align=)?(?:center|left|right)\]',
+      ),
       '',
     );
 
-    // v3.9.7: Always wrap with explicit tags so teleprompter can detect alignment
-    // (previously 'left' returned clean text, losing alignment info for RTL scripts)
+    // Always wrap with explicit tags so teleprompter can detect alignment.
     return '[$layout]$clean[/$layout]';
+  }
+
+  /// Direction is paragraph-level and mutually exclusive.
+  /// Strips only direction tags from the entire text, then re-wraps.
+  static String applyDirection(
+      String text, TextSelection selection, String direction) {
+    if (text.isEmpty) return text;
+    if (direction != 'rtl' && direction != 'ltr') return text;
+
+    final clean = text.replaceAll(
+      RegExp(r'\[(?:rtl|ltr)\]|\[\/(?:rtl|ltr)\]'),
+      '',
+    );
+
+    return '[$direction]$clean[/$direction]';
   }
 
   // v3.9.5.64: Slices a text block while mathematically preserving and re-wrapping geometric tags

@@ -1,4 +1,5 @@
 import 'package:autoteleprompter/features/script/services/styling_service.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -17,5 +18,27 @@ void main() {
     );
 
     expect(preview, 'EP1: Intro\nImported text');
+  });
+
+  test('direction changes preserve alignment markup', () {
+    const text = '[align=center][rtl]שלום[/rtl][/align=center]';
+    final next = StylingService.applyDirection(
+      text,
+      const TextSelection.collapsed(offset: 0),
+      'ltr',
+    );
+
+    expect(next, '[ltr][align=center]שלום[/align=center][/ltr]');
+  });
+
+  test('alignment changes preserve direction markup', () {
+    const text = '[rtl][align=center]שלום[/align=center][/rtl]';
+    final next = StylingService.applyLayout(
+      text,
+      const TextSelection.collapsed(offset: 0),
+      'right',
+    );
+
+    expect(next, '[right][rtl]שלום[/rtl][/right]');
   });
 }

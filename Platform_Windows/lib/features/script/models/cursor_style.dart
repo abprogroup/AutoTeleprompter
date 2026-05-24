@@ -8,6 +8,7 @@ class CursorStyle {
   final bool isBold, isItalic, isUnderline;
   final int fontSize;
   final String fontFamily, textAlign;
+  final String? textDirection;
   final Color? textColor, highlightColor;
 
   CursorStyle({
@@ -17,6 +18,7 @@ class CursorStyle {
     this.fontSize = 40,
     this.fontFamily = 'Inter',
     this.textAlign = 'left',
+    this.textDirection,
     this.textColor,
     this.highlightColor,
   });
@@ -28,6 +30,7 @@ class CursorStyle {
       int? fontSize,
       String? fontFamily,
       String? textAlign,
+      String? textDirection,
       Color? textColor,
       Color? highlightColor}) {
     return CursorStyle(
@@ -37,6 +40,7 @@ class CursorStyle {
       fontSize: fontSize ?? this.fontSize,
       fontFamily: fontFamily ?? this.fontFamily,
       textAlign: textAlign ?? this.textAlign,
+      textDirection: textDirection ?? this.textDirection,
       textColor: textColor ?? this.textColor,
       highlightColor: highlightColor ?? this.highlightColor,
     );
@@ -53,6 +57,7 @@ class CursorStyle {
           fontSize == other.fontSize &&
           fontFamily == other.fontFamily &&
           textAlign == other.textAlign &&
+          textDirection == other.textDirection &&
           textColor == other.textColor &&
           highlightColor == other.highlightColor;
 
@@ -64,6 +69,7 @@ class CursorStyle {
       fontSize.hashCode ^
       fontFamily.hashCode ^
       textAlign.hashCode ^
+      textDirection.hashCode ^
       textColor.hashCode ^
       highlightColor.hashCode;
 }

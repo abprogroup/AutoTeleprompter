@@ -62,6 +62,7 @@ part 'script_editor_screen.keyboard_navigation.dart';
 part 'script_editor_screen.keyboard_selection.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
 part 'script_editor_screen.keyboard_horizontal.dart';
+part 'script_editor_screen.keyboard_bookmark_helpers.dart';
 part 'script_editor_screen.keyboard_focus.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator

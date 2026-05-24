@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'script_editor_screen.dart';
 import '../../../core/security/secure_script_store.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/widgets/remote_status_card.dart';
@@ -56,6 +58,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
+    final auth = ref.watch(authProvider);
 
     return AbsorbPointer(
       absorbing: _inputShielded,
@@ -135,6 +138,8 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               const SizedBox(height: 8),
               const Text('Ready for your next broadcast?',
                   style: TextStyle(color: Colors.white54, fontSize: 15)),
+              const SizedBox(height: 18),
+              _ProDashboard(auth: auth),
               const SizedBox(height: 40),
               _GalleryActionCard(
                 title: 'New Script',
@@ -284,4 +289,4 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   }
 }
 
-// v4.0: _ProDashboard, _RemoteDashboard, _RemoteActionBtn removed (premium features)
+// v4.0: _RemoteDashboard and _RemoteActionBtn removed (premium features)

@@ -118,6 +118,102 @@ class _GalleryActionCard extends StatelessWidget {
   }
 }
 
+class _ProDashboard extends StatelessWidget {
+  final AuthState auth;
+
+  const _ProDashboard({required this.auth});
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = auth.isPro || auth.isAdmin;
+    final title = isActive ? 'Pro access active' : 'Beta Pro access';
+    final subtitle = isActive
+        ? auth.isAdmin
+            ? 'Admin workspace unlocked'
+            : 'Professional tools are unlocked on this device'
+        : 'Activate a license when premium publishing tools are ready';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFFFBF00).withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFBF00).withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isActive
+                  ? Icons.verified_rounded
+                  : Icons.workspace_premium_outlined,
+              color: const Color(0xFFFFBF00),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (isActive)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
+              ),
+              child: const Text(
+                'ACTIVE',
+                style: TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          else
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              ),
+              child: const Text('Activate'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ScriptListItem extends ConsumerWidget {
   static final Map<String, Future<String>> _previewCache = {};
 

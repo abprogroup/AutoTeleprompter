@@ -50,11 +50,9 @@ extension _SettingsSecureScriptParts on SettingsNotifier {
         await secureStore.migrateRecentMetadata(sanitizedRecents);
     var needsResave =
         jsonEncode(migratedRecents) != jsonEncode(sanitizedRecents);
-    var lastScriptSessionId =
-        prefs.getString(SettingsNotifier._lastScriptSessionIdKey) ?? '';
+    var lastScriptSessionId = prefs.getString(_lastScriptSessionIdKey) ?? '';
 
-    final legacyLastScript =
-        prefs.getString(SettingsNotifier._lastScriptKey) ?? '';
+    final legacyLastScript = prefs.getString(_lastScriptKey) ?? '';
     if (legacyLastScript.trim().isNotEmpty) {
       final migratedLastId = await secureStore.migrateLastScript(
         lastScript: legacyLastScript,
@@ -66,12 +64,9 @@ extension _SettingsSecureScriptParts on SettingsNotifier {
       );
       if (migratedLastId != null) {
         lastScriptSessionId = migratedLastId;
-        await prefs.setString(
-          SettingsNotifier._lastScriptSessionIdKey,
-          migratedLastId,
-        );
+        await prefs.setString(_lastScriptSessionIdKey, migratedLastId);
       }
-      await prefs.remove(SettingsNotifier._lastScriptKey);
+      await prefs.remove(_lastScriptKey);
     }
 
     final legacyAutosave = prefs.getString('autosave_script') ?? '';

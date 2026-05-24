@@ -6,59 +6,10 @@ import '../models/app_settings.dart';
 
 export '../models/app_settings.dart';
 
+part 'settings_provider.keys.dart';
 part 'settings_provider.secure_scripts.dart';
 
 class SettingsNotifier extends Notifier<AppSettings> {
-  static const _fontSizeKey = 'fontSize';
-  static const _languageKey = 'languageMode';
-  static const _scrollLeadKey = 'scrollLead';
-  static const _lastScriptKey = 'lastScript';
-  static const _lastScriptSessionIdKey = 'lastScriptSessionId';
-  static const _scrollModeKey = 'scrollMode';
-  static const _scrollSpeedKey = 'scrollSpeed';
-  static const _textAlignKey = 'textAlign';
-  static const _mirrorHorizontalKey = 'mirrorHorizontal';
-  static const _mirrorVerticalKey = 'mirrorVertical';
-  static const _flipRotationKey = 'flipRotation';
-  static const _lineSpacingKey = 'lineSpacing';
-  static const _wordSpacingKey = 'wordSpacing';
-  static const _letterSpacingKey = 'letterSpacing';
-  static const _scriptBgColorKey = 'scriptBgColor';
-  static const _currentWordColorKey = 'currentWordColor';
-  static const _futureWordColorKey = 'futureWordColor';
-  static const _pastWordOpacityKey = 'pastWordOpacity';
-  static const _debugModeKey = 'debugMode';
-  static const _videoResolutionKey = 'videoResolution';
-  static const _recentScriptsKey = 'recentScripts';
-  static const _displayNameKey = 'displayName';
-  static const _lastTextColorKey = 'lastTextColor';
-  static const _lastHighlightColorKey = 'lastHighlightColor';
-  static const _lastImportPathKey = 'lastImportPath';
-  static const _lastHistoryIndexKey = 'lastHistoryIndex';
-  static const _showCurrentWordHighlightKey = 'showCurrentWordHighlight';
-  static const _showUpcomingWordColorKey = 'showUpcomingWordColor';
-  static const _fontFamilyKey = 'fontFamily';
-  static const _showAlignmentOverrideKey = 'showAlignmentOverride';
-  static const _sttEngineKey = 'sttEngine';
-  static const _readFadeIntensityKey = 'readFadeIntensity';
-  static const _sttInputDeviceIdKey = 'sttInputDeviceId';
-  static const _sttInputDeviceLabelKey = 'sttInputDeviceLabel';
-  static const _sttVisibleSkipEnabledKey = 'sttVisibleSkipEnabled';
-  static const _sttStrictBulletModeKey = 'sttStrictBulletMode';
-  static const _sttHardVisibleSkipEnabledKey = 'sttHardVisibleSkipEnabled';
-  static const _sttManualProfileEnabledKey = 'sttManualProfileEnabled';
-  static const _sttManualStartAdvanceSmallWordsKey =
-      'sttManualStartAdvanceSmallWords';
-  static const _sttManualStartAdvanceBigWordsKey =
-      'sttManualStartAdvanceBigWords';
-  static const _sttManualSafetySmallWordsKey = 'sttManualSafetySmallWords';
-  static const _sttManualSafetyBigWordsKey = 'sttManualSafetyBigWords';
-  static const _sttManualVisibleSkipSmallWordsKey =
-      'sttManualVisibleSkipSmallWords';
-  static const _sttManualVisibleSkipBigWordsKey =
-      'sttManualVisibleSkipBigWords';
-  static const _sttManualBigWordMinLettersKey = 'sttManualBigWordMinLetters';
-
   @override
   AppSettings build() {
     _load();

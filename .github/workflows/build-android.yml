@@ -28,7 +28,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.3'
+          flutter-version: '3.32.8'
           channel: 'stable'
           cache: true
 
@@ -48,8 +48,10 @@ jobs:
         working-directory: Platform_Android
 
       - name: Build Android APK (Release, split ABI)
-        run: flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi
+        run: flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi --dart-define=APP_VERSION=5.0.0+1 --dart-define=FEEDBACK_ENDPOINT="$FEEDBACK_ENDPOINT"
         working-directory: Platform_Android
+        env:
+          FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
 
       - name: Rename Android APKs
         run: |

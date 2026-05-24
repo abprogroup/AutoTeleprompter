@@ -1,27 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../feedback/providers/beta_consent_provider.dart';
+import '../../feedback/widgets/beta_consent_gate.dart';
 import '../../script/widgets/script_gallery_screen.dart';
 
-class V3SplashScreen extends StatefulWidget {
+class V3SplashScreen extends ConsumerStatefulWidget {
   const V3SplashScreen({super.key});
 
   @override
-  State<V3SplashScreen> createState() => _V3SplashScreenState();
+  ConsumerState<V3SplashScreen> createState() => _V3SplashScreenState();
 }
 
-class _V3SplashScreenState extends State<V3SplashScreen> {
+class _V3SplashScreenState extends ConsumerState<V3SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 2500), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const ScriptGalleryScreen()),
-        );
-      }
-    });
+    Future.delayed(const Duration(milliseconds: 2500), _goNext);
+  }
+
+  Future<void> _goNext() async {
+    await ref.read(betaConsentProvider.notifier).ensureLoaded();
+    if (!mounted) return;
+    final consent = ref.read(betaConsentProvider);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => consent.hasAcceptedCurrentPolicy
+            ? const ScriptGalleryScreen()
+            : const BetaConsentGate(),
+      ),
+    );
   }
 
   @override

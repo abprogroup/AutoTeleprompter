@@ -26,6 +26,8 @@ dependencies:
   camera: 0.10.5+9
   gal: ^2.3.2
   archive: ^3.6.1
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.4
   xml: ^6.5.0
   google_fonts: ^6.2.1
   network_info_plus: ^5.0.0

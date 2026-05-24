@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'script_editor_screen.dart';
+import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../providers/script_provider.dart';
@@ -53,6 +54,15 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(
+            tooltip: 'Send beta feedback',
+            icon:
+                const Icon(Icons.bug_report_outlined, color: Colors.white54),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white54),
             onPressed: () => Navigator.push(

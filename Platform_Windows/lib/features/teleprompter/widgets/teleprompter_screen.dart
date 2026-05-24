@@ -25,6 +25,7 @@ import '../../../platform/stt/abstract_stt_service.dart';
 part 'teleprompter_screen.session_stt.dart';
 part 'teleprompter_screen.manual_scroll.dart';
 part 'teleprompter_screen.bookmarks_search.dart';
+part 'teleprompter_screen.presenter_search.dart';
 part 'teleprompter_screen.smooth_settings.dart';
 part 'teleprompter_screen.chrome.dart';
 part 'teleprompter_screen.build.dart';

@@ -18,6 +18,7 @@ import '../../settings/widgets/app_settings_screen.dart';
 import '../providers/script_provider.dart';
 import '../services/styling_service.dart';
 
+part 'script_gallery_screen.account_menu.dart';
 part 'script_gallery_screen.widgets.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {

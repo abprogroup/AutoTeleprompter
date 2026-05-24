@@ -163,4 +163,4 @@ class _ControlBar extends ConsumerWidget {
   }
 }
 
-// ── Settings panel ─────────────────────────────────────────────────────────────
+// Settings panel

@@ -10,6 +10,7 @@ import 'script_editor_screen.dart';
 import '../../../core/security/secure_script_store.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
+import '../../remote/widgets/remote_status_card.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../providers/script_provider.dart';
@@ -170,6 +171,17 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                   );
                 },
               ),
+              if (Platform.isWindows) ...[
+                const SizedBox(height: 12),
+                RemoteStatusCard(
+                  onOpenSettings: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AppSettingsScreen(),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 48),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

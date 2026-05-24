@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../../platform/file_import/platform_file_import.dart';
 
 class TelepromptSelectorSheet extends StatefulWidget {
   final String initialPath;
@@ -17,20 +17,7 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
   List<FileSystemEntity> _entities = [];
   bool _isLoading = true;
 
-  final List<String> _supportedExts = [
-    'rtf',
-    'pdf',
-    'docx',
-    'doc',
-    'pages',
-    'txt',
-    'log',
-    'md',
-    'odt',
-    'ott',
-    'rtx',
-    'dot'
-  ];
+  List<String> get _supportedExts => PlatformFileImport.supportedExtensions;
 
   @override
   void initState() {
@@ -38,24 +25,10 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
     _initDirectory();
   }
 
-  Future<void> _initDirectory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastPath = prefs.getString('last_picker_path');
-
-    setState(() {
-      // Step 2: Show most recent used folder if available
-      if (lastPath != null && Directory(lastPath).existsSync()) {
-        _currentDir = Directory(lastPath);
-      } else {
-        _currentDir = Directory(widget.initialPath);
-      }
-    });
+  void _initDirectory() {
+    final initialDir = Directory(widget.initialPath);
+    _currentDir = initialDir.existsSync() ? initialDir : Directory.current;
     _loadEntities();
-  }
-
-  Future<void> _saveCurrentPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('last_picker_path', _currentDir.path);
   }
 
   void _loadEntities() {
@@ -121,7 +94,7 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
     final isDir = entity is Directory;
 
     return Opacity(
-      // Step 3: Grey out unsupported files (APKs, PNGs, etc.)
+      // Grey out unsupported files (APKs, PNGs, etc.).
       opacity: isSupported ? 1.0 : 0.3,
       child: ListTile(
         leading: Icon(
@@ -147,13 +120,11 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
         onTap: () async {
           if (isDir) {
             setState(() => _currentDir = entity);
-            _saveCurrentPath();
             _loadEntities();
           } else if (isSupported) {
-            // Step 5: Success - return to app
             Navigator.pop(context, entity as File);
           } else {
-            // Step 4: Show Unsupported Dialog WITHOUT closing the selector
+            // Show the unsupported dialog without closing the selector.
             await showDialog(
               context: context,
               builder: (ctx) => AlertDialog(
@@ -167,7 +138,7 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
                   ],
                 ),
                 content: Text(
-                    "The file '$name' is not a supported script format.\n\nPlease select an RTF, DOCX, or PDF file.",
+                    "The file '$name' is not a supported script format.\n\nSupported formats: ${PlatformFileImport.formatsLabel}.",
                     style: const TextStyle(color: Colors.white70)),
                 actions: [
                   TextButton(
@@ -187,17 +158,17 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
   }
 
   Widget _buildHeader() {
+    final canGoUp = _currentDir.parent.path != _currentDir.path;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          if (_currentDir.path != '/')
+          if (canGoUp)
             IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded,
                   color: Colors.white, size: 20),
               onPressed: () {
                 setState(() => _currentDir = _currentDir.parent);
-                _saveCurrentPath();
                 _loadEntities();
               },
             ),

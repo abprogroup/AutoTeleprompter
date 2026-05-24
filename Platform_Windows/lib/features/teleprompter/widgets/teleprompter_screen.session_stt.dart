@@ -67,13 +67,14 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   Future<void> _exitPresentation() async {
     if (_closingPresentation) return;
     final navigator = Navigator.of(context);
+    final returnWordIndex = ref.read(teleprompterProvider).confirmedWordIndex;
     if (mounted) {
       _setTeleprompterState(() => _closingPresentation = true);
     } else {
       _closingPresentation = true;
     }
     await _stopPresentationSession();
-    if (mounted) navigator.pop();
+    if (mounted) navigator.pop(returnWordIndex);
   }
 
   Future<void> _initWebViewController() async {

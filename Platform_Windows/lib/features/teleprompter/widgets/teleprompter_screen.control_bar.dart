@@ -77,6 +77,7 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white70),
               onPressed: onBack,
+              tooltip: 'Back to editor',
             ),
             IconButton(
               icon: const Icon(Icons.skip_previous, color: Colors.white70),

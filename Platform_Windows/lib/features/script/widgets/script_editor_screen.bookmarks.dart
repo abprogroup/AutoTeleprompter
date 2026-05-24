@@ -454,13 +454,12 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     return raw.clamp(0, text.length).toInt();
   }
 
-  void _goToEditorBookmark(int bookmarkIndex) {
-    if (bookmarkIndex < 0 || bookmarkIndex >= _bookmarks.length) return;
-    final bookmark = _bookmarks[bookmarkIndex];
-    final position = _editorPositionForBookmark(bookmark);
+  void _focusEditorPosition(({int block, int offset}) position) {
     if (position.block < 0 || position.block >= _controllers.length) return;
     final controller = _controllers[position.block];
-    final selection = TextSelection.collapsed(offset: position.offset);
+    final selection = TextSelection.collapsed(
+      offset: position.offset.clamp(0, controller.text.length).toInt(),
+    );
     _overlayKey.currentState?.clearSelection();
     for (final c in _controllers) {
       c.externalSelection = null;
@@ -471,6 +470,17 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     _setEditorState(() => _isGlobalSelection = false);
     _focusNodes[position.block].requestFocus();
     _scrollEditorBlockIntoView(position.block, alignment: 0.28);
+  }
+
+  void _focusEditorWordIndex(int wordIndex) {
+    _focusEditorPosition(_editorPositionForWordIndex(wordIndex));
+  }
+
+  void _goToEditorBookmark(int bookmarkIndex) {
+    if (bookmarkIndex < 0 || bookmarkIndex >= _bookmarks.length) return;
+    final bookmark = _bookmarks[bookmarkIndex];
+    final position = _editorPositionForBookmark(bookmark);
+    _focusEditorPosition(position);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Bookmark: ${bookmark.label}'),

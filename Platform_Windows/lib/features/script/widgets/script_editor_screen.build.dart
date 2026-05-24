@@ -134,6 +134,12 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
           onImport: _importFile,
           onRename: _showRenameDialog,
           onSearch: _showEditorSearchDialog,
+          onSettings: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+            );
+          },
           onAddBookmark: _addEditorBookmark,
           onRemoveBookmark: () =>
               unawaited(_deleteEditorBookmarkAtCurrentPosition()),

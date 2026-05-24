@@ -43,6 +43,12 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             const SizedBox(height: 22),
             const _SectionHeader(title: 'SPEECH INPUT'),
             const SizedBox(height: 8),
+            _SpeechEngineTile(
+              value: settings.sttEngine,
+              onChanged: (engine) =>
+                  ref.read(settingsProvider.notifier).setSttEngine(engine),
+            ),
+            const SizedBox(height: 8),
             _SettingsTile(
               icon: Icons.mic_external_on_outlined,
               title: 'Preferred Microphone',
@@ -64,9 +70,20 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   Process.run('cmd', ['/c', 'start', 'ms-settings:sound']),
             ),
           ],
+          const SizedBox(height: 22),
+          const _SectionHeader(title: 'DIAGNOSTICS'),
+          const SizedBox(height: 8),
+          _SettingsSwitchTile(
+            icon: Icons.bug_report_outlined,
+            title: 'Debug Mode',
+            subtitle: settings.debugMode
+                ? 'Detailed logs and trace tools are visible'
+                : 'Normal mode: heavy debug traces stay off',
+            value: settings.debugMode,
+            onChanged: (_) =>
+                ref.read(settingsProvider.notifier).toggleDebugMode(),
+          ),
 
-          // v4.1+: Speech Recognition Engine selector and Whisper offline models
-          // are hidden for stable release. See MASTER_TODO.md deferred section.
           const SizedBox(height: 22),
           const _SectionHeader(title: 'BETA FEEDBACK'),
           const SizedBox(height: 8),
@@ -118,6 +135,118 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                 style: TextStyle(
                     color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SpeechEngineTile extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _SpeechEngineTile({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedValue = value == 'google' ? value : 'google';
+    final hasUnsupportedSavedValue = value != 'google';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.record_voice_over_outlined,
+                color: Colors.white54,
+                size: 22,
+              ),
+              SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Speech Recognition Engine',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Controls the sound-to-text system used in Present mode',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            // Flutter 3.32 on GitHub Actions still requires value.
+            // ignore: deprecated_member_use
+            value: normalizedValue,
+            dropdownColor: const Color(0xFF1A1A1A),
+            iconEnabledColor: const Color(0xFFFFBF00),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFF111111),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Colors.white12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFFFBF00)),
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'google',
+                child: Text('Online speech recognition'),
+              ),
+            ],
+            onChanged: (engine) {
+              if (engine == null) return;
+              onChanged(engine);
+            },
+          ),
+          if (hasUnsupportedSavedValue) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Offline Whisper was saved in an older build, but it is not '
+              'enabled for this Windows beta. Online speech recognition will '
+              'be used until the Windows offline engine returns.',
+              style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => onChanged('google'),
+                icon: const Icon(Icons.restore, size: 16),
+                label: const Text('Use online engine'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFFFBF00),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -188,6 +317,73 @@ class _SettingsTile extends StatelessWidget {
               ),
               if (onTap != null)
                 const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsSwitchTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SettingsSwitchTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: Colors.white54, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: value,
+                activeThumbColor: const Color(0xFFFFBF00),
+                onChanged: onChanged,
+              ),
             ],
           ),
         ),

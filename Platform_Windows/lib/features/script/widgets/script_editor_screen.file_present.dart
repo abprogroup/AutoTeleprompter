@@ -3,16 +3,24 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   Future<void> _importFile() async {
     final supportedExts = PlatformFileImport.supportedExtensions;
-    final result = await FilePicker.platform
-        .pickFiles(type: FileType.any, allowMultiple: false);
+    final settings = ref.read(settingsProvider);
+    final fallbackImportPath = settings.lastImportPath.isNotEmpty &&
+            Directory(settings.lastImportPath).existsSync()
+        ? settings.lastImportPath
+        : (Platform.environment['USERPROFILE'] ?? Directory.current.path);
+    final selectedFile = await showModalBottomSheet<File>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TelepromptSelectorSheet(initialPath: fallbackImportPath),
+    );
     if (!mounted) return;
-    if (result == null || result.files.single.path == null) {
+    if (selectedFile == null) {
       // v3.9.5.59: Fluid navigation fallback
       if (widget.shouldAutoLoad) Navigator.pop(context);
       _setEditorState(() => _isPendingLoad = false);
       return;
     }
-    final selectedFile = File(result.files.single.path!);
     final ext = selectedFile.path.split('.').last.toLowerCase();
 
     if (!supportedExts.contains(ext)) {
@@ -69,6 +77,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       'file import selected',
       data: {'extension': ext},
     );
+    await ref
+        .read(settingsProvider.notifier)
+        .setLastImportPath(selectedFile.parent.path);
     await _forceRecentUpdate();
     if (!mounted) return;
 
@@ -277,11 +288,15 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           );
     } catch (_) {}
     if (mounted) {
-      await Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
+      final returnWordIndex = await Navigator.of(context).push<int>(
+        MaterialPageRoute(builder: (_) => const TeleprompterScreen()),
+      );
       if (mounted) {
         await _loadBookmarksForCurrentScript(force: true);
         await _reconcileEditorBookmarkSignsFromMetadata(recordHistory: false);
+        if (returnWordIndex != null) {
+          _focusEditorWordIndex(returnWordIndex);
+        }
         _onSelectionChanged();
       }
     }

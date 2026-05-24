@@ -9,11 +9,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 
 class RemoteControlService {
+  static const int defaultPort = 8080;
+
   HttpServer? _server;
   final _onCommand = StreamController<String>.broadcast();
   Stream<String> get onCommand => _onCommand.stream;
+  bool get isRunning => _server != null;
+  int get port => _server?.port ?? defaultPort;
+  String get localUrl => 'http://localhost:$port';
 
   Future<void> start() async {
+    if (_server != null) return;
+
     final router = Router();
 
     router.get('/ws', webSocketHandler((WebSocketChannel webSocket) {
@@ -30,9 +37,24 @@ class RemoteControlService {
     final handler =
         const Pipeline().addMiddleware(logRequests()).addHandler(router.call);
 
-    _server = await io.serve(handler, InternetAddress.anyIPv4, 8080);
+    _server = await io.serve(handler, InternetAddress.anyIPv4, defaultPort);
     debugPrint(
-        'V3 Remote Server active at http://${_server!.address.address}:8080');
+        'V3 Remote Server active at http://${_server!.address.address}:$port');
+  }
+
+  Future<String> preferredUrl() async {
+    final addresses = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLoopback: false,
+    );
+    for (final interface in addresses) {
+      for (final address in interface.addresses) {
+        if (!address.isLoopback) {
+          return 'http://${address.address}:$port';
+        }
+      }
+    }
+    return localUrl;
   }
 
   Future<void> stop() async {

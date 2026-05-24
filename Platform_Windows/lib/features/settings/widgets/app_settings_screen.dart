@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
+import '../../remote/services/remote_control_service.dart';
 import '../providers/settings_provider.dart';
 
 class AppSettingsScreen extends ConsumerStatefulWidget {
@@ -14,9 +16,23 @@ class AppSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
+  bool _remoteBusy = false;
+  String? _remoteUrl;
+  String? _remoteError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (Platform.isWindows) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshRemoteUrl());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
+    final remote =
+        Platform.isWindows ? ref.read(remoteControlProvider) : null;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
@@ -84,6 +100,22 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                 ref.read(settingsProvider.notifier).toggleDebugMode(),
           ),
 
+          if (Platform.isWindows && remote != null) ...[
+            const SizedBox(height: 22),
+            const _SectionHeader(title: 'REMOTE CONTROL'),
+            const SizedBox(height: 8),
+            _RemoteControlTile(
+              isRunning: remote.isRunning,
+              isBusy: _remoteBusy,
+              url: _remoteUrl ?? remote.localUrl,
+              error: _remoteError,
+              onStart: _startRemote,
+              onStop: _stopRemote,
+              onCopy: _copyRemoteUrl,
+              onOpen: _openRemoteUrl,
+            ),
+          ],
+
           const SizedBox(height: 22),
           const _SectionHeader(title: 'BETA FEEDBACK'),
           const SizedBox(height: 8),
@@ -99,6 +131,68 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _refreshRemoteUrl() async {
+    if (!mounted || !Platform.isWindows) return;
+    final remote = ref.read(remoteControlProvider);
+    final url = remote.isRunning ? await remote.preferredUrl() : remote.localUrl;
+    if (!mounted) return;
+    setState(() {
+      _remoteUrl = url;
+      _remoteError = null;
+    });
+  }
+
+  Future<void> _startRemote() async {
+    if (_remoteBusy) return;
+    setState(() {
+      _remoteBusy = true;
+      _remoteError = null;
+    });
+    final remote = ref.read(remoteControlProvider);
+    try {
+      await remote.start();
+      final url = await remote.preferredUrl();
+      if (!mounted) return;
+      setState(() => _remoteUrl = url);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _remoteError =
+            'Remote control could not start. Port 8080 may already be in use.';
+      });
+    } finally {
+      if (mounted) setState(() => _remoteBusy = false);
+    }
+  }
+
+  Future<void> _stopRemote() async {
+    if (_remoteBusy) return;
+    setState(() {
+      _remoteBusy = true;
+      _remoteError = null;
+    });
+    await ref.read(remoteControlProvider).stop();
+    if (!mounted) return;
+    setState(() {
+      _remoteBusy = false;
+      _remoteUrl = ref.read(remoteControlProvider).localUrl;
+    });
+  }
+
+  Future<void> _copyRemoteUrl() async {
+    final url = _remoteUrl ?? ref.read(remoteControlProvider).localUrl;
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Remote URL copied: $url')),
+    );
+  }
+
+  Future<void> _openRemoteUrl() async {
+    final url = _remoteUrl ?? ref.read(remoteControlProvider).localUrl;
+    await Process.run('cmd', ['/c', 'start', url]);
   }
 
   void _editDisplayName(BuildContext context) {
@@ -247,6 +341,129 @@ class _SpeechEngineTile extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RemoteControlTile extends StatelessWidget {
+  final bool isRunning;
+  final bool isBusy;
+  final String url;
+  final String? error;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+  final VoidCallback onCopy;
+  final VoidCallback onOpen;
+
+  const _RemoteControlTile({
+    required this.isRunning,
+    required this.isBusy,
+    required this.url,
+    required this.error,
+    required this.onStart,
+    required this.onStop,
+    required this.onCopy,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final status = isRunning ? 'Running at $url' : 'Stopped';
+    final statusColor = isRunning ? const Color(0xFFFFBF00) : Colors.white38;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isRunning
+                    ? Icons.settings_remote_rounded
+                    : Icons.settings_remote_outlined,
+                color: Colors.white54,
+                size: 22,
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Local Remote Control',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Start a phone/browser controller for Present mode',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              if (isBusy)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFFFBF00),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(status, style: TextStyle(color: statusColor, fontSize: 12)),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(error!, style: const TextStyle(color: Colors.orangeAccent)),
+          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                onPressed: isBusy ? null : (isRunning ? onStop : onStart),
+                icon: Icon(isRunning ? Icons.stop_rounded : Icons.play_arrow),
+                label: Text(isRunning ? 'Stop' : 'Start'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFBF00),
+                  foregroundColor: Colors.black,
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: isRunning ? onCopy : null,
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                label: const Text('Copy URL'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFFFBF00),
+                  side: const BorderSide(color: Color(0xFFFFBF00)),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: isRunning ? onOpen : null,
+                icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                label: const Text('Open'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white24),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

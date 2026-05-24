@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../providers/settings_provider.dart';
+import 'cloud_sync_screen.dart';
 
 class AppSettingsScreen extends ConsumerStatefulWidget {
   const AppSettingsScreen({super.key});
@@ -115,6 +116,19 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               onOpen: _openRemoteUrl,
             ),
           ],
+
+          const SizedBox(height: 22),
+          const _SectionHeader(title: 'CLOUD SYNC'),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.cloud_sync_outlined,
+            title: 'Cloud Sync',
+            subtitle: 'Coming soon: connect storage and sync scripts',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
+            ),
+          ),
 
           const SizedBox(height: 22),
           const _SectionHeader(title: 'BETA FEEDBACK'),

@@ -41,19 +41,20 @@ class CloudSyncScreen extends ConsumerWidget {
               label: 'Google Drive',
               icon: Icons.add_to_drive,
               color: Colors.blue,
-              onTap: () {},
+              onTap: () => _showComingSoon(context, 'Google Drive sync'),
             ),
             _CloudOption(
               label: 'Dropbox',
               icon: Icons.cloud_queue,
               color: Colors.blueAccent,
-              onTap: () {},
+              onTap: () => _showComingSoon(context, 'Dropbox sync'),
             ),
             _CloudOption(
               label: 'AutoTeleprompter Cloud',
               icon: Icons.sync,
               color: const Color(0xFFFFBF00),
-              onTap: () {},
+              onTap: () =>
+                  _showComingSoon(context, 'AutoTeleprompter Cloud'),
             ),
             const SizedBox(height: 48),
             const Text('Automation',
@@ -61,25 +62,35 @@ class CloudSyncScreen extends ConsumerWidget {
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold)),
-            SwitchListTile(
-              value: true,
-              onChanged: (v) {},
-              title: const Text('Auto-sync on save',
+            const SwitchListTile(
+              value: false,
+              onChanged: null,
+              title: Text('Auto-sync on save',
                   style: TextStyle(color: Colors.white70, fontSize: 14)),
-              activeThumbColor: const Color(0xFFFFBF00),
+              subtitle: Text('Coming soon',
+                  style: TextStyle(color: Colors.white30, fontSize: 12)),
+              activeThumbColor: Color(0xFFFFBF00),
               contentPadding: EdgeInsets.zero,
             ),
-            SwitchListTile(
+            const SwitchListTile(
               value: false,
-              onChanged: (v) {},
-              title: const Text('Upload recordings automatically',
+              onChanged: null,
+              title: Text('Upload recordings automatically',
                   style: TextStyle(color: Colors.white70, fontSize: 14)),
-              activeThumbColor: const Color(0xFFFFBF00),
+              subtitle: Text('Coming soon',
+                  style: TextStyle(color: Colors.white30, fontSize: 12)),
+              activeThumbColor: Color(0xFFFFBF00),
               contentPadding: EdgeInsets.zero,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showComingSoon(BuildContext context, String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$feature is planned for a future beta.')),
     );
   }
 }

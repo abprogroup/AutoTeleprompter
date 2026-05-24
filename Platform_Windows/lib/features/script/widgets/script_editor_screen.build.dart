@@ -140,6 +140,12 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
               MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
             );
           },
+          onRecord: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ContentCreatorScreen()),
+            );
+          },
           onAddBookmark: _addEditorBookmark,
           onRemoveBookmark: () =>
               unawaited(_deleteEditorBookmarkAtCurrentPosition()),

@@ -28,6 +28,7 @@ import '../../../core/security/secure_script_store.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
+import '../../teleprompter/widgets/content_creator_screen.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../services/styling_service.dart';
 import '../services/script_bookmark_service.dart';

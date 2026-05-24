@@ -39,7 +39,8 @@ class RemoteControlService {
 
     _server = await io.serve(handler, InternetAddress.anyIPv4, defaultPort);
     debugPrint(
-        'V3 Remote Server active at http://${_server!.address.address}:$port');
+      'V5 Remote Server active at http://${_server!.address.address}:$port',
+    );
   }
 
   Future<String> preferredUrl() async {
@@ -66,7 +67,7 @@ class RemoteControlService {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>V3 REMOTE SUITE</title>
+    <title>AutoTeleprompter Remote</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { background: #0A0A0A; color: white; font-family: -apple-system, system-ui; text-align: center; padding: 20px; margin: 0; }
@@ -86,7 +87,7 @@ class RemoteControlService {
     </style>
 </head>
 <body>
-    <div class="brand">V3 PROFESSIONAL SUITE</div>
+    <div class="brand">AUTOTELEPROMPTER REMOTE</div>
     
     <div class="section">
         <span class="label">Operation Mode</span>

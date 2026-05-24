@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 
 class RemoteControlService {
   static const int defaultPort = 8080;
+  static const int maxFallbackPort = 8090;
 
   HttpServer? _server;
   final _onCommand = StreamController<String>.broadcast();
@@ -37,9 +38,29 @@ class RemoteControlService {
     final handler =
         const Pipeline().addMiddleware(logRequests()).addHandler(router.call);
 
-    _server = await io.serve(handler, InternetAddress.anyIPv4, defaultPort);
+    _server = await _bindAvailablePort(handler);
     debugPrint(
       'V5 Remote Server active at http://${_server!.address.address}:$port',
+    );
+  }
+
+  Future<HttpServer> _bindAvailablePort(Handler handler) async {
+    Object? lastError;
+    for (var candidate = defaultPort;
+        candidate <= maxFallbackPort;
+        candidate++) {
+      try {
+        return await io.serve(handler, InternetAddress.anyIPv4, candidate);
+      } on SocketException catch (error) {
+        lastError = error;
+        debugPrint(
+          'Remote port $candidate unavailable, trying ${candidate + 1}...',
+        );
+      }
+    }
+    throw StateError(
+      'Unable to start remote control. Ports '
+      '$defaultPort-$maxFallbackPort are unavailable. Last error: $lastError',
     );
   }
 

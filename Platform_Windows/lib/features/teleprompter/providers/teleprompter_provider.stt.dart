@@ -77,6 +77,15 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       _noProgressCount = 0;
       _addDebugLog(
           '$engineTag STANDBY LOCK | ${aligned.debugInfo} | heard: "${result.words}"');
+      LightweightDiagnostics.instance.record(
+        'stt',
+        'standby lock',
+        data: {
+          'heard': result.words,
+          'position': _currentState.confirmedWordIndex,
+          'confidence': aligned.confidence,
+        },
+      );
       return;
     }
 
@@ -101,6 +110,17 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
           target < script.words.length ? script.words[target].raw : '?';
       _addDebugLog(
           '$engineTag âœ… ADVANCE â†’ #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
+      LightweightDiagnostics.instance.record(
+        'stt',
+        'advanced',
+        data: {
+          'from': _currentState.confirmedWordIndex,
+          'to': target,
+          'word': advancedWord,
+          'confidence': aligned.confidence,
+          'heard': result.words,
+        },
+      );
 
       // Fluid advancement: if jumping more than 3 words, animate
       // through intermediate words so the user's eye can follow.
@@ -132,9 +152,24 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       if (improvising) {
         _addDebugLog(
             '$engineTag IMPROVISING | heard: "${result.words}" | visible relock waiting');
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'improvising',
+          data: {'heard': result.words, 'position': currentIdx},
+        );
       } else {
         _addDebugLog(
             '$engineTag WAIT #$_noProgressCount | heard: "${result.words}" | next: "$nextExpected"');
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'waiting',
+          data: {
+            'heard': result.words,
+            'next': nextExpected,
+            'position': currentIdx,
+            'stuckCount': _noProgressCount,
+          },
+        );
         _checkAndSwitchLocale();
       }
 
@@ -193,6 +228,11 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       if (_startingSession && status != SpeechStatus.listening) return;
       _startingSession = false;
       _addDebugLog('ðŸŽ¤ [${_sttService.platformName}] STATUS: $status');
+      LightweightDiagnostics.instance.record(
+        'stt',
+        'status changed',
+        data: {'platform': _sttService.platformName, 'status': '$status'},
+      );
       _safeSetState((s) => s.copyWith(
             isListening: status == SpeechStatus.listening,
             isStarting: false,
@@ -204,6 +244,11 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     _sttService.onError = (error) {
       if (_useWhisper || _disposed || _sessionStopped) return;
       _addDebugLog('ðŸŽ¤ [${_sttService.platformName}] STT ERROR: $error');
+      LightweightDiagnostics.instance.record(
+        'stt',
+        'STT error',
+        data: {'platform': _sttService.platformName, 'error': error},
+      );
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
           error.contains('error_permission') ||

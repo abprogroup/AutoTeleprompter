@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../feedback/widgets/feedback_report_screen.dart';
 import '../providers/settings_provider.dart';
 
 class AppSettingsScreen extends ConsumerStatefulWidget {
@@ -66,6 +67,18 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
           // v4.1+: Speech Recognition Engine selector and Whisper offline models
           // are hidden for stable release. See MASTER_TODO.md deferred section.
+          const SizedBox(height: 22),
+          const _SectionHeader(title: 'BETA FEEDBACK'),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.bug_report_outlined,
+            title: 'Send Feedback',
+            subtitle: 'Includes full active script and diagnostics',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
+            ),
+          ),
         ],
       ),
     );

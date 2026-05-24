@@ -1,5 +1,5 @@
-name: Build Windows EXE (v5.0.1)
-run-name: Windows v5.0.1 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+name: Build Windows EXE (v5.0.2)
+run-name: Windows v5.0.2 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   push:
@@ -44,5 +44,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-Windows-v5.0.1-EXE
+          name: AutoTeleprompter-Windows-v5.0.2-EXE
           path: build-zip\AutoTeleprompter-Windows

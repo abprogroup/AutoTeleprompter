@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
 import '../services/word_aligner.dart';
@@ -456,6 +457,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog(
         'ðŸš€ SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
+    LightweightDiagnostics.instance.record(
+      'session',
+      'presentation session started',
+      data: {
+        'title': script.title,
+        'sessionId': script.sessionId,
+        'sourceType': script.sourceType,
+        'wordCount': script.words.where((w) => !w.isNewline).length,
+        'startIndex': startIndex,
+      },
+    );
     final localeId = resolveInitialSttLocale(
       script.words,
       startIndex: startIndex,
@@ -558,6 +570,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
       if (!result.success) {
         _addDebugLog('ðŸŽ¤ [$platform] STT FAILED: ${result.message}');
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'STT start failed',
+          data: {'platform': platform, 'message': result.message},
+        );
         _safeSetState((s) => s.copyWith(
               statusMessage: result.message ?? 'Speech recognition failed',
               hasError: true,
@@ -593,6 +610,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       } else {
         _addDebugLog(
             'ðŸŽ¤ [$platform] STT using locale: ${result.actualLocale}');
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'STT started',
+          data: {'platform': platform, 'locale': result.actualLocale},
+        );
       }
     }
   }
@@ -604,6 +626,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
     _sessionToken++;
     _sessionStopped = true;
+    LightweightDiagnostics.instance.record(
+      'session',
+      'presentation session stopped',
+      data: {'position': state.confirmedWordIndex},
+    );
     _startingSession = false;
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
@@ -651,6 +678,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('ðŸ”„ POSITION RESET â†’ 0');
+    LightweightDiagnostics.instance.record('position', 'position reset');
     state = state.copyWith(confirmedWordIndex: 0);
     if (!_sessionStopped && _currentScript != null && state.isListening) {
       _syncLocaleForPosition(_currentScript!, 0, reason: 'reset');
@@ -669,6 +697,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(
         'ðŸ“ POSITION JUMP â†’ #$target "${activeScript.words[target].raw}"');
+    LightweightDiagnostics.instance.record(
+      'position',
+      'position jumped',
+      data: {'target': target, 'word': activeScript.words[target].raw},
+    );
     try {
       state = state.copyWith(confirmedWordIndex: target);
     } catch (_) {

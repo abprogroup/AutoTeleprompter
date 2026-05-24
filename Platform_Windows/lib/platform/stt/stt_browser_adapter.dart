@@ -38,7 +38,7 @@ class SttBrowserAdapter extends AbstractSttService {
     _sessionId++;
 
     onDiagnostic
-        ?.call('🌐 [Browser STT] Starting local server on port $_port...');
+        ?.call('[Browser STT] Starting local server on port $_port...');
 
     await _stopServer();
 
@@ -59,7 +59,7 @@ class SttBrowserAdapter extends AbstractSttService {
           previousClient.sink.close();
         } catch (_) {}
       }
-      onDiagnostic?.call('🔗 [Browser STT] WebView connected');
+      onDiagnostic?.call('[Browser STT] WebView connected');
 
       channel.stream.listen(
         (message) {
@@ -92,7 +92,7 @@ class SttBrowserAdapter extends AbstractSttService {
                   _everListened = true;
                   onStatusChange?.call(SpeechStatus.listening);
                   onDiagnostic?.call(
-                      '🎤 [Browser STT] Web Speech API active — speak now');
+                      '[Browser STT] Web Speech API active - speak now');
                 }
                 break;
               case 'result':
@@ -112,7 +112,7 @@ class SttBrowserAdapter extends AbstractSttService {
                   _selectedAudioInputDeviceLabel = label;
                 }
                 onDiagnostic?.call(
-                    '🎙️ [Browser STT] Input ready: $_selectedAudioInputDeviceLabel');
+                    '[Browser STT] Input ready: $_selectedAudioInputDeviceLabel');
                 break;
               case 'watchdogRestart':
                 final reason = data['reason'] as String? ?? 'stale';
@@ -124,16 +124,16 @@ class SttBrowserAdapter extends AbstractSttService {
                 final err = data['error'] as String? ?? 'unknown';
                 if (err == 'input-device-missing') {
                   onDiagnostic?.call(
-                      '⚠️ [Browser STT] Selected microphone unavailable; using system default.');
+                      '[Browser STT] Selected microphone unavailable; using system default.');
                 } else if (err == 'input-device-failed') {
                   onDiagnostic?.call(
-                      '⚠️ [Browser STT] Could not open selected microphone; using system default.');
+                      '[Browser STT] Could not open selected microphone; using system default.');
                 } else if (err == 'not-allowed') {
                   onError?.call('Microphone blocked in WebView2.\n'
                       'Grant mic access once: open http://localhost:$_port/ in Edge, '
                       'allow microphone, then restart the session.');
                 } else if (err != 'aborted' && err != 'no-speech') {
-                  onDiagnostic?.call('⚠️ [Browser STT] error: $err');
+                  onDiagnostic?.call('[Browser STT] error: $err');
                 }
                 break;
             }
@@ -145,7 +145,7 @@ class SttBrowserAdapter extends AbstractSttService {
             _wsClient = null;
           }
           if (_isActive && wasCurrentClient) {
-            onDiagnostic?.call('⚠️ [Browser STT] WebView disconnected');
+            onDiagnostic?.call('[Browser STT] WebView disconnected');
           }
         },
       );
@@ -162,7 +162,7 @@ class SttBrowserAdapter extends AbstractSttService {
     }
 
     onDiagnostic?.call(
-        '🌐 [Browser STT] WebView ready at http://localhost:$_port/?session=$_sessionId');
+        '[Browser STT] WebView ready at http://localhost:$_port/?session=$_sessionId');
 
     return SpeechStartResult(
       success: true,
@@ -178,7 +178,7 @@ class SttBrowserAdapter extends AbstractSttService {
     if (normalized == _currentLocale) return;
     _currentLocale = normalized;
     _everListened = false;
-    onDiagnostic?.call('🔤 [Browser STT] Switching locale → $normalized');
+    onDiagnostic?.call('[Browser STT] Switching locale -> $normalized');
     try {
       _wsClient?.sink
           .add(jsonEncode({'type': 'setLocale', 'locale': normalized}));
@@ -194,8 +194,8 @@ class SttBrowserAdapter extends AbstractSttService {
         ? 'System default microphone'
         : label.trim();
     onDiagnostic?.call(normalized == null
-        ? '🎙️ [Browser STT] Using system default microphone'
-        : '🎙️ [Browser STT] Requested microphone: $_selectedAudioInputDeviceLabel');
+        ? '[Browser STT] Using system default microphone'
+        : '[Browser STT] Requested microphone: $_selectedAudioInputDeviceLabel');
     try {
       _wsClient?.sink.add(jsonEncode({
         'type': 'setAudioInputDevice',
@@ -250,7 +250,7 @@ class SttBrowserAdapter extends AbstractSttService {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AutoTeleprompter — Pro Audio Console</title>
+<title>AutoTeleprompter - Pro Audio Console</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0A0A0A;color:#FFBF00;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;

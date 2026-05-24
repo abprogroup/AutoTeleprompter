@@ -23,7 +23,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _wordKeys = [];
   bool _isInit = false;
+  bool _isCameraInitializing = true;
   bool _isRecording = false;
+  String? _cameraError;
   int _countdown = 0;
   int _recordSeconds = 0;
   int _activeWordIndex = 0;
@@ -38,29 +40,57 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   }
 
   Future<void> _initializeCamera() async {
-    final cameras = await availableCameras();
-    if (cameras.isEmpty) return;
-
-    // Find front camera
-    final front = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
-
-    final settings = ref.read(settingsProvider);
-    ResolutionPreset preset = ResolutionPreset.medium; // 720p
-    if (settings.videoResolution.contains('1080')) {
-      preset = ResolutionPreset.high;
-    } else if (settings.videoResolution.contains('480')) {
-      preset = ResolutionPreset.low;
-    }
-
-    _cameraController = CameraController(front, preset, enableAudio: true);
     try {
+      setState(() {
+        _isCameraInitializing = true;
+        _cameraError = null;
+      });
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isInit = false;
+            _isCameraInitializing = false;
+            _cameraError = 'No camera was found on this Windows device.';
+          });
+        }
+        return;
+      }
+
+      // Find front camera
+      final front = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+
+      final settings = ref.read(settingsProvider);
+      ResolutionPreset preset = ResolutionPreset.medium; // 720p
+      if (settings.videoResolution.contains('1080')) {
+        preset = ResolutionPreset.high;
+      } else if (settings.videoResolution.contains('480')) {
+        preset = ResolutionPreset.low;
+      }
+
+      await _cameraController?.dispose();
+      _cameraController = CameraController(front, preset, enableAudio: true);
       await _cameraController!.initialize();
-      if (mounted) setState(() => _isInit = true);
+      if (mounted) {
+        setState(() {
+          _isInit = true;
+          _isCameraInitializing = false;
+          _cameraError = null;
+        });
+      }
     } catch (e) {
       debugPrint('Camera error: $e');
+      if (mounted) {
+        setState(() {
+          _isInit = false;
+          _isCameraInitializing = false;
+          _cameraError =
+              'Camera could not start. Check Windows camera and microphone permissions.';
+        });
+      }
     }
   }
 
@@ -76,6 +106,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
 
   Future<void> _toggleRecording() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      _showSnack(
+        _cameraError ?? 'Camera is still preparing. Try again in a moment.',
+      );
       return;
     }
 
@@ -98,6 +131,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         }
       } catch (e) {
         debugPrint('Save error: $e');
+        _showSnack('Recording saved locally, but gallery export failed.');
       }
     } else {
       // Professional Countdown
@@ -121,6 +155,22 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       });
       _startAutoScroll();
     }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _setVideoResolution(String resolution) async {
+    if (_isRecording) {
+      _showSnack('Stop recording before changing video resolution.');
+      return;
+    }
+    await ref.read(settingsProvider.notifier).setVideoResolution(resolution);
+    await _initializeCamera();
   }
 
   void _startAutoScroll() {
@@ -296,7 +346,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                               ),
                           ],
                         )
-                      : const Center(child: CircularProgressIndicator()),
+                      : _buildCameraFallback(),
                 ),
               ],
             ),
@@ -371,14 +421,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.tune, color: Colors.white70),
-                        onPressed: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (_) => const TeleprompterSettingsPanel(),
-                          );
-                        },
+                        onPressed: _showContentCreatorSettings,
                       ),
                       IconButton(
                         icon: const Icon(Icons.replay, color: Colors.white70),
@@ -394,6 +437,125 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCameraFallback() {
+    if (_isCameraInitializing) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFFFFBF00)),
+      );
+    }
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.videocam_off_outlined,
+                color: Colors.white54, size: 34),
+            const SizedBox(height: 10),
+            Text(
+              _cameraError ?? 'Camera is unavailable.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _initializeCamera,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry camera'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFFFBF00),
+                side: const BorderSide(color: Color(0xFFFFBF00)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showContentCreatorSettings() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Consumer(
+        builder: (context, ref, _) {
+          final settings = ref.watch(settingsProvider);
+          return Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF111111),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(context).padding.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Recording',
+                  style: TextStyle(
+                    color: Color(0xFFFFBF00),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: ['480p', '720p', '1080p'].map((resolution) {
+                    final selected = settings.videoResolution == resolution;
+                    return ChoiceChip(
+                      label: Text(resolution),
+                      selected: selected,
+                      onSelected: (_) => _setVideoResolution(resolution),
+                      selectedColor: const Color(0xFFFFBF00),
+                      labelStyle: TextStyle(
+                        color: selected ? Colors.black : Colors.white70,
+                        fontWeight:
+                            selected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      backgroundColor: const Color(0xFF1E1E1E),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 18),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    showModalBottomSheet(
+                      context: this.context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const TeleprompterSettingsPanel(),
+                    );
+                  },
+                  icon: const Icon(Icons.tune),
+                  label: const Text('Teleprompter settings'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

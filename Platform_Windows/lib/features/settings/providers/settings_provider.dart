@@ -1,15 +1,19 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/security/secure_script_store.dart';
 import '../models/app_settings.dart';
 
 export '../models/app_settings.dart';
+
+part 'settings_provider.secure_scripts.dart';
 
 class SettingsNotifier extends Notifier<AppSettings> {
   static const _fontSizeKey = 'fontSize';
   static const _languageKey = 'languageMode';
   static const _scrollLeadKey = 'scrollLead';
   static const _lastScriptKey = 'lastScript';
+  static const _lastScriptSessionIdKey = 'lastScriptSessionId';
   static const _scrollModeKey = 'scrollMode';
   static const _scrollSpeedKey = 'scrollSpeed';
   static const _textAlignKey = 'textAlign';
@@ -65,7 +69,6 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     List<String> rawRecents = prefs.getStringList(_recentScriptsKey) ?? [];
 
-    // v3.9.5.55: Institutional Heuristic Healer (Data Reconstruction)
     final List<String> sanitizedRecents = [];
     bool needsResave = false;
 
@@ -74,7 +77,6 @@ class SettingsNotifier extends Notifier<AppSettings> {
         final decoded = Map<String, dynamic>.from(jsonDecode(json));
         bool itemModified = false;
 
-        // 1. Repair Type Integrity (PDF/DOCX/RTF guessing)
         if (decoded['type'] == null || decoded['type'] == 'FILE') {
           final String title = (decoded['title'] ?? '').toLowerCase();
           String guessedType = 'FILE';
@@ -92,13 +94,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
           itemModified = true;
         }
 
-        // 2. Repair Date/Session IDs
         if (decoded['lastModified'] == null) {
           decoded['lastModified'] = DateTime.now().toIso8601String();
           itemModified = true;
         }
         if (decoded['date'] == null) {
-          // Format date for UI compatibility (e.g. Apr 10, 2026)
           decoded['date'] = 'Imported Script';
           itemModified = true;
         }
@@ -115,8 +115,18 @@ class SettingsNotifier extends Notifier<AppSettings> {
       }
     }
 
+    final secureMigration = await _migrateSecureScriptPreferences(
+      prefs,
+      sanitizedRecents,
+    );
+    final migratedRecents = secureMigration.recentScripts;
+    if (secureMigration.needsResave) {
+      needsResave = true;
+    }
+    final lastScriptSessionId = secureMigration.lastScriptSessionId;
+
     if (needsResave) {
-      await prefs.setStringList(_recentScriptsKey, sanitizedRecents);
+      await prefs.setStringList(_recentScriptsKey, migratedRecents);
     }
 
     final manualStartSmall =
@@ -153,8 +163,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
           (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(14.0, 120.0).toDouble(),
       languageMode: prefs.getString(_languageKey) ?? 'auto',
       scrollLead: prefs.getDouble(_scrollLeadKey) ?? 0.32,
-      lastScript: prefs.getString(_lastScriptKey) ?? '',
+      lastScript: '',
       lastScriptTitle: prefs.getString('last_script_title') ?? '',
+      lastScriptSessionId: lastScriptSessionId,
       scrollMode: prefs.getString(_scrollModeKey) ?? 'auto',
       scrollSpeed: prefs.getDouble(_scrollSpeedKey) ?? 100.0,
       textAlign: prefs.getString(_textAlignKey) ?? 'center',
@@ -170,7 +181,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
       pastWordOpacity: prefs.getDouble(_pastWordOpacityKey) ?? 0.3,
       debugMode: prefs.getBool(_debugModeKey) ?? false,
       videoResolution: prefs.getString(_videoResolutionKey) ?? '720p',
-      recentScripts: sanitizedRecents,
+      recentScripts: migratedRecents,
       displayName: prefs.getString(_displayNameKey) ?? 'Guest',
       lastTextColor: prefs.getInt(_lastTextColorKey) ?? 0xFFFFBF00,
       lastHighlightColor: prefs.getInt(_lastHighlightColorKey) ?? 0x4DFFFFFF,
@@ -240,23 +251,30 @@ class SettingsNotifier extends Notifier<AppSettings> {
     String? historyJson,
   }) async {
     final currentTitle = title ?? state.lastScriptTitle;
+    final secureRecord = await _saveEncryptedScriptRecord(
+      text: text,
+      sessionId: sessionId,
+      historyJson: historyJson,
+    );
+    final effectiveSessionId = secureRecord.sessionId;
+    final secureRecordId = secureRecord.recordId;
 
-    // v3.36.7: Silent Persistence Guard
     if (!isSilent) {
       state = state.copyWith(
-        lastScript: text,
+        lastScript: '',
         lastScriptTitle: currentTitle,
+        lastScriptSessionId: secureRecordId,
         lastHistoryIndex: historyIndex ?? state.lastHistoryIndex,
       );
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastScriptKey, text);
+    await prefs.remove(_lastScriptKey);
+    await prefs.setString(_lastScriptSessionIdKey, secureRecordId);
     if (title != null) {
       await prefs.setString('last_script_title', title);
     }
 
-    // v3.9.8.1: Mandatory recentList sync to preserve Undo state
     final recentList = List<String>.from(state.recentScripts);
     bool updated = false;
 
@@ -274,13 +292,17 @@ class SettingsNotifier extends Notifier<AppSettings> {
         }
 
         if (isMatch) {
-          decoded['fullText'] = text;
+          decoded['sessionId'] = effectiveSessionId;
+          decoded[SecureScriptStore.recordIdKey] = secureRecordId;
+          decoded[SecureScriptStore.storageVersionKey] =
+              SecureScriptStore.storageVersion;
+          decoded.remove('fullText');
+          decoded.remove('historyJson');
+          decoded.remove('snippet');
           if (historyIndex != null) decoded['historyIndex'] = historyIndex;
           if (type != null) decoded['type'] = type;
           if (decoded['type'] == null) decoded['type'] = 'FILE';
-          if (historyJson != null) decoded['historyJson'] = historyJson;
 
-          // v3.9.5.70: Persist detected/applied metadata (Nested for Gallery Compatibility)
           final styleMap = decoded['style'] as Map<String, dynamic>? ?? {};
           if (fontSize != null) styleMap['fontSize'] = fontSize;
           if (fontFamily != null) styleMap['fontFamily'] = fontFamily;
@@ -298,7 +320,6 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
           if (styleMap.isNotEmpty) decoded['style'] = styleMap;
 
-          // v3.9.5.56: Positional Sovereignty (Lift-and-Prepend)
           recentList.removeAt(i);
           recentList.insert(0, jsonEncode(decoded));
 
@@ -313,16 +334,15 @@ class SettingsNotifier extends Notifier<AppSettings> {
         state = state.copyWith(recentScripts: recentList);
       }
       await prefs.setStringList(_recentScriptsKey, recentList);
-    } else if (sessionId != null) {
-      // v3.9.5.52: Automatic Prepention for new sessions
+    } else if (secureRecordId.isNotEmpty) {
       final newEntry = {
         'title': currentTitle,
-        'fullText': text,
         'type': type ?? 'FILE', // v3.9.5.54: Restore Label Integrity
-        'sessionId': sessionId,
+        'sessionId': effectiveSessionId,
+        SecureScriptStore.recordIdKey: secureRecordId,
+        SecureScriptStore.storageVersionKey: SecureScriptStore.storageVersion,
         'historyIndex': historyIndex ?? 0,
         'lastModified': DateTime.now().toIso8601String(),
-        // v3.9.5.70: Initial metadata baseline (Nested for Gallery Compatibility)
         'style': {
           if (fontSize != null) 'fontSize': fontSize,
           if (fontFamily != null) 'fontFamily': fontFamily,
@@ -334,7 +354,6 @@ class SettingsNotifier extends Notifier<AppSettings> {
           if (currentWordColor != null) 'currentWordColor': currentWordColor,
           if (futureWordColor != null) 'futureWordColor': futureWordColor,
         },
-        'historyJson': historyJson,
       };
       recentList.insert(0, jsonEncode(newEntry));
       if (!isSilent) {
@@ -443,12 +462,10 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> addToRecent(String metadataJson) async {
     final list = List<String>.from(state.recentScripts);
-    final Map<String, dynamic> newData = jsonDecode(metadataJson);
+    final newData = await _secureIncomingRecentMetadata(metadataJson);
     final String? newSessionId = newData['sessionId'] as String?;
     final String? newTitle = newData['title'] as String?;
 
-    // Smart Upsert: Deduplicate by sessionId OR (fullText + title)
-    // Smart Upsert: Deduplicate by title (Primary) or sessionId
     list.removeWhere((item) {
       try {
         final decoded = jsonDecode(item);
@@ -462,13 +479,29 @@ class SettingsNotifier extends Notifier<AppSettings> {
       }
     });
 
-    // Insert the latest version at the top
-    list.insert(0, metadataJson);
+    list.insert(0, jsonEncode(newData));
     if (list.length > 20) list.removeLast();
 
     state = state.copyWith(recentScripts: list);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_recentScriptsKey, list);
+  }
+
+  Future<void> activateRecentScript(Map<String, dynamic> metadata) async {
+    final activation = _prepareRecentActivation(metadata, state);
+    state = activation.settings;
+    final prefs = await SharedPreferences.getInstance();
+    await Future.wait([
+      prefs.remove(_lastScriptKey),
+      prefs.setString(_lastScriptSessionIdKey, activation.recordId),
+      prefs.setString('last_script_title', activation.title),
+    ]);
+    if (activation.historyIndex != null) {
+      await prefs.setInt(_lastHistoryIndexKey, activation.historyIndex!);
+    }
+    if (activation.recentsChanged) {
+      await prefs.setStringList(_recentScriptsKey, activation.recentScripts);
+    }
   }
 
   Future<void> removeFromRecent(String sessionId) async {

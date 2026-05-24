@@ -22,6 +22,8 @@ import './editor/components/global_selection_overlay.dart';
 import './editor/components/ghost_selection_controls.dart';
 import '../providers/script_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
+import '../../../core/security/encrypted_file_store.dart';
+import '../../../core/security/secure_script_store.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../services/styling_service.dart';
@@ -200,6 +202,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isDirty = false;
   bool _isLoading = false;
   bool _isPendingLoad = false;
+  bool _isBulkLoadingBlocks = false;
+  bool _recentPersistRunning = false;
+  bool _recentPersistQueued = false;
+  String? _lastRecentPersistFingerprint;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer, _clipboardGuardTimer;
   Timer?
@@ -340,7 +346,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _loadText(initialText);
       _currentTitle = initialTitle;
 
-      // Read historyJson and historyIndex DIRECTLY from the persisted recent
+      // Read historyIndex directly from persisted recent metadata.
       // scripts entry (matched by sessionId).  scriptProvider.state.rawText is
       // only updated by _startPresenting, so it can be stale when the user
       // navigates away and back without going through the presenter.
@@ -352,9 +358,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           try {
             final meta = jsonDecode(json) as Map<String, dynamic>;
             if (meta['sessionId'] == _currentSessionId) {
-              final mj = meta['historyJson'];
               final mi = meta['historyIndex'];
-              if (mj is String) freshHistoryJson = mj;
               if (mi is int) freshHistoryIndex = mi;
               break;
             }
@@ -394,7 +398,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         _saveHistory(description: 'Initial Load');
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_forceRecentUpdate());
+        if (mounted) _rememberCurrentRecentFingerprint();
       });
       unawaited(_loadBookmarksForCurrentScript());
       // Migrate old metadata-only bookmarks â†’ insert Â» signs into text.

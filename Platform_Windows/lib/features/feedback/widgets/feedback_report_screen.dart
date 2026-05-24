@@ -77,7 +77,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
             value: _category,
             values: const [
               'Bug',
-              'STT',
+              'Speech-to-text system',
               'Editor',
               'Presenter',
               'Crash',

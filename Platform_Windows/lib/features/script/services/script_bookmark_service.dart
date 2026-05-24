@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:autoteleprompter/features/script/models/script_word.dart';
+import 'package:autoteleprompter/core/security/encrypted_file_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ScriptBookmark {
@@ -59,18 +60,26 @@ class ScriptBookmarkService {
 
   static Future<List<ScriptBookmark>> load(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getStringList(key) ?? const [];
-    final result = <ScriptBookmark>[];
-    for (final item in raw) {
+    final secureKey = '$key.secure';
+    final secureRaw = prefs.getString(secureKey);
+    if (secureRaw != null && secureRaw.isNotEmpty) {
       try {
-        result.add(
-          ScriptBookmark.fromJson(
-            Map<String, dynamic>.from(jsonDecode(item) as Map),
-          ),
+        final bytes = EncryptedFileStore().unprotectEnvelope(
+          secureRaw,
+          expectedKind: 'script-bookmarks',
         );
-      } catch (_) {}
+        final raw = (jsonDecode(utf8.decode(bytes)) as List).cast<dynamic>();
+        return _decodeBookmarks(raw);
+      } catch (_) {
+        return const [];
+      }
     }
-    result.sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
+    final raw = prefs.getStringList(key) ?? const [];
+    final result = _decodeBookmarks(raw);
+    if (result.isNotEmpty) {
+      await save(key, result);
+      await prefs.remove(key);
+    }
     return result;
   }
 
@@ -78,10 +87,26 @@ class ScriptBookmarkService {
     final prefs = await SharedPreferences.getInstance();
     final sorted = [...bookmarks]
       ..sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
-    await prefs.setStringList(
-      key,
-      sorted.map((bookmark) => jsonEncode(bookmark.toJson())).toList(),
+    final encrypted = EncryptedFileStore().protectToEnvelope(
+      utf8.encode(jsonEncode(sorted.map((b) => b.toJson()).toList())),
+      kind: 'script-bookmarks',
     );
+    await prefs.setString('$key.secure', encrypted);
+    await prefs.remove(key);
+  }
+
+  static List<ScriptBookmark> _decodeBookmarks(List<dynamic> raw) {
+    final result = <ScriptBookmark>[];
+    for (final item in raw) {
+      try {
+        final decoded = item is String ? jsonDecode(item) : item;
+        result.add(
+          ScriptBookmark.fromJson(Map<String, dynamic>.from(decoded as Map)),
+        );
+      } catch (_) {}
+    }
+    result.sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
+    return result;
   }
 
   static List<ScriptBookmark> upsert(

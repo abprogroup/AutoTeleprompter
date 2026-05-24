@@ -506,7 +506,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                     'overlay-selection',
                                   );
                                 },
-                                child: SingleChildScrollView(
+                                child: ListView.builder(
                                   controller: _editorScrollController,
                                   padding: const EdgeInsets.fromLTRB(
                                     24,
@@ -514,45 +514,40 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                     24,
                                     250,
                                   ),
-                                  child: Column(
-                                    children: List.generate(
-                                      _controllers.length,
-                                      (index) => Listener(
-                                        onPointerDown: (event) {
-                                          _verticalArrowPreferredX = null;
-                                        },
-                                        child: _EditorBlock(
-                                          key: _blockKeys[index],
-                                          controller: _controllers[index],
-                                          focusNode: _focusNodes[index],
-                                          settings: settings,
-                                          isGlobalSelected: _isGlobalSelection,
-                                          inheritedRtl: _editorBlockResolvedRtl(
-                                            index,
-                                          ),
-                                          onSubmitted: () =>
-                                              _addBlock(index + 1),
-                                          onTap: () {
-                                            _verticalArrowPreferredX = null;
-                                            // Secondary safety, though Listener should handle it
-                                            if (_isGlobalSelection) {
-                                              _clearGlobalSelection();
-                                            }
-                                          },
-                                          onSelectAll: _selectAllBlocks,
-                                          onCopy: _onCopyClean,
-                                          onCut: _onCut,
-                                          onPaste: _onPaste,
-                                          onUndo: _undo,
-                                          onRedo: _redo,
-                                          onSearch: _showEditorSearchDialog,
-                                          hasBookmark:
-                                              _hasBookmarkInEditorBlock(index),
-                                          onBookmarkTap: () =>
-                                              _deleteEditorBookmarksForBlock(
-                                            index,
-                                          ),
-                                        ),
+                                  itemCount: _controllers.length,
+                                  cacheExtent: 900,
+                                  itemBuilder: (context, index) => Listener(
+                                    onPointerDown: (event) {
+                                      _verticalArrowPreferredX = null;
+                                    },
+                                    child: _EditorBlock(
+                                      key: _blockKeys[index],
+                                      controller: _controllers[index],
+                                      focusNode: _focusNodes[index],
+                                      settings: settings,
+                                      isGlobalSelected: _isGlobalSelection,
+                                      inheritedRtl:
+                                          _editorBlockResolvedRtl(index),
+                                      onSubmitted: () => _addBlock(index + 1),
+                                      onTap: () {
+                                        _verticalArrowPreferredX = null;
+                                        // Secondary safety, though Listener should handle it
+                                        if (_isGlobalSelection) {
+                                          _clearGlobalSelection();
+                                        }
+                                      },
+                                      onSelectAll: _selectAllBlocks,
+                                      onCopy: _onCopyClean,
+                                      onCut: _onCut,
+                                      onPaste: _onPaste,
+                                      onUndo: _undo,
+                                      onRedo: _redo,
+                                      onSearch: _showEditorSearchDialog,
+                                      hasBookmark:
+                                          _hasBookmarkInEditorBlock(index),
+                                      onBookmarkTap: () =>
+                                          _deleteEditorBookmarksForBlock(
+                                        index,
                                       ),
                                     ),
                                   ),

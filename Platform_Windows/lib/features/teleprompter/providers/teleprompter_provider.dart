@@ -45,7 +45,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _pendingVisibleLocaleAssistLocale;
   bool _sttReadingStandby = false;
 
-  // â”€â”€ STT tuning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // STT tuning
   static const int _maxAdvancePerUpdate = 30;
   static const int _visibleLocaleAssistAfterWaits = 2;
   static const Duration _visibleLocaleAssistCooldown =
@@ -109,7 +109,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _safeSetState((s) => s.copyWith(debugLogs: logs));
   }
 
-  /// Common handler for STT results â€” shared between Google and Whisper
+  /// Common handler for STT results - shared between Google and Whisper.
   static int resolveAdvanceTarget({
     required int currentIndex,
     required int alignedIndex,
@@ -421,7 +421,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final token = ++_sessionToken;
     // Compare by sessionId rather than object identity. _startPresenting()
     // always rebuilds the Script object, so identical() always returns false
-    // â€” causing the resume position to reset to 0 on every re-entry. Using
+    // causing the resume position to reset to 0 on every re-entry. Using
     // sessionId (stable across editor edits of the same session) lets us
     // distinguish "re-entered same session" from "loaded a different script".
     final sameScript = _currentScript != null &&
@@ -456,7 +456,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         missingLanguage: null);
 
     _addDebugLog(
-        'ðŸš€ SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
+        'SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
     LightweightDiagnostics.instance.record(
       'session',
       'presentation session started',
@@ -486,7 +486,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           realWords.where((w) => _explicitLocaleForWord(w) == 'he_IL').length;
       final ratio = realWords.isEmpty ? 0 : hebrewCount / realWords.length;
       _addDebugLog(
-          'ðŸŒ LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew language words)');
+          'LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew language words)');
       _addDebugLog(
           'STT START LOCALE: $localeId | sections=${_sectionLocales.toSet().length}');
     }
@@ -504,7 +504,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
         _addDebugLog(
-            'ðŸ’“ HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
+            'HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
 
         // Silent-listening detector: STT says listening but no audio level or results received.
         if (!_useWhisper &&
@@ -516,9 +516,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           if (elapsed.inSeconds >= 10) {
             _silentWarningFired = true;
             _addDebugLog(
-                'ðŸš¨ SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
+                'SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
             _addDebugLog(
-                'ðŸ‘‰ FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
+                'FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
             _safeSetState((s) => s.copyWith(
                   statusMessage:
                       'Microphone signal weak or blocked.\n1. Check Privacy Settings -> Microphone.\n2. Ensure "Online Speech Recognition" is enabled.',
@@ -542,7 +542,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     if (_useWhisper) {
       final model = whisperModelFromEngine(sttEngine);
-      _addDebugLog('ðŸ¤– Starting Whisper STT ($sttEngine) offline...');
+      _addDebugLog('Starting Whisper STT ($sttEngine) offline...');
       await _whisperService.start(localeId: localeId, model: model);
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _whisperService.stop();
@@ -558,10 +558,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             ? 'System default microphone'
             : selectedMicLabel,
       );
-      _addDebugLog('ðŸŽ¤ [$platform] Starting STT locale=$localeId...');
+      _addDebugLog('[$platform] Starting STT locale=$localeId...');
       _addDebugLog(selectedMicId.isEmpty
-          ? 'ðŸŽ™ï¸ [$platform] Microphone: system default input'
-          : 'ðŸŽ™ï¸ [$platform] Microphone: $selectedMicLabel');
+          ? '[$platform] Microphone: system default input'
+          : '[$platform] Microphone: $selectedMicLabel');
       final result = await _sttService.start(localeId: localeId);
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _sttService.stop();
@@ -569,7 +569,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
 
       if (!result.success) {
-        _addDebugLog('ðŸŽ¤ [$platform] STT FAILED: ${result.message}');
+        _addDebugLog('[$platform] STT FAILED: ${result.message}');
         LightweightDiagnostics.instance.record(
           'stt',
           'STT start failed',
@@ -604,12 +604,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
       if (result.languageMissing && result.missingLanguageName != null) {
         _addDebugLog(
-            'âš ï¸ [$platform] LANG MISSING: ${result.missingLanguageName} â€” using ${result.actualLocale}');
+            '[$platform] LANG MISSING: ${result.missingLanguageName} - using ${result.actualLocale}');
         _safeSetState(
             (s) => s.copyWith(missingLanguage: result.missingLanguageName));
       } else {
-        _addDebugLog(
-            'ðŸŽ¤ [$platform] STT using locale: ${result.actualLocale}');
+        _addDebugLog('[$platform] STT using locale: ${result.actualLocale}');
         LightweightDiagnostics.instance.record(
           'stt',
           'STT started',
@@ -645,7 +644,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _visibleWordEnd = null;
     _resetVisibleLocaleAssist();
 
-    // Stop all engines â€” Whisper may have been auto-started via fallback
+    // Stop all engines - Whisper may have been auto-started via fallback.
     final stopFuture = Future.wait([
       _sttService.stop(),
       _whisperService.stop(),
@@ -677,7 +676,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sttReadingStandby = false;
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
-    _addDebugLog('ðŸ”„ POSITION RESET â†’ 0');
+    _addDebugLog('POSITION RESET -> 0');
     LightweightDiagnostics.instance.record('position', 'position reset');
     state = state.copyWith(confirmedWordIndex: 0);
     if (!_sessionStopped && _currentScript != null && state.isListening) {
@@ -696,7 +695,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(
-        'ðŸ“ POSITION JUMP â†’ #$target "${activeScript.words[target].raw}"');
+        'POSITION JUMP -> #$target "${activeScript.words[target].raw}"');
     LightweightDiagnostics.instance.record(
       'position',
       'position jumped',
@@ -730,8 +729,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     );
     unawaited(refreshAudioInputDevices());
     _addDebugLog(normalizedId.isEmpty
-        ? 'ðŸŽ™ï¸ Microphone input set to system default'
-        : 'ðŸŽ™ï¸ Microphone input set to $normalizedLabel');
+        ? 'Microphone input set to system default'
+        : 'Microphone input set to $normalizedLabel');
   }
 
   void setVisibleWordWindow(int? startIndex, int? endIndex) {

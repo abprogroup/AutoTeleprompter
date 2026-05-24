@@ -60,6 +60,7 @@ class _ConsentContent extends ConsumerStatefulWidget {
 
 class _ConsentContentState extends ConsumerState<_ConsentContent> {
   bool _acknowledged = false;
+  bool _accepting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +87,9 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
         const SizedBox(height: 18),
         CheckboxListTile(
           value: _acknowledged,
-          onChanged: (value) => setState(() => _acknowledged = value ?? false),
+          onChanged: _accepting
+              ? null
+              : (value) => setState(() => _acknowledged = value ?? false),
           activeColor: const Color(0xFFFFBF00),
           checkColor: Colors.black,
           contentPadding: EdgeInsets.zero,
@@ -108,9 +111,10 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
             ),
             const Spacer(),
             ElevatedButton.icon(
-              onPressed: _acknowledged ? _accept : null,
+              onPressed: _acknowledged && !_accepting ? _accept : null,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Accept and continue'),
+              label:
+                  Text(_accepting ? 'Entering beta...' : 'Accept and continue'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFBF00),
                 foregroundColor: Colors.black,
@@ -127,10 +131,16 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
   }
 
   Future<void> _accept() async {
+    setState(() => _accepting = true);
     await ref.read(betaConsentProvider.notifier).acceptCurrentPolicy();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const ScriptGalleryScreen()),
+      MaterialPageRoute(
+        builder: (_) => const ScriptGalleryScreen(
+          initialInputShieldDuration: Duration(milliseconds: 450),
+        ),
+      ),
     );
   }
 }
@@ -161,13 +171,20 @@ class _PolicyBox extends StatelessWidget {
             _paragraph(
               'What we collect: when you send feedback or confirm a crash/error '
               'report, the report includes your full active script, bug text, '
-              'current app/session state, STT/editor diagnostic events, app '
-              'version, platform, and this anonymous device key.',
+              'current app/session state, speech-to-text/editor diagnostic '
+              'events, app version, platform, and this anonymous device key.',
             ),
             _paragraph(
               'What we do not do: normal app use does not continuously upload '
               'your scripts. Heavy screenshots and trace files are still created '
               'only when debug mode is enabled.',
+            ),
+            _paragraph(
+              'Local protection: saved scripts, queued feedback reports, and '
+              'debug artifacts are encrypted on this Windows account. This helps '
+              'protect copied app-data files, but it cannot protect against '
+              'screen recording, malware running as you, or reports you choose '
+              'to send.',
             ),
             _paragraph(
               'Why we collect it: to reproduce beta bugs, group repeated reports '

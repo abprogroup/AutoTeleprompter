@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:archive/archive.dart';
@@ -7,6 +8,7 @@ import '../models/script.dart';
 import '../models/script_word.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
+import '../../../core/security/secure_script_store.dart';
 import '../../../features/teleprompter/services/word_aligner.dart';
 
 part 'script_provider.docx.dart';
@@ -16,7 +18,13 @@ part 'script_provider.models.dart';
 class ScriptNotifier extends Notifier<Script?> {
   @override
   Script? build() {
-    // Load last saved script on startup
+    ref.listen<AppSettings>(settingsProvider, (previous, next) {
+      if (previous?.lastScriptSessionId != next.lastScriptSessionId) {
+        unawaited(_loadStoredScriptFromSettings(next));
+      }
+    });
+    unawaited(_loadStoredScriptFromSettings(ref.read(settingsProvider)));
+    // Load legacy last saved script on startup while encrypted settings hydrate.
     final settings = ref.read(settingsProvider);
     final lastText = settings.lastScript;
     final lastTitle = settings.lastScriptTitle;
@@ -97,6 +105,43 @@ class ScriptNotifier extends Notifier<Script?> {
     return null;
   }
 
+  Future<void> _loadStoredScriptFromSettings(AppSettings settings) async {
+    if (settings.lastScriptSessionId.isEmpty || state != null) return;
+    Map<String, dynamic>? meta;
+    for (final item in settings.recentScripts) {
+      try {
+        final decoded = Map<String, dynamic>.from(jsonDecode(item));
+        if (decoded[SecureScriptStore.recordIdKey] ==
+                settings.lastScriptSessionId ||
+            decoded['sessionId'] == settings.lastScriptSessionId) {
+          meta = decoded;
+          break;
+        }
+      } catch (_) {}
+    }
+    final data = await SecureScriptStore().read(settings.lastScriptSessionId);
+    if (data == null || data.text.isEmpty || state != null) return;
+    state = _buildScript(
+      data.text,
+      title: settings.lastScriptTitle.isNotEmpty
+          ? settings.lastScriptTitle
+          : meta?['title'] as String?,
+      sourceType: meta?['type'] as String?,
+      sessionId: meta?['sessionId'] as String?,
+      historyJson: data.historyJson,
+      historyIndex: meta?['historyIndex'] as int?,
+      fontSize: (meta?['style']?['fontSize'] as num?)?.toDouble(),
+      fontFamily: meta?['style']?['fontFamily'] as String?,
+      lineSpacing: (meta?['style']?['lineSpacing'] as num?)?.toDouble(),
+      letterSpacing: (meta?['style']?['letterSpacing'] as num?)?.toDouble(),
+      wordSpacing: (meta?['style']?['wordSpacing'] as num?)?.toDouble(),
+      textAlign: meta?['style']?['textAlign'] as String?,
+      scriptBgColor: meta?['style']?['scriptBgColor'] as int?,
+      currentWordColor: meta?['style']?['currentWordColor'] as int?,
+      futureWordColor: meta?['style']?['futureWordColor'] as int?,
+    );
+  }
+
   Script _buildScript(
     String text, {
     String? title,
@@ -113,8 +158,9 @@ class ScriptNotifier extends Notifier<Script?> {
     int? scriptBgColor,
     int? currentWordColor,
     int? futureWordColor,
+    bool tokenize = true,
   }) {
-    final words = WordAligner.tokenize(text);
+    final words = tokenize ? WordAligner.tokenize(text) : const <ScriptWord>[];
     final isRtl = text.isHebrew;
 
     // v3.9.5.46: Pull baseline from settings if not provided by import
@@ -162,6 +208,8 @@ class ScriptNotifier extends Notifier<Script?> {
     int? scriptBgColor,
     int? currentWordColor,
     int? futureWordColor,
+    bool persist = true,
+    bool tokenize = true,
   }) {
     state = _buildScript(
       text,
@@ -179,24 +227,27 @@ class ScriptNotifier extends Notifier<Script?> {
       scriptBgColor: scriptBgColor,
       currentWordColor: currentWordColor,
       futureWordColor: futureWordColor,
+      tokenize: tokenize,
     );
-    ref.read(settingsProvider.notifier).saveScript(
-          text,
-          title: title,
-          type: sourceType,
-          sessionId: sessionId,
-          historyIndex: historyIndex,
-          fontSize: fontSize,
-          fontFamily: fontFamily,
-          lineSpacing: lineSpacing,
-          letterSpacing: letterSpacing,
-          wordSpacing: wordSpacing,
-          textAlign: textAlign,
-          scriptBgColor: scriptBgColor,
-          currentWordColor: currentWordColor,
-          futureWordColor: futureWordColor,
-          historyJson: historyJson,
-        );
+    if (persist) {
+      ref.read(settingsProvider.notifier).saveScript(
+            text,
+            title: title,
+            type: sourceType,
+            sessionId: sessionId,
+            historyIndex: historyIndex,
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            lineSpacing: lineSpacing,
+            letterSpacing: letterSpacing,
+            wordSpacing: wordSpacing,
+            textAlign: textAlign,
+            scriptBgColor: scriptBgColor,
+            currentWordColor: currentWordColor,
+            futureWordColor: futureWordColor,
+            historyJson: historyJson,
+          );
+    }
   }
 
   Future<void> updateStyleMetadata({

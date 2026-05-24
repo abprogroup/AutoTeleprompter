@@ -11,25 +11,28 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
       // Voice Commands
       if (words.contains('stop prompt') ||
-          words.contains('×¢×¦×•×¨') ||
-          words.contains('×¢×¦×™×¨×”')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: STOP');
+          words.contains('\u05E2\u05E6\u05D5\u05E8') ||
+          words.contains('\u05E2\u05E6\u05D9\u05E8\u05D4')) {
+        _addDebugLog('VOICE COMMAND: STOP');
         ref.read(settingsProvider.notifier).setScrollSpeed(0);
         return;
-      } else if (words.contains('start prompt') || words.contains('×‘×•×')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: START');
+      } else if (words.contains('start prompt') ||
+          words.contains('\u05D1\u05D5\u05D0')) {
+        _addDebugLog('VOICE COMMAND: START');
         if (settings.scrollSpeed == 0) {
           ref.read(settingsProvider.notifier).setScrollSpeed(100);
         }
         return;
-      } else if (words.contains('speed up') || words.contains('×ž×”×¨')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: FASTER');
+      } else if (words.contains('speed up') ||
+          words.contains('\u05DE\u05D4\u05E8')) {
+        _addDebugLog('VOICE COMMAND: FASTER');
         ref
             .read(settingsProvider.notifier)
             .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
         return;
-      } else if (words.contains('slow down') || words.contains('×œ××˜')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: SLOWER');
+      } else if (words.contains('slow down') ||
+          words.contains('\u05DC\u05D0\u05D8')) {
+        _addDebugLog('VOICE COMMAND: SLOWER');
         ref
             .read(settingsProvider.notifier)
             .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
@@ -71,7 +74,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
             .join(' ')
         : '<END>';
 
-    final engineTag = _useWhisper ? 'ðŸ¤–' : 'ðŸŽ¤';
+    final engineTag = _useWhisper ? '[Whisper]' : '[Speech]';
     if (aligned.shouldEnterStandby) {
       _sttReadingStandby = true;
       _noProgressCount = 0;
@@ -109,7 +112,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       final advancedWord =
           target < script.words.length ? script.words[target].raw : '?';
       _addDebugLog(
-          '$engineTag âœ… ADVANCE â†’ #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
+          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
       LightweightDiagnostics.instance.record(
         'stt',
         'advanced',
@@ -130,7 +133,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         _fluidAdvanceTimer?.cancel();
         _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
       } else {
-        // Large jump â€” advance word by word with short delays
+        // Large jump - advance word by word with short delays.
         _startFluidAdvance(target, script);
       }
       _syncLocaleForPosition(script, target + 1, reason: 'advance');
@@ -217,7 +220,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         }
       }
       _addDebugLog(
-          'ðŸŽ™ï¸ Selected microphone was not found; using system default input.');
+          'Selected microphone was not found; using system default input.');
     };
 
     _sttService.onStatusChange = (status) {
@@ -227,7 +230,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       // from resetting isListening=false right after the new session starts.
       if (_startingSession && status != SpeechStatus.listening) return;
       _startingSession = false;
-      _addDebugLog('ðŸŽ¤ [${_sttService.platformName}] STATUS: $status');
+      _addDebugLog('[${_sttService.platformName}] STATUS: $status');
       LightweightDiagnostics.instance.record(
         'stt',
         'status changed',
@@ -243,7 +246,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
     _sttService.onError = (error) {
       if (_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('ðŸŽ¤ [${_sttService.platformName}] STT ERROR: $error');
+      _addDebugLog('[${_sttService.platformName}] STT ERROR: $error');
       LightweightDiagnostics.instance.record(
         'stt',
         'STT error',
@@ -266,7 +269,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       final langName = SpeechStartResult.languageNameFromLocale(
         _scriptLanguageLocale ?? requestedLocale,
       );
-      _addDebugLog('ðŸŽ¤ [$platform] LANGUAGE UNAVAILABLE: $langName');
+      _addDebugLog('[$platform] LANGUAGE UNAVAILABLE: $langName');
       _safeSetState((s) => s.copyWith(
             missingLanguage: langName,
             hasError: true,
@@ -283,7 +286,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       if (_useWhisper || _disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(locale);
       _addDebugLog(
-          'ðŸŽ¤ [$platform] ALL STT FAILED for $langName â€” internet required');
+          '[$platform] ALL STT FAILED for $langName - internet required');
       _safeSetState((s) => s.copyWith(
             hasError: true,
             isListening: false,
@@ -304,7 +307,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
     _whisperService.onStatusChange = (status) {
       if (!_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('ðŸ¤– WHISPER STATUS: $status');
+      _addDebugLog('WHISPER STATUS: $status');
       _safeSetState((s) => s.copyWith(
             isListening: status == SpeechStatus.listening,
             isStarting: false,
@@ -315,7 +318,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
     _whisperService.onError = (error) {
       if (_disposed || _sessionStopped) return;
-      _addDebugLog('ðŸ¤– WHISPER ERROR: $error');
+      _addDebugLog('WHISPER ERROR: $error');
       final isFatal =
           error.contains('not available') || error.contains('init failed');
       if (isFatal) {

@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/security/encrypted_file_store.dart';
+
 const feedbackEndpoint = String.fromEnvironment('FEEDBACK_ENDPOINT');
 
 class FeedbackSendResult {
@@ -41,11 +43,13 @@ class FeedbackReportService {
     String endpoint = feedbackEndpoint,
   })  : _client = client ?? HttpClient(),
         _outboxDirectory = outboxDirectory,
-        _endpoint = endpoint;
+        _endpoint = endpoint,
+        _encryptedStore = EncryptedFileStore(baseDirectory: outboxDirectory);
 
   final HttpClient _client;
   final Future<Directory> Function()? _outboxDirectory;
   final String _endpoint;
+  final EncryptedFileStore _encryptedStore;
 
   Future<FeedbackSendResult> submit(Map<String, Object?> report) async {
     final reportId = report['reportId']?.toString() ?? _newReportId();
@@ -138,7 +142,7 @@ class FeedbackReportService {
     var sent = 0;
     for (final file in files) {
       try {
-        final payload = utf8.decode(gzip.decode(await file.readAsBytes()));
+        final payload = await _readPendingPayload(file);
         final reportId = _reportIdFromFile(file);
         final result = await _sendPayload(
           reportId,
@@ -163,8 +167,15 @@ class FeedbackReportService {
 
   Future<void> _queueReport(String reportId, String payload) async {
     final dir = await _ensureOutboxDirectory();
-    final file = File('${dir.path}${Platform.pathSeparator}$reportId.json.gz');
-    await file.writeAsBytes(gzip.encode(utf8.encode(payload)), flush: true);
+    final file = File(
+      '${dir.path}${Platform.pathSeparator}$reportId.json.gz.atpe',
+    );
+    final encrypted = _encryptedStore.protectToEnvelope(
+      gzip.encode(utf8.encode(payload)),
+      kind: 'feedback-report',
+      compress: false,
+    );
+    await file.writeAsString(encrypted, flush: true);
     await _enforceOutboxLimit(dir);
   }
 
@@ -188,7 +199,28 @@ class FeedbackReportService {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
+    await _migrateLegacyOutbox(dir);
     return dir;
+  }
+
+  Future<void> _migrateLegacyOutbox(Directory dir) async {
+    final legacyFiles = dir
+        .listSync()
+        .whereType<File>()
+        .where((file) =>
+            file.path.endsWith('.json.gz') && !file.path.endsWith('.atpe'))
+        .toList();
+    for (final file in legacyFiles) {
+      try {
+        final encrypted = _encryptedStore.protectToEnvelope(
+          await file.readAsBytes(),
+          kind: 'feedback-report',
+          compress: false,
+        );
+        await File('${file.path}.atpe').writeAsString(encrypted, flush: true);
+        await file.delete();
+      } catch (_) {}
+    }
   }
 
   Uri _feedbackUri(String endpoint) {
@@ -202,12 +234,24 @@ class FeedbackReportService {
   List<File> _pendingFiles(Directory dir) => dir
       .listSync()
       .whereType<File>()
-      .where((file) => file.path.endsWith('.json.gz'))
+      .where((file) =>
+          file.path.endsWith('.json.gz.atpe') || file.path.endsWith('.json.gz'))
       .toList();
+
+  Future<String> _readPendingPayload(File file) async {
+    if (file.path.endsWith('.atpe')) {
+      final bytes = await _encryptedStore.readBytes(
+        file,
+        kind: 'feedback-report',
+      );
+      return utf8.decode(gzip.decode(bytes));
+    }
+    return utf8.decode(gzip.decode(await file.readAsBytes()));
+  }
 
   String _reportIdFromFile(File file) {
     final name = file.path.split(Platform.pathSeparator).last;
-    return name.replaceFirst(RegExp(r'\.json\.gz$'), '');
+    return name.replaceFirst(RegExp(r'\.json\.gz(?:\.atpe)?$'), '');
   }
 
   String _newReportId() =>

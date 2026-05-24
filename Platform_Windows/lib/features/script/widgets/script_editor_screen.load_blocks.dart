@@ -36,7 +36,10 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
       if (existingMeta != null) {
         final decoded = jsonDecode(existingMeta);
-        final String existingContent = decoded['fullText'] ?? '';
+        final secureData = await SecureScriptStore().readFromMetadata(
+          Map<String, dynamic>.from(decoded),
+        );
+        final String existingContent = secureData?.text ?? '';
         final String sessionId = decoded['sessionId'];
         final String type = decoded['type'] ?? 'TXT';
 
@@ -44,7 +47,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           finalContent = existingContent;
           finalType = type;
           finalSessionId = sessionId;
-          finalHistoryJson = decoded['historyJson'];
+          finalHistoryJson = secureData?.historyJson;
         } else {
           if (!mounted) return;
           final choice = await showDialog<String>(
@@ -99,7 +102,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             finalContent = existingContent;
             finalType = type;
             finalSessionId = sessionId;
-            finalHistoryJson = decoded['historyJson'];
+            finalHistoryJson = secureData?.historyJson;
           } else {
             if (mounted) Navigator.pop(context);
             return;
@@ -137,10 +140,14 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         timer.cancel();
         return;
       }
+      if (_typingCharCount > 0 || (_typingBulkTimer?.isActive ?? false)) {
+        _scheduleRecentUpdate();
+        return;
+      }
       final text = _getRefinedFullTextWithoutBookmarkSigns();
       if (text.isEmpty && _currentTitle == 'New Project') return;
       try {
-        _forceRecentUpdate();
+        unawaited(_forceRecentUpdate());
       } catch (_) {}
     });
   }
@@ -158,7 +165,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   }
 
   void _addBlock(int index, {String text = ''}) {
-    _setEditorState(() {
+    void insertBlock() {
       final controller = MarkupController(text: text);
       final blockKey = GlobalKey(); // v3.9.5.66
 
@@ -294,9 +301,15 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       _controllers.insert(index, controller);
       _focusNodes.insert(index, node);
       _blockKeys.insert(index, blockKey);
-    });
+    }
 
-    if (text.isEmpty) {
+    if (_isBulkLoadingBlocks) {
+      insertBlock();
+    } else {
+      _setEditorState(insertBlock);
+    }
+
+    if (!_isBulkLoadingBlocks && text.isEmpty) {
       Future.delayed(Duration.zero, () => _focusNodes[index].requestFocus());
     }
   }
@@ -315,12 +328,22 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   void _loadText(String text) {
     _isLoading = true;
     try {
-      _clearControllers();
-      final paragraphs = text.split('\n');
-      for (int i = 0; i < paragraphs.length; i++) {
-        _addBlock(i, text: paragraphs[i]);
+      _setEditorState(() {
+        _clearControllers();
+        _isBulkLoadingBlocks = true;
+        try {
+          final paragraphs = text.split('\n');
+          for (int i = 0; i < paragraphs.length; i++) {
+            _addBlock(i, text: paragraphs[i]);
+          }
+          if (_controllers.isEmpty) _addBlock(0);
+        } finally {
+          _isBulkLoadingBlocks = false;
+        }
+      });
+      if (text.isEmpty && _focusNodes.isNotEmpty) {
+        Future.delayed(Duration.zero, () => _focusNodes.first.requestFocus());
       }
-      if (_controllers.isEmpty) _addBlock(0);
     } finally {
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) _isLoading = false;
@@ -385,44 +408,104 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     }
   }
 
-  void _scheduleRecentUpdate() {
+  void _scheduleRecentUpdate({
+    Duration delay = const Duration(seconds: 4),
+  }) {
     _recentTimer?.cancel();
-    _recentTimer = Timer(const Duration(milliseconds: 500), () {
-      if (mounted) _forceRecentUpdate();
+    _recentTimer = Timer(delay, () {
+      if (mounted) unawaited(_forceRecentUpdate());
     });
   }
 
   Future<void> _forceRecentUpdate() async {
     _recentTimer?.cancel();
+    if (_recentPersistRunning) {
+      _recentPersistQueued = true;
+      return;
+    }
     final text = _getRefinedFullTextWithoutBookmarkSigns();
     if (text.trim().isEmpty) return;
     final settings = ref.read(settingsProvider);
-    await ref.read(settingsProvider.notifier).saveScript(
-          text,
-          title: _currentTitle,
-          type: _sourceType,
-          historyIndex: _historyIndex,
-          sessionId: _currentSessionId,
-          fontSize: settings.fontSize,
-          fontFamily: settings.fontFamily,
-          lineSpacing: settings.lineSpacing,
-          letterSpacing: settings.letterSpacing,
-          wordSpacing: settings.wordSpacing,
-          textAlign: settings.textAlign,
-          scriptBgColor: settings.scriptBgColor,
-          currentWordColor: settings.currentWordColor,
-          futureWordColor: settings.futureWordColor,
-          historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
-        );
-    // Keep scriptProvider.state in sync so that a new ScriptEditorScreen
-    // (created on re-entry after navigating away) reads the correct
-    // historyIndex and historyJson rather than stale startup values.
-    if (mounted) {
-      ref.read(scriptProvider.notifier).updateHistory(
-            _historyIndex,
-            jsonEncode(_history.map((e) => e.toJson()).toList()),
+    final historyJson = jsonEncode(_history.map((e) => e.toJson()).toList());
+    final fingerprint = _recentPersistenceFingerprint(
+      text: text,
+      historyJson: historyJson,
+      settings: settings,
+    );
+    if (fingerprint == _lastRecentPersistFingerprint) return;
+    _recentPersistRunning = true;
+    try {
+      await ref.read(settingsProvider.notifier).saveScript(
+            text,
+            title: _currentTitle,
+            type: _sourceType,
+            historyIndex: _historyIndex,
+            sessionId: _currentSessionId,
+            fontSize: settings.fontSize,
+            fontFamily: settings.fontFamily,
+            lineSpacing: settings.lineSpacing,
+            letterSpacing: settings.letterSpacing,
+            wordSpacing: settings.wordSpacing,
+            textAlign: settings.textAlign,
+            scriptBgColor: settings.scriptBgColor,
+            currentWordColor: settings.currentWordColor,
+            futureWordColor: settings.futureWordColor,
+            historyJson: historyJson,
           );
+      _lastRecentPersistFingerprint = fingerprint;
+      // Keep scriptProvider.state in sync so that a new ScriptEditorScreen
+      // (created on re-entry after navigating away) reads the correct
+      // historyIndex and historyJson rather than stale startup values.
+      if (mounted) {
+        ref.read(scriptProvider.notifier).updateHistory(
+              _historyIndex,
+              historyJson,
+            );
+      }
+    } finally {
+      _recentPersistRunning = false;
+      if (_recentPersistQueued && mounted) {
+        _recentPersistQueued = false;
+        _scheduleRecentUpdate(delay: const Duration(seconds: 2));
+      }
     }
+  }
+
+  void _rememberCurrentRecentFingerprint() {
+    if (_controllers.isEmpty) return;
+    final text = _getRefinedFullTextWithoutBookmarkSigns();
+    final historyJson = jsonEncode(_history.map((e) => e.toJson()).toList());
+    _lastRecentPersistFingerprint = _recentPersistenceFingerprint(
+      text: text,
+      historyJson: historyJson,
+      settings: ref.read(settingsProvider),
+    );
+  }
+
+  String _recentPersistenceFingerprint({
+    required String text,
+    required String historyJson,
+    required AppSettings settings,
+  }) {
+    return [
+      _currentTitle,
+      _sourceType,
+      _currentSessionId ?? '',
+      _historyIndex.toString(),
+      text.length.toString(),
+      text.hashCode.toString(),
+      historyJson.length.toString(),
+      historyJson.hashCode.toString(),
+      settings.fontSize.toStringAsFixed(3),
+      settings.fontFamily,
+      settings.lineSpacing.toStringAsFixed(3),
+      settings.letterSpacing.toStringAsFixed(3),
+      settings.wordSpacing.toStringAsFixed(3),
+      settings.textAlign,
+      settings.scriptBgColor.toString(),
+      settings.currentWordColor.toString(),
+      settings.futureWordColor.toString(),
+    ].join('|');
   }
 
   void _onBlockChanged() {

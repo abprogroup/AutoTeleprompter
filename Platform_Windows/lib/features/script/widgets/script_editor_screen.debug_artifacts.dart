@@ -82,9 +82,14 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
         directory: directory,
         prefix: prefix,
         sequence: sequence,
-        extension: 'png',
+        extension: 'png.atpe',
       );
-      await File(path).writeAsBytes(byteData.buffer.asUint8List(), flush: true);
+      final encrypted = EncryptedFileStore().protectToEnvelope(
+        byteData.buffer.asUint8List(),
+        kind: 'debug-artifact',
+        compress: false,
+      );
+      await File(path).writeAsString(encrypted, flush: true);
       return path;
     } catch (error) {
       return 'capture failed: $error';
@@ -102,10 +107,41 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
       directory: directory,
       prefix: prefix,
       sequence: sequence,
-      extension: 'txt',
+      extension: 'txt.atpe',
     );
-    await File(path).writeAsString(trace, flush: true);
+    final encrypted = EncryptedFileStore().protectToEnvelope(
+      utf8.encode(trace),
+      kind: 'debug-artifact',
+    );
+    await File(path).writeAsString(encrypted, flush: true);
     return path;
+  }
+
+  Future<void> _exportDebugArtifactSession(
+    _EditorDebugArtifactType type,
+    String sessionId,
+  ) async {
+    final directory = await _ensureDebugArtifactDirectory(type, sessionId);
+    if (directory == null) return;
+    final exportDir = Directory(
+      '${directory.path}${Platform.pathSeparator}decrypted_export',
+    );
+    if (!await exportDir.exists()) await exportDir.create(recursive: true);
+    final store = EncryptedFileStore();
+    for (final file in directory.listSync().whereType<File>()) {
+      if (!file.path.endsWith('.atpe')) continue;
+      try {
+        final bytes = await store.readBytes(file, kind: 'debug-artifact');
+        final name = SecureFileExport.decryptedExportPathFor(file);
+        await File('${exportDir.path}${Platform.pathSeparator}$name')
+            .writeAsBytes(bytes, flush: true);
+      } catch (_) {}
+    }
+    if (Platform.isWindows) {
+      await Process.start('explorer.exe', [exportDir.path]);
+      return;
+    }
+    await Process.start('open', [exportDir.path]);
   }
 
   Future<void> _openDebugArtifactFolder(
@@ -114,6 +150,14 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
   ) async {
     final directory = await _ensureDebugArtifactDirectory(type, sessionId);
     if (directory == null) return;
+    final hasEncryptedArtifacts = directory
+        .listSync()
+        .whereType<File>()
+        .any((file) => file.path.endsWith('.atpe'));
+    if (hasEncryptedArtifacts) {
+      await _exportDebugArtifactSession(type, sessionId);
+      return;
+    }
     if (Platform.isWindows) {
       await Process.start('explorer.exe', [directory.path]);
       return;

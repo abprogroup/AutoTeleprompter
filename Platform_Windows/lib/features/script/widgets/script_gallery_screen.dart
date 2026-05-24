@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'script_editor_screen.dart';
+import '../../../core/security/secure_script_store.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
@@ -12,7 +14,12 @@ import '../providers/script_provider.dart';
 import '../services/styling_service.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {
-  const ScriptGalleryScreen({super.key});
+  final Duration initialInputShieldDuration;
+
+  const ScriptGalleryScreen({
+    super.key,
+    this.initialInputShieldDuration = Duration.zero,
+  });
 
   @override
   ConsumerState<ScriptGalleryScreen> createState() =>
@@ -21,146 +28,171 @@ class ScriptGalleryScreen extends ConsumerStatefulWidget {
 
 class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   int _logoTaps = 0;
+  Timer? _inputShieldTimer;
+  bool _inputShielded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialInputShieldDuration > Duration.zero) {
+      _inputShielded = true;
+      _inputShieldTimer = Timer(widget.initialInputShieldDuration, () {
+        if (mounted) setState(() => _inputShielded = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _inputShieldTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
-      appBar: AppBar(
-        toolbarHeight: 80,
-        title: GestureDetector(
-          onTap: () async {
-            setState(() => _logoTaps++);
-            if (_logoTaps >= 5) {
-              setState(() => _logoTaps = 0);
-              await ref.read(settingsProvider.notifier).toggleDebugMode();
-              final isNowDebug = ref.read(settingsProvider).debugMode;
-              if (!context.mounted) {
-                return;
-              }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('DEBUG MODE: ${isNowDebug ? 'ON' : 'OFF'}'),
-                  backgroundColor: isNowDebug ? Colors.green : Colors.grey[800],
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            }
-          },
-          child: Text('AutoTeleprompter',
-              style: GoogleFonts.bebasNeue(
-                  letterSpacing: 1.5,
-                  fontSize: 28,
-                  color: const Color(0xFFFFBF00))),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            tooltip: 'Send beta feedback',
-            icon: const Icon(Icons.bug_report_outlined, color: Colors.white54),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Colors.white54),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
-            ),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: SingleChildScrollView(
-        physics: const ClampingScrollPhysics(),
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Welcome Back, ${settings.displayName}.',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            const Text('Ready for your next broadcast?',
-                style: TextStyle(color: Colors.white54, fontSize: 15)),
-            const SizedBox(height: 40),
-            _GalleryActionCard(
-              title: 'New Script',
-              subtitle: 'Start with a blank canvas',
-              icon: Icons.add_rounded,
-              color: const Color(0xFFFFBF00),
-              onTap: () => _showNewScriptDialog(context),
-            ),
-            const SizedBox(height: 12),
-            _GalleryActionCard(
-              title: 'Load Script',
-              subtitle: 'Import from DOCX, TXT, or PDF',
-              icon: Icons.file_open_outlined,
-              color: Colors.white,
-              onTap: () {
-                // v3.9.5.59: Sovereign Fluid Transition
-                // Immediately navigate to the editor shell; the editor will handle
-                // triggering the file picker over its amber loading screen,
-                // eliminating home-to-home flicker.
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          const ScriptEditorScreen(shouldAutoLoad: true)),
-                );
-              },
-            ),
-            const SizedBox(height: 48),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Recent Activity',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
-                if (settings.recentScripts.length > 3)
-                  TextButton(
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        backgroundColor: const Color(0xFF0A0A0A),
-                        isScrollControlled: true,
-                        builder: (_) => const _FullHistorySheet(),
-                      );
-                    },
-                    child: const Text('show more',
-                        style: TextStyle(
-                            color: Color(0xFFFFBF00),
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold)),
+    return AbsorbPointer(
+      absorbing: _inputShielded,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0A0A),
+        appBar: AppBar(
+          toolbarHeight: 80,
+          title: GestureDetector(
+            onTap: () async {
+              setState(() => _logoTaps++);
+              if (_logoTaps >= 5) {
+                setState(() => _logoTaps = 0);
+                await ref.read(settingsProvider.notifier).toggleDebugMode();
+                final isNowDebug = ref.read(settingsProvider).debugMode;
+                if (!context.mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('DEBUG MODE: ${isNowDebug ? 'ON' : 'OFF'}'),
+                    backgroundColor:
+                        isNowDebug ? Colors.green : Colors.grey[800],
+                    duration: const Duration(seconds: 2),
                   ),
-              ],
+                );
+              }
+            },
+            child: Text('AutoTeleprompter',
+                style: GoogleFonts.bebasNeue(
+                    letterSpacing: 1.5,
+                    fontSize: 28,
+                    color: const Color(0xFFFFBF00))),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          actions: [
+            IconButton(
+              tooltip: 'Send beta feedback',
+              icon:
+                  const Icon(Icons.bug_report_outlined, color: Colors.white54),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
+              ),
             ),
-            const SizedBox(height: 12),
-            Column(
-              children: settings.recentScripts.isEmpty
-                  ? [const _EmptyStatePlaceholder()]
-                  : settings.recentScripts.take(3).map((metaJson) {
-                      final meta = jsonDecode(metaJson);
-                      return _ScriptListItem(
-                        title: meta['title'] ?? 'Untitled Script',
-                        date: meta['date'] ?? 'Imported',
-                        type: meta['type'] ?? 'FILE',
-                        fullText: meta['fullText'] ?? '',
-                        snippet: meta['snippet'],
-                        sessionId: meta['sessionId'],
-                      );
-                    }).toList(),
+            IconButton(
+              icon: const Icon(Icons.settings_outlined, color: Colors.white54),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+              ),
             ),
+            const SizedBox(width: 4),
           ],
+        ),
+        body: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Welcome Back, ${settings.displayName}.',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text('Ready for your next broadcast?',
+                  style: TextStyle(color: Colors.white54, fontSize: 15)),
+              const SizedBox(height: 40),
+              _GalleryActionCard(
+                title: 'New Script',
+                subtitle: 'Start with a blank canvas',
+                icon: Icons.add_rounded,
+                color: const Color(0xFFFFBF00),
+                onTap: () => _showNewScriptDialog(context),
+              ),
+              const SizedBox(height: 12),
+              _GalleryActionCard(
+                title: 'Load Script',
+                subtitle: 'Import from DOCX, TXT, or PDF',
+                icon: Icons.file_open_outlined,
+                color: Colors.white,
+                onTap: () {
+                  // v3.9.5.59: Sovereign Fluid Transition
+                  // Immediately navigate to the editor shell; the editor will handle
+                  // triggering the file picker over its amber loading screen,
+                  // eliminating home-to-home flicker.
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            const ScriptEditorScreen(shouldAutoLoad: true)),
+                  );
+                },
+              ),
+              const SizedBox(height: 48),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Recent Activity',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                  if (settings.recentScripts.length > 3)
+                    TextButton(
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          backgroundColor: const Color(0xFF0A0A0A),
+                          isScrollControlled: true,
+                          builder: (_) => const _FullHistorySheet(),
+                        );
+                      },
+                      child: const Text('show more',
+                          style: TextStyle(
+                              color: Color(0xFFFFBF00),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Column(
+                children: settings.recentScripts.isEmpty
+                    ? [const _EmptyStatePlaceholder()]
+                    : settings.recentScripts.take(3).map((metaJson) {
+                        final meta = jsonDecode(metaJson);
+                        return _ScriptListItem(
+                          title: meta['title'] ?? 'Untitled Script',
+                          date: meta['date'] ?? 'Imported',
+                          type: meta['type'] ?? 'FILE',
+                          fullText: meta['fullText'] ?? '',
+                          snippet: meta['snippet'],
+                          sessionId: meta['sessionId'],
+                          secureRecordId: meta[SecureScriptStore.recordIdKey],
+                        );
+                      }).toList(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -248,6 +280,7 @@ class _FullHistorySheet extends ConsumerWidget {
                     fullText: meta['fullText'] ?? '',
                     snippet: meta['snippet'],
                     sessionId: meta['sessionId'],
+                    secureRecordId: meta[SecureScriptStore.recordIdKey],
                   );
                 },
               );
@@ -318,9 +351,12 @@ class _GalleryActionCard extends StatelessWidget {
 }
 
 class _ScriptListItem extends ConsumerWidget {
+  static final Map<String, Future<String>> _previewCache = {};
+
   final String title, date, type, fullText;
   final String? snippet;
   final String? sessionId;
+  final String? secureRecordId;
 
   const _ScriptListItem({
     super.key,
@@ -330,6 +366,7 @@ class _ScriptListItem extends ConsumerWidget {
     required this.fullText,
     this.snippet,
     this.sessionId,
+    this.secureRecordId,
   });
 
   @override
@@ -376,10 +413,15 @@ class _ScriptListItem extends ConsumerWidget {
         labelBorderColor = labelColor.withValues(alpha: 0.3);
     }
 
-    final previewText = StylingService.recentScriptPreviewText(
-      fullText: fullText,
-      snippet: snippet,
-    );
+    final previewKey = [
+      secureRecordId ?? '',
+      title,
+      date,
+      fullText.hashCode.toString(),
+      snippet.hashCode.toString(),
+    ].join('|');
+    final previewFuture =
+        _previewCache.putIfAbsent(previewKey, _loadPreviewText);
 
     return Material(
       color: Colors.transparent,
@@ -419,20 +461,30 @@ class _ScriptListItem extends ConsumerWidget {
                     }
 
                     Map<String, dynamic>? decodedMeta;
+                    var resolvedText = fullText;
+                    String? resolvedHistoryJson;
                     if (targetMeta != null) {
                       decodedMeta = jsonDecode(targetMeta);
-                      if (decodedMeta!['style'] != null) {
+                      final secureData =
+                          await SecureScriptStore().readFromMetadata(
+                        decodedMeta!,
+                      );
+                      if (secureData != null) {
+                        resolvedText = secureData.text;
+                        resolvedHistoryJson = secureData.historyJson;
+                      }
+                      if (decodedMeta['style'] != null) {
                         await settingsNotifier
                             .applySessionStyles(decodedMeta['style']);
                       }
                     }
 
                     scriptNotifier.loadText(
-                      fullText,
+                      resolvedText,
                       title: title,
                       sourceType: type,
                       sessionId: sessionId,
-                      historyJson: decodedMeta?['historyJson'],
+                      historyJson: resolvedHistoryJson,
                       fontSize: (decodedMeta?['style']?['fontSize'] as num?)
                           ?.toDouble(),
                       fontFamily: decodedMeta?['style']?['fontFamily'],
@@ -451,11 +503,21 @@ class _ScriptListItem extends ConsumerWidget {
                           ?['currentWordColor'],
                       futureWordColor: decodedMeta?['style']
                           ?['futureWordColor'],
+                      persist: decodedMeta == null,
+                      tokenize: false,
                     );
+                    if (decodedMeta != null) {
+                      unawaited(settingsNotifier.activateRecentScript(
+                        decodedMeta,
+                      ));
+                    }
                   } catch (e) {
                     debugPrint('Session Recovery Error: $e');
                     scriptNotifier.loadText(fullText,
-                        title: title, sourceType: type, sessionId: sessionId);
+                        title: title,
+                        sourceType: type,
+                        sessionId: sessionId,
+                        tokenize: false);
                   }
                   if (context.mounted) {
                     Navigator.push(
@@ -495,11 +557,20 @@ class _ScriptListItem extends ConsumerWidget {
                                     fontWeight: FontWeight.bold,
                                     fontSize: 15)),
                             const SizedBox(height: 2),
-                            Text(previewText,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: Colors.white38, fontSize: 13)),
+                            FutureBuilder<String>(
+                              future: previewFuture,
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'Loading preview...',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white38,
+                                    fontSize: 13,
+                                  ),
+                                );
+                              },
+                            ),
                             Text(date,
                                 style: const TextStyle(
                                     color: Colors.white24, fontSize: 11)),
@@ -534,6 +605,18 @@ class _ScriptListItem extends ConsumerWidget {
       ),
     );
   }
+
+  Future<String> _loadPreviewText() async {
+    String text = fullText;
+    if (secureRecordId != null && secureRecordId!.isNotEmpty) {
+      final data = await SecureScriptStore().read(secureRecordId);
+      text = data?.text ?? '';
+    }
+    return StylingService.recentScriptPreviewText(
+      fullText: text,
+      snippet: null,
+    );
+  }
 }
 
 class _AutoSaveCard extends StatefulWidget {
@@ -553,7 +636,13 @@ class _AutoSaveCardState extends State<_AutoSaveCard> {
 
   Future<void> _checkAutoSave() async {
     final prefs = await SharedPreferences.getInstance();
-    final content = prefs.getString('autosave_script');
+    var content = prefs.getString('autosave_script');
+    final secureId = prefs.getString('autosave_secure_record_id');
+    if ((content == null || content.trim().isEmpty) &&
+        secureId != null &&
+        secureId.isNotEmpty) {
+      content = (await SecureScriptStore().read(secureId))?.text;
+    }
     final title = prefs.getString('autosave_title') ?? 'Untitled';
     if (mounted && content != null && content.trim().isNotEmpty) {
       setState(() => _lastContent = '$title: $content');

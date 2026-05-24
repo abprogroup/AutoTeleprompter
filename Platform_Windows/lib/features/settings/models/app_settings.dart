@@ -1,9 +1,10 @@
-﻿class AppSettings {
+class AppSettings {
   final double fontSize;
   final String languageMode; // 'auto', 'he', 'en'
   final double scrollLead; // 0.2â€“0.5, viewport ratio for reading line
   final String lastScript;
   final String lastScriptTitle;
+  final String lastScriptSessionId;
   final String scrollMode; // 'auto' (speech) | 'manual' (timer)
   final double scrollSpeed; // words per minute for manual mode
   final String textAlign; // 'center' | 'left' | 'right'
@@ -59,6 +60,7 @@
     this.scrollLead = 0.32,
     this.lastScript = '',
     this.lastScriptTitle = '',
+    this.lastScriptSessionId = '',
     this.scrollMode = 'auto',
     this.scrollSpeed = 100.0,
     this.textAlign = 'center',
@@ -107,6 +109,7 @@
     double? scrollLead,
     String? lastScript,
     String? lastScriptTitle,
+    String? lastScriptSessionId,
     String? scrollMode,
     double? scrollSpeed,
     String? textAlign,
@@ -154,6 +157,7 @@
       scrollLead: scrollLead ?? this.scrollLead,
       lastScript: lastScript ?? this.lastScript,
       lastScriptTitle: lastScriptTitle ?? this.lastScriptTitle,
+      lastScriptSessionId: lastScriptSessionId ?? this.lastScriptSessionId,
       scrollMode: scrollMode ?? this.scrollMode,
       scrollSpeed: scrollSpeed ?? this.scrollSpeed,
       textAlign: textAlign ?? this.textAlign,

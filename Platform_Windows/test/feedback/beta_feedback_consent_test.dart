@@ -64,6 +64,11 @@ void main() {
       endpoint: '',
       outboxDirectory: () async => temp,
     );
+    final legacyDir =
+        Directory('${temp.path}${Platform.pathSeparator}feedback_outbox');
+    await legacyDir.create(recursive: true);
+    await File('${legacyDir.path}${Platform.pathSeparator}legacy.json.gz')
+        .writeAsBytes(gzip.encode(utf8.encode('{"rawText":"legacy script"}')));
 
     for (var i = 0; i < 5; i++) {
       final result = await service.submit({
@@ -76,12 +81,20 @@ void main() {
     }
 
     expect(await service.pendingReportCount(), 3);
+    expect(
+      File('${legacyDir.path}${Platform.pathSeparator}legacy.json.gz')
+          .existsSync(),
+      isFalse,
+    );
     final files = temp
         .listSync(recursive: true)
         .whereType<File>()
-        .where((file) => file.path.endsWith('.json.gz'))
+        .where((file) => file.path.endsWith('.json.gz.atpe'))
         .toList();
     expect(files, hasLength(3));
+    for (final file in files) {
+      expect(await file.readAsString(), isNot(contains('script')));
+    }
 
     final retry = await service.retryPendingReports();
     expect(retry.sent, 0);

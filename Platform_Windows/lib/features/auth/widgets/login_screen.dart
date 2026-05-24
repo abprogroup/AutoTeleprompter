@@ -169,7 +169,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text(
-          'Upgrade to V5 Pro',
+          'V5 Pro Access',
           style: TextStyle(color: Colors.white),
         ),
         content: const Column(
@@ -194,7 +194,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             SizedBox(height: 16),
             Text(
-              'Price: \$29.99 / Lifetime',
+              'Purchases are not connected in this beta. Enter your beta '
+              'license key on the activation screen when one is provided.',
               style: TextStyle(
                 color: Color(0xFFFFBF00),
                 fontWeight: FontWeight.bold,
@@ -205,22 +206,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Maybe Later'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Mock IAP: Purchase verification starting...'),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFFBF00),
-              foregroundColor: Colors.black,
-            ),
-            child: const Text('PURCHASE NOW'),
+            child: const Text('Close'),
           ),
         ],
       ),

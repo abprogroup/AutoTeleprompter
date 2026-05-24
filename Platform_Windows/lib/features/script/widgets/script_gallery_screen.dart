@@ -114,6 +114,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
               ),
             ),
+            _AccountMenuButton(auth: auth),
             IconButton(
               icon: const Icon(Icons.settings_outlined, color: Colors.white54),
               onPressed: () => Navigator.push(

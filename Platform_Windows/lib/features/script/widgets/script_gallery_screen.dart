@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -88,6 +89,17 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           actions: [
+            if (Platform.isWindows)
+              IconButton(
+                tooltip: 'Local Remote Control',
+                icon: const Icon(Icons.wifi_tethering_rounded,
+                    color: Colors.white54),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const AppSettingsScreen()),
+                ),
+              ),
             IconButton(
               tooltip: 'Send beta feedback',
               icon:

@@ -55,6 +55,7 @@ part 'script_editor_screen.debug_bookmarks_search.dart';
 part 'script_editor_screen.bookmarks.dart';
 part 'script_editor_screen.search.dart';
 part 'script_editor_screen.editor_block.dart';
+part 'script_editor_screen.chrome.dart';
 part 'script_editor_screen.build.dart';
 part 'script_editor_screen.debug_artifacts.dart';
 part 'script_editor_screen.arrow_trace.dart';

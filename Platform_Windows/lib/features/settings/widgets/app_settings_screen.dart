@@ -50,7 +50,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // ── Profile ──
+          // Profile
           const _SectionHeader(title: 'PROFILE'),
           const SizedBox(height: 8),
           _SettingsTile(
@@ -184,8 +184,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _remoteError =
-            'Remote control could not start. Port 8080 may already be in use.';
+        _remoteError = 'Remote control could not start. Ports 8080-8090 may '
+            'already be in use.';
       });
     } finally {
       if (mounted) setState(() => _remoteBusy = false);

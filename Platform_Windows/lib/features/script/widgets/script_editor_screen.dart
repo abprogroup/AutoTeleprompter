@@ -50,6 +50,7 @@ part 'script_editor_screen.vertical_layout.dart';
 part 'script_editor_screen.dialogs_history.dart';
 part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';
+part 'script_editor_screen.debug_sentry.dart';
 part 'script_editor_screen.debug_bookmarks_search.dart';
 part 'script_editor_screen.bookmarks.dart';
 part 'script_editor_screen.search.dart';

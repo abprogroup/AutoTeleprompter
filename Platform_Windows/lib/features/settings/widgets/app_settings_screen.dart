@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../feedback/providers/beta_consent_provider.dart';
+import '../../feedback/widgets/beta_consent_gate.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../providers/settings_provider.dart';
@@ -142,6 +144,13 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
             ),
           ),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.privacy_tip_outlined,
+            title: 'Beta Privacy Consent',
+            subtitle: 'Review device key, policy version, and consent status',
+            onTap: () => _showBetaConsentDetails(context),
+          ),
         ],
       ),
     );
@@ -209,6 +218,130 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     await Process.run('cmd', ['/c', 'start', url]);
   }
 
+  void _showBetaConsentDetails(BuildContext context) {
+    final consent = ref.read(betaConsentProvider);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Beta Privacy Consent',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ConsentDetailRow(
+              label: 'Status',
+              value: consent.hasAcceptedCurrentPolicy
+                  ? 'Accepted'
+                  : 'Not accepted',
+            ),
+            _ConsentDetailRow(
+              label: 'Policy',
+              value: consent.acceptedPolicyVersion.isEmpty
+                  ? betaPrivacyPolicyVersion
+                  : consent.acceptedPolicyVersion,
+            ),
+            _ConsentDetailRow(
+              label: 'Accepted',
+              value: consent.acceptedAtIso.isEmpty
+                  ? 'Not recorded'
+                  : consent.acceptedAtIso,
+            ),
+            _ConsentDetailRow(
+              label: 'App version',
+              value: consent.acceptedAppVersion.isEmpty
+                  ? betaAppVersion
+                  : consent.acceptedAppVersion,
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              'Device key: ${consent.deviceKey}',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Withdrawing consent keeps your device key for support and '
+              'deletion requests, then returns the app to the beta consent gate.',
+              style: TextStyle(color: Colors.white54, height: 1.35),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final dialogNavigator = Navigator.of(ctx);
+              final messenger = ScaffoldMessenger.of(context);
+              await Clipboard.setData(
+                ClipboardData(text: consent.deviceKey),
+              );
+              dialogNavigator.pop();
+              if (!mounted) return;
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Device key copied.')),
+              );
+            },
+            child: const Text('Copy key'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: consent.hasAcceptedCurrentPolicy
+                ? () => _confirmWithdrawConsent(ctx)
+                : null,
+            child: const Text(
+              'Withdraw',
+              style: TextStyle(color: Colors.orangeAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmWithdrawConsent(BuildContext dialogContext) {
+    Navigator.pop(dialogContext);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Withdraw beta consent?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'The beta app cannot be used without accepting the current privacy '
+          'notice. You can accept again from the consent screen.',
+          style: TextStyle(color: Colors.white70, height: 1.35),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await ref.read(betaConsentProvider.notifier).withdrawConsent();
+              if (!mounted) return;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const BetaConsentGate()),
+                (_) => false,
+              );
+            },
+            child: const Text(
+              'Withdraw',
+              style: TextStyle(color: Colors.orangeAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _editDisplayName(BuildContext context) {
     final controller =
         TextEditingController(text: ref.read(settingsProvider).displayName);
@@ -242,6 +375,41 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             child: const Text('Save',
                 style: TextStyle(
                     color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConsentDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _ConsentDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
           ),
         ],
       ),

@@ -79,6 +79,19 @@ class BetaConsentNotifier extends Notifier<BetaConsentState> {
     );
   }
 
+  Future<void> withdrawConsent() async {
+    await ensureLoaded();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_acceptedPolicyVersionKey);
+    await prefs.remove(_acceptedAtKey);
+    await prefs.remove(_acceptedAppVersionKey);
+    state = state.copyWith(
+      acceptedPolicyVersion: '',
+      acceptedAtIso: '',
+      acceptedAppVersion: '',
+    );
+  }
+
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     var deviceKey = prefs.getString(_deviceKeyKey) ?? '';

@@ -32,6 +32,28 @@ void main() {
     expect(state.acceptedAtIso, isNotEmpty);
   });
 
+  test('withdrawing consent keeps device key and clears acceptance', () async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final notifier = container.read(betaConsentProvider.notifier);
+    await notifier.ensureLoaded();
+    await notifier.acceptCurrentPolicy();
+    final accepted = container.read(betaConsentProvider);
+
+    expect(accepted.hasAcceptedCurrentPolicy, isTrue);
+
+    await notifier.withdrawConsent();
+    final withdrawn = container.read(betaConsentProvider);
+
+    expect(withdrawn.deviceKey, accepted.deviceKey);
+    expect(withdrawn.hasAcceptedCurrentPolicy, isFalse);
+    expect(withdrawn.acceptedPolicyVersion, isEmpty);
+    expect(withdrawn.acceptedAtIso, isEmpty);
+    expect(withdrawn.acceptedAppVersion, isEmpty);
+  });
+
   test('lightweight diagnostics stays capped below payload budget', () {
     final diagnostics = LightweightDiagnostics.instance;
     diagnostics.clear();

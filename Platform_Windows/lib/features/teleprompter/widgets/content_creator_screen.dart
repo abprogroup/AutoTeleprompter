@@ -26,7 +26,10 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   bool _isRecording = false;
   int _countdown = 0;
   int _recordSeconds = 0;
+  int _activeWordIndex = 0;
   Timer? _recordTimer;
+  Timer? _autoScrollTimer;
+  Timer? _wordTrackTimer;
 
   @override
   void initState() {
@@ -64,6 +67,8 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   @override
   void dispose() {
     _recordTimer?.cancel();
+    _autoScrollTimer?.cancel();
+    _wordTrackTimer?.cancel();
     _cameraController?.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -77,6 +82,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     if (_isRecording) {
       final file = await _cameraController!.stopVideoRecording();
       _recordTimer?.cancel();
+      _stopAutoScroll();
       setState(() {
         _isRecording = false;
         _recordSeconds = 0;
@@ -109,7 +115,70 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         if (mounted) setState(() => _recordSeconds = t.tick);
       });
       ref.read(settingsProvider.notifier).setScrollSpeed(100);
-      setState(() => _isRecording = true);
+      setState(() {
+        _isRecording = true;
+        _activeWordIndex = ref.read(teleprompterProvider).confirmedWordIndex;
+      });
+      _startAutoScroll();
+    }
+  }
+
+  void _startAutoScroll() {
+    if (!_scrollController.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isRecording) _startAutoScroll();
+      });
+      return;
+    }
+    _autoScrollTimer?.cancel();
+    _wordTrackTimer?.cancel();
+
+    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted || !_isRecording || !_scrollController.hasClients) return;
+      final settings = ref.read(settingsProvider);
+      final speed = settings.scrollSpeed;
+      if (speed == 0) return;
+
+      final pxPerTick = speed.abs() * 3.0 * 16.0 / 1000.0;
+      final delta = speed < 0 ? -pxPerTick : pxPerTick;
+      final max = _scrollController.position.maxScrollExtent;
+      final next = (_scrollController.offset + delta).clamp(0.0, max);
+      _scrollController.jumpTo(next);
+      if (next == 0.0 || next == max) _stopAutoScroll();
+    });
+
+    _wordTrackTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      _updateActiveWordFromScroll();
+    });
+  }
+
+  void _stopAutoScroll() {
+    _autoScrollTimer?.cancel();
+    _wordTrackTimer?.cancel();
+  }
+
+  void _updateActiveWordFromScroll() {
+    if (!mounted || !_scrollController.hasClients || _wordKeys.isEmpty) return;
+    final settings = ref.read(settingsProvider);
+    final targetY = MediaQuery.of(context).size.height * settings.scrollLead;
+    final start = (_activeWordIndex - 5).clamp(0, _wordKeys.length - 1);
+    final end = (_activeWordIndex + 25).clamp(0, _wordKeys.length - 1);
+
+    var bestIndex = _activeWordIndex;
+    var bestDistance = double.infinity;
+    for (var i = start; i <= end; i++) {
+      final ctx = _wordKeys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) continue;
+      final distance = (box.localToGlobal(Offset.zero).dy - targetY).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    if (bestIndex != _activeWordIndex) {
+      setState(() => _activeWordIndex = bestIndex);
     }
   }
 
@@ -128,6 +197,8 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     final script = ref.watch(scriptProvider);
     final settings = ref.watch(settingsProvider);
     final tState = ref.watch(teleprompterProvider);
+    final activeWordIndex =
+        _isRecording ? _activeWordIndex : tState.confirmedWordIndex;
 
     if (script != null) {
       while (_wordKeys.length < script.words.length) {
@@ -245,7 +316,8 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                       left: 20,
                       right: 20,
                     ),
-                    child: _buildPrompterContent(script, settings, tState),
+                    child:
+                        _buildPrompterContent(script, settings, activeWordIndex),
                   ),
                 ),
                 const Spacer(flex: 4),
@@ -310,7 +382,10 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.replay, color: Colors.white70),
-                        onPressed: () => _scrollController.jumpTo(0),
+                        onPressed: () {
+                          _scrollController.jumpTo(0);
+                          setState(() => _activeWordIndex = 0);
+                        },
                       ),
                     ],
                   ),
@@ -324,7 +399,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   }
 
   Widget _buildPrompterContent(
-      Script? script, AppSettings settings, dynamic tState) {
+      Script? script, AppSettings settings, int activeWordIndex) {
     if (script == null || script.isEmpty) {
       return const Center(
           child:
@@ -377,8 +452,8 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                   alignment: _toWrapAlignment(paraAlign, settings),
                   children: para.map<Widget>((word) {
                     final i = word.index;
-                    final isCurrent = i == tState.confirmedWordIndex;
-                    final isPast = i < tState.confirmedWordIndex;
+                    final isCurrent = i == activeWordIndex;
+                    final isPast = i < activeWordIndex;
                     final displayText = word.raw.replaceAll(
                         RegExp(
                             r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg)(?:=[^\]]+)?\]|\*\*'),

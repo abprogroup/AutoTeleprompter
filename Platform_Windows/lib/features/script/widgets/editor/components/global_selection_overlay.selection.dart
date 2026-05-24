@@ -197,7 +197,7 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
 
   /// Converts a native single-block partial selection (e.g. from double-click
   /// or drag-to-select inside one TextField) into the app overlay handles.
-  /// Full-block selections are ignored here â€” Select All owns those.
+  /// Full-block selections are ignored here - Select All owns those.
   void extendNativeBlockSelection(
     int blockIndex,
     TextSelection selection, {

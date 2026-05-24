@@ -69,7 +69,7 @@ part 'script_editor_screen.keyboard_bookmark_helpers.dart';
 part 'script_editor_screen.keyboard_focus.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
-// â”€â”€ Switchboard Orchestrator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Switchboard Orchestrator --------------------------------------------------
 
 class _SelectAllIntent extends Intent {
   const _SelectAllIntent();
@@ -116,10 +116,10 @@ const String _keyboardBookmarkSign = '\u00BB';
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     with WidgetsBindingObserver, StylingLogicMixin<ScriptEditorScreen> {
-  // Dummy node for HardwareKeyboard â†’ _handleEditorArrowKey bridge
+  // Dummy node for HardwareKeyboard -> _handleEditorArrowKey bridge
   // (_handleEditorArrowKey never uses the node parameter).
   static final _arrowKeyDummyNode = FocusNode();
-  // â”€â”€ Mixin Implementation for StylingLogicMixin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Mixin Implementation for StylingLogicMixin ----------------------------
   @override
   List<MarkupController> get controllers => _controllers;
   @override
@@ -139,7 +139,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   void saveHistory({required String description, bool debounce = true}) =>
       _saveHistory(description: description, debounce: debounce);
 
-  // â”€â”€ State Members â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- State Members ----------------------------------------------------------
   final List<MarkupController> _controllers = [];
   final List<FocusNode> _focusNodes = [];
   final List<GlobalKey> _blockKeys = [];
@@ -148,7 +148,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   double? _editorScrollOffsetBeforeWindowHide;
   String _currentTitle = 'New Project';
 
-  /// Preserved non-collapsed selection â€” survives focus loss from dialogs.
+  /// Preserved non-collapsed selection - survives focus loss from dialogs.
   /// Updated only when the selection is non-collapsed, so opening a dialog
   /// (which collapses the selection) doesn't overwrite this.
   TextSelection? _preservedSelection;
@@ -409,7 +409,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         if (mounted) _rememberCurrentRecentFingerprint();
       });
       unawaited(_loadBookmarksForCurrentScript());
-      // Migrate old metadata-only bookmarks â†’ insert Â» signs into text.
+      // Migrate old metadata-only bookmarks -> insert >> signs into text.
       // Safe to re-run: strips existing signs first, then re-inserts in order.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_reconcileEditorBookmarkSignsFromMetadata());

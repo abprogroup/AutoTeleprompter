@@ -75,12 +75,12 @@ extension GlobalSelectionOverlayHandles on GlobalSelectionOverlayState {
     final height = _stackSize.height;
     double speed = 0;
     if (local.dy < _autoScrollZone) {
-      // Near top â€” scroll up
+      // Near top - scroll up
       final factor =
           ((_autoScrollZone - local.dy) / _autoScrollZone).clamp(0.0, 1.0);
       speed = -_autoScrollMax * factor.toDouble();
     } else if (local.dy > height - _autoScrollZone) {
-      // Near bottom â€” scroll down
+      // Near bottom - scroll down
       final factor = ((local.dy - (height - _autoScrollZone)) / _autoScrollZone)
           .clamp(0.0, 1.0);
       speed = _autoScrollMax * factor.toDouble();

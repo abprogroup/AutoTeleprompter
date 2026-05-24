@@ -285,7 +285,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                                 ),
                               ),
                             ),
-                            // V3 Pro: Enhanced Eye-Contact Radial Vignette
+                            // Pro camera: enhanced eye-contact radial vignette
                             Container(
                               decoration: BoxDecoration(
                                 gradient: RadialGradient(
@@ -300,12 +300,12 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                                 ),
                               ),
                             ),
-                            // V3 Pro: Camera Lens HUD Painter
+                            // Pro camera: camera lens HUD painter
                             CustomPaint(
                               painter: _LensHUDPainter(),
                               child: Container(),
                             ),
-                            // V3 Pro: Session Timer HUD
+                            // Pro camera: session timer HUD
                             if (_isRecording)
                               Positioned(
                                 top: 20,
@@ -330,7 +330,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                                   ),
                                 ),
                               ),
-                            // V3 Pro: Countdown Overlay
+                            // Pro camera: countdown overlay
                             if (_countdown > 0)
                               Center(
                                 child: Container(

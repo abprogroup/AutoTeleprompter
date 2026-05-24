@@ -8,7 +8,7 @@ extension GlobalSelectionOverlayBuild on GlobalSelectionOverlayState {
         // Only show a handle when its block is currently rendered (position
         // known). If the block has scrolled offscreen, _handleStartPos /
         // _handleEndPos is null. We hide the handle instead of clamping it
-        // to a viewport edge â€” a handle floating at an unrelated edge is
+        // to a viewport edge - a handle floating at an unrelated edge is
         // confusing and doesn't correspond to any real text position.
         final start = hasSelection ? _handleStartPos : null;
         final end = hasSelection ? _handleEndPos : null;
@@ -77,7 +77,7 @@ extension GlobalSelectionOverlayBuild on GlobalSelectionOverlayState {
           // v4.0.9: Convert the handle's Stack-local caret position to GLOBAL
           // coordinates HERE (layout is guaranteed valid from the previous frame).
           // Subsequent onPanUpdate calls just add the finger delta to this global
-          // caret origin, so the caret â€” not the touch-point â€” drives
+          // caret origin, so the caret - not the touch-point - drives
           // _handleUpdate.  This eliminates the line-1 snap that occurred when
           // the user's finger landed at the top of the 56-px hit area (18 px
           // above the caret) and the raw touch y was mapped to line 1 instead.

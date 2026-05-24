@@ -492,7 +492,7 @@ class SettingsNotifier extends Notifier<AppSettings>
   }
 
   Future<void> resetToDefaultAppearance() async {
-    // v3.9.5.60: Calibrated defaults â€” line spacing 1.2 matches AppSettings baseline
+    // v3.9.5.60: Calibrated defaults - line spacing 1.2 matches AppSettings baseline
     state = state.copyWith(
       scriptBgColor: 0xFF000000,
       currentWordColor: 0xFFFFBF00,

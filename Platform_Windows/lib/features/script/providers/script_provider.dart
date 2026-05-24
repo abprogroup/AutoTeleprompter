@@ -321,10 +321,10 @@ class ScriptNotifier extends Notifier<Script?> {
         if (raw.trimLeft().startsWith('{\\rtf')) {
           result = _parseRtf(raw);
         } else if (lower.endsWith('.rtf')) {
-          // Non-RTF content in a .rtf file (e.g. saved before the fix) â€” treat as UTF-8
+          // Non-RTF content in a .rtf file (e.g. saved before the fix) - treat as UTF-8
           result = ParsedFile(raw.trim());
         } else {
-          // Legacy .doc binary files â€” strip non-printable bytes
+          // Legacy .doc binary files - strip non-printable bytes
           final content = String.fromCharCodes(
             rawBytes.where(
                 (b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),

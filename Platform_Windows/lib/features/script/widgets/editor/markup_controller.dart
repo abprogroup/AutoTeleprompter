@@ -170,7 +170,7 @@ class MarkupController extends TextEditingController {
     super.value = newValue.copyWith(text: newText, selection: newSelection);
   }
 
-  // â”€â”€ Visual-offset conversion helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Visual-offset conversion helpers -------------------------------------
   // Tags occupy raw character positions but render at zero visible width.
   // These helpers let callers track selections by VISIBLE character count so
   // that inserting or removing tags (B/I/U/size/color/font) never shifts the
@@ -184,7 +184,7 @@ class MarkupController extends TextEditingController {
   /// placing the cursor at [text.length] can trap it between the end of the
   /// raw string and the end of a trailing invisible tag. Flutter's default
   /// cursor-left then increments the position INTO the tag; MarkupController's
-  /// value-setter snaps it back to the end of the tag â€” forever stuck.
+  /// value-setter snaps it back to the end of the tag - forever stuck.
   ///
   /// Placing the cursor at safeEndOffset instead lands just before those
   /// trailing tags, so the very next arrowLeft moves past a real character.

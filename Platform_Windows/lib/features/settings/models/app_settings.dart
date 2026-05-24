@@ -1,7 +1,7 @@
 class AppSettings {
   final double fontSize;
   final String languageMode; // 'auto', 'he', 'en'
-  final double scrollLead; // 0.2â€“0.5, viewport ratio for reading line
+  final double scrollLead; // 0.2-0.5, viewport ratio for reading line
   final String lastScript;
   final String lastScriptTitle;
   final String lastScriptSessionId;
@@ -11,13 +11,13 @@ class AppSettings {
   final bool mirrorHorizontal; // flip horizontally
   final bool mirrorVertical; // flip vertically
   final int flipRotation; // screen rotation: 0, 90, 180, 270 degrees
-  final double lineSpacing; // 1.0â€“2.5
+  final double lineSpacing; // 1.0-2.5
   final double wordSpacing; // extra spacing between words (px)
   final double letterSpacing; // extra spacing between letters (px)
   final int scriptBgColor; // ARGB int, default black
   final int currentWordColor; // ARGB int, default amber
   final int futureWordColor; // ARGB int, default white
-  final double pastWordOpacity; // 0.0â€“0.6
+  final double pastWordOpacity; // 0.0-0.6
   final bool debugMode; // technical mode for STT logs
   final String videoResolution; // '480p', '720p', '1080p'
   final List<String> recentScripts; // JSON strings of script metadata

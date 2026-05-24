@@ -53,7 +53,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
   /// Parses RTF, extracts text with style markup (bold, color, size).
   ParsedFile _parseRtf(String raw) {
     double? detectedFontSize;
-    // â”€â”€ Step 1: Extract color table â”€â”€
+    // -- Step 1: Extract color table --
     final colorTable = <String>['000000']; // index 0 = auto/default
     final ctMatch = RegExp(r'\{\\colortbl\s*;?([^}]*)\}').firstMatch(raw);
     if (ctMatch != null) {
@@ -73,7 +73,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
       }
     }
 
-    // â”€â”€ Step 2: Walk the document â”€â”€
+    // -- Step 2: Walk the document --
     const skipGroupWords = {
       // Header / metadata
       'fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'object',
@@ -95,7 +95,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
       'pgdsctbl', 'wgrffmtfilter', 'filetbl', 'upr',
     };
 
-    // Formatting state (no size â€” teleprompter controls its own font size)
+    // Formatting state (no size - teleprompter controls its own font size)
     bool bold = false;
     int cfIndex = 0;
 
@@ -195,7 +195,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
           continue;
         }
 
-        // Unicode escape \uNNNN? â€” only if followed by a digit or minus sign.
+        // Unicode escape \uNNNN? - only if followed by a digit or minus sign.
         // Control words like \uc, \ul, \ulnone start with 'u' but are NOT unicode escapes.
         if (next == 'u' &&
             (i + 1) < raw.length &&
@@ -295,7 +295,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
         continue;
       }
 
-      // Regular text character (skip bare CR/LF â€” RTF uses \par)
+      // Regular text character (skip bare CR/LF - RTF uses \par)
       if (c != '\r' && c != '\n') {
         currentText.write(c);
       }
@@ -303,7 +303,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
     }
     flushRun();
 
-    // â”€â”€ Step 3: Convert runs to internal markup â”€â”€
+    // -- Step 3: Convert runs to internal markup --
     final buf = StringBuffer();
     for (final run in runs) {
       String text = run.text;

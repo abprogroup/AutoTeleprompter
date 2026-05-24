@@ -99,7 +99,7 @@ class SttRecognitionPolicy {
 }
 
 class WordAligner {
-  // â”€â”€ Tuning constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Tuning constants -------------------------------------------------------
   // Window size to search ahead (in non-newline words).
   static const int _searchWindowSize = 50;
   // Max words for a SINGLE-word match (prevents false jumps on common words).
@@ -114,7 +114,7 @@ class WordAligner {
   static const double _fastMatchThreshold = 0.65;
   // Penalty applied per word of distance from the current position.
   static const double _distancePenaltyPerWord = 0.025;
-  // Cross-language (e.g. Latin word in Hebrew script) â€” more lenient
+  // Cross-language (e.g. Latin word in Hebrew script) - more lenient
   // Hebrew-specific: even more lenient because STT often returns approximate matches
   static const double _hebrewMatchThreshold = 0.50;
   // Bullet/header prompting must not silently walk through guessed words.
@@ -130,15 +130,15 @@ class WordAligner {
   static List<ScriptWord> tokenize(String text) =>
       _WordAlignerTokenizer.tokenize(text);
 
-  // â”€â”€ Aligner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Aligner -----------------------------------------------------------------
 
   /// Core alignment: given a script word list and a speech transcript,
   /// determine which word the user has reached.
   ///
   /// Strategy:
-  /// 1. FAST PATH: Check the very next expected word(s) first â€” if the last
+  /// 1. FAST PATH: Check the very next expected word(s) first - if the last
   ///    spoken word matches the next script word, advance by exactly 1.
-  /// 2. NEARBY SCAN: Check a small window (Â±8 words) for a strong single-word
+  /// 2. NEARBY SCAN: Check a small window (+/-8 words) for a strong single-word
   ///    match. This handles minor improvisation where the user skips 1-2 words.
   /// 3. MULTI-WORD CONFIRMATION: Use the last 3 spoken words to confirm a
   ///    position via sequence alignment. This prevents false matches on common
@@ -263,7 +263,7 @@ class WordAligner {
       );
     }
 
-    // â”€â”€ STEP 1: NEXT-WORD PRIORITY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- STEP 1: NEXT-WORD PRIORITY ------------------------------------------
     // The most common case: user said the very next word. Check it first with
     // a slightly lower threshold since position makes it very likely.
     if (localThreshold.passes([lastSpoken]) &&
@@ -273,7 +273,7 @@ class WordAligner {
       if (nextWord.isNotEmpty) {
         final isHebrew = script[searchStart].isRtl;
         final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
-        // Hebrew STT is less precise â€” use a lower threshold for the next word
+        // Hebrew STT is less precise - use a lower threshold for the next word
         final nextThreshold =
             policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
         if (sim >= nextThreshold) {
@@ -283,7 +283,7 @@ class WordAligner {
       }
     }
 
-    // â”€â”€ STEP 2: NEARBY SINGLE-WORD SCAN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- STEP 2: NEARBY SINGLE-WORD SCAN -------------------------------------
     // Look at a small window ahead for a strong single-word match.
     String debugScans = '';
     double bestSingleSim = 0.0;
@@ -296,7 +296,7 @@ class WordAligner {
 
       final sim = _wordSimilarity(lastSpoken, scriptWord, script[i].isRtl);
       final distance = i - searchStart;
-      // Apply distance penalty â€” farther words need higher confidence
+      // Apply distance penalty - farther words need higher confidence
       final adjustedSim = sim - (distance * _distancePenaltyPerWord);
 
       debugScans +=
@@ -322,7 +322,7 @@ class WordAligner {
             activeStandby && localThreshold.passes([lastSpoken]);
         if (allowSingleAdvance && jumpDist <= _maxSingleJump) {
           return AlignmentResult(bestSingleIdx, bestSingleSim,
-              'SINGLE: "$lastSpoken" â†’ [$bestSingleIdx]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
+              'SINGLE: "$lastSpoken" -> [$bestSingleIdx]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
         }
       }
     }
@@ -365,7 +365,7 @@ class WordAligner {
       if (nearbyPhrase != null) return nearbyPhrase;
     }
 
-    // â”€â”€ STEP 3: MULTI-WORD SEQUENCE CONFIRMATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- STEP 3: MULTI-WORD SEQUENCE CONFIRMATION ----------------------------
     // Use the last K spoken words to find a matching sequence in the script.
     // This helps confirm position when single words are ambiguous.
     final k = visibleSkipEnabled
@@ -442,9 +442,9 @@ class WordAligner {
           bestSeqEndIdx, bestSeqScore, '$bestSeqDebug\n$debugScans');
     }
 
-    // â”€â”€ NO MATCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- NO MATCH ------------------------------------------------------------
     // The spoken word didn't match anything in our window. This is normal
-    // during improvisation â€” the user is saying something not in the script.
+    // during improvisation - the user is saying something not in the script.
     final nextExpected =
         searchStart < script.length ? script[searchStart].normalized : '?';
     return AlignmentResult(
@@ -615,7 +615,7 @@ class WordAligner {
     'you',
   };
 
-  // â”€â”€ Word similarity helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Word similarity helper -------------------------------------------------
   /// Compute similarity between a spoken word and a script word,
   /// with special handling for Hebrew prefix stripping.
   static double _wordSimilarity(String spoken, String scriptWord, bool isRtl) {
@@ -636,7 +636,7 @@ class WordAligner {
       }
 
       // Also try phonetic normalization for Hebrew
-      // (×›/×§, ×ª/×˜, ×‘/×•, ×—/×›, ×¡/×©×‚ are commonly confused by STT)
+      // Similar-sounding Hebrew letters are commonly confused by STT.
       if (sim < 0.65) {
         final phoneticSpoken = _hebrewPhonetic(spoken);
         final phoneticScript = _hebrewPhonetic(scriptWord);
@@ -671,11 +671,11 @@ class WordAligner {
   /// Normalize Hebrew letters that sound the same for phonetic comparison.
   static String _hebrewPhonetic(String s) {
     return s
-        .replaceAll('\u05E7', '\u05DB') // ×§ â†’ ×›
-        .replaceAll('\u05D8', '\u05EA') // ×˜ â†’ ×ª
-        .replaceAll('\u05E1', '\u05E9') // ×¡ â†’ ×©
-        .replaceAll('\u05E2', '\u05D0') // ×¢ â†’ ×
-        .replaceAll('\u05D5', '\u05D1'); // ×• â†’ ×‘ (when confused by STT)
+        .replaceAll('\u05E7', '\u05DB') // qof -> kaf
+        .replaceAll('\u05D8', '\u05EA') // tet -> tav
+        .replaceAll('\u05E1', '\u05E9') // samekh -> shin
+        .replaceAll('\u05E2', '\u05D0') // ayin -> alef
+        .replaceAll('\u05D5', '\u05D1'); // vav -> bet
   }
 
   /// Collapse sequences of single-character words into abbreviation candidates.

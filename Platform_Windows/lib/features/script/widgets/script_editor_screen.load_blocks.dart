@@ -241,7 +241,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           // On focus loss, suppress any lingering native selection highlight
           // (set via TextField drag-select). MarkupController otherwise falls
           // through to controller.selection and renders amber on the now-
-          // unfocused block â€” which is the "two highlights at once" bug.
+          // unfocused block - which is the "two highlights at once" bug.
           // Skip while a global multi-block selection or overlay drag is active
           // (their externalSelection values must not be overwritten here).
           final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
@@ -270,7 +270,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             // Escalate native full-block select to global Select All.
             // Catches all paths: context menu, keyboard, platform menu.
             // Skip when overlay has active handles (refine mode) to avoid
-            // infinite loop: refine clears isGlobal â†’ escalation re-selects â†’ loop.
+            // infinite loop: refine clears isGlobal -> escalation re-selects -> loop.
             final overlayActive =
                 _overlayKey.currentState?.hasSelection ?? false;
             if (!_isGlobalSelection &&
@@ -350,7 +350,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       });
     }
     // Sync toolbar state after load. Non-empty blocks don't auto-request focus,
-    // so _onSelectionChanged never fires â€” cursorStyleProvider stays at its
+    // so _onSelectionChanged never fires - cursorStyleProvider stays at its
     // default 'left'. Point lastFocusedController at the first block so
     // _detectAlignAtCursor reads the right text, then run detection.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -372,7 +372,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         // (i.e. the notification came from our own _selectAllBlocks).
         // Any other selection state (collapsed tap, partial drag) clears it.
         // Guard: if the overlay has active handles (e.g. alignment was just applied
-        // or drag is in progress), do NOT clear â€” focus events fire before
+        // or drag is in progress), do NOT clear - focus events fire before
         // _isCommandExecuting is set and would prematurely destroy the selection.
         if (_overlayKey.currentState?.hasSelection ?? false) return;
         final textLen = controller.text.length;

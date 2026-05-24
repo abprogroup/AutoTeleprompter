@@ -310,7 +310,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                     ),
                                   );
                                 } else if (sel.isValid && sel.isCollapsed) {
-                                  // Check if cursor is at end of line/paragraph â†’ Baseline Mode: clear whole script
+                                  // Check if cursor is at end of line/paragraph -> Baseline Mode: clear whole script
                                   final cursorInPlain =
                                       sel.start >= text.length ||
                                           text
@@ -521,7 +521,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                             ),
                             SizedBox(height: 18),
                             Text(
-                              'Loading scriptâ€¦',
+                              'Loading script...',
                               style: TextStyle(
                                 color: Color(0xFFFFBF00),
                                 fontSize: 14,

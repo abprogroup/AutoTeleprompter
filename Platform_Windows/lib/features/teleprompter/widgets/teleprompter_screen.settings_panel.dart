@@ -107,7 +107,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             ),
           ),
 
-          // ── Scroll mode ─────────────────────────────────────────────────────
+          // -- Scroll mode -----------------------------------------------------
           const Text('Scroll Mode', style: sectionStyle),
           const SizedBox(height: 8),
           SegmentedButton<String>(
@@ -295,7 +295,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const Divider(color: Colors.white12),
           const SizedBox(height: 8),
 
-          // ── Text ───────────────────────────────────────────────────────────
+          // -- Text -----------------------------------------------------------
           Row(children: [
             const Text('Override Text Alignment', style: sectionStyle),
             const Spacer(),
@@ -332,7 +332,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const Text('Layout & Typography', style: sectionStyle),
           const SizedBox(height: 14),
 
-          // V3 Professional: Broadcast Profiles
+          // Professional broadcast profiles
           const Text('Broadcast Profile', style: labelStyle),
           const SizedBox(height: 8),
           SingleChildScrollView(
@@ -457,7 +457,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const Divider(color: Colors.white12),
           const SizedBox(height: 8),
 
-          // ── Colors ─────────────────────────────────────────────────────────
+          // -- Colors ---------------------------------------------------------
           const Text('Colors', style: sectionStyle),
           const SizedBox(height: 14),
 
@@ -541,7 +541,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const Divider(color: Colors.white12),
           const SizedBox(height: 8),
 
-          // ── Display ────────────────────────────────────────────────────────
+          // -- Display --------------------------------------------------------
           Row(
             children: [
               const Text('Mirror Horizontal', style: sectionStyle),

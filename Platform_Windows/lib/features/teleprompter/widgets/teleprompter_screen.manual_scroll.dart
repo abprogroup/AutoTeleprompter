@@ -18,7 +18,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
           settings.scrollMode == 'manual' ? settings.scrollSpeed : 100.0;
       if (speed == 0) return;
 
-      // pixels per tick: speed(wpm) × 3px × 16ms/1000ms
+      // pixels per tick: speed(wpm) x 3px x 16ms/1000ms
       final pxPerTick = speed.abs() * 3.0 * 16.0 / 1000.0;
       final isBackward = speed < 0;
       final delta = isBackward ? -pxPerTick : pxPerTick;
@@ -160,7 +160,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
-  // ── Speech-mode scroll ──────────────────────────────────────────────────────
+  // -- Speech-mode scroll ------------------------------------------------------
 
   void _scrollToWordIndex(int index,
       {bool anticipate = false, bool immediate = false}) {

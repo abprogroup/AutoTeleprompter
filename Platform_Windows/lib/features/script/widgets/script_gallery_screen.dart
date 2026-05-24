@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'script_editor_screen.dart';
 import '../../../core/security/secure_script_store.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
@@ -126,7 +127,13 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 subtitle: 'Start with a blank canvas',
                 icon: Icons.add_rounded,
                 color: const Color(0xFFFFBF00),
-                onTap: () => _showNewScriptDialog(context),
+                onTap: () {
+                  LightweightDiagnostics.instance.record(
+                    'gallery',
+                    'new script action opened',
+                  );
+                  _showNewScriptDialog(context);
+                },
               ),
               const SizedBox(height: 12),
               _GalleryActionCard(
@@ -135,6 +142,10 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 icon: Icons.file_open_outlined,
                 color: Colors.white,
                 onTap: () {
+                  LightweightDiagnostics.instance.record(
+                    'gallery',
+                    'load script action opened',
+                  );
                   // v3.9.5.59: Sovereign Fluid Transition
                   // Immediately navigate to the editor shell; the editor will handle
                   // triggering the file picker over its amber loading screen,
@@ -223,6 +234,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             onPressed: () {
               final name = controller.text.trim();
               Navigator.pop(ctx);
+              LightweightDiagnostics.instance.record(
+                'gallery',
+                'new script created',
+                data: {'title': name.isEmpty ? 'New Script' : name},
+              );
               ref.read(scriptProvider.notifier).clear();
               ref.read(settingsProvider.notifier).resetToDefaultAppearance();
               ref
@@ -438,6 +454,17 @@ class _ScriptListItem extends ConsumerWidget {
             Expanded(
               child: InkWell(
                 onTap: () async {
+                  LightweightDiagnostics.instance.record(
+                    'gallery',
+                    'recent script opened',
+                    data: {
+                      'title': title,
+                      'sourceType': type,
+                      'sessionId': sessionId,
+                      'hasSecureRecord':
+                          secureRecordId != null && secureRecordId!.isNotEmpty,
+                    },
+                  );
                   final settingsNotifier = ref.read(settingsProvider.notifier);
                   final scriptNotifier = ref.read(scriptProvider.notifier);
 

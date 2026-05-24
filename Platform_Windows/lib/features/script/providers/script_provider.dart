@@ -7,6 +7,7 @@ import 'package:xml/xml.dart';
 import '../models/script.dart';
 import '../models/script_word.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../../core/security/secure_script_store.dart';
 import '../../../features/teleprompter/services/word_aligner.dart';
@@ -229,6 +230,17 @@ class ScriptNotifier extends Notifier<Script?> {
       futureWordColor: futureWordColor,
       tokenize: tokenize,
     );
+    LightweightDiagnostics.instance.record(
+      'script',
+      'script loaded',
+      data: {
+        'title': state?.title,
+        'sourceType': state?.sourceType,
+        'sessionId': state?.sessionId,
+        'charCount': text.length,
+        'persist': persist,
+      },
+    );
     if (persist) {
       ref.read(settingsProvider.notifier).saveScript(
             text,
@@ -357,6 +369,7 @@ class ScriptNotifier extends Notifier<Script?> {
 
   void clear() {
     state = null;
+    LightweightDiagnostics.instance.record('script', 'script cleared');
     ref.read(settingsProvider.notifier).saveScript('', title: '');
   }
 }

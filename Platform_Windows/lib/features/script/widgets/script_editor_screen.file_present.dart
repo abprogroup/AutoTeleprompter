@@ -64,6 +64,11 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     // Persist the current script's session before swapping editors so its
     // history index / recent entry are not lost.
+    LightweightDiagnostics.instance.record(
+      'editor',
+      'file import selected',
+      data: {'extension': ext},
+    );
     await _forceRecentUpdate();
     if (!mounted) return;
 
@@ -127,6 +132,14 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     final finalPath =
         savedPath.endsWith('.$format') ? savedPath : '$savedPath.$format';
     await File(finalPath).writeAsBytes(Uint8List.fromList(bytes));
+    LightweightDiagnostics.instance.record(
+      'editor',
+      'script exported',
+      data: {
+        'format': format,
+        'fileName': finalPath.split(RegExp(r'[\\/]')).last
+      },
+    );
 
     if (!mounted) return;
 
@@ -225,6 +238,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   void _clearScript() {
+    LightweightDiagnostics.instance.record('editor', 'script cleared');
     _setEditorState(() {
       _loadText('');
       _saveHistory(description: 'Clear');
@@ -232,6 +246,15 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   void _startPresenting() async {
+    LightweightDiagnostics.instance.record(
+      'editor',
+      'presenter opened',
+      data: {
+        'title': _currentTitle,
+        'sessionId': _currentSessionId,
+        'blockCount': _controllers.length,
+      },
+    );
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
     try {
       final settings = ref.read(settingsProvider);

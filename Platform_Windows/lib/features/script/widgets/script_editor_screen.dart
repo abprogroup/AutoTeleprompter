@@ -24,6 +24,7 @@ import '../providers/script_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../../core/security/encrypted_file_store.dart';
 import '../../../core/security/secure_script_store.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../services/styling_service.dart';

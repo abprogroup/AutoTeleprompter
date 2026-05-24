@@ -64,69 +64,74 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'AutoTeleprompter Beta Privacy Notice',
-          style: GoogleFonts.bebasNeue(
-            color: const Color(0xFFFFBF00),
-            fontSize: 30,
-            letterSpacing: 1.5,
-          ),
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          'This beta is free to use, but participation requires diagnostic '
-          'feedback data so AB Pro Group can find and fix bugs.',
-          style: TextStyle(color: Colors.white, fontSize: 15, height: 1.45),
-        ),
-        const SizedBox(height: 18),
-        _PolicyBox(deviceKey: widget.consent.deviceKey),
-        const SizedBox(height: 18),
-        CheckboxListTile(
-          value: _acknowledged,
-          onChanged: _accepting
-              ? null
-              : (value) => setState(() => _acknowledged = value ?? false),
-          activeColor: const Color(0xFFFFBF00),
-          checkColor: Colors.black,
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: const Text(
-            'I understand and agree that beta feedback reports include my full '
-            'active script and diagnostic data.',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            TextButton.icon(
-              onPressed: () => exit(0),
-              icon: const Icon(Icons.close, color: Colors.white54),
-              label: const Text('Exit beta',
-                  style: TextStyle(color: Colors.white70)),
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height - 104,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'AutoTeleprompter Beta Privacy Notice',
+            style: GoogleFonts.bebasNeue(
+              color: const Color(0xFFFFBF00),
+              fontSize: 30,
+              letterSpacing: 1.5,
             ),
-            const Spacer(),
-            ElevatedButton.icon(
-              onPressed: _acknowledged && !_accepting ? _accept : null,
-              icon: const Icon(Icons.check_circle_outline),
-              label:
-                  Text(_accepting ? 'Entering beta...' : 'Accept and continue'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFBF00),
-                foregroundColor: Colors.black,
-                disabledBackgroundColor: Colors.white12,
-                disabledForegroundColor: Colors.white38,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'This beta is free to use, but participation requires diagnostic '
+            'feedback data so AB Pro Group can find and fix bugs.',
+            style: TextStyle(color: Colors.white, fontSize: 15, height: 1.45),
+          ),
+          const SizedBox(height: 18),
+          Expanded(
+            child: _PolicyBox(deviceKey: widget.consent.deviceKey),
+          ),
+          const SizedBox(height: 18),
+          CheckboxListTile(
+            value: _acknowledged,
+            onChanged: _accepting
+                ? null
+                : (value) => setState(() => _acknowledged = value ?? false),
+            activeColor: const Color(0xFFFFBF00),
+            checkColor: Colors.black,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text(
+              'I understand and agree that beta feedback reports include my full '
+              'active script and diagnostic data.',
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: () => exit(0),
+                icon: const Icon(Icons.close, color: Colors.white54),
+                label: const Text('Exit beta',
+                    style: TextStyle(color: Colors.white70)),
               ),
-            ),
-          ],
-        ),
-      ],
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: _acknowledged && !_accepting ? _accept : null,
+                icon: const Icon(Icons.check_circle_outline),
+                label: Text(
+                    _accepting ? 'Entering beta...' : 'Accept and continue'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFBF00),
+                  foregroundColor: Colors.black,
+                  disabledBackgroundColor: Colors.white12,
+                  disabledForegroundColor: Colors.white38,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -153,7 +158,6 @@ class _PolicyBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 390),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.35),

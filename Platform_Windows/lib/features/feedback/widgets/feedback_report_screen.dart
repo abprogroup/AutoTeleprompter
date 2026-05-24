@@ -30,6 +30,10 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
   @override
   void initState() {
     super.initState();
+    LightweightDiagnostics.instance.record(
+      'feedback',
+      'feedback screen opened',
+    );
     _refreshPendingReports();
   }
 
@@ -313,9 +317,8 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
   }
 
   Map<String, Object?> _buildReport() {
-    final script = ref.read(scriptProvider);
+    final script = _safeRead(() => ref.read(scriptProvider));
     final settings = ref.read(settingsProvider);
-    final teleprompter = ref.read(teleprompterProvider);
     final consent = ref.read(betaConsentProvider);
     final reportId = 'rpt_${DateTime.now().toUtc().millisecondsSinceEpoch}';
     return {
@@ -344,14 +347,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
               'wordCount': script.words.where((w) => !w.isNewline).length,
             },
       'diagnostics': {
-        'teleprompter': {
-          'confirmedWordIndex': teleprompter.confirmedWordIndex,
-          'isListening': teleprompter.isListening,
-          'isStarting': teleprompter.isStarting,
-          'hasError': teleprompter.hasError,
-          'statusMessage': teleprompter.statusMessage,
-          'debugLogsTail': _tail(teleprompter.debugLogs, 20),
-        },
+        'teleprompter': _readTeleprompterDiagnostics(),
         'settings': {
           'languageMode': settings.languageMode,
           'scrollMode': settings.scrollMode,
@@ -361,9 +357,50 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
           'sttVisibleSkipEnabled': settings.sttVisibleSkipEnabled,
           'sttManualProfileEnabled': settings.sttManualProfileEnabled,
         },
-        'ringBuffer': LightweightDiagnostics.instance.snapshot(),
+        'ringBuffer': LightweightDiagnostics.instance.snapshot(
+          budgetBytes: 96 * 1024,
+          stackTraceLimit: 2000,
+        ),
       },
     };
+  }
+
+  Map<String, Object?> _readTeleprompterDiagnostics() {
+    try {
+      final teleprompter = ref.read(teleprompterProvider);
+      return {
+        'available': true,
+        'confirmedWordIndex': teleprompter.confirmedWordIndex,
+        'isListening': teleprompter.isListening,
+        'isStarting': teleprompter.isStarting,
+        'hasError': teleprompter.hasError,
+        'statusMessage': teleprompter.statusMessage,
+        'debugLogsTail': _tail(teleprompter.debugLogs, 20),
+      };
+    } catch (error) {
+      LightweightDiagnostics.instance.record(
+        'feedback',
+        'teleprompter snapshot unavailable',
+        data: {'error': error.toString()},
+      );
+      return {
+        'available': false,
+        'snapshotError': error.toString(),
+      };
+    }
+  }
+
+  T? _safeRead<T>(T Function() read) {
+    try {
+      return read();
+    } catch (error) {
+      LightweightDiagnostics.instance.record(
+        'feedback',
+        'provider snapshot unavailable',
+        data: {'error': error.toString()},
+      );
+      return null;
+    }
   }
 
   List<T> _tail<T>(List<T> items, int count) {

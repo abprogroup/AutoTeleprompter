@@ -61,17 +61,30 @@ class LightweightDiagnostics {
     );
   }
 
-  Map<String, Object?> snapshot() {
+  Map<String, Object?> snapshot({
+    int? budgetBytes,
+    int stackTraceLimit = 2000,
+  }) {
     _prune();
+    final budget = budgetBytes ?? maxBytes;
+    final eventJson = _events
+        .map((event) => _eventJson(event, stackTraceLimit))
+        .toList(growable: true);
+    var dropped = 0;
+    while (eventJson.isNotEmpty && _snapshotSize(eventJson) > budget) {
+      eventJson.removeAt(0);
+      dropped++;
+    }
     return {
       'retentionMinutes': retentionWindow.inMinutes,
-      'maxBytes': maxBytes,
-      'events': _events.map((e) => e.toJson()).toList(growable: false),
+      'maxBytes': budget,
+      if (dropped > 0) 'droppedEventCount': dropped,
+      'events': eventJson,
       if (_lastError != null)
         'lastError': {
           'message': _lastError.toString(),
           if (_lastStackTrace != null)
-            'stackTrace': _trim(_lastStackTrace.toString(), 8000),
+            'stackTrace': _trim(_lastStackTrace.toString(), stackTraceLimit),
         },
     };
   }
@@ -95,6 +108,26 @@ class LightweightDiagnostics {
         'events': _events.map((e) => e.toJson()).toList(growable: false),
       }))
       .length;
+
+  int _snapshotSize(List<Map<String, Object?>> events) =>
+      utf8.encode(jsonEncode({'events': events})).length;
+
+  static Map<String, Object?> _eventJson(
+    DiagnosticEvent event,
+    int stackTraceLimit,
+  ) =>
+      {
+        'time': event.time.toIso8601String(),
+        'type': event.type,
+        'message': event.message,
+        if (event.data.isNotEmpty)
+          'data': event.data.map((key, value) {
+            if (key == 'stackTrace' && value is String) {
+              return MapEntry(key, _trim(value, stackTraceLimit));
+            }
+            return MapEntry(key, value);
+          }),
+      };
 
   static String _trim(String value, int maxLength) {
     if (value.length <= maxLength) return value;

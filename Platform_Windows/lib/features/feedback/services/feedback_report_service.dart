@@ -34,8 +34,9 @@ class FeedbackOutboxRetryResult {
 }
 
 class FeedbackReportService {
-  static const int gzipThresholdBytes = 64 * 1024;
+  static const int inlinePayloadThresholdBytes = 48 * 1024;
   static const int maxPendingReports = 3;
+  static const int maxRedirects = 5;
 
   FeedbackReportService({
     HttpClient? client,
@@ -53,8 +54,60 @@ class FeedbackReportService {
 
   Future<FeedbackSendResult> submit(Map<String, Object?> report) async {
     final reportId = report['reportId']?.toString() ?? _newReportId();
-    final payload = jsonEncode(report);
+    final payload = _transportPayload(reportId, report);
     return _sendPayload(reportId, payload, queueOnFailure: true);
+  }
+
+  String _transportPayload(String reportId, Map<String, Object?> report) {
+    final inline = jsonEncode(report);
+    final inlineBytes = utf8.encode(inline);
+    if (inlineBytes.length <= inlinePayloadThresholdBytes) return inline;
+
+    final compressed = gzip.encode(inlineBytes);
+    final activeScript = report['activeScript'];
+    return jsonEncode({
+      'schemaVersion': report['schemaVersion'],
+      'reportId': reportId,
+      'deviceKey': report['deviceKey'],
+      'consentVersion': report['consentVersion'],
+      'appVersion': report['appVersion'],
+      'platform': report['platform'],
+      'createdAt': report['createdAt'],
+      'userText': report['userText'],
+      'activeScript': _activeScriptSummary(activeScript),
+      'diagnostics': _diagnosticSummary(report['diagnostics']),
+      'transport': {
+        'mode': 'compressedFullReport',
+        'encoding': 'gzip+base64',
+        'fileName': '$reportId.full-report.json.gz',
+        'originalJsonBytes': inlineBytes.length,
+        'compressedBytes': compressed.length,
+        'fullReportGzipBase64': base64Encode(compressed),
+      },
+    });
+  }
+
+  Object? _activeScriptSummary(Object? activeScript) {
+    if (activeScript is! Map) return activeScript;
+    final rawText = activeScript['rawText']?.toString() ?? '';
+    return {
+      'title': activeScript['title'],
+      'sourceType': activeScript['sourceType'],
+      'sessionId': activeScript['sessionId'],
+      'isRtl': activeScript['isRtl'],
+      'wordCount': activeScript['wordCount'],
+      'rawTextAttachedInCompressedReport': true,
+      'rawTextBytes': utf8.encode(rawText).length,
+    };
+  }
+
+  Object? _diagnosticSummary(Object? diagnostics) {
+    if (diagnostics is! Map) return diagnostics;
+    return {
+      'teleprompter': diagnostics['teleprompter'],
+      'settings': diagnostics['settings'],
+      'ringBufferAttachedInCompressedReport': true,
+    };
   }
 
   Future<FeedbackSendResult> _sendPayload(
@@ -77,34 +130,32 @@ class FeedbackReportService {
     try {
       final uri = _feedbackUri(_endpoint);
       final bytes = utf8.encode(payload);
-      final body =
-          bytes.length > gzipThresholdBytes ? gzip.encode(bytes) : bytes;
-      final request = await _client.postUrl(uri);
-      request.headers.contentType = ContentType.json;
-      request.headers.set('X-AutoTeleprompter-Report-Id', reportId);
-      if (!identical(body, bytes)) {
-        request.headers.set(HttpHeaders.contentEncodingHeader, 'gzip');
-      }
-      request.add(body);
-      final response = await request.close();
-      final responseText = await response.transform(utf8.decoder).join();
-      if (response.statusCode >= 200 && response.statusCode < 300) {
+      final response = await _sendWithRedirects(
+        uri: uri,
+        reportId: reportId,
+        body: bytes,
+        gzipped: false,
+      );
+      if (response.isAccepted) {
         return FeedbackSendResult(
           sent: true,
           queued: false,
           reportId: reportId,
-          message: responseText.trim().isEmpty
+          message: response.body.trim().isEmpty
               ? 'Feedback sent. Report ID: $reportId'
               : 'Feedback sent. Report ID: $reportId',
         );
       }
       if (queueOnFailure) await _queueReport(reportId, payload);
+      final serverMessage = response.serverMessage;
       return FeedbackSendResult(
         sent: false,
         queued: queueOnFailure,
         reportId: reportId,
-        message: 'Server returned ${response.statusCode}.'
-            '${queueOnFailure ? ' Report saved locally.' : ''}',
+        message: (serverMessage == null
+                ? 'Server returned ${response.statusCode}.'
+                : 'Feedback service rejected the report: $serverMessage.') +
+            (queueOnFailure ? ' Report saved locally.' : ''),
       );
     } catch (error) {
       if (queueOnFailure) await _queueReport(reportId, payload);
@@ -113,10 +164,58 @@ class FeedbackReportService {
         queued: queueOnFailure,
         reportId: reportId,
         message: 'Could not send feedback.'
-            '${queueOnFailure ? ' Report saved locally.' : ''}',
+            '${queueOnFailure ? " Report saved locally." : ""}',
       );
     }
   }
+
+  Future<_FeedbackHttpResponse> _sendWithRedirects({
+    required Uri uri,
+    required String reportId,
+    required List<int> body,
+    required bool gzipped,
+  }) async {
+    var current = uri;
+    var method = 'POST';
+    for (var i = 0; i <= maxRedirects; i++) {
+      final request = method == 'POST'
+          ? await _client.postUrl(current)
+          : await _client.getUrl(current);
+      request.followRedirects = false;
+      request.headers.set('X-AutoTeleprompter-Report-Id', reportId);
+      if (method == 'POST') {
+        request.headers.contentType = ContentType.json;
+        if (gzipped) {
+          request.headers.set(HttpHeaders.contentEncodingHeader, 'gzip');
+        }
+        request.add(body);
+      }
+      final response = await request.close();
+      if (!_isRedirect(response.statusCode)) {
+        final text = await response.transform(utf8.decoder).join();
+        return _FeedbackHttpResponse(response.statusCode, text);
+      }
+      final location = response.headers.value(HttpHeaders.locationHeader);
+      await response.drain<void>();
+      if (location == null || location.trim().isEmpty) {
+        return _FeedbackHttpResponse(response.statusCode, '');
+      }
+      current = current.resolve(location);
+      method = _preservePostOnRedirect(response.statusCode) ? method : 'GET';
+    }
+    return const _FeedbackHttpResponse(310, 'Too many redirects.');
+  }
+
+  bool _isRedirect(int statusCode) =>
+      statusCode == HttpStatus.movedPermanently ||
+      statusCode == HttpStatus.found ||
+      statusCode == HttpStatus.seeOther ||
+      statusCode == HttpStatus.temporaryRedirect ||
+      statusCode == HttpStatus.permanentRedirect;
+
+  bool _preservePostOnRedirect(int statusCode) =>
+      statusCode == HttpStatus.temporaryRedirect ||
+      statusCode == HttpStatus.permanentRedirect;
 
   Future<int> pendingReportCount() async {
     final dir = await _ensureOutboxDirectory();
@@ -256,4 +355,39 @@ class FeedbackReportService {
 
   String _newReportId() =>
       'rpt_${DateTime.now().toUtc().millisecondsSinceEpoch}';
+}
+
+class _FeedbackHttpResponse {
+  final int statusCode;
+  final String body;
+
+  const _FeedbackHttpResponse(this.statusCode, this.body);
+
+  bool get isOk => statusCode >= 200 && statusCode < 300;
+
+  bool get isAccepted {
+    if (!isOk) return false;
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(trimmed);
+      return decoded is Map && decoded['ok'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String? get serverMessage {
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map) {
+        final error = decoded['error'] ?? decoded['message'];
+        if (error != null) return error.toString();
+      }
+    } catch (_) {}
+    if (isOk) return 'unexpected response from feedback inbox';
+    return null;
+  }
 }

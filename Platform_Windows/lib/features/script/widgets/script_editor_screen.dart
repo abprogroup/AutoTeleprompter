@@ -50,6 +50,7 @@ part 'script_editor_screen.cursor_detection.dart';
 part 'script_editor_screen.vertical_layout.dart';
 part 'script_editor_screen.vertical_layout_builder.dart';
 part 'script_editor_screen.dialogs_history.dart';
+part 'script_editor_screen.clear_style.dart';
 part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';
 part 'script_editor_screen.debug_sentry.dart';

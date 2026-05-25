@@ -15,6 +15,7 @@ import '../../../platform/stt/abstract_stt_service.dart';
 
 import '../../../platform/stt/stt_service_factory.dart';
 part 'teleprompter_provider.heartbeat.dart';
+part 'teleprompter_provider.stt_callbacks.dart';
 part 'teleprompter_provider.stt.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {

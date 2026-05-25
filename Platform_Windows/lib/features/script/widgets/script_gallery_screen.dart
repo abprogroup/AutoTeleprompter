@@ -291,4 +291,4 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   }
 }
 
-// v4.0: _RemoteDashboard and _RemoteActionBtn removed (premium features)
+// Gallery remote status is now restored through RemoteStatusCard.

@@ -28,6 +28,7 @@ part 'teleprompter_screen.bookmarks_search.dart';
 part 'teleprompter_screen.presenter_search.dart';
 part 'teleprompter_screen.smooth_settings.dart';
 part 'teleprompter_screen.chrome.dart';
+part 'teleprompter_screen.presenter_word_list.dart';
 part 'teleprompter_screen.build.dart';
 part 'teleprompter_screen.debug_console.dart';
 part 'teleprompter_screen.decoration_painter.dart';

@@ -1,5 +1,11 @@
 part of 'teleprompter_screen.dart';
 
+const _presenterSectionStyle = TextStyle(
+  color: Colors.white,
+  fontSize: 16,
+  fontWeight: FontWeight.w600,
+);
+
 class TeleprompterSettingsPanel extends ConsumerWidget {
   final ValueChanged<double>? onFontSizeChanged;
 
@@ -8,12 +14,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
-    final tState = ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
-    final manualSttProfile = settings.sttManualProfileEnabled;
-    final visibleSkipControlsEnabled = !manualSttProfile;
-    final hardSkipControlsEnabled =
-        !manualSttProfile && settings.sttVisibleSkipEnabled;
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
@@ -85,9 +86,6 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
     }
 
     const labelStyle = TextStyle(color: Colors.white70, fontSize: 14);
-    const sectionStyle = TextStyle(
-        color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600);
-
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.80,
@@ -108,7 +106,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
 
           // -- Scroll mode -----------------------------------------------------
-          const Text('Scroll Mode', style: sectionStyle),
+          const Text('Scroll Mode', style: _presenterSectionStyle),
           const SizedBox(height: 8),
           SegmentedButton<String>(
             segments: const [
@@ -128,148 +126,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const SizedBox(height: 16),
 
           if (Platform.isWindows) ...[
-            const Text('Speech Input', style: sectionStyle),
-            const SizedBox(height: 8),
-            _WindowsMicSelector(
-              selectedDeviceId: settings.sttInputDeviceId,
-              selectedLabel: settings.sttInputDeviceLabel,
-              devices: tState.audioInputDevices,
-              accentColor: Color(settings.currentWordColor),
-              onSelected: (deviceId, label) async {
-                await notifier.setSttInputDevice(deviceId, label);
-                ref
-                    .read(teleprompterProvider.notifier)
-                    .setSttInputDevice(deviceId, label);
-              },
-              onRefresh: () async {
-                await ref
-                    .read(teleprompterProvider.notifier)
-                    .refreshAudioInputDevices();
-              },
-              onUseDefault: () async {
-                await notifier.setSttInputDevice(
-                  '',
-                  'System default microphone',
-                );
-                ref
-                    .read(teleprompterProvider.notifier)
-                    .setSttInputDevice('', 'System default microphone');
-              },
-            ),
-            const SizedBox(height: 16),
-            _SwitchRow(
-              icon: Icons.tune_outlined,
-              title: 'Manual Profile',
-              subtitle:
-                  'Advanced: set exact STT thresholds yourself. This turns off Bullet, Visible Skip, and Hard Skip buttons.',
-              value: manualSttProfile,
-              accentColor: Color(settings.currentWordColor),
-              onChanged: notifier.setSttManualProfileEnabled,
-            ),
-            const SizedBox(height: 12),
-            _SwitchRow(
-              icon: Icons.visibility_outlined,
-              title: 'Visible Skip',
-              subtitle:
-                  'Allows deliberate jumps only to text currently visible on screen.',
-              value: settings.sttVisibleSkipEnabled,
-              accentColor: Color(settings.currentWordColor),
-              enabled: visibleSkipControlsEnabled,
-              onChanged: notifier.setSttVisibleSkipEnabled,
-            ),
-            const SizedBox(height: 12),
-            _SwitchRow(
-              icon: Icons.security_outlined,
-              title: 'Hard Skip',
-              subtitle:
-                  'Requires more words before visible jumps: 5 small words or 4 big words.',
-              value: settings.sttHardVisibleSkipEnabled &&
-                  settings.sttVisibleSkipEnabled,
-              accentColor: Color(settings.currentWordColor),
-              enabled: hardSkipControlsEnabled,
-              onChanged: notifier.setSttHardVisibleSkipEnabled,
-            ),
-            const SizedBox(height: 12),
-            _SwitchRow(
-              icon: Icons.subject_outlined,
-              title: 'Bullet Mode',
-              subtitle:
-                  'Strict header/bullet reading. Stops on off-script speech instead of guessing ahead.',
-              value: settings.sttStrictBulletMode,
-              accentColor: Color(settings.currentWordColor),
-              enabled: visibleSkipControlsEnabled,
-              onChanged: notifier.setSttStrictBulletMode,
-            ),
-            if (manualSttProfile) ...[
-              const SizedBox(height: 12),
-              _SttBigWordLengthSlider(
-                value: settings.sttManualBigWordMinLetters,
-                accentColor: Color(settings.currentWordColor),
-                onChanged: notifier.setSttManualBigWordMinLetters,
-                onReset: () => notifier.setSttManualBigWordMinLetters(5),
-              ),
-              const SizedBox(height: 12),
-              _SttThresholdPairSliders(
-                title: 'Words to start advancing',
-                subtitle:
-                    'How much ordered text is needed before normal reading starts moving.',
-                smallValue: settings.sttManualStartAdvanceSmallWords,
-                bigValue: settings.sttManualStartAdvanceBigWords,
-                smallMin: 2,
-                smallMax: 8,
-                bigMin: 1,
-                bigMax: 8,
-                allowOff: false,
-                accentColor: Color(settings.currentWordColor),
-                onSmallChanged: notifier.setSttManualStartAdvanceSmallWords,
-                onBigChanged: notifier.setSttManualStartAdvanceBigWords,
-                onReset: () {
-                  unawaited(notifier.setSttManualStartAdvanceSmallWords(4));
-                  unawaited(notifier.setSttManualStartAdvanceBigWords(3));
-                },
-              ),
-              const SizedBox(height: 12),
-              _SttThresholdPairSliders(
-                title: 'Safety recovery',
-                subtitle:
-                    'How much ordered evidence can recover after misrecognized words.',
-                smallValue: settings.sttManualSafetySmallWords,
-                bigValue: settings.sttManualSafetyBigWords,
-                smallMin: 1,
-                smallMax: 5,
-                bigMin: 1,
-                bigMax: 5,
-                allowOff: false,
-                accentColor: Color(settings.currentWordColor),
-                onSmallChanged: notifier.setSttManualSafetySmallWords,
-                onBigChanged: notifier.setSttManualSafetyBigWords,
-                onReset: () {
-                  unawaited(notifier.setSttManualSafetySmallWords(2));
-                  unawaited(notifier.setSttManualSafetyBigWords(1));
-                },
-              ),
-              const SizedBox(height: 12),
-              _SttThresholdPairSliders(
-                title: 'Visible-area skip',
-                subtitle:
-                    'Off disables jumping. Higher values make visible jumps stricter.',
-                smallValue: settings.sttManualVisibleSkipSmallWords,
-                bigValue: settings.sttManualVisibleSkipBigWords,
-                smallMin: 2,
-                smallMax: 8,
-                bigMin: 1,
-                bigMax: 8,
-                allowOff: true,
-                accentColor: Color(settings.currentWordColor),
-                onSmallChanged: notifier.setSttManualVisibleSkipSmallWords,
-                onBigChanged: notifier.setSttManualVisibleSkipBigWords,
-                onReset: () {
-                  unawaited(notifier.setSttManualVisibleSkipSmallWords(0));
-                  unawaited(notifier.setSttManualVisibleSkipBigWords(0));
-                },
-              ),
-            ],
-            const SizedBox(height: 16),
+            const _WindowsSpeechSettingsSection(),
           ],
 
           if (settings.scrollMode == 'manual') ...[
@@ -297,7 +154,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
 
           // -- Text -----------------------------------------------------------
           Row(children: [
-            const Text('Override Text Alignment', style: sectionStyle),
+            const Text('Override Text Alignment',
+                style: _presenterSectionStyle),
             const Spacer(),
             Switch.adaptive(
               value: settings.showAlignmentOverride,
@@ -329,7 +187,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          const Text('Layout & Typography', style: sectionStyle),
+          const Text('Layout & Typography', style: _presenterSectionStyle),
           const SizedBox(height: 14),
 
           // Professional broadcast profiles
@@ -458,7 +316,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const SizedBox(height: 8),
 
           // -- Colors ---------------------------------------------------------
-          const Text('Colors', style: sectionStyle),
+          const Text('Colors', style: _presenterSectionStyle),
           const SizedBox(height: 14),
 
           const Text('Script Background', style: labelStyle),
@@ -544,7 +402,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           // -- Display --------------------------------------------------------
           Row(
             children: [
-              const Text('Mirror Horizontal', style: sectionStyle),
+              const Text('Mirror Horizontal', style: _presenterSectionStyle),
               const Spacer(),
               Switch(
                 value: settings.mirrorHorizontal,
@@ -556,7 +414,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           Row(
             children: [
-              const Text('Mirror Vertical (Flip)', style: sectionStyle),
+              const Text('Mirror Vertical (Flip)',
+                  style: _presenterSectionStyle),
               const Spacer(),
               Switch(
                 value: settings.mirrorVertical,
@@ -567,7 +426,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          const Text('Screen Rotation', style: sectionStyle),
+          const Text('Screen Rotation', style: _presenterSectionStyle),
           const SizedBox(height: 8),
           SegmentedButton<int>(
             segments: const [

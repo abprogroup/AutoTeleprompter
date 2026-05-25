@@ -35,6 +35,7 @@ part 'teleprompter_screen.alignment_helpers.dart';
 part 'teleprompter_screen.audio_debug_widgets.dart';
 part 'teleprompter_screen.control_bar.dart';
 part 'teleprompter_screen.settings_panel.dart';
+part 'teleprompter_screen.speech_settings.dart';
 part 'teleprompter_screen.settings_widgets.dart';
 
 // Regex to strip any unprocessed markup tags that somehow leaked into word.raw

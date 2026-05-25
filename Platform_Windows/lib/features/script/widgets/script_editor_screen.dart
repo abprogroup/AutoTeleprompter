@@ -72,6 +72,7 @@ part 'script_editor_screen.keyboard_selection_seed.dart';
 part 'script_editor_screen.keyboard_render_caret.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
 part 'script_editor_screen.keyboard_horizontal.dart';
+part 'script_editor_screen.keyboard_horizontal_route.dart';
 part 'script_editor_screen.keyboard_bookmark_helpers.dart';
 part 'script_editor_screen.keyboard_focus.dart';
 

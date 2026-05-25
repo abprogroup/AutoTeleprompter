@@ -21,7 +21,7 @@ class AutoTeleprompterApp extends StatelessWidget {
           ),
           textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         ),
-        home: const V3SplashScreen(),
+        home: const AutoTeleprompterSplashScreen(),
       ),
     );
   }

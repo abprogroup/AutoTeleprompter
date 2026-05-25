@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/remote_control_service.dart';
@@ -74,7 +75,35 @@ class RemoteStatusCard extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+              if (isRunning)
+                Tooltip(
+                  message: 'Copy remote URL',
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () async {
+                      final url = remote.localUrl;
+                      if (url.isEmpty) return;
+                      await Clipboard.setData(ClipboardData(text: url));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Remote URL copied.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.copy_rounded,
+                      color: Color(0xFFFFBF00),
+                      size: 19,
+                    ),
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white24,
+                ),
             ],
           ),
         ),

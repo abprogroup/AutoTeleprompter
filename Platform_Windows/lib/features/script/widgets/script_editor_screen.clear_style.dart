@@ -1,6 +1,71 @@
 part of 'script_editor_screen.dart';
 
 extension _ScriptEditorClearStyleParts on _ScriptEditorScreenState {
+  void _onClearFormat() {
+    _setEditorState(() => _isCommandExecuting = true);
+    final tagPattern = RegExp(
+      r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*',
+    );
+    if (_isGlobalSelection ||
+        (_overlayKey.currentState?.hasSelection ?? false)) {
+      for (final c in _controllers) {
+        c.text = c.text.replaceAll(tagPattern, '');
+      }
+    } else {
+      final c = _activeController;
+      if (c != null) {
+        final text = c.text;
+        final sel = c.selection;
+        if (sel.isValid && !sel.isCollapsed) {
+          final before = text.substring(0, sel.start);
+          final selected = text.substring(sel.start, sel.end);
+          final after = text.substring(sel.end);
+          final cleaned = selected.replaceAll(tagPattern, '');
+          final intermediate = before + cleaned + after;
+          final cleanEnd = sel.start + cleaned.length;
+          final result = _splitAllEnclosingStyles(
+            intermediate,
+            sel.start,
+            cleanEnd,
+            tagPattern,
+          );
+          c.value = TextEditingValue(
+            text: result,
+            selection: TextSelection.collapsed(offset: sel.start),
+          );
+        } else if (sel.isValid && sel.isCollapsed) {
+          final cursorInPlain = sel.start >= text.length ||
+              text.substring(sel.start).replaceAll(tagPattern, '').isEmpty;
+          if (cursorInPlain) {
+            for (final ctrl in _controllers) {
+              ctrl.text = ctrl.text.replaceAll(tagPattern, '');
+            }
+          } else {
+            _clearStyleAtCursor(c, sel.start);
+          }
+        }
+      }
+    }
+    _isDirty = false;
+    _setEditorState(() => _isCommandExecuting = false);
+    _saveHistory(description: 'Clear Format');
+    _onSelectionChanged();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final c = _activeController;
+      if (c != null) {
+        final hasAlign = RegExp(
+          r'\[(?:align=)?(?:center|left|right)\]',
+        ).hasMatch(c.text);
+        if (!hasAlign) {
+          ref.read(cursorStyleProvider.notifier).state =
+              ref.read(cursorStyleProvider).copyWith(textAlign: 'left');
+        }
+      }
+      _overlayKey.currentState?.refreshPositions();
+    });
+  }
+
   /// Clear style at cursor by stripping tags from the current word while
   /// preserving surrounding styled text.
   void _clearStyleAtCursor(MarkupController c, int cursor) {

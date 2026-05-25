@@ -1,5 +1,5 @@
-name: Build Windows EXE (v5.0.2)
-run-name: Windows v5.0.2 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+name: Build Windows EXE (v5.0.3)
+run-name: Windows v5.0.3 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   push:
@@ -34,9 +34,9 @@ jobs:
 
       - name: Build Windows Archive
         run: |
-          $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.2"
+          $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.3"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
-          flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.2+17 --dart-define=FEEDBACK_ENDPOINT="$env:FEEDBACK_ENDPOINT"
+          flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.3+18 --dart-define=FEEDBACK_ENDPOINT="$env:FEEDBACK_ENDPOINT"
         working-directory: Platform_Windows
         env:
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
@@ -49,5 +49,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-Windows-v5.0.2-EXE
+          name: AutoTeleprompter-Windows-v5.0.3-EXE
           path: build-zip\AutoTeleprompter-Windows

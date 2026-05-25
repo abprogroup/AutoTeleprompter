@@ -45,8 +45,10 @@ import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
 part 'script_editor_screen.load_blocks.dart';
+part 'script_editor_screen.recent_persistence.dart';
 part 'script_editor_screen.cursor_detection.dart';
 part 'script_editor_screen.vertical_layout.dart';
+part 'script_editor_screen.vertical_layout_builder.dart';
 part 'script_editor_screen.dialogs_history.dart';
 part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';

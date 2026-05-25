@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
 import 'package:gal/gal.dart';
@@ -84,7 +85,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Camera error: $e');
+      if (kDebugMode) debugPrint('Camera error: $e');
       if (mounted) {
         setState(() {
           _isInit = false;
@@ -132,7 +133,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
           );
         }
       } catch (e) {
-        debugPrint('Save error: $e');
+        if (kDebugMode) debugPrint('Save error: $e');
         _showSnack('Recording saved locally, but gallery export failed.');
       }
     } else {

@@ -68,6 +68,7 @@ part 'script_editor_screen.highlight_trace.dart';
 part 'script_editor_screen.selection_trace.dart';
 part 'script_editor_screen.keyboard_navigation.dart';
 part 'script_editor_screen.keyboard_selection.dart';
+part 'script_editor_screen.keyboard_selection_seed.dart';
 part 'script_editor_screen.keyboard_render_caret.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
 part 'script_editor_screen.keyboard_horizontal.dart';

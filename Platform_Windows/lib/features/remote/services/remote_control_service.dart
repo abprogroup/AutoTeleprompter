@@ -26,7 +26,7 @@ class RemoteControlService {
 
     router.get('/ws', webSocketHandler((WebSocketChannel webSocket) {
       webSocket.stream.listen((message) {
-        debugPrint('Remote Command: $message');
+        if (kDebugMode) debugPrint('Remote Command: $message');
         _onCommand.add(message.toString());
       });
     }));
@@ -35,13 +35,17 @@ class RemoteControlService {
       return Response.ok(_html, headers: {'content-type': 'text/html'});
     });
 
-    final handler =
-        const Pipeline().addMiddleware(logRequests()).addHandler(router.call);
+    final pipeline = kDebugMode
+        ? const Pipeline().addMiddleware(logRequests())
+        : const Pipeline();
+    final handler = pipeline.addHandler(router.call);
 
     _server = await _bindAvailablePort(handler);
-    debugPrint(
-      'V5 Remote Server active at http://${_server!.address.address}:$port',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        'V5 Remote Server active at http://${_server!.address.address}:$port',
+      );
+    }
   }
 
   Future<HttpServer> _bindAvailablePort(Handler handler) async {
@@ -53,9 +57,11 @@ class RemoteControlService {
         return await io.serve(handler, InternetAddress.anyIPv4, candidate);
       } on SocketException catch (error) {
         lastError = error;
-        debugPrint(
-          'Remote port $candidate unavailable, trying ${candidate + 1}...',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            'Remote port $candidate unavailable, trying ${candidate + 1}...',
+          );
+        }
       }
     }
     throw StateError(

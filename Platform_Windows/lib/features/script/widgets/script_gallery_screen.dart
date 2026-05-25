@@ -20,6 +20,7 @@ import '../providers/script_provider.dart';
 import '../services/styling_service.dart';
 
 part 'script_gallery_screen.account_menu.dart';
+part 'script_gallery_screen.history_sheet.dart';
 part 'script_gallery_screen.widgets.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {

@@ -11,7 +11,7 @@ class SpeechResult {
   SpeechResult(this.words, this.isFinal);
 }
 
-/// Result of starting the speech service — tells the caller what happened.
+/// Result of starting the speech service - tells the caller what happened.
 class SpeechStartResult {
   final bool success;
   final String? actualLocale; // The locale that was actually used
@@ -71,7 +71,7 @@ class SpeechStartResult {
   }
 }
 
-/// Google STT service — designed to work reliably across ALL Android devices.
+/// Google STT service - designed to work reliably across ALL Android devices.
 ///
 /// Handles known quirks:
 /// - Oppo/Realme/OnePlus (ColorOS): Bluetooth permission issues
@@ -105,15 +105,15 @@ class SpeechService {
 
   Future<bool> initialize() async {
     try {
-      onDiagnostic?.call('🔧 STT init starting...');
+      onDiagnostic?.call('[STT] init starting...');
       _isInitialized = await _stt.initialize(
         onError: (error) {
           if (!_isActive) return;
 
           final msg = error.errorMsg;
-          onDiagnostic?.call('⚠️ STT error: $msg');
+          onDiagnostic?.call('[STT] error: $msg');
 
-          // Language error — try fallback, then give up and notify
+          // Language error - try fallback, then give up and notify
           if (msg.contains('error_language')) {
             _languageRetries++;
             if (_languageRetries == 1 && _localeId.isNotEmpty) {
@@ -129,7 +129,7 @@ class SpeechService {
                 _scheduleRestart(const Duration(milliseconds: 500));
               }
             } else {
-              // Exhausted all retries — notify the UI
+              // Exhausted all retries - notify the UI
               _isActive = false;
               onLanguageUnavailable?.call(_localeId);
               onStatusChange?.call(SpeechStatus.error);
@@ -137,15 +137,15 @@ class SpeechService {
             return;
           }
 
-          // Permission and hardware errors — stop and notify user
+          // Permission and hardware errors - stop and notify user
           final fatal = msg == 'error_audio' ||
               msg == 'error_insufficient_permissions' ||
               msg == 'error_permission';
           if (fatal) {
             _isActive = false;
             final userMsg = msg == 'error_audio'
-                ? 'Microphone blocked or in use by another app. Check Windows Settings → Privacy → Microphone.'
-                : 'Microphone permission denied. Enable in Windows Settings → Privacy → Microphone.';
+                ? 'Microphone blocked or in use by another app. Check Windows Settings > Privacy > Microphone.'
+                : 'Microphone permission denied. Enable in Windows Settings > Privacy > Microphone.';
             onError?.call(userMsg);
             onStatusChange?.call(SpeechStatus.error);
             return;
@@ -197,8 +197,8 @@ class SpeechService {
       _isInitialized = false;
     }
     onDiagnostic?.call(_isInitialized
-        ? '✅ STT init OK'
-        : '❌ STT init FAILED — check Windows Settings → Privacy → Microphone, and Time & Language → Speech');
+        ? '[STT] init OK'
+        : '[STT] init FAILED - check Windows Settings > Privacy > Microphone, and Time & Language > Speech');
     return _isInitialized;
   }
 
@@ -255,14 +255,14 @@ class SpeechService {
     final hasPermission = await _stt.hasPermission;
 
     onDiagnostic
-        ?.call('🔧 hasPermission=$hasPermission, initialized=$_isInitialized');
+        ?.call('[STT] hasPermission=$hasPermission, initialized=$_isInitialized');
     if (!_isInitialized || !hasPermission) {
       final ok = await initialize();
       if (!ok) {
         return SpeechStartResult(
           success: false,
           message:
-              'Speech recognition failed to start.\n\nOn Windows, check:\n1. Settings → Privacy → Microphone → allow desktop apps\n2. Settings → Time & Language → Speech → install a speech language pack',
+              'Speech recognition failed to start.\n\nOn Windows, check:\n1. Settings > Privacy > Microphone > allow desktop apps\n2. Settings > Time & Language > Speech > install a speech language pack',
         );
       }
     }
@@ -270,7 +270,7 @@ class SpeechService {
     // Get available locales from the device
     final locales = await _stt.locales();
     onDiagnostic?.call(
-        '🌐 Available STT locales (${locales.length}): ${locales.map((l) => l.localeId).take(8).join(', ')}${locales.length > 8 ? '...' : ''}');
+        '[STT] Available locales (${locales.length}): ${locales.map((l) => l.localeId).take(8).join(', ')}${locales.length > 8 ? '...' : ''}');
     bool languageMissing = false;
     String? requestedLang = localeId;
 
@@ -289,12 +289,12 @@ class SpeechService {
       } else if (bestMatch != null) {
         _localeId = bestMatch;
       } else {
-        // Requested language not available — fall back but flag it
+        // Requested language not available - fall back but flag it
         languageMissing = true;
         _localeId = '';
       }
     } else {
-      // No locale specified — use device default
+      // No locale specified - use device default
       _localeId = '';
     }
 
@@ -322,7 +322,7 @@ class SpeechService {
         await _stt.cancel();
         await Future.delayed(const Duration(milliseconds: 80));
       }
-      // Use the simplest possible listen call — no locale override,
+      // Use the simplest possible listen call - no locale override,
       // no special modes. Let the device's speech recognizer decide everything.
       // Only specify locale if explicitly set (non-empty).
       final useLocale = _localeId.isEmpty ? null : _localeId;

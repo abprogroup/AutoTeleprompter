@@ -399,7 +399,9 @@ class _SettingsSwitchTile extends StatelessWidget {
               ),
               Switch.adaptive(
                 value: value,
-                activeThumbColor: const Color(0xFFFFBF00),
+                // Flutter 3.32 on GitHub Actions still requires activeColor.
+                // ignore: deprecated_member_use
+                activeColor: const Color(0xFFFFBF00),
                 onChanged: onChanged,
               ),
             ],

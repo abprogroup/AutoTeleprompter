@@ -69,7 +69,9 @@ class CloudSyncScreen extends ConsumerWidget {
                   style: TextStyle(color: Colors.white70, fontSize: 14)),
               subtitle: Text('Coming soon',
                   style: TextStyle(color: Colors.white30, fontSize: 12)),
-              activeThumbColor: Color(0xFFFFBF00),
+              // Flutter 3.32 on GitHub Actions still requires activeColor.
+              // ignore: deprecated_member_use
+              activeColor: Color(0xFFFFBF00),
               contentPadding: EdgeInsets.zero,
             ),
             const SwitchListTile(
@@ -79,7 +81,9 @@ class CloudSyncScreen extends ConsumerWidget {
                   style: TextStyle(color: Colors.white70, fontSize: 14)),
               subtitle: Text('Coming soon',
                   style: TextStyle(color: Colors.white30, fontSize: 12)),
-              activeThumbColor: Color(0xFFFFBF00),
+              // Flutter 3.32 on GitHub Actions still requires activeColor.
+              // ignore: deprecated_member_use
+              activeColor: Color(0xFFFFBF00),
               contentPadding: EdgeInsets.zero,
             ),
           ],

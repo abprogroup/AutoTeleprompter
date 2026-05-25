@@ -14,6 +14,7 @@ import '../../remote/services/remote_control_service.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
 
 import '../../../platform/stt/stt_service_factory.dart';
+part 'teleprompter_provider.heartbeat.dart';
 part 'teleprompter_provider.stt.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
@@ -296,7 +297,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _visibleWordEnd = null;
     _resetVisibleLocaleAssist();
     _precomputeSectionLocales(script);
-    final sttEngine = ref.read(settingsProvider).sttEngine;
+    final settings = ref.read(settingsProvider);
+    final sttEngine = settings.sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
     final resumeIndex = sameScript ? state.confirmedWordIndex : 0;
     final startIndex = resumeIndex.clamp(
@@ -348,54 +350,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           'STT START LOCALE: $localeId | sections=${_sectionLocales.toSet().length}');
     }
 
-    // Start heartbeat timer in debug mode
-    _heartbeatTimer?.cancel();
-    final settings = ref.read(settingsProvider);
-    if (settings.debugMode) {
-      _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-        if (_disposed) return;
-        final engineName =
-            _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
-        final listening =
-            _useWhisper ? _whisperService.isListening : _sttService.isListening;
-        final pos = state.confirmedWordIndex;
-        final total = script.words.where((w) => !w.isNewline).length;
-        _addDebugLog(
-            'HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
-
-        // Silent-listening detector: STT says listening but no audio level or results received.
-        if (!_useWhisper &&
-            listening &&
-            !_silentWarningFired &&
-            _lastVolLog == null &&
-            _sessionStartTime != null) {
-          final elapsed = DateTime.now().difference(_sessionStartTime!);
-          if (elapsed.inSeconds >= 10) {
-            _silentWarningFired = true;
-            _addDebugLog(
-                'SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
-            _addDebugLog(
-                'FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
-            _safeSetState((s) => s.copyWith(
-                  statusMessage:
-                      'Microphone signal weak or blocked.\n1. Check Privacy Settings -> Microphone.\n2. Ensure "Online Speech Recognition" is enabled.',
-                  hasError: true,
-                ));
-          }
-        }
-
-        // Dynamic language switching for mixed Hebrew/English scripts.
-        // Every heartbeat, check the next expected word. If its language
-        // changed, hot-switch the STT locale via WebSocket.
-        if (!_useWhisper && listening && _currentScript != null) {
-          final policy =
-              recognitionPolicyForSettings(ref.read(settingsProvider));
-          if (policy.bulletMode && _noProgressCount > 0) return;
-          _syncLocaleForPosition(_currentScript!, state.confirmedWordIndex + 1,
-              reason: 'heartbeat');
-        }
-      });
-    }
+    _startSessionHeartbeat(script);
 
     if (_useWhisper) {
       final model = whisperModelFromEngine(sttEngine);

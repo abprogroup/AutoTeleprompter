@@ -59,9 +59,7 @@ class _EditorBlock extends StatelessWidget {
       if (!external.isValid || external.isCollapsed) return null;
       selection = external;
     } else {
-      final native = controller.selection;
-      if (!native.isValid || native.isCollapsed) return null;
-      selection = native;
+      return null;
     }
 
     final start = selection.start.clamp(0, length).toInt();
@@ -242,12 +240,16 @@ class _EditorBlock extends StatelessWidget {
                   ),
                   child: _EditorRenderEditableDecorations(
                     controller: controller,
+                    focusNode: focusNode,
                     selection: paintSelection,
                     textDirection: textDirection,
                     child: TextField(
                       selectionControls: GhostSelectionControls(),
                       controller: controller,
                       focusNode: focusNode,
+                      inputFormatters: [
+                        _AppSelectionReplacementFormatter(controller),
+                      ],
                       maxLines: null,
                       onSubmitted: (_) => onSubmitted(),
                       onTap: onTap,
@@ -329,5 +331,58 @@ class _EditorBlock extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _AppSelectionReplacementFormatter extends TextInputFormatter {
+  final MarkupController controller;
+
+  const _AppSelectionReplacementFormatter(this.controller);
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final external = controller.externalSelection;
+    if (external == null ||
+        !external.isValid ||
+        external.isCollapsed ||
+        oldValue.text == newValue.text) {
+      return newValue;
+    }
+    final replacement = _replacementDelta(oldValue.text, newValue.text);
+    if (replacement == null) return newValue;
+    final start = external.start.clamp(0, oldValue.text.length).toInt();
+    final end = external.end.clamp(start, oldValue.text.length).toInt();
+    if (end <= start) return newValue;
+    final text = oldValue.text.substring(0, start) +
+        replacement +
+        oldValue.text.substring(end);
+    final caret = start + replacement.length;
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: caret),
+      composing: TextRange.empty,
+    );
+  }
+
+  String? _replacementDelta(String oldText, String newText) {
+    var prefix = 0;
+    while (prefix < oldText.length &&
+        prefix < newText.length &&
+        oldText.codeUnitAt(prefix) == newText.codeUnitAt(prefix)) {
+      prefix++;
+    }
+    var oldSuffix = oldText.length;
+    var newSuffix = newText.length;
+    while (oldSuffix > prefix &&
+        newSuffix > prefix &&
+        oldText.codeUnitAt(oldSuffix - 1) ==
+            newText.codeUnitAt(newSuffix - 1)) {
+      oldSuffix--;
+      newSuffix--;
+    }
+    return newText.substring(prefix, newSuffix);
   }
 }

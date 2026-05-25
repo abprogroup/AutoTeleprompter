@@ -267,12 +267,22 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           }
           return;
         }
+        final hadAppSelectionBeforeEdit = !_isCommandExecuting &&
+            (controller.isGlobalSelected ||
+                _isGlobalSelection ||
+                (_overlayKey.currentState?.hasSelection ?? false) ||
+                (controller.externalSelection != null &&
+                    controller.externalSelection!.isValid &&
+                    !controller.externalSelection!.isCollapsed));
         lastText = controller.text;
         _isDirty = true;
         _verticalArrowPreferredX = null;
         // v4.1.2: When the user edits text (not inside a style command), clear
         // any pinned externalSelection so stale amber doesn't linger after typing.
-        if (!_isCommandExecuting && controller.externalSelection != null) {
+        if (hadAppSelectionBeforeEdit) {
+          _clearAppSelectionAfterTextInput(controller);
+        } else if (!_isCommandExecuting &&
+            controller.externalSelection != null) {
           controller.externalSelection = null;
           controller.externalVisibleSelection = null;
           controller.refresh();
@@ -395,5 +405,25 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     if (_isCleaning || _isCommandExecuting) return;
     _saveHistory(description: 'Edit Text', debounce: true);
     _scheduleRecentUpdate();
+  }
+
+  void _clearAppSelectionAfterTextInput(MarkupController editedController) {
+    _overlayKey.currentState?.clearSelection();
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
+    _isGlobalSelection = false;
+    for (final c in _controllers) {
+      c.isGlobalSelected = false;
+      c.externalSelection = null;
+      c.externalVisibleSelection = null;
+      if (!identical(c, editedController) &&
+          c.selection.isValid &&
+          !c.selection.isCollapsed) {
+        final collapseAt = c.selection.extentOffset.clamp(0, c.text.length);
+        c.selection = TextSelection.collapsed(offset: collapseAt);
+      }
+      c.refresh();
+    }
+    _lastFocusedController = editedController;
   }
 }

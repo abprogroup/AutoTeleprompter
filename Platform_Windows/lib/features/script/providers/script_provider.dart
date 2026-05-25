@@ -19,14 +19,21 @@ part 'script_provider.models.dart';
 class ScriptNotifier extends Notifier<Script?> {
   @override
   Script? build() {
+    void scheduleStoredScriptLoad(AppSettings settings) {
+      if (settings.lastScriptSessionId.isEmpty) return;
+      Future<void>.delayed(Duration.zero, () {
+        unawaited(_loadStoredScriptFromSettings(settings));
+      });
+    }
+
     ref.listen<AppSettings>(settingsProvider, (previous, next) {
       if (previous?.lastScriptSessionId != next.lastScriptSessionId) {
-        unawaited(_loadStoredScriptFromSettings(next));
+        scheduleStoredScriptLoad(next);
       }
     });
-    unawaited(_loadStoredScriptFromSettings(ref.read(settingsProvider)));
     // Load legacy last saved script on startup while encrypted settings hydrate.
     final settings = ref.read(settingsProvider);
+    scheduleStoredScriptLoad(settings);
     final lastText = settings.lastScript;
     final lastTitle = settings.lastScriptTitle;
 
@@ -106,8 +113,16 @@ class ScriptNotifier extends Notifier<Script?> {
     return null;
   }
 
+  bool get _hasActiveScript {
+    try {
+      return state != null;
+    } on StateError {
+      return false;
+    }
+  }
+
   Future<void> _loadStoredScriptFromSettings(AppSettings settings) async {
-    if (settings.lastScriptSessionId.isEmpty || state != null) return;
+    if (settings.lastScriptSessionId.isEmpty || _hasActiveScript) return;
     Map<String, dynamic>? meta;
     for (final item in settings.recentScripts) {
       try {
@@ -121,7 +136,7 @@ class ScriptNotifier extends Notifier<Script?> {
       } catch (_) {}
     }
     final data = await SecureScriptStore().read(settings.lastScriptSessionId);
-    if (data == null || data.text.isEmpty || state != null) return;
+    if (data == null || data.text.isEmpty || _hasActiveScript) return;
     state = _buildScript(
       data.text,
       title: settings.lastScriptTitle.isNotEmpty

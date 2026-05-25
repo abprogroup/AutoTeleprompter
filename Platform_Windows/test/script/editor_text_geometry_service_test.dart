@@ -75,10 +75,42 @@ void main() {
     expect(EditorTextGeometryService.resolveBlockRtl(blocks, 1), isTrue);
   });
 
+  test('Hebrew neutral numeric row between Hebrew blocks resolves RTL', () {
+    final blocks = [
+      '\u05e4\u05e8\u05e7 \u05e8\u05d0\u05e9\u05d5\u05df',
+      '1',
+      '[bg=#FFFF00]2[/bg]',
+      '\u05e4\u05e8\u05e7 \u05e9\u05e0\u05d9',
+    ];
+
+    expect(EditorTextGeometryService.resolveBlockRtl(blocks, 1), isTrue);
+    expect(EditorTextGeometryService.resolveBlockRtl(blocks, 2), isTrue);
+  });
+
+  test('Hebrew neutral punctuation row between Hebrew blocks resolves RTL', () {
+    final blocks = [
+      '\u05de\u05e9\u05e4\u05d8 \u05d0\u05d7\u05d3',
+      '[size=48]?! - :[/size]',
+      '\u05de\u05e9\u05e4\u05d8 \u05e9\u05e0\u05d9',
+    ];
+
+    expect(EditorTextGeometryService.resolveBlockRtl(blocks, 1), isTrue);
+  });
+
   test('English empty row between English blocks resolves LTR', () {
     final blocks = [
       'First line',
       '[bg=#00FF00]   [/bg]',
+      'Second line',
+    ];
+
+    expect(EditorTextGeometryService.resolveBlockRtl(blocks, 1), isFalse);
+  });
+
+  test('English neutral numeric row between English blocks resolves LTR', () {
+    final blocks = [
+      'First line',
+      '123',
       'Second line',
     ];
 

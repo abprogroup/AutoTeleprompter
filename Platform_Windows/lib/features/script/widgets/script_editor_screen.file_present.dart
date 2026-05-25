@@ -8,19 +8,21 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             Directory(settings.lastImportPath).existsSync()
         ? settings.lastImportPath
         : (Platform.environment['USERPROFILE'] ?? Directory.current.path);
-    final selectedFile = await showModalBottomSheet<File>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => TelepromptSelectorSheet(initialPath: fallbackImportPath),
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Open script',
+      type: FileType.custom,
+      allowedExtensions: supportedExts,
+      initialDirectory: fallbackImportPath,
     );
     if (!mounted) return;
-    if (selectedFile == null) {
+    final selectedPath = result?.files.single.path;
+    if (selectedPath == null || selectedPath.isEmpty) {
       // v3.9.5.59: Fluid navigation fallback
       if (widget.shouldAutoLoad) Navigator.pop(context);
       _setEditorState(() => _isPendingLoad = false);
       return;
     }
+    final selectedFile = File(selectedPath);
     final ext = selectedFile.path.split('.').last.toLowerCase();
 
     if (!supportedExts.contains(ext)) {

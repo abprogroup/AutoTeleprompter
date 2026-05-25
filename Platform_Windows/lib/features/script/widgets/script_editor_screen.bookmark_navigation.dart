@@ -394,6 +394,101 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
       ensure();
       return;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => ensure());
+    final estimatedOffset = _estimatedEditorScrollOffsetForBlock(
+      block,
+      alignment: alignment,
+    );
+    if (estimatedOffset == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => ensure());
+      return;
+    }
+    unawaited(
+      _editorScrollController
+          .animateTo(
+        estimatedOffset,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      )
+          .then((_) {
+        if (!mounted) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ensure(duration: const Duration(milliseconds: 80));
+        });
+      }),
+    );
+  }
+
+  double? _estimatedEditorScrollOffsetForBlock(
+    int block, {
+    required double alignment,
+  }) {
+    if (!_editorScrollController.hasClients) return null;
+    final position = _editorScrollController.position;
+    final viewportHeight = position.viewportDimension;
+    if (viewportHeight <= 0) return null;
+
+    final textWidth = _estimatedEditorTextWidth();
+    var blockTop = 24.0; // ListView top padding.
+    for (var i = 0; i < block; i++) {
+      blockTop += _estimatedEditorBlockHeight(i, textWidth);
+    }
+    final blockHeight = _estimatedEditorBlockHeight(block, textWidth);
+    final target = blockTop - alignment * (viewportHeight - blockHeight);
+    return target.clamp(0.0, position.maxScrollExtent).toDouble();
+  }
+
+  double _estimatedEditorTextWidth() {
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final fallbackWidth = MediaQuery.maybeOf(context)?.size.width ?? 800.0;
+    final editorWidth = renderBox != null && renderBox.hasSize
+        ? renderBox.size.width
+        : fallbackWidth;
+    final maxWidth = editorWidth > 120.0 ? editorWidth : 120.0;
+    return (editorWidth - 48.0 - 30.0).clamp(120.0, maxWidth).toDouble();
+  }
+
+  double _estimatedEditorBlockHeight(int block, double textWidth) {
+    if (block < 0 || block >= _controllers.length) return 0;
+    final controller = _controllers[block];
+    final settings = ref.read(settingsProvider);
+    final isRtl = _editorBlockResolvedRtl(block);
+    final textAlign = EditorTextGeometryService.resolveTextAlign(
+      controller.text,
+      isRtl: isRtl,
+    );
+    final style = TextStyle(
+      color: Colors.white,
+      fontSize: settings.fontSize,
+      height: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
+    );
+    final maxFontSize = EditorTextGeometryService.maxFontSize(
+      controller.text,
+      settings.fontSize,
+    );
+    final span = controller.text.isEmpty
+        ? TextSpan(text: ' ', style: style)
+        : controller.buildTextSpan(
+            context: context,
+            style: style,
+            withComposing: false,
+          );
+    final painter = TextPainter(
+      text: span,
+      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+      textAlign: textAlign,
+      strutStyle: StrutStyle(
+        fontSize: maxFontSize,
+        height: settings.lineSpacing,
+        forceStrutHeight: true,
+      ),
+    )..layout(maxWidth: textWidth);
+    final height = painter.height + 4.0; // TextField vertical content padding.
+    final minHeight = maxFontSize * settings.lineSpacing + 4.0;
+    final bookmarkHeight = _hasBookmarkInEditorBlock(block) ? 28.0 : 0.0;
+    if (height < minHeight) return minHeight;
+    if (height < bookmarkHeight) return bookmarkHeight;
+    return height;
   }
 }

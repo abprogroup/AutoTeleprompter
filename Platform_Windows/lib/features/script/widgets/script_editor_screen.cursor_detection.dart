@@ -54,7 +54,13 @@ extension _ScriptEditorCursorDetectionParts on _ScriptEditorScreenState {
         }
       }
     }
-    if (found == 'left' && text.isHebrew) found = 'right';
+    if (found == 'left') {
+      final index = _controllers.indexOf(controller);
+      final isRtl = index >= 0
+          ? _editorBlockResolvedRtl(index)
+          : EditorTextGeometryService.resolveTextRtl(text);
+      if (isRtl) found = 'right';
+    }
     return found;
   }
 
@@ -64,7 +70,11 @@ extension _ScriptEditorCursorDetectionParts on _ScriptEditorScreenState {
     final text = controller.text;
     final explicit = EditorTextGeometryService.explicitTextDirection(text);
     if (explicit != null) return explicit;
-    return EditorTextGeometryService.resolveTextRtl(text) ? 'rtl' : 'ltr';
+    final index = _controllers.indexOf(controller);
+    final isRtl = index >= 0
+        ? _editorBlockResolvedRtl(index)
+        : EditorTextGeometryService.resolveTextRtl(text);
+    return isRtl ? 'rtl' : 'ltr';
   }
 
   bool _detectStyleAtCursor(String open, String close) {

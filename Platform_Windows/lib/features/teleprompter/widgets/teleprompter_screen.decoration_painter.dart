@@ -42,11 +42,12 @@ class _PresenterDecorationPainter extends CustomPainter {
       for (final entry in rectsByColor.entries) {
         if (entry.key.a <= 0) continue;
         paint.color = entry.key;
-        for (final rect in MarkupDecorationBoxMerger.merge(
+        final merged = MarkupDecorationBoxMerger.merge(
           entry.value,
           rowTolerance: 8,
           gapTolerance: gapTolerance,
-        )) {
+        );
+        for (final rect in _presenterBackgroundBands(merged, size)) {
           final radius = Radius.circular((rect.height * 0.10).clamp(2.0, 8.0));
           canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
         }
@@ -77,6 +78,69 @@ class _PresenterDecorationPainter extends CustomPainter {
       final y = rect.bottom - (paint.strokeWidth * 0.5);
       canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
     }
+  }
+
+  List<Rect> _presenterBackgroundBands(List<Rect> bands, Size size) {
+    final sorted = bands
+        .where((band) => band.width > 0 && band.height > 0)
+        .toList()
+      ..sort((a, b) {
+        final top = a.top.compareTo(b.top);
+        return top != 0 ? top : a.left.compareTo(b.left);
+      });
+    if (sorted.isEmpty) return const [];
+
+    final medianHeight = _medianHeight(sorted);
+    final pad = (medianHeight * 0.07).clamp(3.0, 8.0).toDouble();
+    final overlap = (medianHeight * 0.035).clamp(1.5, 4.0).toDouble();
+    final maxAdjacentDistance = medianHeight * 1.75;
+    final bridgeGapLimit = medianHeight * 0.65;
+    final painted = [
+      for (final band in sorted)
+        Rect.fromLTRB(
+          band.left,
+          (band.top - pad).clamp(0.0, size.height).toDouble(),
+          band.right,
+          (band.bottom + pad).clamp(0.0, size.height).toDouble(),
+        ),
+    ];
+
+    for (var i = 0; i < sorted.length - 1; i++) {
+      final current = sorted[i];
+      final next = sorted[i + 1];
+      final centerDistance = next.center.dy - current.center.dy;
+      if (centerDistance <= medianHeight * 0.25 ||
+          centerDistance > maxAdjacentDistance) {
+        continue;
+      }
+      final rowGap = next.top - current.bottom;
+      if (rowGap > bridgeGapLimit) continue;
+
+      final boundary = (current.bottom + next.top) / 2.0;
+      if (boundary <= painted[i].top || boundary >= painted[i + 1].bottom) {
+        continue;
+      }
+      painted[i] = Rect.fromLTRB(
+        painted[i].left,
+        painted[i].top,
+        painted[i].right,
+        (boundary + overlap).clamp(0.0, size.height).toDouble(),
+      );
+      painted[i + 1] = Rect.fromLTRB(
+        painted[i + 1].left,
+        (boundary - overlap).clamp(0.0, size.height).toDouble(),
+        painted[i + 1].right,
+        painted[i + 1].bottom,
+      );
+    }
+
+    return painted;
+  }
+
+  double _medianHeight(List<Rect> rects) {
+    final heights = rects.map((rect) => rect.height).toList()..sort();
+    if (heights.isEmpty) return 1.0;
+    return heights[heights.length ~/ 2].clamp(1.0, double.infinity).toDouble();
   }
 
   Rect? _rectForWord(int index, RenderBox contentBox) {

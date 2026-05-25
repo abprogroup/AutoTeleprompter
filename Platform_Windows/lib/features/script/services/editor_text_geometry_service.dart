@@ -15,6 +15,26 @@ class EditorTextGeometryService {
   static bool hasVisibleContent(String rawText) =>
       visibleText(rawText).trim().isNotEmpty;
 
+  static bool? visibleTextDirectionRtl(String rawText) {
+    final visible = visibleText(rawText).trim();
+    if (visible.isEmpty) return null;
+
+    var hasHebrew = false;
+    var hasLatin = false;
+    for (final rune in visible.runes) {
+      if (rune >= 0x0590 && rune <= 0x05FF) {
+        hasHebrew = true;
+      } else if ((rune >= 0x0041 && rune <= 0x005A) ||
+          (rune >= 0x0061 && rune <= 0x007A)) {
+        hasLatin = true;
+      }
+    }
+
+    if (!hasHebrew && !hasLatin) return null;
+    if (hasHebrew && (!hasLatin || visible.isHebrew)) return true;
+    return false;
+  }
+
   static String? explicitTextDirection(String rawText) {
     String? direction;
     for (final match in RegExp(r'\[(rtl|ltr)\]').allMatches(rawText)) {
@@ -29,7 +49,7 @@ class EditorTextGeometryService {
   static bool resolveTextRtl(String rawText) {
     final explicit = explicitTextDirection(rawText);
     if (explicit != null) return explicit == 'rtl';
-    return visibleText(rawText).isHebrew;
+    return visibleTextDirectionRtl(rawText) ?? false;
   }
 
   static bool resolveBlockRtl(List<String> rawBlocks, int index) {
@@ -37,13 +57,16 @@ class EditorTextGeometryService {
     final current = rawBlocks[index];
     final explicit = explicitTextDirection(current);
     if (explicit != null) return explicit == 'rtl';
-    if (hasVisibleContent(current)) return resolveTextRtl(current);
+    final currentDirection = visibleTextDirectionRtl(current);
+    if (currentDirection != null) return currentDirection;
 
     for (var i = index - 1; i >= 0; i--) {
-      if (hasVisibleContent(rawBlocks[i])) return resolveTextRtl(rawBlocks[i]);
+      final direction = visibleTextDirectionRtl(rawBlocks[i]);
+      if (direction != null) return direction;
     }
     for (var i = index + 1; i < rawBlocks.length; i++) {
-      if (hasVisibleContent(rawBlocks[i])) return resolveTextRtl(rawBlocks[i]);
+      final direction = visibleTextDirectionRtl(rawBlocks[i]);
+      if (direction != null) return direction;
     }
     return false;
   }

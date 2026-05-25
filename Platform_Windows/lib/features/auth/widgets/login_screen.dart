@@ -181,15 +181,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               style: TextStyle(color: Colors.white70),
             ),
             Text(
-              '- 4K video support and HUD',
+              '- Beta feedback and diagnostics support',
               style: TextStyle(color: Colors.white70),
             ),
             Text(
-              '- Unlimited cloud sync (coming soon)',
+              '- Windows encrypted local script storage',
               style: TextStyle(color: Colors.white70),
             ),
             Text(
-              '- Advanced eye-contact lens HUD',
+              '- Future premium tools under active development',
               style: TextStyle(color: Colors.white70),
             ),
             SizedBox(height: 16),

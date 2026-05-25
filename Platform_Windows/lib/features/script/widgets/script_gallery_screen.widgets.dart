@@ -398,7 +398,7 @@ class _ScriptListItem extends ConsumerWidget {
         unawaited(settingsNotifier.activateRecentScript(decodedMeta));
       }
     } catch (e) {
-      debugPrint('Session Recovery Error: $e');
+      if (kDebugMode) debugPrint('Session Recovery Error: $e');
       scriptNotifier.loadText(
         fullText,
         title: title,

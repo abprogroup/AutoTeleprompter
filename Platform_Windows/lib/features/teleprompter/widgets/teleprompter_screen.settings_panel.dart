@@ -571,10 +571,10 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const SizedBox(height: 8),
           SegmentedButton<int>(
             segments: const [
-              ButtonSegment(value: 0, label: Text('0°')),
-              ButtonSegment(value: 90, label: Text('90°')),
-              ButtonSegment(value: 180, label: Text('180°')),
-              ButtonSegment(value: 270, label: Text('270°')),
+              ButtonSegment(value: 0, label: Text('0 deg')),
+              ButtonSegment(value: 90, label: Text('90 deg')),
+              ButtonSegment(value: 180, label: Text('180 deg')),
+              ButtonSegment(value: 270, label: Text('270 deg')),
             ],
             selected: {settings.flipRotation},
             onSelectionChanged: (val) => notifier.setFlipRotation(val.first),

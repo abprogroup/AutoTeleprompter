@@ -465,7 +465,7 @@ class _PresetBtn extends StatelessWidget {
   }
 }
 
-// ── Full color palette grid ────────────────────────────────────────────────────
+// Full color palette grid.
 
 class _ColorGrid extends StatelessWidget {
   final int selected;

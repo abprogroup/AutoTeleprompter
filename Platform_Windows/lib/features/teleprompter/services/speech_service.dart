@@ -189,8 +189,9 @@ class SpeechService {
             onStatusChange?.call(SpeechStatus.listening);
           }
         },
-        debugLogging:
-            true, // v4.1.5: Force trace to debug Windows native STT silently failing
+        // Keep plugin-level chatter off in beta builds. App-owned diagnostics
+        // are routed through onDiagnostic/debugMode instead.
+        debugLogging: false,
       );
     } catch (e) {
       onError?.call('STT init failed: $e');

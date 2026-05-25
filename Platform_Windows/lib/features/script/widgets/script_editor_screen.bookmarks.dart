@@ -4,7 +4,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   static const String _bookmarkSign = '\u00BB';
   static const String _legacyBookmarkSign = '\u00C2\u00BB';
 
-  // ── Load / save ────────────────────────────────────────────────────────────
+  // Load / save.
 
   Future<void> _loadBookmarksForCurrentScript({bool force = false}) async {
     final key =
@@ -34,7 +34,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     await ScriptBookmarkService.save(key, _bookmarks);
   }
 
-  // ── Sign helpers ───────────────────────────────────────────────────────────
+  // Sign helpers.
 
   String _normalizeBookmarkSigns(String text) =>
       text.replaceAll(_legacyBookmarkSign, _bookmarkSign);
@@ -67,7 +67,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     return _controllers.map((c) => _stripBookmarkSigns(c.text)).join('\n');
   }
 
-  // ── Sync: text signs → metadata ────────────────────────────────────────────
+  // Sync text signs to metadata.
 
   Future<void> _syncBookmarksFromEditorSigns({
     bool notify = true,
@@ -100,7 +100,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     if (save) await _saveBookmarks();
   }
 
-  // ── Reconcile: metadata → text signs (migration from old metadata-only system) ──
+  // Reconcile metadata to text signs for old metadata-only bookmark scripts.
 
   Future<void> _reconcileEditorBookmarkSignsFromMetadata({
     bool recordHistory = true,
@@ -218,7 +218,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     return position.offset.clamp(0, cleanLength).toInt();
   }
 
-  // ── Cursor helpers ─────────────────────────────────────────────────────────
+  // Cursor helpers.
 
   int _currentEditorBlockIndex() {
     final active = _activeController;
@@ -234,7 +234,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
         : 0;
   }
 
-  // ── Word-index helpers (bookmark-sign aware) ───────────────────────────────
+  // Word-index helpers (bookmark-sign aware).
 
   int _wordIndexForEditorPosition(int block, int offset) {
     final allTokens = WordAligner.tokenize(
@@ -313,7 +313,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     return text.length <= 44 ? text : '${text.substring(0, 44)}...';
   }
 
-  // ── Add bookmark ───────────────────────────────────────────────────────────
+  // Add bookmark.
 
   Future<void> _addEditorBookmark() async {
     if (_controllers.isEmpty) return;
@@ -351,7 +351,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     );
   }
 
-  // ── Navigate bookmarks ─────────────────────────────────────────────────────
+  // Navigate bookmarks.
 
   Future<void> _jumpEditorBookmark(int direction) async {
     await _loadBookmarksForCurrentScript(force: true);
@@ -494,7 +494,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     return _controllers[block].text.contains(_bookmarkSign);
   }
 
-  // ── Delete bookmarks ───────────────────────────────────────────────────────
+  // Delete bookmarks.
 
   Future<void> _deleteEditorBookmarkAtCurrentPosition() async {
     await _loadBookmarksForCurrentScript(force: true);
@@ -591,7 +591,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     );
   }
 
-  // ── Scroll helper (shared with search.dart) ────────────────────────────────
+  // Scroll helper shared with search.
 
   void _scrollEditorBlockIntoView(int block, {double alignment = 0.25}) {
     if (block < 0 || block >= _blockKeys.length) return;

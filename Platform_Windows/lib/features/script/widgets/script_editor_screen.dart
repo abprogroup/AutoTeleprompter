@@ -53,6 +53,7 @@ part 'script_editor_screen.file_present.dart';
 part 'script_editor_screen.debug_sentry.dart';
 part 'script_editor_screen.debug_bookmarks_search.dart';
 part 'script_editor_screen.bookmarks.dart';
+part 'script_editor_screen.bookmark_navigation.dart';
 part 'script_editor_screen.search.dart';
 part 'script_editor_screen.editor_block.dart';
 part 'script_editor_screen.chrome.dart';

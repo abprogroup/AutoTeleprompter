@@ -199,6 +199,34 @@ void main() {
     expect(await service.pendingReportCount(), 1);
   });
 
+  test('feedback service trims endpoint whitespace before sending', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    var received = false;
+    unawaited(() async {
+      await for (final request in server) {
+        received = request.uri.path == '/feedback';
+        await request.drain<void>();
+        request.response.headers.contentType = ContentType.json;
+        request.response.write('{"ok":true,"reportId":"trim-test"}');
+        await request.response.close();
+      }
+    }());
+
+    final service = FeedbackReportService(
+      endpoint: ' \r\nhttp://127.0.0.1:${server.port}/feedback\r\n ',
+    );
+    final result = await service.submit({
+      'reportId': 'trim-test',
+      'schemaVersion': 1,
+      'activeScript': {'rawText': 'trimmed endpoint script'},
+    });
+
+    expect(result.sent, isTrue);
+    expect(received, isTrue);
+  });
+
   test('feedback service packs large reports as compressed JSON attachment',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

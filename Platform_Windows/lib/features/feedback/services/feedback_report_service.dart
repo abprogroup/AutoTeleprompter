@@ -44,13 +44,16 @@ class FeedbackReportService {
     String endpoint = feedbackEndpoint,
   })  : _client = client ?? HttpClient(),
         _outboxDirectory = outboxDirectory,
-        _endpoint = endpoint,
+        _endpoint = _sanitizeEndpoint(endpoint),
         _encryptedStore = EncryptedFileStore(baseDirectory: outboxDirectory);
 
   final HttpClient _client;
   final Future<Directory> Function()? _outboxDirectory;
   final String _endpoint;
   final EncryptedFileStore _encryptedStore;
+
+  static String _sanitizeEndpoint(String endpoint) =>
+      endpoint.replaceAll(RegExp(r'[\r\n]'), '').trim();
 
   Future<FeedbackSendResult> submit(Map<String, Object?> report) async {
     final reportId = report['reportId']?.toString() ?? _newReportId();

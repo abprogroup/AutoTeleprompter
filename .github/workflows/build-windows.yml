@@ -36,7 +36,8 @@ jobs:
         run: |
           $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.4"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
-          flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.4+19 --dart-define=FEEDBACK_ENDPOINT="$env:FEEDBACK_ENDPOINT"
+          $endpoint = ($env:FEEDBACK_ENDPOINT -replace "`r", "" -replace "`n", "").Trim()
+          flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.4+19 --dart-define=FEEDBACK_ENDPOINT="$endpoint"
         working-directory: Platform_Windows
         env:
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}

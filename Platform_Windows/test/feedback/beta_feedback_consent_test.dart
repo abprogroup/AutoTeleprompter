@@ -132,10 +132,12 @@ void main() {
     addTearDown(() async => server.close(force: true));
 
     final requests = <String>[];
+    final contentLengths = <int>[];
     unawaited(() async {
       await for (final request in server) {
         requests.add('${request.method} ${request.uri.path}');
         if (request.uri.path == '/start') {
+          contentLengths.add(request.contentLength);
           await request.drain<void>();
           request.response
             ..statusCode = HttpStatus.found
@@ -161,6 +163,7 @@ void main() {
     expect(result.sent, isTrue);
     expect(result.queued, isFalse);
     expect(requests, ['POST /start', 'GET /done']);
+    expect(contentLengths.single, greaterThan(0));
   });
 
   test('feedback service queues 200 responses without ok true', () async {

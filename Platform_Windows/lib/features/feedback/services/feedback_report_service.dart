@@ -185,6 +185,7 @@ class FeedbackReportService {
       request.headers.set('X-AutoTeleprompter-Report-Id', reportId);
       if (method == 'POST') {
         request.headers.contentType = ContentType.json;
+        request.contentLength = body.length;
         if (gzipped) {
           request.headers.set(HttpHeaders.contentEncodingHeader, 'gzip');
         }

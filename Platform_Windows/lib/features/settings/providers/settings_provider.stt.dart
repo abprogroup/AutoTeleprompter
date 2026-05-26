@@ -2,9 +2,16 @@ part of 'settings_provider.dart';
 
 mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
   Future<void> setSttEngine(String engine) async {
-    state = state.copyWith(sttEngine: engine);
+    final normalized = _normalizeSttEngine(engine);
+    state = state.copyWith(sttEngine: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sttEngineKey, engine);
+    await prefs.setString(_sttEngineKey, normalized);
+  }
+
+  Future<void> setAllowScrollDuringActiveSession(bool enabled) async {
+    state = state.copyWith(allowScrollDuringActiveSession: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_allowScrollDuringActiveSessionKey, enabled);
   }
 
   Future<void> setReadFadeIntensity(double intensity) async {

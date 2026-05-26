@@ -11,6 +11,10 @@ part 'settings_provider.secure_scripts.dart';
 part 'settings_provider.appearance.dart';
 part 'settings_provider.stt.dart';
 
+String _normalizeSttEngine(String? engine) {
+  return AppSettings.normalizeSttEngine(engine);
+}
+
 class SettingsNotifier extends Notifier<AppSettings>
     with SettingsNotifierAppearance, SettingsNotifierSttSettings {
   @override
@@ -146,7 +150,9 @@ class SettingsNotifier extends Notifier<AppSettings>
       showUpcomingWordColor: prefs.getBool(_showUpcomingWordColorKey) ?? false,
       fontFamily: prefs.getString(_fontFamilyKey) ?? 'Inter',
       showAlignmentOverride: prefs.getBool(_showAlignmentOverrideKey) ?? false,
-      sttEngine: prefs.getString(_sttEngineKey) ?? 'google',
+      sttEngine: _normalizeSttEngine(prefs.getString(_sttEngineKey)),
+      allowScrollDuringActiveSession:
+          prefs.getBool(_allowScrollDuringActiveSessionKey) ?? false,
       readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
       sttInputDeviceId: prefs.getString(_sttInputDeviceIdKey) ?? '',
       sttInputDeviceLabel: prefs.getString(_sttInputDeviceLabelKey) ??

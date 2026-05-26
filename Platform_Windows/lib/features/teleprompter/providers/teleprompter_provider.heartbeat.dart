@@ -24,7 +24,104 @@ extension TeleprompterHeartbeat on TeleprompterNotifier {
       _maybeWarnAboutSilentListening(listening);
     }
 
+    _maybeRecoverBrowserStt(script, listening);
     _syncHeartbeatLocale(listening);
+  }
+
+  void _maybeRecoverBrowserStt(Script script, bool listening) {
+    if (_useWhisper ||
+        _sttService != _browserSttService ||
+        !listening ||
+        _sttRecoveryInFlight) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final lastHeartbeat = _lastBrowserHeartbeatAt;
+    final heartbeatStale = lastHeartbeat != null &&
+        now.difference(lastHeartbeat) > const Duration(seconds: 18);
+    final lastRecoverableError = _lastRecoverableSttErrorAt;
+    final repeatedRecoverableErrors = lastRecoverableError != null &&
+        now.difference(lastRecoverableError) < const Duration(seconds: 30) &&
+        _recoverableSttErrorCount >= 3;
+
+    if (!heartbeatStale && !repeatedRecoverableErrors) return;
+
+    final reason = heartbeatStale
+        ? 'stale browser heartbeat'
+        : 'recoverable browser errors';
+    _recoverableSttErrorCount = 0;
+    _lastRecoverableSttErrorAt = null;
+    unawaited(_recoverBrowserStt(script, reason: reason));
+  }
+
+  Future<void> _recoverBrowserStt(
+    Script script, {
+    required String reason,
+  }) async {
+    if (_sttRecoveryInFlight || _disposed || _sessionStopped) return;
+    final token = _sessionToken;
+    _sttRecoveryInFlight = true;
+    _addDebugLog('[Browser Online STT] RECOVERY: $reason');
+    LightweightDiagnostics.instance.record(
+      'stt',
+      'browser STT recovery',
+      data: {'reason': reason, 'position': _currentState.confirmedWordIndex},
+    );
+
+    try {
+      final settings = ref.read(settingsProvider);
+      final locale = _activeLocale ??
+          _scriptLanguageLocale ??
+          TeleprompterNotifier.resolveInitialSttLocale(
+            script.words,
+            startIndex: _currentState.confirmedWordIndex,
+            sectionLocales: _sectionLocales,
+          );
+      final selectedMicId = settings.sttInputDeviceId.trim();
+      final selectedMicLabel = settings.sttInputDeviceLabel.trim();
+
+      _safeSetState((s) => s.copyWith(
+            isStarting: true,
+            statusMessage: '',
+            hasError: false,
+          ));
+      await _browserSttService.stop();
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (_disposed || _sessionStopped || token != _sessionToken) return;
+
+      _browserSttService.setAudioInputDevice(
+        selectedMicId.isEmpty ? null : selectedMicId,
+        label: selectedMicLabel.isEmpty
+            ? 'System default microphone'
+            : selectedMicLabel,
+      );
+      final result = await _browserSttService.start(localeId: locale);
+      if (_disposed || _sessionStopped || token != _sessionToken) {
+        await _browserSttService.stop();
+        return;
+      }
+      if (!result.success) {
+        _safeSetState((s) => s.copyWith(
+              isListening: false,
+              isStarting: false,
+              hasError: true,
+              statusMessage: result.message ?? 'Speech recognition failed',
+            ));
+        return;
+      }
+
+      _lastBrowserHeartbeatAt = DateTime.now();
+      final webViewUrl = _browserSttService.sttWebViewUrl;
+      _safeSetState((s) => s.copyWith(
+            sttWebViewUrl: webViewUrl,
+            isStarting: true,
+            hasError: false,
+            statusMessage: '',
+          ));
+    } finally {
+      _sttRecoveryInFlight = false;
+    }
   }
 
   void _maybeWarnAboutSilentListening(bool listening) {

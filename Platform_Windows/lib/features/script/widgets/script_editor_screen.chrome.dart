@@ -57,6 +57,26 @@ extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
                   ),
                 ),
               ),
+              const SizedBox(width: 10),
+              Tooltip(
+                message: 'Content Creator',
+                child: SizedBox(
+                  width: 54,
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: _startContentCreator,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFFBF00),
+                      side: const BorderSide(color: Color(0xFFFFBF00)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: const Icon(Icons.videocam_rounded, size: 24),
+                  ),
+                ),
+              ),
               const SizedBox(width: 16),
             ],
           ),

@@ -164,20 +164,36 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (key == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);
+          if (idx == -1) return KeyEventResult.handled;
+          if (_replaceAppSelectionWithParagraphBreak()) {
+            _saveHistory(description: 'Split Paragraph');
+            return KeyEventResult.handled;
+          }
           final text = controller.text;
-          final sel = controller.selection;
-          if (sel.isValid) {
-            final before = text.substring(0, sel.start);
-            final after = text.substring(sel.start);
-            controller.text = before;
-            _addBlock(idx + 1, text: after);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && idx + 1 < _focusNodes.length) {
-                _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection =
-                    const TextSelection.collapsed(offset: 0);
-              }
-            });
+          final replacementSelection =
+              _selectionForEnterReplacement(controller);
+          if (replacementSelection != null) {
+            final start =
+                replacementSelection.start.clamp(0, text.length).toInt();
+            final end =
+                replacementSelection.end.clamp(start, text.length).toInt();
+            _splitBlockAtSelection(
+              controller: controller,
+              blockIndex: idx,
+              start: start,
+              end: end,
+            );
+          } else {
+            final sel = controller.selection;
+            if (sel.isValid) {
+              final offset = sel.extentOffset.clamp(0, text.length).toInt();
+              _splitBlockAtSelection(
+                controller: controller,
+                blockIndex: idx,
+                start: offset,
+                end: offset,
+              );
+            }
           }
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
@@ -195,6 +211,21 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             _saveHistory(description: 'Delete Empty Line');
           }
           return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.backspace &&
+            controller.selection.isCollapsed &&
+            _isCaretAtVisibleBlockStart(controller)) {
+          final idx = _controllers.indexOf(controller);
+          if (idx > 0) {
+            if (_isVisuallyEmptyBlock(_controllers[idx - 1].text)) {
+              _deletePreviousEmptyBlockFromCaret(idx);
+              _saveHistory(description: 'Delete Empty Line');
+            } else {
+              _joinCurrentBlockIntoPrevious(idx);
+              _saveHistory(description: 'Join Paragraph');
+            }
+            return KeyEventResult.handled;
+          }
         }
         return KeyEventResult.ignored;
       });
@@ -304,6 +335,220 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     if (!_isBulkLoadingBlocks && text.isEmpty) {
       Future.delayed(Duration.zero, () => _focusNodes[index].requestFocus());
     }
+  }
+
+  TextSelection? _selectionForEnterReplacement(MarkupController controller) {
+    final external = controller.externalSelection;
+    if (external != null && external.isValid && !external.isCollapsed) {
+      return TextSelection(
+        baseOffset: external.start,
+        extentOffset: external.end,
+      );
+    }
+    final native = controller.selection;
+    if (native.isValid && !native.isCollapsed) {
+      return TextSelection(baseOffset: native.start, extentOffset: native.end);
+    }
+    if (controller.isGlobalSelected && controller.text.isNotEmpty) {
+      return TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+    }
+    return null;
+  }
+
+  bool _replaceAppSelectionWithParagraphBreak() {
+    final ranges = _activeAppSelectionRangesForEnter();
+    if (ranges.length <= 1) return false;
+
+    final first = ranges.first;
+    final last = ranges.last;
+    final firstController = _controllers[first.blockIndex];
+    final lastController = _controllers[last.blockIndex];
+    final firstStart =
+        first.selection.start.clamp(0, firstController.text.length).toInt();
+    final lastEnd =
+        last.selection.end.clamp(0, lastController.text.length).toInt();
+    final before = firstController.text.substring(0, firstStart);
+    final after = MarkupController.suffixWithOpenTagContext(
+      lastController.text,
+      lastEnd,
+    );
+    final newCaretOffset =
+        MarkupController.openTagsAt(lastController.text, lastEnd).length;
+
+    _isCommandExecuting = true;
+    final previousBulkState = _isBulkLoadingBlocks;
+    try {
+      _setEditorState(() {
+        firstController.value = TextEditingValue(
+          text: before,
+          selection: TextSelection.collapsed(offset: before.length),
+        );
+        for (var i = last.blockIndex; i > first.blockIndex; i--) {
+          _controllers.removeAt(i).dispose();
+          _focusNodes.removeAt(i).dispose();
+          _blockKeys.removeAt(i);
+        }
+        _isBulkLoadingBlocks = true;
+        _addBlock(first.blockIndex + 1, text: after);
+        _isBulkLoadingBlocks = previousBulkState;
+      });
+      _clearAppSelectionAfterTextInput(firstController);
+      if (first.blockIndex + 1 < _controllers.length) {
+        _lastFocusedController = _controllers[first.blockIndex + 1];
+        _controllers[first.blockIndex + 1].selection =
+            TextSelection.collapsed(offset: newCaretOffset);
+      }
+    } finally {
+      _isBulkLoadingBlocks = previousBulkState;
+      _isCommandExecuting = false;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || first.blockIndex + 1 >= _focusNodes.length) return;
+      _lastFocusedController = _controllers[first.blockIndex + 1];
+      _focusNodes[first.blockIndex + 1].requestFocus();
+      _controllers[first.blockIndex + 1].selection =
+          TextSelection.collapsed(offset: newCaretOffset);
+    });
+    return true;
+  }
+
+  List<_EnterSelectionRange> _activeAppSelectionRangesForEnter() {
+    final ranges = <_EnterSelectionRange>[];
+    for (var i = 0; i < _controllers.length; i++) {
+      final controller = _controllers[i];
+      final selection = _appSelectionForEnter(controller);
+      if (selection == null) continue;
+      ranges.add(_EnterSelectionRange(i, selection));
+    }
+    return ranges;
+  }
+
+  TextSelection? _appSelectionForEnter(MarkupController controller) {
+    final length = controller.text.length;
+    if (controller.isGlobalSelected) {
+      return TextSelection(baseOffset: 0, extentOffset: length);
+    }
+    final external = controller.externalSelection;
+    if (external == null || !external.isValid || external.isCollapsed) {
+      return null;
+    }
+    final start = external.start.clamp(0, length).toInt();
+    final end = external.end.clamp(start, length).toInt();
+    if (end <= start) return null;
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
+  void _splitBlockAtSelection({
+    required MarkupController controller,
+    required int blockIndex,
+    required int start,
+    required int end,
+  }) {
+    final text = controller.text;
+    final safeStart = start.clamp(0, text.length).toInt();
+    final safeEnd = end.clamp(safeStart, text.length).toInt();
+    final before = text.substring(0, safeStart);
+    final after = MarkupController.suffixWithOpenTagContext(text, safeEnd);
+    final newCaretOffset = MarkupController.openTagsAt(text, safeEnd).length;
+
+    _isCommandExecuting = true;
+    try {
+      controller.value = TextEditingValue(
+        text: before,
+        selection: TextSelection.collapsed(offset: before.length),
+      );
+      _addBlock(blockIndex + 1, text: after);
+      _clearAppSelectionAfterTextInput(controller);
+      if (blockIndex + 1 < _controllers.length) {
+        _lastFocusedController = _controllers[blockIndex + 1];
+        _controllers[blockIndex + 1].selection =
+            TextSelection.collapsed(offset: newCaretOffset);
+      }
+    } finally {
+      _isCommandExecuting = false;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && blockIndex + 1 < _focusNodes.length) {
+        _lastFocusedController = _controllers[blockIndex + 1];
+        _focusNodes[blockIndex + 1].requestFocus();
+        _controllers[blockIndex + 1].selection =
+            TextSelection.collapsed(offset: newCaretOffset);
+      }
+    });
+  }
+
+  bool _isVisuallyEmptyBlock(String text) {
+    return MarkupDecorationParser.visibleText(text).trim().isEmpty;
+  }
+
+  bool _isCaretAtVisibleBlockStart(MarkupController controller) {
+    final selection = controller.selection;
+    if (!selection.isValid || !selection.isCollapsed) return false;
+    final rawOffset = selection.extentOffset.clamp(0, controller.text.length);
+    return MarkupDecorationParser.rawToVisibleOffset(
+          controller.text,
+          rawOffset,
+        ) ==
+        0;
+  }
+
+  void _deletePreviousEmptyBlockFromCaret(int currentIndex) {
+    if (currentIndex <= 0 || currentIndex >= _controllers.length) return;
+    final controller = _controllers[currentIndex];
+    _setEditorState(() {
+      _controllers.removeAt(currentIndex - 1).dispose();
+      _focusNodes.removeAt(currentIndex - 1).dispose();
+      _blockKeys.removeAt(currentIndex - 1);
+    });
+    final newIndex = (currentIndex - 1).clamp(0, _controllers.length - 1);
+    _lastFocusedController = controller;
+    controller.selection = const TextSelection.collapsed(offset: 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || newIndex >= _focusNodes.length) return;
+      _focusNodes[newIndex].requestFocus();
+      controller.selection = const TextSelection.collapsed(offset: 0);
+    });
+  }
+
+  void _joinCurrentBlockIntoPrevious(int currentIndex) {
+    if (currentIndex <= 0 || currentIndex >= _controllers.length) return;
+    final previous = _controllers[currentIndex - 1];
+    final current = _controllers[currentIndex];
+    final previousText = previous.text;
+    final activePrefix =
+        MarkupController.openTagsAt(previousText, previousText.length);
+    final currentText = MarkupController.stripRedundantLeadingOpenTagContext(
+      current.text,
+      activePrefix,
+    );
+    final caretOffset = previousText.length;
+
+    _isCommandExecuting = true;
+    try {
+      _setEditorState(() {
+        previous.value = TextEditingValue(
+          text: previousText + currentText,
+          selection: TextSelection.collapsed(offset: caretOffset),
+        );
+        _controllers.removeAt(currentIndex).dispose();
+        _focusNodes.removeAt(currentIndex).dispose();
+        _blockKeys.removeAt(currentIndex);
+      });
+      _clearAppSelectionAfterTextInput(previous);
+      _lastFocusedController = previous;
+      previous.selection = TextSelection.collapsed(offset: caretOffset);
+    } finally {
+      _isCommandExecuting = false;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || currentIndex - 1 >= _focusNodes.length) return;
+      _lastFocusedController = previous;
+      _focusNodes[currentIndex - 1].requestFocus();
+      previous.selection = TextSelection.collapsed(offset: caretOffset);
+    });
   }
 
   void _removeBlock(int index) {
@@ -426,4 +671,11 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     }
     _lastFocusedController = editedController;
   }
+}
+
+class _EnterSelectionRange {
+  final int blockIndex;
+  final TextSelection selection;
+
+  const _EnterSelectionRange(this.blockIndex, this.selection);
 }

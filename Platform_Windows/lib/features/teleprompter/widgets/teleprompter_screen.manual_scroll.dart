@@ -254,7 +254,11 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
     final sttState = ref.read(teleprompterProvider);
-    if (sttState.isListening || sttState.isStarting) {
+    final settings = ref.read(settingsProvider);
+    final activeManualOverride =
+        settings.allowScrollDuringActiveSession && sttState.isListening;
+    if (sttState.isStarting ||
+        (sttState.isListening && !activeManualOverride)) {
       _userBrowsingWhileStopped = false;
       return false;
     }

@@ -9,9 +9,18 @@ import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
+import '../../script/services/script_bookmark_service.dart';
+import '../../script/services/markup_decoration_service.dart';
 import 'teleprompter_screen.dart';
 
 part 'content_creator_screen.widgets.dart';
+part 'content_creator_screen.presenter_tools.dart';
+part 'content_creator_screen.presenter_view.dart';
+
+final _contentCreatorTagStripRe = RegExp(
+    r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
+
+enum _ContentCameraSourceMode { native, usb, virtual, all }
 
 class ContentCreatorScreen extends ConsumerStatefulWidget {
   const ContentCreatorScreen({super.key});
@@ -23,10 +32,15 @@ class ContentCreatorScreen extends ConsumerStatefulWidget {
 
 class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   CameraController? _cameraController;
+  final GlobalKey _creatorContentKey = GlobalKey();
+  List<CameraDescription> _availableCameras = const [];
+  String? _selectedCameraName;
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _wordKeys = [];
   bool _isInit = false;
   bool _isCameraInitializing = true;
+  bool _cameraWasChosenByUser = false;
+  _ContentCameraSourceMode _cameraSourceMode = _ContentCameraSourceMode.native;
   bool _isRecording = false;
   String? _cameraError;
   int _countdown = 0;
@@ -35,6 +49,16 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   Timer? _recordTimer;
   Timer? _autoScrollTimer;
   Timer? _wordTrackTimer;
+  String? _bookmarkScopeKey;
+  String? _bookmarkLoadingKey;
+  bool _bookmarksLoaded = false;
+  List<ScriptBookmark> _bookmarks = const [];
+  String _lastSearchQuery = '';
+  bool _searchDialogOpen = false;
+  bool _searchWholeWord = false;
+  List<_ContentSearchMatch> _contentSearchMatches = const [];
+  int _contentSearchMatchIndex = -1;
+  bool _contentSearchToolbarVisible = false;
 
   @override
   void initState() {
@@ -42,16 +66,23 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     _initializeCamera();
   }
 
-  Future<void> _initializeCamera() async {
+  Future<void> _initializeCamera({CameraDescription? preferredCamera}) async {
     try {
       setState(() {
+        _isInit = false;
         _isCameraInitializing = true;
         _cameraError = null;
       });
-      final cameras = await availableCameras();
+      final discoveredCameras = await availableCameras().timeout(
+        const Duration(seconds: 8),
+      );
+      final cameras = _orderedCameras(discoveredCameras);
       if (cameras.isEmpty) {
         if (mounted) {
           setState(() {
+            _availableCameras = const [];
+            _selectedCameraName = null;
+            _cameraWasChosenByUser = false;
             _isInit = false;
             _isCameraInitializing = false;
             _cameraError = 'No camera was found on this Windows device.';
@@ -60,11 +91,13 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         return;
       }
 
-      // Find front camera
-      final front = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
-      );
+      final selectedCamera = _resolveCamera(cameras, preferredCamera);
+      if (mounted) {
+        setState(() {
+          _availableCameras = cameras;
+          _selectedCameraName = selectedCamera.name;
+        });
+      }
 
       final settings = ref.read(settingsProvider);
       ResolutionPreset preset = ResolutionPreset.medium; // 720p
@@ -75,8 +108,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       }
 
       await _cameraController?.dispose();
-      _cameraController = CameraController(front, preset, enableAudio: true);
-      await _cameraController!.initialize();
+      _cameraController =
+          CameraController(selectedCamera, preset, enableAudio: true);
+      await _cameraController!.initialize().timeout(
+            const Duration(seconds: 10),
+          );
       if (mounted) {
         setState(() {
           _isInit = true;
@@ -88,6 +124,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       if (kDebugMode) debugPrint('Camera error: $e');
       if (mounted) {
         setState(() {
+          if (_availableCameras.isEmpty && _selectedCameraName == null) {
+            _selectedCameraName = preferredCamera?.name;
+          }
           _isInit = false;
           _isCameraInitializing = false;
           _cameraError =
@@ -95,6 +134,167 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         });
       }
     }
+  }
+
+  CameraDescription _resolveCamera(
+    List<CameraDescription> cameras,
+    CameraDescription? preferredCamera,
+  ) {
+    final preferredName = preferredCamera?.name ??
+        (_cameraWasChosenByUser ? _selectedCameraName : null);
+    if (preferredName != null) {
+      for (final camera in cameras) {
+        if (camera.name == preferredName) return camera;
+      }
+    }
+    final sourceCameras = _camerasForSourceMode(cameras, _cameraSourceMode);
+    return sourceCameras.isNotEmpty ? sourceCameras.first : cameras.first;
+  }
+
+  List<CameraDescription> _camerasForSourceMode(
+    List<CameraDescription> cameras,
+    _ContentCameraSourceMode mode,
+  ) {
+    if (mode == _ContentCameraSourceMode.all) return cameras;
+    return cameras.where((camera) {
+      final name = camera.name.toLowerCase();
+      return switch (mode) {
+        _ContentCameraSourceMode.native => !_isVirtualCameraName(name) &&
+            !_isIrOrDepthCameraName(name) &&
+            _isIntegratedCameraName(name),
+        _ContentCameraSourceMode.usb => !_isVirtualCameraName(name) &&
+            !_isIrOrDepthCameraName(name) &&
+            _isUsbCameraName(name),
+        _ContentCameraSourceMode.virtual => _isVirtualCameraName(name),
+        _ContentCameraSourceMode.all => true,
+      };
+    }).toList();
+  }
+
+  List<CameraDescription> _orderedCameras(List<CameraDescription> cameras) {
+    final ordered = List<CameraDescription>.of(cameras);
+    ordered.sort((a, b) {
+      final priority = _cameraPriority(a).compareTo(_cameraPriority(b));
+      if (priority != 0) return priority;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return ordered;
+  }
+
+  int _cameraPriority(CameraDescription camera) {
+    final name = camera.name.toLowerCase();
+    var score = 0;
+    if (_isVirtualCameraName(name)) score += 1000;
+    if (_isIrOrDepthCameraName(name)) score += 320;
+    if (_isIntegratedCameraName(name)) score -= 320;
+    if (name.contains('webcam') || name.contains('web camera')) score -= 220;
+    if (_isUsbCameraName(name)) score -= 120;
+    if (camera.lensDirection == CameraLensDirection.front) score -= 40;
+    if (camera.lensDirection == CameraLensDirection.back) score += 40;
+    return score;
+  }
+
+  bool _isIntegratedCameraName(String name) {
+    return name.contains('integrated') ||
+        name.contains('built-in') ||
+        name.contains('builtin') ||
+        name.contains('internal') ||
+        name.contains('asus fhd') ||
+        name.contains('fhd webcam') ||
+        name.contains('hd webcam');
+  }
+
+  bool _isIrOrDepthCameraName(String name) {
+    return name.contains(' ir ') ||
+        name.startsWith('ir ') ||
+        name.endsWith(' ir') ||
+        name.contains('infrared') ||
+        name.contains('depth');
+  }
+
+  bool _isUsbCameraName(String name) {
+    return name.contains('usb') ||
+        name.contains('uvc') ||
+        name.contains('external');
+  }
+
+  bool _isVirtualCameraName(String name) {
+    return name.contains('ndi') ||
+        name.contains('obs') ||
+        name.contains('virtual') ||
+        name.contains('droidcam') ||
+        name.contains('iriun') ||
+        name.contains('epoccam') ||
+        name.contains('camo') ||
+        name.contains('snap camera') ||
+        name.contains('ip camera') ||
+        name.contains('lightform') ||
+        name.contains('screen capture');
+  }
+
+  String _cameraSourceType(CameraDescription camera) {
+    final name = camera.name.toLowerCase();
+    if (_isVirtualCameraName(name)) return 'Wi-Fi / virtual camera';
+    if (_isIrOrDepthCameraName(name)) return 'IR / depth camera';
+    if (_isUsbCameraName(name)) return 'USB camera';
+    if (_isIntegratedCameraName(name)) return 'Native camera';
+    return 'Camera';
+  }
+
+  String _cameraSourceModeLabel(_ContentCameraSourceMode mode) {
+    return switch (mode) {
+      _ContentCameraSourceMode.native => 'Native',
+      _ContentCameraSourceMode.usb => 'USB',
+      _ContentCameraSourceMode.virtual => 'Wi-Fi / virtual',
+      _ContentCameraSourceMode.all => 'All',
+    };
+  }
+
+  String _cameraSourceModeHelp(_ContentCameraSourceMode mode) {
+    return switch (mode) {
+      _ContentCameraSourceMode.native => 'Built-in laptop/webcam first.',
+      _ContentCameraSourceMode.usb => 'USB cameras exposed by Windows.',
+      _ContentCameraSourceMode.virtual =>
+        'NDI, OBS, phone bridges, or Wi-Fi virtual cameras.',
+      _ContentCameraSourceMode.all => 'Every Windows camera device.',
+    };
+  }
+
+  Future<void> _setCameraSourceMode(_ContentCameraSourceMode mode) async {
+    if (_isRecording) {
+      _showSnack('Stop recording before changing camera source.');
+      return;
+    }
+    final matching = _camerasForSourceMode(_availableCameras, mode);
+    final preferred = matching.isEmpty ? null : matching.first;
+    setState(() {
+      _cameraSourceMode = mode;
+      _selectedCameraName = preferred?.name;
+      _cameraWasChosenByUser = preferred != null;
+    });
+    await _initializeCamera(preferredCamera: preferred);
+  }
+
+  Future<void> _selectCamera(CameraDescription camera) async {
+    if (_isRecording) {
+      _showSnack('Stop recording before changing camera.');
+      return;
+    }
+    setState(() {
+      _selectedCameraName = camera.name;
+      _cameraWasChosenByUser = true;
+    });
+    await _initializeCamera(preferredCamera: camera);
+  }
+
+  String _cameraLabel(CameraDescription camera, int index) {
+    final rawDirection = camera.lensDirection.name;
+    final direction = rawDirection.isEmpty
+        ? 'Camera'
+        : '${rawDirection[0].toUpperCase()}${rawDirection.substring(1)}';
+    final trimmed = camera.name.trim();
+    final name = trimmed.isEmpty ? 'Camera ${index + 1}' : trimmed;
+    return '$name - ${_cameraSourceType(camera)} - $direction';
   }
 
   @override
@@ -165,6 +365,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  void _updateContentCreatorState(VoidCallback update) {
+    if (!mounted) return;
+    setState(update);
   }
 
   Future<void> _setVideoResolution(String resolution) async {
@@ -257,103 +462,48 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       while (_wordKeys.length < script.words.length) {
         _wordKeys.add(GlobalKey());
       }
+      unawaited(_loadBookmarksForScript(script));
     }
+
+    final paragraphs =
+        script == null ? <List<ScriptWord>>[] : _paragraphsForScript(script);
+    final presentationFontSize = settings.fontSize * 2.0;
+    final presenterWordGap = _contentWordGap(presentationFontSize, settings);
+    final bookmarkWordIndexes = script == null
+        ? <int>{}
+        : _bookmarks
+            .map(
+              (bookmark) => ScriptBookmarkService.nearestBookmarkableWordIndex(
+                script.words,
+                bookmark.wordIndex,
+              ),
+            )
+            .whereType<int>()
+            .toSet();
+    final wordList = script == null || script.isEmpty
+        ? const Center(
+            child: Text(
+              'No script loaded.',
+              style: TextStyle(color: Colors.white),
+            ),
+          )
+        : _buildContentPresenterWordList(
+            context: context,
+            script: script,
+            paragraphs: paragraphs,
+            activeWordIndex: activeWordIndex,
+            settings: settings,
+            bookmarkWordIndexes: bookmarkWordIndexes,
+            presentationFontSize: presentationFontSize,
+            presenterWordGap: presenterWordGap,
+          );
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 1. Camera Preview (Bottom 40%)
-          Positioned.fill(
-            child: Column(
-              children: [
-                const Spacer(flex: 6),
-                Expanded(
-                  flex: 4,
-                  child: _isInit
-                      ? Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            ClipRect(
-                              child: FittedBox(
-                                fit: BoxFit.cover,
-                                child: SizedBox(
-                                  width: _cameraController!
-                                      .value.previewSize!.height,
-                                  height: _cameraController!
-                                      .value.previewSize!.width,
-                                  child: CameraPreview(_cameraController!),
-                                ),
-                              ),
-                            ),
-                            // Pro camera: enhanced eye-contact radial vignette
-                            Container(
-                              decoration: BoxDecoration(
-                                gradient: RadialGradient(
-                                  center: Alignment.center,
-                                  radius: 0.85,
-                                  colors: [
-                                    Colors.transparent,
-                                    Colors.black.withValues(alpha: 0.5),
-                                    Colors.black.withValues(alpha: 0.9),
-                                  ],
-                                  stops: const [0.4, 0.7, 1.0],
-                                ),
-                              ),
-                            ),
-                            // Pro camera: camera lens HUD painter
-                            CustomPaint(
-                              painter: _LensHUDPainter(),
-                              child: Container(),
-                            ),
-                            // Pro camera: session timer HUD
-                            if (_isRecording)
-                              Positioned(
-                                top: 20,
-                                right: 20,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                      color: Colors.red,
-                                      borderRadius: BorderRadius.circular(6)),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.circle,
-                                          color: Colors.white, size: 8),
-                                      const SizedBox(width: 6),
-                                      Text(_formatTimer(_recordSeconds),
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            // Pro camera: countdown overlay
-                            if (_countdown > 0)
-                              Center(
-                                child: Container(
-                                  padding: const EdgeInsets.all(40),
-                                  decoration: BoxDecoration(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.4),
-                                      shape: BoxShape.circle),
-                                  child: Text('$_countdown',
-                                      style: const TextStyle(
-                                          color: Color(0xFFFFBF00),
-                                          fontSize: 80,
-                                          fontWeight: FontWeight.bold)),
-                                ),
-                              ),
-                          ],
-                        )
-                      : _buildCameraFallback(),
-                ),
-              ],
-            ),
-          ),
+          _buildCameraBackgroundLayer(),
+          _buildReadingSurfaceLayer(),
 
           // 2. Eye-Contact Prompter (Top 60%)
           SafeArea(
@@ -363,14 +513,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                   flex: 6,
                   child: SingleChildScrollView(
                     controller: _scrollController,
-                    padding: EdgeInsets.only(
-                      top: 40,
-                      bottom: MediaQuery.of(context).size.height * 0.3,
-                      left: 20,
-                      right: 20,
-                    ),
-                    child: _buildPrompterContent(
-                        script, settings, activeWordIndex),
+                    child: wordList,
                   ),
                 ),
                 const Spacer(flex: 4),
@@ -378,66 +521,19 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
             ),
           ),
 
-          // 3. Recording Controls & Floating Buttons
           Positioned(
-            bottom: 20,
+            top: 8,
             left: 0,
             right: 0,
-            child: Column(
-              children: [
-                // Red Trigger Button
-                GestureDetector(
-                  onTap: _toggleRecording,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                    ),
-                    child: Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _isRecording
-                            ? Colors.red
-                            : Colors.red.withValues(alpha: 0.5),
-                      ),
-                      child: Icon(
-                        _isRecording ? Icons.stop : Icons.videocam,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Standard Controls Bar (Close, Settings, Replay)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white70),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.tune, color: Colors.white70),
-                        onPressed: _showContentCreatorSettings,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.replay, color: Colors.white70),
-                        onPressed: () {
-                          _scrollController.jumpTo(0);
-                          setState(() => _activeWordIndex = 0);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            child: Center(child: _buildContentSearchToolbar()),
+          ),
+
+          // 3. Recording Controls & Floating Buttons
+          Positioned(
+            bottom: 16,
+            left: 32,
+            right: 32,
+            child: _buildContentControlBar(settings),
           ),
         ],
       ),

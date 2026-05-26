@@ -35,4 +35,39 @@ void main() {
       ),
     );
   });
+
+  test('split suffix preserves active style context', () {
+    const raw = '**remove keep**';
+    const splitOffset = '**remove'.length;
+
+    final suffix = MarkupController.suffixWithOpenTagContext(raw, splitOffset);
+
+    expect(suffix, '** keep**');
+  });
+
+  test('plain split suffix stays plain', () {
+    const raw = 'remove keep';
+
+    final suffix = MarkupController.suffixWithOpenTagContext(raw, 6);
+
+    expect(suffix, ' keep');
+  });
+
+  test('joined split suffix removes duplicated active style context', () {
+    const raw = '**hello world**';
+    const previous = '**hello';
+    final suffix = MarkupController.suffixWithOpenTagContext(
+      raw,
+      previous.length,
+    );
+
+    final joined = previous +
+        MarkupController.stripRedundantLeadingOpenTagContext(
+          suffix,
+          MarkupController.openTagsAt(previous, previous.length),
+        );
+
+    expect(suffix, '** world**');
+    expect(joined, raw);
+  });
 }

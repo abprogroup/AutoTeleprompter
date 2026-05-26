@@ -10,6 +10,24 @@ class SttAudioInputDevice {
   });
 }
 
+class SttRuntimeHealth {
+  final String type;
+  final bool listening;
+  final String locale;
+  final int ageMs;
+  final int failures;
+  final String? error;
+
+  const SttRuntimeHealth({
+    required this.type,
+    required this.listening,
+    required this.locale,
+    this.ageMs = 0,
+    this.failures = 0,
+    this.error,
+  });
+}
+
 /// Platform-agnostic contract for Speech-to-Text services.
 ///
 /// All platform-specific adapters extend this class.
@@ -36,6 +54,10 @@ abstract class AbstractSttService {
 
   /// Called when the platform adapter discovers audio input devices.
   void Function(List<SttAudioInputDevice> devices)? onAudioInputDevicesChanged;
+
+  /// Called for lightweight runtime health events such as browser STT
+  /// heartbeat/watchdog/network status.
+  void Function(SttRuntimeHealth health)? onRuntimeHealth;
 
   /// URL of the embedded STT WebView (Windows browser adapter only). Null on other platforms.
   String? get sttWebViewUrl => null;

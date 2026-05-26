@@ -49,10 +49,11 @@ class ProjectActionsSuite extends StatelessWidget {
                 icon: const Icon(Icons.settings_outlined),
                 tooltip: 'Settings',
                 onPressed: onSettings),
-            IconButton(
-                icon: const Icon(Icons.videocam_outlined),
-                tooltip: 'Content Creator',
-                onPressed: onRecord),
+            if (onRecord != null)
+              IconButton(
+                  icon: const Icon(Icons.videocam_outlined),
+                  tooltip: 'Content Creator',
+                  onPressed: onRecord),
             IconButton(
                 icon: const Icon(Icons.bookmark_add_outlined),
                 onPressed: onAddBookmark),

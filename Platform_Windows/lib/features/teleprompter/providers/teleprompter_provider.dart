@@ -12,6 +12,7 @@ import '../../script/models/script_word.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
+import '../../../core/extensions/string_extensions.dart';
 
 import '../../../platform/stt/stt_service_factory.dart';
 part 'teleprompter_provider.heartbeat.dart';
@@ -19,7 +20,9 @@ part 'teleprompter_provider.stt_callbacks.dart';
 part 'teleprompter_provider.stt.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
-  late final AbstractSttService _sttService;
+  late AbstractSttService _sttService;
+  late final AbstractSttService _browserSttService;
+  late final AbstractSttService _desktopSttService;
   late final WhisperSpeechService _whisperService;
   late final RemoteControlService _remoteControlService;
   bool _useWhisper = false;
@@ -46,10 +49,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _visibleLocaleAssistPinnedLocale;
   String? _pendingVisibleLocaleAssistLocale;
   bool _sttReadingStandby = false;
+  bool _activeSttCanSwitchLocale = true;
+  String _activeSttEngineLabel = 'Browser Online';
+  DateTime? _lastBrowserHeartbeatAt;
+  DateTime? _lastRecoverableSttErrorAt;
+  int _recoverableSttErrorCount = 0;
+  bool _sttRecoveryInFlight = false;
 
   // STT tuning
   static const int _maxAdvancePerUpdate = 30;
   static const int _visibleLocaleAssistAfterWaits = 2;
+  static const int _sttAlignmentWindowWords = 18;
+  static const int _stuckRelockAfterWaits = 25;
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
@@ -58,16 +69,20 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   @override
   TeleprompterState build() {
     _disposed = false;
-    _sttService = SttServiceFactory.create();
+    _browserSttService = SttServiceFactory.createWindowsBrowser();
+    _desktopSttService = SttServiceFactory.createWindowsDesktop();
+    _sttService = _browserSttService;
     _whisperService = WhisperSpeechService();
     _remoteControlService = ref.read(remoteControlProvider);
     _setupRemoteCallbacks();
-    _setupSttCallbacks();
+    _setupSttCallbacks(_browserSttService);
+    _setupSttCallbacks(_desktopSttService);
     _setupWhisperCallbacks();
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
-      _sttService.stop();
+      _browserSttService.stop();
+      _desktopSttService.stop();
       _whisperService.stop();
       _remoteControlService.stop();
     });
@@ -109,6 +124,73 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final logs = [...state.debugLogs, entry];
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
     _safeSetState((s) => s.copyWith(debugLogs: logs));
+  }
+
+  static bool _isEnglishLocale(String locale) =>
+      locale.toLowerCase().replaceAll('_', '-').startsWith('en-') ||
+      locale.toLowerCase() == 'en';
+
+  bool _scriptIsEnglishOnly() =>
+      _sectionLocales.isNotEmpty && _sectionLocales.every(_isEnglishLocale);
+
+  String _recentTranscriptWindow(String transcript) {
+    final words = transcript
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((word) => word.trim().isNotEmpty)
+        .toList();
+    if (words.length <= _sttAlignmentWindowWords) return transcript;
+    return words.sublist(words.length - _sttAlignmentWindowWords).join(' ');
+  }
+
+  int? _relockTargetFromTranscript(Script script, String transcript) {
+    if (_noProgressCount < _stuckRelockAfterWaits) return null;
+    final tokens = transcript
+        .split(RegExp(r'\s+'))
+        .map((word) => word.trim().normalizeForMatching())
+        .where((word) => word.isNotEmpty)
+        .toList();
+    if (tokens.length < 4) return null;
+
+    final realWords = script.words
+        .where((word) => !word.isNewline && word.normalized.isNotEmpty)
+        .toList();
+    if (realWords.length < 4) return null;
+
+    final searchStart = _visibleWordStart == null
+        ? 0
+        : realWords.indexWhere((word) => word.index >= _visibleWordStart!);
+    final start = searchStart < 0 ? 0 : searchStart;
+    final maxPhrase = tokens.length < 8 ? tokens.length : 8;
+    for (var phraseLen = maxPhrase; phraseLen >= 4; phraseLen--) {
+      final phrase = tokens.sublist(tokens.length - phraseLen);
+      for (var i = start; i <= realWords.length - phraseLen; i++) {
+        var matches = true;
+        for (var j = 0; j < phraseLen; j++) {
+          if (realWords[i + j].normalized != phrase[j]) {
+            matches = false;
+            break;
+          }
+        }
+        if (matches) return realWords[i + phraseLen - 1].index;
+      }
+    }
+    return null;
+  }
+
+  AbstractSttService _resolveWindowsSpeechService(
+    AppSettings settings,
+    String initialLocale,
+  ) {
+    final engine = AppSettings.normalizeSttEngine(settings.sttEngine);
+    final canUseOfflineEnglish =
+        _isEnglishLocale(initialLocale) && _scriptIsEnglishOnly();
+    final useOffline = engine == AppSettings.sttEngineWindowsOffline ||
+        (engine == AppSettings.sttEngineAuto && canUseOfflineEnglish);
+    _activeSttCanSwitchLocale = !useOffline;
+    _activeSttEngineLabel =
+        useOffline ? 'Windows Offline STT' : 'Browser Online STT';
+    return useOffline ? _desktopSttService : _browserSttService;
   }
 
   /// Common handler for STT results - shared between Google and Whisper.
@@ -335,6 +417,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     );
     _scriptLanguageLocale = localeId;
     _activeLocale = localeId;
+    if (!_useWhisper) {
+      _lastBrowserHeartbeatAt = null;
+      _lastRecoverableSttErrorAt = null;
+      _recoverableSttErrorCount = 0;
+      _sttRecoveryInFlight = false;
+      _sttService = _resolveWindowsSpeechService(settings, localeId);
+      await (_sttService == _browserSttService
+          ? _desktopSttService.stop()
+          : _browserSttService.stop());
+    }
 
     // v4.2: Detect starting locale focusing ONLY on the immediate first words.
     // This prevents a long Hebrew document from forcing English start-text into Hebrew STT.
@@ -362,7 +454,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         return;
       }
     } else {
-      final platform = _sttService.platformName;
+      final platform = _activeSttEngineLabel;
       final selectedMicId = settings.sttInputDeviceId.trim();
       final selectedMicLabel = settings.sttInputDeviceLabel.trim();
       _sttService.setAudioInputDevice(
@@ -375,10 +467,33 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _addDebugLog(selectedMicId.isEmpty
           ? '[$platform] Microphone: system default input'
           : '[$platform] Microphone: $selectedMicLabel');
-      final result = await _sttService.start(localeId: localeId);
+      var result = await _sttService.start(localeId: localeId);
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _sttService.stop();
         return;
+      }
+
+      if (!result.success &&
+          settings.sttEngine == AppSettings.sttEngineAuto &&
+          _sttService == _desktopSttService) {
+        _addDebugLog(
+          '[Windows Offline STT] unavailable for English, falling back to Browser Online STT.',
+        );
+        await _desktopSttService.stop();
+        _sttService = _browserSttService;
+        _activeSttCanSwitchLocale = true;
+        _activeSttEngineLabel = 'Browser Online STT';
+        _sttService.setAudioInputDevice(
+          selectedMicId.isEmpty ? null : selectedMicId,
+          label: selectedMicLabel.isEmpty
+              ? 'System default microphone'
+              : selectedMicLabel,
+        );
+        result = await _sttService.start(localeId: localeId);
+        if (_disposed || _sessionStopped || token != _sessionToken) {
+          await _sttService.stop();
+          return;
+        }
       }
 
       if (!result.success) {
@@ -459,7 +574,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     // Stop all engines - Whisper may have been auto-started via fallback.
     final stopFuture = Future.wait([
-      _sttService.stop(),
+      _browserSttService.stop(),
+      _desktopSttService.stop(),
       _whisperService.stop(),
     ]);
     _stopInFlight = stopFuture.then((_) {});

@@ -3,16 +3,10 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   Future<void> _importFile() async {
     final supportedExts = PlatformFileImport.supportedExtensions;
-    final settings = ref.read(settingsProvider);
-    final fallbackImportPath = settings.lastImportPath.isNotEmpty &&
-            Directory(settings.lastImportPath).existsSync()
-        ? settings.lastImportPath
-        : (Platform.environment['USERPROFILE'] ?? Directory.current.path);
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: 'Open script',
       type: FileType.custom,
       allowedExtensions: supportedExts,
-      initialDirectory: fallbackImportPath,
     );
     if (!mounted) return;
     final selectedPath = result?.files.single.path;
@@ -302,5 +296,43 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         _onSelectionChanged();
       }
     }
+  }
+
+  void _startContentCreator() async {
+    LightweightDiagnostics.instance.record(
+      'editor',
+      'content creator opened',
+      data: {
+        'title': _currentTitle,
+        'sessionId': _currentSessionId,
+        'blockCount': _controllers.length,
+      },
+    );
+    try {
+      final settings = ref.read(settingsProvider);
+      ref.read(scriptProvider.notifier).loadText(
+            _getRefinedFullTextWithoutBookmarkSigns(),
+            title: _currentTitle,
+            sourceType: _sourceType,
+            sessionId: _currentSessionId,
+            historyIndex: _historyIndex,
+            historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+            fontSize: settings.fontSize,
+            fontFamily: settings.fontFamily,
+            lineSpacing: settings.lineSpacing,
+            letterSpacing: settings.letterSpacing,
+            wordSpacing: settings.wordSpacing,
+            textAlign: settings.textAlign,
+            scriptBgColor: settings.scriptBgColor,
+            currentWordColor: settings.currentWordColor,
+            futureWordColor: settings.futureWordColor,
+          );
+    } catch (_) {}
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ContentCreatorScreen()),
+    );
+    if (!mounted) return;
+    _onSelectionChanged();
   }
 }

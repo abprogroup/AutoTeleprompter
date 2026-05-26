@@ -118,6 +118,25 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setString(_displayNameKey, name);
   }
 
+  Future<void> seedDisplayNameFromEmail(String email) async {
+    final prefix = email.split('@').first.trim();
+    if (prefix.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final savedName = (prefs.getString(_displayNameKey) ?? '').trim();
+    final effectiveName =
+        savedName.isNotEmpty ? savedName : state.displayName.trim();
+    if (effectiveName.isNotEmpty && effectiveName.toLowerCase() != 'guest') {
+      if (state.displayName != effectiveName) {
+        state = state.copyWith(displayName: effectiveName);
+      }
+      return;
+    }
+
+    state = state.copyWith(displayName: prefix);
+    await prefs.setString(_displayNameKey, prefix);
+  }
+
   Future<void> setLastChosenTextColor(int color) async {
     state = state.copyWith(lastTextColor: color);
     final prefs = await SharedPreferences.getInstance();

@@ -33,7 +33,7 @@ class SttDesktopAdapter extends AbstractSttService {
   bool get isListening => _inner.isListening;
 
   @override
-  String get platformName => 'Windows';
+  String get platformName => 'Windows Offline';
 
   @override
   bool get requiresImmediateListeningFlag => false;

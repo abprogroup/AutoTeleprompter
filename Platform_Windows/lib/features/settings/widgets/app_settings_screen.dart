@@ -13,8 +13,19 @@ import 'cloud_sync_screen.dart';
 
 part 'app_settings_screen.tiles.dart';
 
+enum AppSettingsTab { general, account, remote, editor, present }
+
+extension AppSettingsTabIndex on AppSettingsTab {
+  int get index => AppSettingsTab.values.indexOf(this);
+}
+
 class AppSettingsScreen extends ConsumerStatefulWidget {
-  const AppSettingsScreen({super.key});
+  final AppSettingsTab initialTab;
+
+  const AppSettingsScreen({
+    super.key,
+    this.initialTab = AppSettingsTab.general,
+  });
 
   @override
   ConsumerState<AppSettingsScreen> createState() => _AppSettingsScreenState();
@@ -36,132 +47,207 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
-    final remote =
-        Platform.isWindows ? ref.read(remoteControlProvider) : null;
+    final remote = Platform.isWindows ? ref.read(remoteControlProvider) : null;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
-      appBar: AppBar(
-        title: Text('Settings',
-            style: GoogleFonts.bebasNeue(fontSize: 24, letterSpacing: 1.5)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Profile
-          const _SectionHeader(title: 'PROFILE'),
-          const SizedBox(height: 8),
-          _SettingsTile(
-            icon: Icons.person_outline,
-            title: 'Display Name',
-            subtitle: settings.displayName,
-            onTap: () => _editDisplayName(context),
+    return DefaultTabController(
+      length: AppSettingsTab.values.length,
+      initialIndex: widget.initialTab.index,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0A0A),
+        appBar: AppBar(
+          title: Text(
+            'Settings',
+            style: GoogleFonts.bebasNeue(fontSize: 24, letterSpacing: 1.5),
           ),
-
-          if (Platform.isWindows) ...[
-            const SizedBox(height: 22),
-            const _SectionHeader(title: 'SPEECH INPUT'),
-            const SizedBox(height: 8),
-            _SpeechEngineTile(
-              value: settings.sttEngine,
-              onChanged: (engine) =>
-                  ref.read(settingsProvider.notifier).setSttEngine(engine),
-            ),
-            const SizedBox(height: 8),
-            _SettingsTile(
-              icon: Icons.mic_external_on_outlined,
-              title: 'Preferred Microphone',
-              subtitle: settings.sttInputDeviceId.isEmpty
-                  ? 'System default microphone'
-                  : settings.sttInputDeviceLabel,
-              onTap: settings.sttInputDeviceId.isEmpty
-                  ? null
-                  : () => ref
-                      .read(settingsProvider.notifier)
-                      .setSttInputDevice('', 'System default microphone'),
-            ),
-            const SizedBox(height: 8),
-            _SettingsTile(
-              icon: Icons.settings_input_component_outlined,
-              title: 'Windows Input Settings',
-              subtitle: 'Choose or test the default external mic',
-              onTap: () =>
-                  Process.run('cmd', ['/c', 'start', 'ms-settings:sound']),
-            ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          bottom: const TabBar(
+            isScrollable: true,
+            labelColor: Color(0xFFFFBF00),
+            unselectedLabelColor: Colors.white54,
+            indicatorColor: Color(0xFFFFBF00),
+            tabs: [
+              Tab(icon: Icon(Icons.tune_rounded), text: 'General'),
+              Tab(icon: Icon(Icons.person_outline), text: 'Account'),
+              Tab(icon: Icon(Icons.settings_remote_outlined), text: 'Remote'),
+              Tab(icon: Icon(Icons.edit_note_rounded), text: 'Editor'),
+              Tab(icon: Icon(Icons.present_to_all_rounded), text: 'Present'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _settingsList(_generalTab(settings)),
+            _settingsList(_accountTab(settings)),
+            _settingsList(_remoteTab(remote)),
+            _settingsList(_editorTab()),
+            _settingsList(_presentTab(settings)),
           ],
-          const SizedBox(height: 22),
-          const _SectionHeader(title: 'DIAGNOSTICS'),
-          const SizedBox(height: 8),
-          _SettingsSwitchTile(
-            icon: Icons.bug_report_outlined,
-            title: 'Debug Mode',
-            subtitle: settings.debugMode
-                ? 'Detailed logs and trace tools are visible'
-                : 'Normal mode: heavy debug traces stay off',
-            value: settings.debugMode,
-            onChanged: (_) =>
-                ref.read(settingsProvider.notifier).toggleDebugMode(),
-          ),
-
-          if (Platform.isWindows && remote != null) ...[
-            const SizedBox(height: 22),
-            const _SectionHeader(title: 'REMOTE CONTROL'),
-            const SizedBox(height: 8),
-            _RemoteControlTile(
-              isRunning: remote.isRunning,
-              isBusy: _remoteBusy,
-              url: _remoteUrl ?? remote.localUrl,
-              error: _remoteError,
-              onStart: _startRemote,
-              onStop: _stopRemote,
-              onCopy: _copyRemoteUrl,
-              onOpen: _openRemoteUrl,
-            ),
-          ],
-
-          const SizedBox(height: 22),
-          const _SectionHeader(title: 'CLOUD SYNC'),
-          const SizedBox(height: 8),
-          _SettingsTile(
-            icon: Icons.cloud_sync_outlined,
-            title: 'Cloud Sync',
-            subtitle: 'Coming soon: connect storage and sync scripts',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
-            ),
-          ),
-
-          const SizedBox(height: 22),
-          const _SectionHeader(title: 'BETA FEEDBACK'),
-          const SizedBox(height: 8),
-          _SettingsTile(
-            icon: Icons.bug_report_outlined,
-            title: 'Send Feedback',
-            subtitle: 'Includes full active script and diagnostics',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _SettingsTile(
-            icon: Icons.privacy_tip_outlined,
-            title: 'Beta Privacy Consent',
-            subtitle: 'Review device key, policy version, and consent status',
-            onTap: () => _showBetaConsentDetails(context),
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  Widget _settingsList(List<Widget> children) {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: children,
+    );
+  }
+
+  List<Widget> _generalTab(AppSettings settings) {
+    return [
+      const _SectionHeader(title: 'DIAGNOSTICS'),
+      const SizedBox(height: 8),
+      _SettingsSwitchTile(
+        icon: Icons.bug_report_outlined,
+        title: 'Debug Mode',
+        subtitle: settings.debugMode
+            ? 'Detailed logs and trace tools are visible'
+            : 'Normal mode: heavy debug traces stay off',
+        value: settings.debugMode,
+        onChanged: (_) => ref.read(settingsProvider.notifier).toggleDebugMode(),
+      ),
+      const SizedBox(height: 22),
+      const _SectionHeader(title: 'CLOUD SYNC'),
+      const SizedBox(height: 8),
+      _SettingsTile(
+        icon: Icons.cloud_sync_outlined,
+        title: 'Cloud Sync',
+        subtitle: 'Coming soon: connect storage and sync scripts',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
+        ),
+      ),
+      const SizedBox(height: 22),
+      const _SectionHeader(title: 'BETA FEEDBACK'),
+      const SizedBox(height: 8),
+      _SettingsTile(
+        icon: Icons.bug_report_outlined,
+        title: 'Send Feedback',
+        subtitle: 'Includes full active script and diagnostics',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _accountTab(AppSettings settings) {
+    return [
+      const _SectionHeader(title: 'PROFILE'),
+      const SizedBox(height: 8),
+      _SettingsTile(
+        icon: Icons.person_outline,
+        title: 'Display Name',
+        subtitle: settings.displayName,
+        onTap: () => _editDisplayName(context),
+      ),
+      const SizedBox(height: 22),
+      const _SectionHeader(title: 'BETA PRIVACY'),
+      const SizedBox(height: 8),
+      _SettingsTile(
+        icon: Icons.privacy_tip_outlined,
+        title: 'Beta Privacy Consent',
+        subtitle: 'Review device key, policy version, and consent status',
+        onTap: () => _showBetaConsentDetails(context),
+      ),
+    ];
+  }
+
+  List<Widget> _remoteTab(RemoteControlService? remote) {
+    if (!Platform.isWindows || remote == null) {
+      return const [
+        _SectionHeader(title: 'REMOTE CONTROL'),
+        SizedBox(height: 8),
+        _SettingsTile(
+          icon: Icons.settings_remote_outlined,
+          title: 'Local Remote Control',
+          subtitle: 'Available on Windows in this beta',
+        ),
+      ];
+    }
+
+    return [
+      const _SectionHeader(title: 'REMOTE CONTROL'),
+      const SizedBox(height: 8),
+      _RemoteControlTile(
+        isRunning: remote.isRunning,
+        isBusy: _remoteBusy,
+        url: _remoteUrl ?? remote.localUrl,
+        error: _remoteError,
+        onStart: _startRemote,
+        onStop: _stopRemote,
+        onCopy: _copyRemoteUrl,
+        onOpen: _openRemoteUrl,
+      ),
+    ];
+  }
+
+  List<Widget> _editorTab() {
+    return const [
+      _SectionHeader(title: 'EDITOR'),
+      SizedBox(height: 8),
+      _SettingsTile(
+        icon: Icons.edit_note_rounded,
+        title: 'Editor Tools',
+        subtitle: 'Text, layout, color, search, and selection tools live in '
+            'the editor toolbar.',
+      ),
+    ];
+  }
+
+  List<Widget> _presentTab(AppSettings settings) {
+    if (!Platform.isWindows) {
+      return const [
+        _SectionHeader(title: 'PRESENT MODE'),
+        SizedBox(height: 8),
+        _SettingsTile(
+          icon: Icons.present_to_all_rounded,
+          title: 'Presenter Settings',
+          subtitle: 'Presenter controls are available inside Present mode.',
+        ),
+      ];
+    }
+
+    return [
+      const _SectionHeader(title: 'SPEECH INPUT'),
+      const SizedBox(height: 8),
+      _SpeechEngineTile(
+        value: settings.sttEngine,
+        onChanged: (engine) =>
+            ref.read(settingsProvider.notifier).setSttEngine(engine),
+      ),
+      const SizedBox(height: 8),
+      _SettingsTile(
+        icon: Icons.mic_external_on_outlined,
+        title: 'Preferred Microphone',
+        subtitle: settings.sttInputDeviceId.isEmpty
+            ? 'System default microphone'
+            : settings.sttInputDeviceLabel,
+        onTap: settings.sttInputDeviceId.isEmpty
+            ? null
+            : () => ref
+                .read(settingsProvider.notifier)
+                .setSttInputDevice('', 'System default microphone'),
+      ),
+      const SizedBox(height: 8),
+      _SettingsTile(
+        icon: Icons.settings_input_component_outlined,
+        title: 'Windows Input Settings',
+        subtitle: 'Choose or test the default external mic',
+        onTap: () => Process.run('cmd', ['/c', 'start', 'ms-settings:sound']),
+      ),
+    ];
   }
 
   Future<void> _refreshRemoteUrl() async {
     if (!mounted || !Platform.isWindows) return;
     final remote = ref.read(remoteControlProvider);
-    final url = remote.isRunning ? await remote.preferredUrl() : remote.localUrl;
+    final url =
+        remote.isRunning ? await remote.preferredUrl() : remote.localUrl;
     if (!mounted) return;
     setState(() {
       _remoteUrl = url;

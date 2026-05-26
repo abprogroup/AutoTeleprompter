@@ -106,7 +106,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                     color: Colors.white54),
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const AppSettingsScreen(
+                      initialTab: AppSettingsTab.remote,
+                    ),
+                  ),
                 ),
               ),
             IconButton(
@@ -123,7 +127,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               icon: const Icon(Icons.settings_outlined, color: Colors.white54),
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const AppSettingsScreen(
+                    initialTab: AppSettingsTab.general,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 4),
@@ -188,7 +196,9 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                   onOpenSettings: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const AppSettingsScreen(),
+                      builder: (_) => const AppSettingsScreen(
+                        initialTab: AppSettingsTab.remote,
+                      ),
                     ),
                   ),
                 ),

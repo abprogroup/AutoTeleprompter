@@ -265,6 +265,38 @@ class MarkupController extends TextEditingController {
     return sb.toString();
   }
 
+  /// Returns the suffix at [rawOffset] as a standalone block while preserving
+  /// any styles that were active at the split point.
+  ///
+  /// Splitting a styled paragraph moves the suffix into a new independent
+  /// TextField block. The raw suffix may only contain closing tags, because
+  /// the matching opening tags lived earlier in the original block. Prefixing
+  /// the active opening tags keeps the surviving suffix visually styled.
+  static String suffixWithOpenTagContext(String text, int rawOffset) {
+    final offset = rawOffset.clamp(0, text.length).toInt();
+    if (offset <= 0) return text;
+    if (offset >= text.length) return '';
+    return openTagsAt(text, offset) + text.substring(offset);
+  }
+
+  /// Removes duplicated leading style-context tags before joining a split block
+  /// back onto the previous block.
+  ///
+  /// `suffixWithOpenTagContext` makes a split suffix visually correct as a
+  /// standalone TextField block. When Backspace removes that block boundary,
+  /// the previous block may already have the same tags active at its end. In
+  /// that case the copied prefix must be removed or tags such as `**` toggle
+  /// off at the join point.
+  static String stripRedundantLeadingOpenTagContext(
+    String text,
+    String activePrefix,
+  ) {
+    if (activePrefix.isEmpty || !text.startsWith(activePrefix)) {
+      return text;
+    }
+    return text.substring(activePrefix.length);
+  }
+
   static int rawToVisualOffset(String text, int rawOffset) {
     return MarkupDecorationParser.rawToVisibleOffset(text, rawOffset);
   }

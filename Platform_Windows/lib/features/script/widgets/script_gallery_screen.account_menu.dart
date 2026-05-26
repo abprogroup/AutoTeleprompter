@@ -19,7 +19,10 @@ class _AccountMenuButton extends ConsumerWidget {
     }
 
     final email = auth.email!.trim();
-    final initial = email.isEmpty ? 'A' : email.substring(0, 1).toUpperCase();
+    final settings = ref.watch(settingsProvider);
+    final displayName = _accountDisplayName(settings.displayName, email);
+    final initial =
+        displayName.isEmpty ? 'A' : displayName.characters.first.toUpperCase();
     final badge = auth.isAdmin
         ? 'Admin'
         : auth.isPro
@@ -46,7 +49,11 @@ class _AccountMenuButton extends ConsumerWidget {
         if (value == 'settings') {
           await Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+            MaterialPageRoute(
+              builder: (_) => const AppSettingsScreen(
+                initialTab: AppSettingsTab.account,
+              ),
+            ),
           );
         } else if (value == 'logout') {
           await ref.read(authProvider.notifier).logout();
@@ -64,12 +71,22 @@ class _AccountMenuButton extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                email,
+                displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                email,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
                 ),
               ),
               const SizedBox(height: 3),
@@ -100,6 +117,13 @@ class _AccountMenuButton extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  String _accountDisplayName(String savedName, String email) {
+    final name = savedName.trim();
+    if (name.isNotEmpty && name.toLowerCase() != 'guest') return name;
+    final prefix = email.split('@').first.trim();
+    return prefix.isEmpty ? 'Guest' : prefix;
   }
 }
 

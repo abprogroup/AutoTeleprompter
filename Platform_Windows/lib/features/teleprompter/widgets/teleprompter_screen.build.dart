@@ -74,6 +74,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         )
         .whereType<int>()
         .toSet();
+    final allowActiveManualScroll = settings.allowScrollDuringActiveSession &&
+        tState.isListening &&
+        !tState.isStarting;
 
     final wordList = _buildPresenterWordList(
       context: context,
@@ -113,7 +116,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
               },
               child: GestureDetector(
                 onTap: (Platform.isWindows &&
-                        (tState.isListening || tState.isStarting))
+                        (tState.isListening || tState.isStarting) &&
+                        !allowActiveManualScroll)
                     ? null
                     : _showControls,
                 child: Stack(
@@ -123,7 +127,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       onNotification: _handleStoppedBrowsingScroll,
                       child: SingleChildScrollView(
                         controller: _scrollController,
-                        physics: (tState.isListening || tState.isStarting)
+                        physics: ((tState.isListening || tState.isStarting) &&
+                                !allowActiveManualScroll)
                             ? const NeverScrollableScrollPhysics()
                             : const ClampingScrollPhysics(),
                         child: wordList,

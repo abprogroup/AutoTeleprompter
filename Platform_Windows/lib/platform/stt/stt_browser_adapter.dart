@@ -37,8 +37,7 @@ class SttBrowserAdapter extends AbstractSttService {
     _currentLocale = (localeId ?? 'en-US').replaceAll('_', '-');
     _sessionId++;
 
-    onDiagnostic
-        ?.call('[Browser STT] Starting local server on port $_port...');
+    onDiagnostic?.call('[Browser STT] Starting local server on port $_port...');
 
     await _stopServer();
 
@@ -47,7 +46,10 @@ class SttBrowserAdapter extends AbstractSttService {
     router.get('/', (Request req) {
       return Response.ok(
         _buildHtml(_currentLocale, _selectedAudioInputDeviceId),
-        headers: {'content-type': 'text/html; charset=utf-8'},
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+        },
       );
     });
 
@@ -91,8 +93,8 @@ class SttBrowserAdapter extends AbstractSttService {
                 if (!_everListened) {
                   _everListened = true;
                   onStatusChange?.call(SpeechStatus.listening);
-                  onDiagnostic?.call(
-                      '[Browser STT] Web Speech API active - speak now');
+                  onDiagnostic
+                      ?.call('[Browser STT] Web Speech API active - speak now');
                 }
                 break;
               case 'result':
@@ -117,11 +119,34 @@ class SttBrowserAdapter extends AbstractSttService {
               case 'watchdogRestart':
                 final reason = data['reason'] as String? ?? 'stale';
                 final ageMs = (data['ageMs'] as num?)?.toInt() ?? 0;
+                onRuntimeHealth?.call(SttRuntimeHealth(
+                  type: 'watchdogRestart',
+                  listening: true,
+                  locale: _currentLocale,
+                  ageMs: ageMs,
+                  failures: (data['failures'] as num?)?.toInt() ?? 0,
+                ));
                 onDiagnostic?.call(
                     '[Browser STT] Restarting recognizer after ${ageMs ~/ 1000}s without speech events ($reason)');
                 break;
+              case 'heartbeat':
+                onRuntimeHealth?.call(SttRuntimeHealth(
+                  type: 'heartbeat',
+                  listening: data['listening'] as bool? ?? false,
+                  locale: data['locale'] as String? ?? _currentLocale,
+                  ageMs: (data['ageMs'] as num?)?.toInt() ?? 0,
+                  failures: (data['failures'] as num?)?.toInt() ?? 0,
+                ));
+                break;
               case 'error':
                 final err = data['error'] as String? ?? 'unknown';
+                onRuntimeHealth?.call(SttRuntimeHealth(
+                  type: 'error',
+                  listening: _everListened,
+                  locale: _currentLocale,
+                  failures: err == 'network' ? 1 : 0,
+                  error: err,
+                ));
                 if (err == 'input-device-missing') {
                   onDiagnostic?.call(
                       '[Browser STT] Selected microphone unavailable; using system default.');
@@ -236,7 +261,7 @@ class SttBrowserAdapter extends AbstractSttService {
   bool get isListening => _isActive;
 
   @override
-  String get platformName => 'Windows';
+  String get platformName => 'Browser Online';
 
   /// URL loaded by the embedded WebviewController (the STT page itself).
   @override
@@ -280,7 +305,7 @@ class SttBrowserAdapter extends AbstractSttService {
 <div id="words">Ready for speech</div>
 <div id="err"></div>
 <script>
-const ws = new WebSocket('ws://localhost:$_port/ws');
+const ws = new WebSocket('ws://localhost:$_port/ws?session=$_sessionId');
 const dot = document.getElementById('dot');
 const status = document.getElementById('status');
 const words = document.getElementById('words');
@@ -492,7 +517,12 @@ function ensureWatchdog() {
     if(dotOn && lastSpeechEventAt > 0 && now - lastSpeechEventAt > 25000 &&
        now - lastStaleRestartAt > 30000) {
       lastStaleRestartAt = now;
-      send({type: 'watchdogRestart', reason: 'stale-speech-events', ageMs: now - lastSpeechEventAt});
+      send({
+        type: 'watchdogRestart',
+        reason: 'stale-speech-events',
+        ageMs: now - lastSpeechEventAt,
+        failures: consecutiveFails
+      });
       try { rec.abort(); } catch(e) {}
       scheduleRestart(250, 'watchdog-stale');
     }

@@ -46,8 +46,14 @@ class _SpeechEngineTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final normalizedValue = value == 'google' ? value : 'google';
-    final hasUnsupportedSavedValue = value != 'google';
+    final normalizedValue = {
+      AppSettings.sttEngineAuto,
+      AppSettings.sttEngineWindowsOffline,
+      AppSettings.sttEngineBrowserOnline,
+    }.contains(value)
+        ? value
+        : AppSettings.sttEngineAuto;
+    final hasUnsupportedSavedValue = value != normalizedValue;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -111,8 +117,16 @@ class _SpeechEngineTile extends StatelessWidget {
             ),
             items: const [
               DropdownMenuItem(
-                value: 'google',
-                child: Text('Online speech recognition'),
+                value: AppSettings.sttEngineAuto,
+                child: Text('Auto: offline English / online fallback'),
+              ),
+              DropdownMenuItem(
+                value: AppSettings.sttEngineWindowsOffline,
+                child: Text('Windows offline speech'),
+              ),
+              DropdownMenuItem(
+                value: AppSettings.sttEngineBrowserOnline,
+                child: Text('Online browser speech'),
               ),
             ],
             onChanged: (engine) {
@@ -124,17 +138,17 @@ class _SpeechEngineTile extends StatelessWidget {
             const SizedBox(height: 8),
             const Text(
               'Offline Whisper was saved in an older build, but it is not '
-              'enabled for this Windows beta. Online speech recognition will '
-              'be used until the Windows offline engine returns.',
+              'enabled for this Windows beta. Auto speech recognition will '
+              'be used instead.',
               style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
             ),
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: () => onChanged('google'),
+                onPressed: () => onChanged(AppSettings.sttEngineAuto),
                 icon: const Icon(Icons.restore, size: 16),
-                label: const Text('Use online engine'),
+                label: const Text('Use auto engine'),
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFFFFBF00),
                 ),

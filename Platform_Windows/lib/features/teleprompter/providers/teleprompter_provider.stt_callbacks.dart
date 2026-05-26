@@ -1,27 +1,37 @@
 part of 'teleprompter_provider.dart';
 
 extension TeleprompterSttCallbacks on TeleprompterNotifier {
-  void _setupSttCallbacks() {
-    final platform = _sttService.platformName;
+  void _setupSttCallbacks(AbstractSttService service) {
+    final platform = service.platformName;
 
-    _sttService.onResult = (result) {
-      if (_disposed || _sessionStopped) return;
+    service.onResult = (result) {
+      if (_disposed || _sessionStopped || service != _sttService) return;
       _handleSttResult(result);
     };
 
-    _sttService.onSoundLevelChange = (level) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+    service.onSoundLevelChange = (level) {
+      if (_useWhisper ||
+          _disposed ||
+          _sessionStopped ||
+          service != _sttService) {
+        return;
+      }
       _safeSetState((s) => s.copyWith(soundLevel: level.clamp(0.0, 1.0)));
       _lastVolLog = DateTime.now();
     };
 
-    _sttService.onDiagnostic = (msg) {
-      if (_disposed) return;
+    service.onDiagnostic = (msg) {
+      if (_disposed || service != _sttService) return;
       _addDebugLog(msg);
     };
 
-    _sttService.onAudioInputDevicesChanged = (devices) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+    service.onAudioInputDevicesChanged = (devices) {
+      if (_useWhisper ||
+          _disposed ||
+          _sessionStopped ||
+          service != _sttService) {
+        return;
+      }
       _safeSetState((s) => s.copyWith(audioInputDevices: devices));
 
       final selectedId = ref.read(settingsProvider).sttInputDeviceId;
@@ -41,15 +51,41 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
           'Selected microphone was not found; using system default input.');
     };
 
-    _sttService.onStatusChange = (status) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+    service.onRuntimeHealth = (health) {
+      if (_useWhisper ||
+          _disposed ||
+          _sessionStopped ||
+          service != _sttService) {
+        return;
+      }
+      if (health.type == 'heartbeat') {
+        _lastBrowserHeartbeatAt = DateTime.now();
+        if (health.failures <= 0) return;
+      }
+      if (health.error == 'network' || health.failures > 0) {
+        _lastRecoverableSttErrorAt = DateTime.now();
+        _recoverableSttErrorCount += health.failures <= 0 ? 1 : health.failures;
+        _addDebugLog(
+          '[${service.platformName}] health ${health.type}: '
+          'failures=$_recoverableSttErrorCount age=${health.ageMs}ms',
+        );
+      }
+    };
+
+    service.onStatusChange = (status) {
+      if (_useWhisper ||
+          _disposed ||
+          _sessionStopped ||
+          service != _sttService) {
+        return;
+      }
       if (_startingSession && status != SpeechStatus.listening) return;
       _startingSession = false;
-      _addDebugLog('[${_sttService.platformName}] STATUS: $status');
+      _addDebugLog('[${service.platformName}] STATUS: $status');
       LightweightDiagnostics.instance.record(
         'stt',
         'status changed',
-        data: {'platform': _sttService.platformName, 'status': '$status'},
+        data: {'platform': service.platformName, 'status': '$status'},
       );
       _safeSetState((s) => s.copyWith(
             isListening: status == SpeechStatus.listening,
@@ -59,13 +95,18 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
           ));
     };
 
-    _sttService.onError = (error) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('[${_sttService.platformName}] STT ERROR: $error');
+    service.onError = (error) {
+      if (_useWhisper ||
+          _disposed ||
+          _sessionStopped ||
+          service != _sttService) {
+        return;
+      }
+      _addDebugLog('[${service.platformName}] STT ERROR: $error');
       LightweightDiagnostics.instance.record(
         'stt',
         'STT error',
-        data: {'platform': _sttService.platformName, 'error': error},
+        data: {'platform': service.platformName, 'error': error},
       );
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
@@ -79,8 +120,13 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
           ));
     };
 
-    _sttService.onLanguageUnavailable = (requestedLocale) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+    service.onLanguageUnavailable = (requestedLocale) {
+      if (_useWhisper ||
+          _disposed ||
+          _sessionStopped ||
+          service != _sttService) {
+        return;
+      }
       final langName = SpeechStartResult.languageNameFromLocale(
         _scriptLanguageLocale ?? requestedLocale,
       );
@@ -95,8 +141,13 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
           ));
     };
 
-    _sttService.onNeedLanguagePack = (locale) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
+    service.onNeedLanguagePack = (locale) {
+      if (_useWhisper ||
+          _disposed ||
+          _sessionStopped ||
+          service != _sttService) {
+        return;
+      }
       final langName = SpeechStartResult.languageNameFromLocale(locale);
       _addDebugLog(
           '[$platform] ALL STT FAILED for $langName - internet required');

@@ -1,4 +1,22 @@
 class AppSettings {
+  static const String sttEngineAuto = 'windows_auto';
+  static const String sttEngineWindowsOffline = 'windows_offline';
+  static const String sttEngineBrowserOnline = 'browser_online';
+
+  static String normalizeSttEngine(String? engine) {
+    switch (engine) {
+      case sttEngineAuto:
+      case sttEngineWindowsOffline:
+      case sttEngineBrowserOnline:
+        return engine!;
+      case 'google':
+      case null:
+        return sttEngineAuto;
+      default:
+        return sttEngineAuto;
+    }
+  }
+
   final double fontSize;
   final String languageMode; // 'auto', 'he', 'en'
   final double scrollLead; // 0.2-0.5, viewport ratio for reading line
@@ -31,7 +49,8 @@ class AppSettings {
   final String fontFamily; // v3.9.5.46
   final bool
       showAlignmentOverride; // v3.9.8 toggle for presentation alignment override
-  final String sttEngine; // v4.0: 'google', 'whisper_base', 'whisper_small'
+  final String sttEngine; // Windows: auto/offline/browser, legacy 'google'
+  final bool allowScrollDuringActiveSession;
   final double
       readFadeIntensity; // v4.1: gradient fade for read text (0.0=off, 1.0=full)
   final String
@@ -86,7 +105,8 @@ class AppSettings {
     this.showUpcomingWordColor = false,
     this.fontFamily = 'Inter',
     this.showAlignmentOverride = false,
-    this.sttEngine = 'google',
+    this.sttEngine = sttEngineAuto,
+    this.allowScrollDuringActiveSession = false,
     this.readFadeIntensity = 1.0,
     this.sttInputDeviceId = '',
     this.sttInputDeviceLabel = 'System default microphone',
@@ -136,6 +156,7 @@ class AppSettings {
     String? fontFamily,
     bool? showAlignmentOverride,
     String? sttEngine,
+    bool? allowScrollDuringActiveSession,
     double? readFadeIntensity,
     String? sttInputDeviceId,
     String? sttInputDeviceLabel,
@@ -187,6 +208,8 @@ class AppSettings {
       showAlignmentOverride:
           showAlignmentOverride ?? this.showAlignmentOverride,
       sttEngine: sttEngine ?? this.sttEngine,
+      allowScrollDuringActiveSession:
+          allowScrollDuringActiveSession ?? this.allowScrollDuringActiveSession,
       readFadeIntensity: readFadeIntensity ?? this.readFadeIntensity,
       sttInputDeviceId: sttInputDeviceId ?? this.sttInputDeviceId,
       sttInputDeviceLabel: sttInputDeviceLabel ?? this.sttInputDeviceLabel,

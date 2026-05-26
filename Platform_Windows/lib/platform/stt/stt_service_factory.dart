@@ -3,6 +3,7 @@ import 'abstract_stt_service.dart';
 import 'stt_android_adapter.dart';
 import 'stt_apple_adapter.dart';
 import 'stt_browser_adapter.dart';
+import 'stt_desktop_adapter.dart';
 
 /// Creates the correct [AbstractSttService] implementation for the
 /// current runtime platform.
@@ -28,4 +29,8 @@ class SttServiceFactory {
     // Windows: WebView2/Web Speech supports Hebrew and browser audio inputs.
     return SttBrowserAdapter();
   }
+
+  static AbstractSttService createWindowsBrowser() => SttBrowserAdapter();
+
+  static AbstractSttService createWindowsDesktop() => SttDesktopAdapter();
 }

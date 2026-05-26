@@ -12,12 +12,15 @@ class _ControlBar extends ConsumerWidget {
   final VoidCallback onStop;
   final VoidCallback onReset;
   final VoidCallback onBack;
+  final VoidCallback onEditCurrentPosition;
   final VoidCallback onSettings;
   final VoidCallback onAddBookmark;
   final VoidCallback onRemoveBookmark;
   final VoidCallback onPreviousBookmark;
   final VoidCallback onNextBookmark;
   final VoidCallback onSearch;
+  final bool isFullscreen;
+  final VoidCallback onToggleFullscreen;
   final ValueChanged<double> onFontSizeChanged;
 
   const _ControlBar({
@@ -32,12 +35,15 @@ class _ControlBar extends ConsumerWidget {
     required this.onStop,
     required this.onReset,
     required this.onBack,
+    required this.onEditCurrentPosition,
     required this.onSettings,
     required this.onAddBookmark,
     required this.onRemoveBookmark,
     required this.onPreviousBookmark,
     required this.onNextBookmark,
     required this.onSearch,
+    required this.isFullscreen,
+    required this.onToggleFullscreen,
     required this.onFontSizeChanged,
   });
 
@@ -78,6 +84,11 @@ class _ControlBar extends ConsumerWidget {
               icon: const Icon(Icons.arrow_back, color: Colors.white70),
               onPressed: onBack,
               tooltip: 'Back to editor',
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit_note, color: Colors.white70),
+              onPressed: onEditCurrentPosition,
+              tooltip: 'Edit current position',
             ),
             IconButton(
               icon: const Icon(Icons.skip_previous, color: Colors.white70),
@@ -141,6 +152,15 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.tune, color: Colors.white70),
               onPressed: onSettings,
+              tooltip: 'Presenter settings',
+            ),
+            IconButton(
+              icon: Icon(
+                isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                color: Colors.white70,
+              ),
+              onPressed: onToggleFullscreen,
+              tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
             ),
             IconButton(
               icon: const Icon(Icons.skip_next, color: Colors.white70),

@@ -6,7 +6,6 @@ class _EditorBlock extends StatelessWidget {
   final AppSettings settings;
   final bool isGlobalSelected;
   final bool? inheritedRtl;
-  final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
@@ -25,7 +24,6 @@ class _EditorBlock extends StatelessWidget {
     required this.settings,
     required this.isGlobalSelected,
     this.inheritedRtl,
-    required this.onSubmitted,
     required this.onTap,
     required this.onSelectAll,
     required this.onCopy,
@@ -251,7 +249,6 @@ class _EditorBlock extends StatelessWidget {
                         _AppSelectionReplacementFormatter(controller),
                       ],
                       maxLines: null,
-                      onSubmitted: (_) => onSubmitted(),
                       onTap: onTap,
                       textDirection: textDirection,
                       textAlign: textAlign,
@@ -344,6 +341,9 @@ class _AppSelectionReplacementFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
+    if (newValue.text.contains('\n')) {
+      return oldValue;
+    }
     final external = controller.externalSelection;
     if (external == null ||
         !external.isValid ||
@@ -356,8 +356,11 @@ class _AppSelectionReplacementFormatter extends TextInputFormatter {
     final start = external.start.clamp(0, oldValue.text.length).toInt();
     final end = external.end.clamp(start, oldValue.text.length).toInt();
     if (end <= start) return newValue;
+    final suffixPrefix =
+        start == 0 ? MarkupController.openTagsAt(oldValue.text, end) : '';
     final text = oldValue.text.substring(0, start) +
         replacement +
+        suffixPrefix +
         oldValue.text.substring(end);
     final caret = start + replacement.length;
     return TextEditingValue(

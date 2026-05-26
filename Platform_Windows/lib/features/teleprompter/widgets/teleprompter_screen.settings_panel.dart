@@ -127,6 +127,48 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
 
           if (Platform.isWindows) ...[
             const _WindowsSpeechSettingsSection(),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.pan_tool_alt_outlined,
+                      color: Color(settings.currentWordColor), size: 22),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Allow manual scrolling while listening',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'A technician can wheel or drag the script during speech recognition; release scrolling to resume from the reading line.',
+                          style: TextStyle(color: Colors.white54, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch.adaptive(
+                    value: settings.allowScrollDuringActiveSession,
+                    thumbColor: WidgetStatePropertyAll<Color>(
+                        Color(settings.currentWordColor)),
+                    onChanged: notifier.setAllowScrollDuringActiveSession,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
           ],
 
           if (settings.scrollMode == 'manual') ...[

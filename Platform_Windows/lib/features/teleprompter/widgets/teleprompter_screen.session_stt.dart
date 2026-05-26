@@ -54,6 +54,10 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     final isSearchShortcut = event.logicalKey == LogicalKeyboardKey.keyF &&
         keyboard.isShiftPressed &&
         (keyboard.isControlPressed || keyboard.isMetaPressed);
+    if (event.logicalKey == LogicalKeyboardKey.escape && _presenterFullscreen) {
+      Future.microtask(() => _setPresenterFullscreen(false));
+      return true;
+    }
     if (!isSearchShortcut) return false;
     Future.microtask(_showSearchDialog);
     return true;
@@ -73,8 +77,36 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     } else {
       _closingPresentation = true;
     }
+    await _setPresenterFullscreen(false);
     await _stopPresentationSession();
     if (mounted) navigator.pop(returnWordIndex);
+  }
+
+  Future<void> _editCurrentPresenterPosition() async {
+    await _exitPresentation();
+  }
+
+  Future<void> _togglePresenterFullscreen() async {
+    await _setPresenterFullscreen(!_presenterFullscreen);
+    _showWindowsControlsFromHotZone();
+  }
+
+  Future<void> _setPresenterFullscreen(bool enabled) async {
+    if (!Platform.isWindows && enabled == _presenterFullscreen) return;
+    try {
+      final applied = await PresenterFullscreenService.setEnabled(enabled);
+      if (!mounted) {
+        _presenterFullscreen = applied;
+        return;
+      }
+      _setTeleprompterState(() => _presenterFullscreen = applied);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fullscreen is unavailable.')),
+        );
+      }
+    }
   }
 
   Future<void> _initWebViewController() async {

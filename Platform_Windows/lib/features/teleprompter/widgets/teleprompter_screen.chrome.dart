@@ -58,12 +58,15 @@ extension _TeleprompterChromeParts on _TeleprompterScreenState {
                 onBack: () {
                   _exitPresentation();
                 },
+                onEditCurrentPosition: _editCurrentPresenterPosition,
                 onSettings: _showSettings,
                 onAddBookmark: _addPresenterBookmark,
                 onRemoveBookmark: _deletePresenterBookmarkAtCurrentPosition,
                 onPreviousBookmark: () => _jumpPresenterBookmark(-1),
                 onNextBookmark: () => _jumpPresenterBookmark(1),
                 onSearch: _showSearchDialog,
+                isFullscreen: _presenterFullscreen,
+                onToggleFullscreen: _togglePresenterFullscreen,
                 onFontSizeChanged: _preserveReadingPositionAfterLayoutChange,
               ),
             ],

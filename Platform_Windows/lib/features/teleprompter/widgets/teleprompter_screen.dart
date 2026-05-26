@@ -19,6 +19,7 @@ import '../../script/models/script_word.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/services/remote_control_service.dart';
+import '../../../core/window/presenter_fullscreen_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
 
@@ -90,6 +91,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _visibleWindowSyncScheduled = false;
   DateTime? _lastVisibleWindowSync;
   bool _windowsControlsHovering = false;
+  bool _presenterFullscreen = false;
 
   @override
   void initState() {
@@ -146,6 +148,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     HardwareKeyboard.instance.removeHandler(_handlePresentationKey);
     ref.read(teleprompterProvider.notifier).stopSession();
     WakelockPlus.disable();
+    if (_presenterFullscreen) {
+      unawaited(PresenterFullscreenService.setEnabled(false));
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     _manualScrollTimer?.cancel();

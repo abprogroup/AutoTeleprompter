@@ -47,15 +47,14 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
           onSettings: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+              MaterialPageRoute(
+                builder: (_) => const AppSettingsScreen(
+                  initialTab: AppSettingsTab.editor,
+                ),
+              ),
             );
           },
-          onRecord: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ContentCreatorScreen()),
-            );
-          },
+          onRecord: null,
           onAddBookmark: _addEditorBookmark,
           onRemoveBookmark: () =>
               unawaited(_deleteEditorBookmarkAtCurrentPosition()),
@@ -360,7 +359,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                       isGlobalSelected: _isGlobalSelection,
                                       inheritedRtl:
                                           _editorBlockResolvedRtl(index),
-                                      onSubmitted: () => _addBlock(index + 1),
                                       onTap: () {
                                         _verticalArrowPreferredX = null;
                                         // Secondary safety, though Listener should handle it

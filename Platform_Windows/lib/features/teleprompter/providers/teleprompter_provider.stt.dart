@@ -41,6 +41,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     } catch (_) {}
 
     _accumulatedTranscript = result.words;
+    final alignmentTranscript = _recentTranscriptWindow(_accumulatedTranscript);
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
     final policy = TeleprompterNotifier.recognitionPolicyForSettings(settings);
@@ -54,7 +55,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
     final aligned = WordAligner.align(
       script: script.words,
-      transcript: _accumulatedTranscript,
+      transcript: alignmentTranscript,
       lastConfirmedIndex: _currentState.confirmedWordIndex,
       visibleSkipStartIndex:
           maxSkipTargetIndex == null ? null : _visibleWordStart,
@@ -79,12 +80,12 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       _sttReadingStandby = true;
       _noProgressCount = 0;
       _addDebugLog(
-          '$engineTag STANDBY LOCK | ${aligned.debugInfo} | heard: "${result.words}"');
+          '$engineTag STANDBY LOCK | ${aligned.debugInfo} | heard: "$alignmentTranscript"');
       LightweightDiagnostics.instance.record(
         'stt',
         'standby lock',
         data: {
-          'heard': result.words,
+          'heard': alignmentTranscript,
           'position': _currentState.confirmedWordIndex,
           'confidence': aligned.confidence,
         },
@@ -112,7 +113,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       final advancedWord =
           target < script.words.length ? script.words[target].raw : '?';
       _addDebugLog(
-          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
+          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "$alignmentTranscript"');
       LightweightDiagnostics.instance.record(
         'stt',
         'advanced',
@@ -121,7 +122,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
           'to': target,
           'word': advancedWord,
           'confidence': aligned.confidence,
-          'heard': result.words,
+          'heard': alignmentTranscript,
         },
       );
 
@@ -154,20 +155,20 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       );
       if (improvising) {
         _addDebugLog(
-            '$engineTag IMPROVISING | heard: "${result.words}" | visible relock waiting');
+            '$engineTag IMPROVISING | heard: "$alignmentTranscript" | visible relock waiting');
         LightweightDiagnostics.instance.record(
           'stt',
           'improvising',
-          data: {'heard': result.words, 'position': currentIdx},
+          data: {'heard': alignmentTranscript, 'position': currentIdx},
         );
       } else {
         _addDebugLog(
-            '$engineTag WAIT #$_noProgressCount | heard: "${result.words}" | next: "$nextExpected"');
+            '$engineTag WAIT #$_noProgressCount | heard: "$alignmentTranscript" | next: "$nextExpected"');
         LightweightDiagnostics.instance.record(
           'stt',
           'waiting',
           data: {
-            'heard': result.words,
+            'heard': alignmentTranscript,
             'next': nextExpected,
             'position': currentIdx,
             'stuckCount': _noProgressCount,
@@ -176,7 +177,35 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         _checkAndSwitchLocale();
       }
 
-      if (_maybeAssistVisibleLocale(script, policy, result.words)) {
+      final relockTarget = _relockTargetFromTranscript(
+        script,
+        alignmentTranscript,
+      );
+      if (relockTarget != null &&
+          relockTarget > _currentState.confirmedWordIndex) {
+        final relockedWord = script.words[relockTarget].raw;
+        _addDebugLog(
+          '$engineTag RELOCK -> #$relockTarget "$relockedWord" | heard: "$alignmentTranscript"',
+        );
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'relocked',
+          data: {
+            'from': _currentState.confirmedWordIndex,
+            'to': relockTarget,
+            'word': relockedWord,
+            'heard': alignmentTranscript,
+          },
+        );
+        _noProgressCount = 0;
+        _sttReadingStandby = true;
+        _fluidAdvanceTimer?.cancel();
+        _safeSetState((s) => s.copyWith(confirmedWordIndex: relockTarget));
+        _syncLocaleForPosition(script, relockTarget + 1, reason: 'relock');
+        return;
+      }
+
+      if (_maybeAssistVisibleLocale(script, policy, alignmentTranscript)) {
         return;
       }
     }
@@ -254,6 +283,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
   bool _switchLocaleIfNeeded(String locale, {required String reason}) {
     if (_useWhisper || _disposed || _sessionStopped) return false;
+    if (!_activeSttCanSwitchLocale) return false;
     if (locale == _activeLocale && locale == _scriptLanguageLocale) {
       return false;
     }

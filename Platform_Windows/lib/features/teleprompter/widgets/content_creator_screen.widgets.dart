@@ -2,6 +2,28 @@ part of 'content_creator_screen.dart';
 
 extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
   Widget _buildReadingSurfaceLayer() {
+    final settings = ref.watch(settingsProvider);
+    if (settings.contentCreatorFeedMode ==
+        AppSettings.contentCreatorFeedBubble) {
+      return const Positioned.fill(child: SizedBox.shrink());
+    }
+    final preset = settings.contentCreatorLayoutPreset;
+    final topAlpha = switch (preset) {
+      AppSettings.contentCreatorLayoutCamera => 0.40,
+      AppSettings.contentCreatorLayoutBalanced => 0.52,
+      _ => 0.64,
+    };
+    final midAlpha = switch (preset) {
+      AppSettings.contentCreatorLayoutCamera => 0.22,
+      AppSettings.contentCreatorLayoutBalanced => 0.34,
+      _ => 0.48,
+    };
+    final lowerAlpha = switch (preset) {
+      AppSettings.contentCreatorLayoutCamera => 0.04,
+      AppSettings.contentCreatorLayoutBalanced => 0.08,
+      _ => 0.14,
+    };
+    final lead = settings.scrollLead.clamp(0.18, 0.42).toDouble();
     return Positioned.fill(
       child: IgnorePointer(
         child: DecoratedBox(
@@ -10,14 +32,19 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Colors.black.withValues(alpha: 0.99),
-                Colors.black.withValues(alpha: 0.99),
-                Colors.black.withValues(alpha: 0.96),
-                Colors.black.withValues(alpha: 0.76),
-                Colors.black.withValues(alpha: 0.36),
-                Colors.transparent,
+                Colors.black.withValues(alpha: topAlpha),
+                Colors.black.withValues(alpha: topAlpha),
+                Colors.black.withValues(alpha: midAlpha),
+                Colors.black.withValues(alpha: lowerAlpha),
+                Colors.black.withValues(alpha: 0.04),
               ],
-              stops: const [0.0, 0.44, 0.62, 0.74, 0.86, 1.0],
+              stops: [
+                0.0,
+                (lead + 0.10).clamp(0.0, 1.0),
+                (lead + 0.28).clamp(0.0, 1.0),
+                0.82,
+                1.0,
+              ],
             ),
           ),
         ),
@@ -26,49 +53,250 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
   }
 
   Widget _buildCameraBackgroundLayer() {
-    final height = MediaQuery.sizeOf(context).height;
-    final feedHeight = (height * 0.42).clamp(280.0, height * 0.50);
+    final settings = ref.watch(settingsProvider);
+    if (settings.contentCreatorFeedMode ==
+        AppSettings.contentCreatorFeedBubble) {
+      return Positioned.fill(
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: Color(settings.scriptBgColor)),
+        ),
+      );
+    }
+    return Positioned.fill(
+      child: _isInit ? _buildFadedCameraPreviewLayer() : _buildCameraFallback(),
+    );
+  }
+
+  Widget _buildCameraPreviewEntry(AppSettings settings) {
     return Stack(
-      fit: StackFit.expand,
       children: [
-        const ColoredBox(color: Colors.black),
+        Positioned.fill(
+          child:
+              _isInit ? _buildCameraPreviewBackdrop() : _buildCameraFallback(),
+        ),
+        Positioned(
+          left: 24,
+          top: 24,
+          child: SafeArea(
+            child: _previewPillButton(
+              icon: Icons.arrow_back,
+              label: 'Back',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ),
         Positioned(
           left: 0,
           right: 0,
-          bottom: 0,
-          height: feedHeight,
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Color(0x33FFBF00), width: 1),
-              ),
+          bottom: 28,
+          child: SafeArea(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _previewPillButton(
+                  icon: Icons.photo_camera_outlined,
+                  label: 'Camera settings',
+                  onPressed: _showContentCreatorSettings,
+                ),
+                const SizedBox(width: 14),
+                _previewPillButton(
+                  icon: Icons.check_circle_outline,
+                  label: 'Confirm frame',
+                  emphasized: true,
+                  onPressed: _isInit ? _confirmContentFrame : null,
+                ),
+              ],
             ),
-            child: _isInit
-                ? _buildFadedCameraPreviewLayer()
-                : _buildCameraFallback(),
           ),
         ),
       ],
     );
   }
 
+  Widget _previewPillButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    bool emphasized = false,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: emphasized ? const Color(0xFFFFBF00) : Colors.black87,
+        foregroundColor: emphasized ? Colors.black : Colors.white,
+        disabledBackgroundColor: Colors.black45,
+        disabledForegroundColor: Colors.white38,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999),
+          side: BorderSide(
+            color: emphasized ? const Color(0xFFFFBF00) : Colors.white24,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCameraPreviewBackdrop() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Opacity(
+          opacity: 0.56,
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: _buildCameraPreviewFit(BoxFit.cover),
+          ),
+        ),
+        _buildCameraPreviewFit(BoxFit.contain),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              radius: 0.95,
+              colors: [
+                Colors.transparent,
+                Colors.black.withValues(alpha: 0.22),
+                Colors.black.withValues(alpha: 0.58),
+              ],
+              stops: const [0.48, 0.78, 1.0],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContentPresenterStage({
+    required AppSettings settings,
+    required Widget child,
+  }) {
+    final quarterTurns = ((settings.flipRotation ~/ 90) % 4 + 4) % 4;
+    if (quarterTurns == 0) return Positioned.fill(child: child);
+    if (quarterTurns.isEven) {
+      return Positioned.fill(
+        child: ClipRect(
+          child: RotatedBox(
+            quarterTurns: quarterTurns,
+            child: child,
+          ),
+        ),
+      );
+    }
+    final size = MediaQuery.sizeOf(context);
+    return Positioned.fill(
+      child: ClipRect(
+        child: Center(
+          child: SizedBox(
+            width: size.height,
+            height: size.width,
+            child: RotatedBox(
+              quarterTurns: quarterTurns,
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContentReadFadeOverlay(AppSettings settings) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final center = (settings.scrollLead + 0.05).clamp(0.0, 1.0).toDouble();
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      height: screenHeight,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withValues(alpha: settings.readFadeIntensity),
+                Colors.black.withValues(
+                  alpha: settings.readFadeIntensity * 0.56,
+                ),
+                Colors.transparent,
+                Colors.transparent,
+              ],
+              stops: [
+                0.0,
+                (center - 0.16).clamp(0.0, 1.0).toDouble(),
+                center,
+                1.0,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContentReadingLine(AppSettings settings) {
+    final size = MediaQuery.sizeOf(context);
+    final color = Color(settings.currentWordColor);
+    final decoration = BoxDecoration(
+      color: color.withValues(alpha: 0.46),
+      boxShadow: [
+        BoxShadow(
+          color: color.withValues(alpha: 0.22),
+          blurRadius: 8,
+        ),
+      ],
+    );
+    if (_contentUsesVerticalReadingLine(settings)) {
+      final x = _contentReadingLineCoordinate(settings, size);
+      return Positioned(
+        left: x - 1.0,
+        top: 0,
+        bottom: 0,
+        child: IgnorePointer(
+          child: Container(width: 2, decoration: decoration),
+        ),
+      );
+    }
+    final y = _contentReadingLineCoordinate(settings, size);
+    return Positioned(
+      top: y - 1.0,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Container(height: 2, decoration: decoration),
+      ),
+    );
+  }
+
   Widget _buildFadedCameraPreviewLayer() {
+    final settings = ref.watch(settingsProvider);
+    final opacity = switch (settings.contentCreatorLayoutPreset) {
+      AppSettings.contentCreatorLayoutCamera =>
+        (settings.contentCreatorCameraOpacity + 0.10).clamp(0.45, 1.0),
+      AppSettings.contentCreatorLayoutBalanced =>
+        settings.contentCreatorCameraOpacity.clamp(0.35, 1.0),
+      _ => (settings.contentCreatorCameraOpacity * 0.78).clamp(0.28, 0.82),
+    }
+        .toDouble();
     return IgnorePointer(
       child: Stack(
         fit: StackFit.expand,
         children: [
           Opacity(
-            opacity: 0.72,
-            child: ClipRect(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _cameraController!.value.previewSize!.height,
-                  height: _cameraController!.value.previewSize!.width,
-                  child: CameraPreview(_cameraController!),
-                ),
+            opacity: 0.34,
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(
+                sigmaX: settings.contentCreatorFeedBlur,
+                sigmaY: settings.contentCreatorFeedBlur,
               ),
+              child: _buildCameraPreviewFit(BoxFit.cover),
             ),
+          ),
+          Opacity(
+            opacity: opacity,
+            child: _buildCameraPreviewFit(BoxFit.contain),
           ),
           DecoratedBox(
             decoration: BoxDecoration(
@@ -76,13 +304,17 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 1.0),
-                  Colors.black.withValues(alpha: 0.58),
-                  Colors.black.withValues(alpha: 0.24),
-                  Colors.black.withValues(alpha: 0.26),
-                  Colors.black.withValues(alpha: 0.72),
+                  Colors.black.withValues(
+                    alpha: settings.contentCreatorTextScrim,
+                  ),
+                  Colors.black.withValues(
+                    alpha: settings.contentCreatorTextScrim * 0.42,
+                  ),
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.18),
+                  Colors.black.withValues(alpha: 0.62),
                 ],
-                stops: const [0.0, 0.16, 0.42, 0.72, 1.0],
+                stops: const [0.0, 0.22, 0.50, 0.78, 1.0],
               ),
             ),
           ),
@@ -93,8 +325,12 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
                 radius: 0.92,
                 colors: [
                   Colors.transparent,
-                  Colors.black.withValues(alpha: 0.30),
-                  Colors.black.withValues(alpha: 0.78),
+                  Colors.black.withValues(
+                    alpha: settings.contentCreatorVignetteIntensity * 0.45,
+                  ),
+                  Colors.black.withValues(
+                    alpha: settings.contentCreatorVignetteIntensity,
+                  ),
                 ],
                 stops: const [0.35, 0.74, 1.0],
               ),
@@ -104,9 +340,129 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
             painter: _LensHUDPainter(),
             child: Container(),
           ),
-          if (_isRecording) _buildRecordingTimerHud(),
-          if (_countdown > 0) _buildCountdownOverlay(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCameraBubble(AppSettings settings) {
+    final size = MediaQuery.sizeOf(context);
+    final shape = settings.contentCreatorBubbleShape;
+    final isCircle = shape == AppSettings.contentCreatorBubbleShapeCircle;
+    final isTriangle = shape == AppSettings.contentCreatorBubbleShapeTriangle;
+    final shortestSide = size.shortestSide;
+    final width = isCircle || isTriangle
+        ? (shortestSide * settings.contentCreatorBubbleSize)
+            .clamp(56.0, shortestSide * 0.82)
+            .toDouble()
+        : (size.width * settings.contentCreatorBubbleSize)
+            .clamp(64.0, size.width * 0.56)
+            .toDouble();
+    final preview = _cameraController?.value.previewSize;
+    final aspect = preview == null || preview.height == 0
+        ? 16 / 9
+        : preview.width / preview.height;
+    final height = (isCircle || isTriangle)
+        ? width
+        : (width / aspect).clamp(64.0, size.height * 0.46).toDouble();
+    final effectiveWidth = width;
+    final maxRadius = (effectiveWidth < height ? effectiveWidth : height) / 2;
+    final radius = switch (shape) {
+      AppSettings.contentCreatorBubbleShapeRectangle => 8.0,
+      AppSettings.contentCreatorBubbleShapeCircle => maxRadius,
+      AppSettings.contentCreatorBubbleShapeTriangle => 0.0,
+      _ => (maxRadius * settings.contentCreatorBubbleRoundness)
+          .clamp(0.0, maxRadius)
+          .toDouble(),
+    };
+    const margin = 22.0;
+    final position = settings.contentCreatorBubblePosition;
+    final alignTop = position == AppSettings.contentCreatorBubbleTopLeft ||
+        position == AppSettings.contentCreatorBubbleTopRight;
+    final alignLeft = position == AppSettings.contentCreatorBubbleBottomLeft ||
+        position == AppSettings.contentCreatorBubbleTopLeft;
+    final horizontalShift = size.width * settings.contentCreatorBubbleOffsetX;
+    final verticalShift = size.height * settings.contentCreatorBubbleOffsetY;
+    final maxSideInset = (size.width - effectiveWidth).clamp(0.0, size.width);
+    final maxVerticalInset =
+        (size.height - height - 108.0).clamp(0.0, size.height);
+    final leftInset = alignLeft
+        ? (margin + horizontalShift).clamp(0.0, maxSideInset).toDouble()
+        : null;
+    final rightInset = alignLeft
+        ? null
+        : (margin - horizontalShift).clamp(0.0, maxSideInset).toDouble();
+    final topInset = alignTop
+        ? (margin + MediaQuery.paddingOf(context).top + verticalShift)
+            .clamp(0.0, maxVerticalInset)
+            .toDouble()
+        : null;
+    final bottomInset = alignTop
+        ? null
+        : (108.0 - verticalShift).clamp(0.0, maxVerticalInset).toDouble();
+    final previewWidget = _buildCameraPreviewFit(BoxFit.cover);
+    final clippedPreview = switch (shape) {
+      AppSettings.contentCreatorBubbleShapeCircle =>
+        ClipOval(child: previewWidget),
+      AppSettings.contentCreatorBubbleShapeTriangle => ClipPath(
+          clipper: _TriangleBubbleClipper(),
+          child: previewWidget,
+        ),
+      _ => ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: previewWidget,
+        ),
+    };
+    final bubbleShell = DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black,
+        shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: isCircle ? null : BorderRadius.circular(radius),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.18),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.52),
+            blurRadius: 24,
+            spreadRadius: 3,
+          ),
+        ],
+      ),
+      child: clippedPreview,
+    );
+    final shapedBubble = isTriangle
+        ? ClipPath(
+            clipper: _TriangleBubbleClipper(),
+            child: bubbleShell,
+          )
+        : bubbleShell;
+    return Positioned(
+      top: topInset,
+      bottom: bottomInset,
+      left: leftInset,
+      right: rightInset,
+      width: effectiveWidth,
+      height: height,
+      child: IgnorePointer(
+        child: Opacity(
+          opacity: settings.contentCreatorBubbleOpacity,
+          child: shapedBubble,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCameraPreviewFit(BoxFit fit) {
+    final preview = _cameraController!.value.previewSize!;
+    return ClipRect(
+      child: FittedBox(
+        fit: fit,
+        child: SizedBox(
+          width: preview.width,
+          height: preview.height,
+          child: CameraPreview(_cameraController!),
+        ),
       ),
     );
   }
@@ -139,67 +495,41 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
     );
   }
 
-  Widget _buildCountdownOverlay() {
-    return Center(
+  Widget _buildRecordingExportHud() {
+    final progress = (_recordExportProgress ?? 0.0).clamp(0.0, 1.0);
+    return Positioned(
+      top: 20,
+      right: 20,
       child: Container(
-        padding: const EdgeInsets.all(40),
+        width: 220,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.4),
-          shape: BoxShape.circle,
-        ),
-        child: Text(
-          '$_countdown',
-          style: const TextStyle(
-            color: Color(0xFFFFBF00),
-            fontSize: 80,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCameraFallback() {
-    if (_isCameraInitializing) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFFFBF00)),
-      );
-    }
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(24, 18, 24, 92),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white24),
+          color: Colors.black.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFFFBF00)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.videocam_off_outlined,
-                color: Colors.white54, size: 34),
-            const SizedBox(height: 10),
+            const Text(
+              'Saving recording',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.white12,
+              color: const Color(0xFFFFBF00),
+            ),
+            const SizedBox(height: 4),
             Text(
-              _cameraError ?? 'Camera is unavailable.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, height: 1.35),
-            ),
-            const SizedBox(height: 12),
-            if (_availableCameras.isNotEmpty) ...[
-              _buildCameraSourceModeSelector(),
-              const SizedBox(height: 10),
-              _buildCameraSelector(),
-              const SizedBox(height: 12),
-            ],
-            OutlinedButton.icon(
-              onPressed: () => _initializeCamera(),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry camera'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFFFBF00),
-                side: const BorderSide(color: Color(0xFFFFBF00)),
-              ),
+              '${(progress * 100).round()}%',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
             ),
           ],
         ),
@@ -207,211 +537,72 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
     );
   }
 
-  Widget _buildCameraSelector() {
-    final sourceCameras =
-        _camerasForSourceMode(_availableCameras, _cameraSourceMode);
-    if (_availableCameras.isEmpty || sourceCameras.isEmpty) {
-      return OutlinedButton.icon(
-        onPressed: _isCameraInitializing
-            ? null
-            : _availableCameras.isEmpty
-                ? () => _initializeCamera()
-                : () => _setCameraSourceMode(_ContentCameraSourceMode.all),
-        icon: const Icon(Icons.photo_camera_outlined),
-        label: Text(_availableCameras.isEmpty
-            ? 'Find cameras'
-            : 'No ${_cameraSourceModeLabel(_cameraSourceMode)} cameras - show all'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFFFFBF00),
-          side: const BorderSide(color: Color(0xFFFFBF00)),
-        ),
-      );
-    }
-
-    var selectedIndex =
-        sourceCameras.indexWhere((c) => c.name == _selectedCameraName);
-    if (selectedIndex < 0) selectedIndex = 0;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF181818),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: selectedIndex,
-          isExpanded: true,
-          dropdownColor: const Color(0xFF181818),
-          iconEnabledColor: const Color(0xFFFFBF00),
-          style: const TextStyle(color: Colors.white),
-          items: [
-            for (var i = 0; i < sourceCameras.length; i++)
-              DropdownMenuItem<int>(
-                value: i,
-                child: Text(
-                  _cameraLabel(sourceCameras[i], i),
-                  overflow: TextOverflow.ellipsis,
+  Widget _buildCountdownOverlay() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(44),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.62),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  blurRadius: 40,
+                  spreadRadius: 12,
                 ),
-              ),
-          ],
-          onChanged: _isRecording
-              ? null
-              : (index) {
-                  if (index == null) return;
-                  _selectCamera(sourceCameras[index]);
-                },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCameraSourceModeSelector() {
-    const modes = _ContentCameraSourceMode.values;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final mode in modes)
-          Tooltip(
-            message: _cameraSourceModeHelp(mode),
-            child: ChoiceChip(
-              label: Text(_cameraSourceModeLabel(mode)),
-              selected: _cameraSourceMode == mode,
-              onSelected:
-                  _isRecording ? null : (_) => _setCameraSourceMode(mode),
-              selectedColor: const Color(0xFFFFBF00),
-              backgroundColor: const Color(0xFF1E1E1E),
-              labelStyle: TextStyle(
-                color: _cameraSourceMode == mode ? Colors.black : Colors.white,
-                fontWeight: _cameraSourceMode == mode
-                    ? FontWeight.bold
-                    : FontWeight.w600,
-              ),
-              side: BorderSide(
-                color: _cameraSourceMode == mode
-                    ? const Color(0xFFFFBF00)
-                    : Colors.white24,
+              ],
+            ),
+            child: Text(
+              '$_countdown',
+              style: const TextStyle(
+                color: Color(0xFFFFBF00),
+                fontSize: 92,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
-      ],
-    );
-  }
-
-  void _showContentCreatorSettings() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Consumer(
-        builder: (context, ref, _) {
-          final settings = ref.watch(settingsProvider);
-          return Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF111111),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 20,
-              bottom: MediaQuery.of(context).padding.bottom + 20,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.82,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Recording',
-                      style: TextStyle(
-                        color: Color(0xFFFFBF00),
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Camera feed source',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildCameraSourceModeSelector(),
-                    const SizedBox(height: 10),
-                    _buildCameraSelector(),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed:
-                            _isRecording ? null : () => _initializeCamera(),
-                        icon: const Icon(Icons.refresh, size: 18),
-                        label: const Text('Refresh cameras'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFFFBF00),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Video quality',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: ['480p', '720p', '1080p'].map((resolution) {
-                        final selected = settings.videoResolution == resolution;
-                        return ChoiceChip(
-                          label: Text(resolution),
-                          selected: selected,
-                          onSelected: (_) => _setVideoResolution(resolution),
-                          selectedColor: const Color(0xFFFFBF00),
-                          labelStyle: TextStyle(
-                            color: selected ? Colors.black : Colors.white70,
-                            fontWeight:
-                                selected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          backgroundColor: const Color(0xFF1E1E1E),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 18),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showPrompterSettings();
-                      },
-                      icon: const Icon(Icons.tune),
-                      label: const Text('Prompter settings'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: const BorderSide(color: Colors.white24),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
+        ),
       ),
     );
   }
 
-  void _showPrompterSettings() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const TeleprompterSettingsPanel(),
+  Widget _buildContentResumeBlocker() {
+    return Positioned.fill(
+      child: AbsorbPointer(
+        absorbing: true,
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.18),
+          alignment: Alignment.center,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFFBF00)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFFFBF00),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'Preparing resume choice...',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -452,4 +643,18 @@ class _LensHUDPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _TriangleBubbleClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    return Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

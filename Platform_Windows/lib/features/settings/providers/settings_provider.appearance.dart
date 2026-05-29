@@ -9,33 +9,45 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
   }
 
   Future<void> setLanguageMode(String mode) async {
-    state = state.copyWith(languageMode: mode);
+    final normalized = _normalizeLanguageMode(mode);
+    state = state.copyWith(languageMode: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_languageKey, mode);
+    await prefs.setString(_languageKey, normalized);
   }
 
   Future<void> setScrollLead(double lead) async {
-    state = state.copyWith(scrollLead: lead);
+    final normalized = _normalizeScrollLead(lead);
+    state = state.copyWith(scrollLead: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_scrollLeadKey, lead);
+    await prefs.setDouble(_scrollLeadKey, normalized);
   }
 
   Future<void> setScrollMode(String mode) async {
-    state = state.copyWith(scrollMode: mode);
+    final normalized = _normalizeScrollMode(mode);
+    state = state.copyWith(scrollMode: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_scrollModeKey, mode);
+    await prefs.setString(_scrollModeKey, normalized);
   }
 
   Future<void> setScrollSpeed(double speed) async {
-    state = state.copyWith(scrollSpeed: speed);
+    final normalized = _normalizeScrollSpeed(speed);
+    state = state.copyWith(scrollSpeed: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_scrollSpeedKey, speed);
+    await prefs.setDouble(_scrollSpeedKey, normalized);
+  }
+
+  Future<void> setManualScrollBarPlacement(String placement) async {
+    final normalized = _normalizeManualScrollBarPlacement(placement);
+    state = state.copyWith(manualScrollBarPlacement: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_manualScrollBarPlacementKey, normalized);
   }
 
   Future<void> setTextAlign(String align) async {
-    state = state.copyWith(textAlign: align);
+    final normalized = _normalizeTextAlign(align);
+    state = state.copyWith(textAlign: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_textAlignKey, align);
+    await prefs.setString(_textAlignKey, normalized);
   }
 
   Future<void> setMirrorHorizontal(bool mirror) async {
@@ -51,52 +63,59 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
   }
 
   Future<void> setFlipRotation(int degrees) async {
-    state = state.copyWith(flipRotation: degrees);
+    final normalized = _normalizeFlipRotation(degrees);
+    state = state.copyWith(flipRotation: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_flipRotationKey, degrees);
+    await prefs.setInt(_flipRotationKey, normalized);
   }
 
   Future<void> setLineSpacing(double spacing) async {
-    final clamped = spacing < 0.1 ? 0.1 : spacing;
+    final clamped = _normalizeLineSpacing(spacing);
     state = state.copyWith(lineSpacing: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_lineSpacingKey, clamped);
   }
 
   Future<void> setWordSpacing(double spacing) async {
-    state = state.copyWith(wordSpacing: spacing);
+    final normalized = _normalizeWordSpacing(spacing);
+    state = state.copyWith(wordSpacing: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_wordSpacingKey, spacing);
+    await prefs.setDouble(_wordSpacingKey, normalized);
   }
 
   Future<void> setLetterSpacing(double spacing) async {
-    state = state.copyWith(letterSpacing: spacing);
+    final normalized = _normalizeLetterSpacing(spacing);
+    state = state.copyWith(letterSpacing: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_letterSpacingKey, spacing);
+    await prefs.setDouble(_letterSpacingKey, normalized);
   }
 
   Future<void> setScriptBgColor(int color) async {
-    state = state.copyWith(scriptBgColor: color);
+    final normalized = _normalizeColor(color, state.scriptBgColor);
+    state = state.copyWith(scriptBgColor: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_scriptBgColorKey, color);
+    await prefs.setInt(_scriptBgColorKey, normalized);
   }
 
   Future<void> setCurrentWordColor(int color) async {
-    state = state.copyWith(currentWordColor: color);
+    final normalized = _normalizeColor(color, state.currentWordColor);
+    state = state.copyWith(currentWordColor: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_currentWordColorKey, color);
+    await prefs.setInt(_currentWordColorKey, normalized);
   }
 
   Future<void> setFutureWordColor(int color) async {
-    state = state.copyWith(futureWordColor: color);
+    final normalized = _normalizeColor(color, state.futureWordColor);
+    state = state.copyWith(futureWordColor: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_futureWordColorKey, color);
+    await prefs.setInt(_futureWordColorKey, normalized);
   }
 
   Future<void> setPastWordOpacity(double opacity) async {
-    state = state.copyWith(pastWordOpacity: opacity);
+    final normalized = _normalizePastWordOpacity(opacity);
+    state = state.copyWith(pastWordOpacity: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_pastWordOpacityKey, opacity);
+    await prefs.setDouble(_pastWordOpacityKey, normalized);
   }
 
   Future<void> toggleDebugMode() async {
@@ -107,15 +126,137 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
   }
 
   Future<void> setVideoResolution(String resolution) async {
-    state = state.copyWith(videoResolution: resolution);
+    final normalized = _normalizeVideoResolution(resolution);
+    state = state.copyWith(videoResolution: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_videoResolutionKey, resolution);
+    await prefs.setString(_videoResolutionKey, normalized);
+  }
+
+  Future<void> setContentCreatorCameraSourceMode(String mode) async {
+    final normalized = _normalizeContentCreatorCameraSource(mode);
+    state = state.copyWith(contentCreatorCameraSourceMode: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorCameraSourceModeKey, normalized);
+  }
+
+  Future<void> setContentCreatorLayoutPreset(String preset) async {
+    final normalized = _normalizeContentCreatorLayout(preset);
+    state = state.copyWith(contentCreatorLayoutPreset: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorLayoutPresetKey, normalized);
+  }
+
+  Future<void> setContentCreatorCameraOpacity(double opacity) async {
+    final clamped = opacity.clamp(0.2, 1.0).toDouble();
+    state = state.copyWith(contentCreatorCameraOpacity: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorCameraOpacityKey, clamped);
+  }
+
+  Future<void> setContentCreatorFeedMode(String mode) async {
+    final normalized = _normalizeContentCreatorFeedMode(mode);
+    state = state.copyWith(contentCreatorFeedMode: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorFeedModeKey, normalized);
+  }
+
+  Future<void> setContentCreatorBubblePosition(String position) async {
+    final normalized = _normalizeContentCreatorBubblePosition(position);
+    state = state.copyWith(contentCreatorBubblePosition: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorBubblePositionKey, normalized);
+  }
+
+  Future<void> setContentCreatorBubbleShape(String shape) async {
+    final normalized = _normalizeContentCreatorBubbleShape(shape);
+    state = state.copyWith(contentCreatorBubbleShape: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorBubbleShapeKey, normalized);
+  }
+
+  Future<void> setContentCreatorBubbleSize(double size) async {
+    final clamped = size.clamp(0.04, 0.60).toDouble();
+    state = state.copyWith(contentCreatorBubbleSize: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorBubbleSizeKey, clamped);
+  }
+
+  Future<void> setContentCreatorBubbleOpacity(double opacity) async {
+    final clamped = opacity.clamp(0.25, 1.0).toDouble();
+    state = state.copyWith(contentCreatorBubbleOpacity: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorBubbleOpacityKey, clamped);
+  }
+
+  Future<void> setContentCreatorBubbleRoundness(double value) async {
+    final clamped = value.clamp(0.0, 1.0).toDouble();
+    state = state.copyWith(contentCreatorBubbleRoundness: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorBubbleRoundnessKey, clamped);
+  }
+
+  Future<void> setContentCreatorBubbleOffsetX(double value) async {
+    final clamped = value.clamp(-0.25, 0.25).toDouble();
+    state = state.copyWith(contentCreatorBubbleOffsetX: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorBubbleOffsetXKey, clamped);
+  }
+
+  Future<void> setContentCreatorBubbleOffsetY(double value) async {
+    final clamped = value.clamp(-0.25, 0.25).toDouble();
+    state = state.copyWith(contentCreatorBubbleOffsetY: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorBubbleOffsetYKey, clamped);
+  }
+
+  Future<void> setContentCreatorVignetteIntensity(double value) async {
+    final clamped = value.clamp(0.0, 1.0).toDouble();
+    state = state.copyWith(contentCreatorVignetteIntensity: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorVignetteIntensityKey, clamped);
+  }
+
+  Future<void> setContentCreatorFeedBlur(double value) async {
+    final clamped = value.clamp(0.0, 30.0).toDouble();
+    state = state.copyWith(contentCreatorFeedBlur: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorFeedBlurKey, clamped);
+  }
+
+  Future<void> setContentCreatorTextScrim(double value) async {
+    final clamped = value.clamp(0.0, 0.9).toDouble();
+    state = state.copyWith(contentCreatorTextScrim: clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_contentCreatorTextScrimKey, clamped);
+  }
+
+  Future<void> setContentCreatorRecordingFolder(String folder) async {
+    final normalized = _normalizeLocalPath(folder);
+    state = state.copyWith(contentCreatorRecordingFolder: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorRecordingFolderKey, normalized);
+  }
+
+  Future<void> setContentCreatorRecordingFormat(String format) async {
+    final normalized = _normalizeContentCreatorRecordingFormat(format);
+    state = state.copyWith(contentCreatorRecordingFormat: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorRecordingFormatKey, normalized);
+  }
+
+  Future<void> setContentCreatorRecordingAudioMode(String mode) async {
+    final normalized = _normalizeContentCreatorRecordingAudioMode(mode);
+    state = state.copyWith(contentCreatorRecordingAudioMode: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorRecordingAudioModeKey, normalized);
   }
 
   Future<void> setDisplayName(String name) async {
-    state = state.copyWith(displayName: name);
+    final normalized = name.trim();
+    if (normalized.isEmpty) return;
+    state = state.copyWith(displayName: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_displayNameKey, name);
+    await prefs.setString(_displayNameKey, normalized);
   }
 
   Future<void> seedDisplayNameFromEmail(String email) async {
@@ -172,55 +313,90 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
   }
 
   Future<void> applySessionStyles(Map<String, dynamic> styles) async {
+    final hasScriptBgColor = styles.containsKey('scriptBgColor');
+    final hasCurrentWordColor = styles.containsKey('currentWordColor');
+    final hasFutureWordColor = styles.containsKey('futureWordColor');
+    final hasLineSpacing = styles.containsKey('lineSpacing');
+    final hasWordSpacing = styles.containsKey('wordSpacing');
+    final hasLetterSpacing = styles.containsKey('letterSpacing');
+    final hasFontSize = styles.containsKey('fontSize');
+    final hasFontFamily = styles.containsKey('fontFamily');
+    final hasTextAlign = styles.containsKey('textAlign');
+
+    final scriptBgColor = hasScriptBgColor && styles['scriptBgColor'] is int
+        ? _normalizeColor(styles['scriptBgColor'] as int, state.scriptBgColor)
+        : state.scriptBgColor;
+    final currentWordColor =
+        hasCurrentWordColor && styles['currentWordColor'] is int
+            ? _normalizeColor(
+                styles['currentWordColor'] as int,
+                state.currentWordColor,
+              )
+            : state.currentWordColor;
+    final futureWordColor =
+        hasFutureWordColor && styles['futureWordColor'] is int
+            ? _normalizeColor(
+                styles['futureWordColor'] as int,
+                state.futureWordColor,
+              )
+            : state.futureWordColor;
+    final lineSpacing = hasLineSpacing && styles['lineSpacing'] is num
+        ? _normalizeLineSpacing((styles['lineSpacing'] as num).toDouble())
+        : state.lineSpacing;
+    final wordSpacing = hasWordSpacing && styles['wordSpacing'] is num
+        ? _normalizeWordSpacing((styles['wordSpacing'] as num).toDouble())
+        : state.wordSpacing;
+    final letterSpacing = hasLetterSpacing && styles['letterSpacing'] is num
+        ? _normalizeLetterSpacing((styles['letterSpacing'] as num).toDouble())
+        : state.letterSpacing;
+    final fontSize = hasFontSize && styles['fontSize'] is num
+        ? (styles['fontSize'] as num).toDouble().clamp(14.0, 120.0).toDouble()
+        : state.fontSize;
+    final fontFamily = hasFontFamily && styles['fontFamily'] is String
+        ? (styles['fontFamily'] as String).trim()
+        : state.fontFamily;
+    final textAlign = hasTextAlign && styles['textAlign'] is String
+        ? _normalizeTextAlign(styles['textAlign'] as String)
+        : state.textAlign;
+
     state = state.copyWith(
-      scriptBgColor: styles['scriptBgColor'] ?? state.scriptBgColor,
-      currentWordColor: styles['currentWordColor'] ?? state.currentWordColor,
-      futureWordColor: styles['futureWordColor'] ?? state.futureWordColor,
-      lineSpacing:
-          (styles['lineSpacing'] as num?)?.toDouble() ?? state.lineSpacing,
-      wordSpacing:
-          (styles['wordSpacing'] as num?)?.toDouble() ?? state.wordSpacing,
-      letterSpacing:
-          (styles['letterSpacing'] as num?)?.toDouble() ?? state.letterSpacing,
-      fontSize: (styles['fontSize'] as num?)?.toDouble() ?? state.fontSize,
-      fontFamily: styles['fontFamily'] ?? state.fontFamily,
+      scriptBgColor: scriptBgColor,
+      currentWordColor: currentWordColor,
+      futureWordColor: futureWordColor,
+      lineSpacing: lineSpacing,
+      wordSpacing: wordSpacing,
+      letterSpacing: letterSpacing,
+      fontSize: fontSize,
+      fontFamily: fontFamily.isEmpty ? state.fontFamily : fontFamily,
+      textAlign: textAlign,
     );
     final prefs = await SharedPreferences.getInstance();
-    if (styles.containsKey('scriptBgColor')) {
-      await prefs.setInt(_scriptBgColorKey, styles['scriptBgColor']);
+    if (hasScriptBgColor) {
+      await prefs.setInt(_scriptBgColorKey, scriptBgColor);
     }
-    if (styles.containsKey('currentWordColor')) {
-      await prefs.setInt(_currentWordColorKey, styles['currentWordColor']);
+    if (hasCurrentWordColor) {
+      await prefs.setInt(_currentWordColorKey, currentWordColor);
     }
-    if (styles.containsKey('futureWordColor')) {
-      await prefs.setInt(_futureWordColorKey, styles['futureWordColor']);
+    if (hasFutureWordColor) {
+      await prefs.setInt(_futureWordColorKey, futureWordColor);
     }
-    if (styles.containsKey('lineSpacing')) {
-      await prefs.setDouble(
-        _lineSpacingKey,
-        (styles['lineSpacing'] as num).toDouble(),
-      );
+    if (hasLineSpacing) {
+      await prefs.setDouble(_lineSpacingKey, lineSpacing);
     }
-    if (styles.containsKey('wordSpacing')) {
-      await prefs.setDouble(
-        _wordSpacingKey,
-        (styles['wordSpacing'] as num).toDouble(),
-      );
+    if (hasWordSpacing) {
+      await prefs.setDouble(_wordSpacingKey, wordSpacing);
     }
-    if (styles.containsKey('letterSpacing')) {
-      await prefs.setDouble(
-        _letterSpacingKey,
-        (styles['letterSpacing'] as num).toDouble(),
-      );
+    if (hasLetterSpacing) {
+      await prefs.setDouble(_letterSpacingKey, letterSpacing);
     }
-    if (styles.containsKey('fontSize')) {
-      await prefs.setDouble(
-        _fontSizeKey,
-        (styles['fontSize'] as num).toDouble(),
-      );
+    if (hasFontSize) {
+      await prefs.setDouble(_fontSizeKey, fontSize);
     }
-    if (styles.containsKey('fontFamily')) {
-      await prefs.setString(_fontFamilyKey, styles['fontFamily']);
+    if (hasFontFamily && fontFamily.isNotEmpty) {
+      await prefs.setString(_fontFamilyKey, fontFamily);
+    }
+    if (hasTextAlign) {
+      await prefs.setString(_textAlignKey, textAlign);
     }
   }
 

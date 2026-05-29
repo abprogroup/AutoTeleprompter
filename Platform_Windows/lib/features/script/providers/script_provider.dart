@@ -16,16 +16,41 @@ part 'script_provider.docx.dart';
 part 'script_provider.pages_rtf.dart';
 part 'script_provider.models.dart';
 
+const int _maxPlainImportBytes = 25 * 1024 * 1024;
+const int _maxArchiveImportBytes = 80 * 1024 * 1024;
+const int _maxArchiveEntries = 2000;
+const int _maxArchiveExpandedBytes = 120 * 1024 * 1024;
+const int _maxImportXmlBytes = 30 * 1024 * 1024;
+
+class ImportSafetyException implements Exception {
+  final String message;
+
+  const ImportSafetyException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class ScriptNotifier extends Notifier<Script?> {
+  int _storedLoadGeneration = 0;
+  bool _isDisposed = false;
+
   @override
   Script? build() {
     void scheduleStoredScriptLoad(AppSettings settings) {
       if (settings.lastScriptSessionId.isEmpty) return;
+      final generation = ++_storedLoadGeneration;
       Future<void>.delayed(Duration.zero, () {
-        unawaited(_loadStoredScriptFromSettings(settings));
+        if (_isDisposed || generation != _storedLoadGeneration) return;
+        unawaited(_loadStoredScriptFromSettings(settings, generation));
       });
     }
 
+    _isDisposed = false;
+    ref.onDispose(() {
+      _isDisposed = true;
+      _storedLoadGeneration++;
+    });
     ref.listen<AppSettings>(settingsProvider, (previous, next) {
       if (previous?.lastScriptSessionId != next.lastScriptSessionId) {
         scheduleStoredScriptLoad(next);
@@ -88,7 +113,16 @@ class ScriptNotifier extends Notifier<Script?> {
 
           break;
         }
-      } catch (_) {}
+      } catch (e) {
+        LightweightDiagnostics.instance.record(
+          'script',
+          'ignored malformed recent script metadata',
+          data: {
+            'source': 'startupLegacyMetadata',
+            'error': e.toString(),
+          },
+        );
+      }
     }
 
     if (lastText.isNotEmpty) {
@@ -121,8 +155,16 @@ class ScriptNotifier extends Notifier<Script?> {
     }
   }
 
-  Future<void> _loadStoredScriptFromSettings(AppSettings settings) async {
-    if (settings.lastScriptSessionId.isEmpty || _hasActiveScript) return;
+  Future<void> _loadStoredScriptFromSettings(
+    AppSettings settings,
+    int generation,
+  ) async {
+    if (_isDisposed ||
+        generation != _storedLoadGeneration ||
+        settings.lastScriptSessionId.isEmpty ||
+        _hasActiveScript) {
+      return;
+    }
     Map<String, dynamic>? meta;
     for (final item in settings.recentScripts) {
       try {
@@ -133,29 +175,73 @@ class ScriptNotifier extends Notifier<Script?> {
           meta = decoded;
           break;
         }
-      } catch (_) {}
+      } catch (e) {
+        LightweightDiagnostics.instance.record(
+          'script',
+          'ignored malformed recent script metadata',
+          data: {
+            'source': 'storedScriptMetadata',
+            'sessionId': settings.lastScriptSessionId,
+            'error': e.toString(),
+          },
+        );
+      }
     }
-    final data = await SecureScriptStore().read(settings.lastScriptSessionId);
-    if (data == null || data.text.isEmpty || _hasActiveScript) return;
-    state = _buildScript(
-      data.text,
-      title: settings.lastScriptTitle.isNotEmpty
-          ? settings.lastScriptTitle
-          : meta?['title'] as String?,
-      sourceType: meta?['type'] as String?,
-      sessionId: meta?['sessionId'] as String?,
-      historyJson: data.historyJson,
-      historyIndex: meta?['historyIndex'] as int?,
-      fontSize: (meta?['style']?['fontSize'] as num?)?.toDouble(),
-      fontFamily: meta?['style']?['fontFamily'] as String?,
-      lineSpacing: (meta?['style']?['lineSpacing'] as num?)?.toDouble(),
-      letterSpacing: (meta?['style']?['letterSpacing'] as num?)?.toDouble(),
-      wordSpacing: (meta?['style']?['wordSpacing'] as num?)?.toDouble(),
-      textAlign: meta?['style']?['textAlign'] as String?,
-      scriptBgColor: meta?['style']?['scriptBgColor'] as int?,
-      currentWordColor: meta?['style']?['currentWordColor'] as int?,
-      futureWordColor: meta?['style']?['futureWordColor'] as int?,
-    );
+    SecureScriptData? data;
+    try {
+      data = await SecureScriptStore().read(settings.lastScriptSessionId);
+    } catch (error, stackTrace) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stackTrace,
+        source: 'script-provider-secure-read',
+      );
+      return;
+    }
+    if (_isDisposed ||
+        generation != _storedLoadGeneration ||
+        _hasActiveScript) {
+      return;
+    }
+    if (data == null || data.text.isEmpty) {
+      LightweightDiagnostics.instance.record(
+        'script',
+        'stored script could not be loaded',
+        data: {
+          'sessionId': settings.lastScriptSessionId,
+          'hasData': data != null,
+          'hasText': data?.text.isNotEmpty == true,
+        },
+      );
+      return;
+    }
+    try {
+      state = _buildScript(
+        data.text,
+        title: settings.lastScriptTitle.isNotEmpty
+            ? settings.lastScriptTitle
+            : meta?['title'] as String?,
+        sourceType: meta?['type'] as String?,
+        sessionId: meta?['sessionId'] as String?,
+        historyJson: data.historyJson,
+        historyIndex: meta?['historyIndex'] as int?,
+        fontSize: (meta?['style']?['fontSize'] as num?)?.toDouble(),
+        fontFamily: meta?['style']?['fontFamily'] as String?,
+        lineSpacing: (meta?['style']?['lineSpacing'] as num?)?.toDouble(),
+        letterSpacing: (meta?['style']?['letterSpacing'] as num?)?.toDouble(),
+        wordSpacing: (meta?['style']?['wordSpacing'] as num?)?.toDouble(),
+        textAlign: meta?['style']?['textAlign'] as String?,
+        scriptBgColor: meta?['style']?['scriptBgColor'] as int?,
+        currentWordColor: meta?['style']?['currentWordColor'] as int?,
+        futureWordColor: meta?['style']?['futureWordColor'] as int?,
+      );
+    } on StateError catch (error, stackTrace) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stackTrace,
+        source: 'script-provider-load',
+      );
+    }
   }
 
   Script _buildScript(
@@ -323,10 +409,12 @@ class ScriptNotifier extends Notifier<Script?> {
 
   Future<ParsedFile> parseFile(File file) async {
     final lower = file.path.toLowerCase();
-    final rawBytes = await file.readAsBytes();
     ParsedFile result = ParsedFile('');
 
     try {
+      final byteLength = await file.length();
+      _validateImportFileSize(lower, byteLength);
+      final rawBytes = await file.readAsBytes();
       if (lower.endsWith('.docx')) {
         result = _parseDocx(rawBytes);
       } else if (lower.endsWith('.pages')) {
@@ -351,6 +439,15 @@ class ScriptNotifier extends Notifier<Script?> {
       }
     } catch (e) {
       final errStr = e.toString();
+      LightweightDiagnostics.instance.record(
+        'import',
+        'file import failed',
+        data: {
+          'extension': lower.contains('.') ? lower.split('.').last : 'unknown',
+          'safetyLimit': e is ImportSafetyException,
+          'error': errStr,
+        },
+      );
       String errContent = '';
       if (errStr.contains('Central Directory') || errStr.contains('Format')) {
         errContent =
@@ -358,13 +455,69 @@ class ScriptNotifier extends Notifier<Script?> {
       } else {
         errContent = 'Error loading file: $errStr';
       }
-      result = ParsedFile(errContent);
+      result = ParsedFile(errContent, errorMessage: errContent);
     }
     return result;
   }
 
+  void _validateImportFileSize(String lowerPath, int byteLength) {
+    final isArchive =
+        lowerPath.endsWith('.docx') || lowerPath.endsWith('.pages');
+    final maxBytes = isArchive ? _maxArchiveImportBytes : _maxPlainImportBytes;
+    if (byteLength > maxBytes) {
+      final mb = (maxBytes / (1024 * 1024)).round();
+      throw ImportSafetyException(
+        'This file is too large to import safely. '
+        'The current limit for this format is ${mb}MB.',
+      );
+    }
+  }
+
+  Archive _decodeCheckedArchive(List<int> rawBytes, String format) {
+    final archive = ZipDecoder().decodeBytes(rawBytes);
+    if (archive.files.length > _maxArchiveEntries) {
+      throw ImportSafetyException(
+        '$format has too many internal files to import safely.',
+      );
+    }
+    var expandedBytes = 0;
+    for (final file in archive.files) {
+      expandedBytes += file.size;
+      if (expandedBytes > _maxArchiveExpandedBytes) {
+        throw ImportSafetyException(
+          '$format expands to too much data to import safely.',
+        );
+      }
+    }
+    return archive;
+  }
+
+  List<int> _archiveFileBytes(
+    ArchiveFile file, {
+    required String format,
+    bool isXml = false,
+  }) {
+    final maxBytes = isXml ? _maxImportXmlBytes : _maxArchiveExpandedBytes;
+    if (file.size > maxBytes) {
+      throw ImportSafetyException(
+        '$format contains an internal file that is too large to import safely.',
+      );
+    }
+    final dynamic rawContent = file.content;
+    final bytes = rawContent is List<int>
+        ? rawContent
+        : List<int>.from(rawContent as Iterable);
+    if (bytes.length > maxBytes) {
+      throw ImportSafetyException(
+        '$format contains an internal file that is too large to import safely.',
+      );
+    }
+    return bytes;
+  }
+
   Future<void> importFile(File file) async {
     final result = await parseFile(file);
+    if (result.isError) return;
     if (result.text.isNotEmpty) {
       final title = file.path.split('/').last;
       final extension =
@@ -391,26 +544,3 @@ class ScriptNotifier extends Notifier<Script?> {
 
 final scriptProvider =
     NotifierProvider<ScriptNotifier, Script?>(ScriptNotifier.new);
-
-extension ScriptUtils on Script {
-  Script copyWith({
-    String? title,
-    String? rawText,
-    List<ScriptWord>? words,
-    bool? isRtl,
-    String? sourceType,
-    String? sessionId,
-    String? historyJson,
-  }) {
-    return Script(
-      id: id,
-      title: title ?? this.title,
-      rawText: rawText ?? this.rawText,
-      words: words ?? this.words,
-      isRtl: isRtl ?? this.isRtl,
-      sourceType: sourceType ?? this.sourceType,
-      sessionId: sessionId ?? this.sessionId,
-      historyJson: historyJson ?? this.historyJson,
-    );
-  }
-}

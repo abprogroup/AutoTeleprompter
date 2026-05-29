@@ -10,14 +10,16 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     required Set<int> bookmarkWordIndexes,
     required double presentationFontSize,
     required double presenterWordGap,
+    required bool allowWordJump,
   }) {
     Widget wordList = Padding(
       key: _creatorContentKey,
       padding: EdgeInsets.only(
         left: MediaQuery.of(context).size.width * 0.05,
         right: MediaQuery.of(context).size.width * 0.05,
-        top: MediaQuery.of(context).size.height * 0.40,
-        bottom: MediaQuery.of(context).size.height * 0.58,
+        top: MediaQuery.of(context).size.height *
+            (settings.scrollLead + 0.06).clamp(0.24, 0.38).toDouble(),
+        bottom: MediaQuery.of(context).size.height * 0.68,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -30,6 +32,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
               bookmarkWordIndexes: bookmarkWordIndexes,
               presentationFontSize: presentationFontSize,
               presenterWordGap: presenterWordGap,
+              allowWordJump: allowWordJump,
             ),
         ],
       ),
@@ -81,12 +84,6 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
         child: wordList,
       );
     }
-    if (settings.flipRotation != 0) {
-      wordList = RotatedBox(
-        quarterTurns: settings.flipRotation ~/ 90,
-        child: wordList,
-      );
-    }
     return wordList;
   }
 
@@ -97,6 +94,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     required Set<int> bookmarkWordIndexes,
     required double presentationFontSize,
     required double presenterWordGap,
+    required bool allowWordJump,
   }) {
     if (para.length == 1 && para[0].isNewline) {
       final isHard = para[0].raw == '\n\n';
@@ -116,10 +114,11 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
         _ => TextAlign.center,
       };
     } else {
-      try {
-        paraAlign = para.firstWhere((w) => w.alignment != null).alignment;
-      } catch (_) {
-        paraAlign = para.first.alignment;
+      paraAlign = para.first.alignment;
+      for (final word in para) {
+        if (word.alignment == null) continue;
+        paraAlign = word.alignment;
+        break;
       }
     }
 
@@ -146,6 +145,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
                 paragraphDirection: paraDir,
                 bookmarkWordIndexes: bookmarkWordIndexes,
                 presentationFontSize: presentationFontSize,
+                allowWordJump: allowWordJump,
               ),
           ],
         ),
@@ -162,6 +162,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     required TextDirection paragraphDirection,
     required Set<int> bookmarkWordIndexes,
     required double presentationFontSize,
+    required bool allowWordJump,
   }) {
     final i = word.index;
     final hasBookmark = bookmarkWordIndexes.contains(i);
@@ -206,7 +207,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     );
     final wordWidget = GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onTap: () => _jumpToContentWordIndex(i),
+      onTap: allowWordJump ? () => _jumpToContentWordIndex(i) : null,
       child: Directionality(
         textDirection: wordDirection,
         child: Container(
@@ -262,7 +263,9 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
           message: 'Bookmark',
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onTap: () => _jumpToContentWordIndex(i, immediate: true),
+            onTap: allowWordJump
+                ? () => _jumpToContentWordIndex(i, immediate: true)
+                : null,
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: effectiveFontSize * 0.06,

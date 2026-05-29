@@ -13,9 +13,7 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
       }
       final text = _getRefinedFullTextWithoutBookmarkSigns();
       if (text.isEmpty && _currentTitle == 'New Project') return;
-      try {
-        unawaited(_forceRecentUpdate());
-      } catch (_) {}
+      _persistRecentSafely('autosaveTimer');
     });
   }
 
@@ -24,8 +22,20 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
   }) {
     _recentTimer?.cancel();
     _recentTimer = Timer(delay, () {
-      if (mounted) unawaited(_forceRecentUpdate());
+      if (mounted) _persistRecentSafely('scheduledRecentUpdate');
     });
+  }
+
+  void _persistRecentSafely(String source) {
+    unawaited(
+      _forceRecentUpdate().catchError((Object error, StackTrace stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'scriptEditor.$source',
+        );
+      }),
+    );
   }
 
   Future<void> _forceRecentUpdate() async {

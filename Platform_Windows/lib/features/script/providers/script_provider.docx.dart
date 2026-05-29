@@ -2,10 +2,10 @@ part of 'script_provider.dart';
 
 extension _ScriptProviderDocxParsing on ScriptNotifier {
   ParsedFile _parseDocx(List<int> rawBytes) {
-    final archive = ZipDecoder().decodeBytes(rawBytes);
+    final archive = _decodeCheckedArchive(rawBytes, 'DOCX');
     double? detectedFontSize;
 
-    // Find document.xml — try common paths
+    // Find document.xml through common paths.
     ArchiveFile? docEntry;
     for (final candidate in ['word/document.xml', 'word/Document.xml']) {
       docEntry = archive.findFile(candidate);
@@ -21,14 +21,8 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     }
     if (docEntry == null) throw Exception('No document.xml in DOCX');
 
-    // Get bytes safely — archive 3.x content can be List<int> or InputStream
-    final dynamic rawContent = docEntry.content;
-    final List<int> bytes;
-    if (rawContent is List<int>) {
-      bytes = rawContent;
-    } else {
-      bytes = List<int>.from(rawContent);
-    }
+    // Get bytes safely; archive 3.x content can be List<int> or InputStream.
+    final bytes = _archiveFileBytes(docEntry, format: 'DOCX', isXml: true);
 
     final xmlStr = utf8.decode(bytes, allowMalformed: true);
     final document = XmlDocument.parse(xmlStr);
@@ -140,7 +134,13 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
           ref.read(settingsProvider.notifier).setScriptBgColor(colorInt);
         }
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'import.docxBackground',
+      );
+    }
 
     return ParsedFile(
       _normalizeImportedDocxText(parsedParagraphs.join('\n')),
@@ -383,7 +383,7 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
   static String _normalizeImportedDocxText(String text) =>
       text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trimRight();
 
-  /// Parses Apple Pages files (.pages) — a ZIP archive.
+  /// Parses Apple Pages files (.pages) as a ZIP archive.
   /// Handles both the old XML-based format (index.xml) and the newer
   /// iWork format by extracting readable text from all XML entries.
 }

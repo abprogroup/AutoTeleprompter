@@ -1,5 +1,6 @@
 import 'package:autoteleprompter/features/script/models/script_word.dart';
 import 'package:autoteleprompter/features/teleprompter/providers/teleprompter_provider.dart';
+import 'package:autoteleprompter/features/teleprompter/services/stt_visible_relock_service.dart';
 import 'package:autoteleprompter/features/teleprompter/services/word_aligner.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -250,6 +251,187 @@ void main() {
       );
 
       expect(target, 51);
+    });
+
+    test('provider fuzzy relock is clamped to visible window end', () {
+      final words = [
+        _word('visible', 0),
+        _word('camera', 1),
+        _word('settings', 2),
+        _word('recording', 3),
+        _word('hidden', 4),
+        _word('both', 5),
+        _word('of', 6),
+        _word('them', 7),
+        _word('are', 8),
+        _word('good', 9),
+      ];
+
+      final target = const SttVisibleRelockService().fuzzyTarget(
+        words: words,
+        transcript: 'both of them are good',
+        visibleWordStart: 0,
+        visibleWordEnd: 3,
+      );
+
+      expect(target, isNull);
+    });
+
+    test('provider fuzzy relock accepts phrase inside visible window', () {
+      final words = [
+        _word('title', 0),
+        _word('both', 1),
+        _word('of', 2),
+        _word('them', 3),
+        _word('are', 4),
+        _word('good', 5),
+        _word('footer', 6),
+      ];
+
+      final target = const SttVisibleRelockService().fuzzyTarget(
+        words: words,
+        transcript: 'both of them are good',
+        visibleWordStart: 1,
+        visibleWordEnd: 5,
+      );
+
+      expect(target, 5);
+    });
+
+    test('provider approximate relock finds phrase inside visible window', () {
+      final words = [
+        _word('title', 0),
+        _word('intro', 1),
+        _word('both', 2),
+        _word('of', 3),
+        _word('them', 4),
+        _word('are', 5),
+        _word('good', 6),
+        _word('business', 7),
+        _word('people', 8),
+        _word('right', 9),
+        _word('footer', 10),
+      ];
+
+      final target = const SttVisibleRelockService().approximateTarget(
+        words: words,
+        transcript: 'the setup was long but both of them are good business '
+            'people right and then the speaker kept going',
+        currentIndex: 0,
+        visibleWordStart: 1,
+        visibleWordEnd: 10,
+      );
+
+      expect(target, 9);
+    });
+
+    test('provider approximate relock does not search outside visible window',
+        () {
+      final words = [
+        _word('visible', 0),
+        _word('camera', 1),
+        _word('settings', 2),
+        _word('recording', 3),
+        _word('hidden', 4),
+        _word('both', 5),
+        _word('of', 6),
+        _word('them', 7),
+        _word('are', 8),
+        _word('good', 9),
+        _word('business', 10),
+        _word('people', 11),
+        _word('right', 12),
+      ];
+
+      final target = const SttVisibleRelockService().approximateTarget(
+        words: words,
+        transcript: 'both of them are good business people right',
+        currentIndex: 0,
+        visibleWordStart: 0,
+        visibleWordEnd: 3,
+      );
+
+      expect(target, isNull);
+    });
+
+    test('provider approximate relock can relax inside visible window', () {
+      final words = [
+        _word('visible', 0),
+        _word('camera', 1),
+        _word('both', 2),
+        _word('of', 3),
+        _word('them', 4),
+        _word('are', 5),
+        _word('good', 6),
+        _word('business', 7),
+        _word('people', 8),
+        _word('right', 9),
+      ];
+
+      final strict = const SttVisibleRelockService().approximateTarget(
+        words: words,
+        transcript: 'both of them were good business people right',
+        currentIndex: 0,
+        visibleWordStart: 1,
+        visibleWordEnd: 9,
+      );
+      final relaxed = const SttVisibleRelockService().approximateTarget(
+        words: words,
+        transcript: 'both of them were good business people right',
+        currentIndex: 0,
+        visibleWordStart: 1,
+        visibleWordEnd: 9,
+        minimumScore: 0.76,
+      );
+
+      expect(strict, isNull);
+      expect(relaxed, 9);
+    });
+
+    test('provider rolling transcript windows recover earlier visible phrase',
+        () {
+      final words = [
+        _word('1', 0),
+        _word('Video', 1),
+        _word('Scripts', 2),
+        _word('both', 3),
+        _word('of', 4),
+        _word('them', 5),
+        _word('are', 6),
+        _word('good', 7),
+        _word('business', 8),
+        _word('people', 9),
+        _word('right', 10),
+      ];
+      const transcript =
+          'both of them are good business people right and then the speaker '
+          'kept improvising with many extra words that moved the useful '
+          'phrase away from the latest recognition suffix';
+      final windows = TeleprompterNotifier.rollingTranscriptWindowsForAlignment(
+        transcript,
+        windowWords: 8,
+        maxWindows: 5,
+      );
+
+      expect(windows.first, isNot(contains('both of them')));
+      expect(
+        windows.any((window) => window.contains('both of them are good')),
+        isTrue,
+      );
+
+      final targets = [
+        for (final window in windows)
+          WordAligner.align(
+            script: words,
+            transcript: window,
+            lastConfirmedIndex: 0,
+            visibleSkipStartIndex: 0,
+            maxSkipTargetIndex: words.length - 1,
+            policy: SttRecognitionPolicy.legacy(visibleSkipEnabled: true),
+          ).confirmedWordIndex,
+      ];
+
+      expect(targets.any((target) => target >= 7), isTrue);
     });
 
     test('plausible active English text blocks visible Hebrew assist', () {

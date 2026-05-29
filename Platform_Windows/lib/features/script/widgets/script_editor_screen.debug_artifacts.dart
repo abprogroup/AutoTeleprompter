@@ -84,14 +84,20 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
         sequence: sequence,
         extension: 'png.atpe',
       );
-      final encrypted = EncryptedFileStore().protectToEnvelope(
+      final encrypted = await EncryptedFileStore().protectToEnvelopeAsync(
         byteData.buffer.asUint8List(),
         kind: 'debug-artifact',
         compress: false,
       );
       await File(path).writeAsString(encrypted, flush: true);
       return path;
-    } catch (error) {
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'editorDebugArtifact.screenshot',
+        data: {'prefix': prefix, 'sequence': sequence},
+      );
       return 'capture failed: $error';
     }
   }
@@ -109,7 +115,7 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
       sequence: sequence,
       extension: 'txt.atpe',
     );
-    final encrypted = EncryptedFileStore().protectToEnvelope(
+    final encrypted = await EncryptedFileStore().protectToEnvelopeAsync(
       utf8.encode(trace),
       kind: 'debug-artifact',
     );
@@ -135,7 +141,14 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
         final name = SecureFileExport.decryptedExportPathFor(file);
         await File('${exportDir.path}${Platform.pathSeparator}$name')
             .writeAsBytes(bytes, flush: true);
-      } catch (_) {}
+      } catch (e, stack) {
+        LightweightDiagnostics.instance.recordError(
+          e,
+          stack,
+          source: 'editorDebugArtifact.export',
+          data: {'file': file.path, 'artifactType': type.folderName},
+        );
+      }
     }
     if (Platform.isWindows) {
       await Process.start('explorer.exe', [exportDir.path]);

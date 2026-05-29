@@ -78,7 +78,7 @@ class _SpeechEngineTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Speech Recognition Engine',
+                      'Speech-to-text engine',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 15,
@@ -87,7 +87,7 @@ class _SpeechEngineTile extends StatelessWidget {
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Controls the sound-to-text system used in Present mode',
+                      'Controls the speech-to-text system used in Present mode',
                       style: TextStyle(color: Colors.white38, fontSize: 13),
                     ),
                   ],
@@ -134,6 +134,13 @@ class _SpeechEngineTile extends StatelessWidget {
               onChanged(engine);
             },
           ),
+          const SizedBox(height: 8),
+          const Text(
+            'Offline English uses the Windows speech pack installed on this '
+            'computer. If that pack is missing, Auto may fall back to online '
+            'browser speech.',
+            style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.35),
+          ),
           if (hasUnsupportedSavedValue) ...[
             const SizedBox(height: 8),
             const Text(
@@ -165,6 +172,7 @@ class _RemoteControlTile extends StatelessWidget {
   final bool isRunning;
   final bool isBusy;
   final String url;
+  final String pairingPin;
   final String? error;
   final VoidCallback onStart;
   final VoidCallback onStop;
@@ -175,6 +183,7 @@ class _RemoteControlTile extends StatelessWidget {
     required this.isRunning,
     required this.isBusy,
     required this.url,
+    required this.pairingPin,
     required this.error,
     required this.onStart,
     required this.onStop,
@@ -240,6 +249,22 @@ class _RemoteControlTile extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(status, style: TextStyle(color: statusColor, fontSize: 12)),
+          if (isRunning && pairingPin.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SelectableText(
+              'Pairing PIN: $pairingPin',
+              style: const TextStyle(
+                color: Color(0xFFFFBF00),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Only devices with this session PIN can control the prompter.',
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ],
           if (error != null) ...[
             const SizedBox(height: 8),
             Text(error!, style: const TextStyle(color: Colors.orangeAccent)),
@@ -277,6 +302,104 @@ class _RemoteControlTile extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LanguageModeTile extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _LanguageModeTile({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = AppSettings.normalizeLanguageMode(value);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.language_rounded,
+                color: Colors.white54,
+                size: 22,
+              ),
+              SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Script language',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Auto detects the first readable words; use Hebrew or '
+                      'English only when the script needs a fixed start mode',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<String>(
+            selected: {normalized},
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                return states.contains(WidgetState.selected)
+                    ? const Color(0xFFFFBF00)
+                    : const Color(0xFF111111);
+              }),
+              foregroundColor: WidgetStateProperty.resolveWith((states) {
+                return states.contains(WidgetState.selected)
+                    ? Colors.black
+                    : Colors.white70;
+              }),
+              side: WidgetStateProperty.resolveWith((states) {
+                return BorderSide(
+                  color: states.contains(WidgetState.selected)
+                      ? const Color(0xFFFFBF00)
+                      : Colors.white24,
+                );
+              }),
+            ),
+            segments: const [
+              ButtonSegment(
+                value: AppSettings.languageModeAuto,
+                label: Text('Auto'),
+              ),
+              ButtonSegment(
+                value: AppSettings.languageModeHebrew,
+                label: Text('Hebrew'),
+              ),
+              ButtonSegment(
+                value: AppSettings.languageModeEnglish,
+                label: Text('English'),
+              ),
+            ],
+            onSelectionChanged: (selection) => onChanged(selection.first),
           ),
         ],
       ),
@@ -357,12 +480,115 @@ class _SettingsTile extends StatelessWidget {
   }
 }
 
+class _SettingsControlTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> children;
+
+  const _SettingsControlTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: Colors.white54, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (children.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            ...children,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsChipGroup<T> extends StatelessWidget {
+  final T selected;
+  final List<T> values;
+  final String Function(T value) labelFor;
+  final ValueChanged<T> onSelected;
+
+  const _SettingsChipGroup({
+    required this.selected,
+    required this.values,
+    required this.labelFor,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final value in values)
+          ChoiceChip(
+            label: Text(labelFor(value)),
+            selected: value == selected,
+            selectedColor: const Color(0xFFFFBF00),
+            backgroundColor: const Color(0xFF111111),
+            side: BorderSide(
+              color:
+                  value == selected ? const Color(0xFFFFBF00) : Colors.white24,
+            ),
+            labelStyle: TextStyle(
+              color: value == selected ? Colors.black : Colors.white70,
+              fontWeight: value == selected ? FontWeight.bold : FontWeight.w500,
+            ),
+            onSelected: (_) => onSelected(value),
+          ),
+      ],
+    );
+  }
+}
+
 class _SettingsSwitchTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
+  final bool enabled;
 
   const _SettingsSwitchTile({
     required this.icon,
@@ -370,6 +596,7 @@ class _SettingsSwitchTile extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.enabled = true,
   });
 
   @override
@@ -377,7 +604,7 @@ class _SettingsSwitchTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => onChanged(!value),
+        onTap: enabled ? () => onChanged(!value) : null,
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -416,7 +643,7 @@ class _SettingsSwitchTile extends StatelessWidget {
                 // Flutter 3.32 on GitHub Actions still requires activeColor.
                 // ignore: deprecated_member_use
                 activeColor: const Color(0xFFFFBF00),
-                onChanged: onChanged,
+                onChanged: enabled ? onChanged : null,
               ),
             ],
           ),

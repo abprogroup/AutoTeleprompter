@@ -49,7 +49,7 @@ class _WindowsSpeechSettingsSection extends ConsumerWidget {
           icon: Icons.tune_outlined,
           title: 'Manual Profile',
           subtitle:
-              'Advanced: set exact STT thresholds yourself. This turns off Bullet, Visible Skip, and Hard Skip buttons.',
+              'Advanced: set exact speech-to-text thresholds yourself. This turns off Bullet, Visible Skip, and Hard Skip buttons.',
           value: manualSttProfile,
           accentColor: Color(settings.currentWordColor),
           onChanged: notifier.setSttManualProfileEnabled,

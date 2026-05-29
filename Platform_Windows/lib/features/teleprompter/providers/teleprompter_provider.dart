@@ -5,6 +5,8 @@ import '../services/debug_log_formatter.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
+import '../services/stt_recognition_policy_service.dart';
+import '../services/stt_visible_relock_service.dart';
 import '../services/teleprompter_locale_resolver.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
@@ -12,10 +14,10 @@ import '../../script/models/script_word.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
-import '../../../core/extensions/string_extensions.dart';
 
 import '../../../platform/stt/stt_service_factory.dart';
 part 'teleprompter_provider.heartbeat.dart';
+part 'teleprompter_provider.relock.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
 part 'teleprompter_provider.stt.dart';
 
@@ -51,16 +53,20 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   bool _sttReadingStandby = false;
   bool _activeSttCanSwitchLocale = true;
   String _activeSttEngineLabel = 'Browser Online';
+  String _lastRelockScope = 'none';
   DateTime? _lastBrowserHeartbeatAt;
   DateTime? _lastRecoverableSttErrorAt;
   int _recoverableSttErrorCount = 0;
   bool _sttRecoveryInFlight = false;
+  bool _stateFailureDiagnosticRecorded = false;
 
   // STT tuning
   static const int _maxAdvancePerUpdate = 30;
   static const int _visibleLocaleAssistAfterWaits = 2;
   static const int _sttAlignmentWindowWords = 18;
-  static const int _stuckRelockAfterWaits = 25;
+  static const int _stuckRelockAfterWaits = 10;
+  static const int _relaxedVisibleRelockAfterWaits = 24;
+  static const int _globalRelockAfterWaits = 18;
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
@@ -69,6 +75,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   @override
   TeleprompterState build() {
     _disposed = false;
+    _stateFailureDiagnosticRecorded = false;
     _browserSttService = SttServiceFactory.createWindowsBrowser();
     _desktopSttService = SttServiceFactory.createWindowsDesktop();
     _sttService = _browserSttService;
@@ -102,9 +109,24 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     try {
       final current = state;
       state = updater(current);
-    } catch (_) {
+    } catch (e, stack) {
+      _recordStateFailureDiagnostic('safeSetState', e, stack);
       _disposed = true;
     }
+  }
+
+  void _recordStateFailureDiagnostic(
+    String source,
+    Object error,
+    StackTrace stack,
+  ) {
+    if (_stateFailureDiagnosticRecorded) return;
+    _stateFailureDiagnosticRecorded = true;
+    LightweightDiagnostics.instance.recordError(
+      error,
+      stack,
+      source: 'teleprompterProvider.$source',
+    );
   }
 
   TeleprompterState get _currentState => state;
@@ -114,7 +136,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     try {
       final settings = ref.read(settingsProvider);
       if (!settings.debugMode) return;
-    } catch (_) {
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'teleprompterProvider.debugModeRead',
+      );
       return;
     }
     final now = DateTime.now();
@@ -127,141 +154,71 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   static bool _isEnglishLocale(String locale) =>
-      locale.toLowerCase().replaceAll('_', '-').startsWith('en-') ||
-      locale.toLowerCase() == 'en';
+      SttRecognitionPolicyService.isEnglishLocale(locale);
 
-  bool _scriptIsEnglishOnly() =>
-      _sectionLocales.isNotEmpty && _sectionLocales.every(_isEnglishLocale);
-
-  String _recentTranscriptWindow(String transcript) {
-    final words = transcript
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((word) => word.trim().isNotEmpty)
-        .toList();
-    if (words.length <= _sttAlignmentWindowWords) return transcript;
-    return words.sublist(words.length - _sttAlignmentWindowWords).join(' ');
-  }
-
-  int? _relockTargetFromTranscript(Script script, String transcript) {
-    if (_noProgressCount < _stuckRelockAfterWaits) return null;
-    final tokens = transcript
-        .split(RegExp(r'\s+'))
-        .map((word) => word.trim().normalizeForMatching())
-        .where((word) => word.isNotEmpty)
-        .toList();
-    if (tokens.length < 4) return null;
-
-    final realWords = script.words
-        .where((word) => !word.isNewline && word.normalized.isNotEmpty)
-        .toList();
-    if (realWords.length < 4) return null;
-
-    final searchStart = _visibleWordStart == null
-        ? 0
-        : realWords.indexWhere((word) => word.index >= _visibleWordStart!);
-    final start = searchStart < 0 ? 0 : searchStart;
-    final maxPhrase = tokens.length < 8 ? tokens.length : 8;
-    for (var phraseLen = maxPhrase; phraseLen >= 4; phraseLen--) {
-      final phrase = tokens.sublist(tokens.length - phraseLen);
-      for (var i = start; i <= realWords.length - phraseLen; i++) {
-        var matches = true;
-        for (var j = 0; j < phraseLen; j++) {
-          if (realWords[i + j].normalized != phrase[j]) {
-            matches = false;
-            break;
-          }
-        }
-        if (matches) return realWords[i + phraseLen - 1].index;
-      }
-    }
-    return null;
-  }
-
-  AbstractSttService _resolveWindowsSpeechService(
-    AppSettings settings,
-    String initialLocale,
-  ) {
+  static bool shouldUseWindowsOfflineSpeech({
+    required AppSettings settings,
+    required String initialLocale,
+    required List<String> sectionLocales,
+  }) {
     final engine = AppSettings.normalizeSttEngine(settings.sttEngine);
-    final canUseOfflineEnglish =
-        _isEnglishLocale(initialLocale) && _scriptIsEnglishOnly();
-    final useOffline = engine == AppSettings.sttEngineWindowsOffline ||
-        (engine == AppSettings.sttEngineAuto && canUseOfflineEnglish);
-    _activeSttCanSwitchLocale = !useOffline;
-    _activeSttEngineLabel =
-        useOffline ? 'Windows Offline STT' : 'Browser Online STT';
-    return useOffline ? _desktopSttService : _browserSttService;
+    if (engine == AppSettings.sttEngineWindowsOffline) return true;
+    if (engine != AppSettings.sttEngineAuto) return false;
+    return _isEnglishLocale(initialLocale) &&
+        sectionLocales.isNotEmpty &&
+        sectionLocales.every(_isEnglishLocale);
   }
+
+  static List<String> rollingTranscriptWindowsForAlignment(
+    String transcript, {
+    int windowWords = _sttAlignmentWindowWords,
+    int maxWindows = 6,
+  }) =>
+      SttRecognitionPolicyService.rollingTranscriptWindowsForAlignment(
+        transcript,
+        windowWords: windowWords,
+        maxWindows: maxWindows,
+      );
 
   /// Common handler for STT results - shared between Google and Whisper.
   static int resolveAdvanceTarget({
     required int currentIndex,
     required int alignedIndex,
     required int? visibleMaxSkipTargetIndex,
-  }) {
-    if (visibleMaxSkipTargetIndex != null &&
-        alignedIndex <= visibleMaxSkipTargetIndex) {
-      return alignedIndex;
-    }
-    return alignedIndex
-        .clamp(currentIndex, currentIndex + _maxAdvancePerUpdate)
-        .toInt();
-  }
+  }) =>
+      SttRecognitionPolicyService.resolveAdvanceTarget(
+        currentIndex: currentIndex,
+        alignedIndex: alignedIndex,
+        visibleMaxSkipTargetIndex: visibleMaxSkipTargetIndex,
+        maxAdvancePerUpdate: _maxAdvancePerUpdate,
+      );
 
   static bool shouldForceSkipAfterNoProgress({
     required bool strictBulletMode,
     required int noProgressCount,
     required int skipThreshold,
-  }) {
-    return false;
-  }
+  }) =>
+      SttRecognitionPolicyService.shouldForceSkipAfterNoProgress(
+        strictBulletMode: strictBulletMode,
+        noProgressCount: noProgressCount,
+        skipThreshold: skipThreshold,
+      );
 
   static bool shouldUseImprovisationNoMatch({
     required bool strictBulletMode,
     required int alignedIndex,
     required int currentIndex,
-  }) {
-    return strictBulletMode && alignedIndex <= currentIndex;
-  }
+  }) =>
+      SttRecognitionPolicyService.shouldUseImprovisationNoMatch(
+        strictBulletMode: strictBulletMode,
+        alignedIndex: alignedIndex,
+        currentIndex: currentIndex,
+      );
 
   static SttRecognitionPolicy recognitionPolicyForSettings(
-      AppSettings settings) {
-    if (settings.sttManualProfileEnabled) {
-      final manualVisibleSmall = settings.sttManualVisibleSkipSmallWords;
-      final manualVisibleBig = settings.sttManualVisibleSkipBigWords;
-      final manualVisibleEnabled =
-          manualVisibleSmall > 0 && manualVisibleBig > 0;
-      final bigWordMinLetters = settings.sttManualBigWordMinLetters;
-      return SttRecognitionPolicy(
-        bulletMode: false,
-        visibleSkipEnabled: manualVisibleEnabled,
-        hardVisibleSkipEnabled: false,
-        startAdvance: SttEvidenceThreshold(
-          settings.sttManualStartAdvanceSmallWords,
-          settings.sttManualStartAdvanceBigWords,
-          bigWordMinLetters,
-        ),
-        safetyRecovery: SttEvidenceThreshold(
-          settings.sttManualSafetySmallWords,
-          settings.sttManualSafetyBigWords,
-          bigWordMinLetters,
-        ),
-        visibleSkip: SttEvidenceThreshold(
-          manualVisibleEnabled ? manualVisibleSmall : 4,
-          manualVisibleEnabled ? manualVisibleBig : 3,
-          bigWordMinLetters,
-        ),
-      );
-    }
-
-    final visibleSkipEnabled = settings.sttVisibleSkipEnabled;
-    return SttRecognitionPolicy(
-      bulletMode: settings.sttStrictBulletMode,
-      visibleSkipEnabled: visibleSkipEnabled,
-      hardVisibleSkipEnabled:
-          visibleSkipEnabled && settings.sttHardVisibleSkipEnabled,
-    );
-  }
+    AppSettings settings,
+  ) =>
+      SttRecognitionPolicyService.recognitionPolicyForSettings(settings);
 
   static int nextNoProgressCount({
     required int currentCount,
@@ -354,6 +311,26 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     );
   }
 
+  static String resolveInitialSttLocaleForSettings(
+    List<ScriptWord> words,
+    AppSettings settings, {
+    int startIndex = 0,
+    List<String>? sectionLocales,
+  }) {
+    switch (AppSettings.normalizeLanguageMode(settings.languageMode)) {
+      case AppSettings.languageModeHebrew:
+        return 'he_IL';
+      case AppSettings.languageModeEnglish:
+        return 'en_US';
+      default:
+        return resolveInitialSttLocale(
+          words,
+          startIndex: startIndex,
+          sectionLocales: sectionLocales,
+        );
+    }
+  }
+
   Future<void> startSession(Script script) async {
     final pendingStop = _stopInFlight;
     if (pendingStop != null) await pendingStop;
@@ -399,6 +376,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _addDebugLog(
         'SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
+    _addDebugLog(
+      'STT SETTINGS: engine=${settings.sttEngine} language=${settings.languageMode}',
+    );
     LightweightDiagnostics.instance.record(
       'session',
       'presentation session started',
@@ -410,8 +390,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         'startIndex': startIndex,
       },
     );
-    final localeId = resolveInitialSttLocale(
+    final localeId = resolveInitialSttLocaleForSettings(
       script.words,
+      settings,
       startIndex: startIndex,
       sectionLocales: _sectionLocales,
     );
@@ -454,7 +435,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         return;
       }
     } else {
-      final platform = _activeSttEngineLabel;
+      var platform = _activeSttEngineLabel;
       final selectedMicId = settings.sttInputDeviceId.trim();
       final selectedMicLabel = settings.sttInputDeviceLabel.trim();
       _sttService.setAudioInputDevice(
@@ -477,12 +458,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           settings.sttEngine == AppSettings.sttEngineAuto &&
           _sttService == _desktopSttService) {
         _addDebugLog(
-          '[Windows Offline STT] unavailable for English, falling back to Browser Online STT.',
+          '[Windows built-in speech-to-text] unavailable for English, '
+          'falling back to Browser online speech-to-text.',
         );
         await _desktopSttService.stop();
         _sttService = _browserSttService;
         _activeSttCanSwitchLocale = true;
-        _activeSttEngineLabel = 'Browser Online STT';
+        _activeSttEngineLabel = 'Browser online speech-to-text';
+        platform = _activeSttEngineLabel;
         _sttService.setAudioInputDevice(
           selectedMicId.isEmpty ? null : selectedMicId,
           label: selectedMicLabel.isEmpty
@@ -595,7 +578,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           soundLevel: 0.0,
           sttWebViewUrl: null,
         );
-      } catch (_) {}
+      } catch (e, stack) {
+        _recordStateFailureDiagnostic('stopListening.finalState', e, stack);
+      }
     }
   }
 
@@ -632,7 +617,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     );
     try {
       state = state.copyWith(confirmedWordIndex: target);
-    } catch (_) {
+    } catch (e, stack) {
+      _recordStateFailureDiagnostic('jumpToPosition', e, stack);
       _disposed = true;
       return;
     }

@@ -108,6 +108,57 @@ extension _TeleprompterPresenterSearchParts on _TeleprompterScreenState {
     }
 
     if (matches.isEmpty) {
+      final approximateMatches =
+          const ApproximateSpokenSearchService().findRanked(
+        words: script.words,
+        spokenText: query,
+        limit: 5,
+      );
+      if (approximateMatches.isNotEmpty) {
+        final ordered = [...approximateMatches]
+          ..sort((a, b) => a.startWordIndex.compareTo(b.startWordIndex));
+        matches.addAll(ordered.map(
+          (match) => _PresenterSearchMatch(
+            wordIndex:
+                match.startWordIndex.clamp(0, script.words.length - 1).toInt(),
+            charStart: 0,
+            charEnd: 0,
+            isApproximate: true,
+          ),
+        ));
+        final current = ref
+            .read(teleprompterProvider)
+            .confirmedWordIndex
+            .clamp(0, script.words.length - 1)
+            .toInt();
+        final nextIndex = matches.indexWhere((m) => m.wordIndex > current);
+        final initialIndex = nextIndex >= 0 ? nextIndex : 0;
+        if (mounted) {
+          _setTeleprompterState(() {
+            _presenterSearchToolbarVisible = true;
+            _presenterSearchMatches = matches;
+            _presenterSearchMatchIndex = initialIndex;
+          });
+        }
+        _jumpToPresenterSearchMatchAt(initialIndex);
+        final best = approximateMatches.first;
+        final preview = best.matchedText.length <= 54
+            ? best.matchedText
+            : '${best.matchedText.substring(0, 54)}...';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Approximate matches: ${matches.length} '
+                '(best ${(best.score * 100).round()}%): $preview',
+              ),
+              backgroundColor: Colors.black.withValues(alpha: 0.9),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
       if (mounted) {
         _setTeleprompterState(() {
           _presenterSearchToolbarVisible = false;
@@ -188,8 +239,13 @@ extension _TeleprompterPresenterSearchParts on _TeleprompterScreenState {
       return const SizedBox.shrink();
     }
     final hasMatches = _presenterSearchMatches.isNotEmpty;
+    final activeApproximate = hasMatches &&
+        _presenterSearchMatchIndex >= 0 &&
+        _presenterSearchMatchIndex < _presenterSearchMatches.length &&
+        _presenterSearchMatches[_presenterSearchMatchIndex].isApproximate;
     final label = hasMatches
-        ? '${_presenterSearchMatchIndex + 1}/${_presenterSearchMatches.length}'
+        ? '${activeApproximate ? 'Approx ' : ''}'
+            '${_presenterSearchMatchIndex + 1}/${_presenterSearchMatches.length}'
         : '0/0';
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -218,7 +274,7 @@ extension _TeleprompterPresenterSearchParts on _TeleprompterScreenState {
                     hasMatches ? () => _jumpPresenterSearchResult(-1) : null,
               ),
               SizedBox(
-                width: 86,
+                width: 104,
                 child: Text(
                   label,
                   textAlign: TextAlign.center,
@@ -303,11 +359,13 @@ class _PresenterSearchMatch {
   final int wordIndex;
   final int charStart;
   final int charEnd;
+  final bool isApproximate;
 
   const _PresenterSearchMatch({
     required this.wordIndex,
     required this.charStart,
     required this.charEnd,
+    this.isApproximate = false,
   });
 }
 

@@ -158,7 +158,7 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
             statusMessage:
                 '$langName speech recognition requires an internet connection. '
                 'This language is not available offline on your device. '
-                'Please connect to WiFi or mobile data and try again.',
+                'Please connect this Windows device to the internet and try again.',
           ));
     };
   }

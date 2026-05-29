@@ -14,8 +14,16 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       final settings = ref.read(settingsProvider);
 
       // Speed can be negative for backward scrolling
-      final speed =
-          settings.scrollMode == 'manual' ? settings.scrollSpeed : 100.0;
+      final sttState = ref.read(teleprompterProvider);
+      final activeManualOverride =
+          PresenterInputLockService.allowActiveManualScroll(
+        settingEnabled: settings.allowScrollDuringActiveSession,
+        isListening: sttState.isListening,
+        isStarting: sttState.isStarting,
+      );
+      final speed = settings.scrollMode == 'manual' || activeManualOverride
+          ? settings.scrollSpeed
+          : 100.0;
       if (speed == 0) return;
 
       // pixels per tick: speed(wpm) x 3px x 16ms/1000ms
@@ -47,21 +55,44 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _updateManualWordIndex() {
     if (!mounted || !_scrollController.hasClients) return;
+    final bestIndex = _wordIndexNearestReadingLine() ?? _manualWordIndex;
+
+    if (bestIndex != _manualWordIndex) {
+      _setTeleprompterState(() => _manualWordIndex = bestIndex);
+      final script = ref.read(scriptProvider);
+      if (script != null && script.words.isNotEmpty) {
+        ref
+            .read(teleprompterProvider.notifier)
+            .jumpToPosition(bestIndex, script: script);
+      }
+    }
+  }
+
+  int? _wordIndexNearestReadingLine() {
+    final script = ref.read(scriptProvider);
+    if (script == null ||
+        script.words.isEmpty ||
+        !_scrollController.hasClients ||
+        _wordKeys.isEmpty) {
+      return null;
+    }
     final settings = ref.read(settingsProvider);
     final targetScreenY =
         MediaQuery.of(context).size.height * settings.scrollLead;
 
-    int bestIndex = _manualWordIndex;
+    int? bestIndex;
     double bestDist = double.infinity;
+    final maxIndex = _wordKeys.length < script.words.length
+        ? _wordKeys.length
+        : script.words.length;
 
-    final start = (_manualWordIndex - 3).clamp(0, _wordKeys.length - 1);
-    final end = (_manualWordIndex + 15).clamp(0, _wordKeys.length - 1);
-
-    for (int i = start; i <= end; i++) {
+    for (var i = 0; i < maxIndex; i++) {
+      final word = script.words[i];
+      if (word.isNewline || word.normalized.isEmpty) continue;
       final ctx = _wordKeys[i].currentContext;
       if (ctx == null) continue;
       final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null) continue;
+      if (box == null || !box.attached) continue;
       final posY = box.localToGlobal(Offset.zero).dy;
       final dist = (posY - targetScreenY).abs();
       if (dist < bestDist) {
@@ -70,9 +101,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       }
     }
 
-    if (bestIndex != _manualWordIndex) {
-      _setTeleprompterState(() => _manualWordIndex = bestIndex);
-    }
+    return bestIndex;
   }
 
   void _stopManualScroll() {
@@ -256,7 +285,11 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final sttState = ref.read(teleprompterProvider);
     final settings = ref.read(settingsProvider);
     final activeManualOverride =
-        settings.allowScrollDuringActiveSession && sttState.isListening;
+        PresenterInputLockService.allowActiveManualScroll(
+      settingEnabled: settings.allowScrollDuringActiveSession,
+      isListening: sttState.isListening,
+      isStarting: sttState.isStarting,
+    );
     if (sttState.isStarting ||
         (sttState.isListening && !activeManualOverride)) {
       _userBrowsingWhileStopped = false;
@@ -283,32 +316,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _syncResumePointToReadingLine() {
     final script = ref.read(scriptProvider);
-    if (script == null ||
-        script.words.isEmpty ||
-        !_scrollController.hasClients) {
-      return;
-    }
-    final settings = ref.read(settingsProvider);
-    final targetScreenY =
-        MediaQuery.of(context).size.height * settings.scrollLead;
-
-    int? bestIndex;
-    double bestDist = double.infinity;
-    for (var i = 0; i < _wordKeys.length && i < script.words.length; i++) {
-      if (script.words[i].isNewline) continue;
-      final ctx = _wordKeys[i].currentContext;
-      if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached) continue;
-      final posY = box.localToGlobal(Offset.zero).dy;
-      final dist = (posY - targetScreenY).abs();
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIndex = i;
-      }
-    }
-
-    final targetIndex = bestIndex;
+    if (script == null) return;
+    final targetIndex = _wordIndexNearestReadingLine();
     if (targetIndex == null) return;
     _setTeleprompterState(() => _manualWordIndex = targetIndex);
     ref

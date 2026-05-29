@@ -2,6 +2,36 @@ class AppSettings {
   static const String sttEngineAuto = 'windows_auto';
   static const String sttEngineWindowsOffline = 'windows_offline';
   static const String sttEngineBrowserOnline = 'browser_online';
+  static const String languageModeAuto = 'auto';
+  static const String languageModeHebrew = 'he';
+  static const String languageModeEnglish = 'en';
+  static const String contentCreatorSourceNative = 'native';
+  static const String contentCreatorSourceUsb = 'usb';
+  static const String contentCreatorSourceVirtual = 'virtual';
+  static const String contentCreatorSourceAll = 'all';
+  static const String contentCreatorLayoutReading = 'reading';
+  static const String contentCreatorLayoutBalanced = 'balanced';
+  static const String contentCreatorLayoutCamera = 'camera';
+  static const String contentCreatorFeedBubble = 'bubble';
+  static const String contentCreatorFeedFull = 'full';
+  static const String contentCreatorBubbleBottomRight = 'bottomRight';
+  static const String contentCreatorBubbleBottomLeft = 'bottomLeft';
+  static const String contentCreatorBubbleTopRight = 'topRight';
+  static const String contentCreatorBubbleTopLeft = 'topLeft';
+  static const String contentCreatorBubbleShapeRectangle = 'rectangle';
+  static const String contentCreatorBubbleShapeRounded = 'rounded';
+  static const String contentCreatorBubbleShapeCircle = 'circle';
+  static const String contentCreatorBubbleShapeTriangle = 'triangle';
+  static const String contentCreatorRecordingFormatMp4 = 'mp4';
+  static const String contentCreatorRecordingFormatWebm = 'webm';
+  static const String contentCreatorRecordingFormatMovProRes = 'mov_prores';
+  static const String contentCreatorRecordingFormatWav = 'wav';
+  static const String contentCreatorRecordingAudioCamera = 'camera_audio';
+  static const String contentCreatorRecordingAudioSilent = 'silent_video';
+  static const String manualScrollBarBottom = 'bottom';
+  static const String manualScrollBarTop = 'top';
+  static const String manualScrollBarLeft = 'left';
+  static const String manualScrollBarRight = 'right';
 
   static String normalizeSttEngine(String? engine) {
     switch (engine) {
@@ -14,6 +44,17 @@ class AppSettings {
         return sttEngineAuto;
       default:
         return sttEngineAuto;
+    }
+  }
+
+  static String normalizeLanguageMode(String? mode) {
+    switch (mode) {
+      case languageModeAuto:
+      case languageModeHebrew:
+      case languageModeEnglish:
+        return mode!;
+      default:
+        return languageModeAuto;
     }
   }
 
@@ -35,7 +76,7 @@ class AppSettings {
   final int scriptBgColor; // ARGB int, default black
   final int currentWordColor; // ARGB int, default amber
   final int futureWordColor; // ARGB int, default white
-  final double pastWordOpacity; // 0.0-0.6
+  final double pastWordOpacity; // 0.05-1.0
   final bool debugMode; // technical mode for STT logs
   final String videoResolution; // '480p', '720p', '1080p'
   final List<String> recentScripts; // JSON strings of script metadata
@@ -51,6 +92,7 @@ class AppSettings {
       showAlignmentOverride; // v3.9.8 toggle for presentation alignment override
   final String sttEngine; // Windows: auto/offline/browser, legacy 'google'
   final bool allowScrollDuringActiveSession;
+  final String manualScrollBarPlacement;
   final double
       readFadeIntensity; // v4.1: gradient fade for read text (0.0=off, 1.0=full)
   final String
@@ -72,10 +114,27 @@ class AppSettings {
   final int sttManualVisibleSkipSmallWords; // 0 = Off
   final int sttManualVisibleSkipBigWords; // 0 = Off
   final int sttManualBigWordMinLetters;
+  final String contentCreatorCameraSourceMode;
+  final String contentCreatorLayoutPreset;
+  final double contentCreatorCameraOpacity;
+  final String contentCreatorFeedMode;
+  final String contentCreatorBubblePosition;
+  final String contentCreatorBubbleShape;
+  final double contentCreatorBubbleSize;
+  final double contentCreatorBubbleOpacity;
+  final double contentCreatorBubbleRoundness;
+  final double contentCreatorBubbleOffsetX;
+  final double contentCreatorBubbleOffsetY;
+  final double contentCreatorVignetteIntensity;
+  final double contentCreatorFeedBlur;
+  final double contentCreatorTextScrim;
+  final String contentCreatorRecordingFolder;
+  final String contentCreatorRecordingFormat;
+  final String contentCreatorRecordingAudioMode;
 
   const AppSettings({
     this.fontSize = 20.0,
-    this.languageMode = 'auto',
+    this.languageMode = languageModeAuto,
     this.scrollLead = 0.32,
     this.lastScript = '',
     this.lastScriptTitle = '',
@@ -92,7 +151,7 @@ class AppSettings {
     this.scriptBgColor = 0xFF000000,
     this.currentWordColor = 0xFFFFBF00,
     this.futureWordColor = 0xFFFFFFFF,
-    this.pastWordOpacity = 0.7,
+    this.pastWordOpacity = 0.3,
     this.debugMode = false,
     this.videoResolution = '720p',
     this.recentScripts = const [],
@@ -107,7 +166,8 @@ class AppSettings {
     this.showAlignmentOverride = false,
     this.sttEngine = sttEngineAuto,
     this.allowScrollDuringActiveSession = false,
-    this.readFadeIntensity = 1.0,
+    this.manualScrollBarPlacement = manualScrollBarBottom,
+    this.readFadeIntensity = 0.0,
     this.sttInputDeviceId = '',
     this.sttInputDeviceLabel = 'System default microphone',
     this.sttVisibleSkipEnabled = false,
@@ -121,6 +181,23 @@ class AppSettings {
     this.sttManualVisibleSkipSmallWords = 0,
     this.sttManualVisibleSkipBigWords = 0,
     this.sttManualBigWordMinLetters = 5,
+    this.contentCreatorCameraSourceMode = contentCreatorSourceNative,
+    this.contentCreatorLayoutPreset = contentCreatorLayoutReading,
+    this.contentCreatorCameraOpacity = 0.72,
+    this.contentCreatorFeedMode = contentCreatorFeedBubble,
+    this.contentCreatorBubblePosition = contentCreatorBubbleBottomRight,
+    this.contentCreatorBubbleShape = contentCreatorBubbleShapeRounded,
+    this.contentCreatorBubbleSize = 0.24,
+    this.contentCreatorBubbleOpacity = 1.0,
+    this.contentCreatorBubbleRoundness = 0.18,
+    this.contentCreatorBubbleOffsetX = 0.0,
+    this.contentCreatorBubbleOffsetY = 0.0,
+    this.contentCreatorVignetteIntensity = 0.45,
+    this.contentCreatorFeedBlur = 14.0,
+    this.contentCreatorTextScrim = 0.55,
+    this.contentCreatorRecordingFolder = '',
+    this.contentCreatorRecordingFormat = contentCreatorRecordingFormatMp4,
+    this.contentCreatorRecordingAudioMode = contentCreatorRecordingAudioCamera,
   });
 
   AppSettings copyWith({
@@ -157,6 +234,7 @@ class AppSettings {
     bool? showAlignmentOverride,
     String? sttEngine,
     bool? allowScrollDuringActiveSession,
+    String? manualScrollBarPlacement,
     double? readFadeIntensity,
     String? sttInputDeviceId,
     String? sttInputDeviceLabel,
@@ -171,6 +249,23 @@ class AppSettings {
     int? sttManualVisibleSkipSmallWords,
     int? sttManualVisibleSkipBigWords,
     int? sttManualBigWordMinLetters,
+    String? contentCreatorCameraSourceMode,
+    String? contentCreatorLayoutPreset,
+    double? contentCreatorCameraOpacity,
+    String? contentCreatorFeedMode,
+    String? contentCreatorBubblePosition,
+    String? contentCreatorBubbleShape,
+    double? contentCreatorBubbleSize,
+    double? contentCreatorBubbleOpacity,
+    double? contentCreatorBubbleRoundness,
+    double? contentCreatorBubbleOffsetX,
+    double? contentCreatorBubbleOffsetY,
+    double? contentCreatorVignetteIntensity,
+    double? contentCreatorFeedBlur,
+    double? contentCreatorTextScrim,
+    String? contentCreatorRecordingFolder,
+    String? contentCreatorRecordingFormat,
+    String? contentCreatorRecordingAudioMode,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -210,6 +305,8 @@ class AppSettings {
       sttEngine: sttEngine ?? this.sttEngine,
       allowScrollDuringActiveSession:
           allowScrollDuringActiveSession ?? this.allowScrollDuringActiveSession,
+      manualScrollBarPlacement:
+          manualScrollBarPlacement ?? this.manualScrollBarPlacement,
       readFadeIntensity: readFadeIntensity ?? this.readFadeIntensity,
       sttInputDeviceId: sttInputDeviceId ?? this.sttInputDeviceId,
       sttInputDeviceLabel: sttInputDeviceLabel ?? this.sttInputDeviceLabel,
@@ -234,6 +331,40 @@ class AppSettings {
           sttManualVisibleSkipBigWords ?? this.sttManualVisibleSkipBigWords,
       sttManualBigWordMinLetters:
           sttManualBigWordMinLetters ?? this.sttManualBigWordMinLetters,
+      contentCreatorCameraSourceMode:
+          contentCreatorCameraSourceMode ?? this.contentCreatorCameraSourceMode,
+      contentCreatorLayoutPreset:
+          contentCreatorLayoutPreset ?? this.contentCreatorLayoutPreset,
+      contentCreatorCameraOpacity:
+          contentCreatorCameraOpacity ?? this.contentCreatorCameraOpacity,
+      contentCreatorFeedMode:
+          contentCreatorFeedMode ?? this.contentCreatorFeedMode,
+      contentCreatorBubblePosition:
+          contentCreatorBubblePosition ?? this.contentCreatorBubblePosition,
+      contentCreatorBubbleShape:
+          contentCreatorBubbleShape ?? this.contentCreatorBubbleShape,
+      contentCreatorBubbleSize:
+          contentCreatorBubbleSize ?? this.contentCreatorBubbleSize,
+      contentCreatorBubbleOpacity:
+          contentCreatorBubbleOpacity ?? this.contentCreatorBubbleOpacity,
+      contentCreatorBubbleRoundness:
+          contentCreatorBubbleRoundness ?? this.contentCreatorBubbleRoundness,
+      contentCreatorBubbleOffsetX:
+          contentCreatorBubbleOffsetX ?? this.contentCreatorBubbleOffsetX,
+      contentCreatorBubbleOffsetY:
+          contentCreatorBubbleOffsetY ?? this.contentCreatorBubbleOffsetY,
+      contentCreatorVignetteIntensity: contentCreatorVignetteIntensity ??
+          this.contentCreatorVignetteIntensity,
+      contentCreatorFeedBlur:
+          contentCreatorFeedBlur ?? this.contentCreatorFeedBlur,
+      contentCreatorTextScrim:
+          contentCreatorTextScrim ?? this.contentCreatorTextScrim,
+      contentCreatorRecordingFolder:
+          contentCreatorRecordingFolder ?? this.contentCreatorRecordingFolder,
+      contentCreatorRecordingFormat:
+          contentCreatorRecordingFormat ?? this.contentCreatorRecordingFormat,
+      contentCreatorRecordingAudioMode: contentCreatorRecordingAudioMode ??
+          this.contentCreatorRecordingAudioMode,
     );
   }
 }

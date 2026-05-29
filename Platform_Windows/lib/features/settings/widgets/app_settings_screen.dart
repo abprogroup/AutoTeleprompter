@@ -1,19 +1,31 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/providers/beta_consent_provider.dart';
 import '../../feedback/widgets/beta_consent_gate.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/services/remote_control_service.dart';
+import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../providers/settings_provider.dart';
 import 'cloud_sync_screen.dart';
 
 part 'app_settings_screen.tiles.dart';
+part 'app_settings_screen.content_creator.dart';
 
-enum AppSettingsTab { general, account, remote, editor, present }
+enum AppSettingsTab {
+  general,
+  account,
+  remote,
+  editor,
+  present,
+  contentCreator
+}
 
 extension AppSettingsTabIndex on AppSettingsTab {
   int get index => AppSettingsTab.values.indexOf(this);
@@ -72,6 +84,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               Tab(icon: Icon(Icons.settings_remote_outlined), text: 'Remote'),
               Tab(icon: Icon(Icons.edit_note_rounded), text: 'Editor'),
               Tab(icon: Icon(Icons.present_to_all_rounded), text: 'Present'),
+              Tab(
+                  icon: Icon(Icons.video_camera_front_outlined),
+                  text: 'Creator'),
             ],
           ),
         ),
@@ -80,8 +95,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             _settingsList(_generalTab(settings)),
             _settingsList(_accountTab(settings)),
             _settingsList(_remoteTab(remote)),
-            _settingsList(_editorTab()),
+            _settingsList(_editorTab(settings)),
             _settingsList(_presentTab(settings)),
+            _settingsList(_contentCreatorTab(settings)),
           ],
         ),
       ),
@@ -97,18 +113,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
   List<Widget> _generalTab(AppSettings settings) {
     return [
-      const _SectionHeader(title: 'DIAGNOSTICS'),
-      const SizedBox(height: 8),
-      _SettingsSwitchTile(
-        icon: Icons.bug_report_outlined,
-        title: 'Debug Mode',
-        subtitle: settings.debugMode
-            ? 'Detailed logs and trace tools are visible'
-            : 'Normal mode: heavy debug traces stay off',
-        value: settings.debugMode,
-        onChanged: (_) => ref.read(settingsProvider.notifier).toggleDebugMode(),
-      ),
-      const SizedBox(height: 22),
       const _SectionHeader(title: 'CLOUD SYNC'),
       const SizedBox(height: 8),
       _SettingsTile(
@@ -131,6 +135,28 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           context,
           MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
         ),
+      ),
+      const SizedBox(height: 22),
+      const _SectionHeader(title: 'ADVANCED DIAGNOSTICS'),
+      const SizedBox(height: 8),
+      if (Platform.isWindows) ...[
+        _SettingsTile(
+          icon: Icons.cleaning_services_outlined,
+          title: 'Repair old microphone permission setting',
+          subtitle: 'Removes an older Windows speech permission workaround if '
+              'this beta saved it before the local-process fix.',
+          onTap: _clearLegacyWebView2EnvVar,
+        ),
+        const SizedBox(height: 8),
+      ],
+      _SettingsSwitchTile(
+        icon: Icons.bug_report_outlined,
+        title: 'Debug Mode',
+        subtitle: settings.debugMode
+            ? 'Detailed logs and trace tools are visible'
+            : 'Normal mode: heavy debug traces stay off',
+        value: settings.debugMode,
+        onChanged: (_) => ref.read(settingsProvider.notifier).toggleDebugMode(),
       ),
     ];
   }
@@ -177,6 +203,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         isRunning: remote.isRunning,
         isBusy: _remoteBusy,
         url: _remoteUrl ?? remote.localUrl,
+        pairingPin: remote.pairingPin,
         error: _remoteError,
         onStart: _startRemote,
         onStop: _stopRemote,
@@ -186,11 +213,53 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     ];
   }
 
-  List<Widget> _editorTab() {
-    return const [
-      _SectionHeader(title: 'EDITOR'),
-      SizedBox(height: 8),
-      _SettingsTile(
+  List<Widget> _editorTab(AppSettings settings) {
+    return [
+      const _SectionHeader(title: 'EDITOR DEFAULTS'),
+      const SizedBox(height: 8),
+      _SettingsControlTile(
+        icon: Icons.format_align_center_rounded,
+        title: 'Default editor alignment',
+        subtitle: 'Used when new or imported text has no explicit alignment',
+        children: [
+          _SettingsChipGroup<String>(
+            selected: settings.textAlign,
+            values: const ['left', 'center', 'right'],
+            labelFor: (value) => switch (value) {
+              'left' => 'Left',
+              'right' => 'Right',
+              _ => 'Center',
+            },
+            onSelected: ref.read(settingsProvider.notifier).setTextAlign,
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      _SettingsSliderTile(
+        icon: Icons.format_size_rounded,
+        title: 'Editor font size',
+        subtitle: 'Shared with Present mode and saved with script metadata',
+        value: settings.fontSize,
+        displayValue: settings.fontSize.round().toString(),
+        min: 14,
+        max: 120,
+        divisions: 53,
+        onChanged: ref.read(settingsProvider.notifier).setFontSize,
+      ),
+      const SizedBox(height: 8),
+      _SettingsSliderTile(
+        icon: Icons.format_line_spacing_rounded,
+        title: 'Line spacing',
+        subtitle: 'Controls spacing while editing and presenting',
+        value: settings.lineSpacing,
+        displayValue: settings.lineSpacing.toStringAsFixed(2),
+        min: 1.0,
+        max: 2.5,
+        divisions: 30,
+        onChanged: ref.read(settingsProvider.notifier).setLineSpacing,
+      ),
+      const SizedBox(height: 8),
+      const _SettingsTile(
         icon: Icons.edit_note_rounded,
         title: 'Editor Tools',
         subtitle: 'Text, layout, color, search, and selection tools live in '
@@ -221,6 +290,12 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             ref.read(settingsProvider.notifier).setSttEngine(engine),
       ),
       const SizedBox(height: 8),
+      _LanguageModeTile(
+        value: settings.languageMode,
+        onChanged: (mode) =>
+            ref.read(settingsProvider.notifier).setLanguageMode(mode),
+      ),
+      const SizedBox(height: 8),
       _SettingsTile(
         icon: Icons.mic_external_on_outlined,
         title: 'Preferred Microphone',
@@ -240,7 +315,109 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         subtitle: 'Choose or test the default external mic',
         onTap: () => Process.run('cmd', ['/c', 'start', 'ms-settings:sound']),
       ),
+      const SizedBox(height: 18),
+      const _SectionHeader(title: 'SESSION CONTROL'),
+      const SizedBox(height: 8),
+      _SettingsControlTile(
+        icon: Icons.swap_vert_rounded,
+        title: 'Scroll Mode',
+        subtitle: 'Choose speech recognition or fixed manual speed',
+        children: [
+          _SettingsChipGroup<String>(
+            selected: settings.scrollMode,
+            values: const ['auto', 'manual'],
+            labelFor: (value) =>
+                value == 'manual' ? 'Manual Speed' : 'Speech Auto',
+            onSelected: ref.read(settingsProvider.notifier).setScrollMode,
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      _SettingsSwitchTile(
+        icon: Icons.pan_tool_alt_outlined,
+        title: 'Allow manual scrolling while listening',
+        subtitle: settings.scrollMode == 'manual'
+            ? 'Manual Speed mode is not listening, so this is not used'
+            : 'A technician can wheel or drag during active speech recognition',
+        value: settings.allowScrollDuringActiveSession,
+        enabled: settings.scrollMode != 'manual',
+        onChanged: ref
+            .read(settingsProvider.notifier)
+            .setAllowScrollDuringActiveSession,
+      ),
+      const SizedBox(height: 8),
+      _SettingsControlTile(
+        icon: Icons.speed_rounded,
+        title: 'Manual speed bar position',
+        subtitle: 'Where the speed control appears in Manual Speed mode',
+        children: [
+          _SettingsChipGroup<String>(
+            selected: settings.manualScrollBarPlacement,
+            values: const [
+              AppSettings.manualScrollBarBottom,
+              AppSettings.manualScrollBarTop,
+              AppSettings.manualScrollBarLeft,
+              AppSettings.manualScrollBarRight,
+            ],
+            labelFor: (value) => switch (value) {
+              AppSettings.manualScrollBarTop => 'Top',
+              AppSettings.manualScrollBarLeft => 'Left',
+              AppSettings.manualScrollBarRight => 'Right',
+              _ => 'Bottom',
+            },
+            onSelected:
+                ref.read(settingsProvider.notifier).setManualScrollBarPlacement,
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      _SettingsSwitchTile(
+        icon: Icons.visibility_outlined,
+        title: 'Visible skip assist',
+        subtitle: 'Speech recognition may relock only to visible words',
+        value: settings.sttVisibleSkipEnabled,
+        onChanged: ref.read(settingsProvider.notifier).setSttVisibleSkipEnabled,
+      ),
+      const SizedBox(height: 8),
+      _SettingsSwitchTile(
+        icon: Icons.rule_folder_outlined,
+        title: 'Strict bullet/header mode',
+        subtitle: 'Use stricter recognition around bullet-like script starts',
+        value: settings.sttStrictBulletMode,
+        onChanged: ref.read(settingsProvider.notifier).setSttStrictBulletMode,
+      ),
+      const SizedBox(height: 8),
+      _SettingsSwitchTile(
+        icon: Icons.tune_outlined,
+        title: 'Manual speech-to-text profile',
+        subtitle: 'Use your tuned recognition thresholds',
+        value: settings.sttManualProfileEnabled,
+        onChanged:
+            ref.read(settingsProvider.notifier).setSttManualProfileEnabled,
+      ),
+      const SizedBox(height: 18),
+      const _SectionHeader(title: 'PROMPTER DISPLAY'),
+      const SizedBox(height: 8),
+      _SettingsTile(
+        icon: Icons.display_settings_outlined,
+        title: 'Typography, colors, fade, mirror, and rotation',
+        subtitle: _presentDisplaySummary(settings),
+        onTap: _showPresenterSettingsPanel,
+      ),
     ];
+  }
+
+  String _presentDisplaySummary(AppSettings settings) {
+    final pieces = <String>[
+      'Font ${settings.fontSize.round()}',
+      '${settings.flipRotation} deg',
+      'Fade ${(settings.readFadeIntensity * 100).round()}%',
+    ];
+    final mirror = <String>[];
+    if (settings.mirrorHorizontal) mirror.add('H');
+    if (settings.mirrorVertical) mirror.add('V');
+    if (mirror.isNotEmpty) pieces.add('Mirror ${mirror.join('+')}');
+    return pieces.join(' | ');
   }
 
   Future<void> _refreshRemoteUrl() async {
@@ -267,7 +444,12 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       final url = await remote.preferredUrl();
       if (!mounted) return;
       setState(() => _remoteUrl = url);
-    } catch (error) {
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'settings.remoteStart',
+      );
       if (!mounted) return;
       setState(() {
         _remoteError = 'Remote control could not start. Ports 8080-8090 may '
@@ -303,7 +485,57 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
   Future<void> _openRemoteUrl() async {
     final url = _remoteUrl ?? ref.read(remoteControlProvider).localUrl;
-    await Process.run('cmd', ['/c', 'start', url]);
+    try {
+      await Process.run('cmd', ['/c', 'start', url]);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'settings.remoteOpenUrl',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Remote URL could not be opened.')),
+      );
+    }
+  }
+
+  Future<void> _clearLegacyWebView2EnvVar() async {
+    ProcessResult result;
+    try {
+      result = await Process.run('reg', [
+        'delete',
+        r'HKCU\Environment',
+        '/v',
+        'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS',
+        '/f',
+      ]);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'settings.webview2EnvCleanup',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Legacy WebView2 permission flag could not be checked.'),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final deleted = result.exitCode == 0;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          deleted
+              ? 'Legacy WebView2 permission flag cleared.'
+              : 'No legacy WebView2 permission flag was found.',
+        ),
+      ),
+    );
   }
 
   void _showBetaConsentDetails(BuildContext context) {

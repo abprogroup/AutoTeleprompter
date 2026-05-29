@@ -3,7 +3,15 @@ part of 'script_provider.dart';
 class ParsedFile {
   final String text;
   final double? fontSize;
-  ParsedFile(this.text, {this.fontSize});
+  final String? errorMessage;
+
+  ParsedFile(
+    this.text, {
+    this.fontSize,
+    this.errorMessage,
+  });
+
+  bool get isError => errorMessage != null;
 }
 
 class _DocxRunStyle {

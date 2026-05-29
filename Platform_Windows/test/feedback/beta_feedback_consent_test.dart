@@ -122,9 +122,122 @@ void main() {
     final retry = await service.retryPendingReports();
     expect(retry.sent, 0);
     expect(retry.remaining, 3);
+    expect(retry.lastFailureClass, 'endpointMissing');
+    expect(retry.message, contains('Feedback service is not configured'));
 
     expect(await service.deletePendingReports(), 3);
     expect(await service.pendingReportCount(), 0);
+  });
+
+  test('feedback outbox sanitizes report ids used as filenames', () async {
+    final temp =
+        await Directory.systemTemp.createTemp('feedback_filename_test_');
+    addTearDown(() async {
+      if (await temp.exists()) await temp.delete(recursive: true);
+    });
+
+    final service = FeedbackReportService(
+      endpoint: '',
+      outboxDirectory: () async => temp,
+    );
+    final result = await service.submit({
+      'reportId': r'..\bad/report:id',
+      'schemaVersion': 1,
+      'activeScript': {'rawText': 'script'},
+    });
+
+    expect(result.queued, isTrue);
+    final files = temp
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.json.gz.atpe'))
+        .toList();
+    expect(files, hasLength(1));
+    expect(files.single.path, isNot(contains('..')));
+    expect(files.single.path, isNot(contains('/bad/')));
+  });
+
+  test('feedback service rejects non-local http endpoints before sending',
+      () async {
+    final temp = await Directory.systemTemp.createTemp('feedback_https_test_');
+    addTearDown(() async {
+      if (await temp.exists()) await temp.delete(recursive: true);
+    });
+
+    final service = FeedbackReportService(
+      endpoint: 'http://example.com/feedback',
+      outboxDirectory: () async => temp,
+    );
+    final result = await service.submit({
+      'reportId': 'http-test',
+      'schemaVersion': 1,
+      'activeScript': {'rawText': 'script'},
+    });
+
+    expect(result.sent, isFalse);
+    expect(result.queued, isTrue);
+    expect(result.failureClass, 'endpointRejected');
+    expect(result.message, contains('HTTPS'));
+    expect(await service.pendingReportCount(), 1);
+  });
+
+  test('feedback service classifies malformed endpoint transport failures',
+      () async {
+    final temp =
+        await Directory.systemTemp.createTemp('feedback_bad_endpoint_test_');
+    addTearDown(() async {
+      if (await temp.exists()) await temp.delete(recursive: true);
+    });
+
+    final service = FeedbackReportService(
+      endpoint: 'https://[broken',
+      outboxDirectory: () async => temp,
+    );
+    final result = await service.submit({
+      'reportId': 'bad-endpoint-test',
+      'schemaVersion': 1,
+      'activeScript': {'rawText': 'script'},
+    });
+
+    expect(result.sent, isFalse);
+    expect(result.queued, isTrue);
+    expect(result.failureClass, 'badEndpointFormat');
+    expect(await service.pendingReportCount(), 1);
+  });
+
+  test('feedback service times out stalled endpoint sends', () async {
+    final temp =
+        await Directory.systemTemp.createTemp('feedback_timeout_test_');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final releaseServer = Completer<void>();
+    addTearDown(() async {
+      releaseServer.complete();
+      await server.close(force: true);
+      if (await temp.exists()) await temp.delete(recursive: true);
+    });
+
+    unawaited(() async {
+      await for (final request in server) {
+        await request.drain<void>();
+        await releaseServer.future;
+      }
+    }());
+
+    final service = FeedbackReportService(
+      endpoint: 'http://127.0.0.1:${server.port}/feedback',
+      outboxDirectory: () async => temp,
+      requestTimeout: const Duration(milliseconds: 20),
+    );
+    final result = await service.submit({
+      'reportId': 'timeout-test',
+      'schemaVersion': 1,
+      'activeScript': {'rawText': 'script'},
+    });
+
+    expect(result.sent, isFalse);
+    expect(result.queued, isTrue);
+    expect(result.failureClass, 'timeout');
+    expect(await service.pendingReportCount(), 1);
   });
 
   test('feedback service follows Apps Script style 302 redirects', () async {
@@ -197,6 +310,13 @@ void main() {
     expect(result.queued, isTrue);
     expect(result.message, contains('bad token'));
     expect(await service.pendingReportCount(), 1);
+
+    final retry = await service.retryPendingReports();
+    expect(retry.sent, 0);
+    expect(retry.remaining, 1);
+    expect(retry.lastFailureClass, 'serverRejected');
+    expect(retry.lastFailureMessage, contains('bad token'));
+    expect(retry.message, contains('bad token'));
   });
 
   test('feedback service trims endpoint whitespace before sending', () async {

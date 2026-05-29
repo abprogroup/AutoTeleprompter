@@ -24,7 +24,10 @@ class RichClipboard {
         });
         if (ok == true) return;
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('RichClipboard HTML fallback: $error\n$stackTrace');
+      }
       // fall through to plain-text fallback
     }
     await Clipboard.setData(ClipboardData(text: plain));

@@ -1,19 +1,18 @@
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import '../../features/feedback/services/lightweight_diagnostics.dart';
 
 /// Handles OS-level permission requests at app startup.
 ///
 /// Platform behavior:
-/// ┌─────────────────┬────────────────────────────────────────────────────┐
-/// │ iOS             │ Requests microphone + speech recognition at launch  │
-/// │                 │ Also calls SpeechToText().initialize() to trigger   │
-/// │                 │ the native SFSpeechRecognizer.requestAuthorization()│
-/// │ macOS           │ Same as iOS — macOS also uses SFSpeechRecognizer    │
-/// │ Android         │ No-op — Android permission dialogs are shown at the │
-/// │                 │ point of use (when STT is first started)             │
-/// │ Windows         │ No-op — Windows uses Privacy Settings, not prompts  │
-/// └─────────────────┴────────────────────────────────────────────────────┘
+/// - iOS/macOS: requests microphone and speech recognition at launch. It also
+///   calls SpeechToText().initialize() so Apple speech authorization can appear
+///   in system settings.
+/// - Android: no startup request; microphone permission is requested at first
+///   speech use.
+/// - Windows: no programmatic request; users manage microphone/camera access in
+///   Windows Privacy settings.
 class PlatformPermissions {
   const PlatformPermissions._();
 
@@ -35,7 +34,13 @@ class PlatformPermissions {
       // which is required for the permission to appear in iOS/macOS Settings.
       try {
         await SpeechToText().initialize();
-      } catch (_) {}
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'platformPermissions.speechInitialize',
+        );
+      }
     }
     // Android: STT service requests mic permission when it first starts.
     // Windows: uses system Privacy Settings, no programmatic request needed.

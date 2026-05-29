@@ -100,7 +100,12 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         return;
       }
       _setTeleprompterState(() => _presenterFullscreen = applied);
-    } catch (_) {
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'presenter.fullscreen',
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Fullscreen is unavailable.')),
@@ -111,30 +116,32 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   Future<void> _initWebViewController() async {
     try {
-      // By using this environment variable, we force WebView2 (Chromium) to
-      // automatically grant microphone and camera permissions for the app.
-      // This is the standard secure way to bypass the missing Permission API
-      // in the current Windows WebView plugin.
-      const envKey = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS';
-      const envVal =
-          '--use-fake-ui-for-media-stream --unsafely-treat-insecure-origin-as-secure=http://localhost:8082 --autoplay-policy=no-user-gesture-required';
-
-      // We'll set it via setx to ensure it persists across the session
-      await Process.run('setx', [envKey, envVal], runInShell: true);
-
       final controller = WebviewController();
       await controller.initialize();
 
       if (mounted) _setTeleprompterState(() => _webviewController = controller);
-    } catch (_) {}
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'presenter.webviewInit',
+      );
+    }
   }
 
   Future<void> _loadSttWebView(String url) async {
+    WebView2RuntimeConfig.configureForLocalSttUrl(url);
     _loadedWebViewUrl = url;
     if (_webviewController == null) await _initWebViewController();
     try {
       await _webviewController?.loadUrl(url);
-    } catch (_) {}
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'presenter.webviewLoad',
+      );
+    }
   }
 
   void _scheduleHideControls() {
@@ -160,7 +167,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     });
   }
 
-  /// Show a dialog when Google speech recognition fails
+  /// Show a dialog when speech recognition needs a language pack.
   void _showMissingLanguageDialog(String languageName) {
     if (Platform.isWindows) {
       showDialog(
@@ -174,7 +181,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
               Icon(Icons.settings_voice, color: Color(0xFFFFBF00), size: 24),
               SizedBox(width: 10),
               Expanded(
-                child: Text('Windows Built-In STT',
+                child: Text('Windows built-in speech-to-text',
                     style: TextStyle(color: Colors.white, fontSize: 18)),
               ),
             ],
@@ -276,7 +283,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'An internet connection (WiFi or mobile data) is required for this language.',
+                    'An internet connection is required for this language.',
                     style: TextStyle(
                         color: Color(0xFFFFBF00),
                         fontSize: 13,
@@ -295,8 +302,8 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
             ),
             const SizedBox(height: 8),
             const Text(
-              '1. Connect to WiFi or enable mobile data\n\n'
-              '2. Make sure the Google app is installed and updated\n\n'
+              '1. Connect this Windows device to the internet\n\n'
+              '2. Enable online speech recognition if this language has no offline pack\n\n'
               '3. Restart the teleprompter session',
               style:
                   TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
@@ -329,16 +336,16 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     }
     if (error.contains('error_permission') ||
         error.contains('insufficient_permissions')) {
-      return 'Microphone permission denied. Please enable it in your device settings: Settings → Apps → AutoTeleprompter → Permissions → Microphone';
+      return 'Microphone permission denied. Open Windows Settings > Privacy & security > Microphone, then allow microphone access and desktop apps.';
     }
     if (error.contains('error_language')) {
-      return 'Language not available for speech recognition. Please connect to WiFi or mobile data — some languages require an internet connection.';
+      return 'Language not available for speech recognition. Some languages need online speech recognition or an installed Windows speech pack.';
     }
     if (error.contains('error_audio')) {
       return 'Microphone not available. Check that no other app is using the microphone.';
     }
     if (error.contains('not available') || error.contains('init failed')) {
-      return 'Speech recognition not available. Make sure the Google app is installed and updated.';
+      return 'Speech recognition not available. Check Windows Settings > Time & Language > Speech, and Privacy & security > Microphone.';
     }
     return error;
   }
@@ -388,7 +395,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
             title: const Text('Microphone Permission Required',
                 style: TextStyle(color: Colors.white)),
             content: const Text(
-              'Microphone permission was denied. Please enable it in your device settings:\n\nSettings → Apps → AutoTeleprompter → Permissions → Microphone',
+              'Microphone permission was denied.\n\nOpen Windows Settings > Privacy & security > Microphone, then allow microphone access and allow desktop apps.',
               style: TextStyle(color: Colors.white70),
             ),
             actions: [
@@ -485,5 +492,5 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     }
   }
 
-  // ── Smooth pixel-based manual scroll ───────────────────────────────────────
+  // Smooth pixel-based manual scroll.
 }

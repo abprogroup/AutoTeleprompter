@@ -46,36 +46,61 @@ extension _SettingsSecureScriptParts on SettingsNotifier {
     List<String> sanitizedRecents,
   ) async {
     final secureStore = SecureScriptStore();
-    final migratedRecents =
-        await secureStore.migrateRecentMetadata(sanitizedRecents);
+    final migratedRecents = await secureStore.migrateRecentMetadata(
+      sanitizedRecents,
+      onIssue: (issue, error, stackTrace, index) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stackTrace,
+          source: 'settings.$issue',
+          data: {'index': index},
+        );
+      },
+    );
     var needsResave =
         jsonEncode(migratedRecents) != jsonEncode(sanitizedRecents);
     var lastScriptSessionId = prefs.getString(_lastScriptSessionIdKey) ?? '';
 
     final legacyLastScript = prefs.getString(_lastScriptKey) ?? '';
     if (legacyLastScript.trim().isNotEmpty) {
-      final migratedLastId = await secureStore.migrateLastScript(
-        lastScript: legacyLastScript,
-        lastTitle: prefs.getString('last_script_title') ?? '',
-        fallbackSessionId: _matchingRecentSessionId(
-          migratedRecents,
-          prefs.getString('last_script_title') ?? '',
-        ),
-      );
-      if (migratedLastId != null) {
-        lastScriptSessionId = migratedLastId;
-        await prefs.setString(_lastScriptSessionIdKey, migratedLastId);
+      try {
+        final migratedLastId = await secureStore.migrateLastScript(
+          lastScript: legacyLastScript,
+          lastTitle: prefs.getString('last_script_title') ?? '',
+          fallbackSessionId: _matchingRecentSessionId(
+            migratedRecents,
+            prefs.getString('last_script_title') ?? '',
+          ),
+        );
+        if (migratedLastId != null) {
+          lastScriptSessionId = migratedLastId;
+          await prefs.setString(_lastScriptSessionIdKey, migratedLastId);
+        }
+      } catch (error, stackTrace) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stackTrace,
+          source: 'settings.secureLastScriptMigration',
+        );
       }
       await prefs.remove(_lastScriptKey);
     }
 
     final legacyAutosave = prefs.getString('autosave_script') ?? '';
     if (legacyAutosave.trim().isNotEmpty) {
-      final autosaveId = await secureStore.save(
-        recordId: 'autosave_${DateTime.now().microsecondsSinceEpoch}',
-        text: legacyAutosave,
-      );
-      await prefs.setString('autosave_secure_record_id', autosaveId);
+      try {
+        final autosaveId = await secureStore.save(
+          recordId: 'autosave_${DateTime.now().microsecondsSinceEpoch}',
+          text: legacyAutosave,
+        );
+        await prefs.setString('autosave_secure_record_id', autosaveId);
+      } catch (error, stackTrace) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stackTrace,
+          source: 'settings.secureAutosaveMigration',
+        );
+      }
       await prefs.remove('autosave_script');
     }
 
@@ -143,7 +168,12 @@ extension _SettingsSecureScriptParts on SettingsNotifier {
         return (sessionId != null && decoded['sessionId'] == sessionId) ||
             (recordId.isNotEmpty &&
                 decoded[SecureScriptStore.recordIdKey] == recordId);
-      } catch (_) {
+      } catch (error) {
+        LightweightDiagnostics.instance.record(
+          'settings',
+          'ignored malformed recent activation metadata',
+          data: {'error': error.toString()},
+        );
         return false;
       }
     });
@@ -174,7 +204,16 @@ extension _SettingsSecureScriptParts on SettingsNotifier {
       try {
         final decoded = Map<String, dynamic>.from(jsonDecode(item));
         if (decoded['title'] == title) return decoded['sessionId'] as String?;
-      } catch (_) {}
+      } catch (error) {
+        LightweightDiagnostics.instance.record(
+          'settings',
+          'ignored malformed recent title metadata',
+          data: {
+            'title': title,
+            'error': error.toString(),
+          },
+        );
+      }
     }
     return null;
   }

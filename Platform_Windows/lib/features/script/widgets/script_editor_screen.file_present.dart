@@ -282,7 +282,17 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             currentWordColor: settings.currentWordColor,
             futureWordColor: settings.futureWordColor,
           );
-    } catch (_) {}
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'scriptEditor.startPresentLoad',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+        },
+      );
+    }
     if (mounted) {
       final returnWordIndex = await Navigator.of(context).push<int>(
         MaterialPageRoute(builder: (_) => const TeleprompterScreen()),
@@ -327,7 +337,17 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             currentWordColor: settings.currentWordColor,
             futureWordColor: settings.futureWordColor,
           );
-    } catch (_) {}
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'scriptEditor.startContentCreatorLoad',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+        },
+      );
+    }
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const ContentCreatorScreen()),

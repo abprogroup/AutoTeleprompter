@@ -183,7 +183,19 @@ class _ScriptListItem extends ConsumerWidget {
       if (decodedMeta != null) {
         unawaited(settingsNotifier.activateRecentScript(decodedMeta));
       }
-    } catch (e) {
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'gallery.recentOpenRecovery',
+        data: {
+          'title': title,
+          'sourceType': type,
+          'sessionId': sessionId,
+          'hasSecureRecord':
+              secureRecordId != null && secureRecordId!.isNotEmpty,
+        },
+      );
       if (kDebugMode) debugPrint('Session Recovery Error: $e');
       scriptNotifier.loadText(
         fullText,

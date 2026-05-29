@@ -3,18 +3,40 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
   List<MarkupController> _styleTargets() {
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
-    if (_isGlobalSelection || hasOverlay) {
+    final hasStructuredSelection = _isGlobalSelection ||
+        hasOverlay ||
+        _controllers.any((c) {
+          final external = c.externalSelection;
+          return c.isGlobalSelected ||
+              (external != null && external.isValid && !external.isCollapsed);
+        });
+    if (hasStructuredSelection) {
       final refined = _controllers
           .where((c) =>
-              c.externalSelection != null &&
-              c.externalSelection!.isValid &&
-              !c.externalSelection!.isCollapsed)
+              c.isGlobalSelected ||
+              (c.externalSelection != null &&
+                  c.externalSelection!.isValid &&
+                  !c.externalSelection!.isCollapsed))
           .toList();
       if (refined.isNotEmpty) return refined;
       return List.of(_controllers);
     }
     final active = _activeController;
     return active == null ? <MarkupController>[] : [active];
+  }
+
+  bool _hasWholeScriptSelection() {
+    if (_isGlobalSelection) return true;
+    if (_controllers.isEmpty) return false;
+    return _controllers.every((c) {
+      if (c.text.isEmpty) return true;
+      if (c.isGlobalSelected) return true;
+      final external = c.externalSelection;
+      return external != null &&
+          external.isValid &&
+          external.start <= 0 &&
+          external.end >= c.text.length;
+    });
   }
 
   void _applyStyleCmd(String open, String close, String label) {
@@ -189,7 +211,8 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     final inSuite = _activeSuite != EditorSuite.none;
     if (inSuite) _trackSuiteSection('Alignment');
 
-    if (_isGlobalSelection) {
+    if (_hasWholeScriptSelection()) {
+      _isGlobalSelection = true;
       broadcastDirection(dir, open: '[$dir]', close: '[/$dir]');
       _resyncGlobalSelection();
     } else {
@@ -209,9 +232,10 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
             ? MarkupController.rawToVisualOffset(
                 controller.text, controller.externalSelection!.end)
             : 0;
+        final selection =
+            hadSel ? controller.externalSelection! : controller.selection;
         controller.value = TextEditingValue(
-          text: StylingService.applyDirection(
-              controller.text, controller.selection, dir),
+          text: StylingService.applyDirection(controller.text, selection, dir),
           selection: const TextSelection.collapsed(offset: 0),
         );
         if (hadSel) {
@@ -252,7 +276,8 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     final inSuite = _activeSuite != EditorSuite.none;
     if (inSuite) _trackSuiteSection('Alignment');
 
-    if (_isGlobalSelection) {
+    if (_hasWholeScriptSelection()) {
+      _isGlobalSelection = true;
       broadcastAlign(align, open: '[align=$align]', close: '[/align=$align]');
       _resyncGlobalSelection();
     } else {
@@ -270,9 +295,10 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
             ? MarkupController.rawToVisualOffset(
                 controller.text, controller.externalSelection!.end)
             : 0;
+        final selection =
+            hadSel ? controller.externalSelection! : controller.selection;
         controller.value = TextEditingValue(
-          text: StylingService.applyLayout(
-              controller.text, controller.selection, align),
+          text: StylingService.applyLayout(controller.text, selection, align),
           selection: const TextSelection.collapsed(offset: 0),
         );
         if (hadSel) {

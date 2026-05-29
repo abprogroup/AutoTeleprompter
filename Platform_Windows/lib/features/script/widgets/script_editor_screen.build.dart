@@ -283,6 +283,12 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                           onHistorySelected: (idx) => _jumpToHistory(idx),
                           activeSuite: _activeSuite,
                           onSuiteToggle: (suite) {
+                            final hadActiveSelection =
+                                _hasAnyActiveEditorSelection;
+                            final wasCommandExecuting = _isCommandExecuting;
+                            if (hadActiveSelection) {
+                              _isCommandExecuting = true;
+                            }
                             // Closing = explicitly closing (none), toggling same suite off, or switching suites
                             final willClose = suite == EditorSuite.none ||
                                 suite == _activeSuite;
@@ -304,6 +310,13 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                             });
                             if (_activeSuite != EditorSuite.none) {
                               _suiteSection = null;
+                            }
+                            if (hadActiveSelection) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (!mounted) return;
+                                _overlayKey.currentState?.refreshPositions();
+                                _isCommandExecuting = wasCommandExecuting;
+                              });
                             }
                           },
                           onLayoutInteraction: (section) {

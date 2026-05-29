@@ -1,29 +1,41 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/security/secure_script_store.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../models/app_settings.dart';
 
 export '../models/app_settings.dart';
 
 part 'settings_provider.keys.dart';
+part 'settings_provider.normalizers.dart';
 part 'settings_provider.secure_scripts.dart';
 part 'settings_provider.appearance.dart';
 part 'settings_provider.stt.dart';
 
-String _normalizeSttEngine(String? engine) {
-  return AppSettings.normalizeSttEngine(engine);
-}
-
 class SettingsNotifier extends Notifier<AppSettings>
     with SettingsNotifierAppearance, SettingsNotifierSttSettings {
+  int _loadGeneration = 0;
+  bool _isDisposed = false;
+
   @override
   AppSettings build() {
-    _load();
+    _isDisposed = false;
+    final generation = ++_loadGeneration;
+    ref.onDispose(() {
+      _isDisposed = true;
+      _loadGeneration++;
+    });
+    unawaited(_load(generation));
     return const AppSettings();
   }
 
-  Future<void> _load() async {
+  bool _canWriteLoadedState(int generation) {
+    return !_isDisposed && generation == _loadGeneration;
+  }
+
+  Future<void> _load(int generation) async {
     final prefs = await SharedPreferences.getInstance();
     List<String> rawRecents = prefs.getStringList(_recentScriptsKey) ?? [];
 
@@ -68,7 +80,15 @@ class SettingsNotifier extends Notifier<AppSettings>
 
         if (itemModified) needsResave = true;
         sanitizedRecents.add(jsonEncode(decoded));
-      } catch (_) {
+      } catch (error) {
+        LightweightDiagnostics.instance.record(
+          'settings',
+          'ignored malformed recent settings metadata',
+          data: {
+            'source': 'settingsLoad',
+            'error': error.toString(),
+          },
+        );
         sanitizedRecents.add(json); // Preservation
       }
     }
@@ -86,6 +106,8 @@ class SettingsNotifier extends Notifier<AppSettings>
     if (needsResave) {
       await prefs.setStringList(_recentScriptsKey, migratedRecents);
     }
+
+    if (!_canWriteLoadedState(generation)) return;
 
     final manualStartSmall =
         (prefs.getInt(_sttManualStartAdvanceSmallWordsKey) ?? 4)
@@ -119,26 +141,32 @@ class SettingsNotifier extends Notifier<AppSettings>
     state = AppSettings(
       fontSize:
           (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(14.0, 120.0).toDouble(),
-      languageMode: prefs.getString(_languageKey) ?? 'auto',
-      scrollLead: prefs.getDouble(_scrollLeadKey) ?? 0.32,
+      languageMode: _normalizeLanguageMode(prefs.getString(_languageKey)),
+      scrollLead: _normalizeScrollLead(prefs.getDouble(_scrollLeadKey)),
       lastScript: '',
       lastScriptTitle: prefs.getString('last_script_title') ?? '',
       lastScriptSessionId: lastScriptSessionId,
-      scrollMode: prefs.getString(_scrollModeKey) ?? 'auto',
-      scrollSpeed: prefs.getDouble(_scrollSpeedKey) ?? 100.0,
-      textAlign: prefs.getString(_textAlignKey) ?? 'center',
+      scrollMode: _normalizeScrollMode(prefs.getString(_scrollModeKey)),
+      scrollSpeed: _normalizeScrollSpeed(prefs.getDouble(_scrollSpeedKey)),
+      textAlign: _normalizeTextAlign(prefs.getString(_textAlignKey)),
       mirrorHorizontal: prefs.getBool(_mirrorHorizontalKey) ?? false,
       mirrorVertical: prefs.getBool(_mirrorVerticalKey) ?? false,
-      flipRotation: prefs.getInt(_flipRotationKey) ?? 0,
-      lineSpacing: prefs.getDouble(_lineSpacingKey) ?? 1.2,
-      wordSpacing: prefs.getDouble(_wordSpacingKey) ?? 0.0,
-      letterSpacing: prefs.getDouble(_letterSpacingKey) ?? 0.0,
-      scriptBgColor: prefs.getInt(_scriptBgColorKey) ?? 0xFF000000,
-      currentWordColor: prefs.getInt(_currentWordColorKey) ?? 0xFFFFBF00,
-      futureWordColor: prefs.getInt(_futureWordColorKey) ?? 0xFFFFFFFF,
-      pastWordOpacity: prefs.getDouble(_pastWordOpacityKey) ?? 0.3,
+      flipRotation: _normalizeFlipRotation(prefs.getInt(_flipRotationKey)),
+      lineSpacing: _normalizeLineSpacing(prefs.getDouble(_lineSpacingKey)),
+      wordSpacing: _normalizeWordSpacing(prefs.getDouble(_wordSpacingKey)),
+      letterSpacing:
+          _normalizeLetterSpacing(prefs.getDouble(_letterSpacingKey)),
+      scriptBgColor:
+          _normalizeColor(prefs.getInt(_scriptBgColorKey), 0xFF000000),
+      currentWordColor:
+          _normalizeColor(prefs.getInt(_currentWordColorKey), 0xFFFFBF00),
+      futureWordColor:
+          _normalizeColor(prefs.getInt(_futureWordColorKey), 0xFFFFFFFF),
+      pastWordOpacity:
+          _normalizePastWordOpacity(prefs.getDouble(_pastWordOpacityKey)),
       debugMode: prefs.getBool(_debugModeKey) ?? false,
-      videoResolution: prefs.getString(_videoResolutionKey) ?? '720p',
+      videoResolution:
+          _normalizeVideoResolution(prefs.getString(_videoResolutionKey)),
       recentScripts: migratedRecents,
       displayName: prefs.getString(_displayNameKey) ?? 'Guest',
       lastTextColor: prefs.getInt(_lastTextColorKey) ?? 0xFFFFBF00,
@@ -153,7 +181,12 @@ class SettingsNotifier extends Notifier<AppSettings>
       sttEngine: _normalizeSttEngine(prefs.getString(_sttEngineKey)),
       allowScrollDuringActiveSession:
           prefs.getBool(_allowScrollDuringActiveSessionKey) ?? false,
-      readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
+      manualScrollBarPlacement: _normalizeManualScrollBarPlacement(
+        prefs.getString(_manualScrollBarPlacementKey),
+      ),
+      readFadeIntensity: (prefs.getDouble(_readFadeIntensityKey) ?? 0.0)
+          .clamp(0.0, 1.0)
+          .toDouble(),
       sttInputDeviceId: prefs.getString(_sttInputDeviceIdKey) ?? '',
       sttInputDeviceLabel: prefs.getString(_sttInputDeviceLabelKey) ??
           'System default microphone',
@@ -170,6 +203,66 @@ class SettingsNotifier extends Notifier<AppSettings>
       sttManualVisibleSkipSmallWords: manualVisibleSmall,
       sttManualVisibleSkipBigWords: manualVisibleBig,
       sttManualBigWordMinLetters: manualBigWordMinLetters,
+      contentCreatorCameraSourceMode: _normalizeContentCreatorCameraSource(
+        prefs.getString(_contentCreatorCameraSourceModeKey),
+      ),
+      contentCreatorLayoutPreset: _normalizeContentCreatorLayout(
+        prefs.getString(_contentCreatorLayoutPresetKey),
+      ),
+      contentCreatorCameraOpacity:
+          (prefs.getDouble(_contentCreatorCameraOpacityKey) ?? 0.72)
+              .clamp(0.2, 1.0)
+              .toDouble(),
+      contentCreatorFeedMode: _normalizeContentCreatorFeedMode(
+        prefs.getString(_contentCreatorFeedModeKey),
+      ),
+      contentCreatorBubblePosition: _normalizeContentCreatorBubblePosition(
+        prefs.getString(_contentCreatorBubblePositionKey),
+      ),
+      contentCreatorBubbleShape: _normalizeContentCreatorBubbleShape(
+        prefs.getString(_contentCreatorBubbleShapeKey),
+      ),
+      contentCreatorBubbleSize:
+          (prefs.getDouble(_contentCreatorBubbleSizeKey) ?? 0.24)
+              .clamp(0.04, 0.60)
+              .toDouble(),
+      contentCreatorBubbleOpacity:
+          (prefs.getDouble(_contentCreatorBubbleOpacityKey) ?? 1.0)
+              .clamp(0.25, 1.0)
+              .toDouble(),
+      contentCreatorBubbleRoundness:
+          (prefs.getDouble(_contentCreatorBubbleRoundnessKey) ?? 0.18)
+              .clamp(0.0, 1.0)
+              .toDouble(),
+      contentCreatorBubbleOffsetX:
+          (prefs.getDouble(_contentCreatorBubbleOffsetXKey) ?? 0.0)
+              .clamp(-0.25, 0.25)
+              .toDouble(),
+      contentCreatorBubbleOffsetY:
+          (prefs.getDouble(_contentCreatorBubbleOffsetYKey) ?? 0.0)
+              .clamp(-0.25, 0.25)
+              .toDouble(),
+      contentCreatorVignetteIntensity:
+          (prefs.getDouble(_contentCreatorVignetteIntensityKey) ?? 0.45)
+              .clamp(0.0, 1.0)
+              .toDouble(),
+      contentCreatorFeedBlur:
+          (prefs.getDouble(_contentCreatorFeedBlurKey) ?? 14.0)
+              .clamp(0.0, 30.0)
+              .toDouble(),
+      contentCreatorTextScrim:
+          (prefs.getDouble(_contentCreatorTextScrimKey) ?? 0.55)
+              .clamp(0.0, 0.9)
+              .toDouble(),
+      contentCreatorRecordingFolder: _normalizeLocalPath(
+          prefs.getString(_contentCreatorRecordingFolderKey)),
+      contentCreatorRecordingFormat: _normalizeContentCreatorRecordingFormat(
+        prefs.getString(_contentCreatorRecordingFormatKey),
+      ),
+      contentCreatorRecordingAudioMode:
+          _normalizeContentCreatorRecordingAudioMode(
+        prefs.getString(_contentCreatorRecordingAudioModeKey),
+      ),
     );
   }
 
@@ -267,7 +360,38 @@ class SettingsNotifier extends Notifier<AppSettings>
           updated = true;
           break;
         }
-      } catch (_) {}
+      } catch (error) {
+        LightweightDiagnostics.instance.record(
+          'settings',
+          'ignored malformed recent metadata during save',
+          data: {
+            'source': 'saveScriptRecentUpdate',
+            'title': currentTitle,
+            'error': error.toString(),
+          },
+        );
+        try {
+          final decoded = Map<String, dynamic>.from(jsonDecode(recentList[i]))
+            ..remove('fullText')
+            ..remove('historyJson')
+            ..remove('snippet');
+          recentList[i] = jsonEncode(decoded);
+          updated = true;
+        } catch (sanitizeError) {
+          LightweightDiagnostics.instance.record(
+            'settings',
+            'failed to scrub malformed recent metadata during save',
+            data: {
+              'source': 'saveScriptRecentScrub',
+              'title': currentTitle,
+              'error': sanitizeError.toString(),
+            },
+          );
+          recentList.removeAt(i);
+          i--;
+          updated = true;
+        }
+      }
     }
 
     if (updated) {
@@ -322,8 +446,17 @@ class SettingsNotifier extends Notifier<AppSettings>
         final bool titleMatch =
             newTitle != null && decoded['title'] == newTitle;
         return idMatch || titleMatch;
-      } catch (e) {
-        return false;
+      } catch (error) {
+        LightweightDiagnostics.instance.record(
+          'settings',
+          'removed malformed recent metadata while adding script',
+          data: {
+            'source': 'addToRecentDuplicateCheck',
+            'title': newTitle,
+            'error': error.toString(),
+          },
+        );
+        return true;
       }
     });
 
@@ -359,6 +492,15 @@ class SettingsNotifier extends Notifier<AppSettings>
         final decoded = jsonDecode(item);
         return decoded['sessionId'] == sessionId;
       } catch (e) {
+        LightweightDiagnostics.instance.record(
+          'settings',
+          'ignored malformed recent metadata while removing script',
+          data: {
+            'source': 'removeFromRecent',
+            'sessionId': sessionId,
+            'error': e.toString(),
+          },
+        );
         return false;
       }
     });

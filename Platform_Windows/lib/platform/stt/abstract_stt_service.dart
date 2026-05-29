@@ -32,7 +32,7 @@ class SttRuntimeHealth {
 ///
 /// All platform-specific adapters extend this class.
 /// Feature code (e.g. TeleprompterNotifier) only ever references
-/// AbstractSttService — it never imports platform-specific types directly.
+/// AbstractSttService; it never imports platform-specific types directly.
 abstract class AbstractSttService {
   /// Called for every transcription result (partial or final).
   void Function(SpeechResult)? onResult;
@@ -96,7 +96,7 @@ abstract class AbstractSttService {
   /// after start() returns, requiring the caller to set isListening
   /// immediately rather than waiting for the callback.
   ///
-  /// Apple (iOS / macOS): true — SFSpeechRecognizer callbacks are async.
-  /// Android / Windows: false — status callback arrives fast enough.
+  /// Apple (iOS / macOS): true; SFSpeechRecognizer callbacks are async.
+  /// Android / Windows: false; status callback arrives fast enough.
   bool get requiresImmediateListeningFlag => false;
 }

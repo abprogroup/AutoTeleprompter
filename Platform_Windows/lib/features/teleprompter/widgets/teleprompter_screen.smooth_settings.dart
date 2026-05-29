@@ -38,6 +38,7 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
       isScrollControlled: true,
       builder: (_) => TeleprompterSettingsPanel(
         onFontSizeChanged: _preserveReadingPositionAfterLayoutChange,
+        onLayoutChanged: () => _preserveReadingPositionAfterLayoutChange(0),
       ),
     );
   }

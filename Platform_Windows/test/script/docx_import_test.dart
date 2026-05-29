@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:autoteleprompter/features/feedback/services/lightweight_diagnostics.dart';
 import 'package:autoteleprompter/features/script/providers/script_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -196,6 +197,184 @@ void main() {
     );
     expect(text,
         isNot(contains('\u05dc\u05d5\u05de\u05d3\u05d9\u05dd.\u05dc\u05d0')));
+  });
+
+  test('DOCX import rejects archives with too many entries safely', () async {
+    final dir = await Directory.systemTemp.createTemp('docx_safety_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final archive = Archive();
+    for (var i = 0; i < 2001; i++) {
+      archive.addFile(ArchiveFile('junk/$i.xml', 2, utf8.encode('<x/>')));
+    }
+    final file = File('${dir.path}/too_many_entries.docx');
+    await file.writeAsBytes(ZipEncoder().encode(archive)!);
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(parsed.isError, isTrue);
+    expect(text, contains('too many internal files'));
+  });
+
+  test('plain import rejects oversized text safely', () async {
+    LightweightDiagnostics.instance.clear();
+    final dir = await Directory.systemTemp.createTemp('plain_safety_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/too_big.txt');
+    final sink = file.openWrite();
+    final chunk = List<int>.filled(1024 * 1024, 0x41);
+    try {
+      for (var i = 0; i < 26; i++) {
+        sink.add(chunk);
+      }
+    } finally {
+      await sink.close();
+    }
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(parsed.isError, isTrue);
+    expect(text, contains('too large'));
+    expect(text, contains('25MB'));
+    final diagnostics = LightweightDiagnostics.instance.snapshot();
+    final events = diagnostics['events'] as List<dynamic>;
+    expect(
+      events.any((event) =>
+          event is Map &&
+          event['type'] == 'import' &&
+          event['message'] == 'file import failed' &&
+          (event['data'] as Map?)?['safetyLimit'] == true),
+      isTrue,
+    );
+  });
+
+  test('importFile does not load parser error text as a script', () async {
+    final dir = await Directory.systemTemp.createTemp('plain_import_error_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/too_big.txt');
+    final sink = file.openWrite();
+    final chunk = List<int>.filled(1024 * 1024, 0x41);
+    try {
+      for (var i = 0; i < 26; i++) {
+        sink.add(chunk);
+      }
+    } finally {
+      await sink.close();
+    }
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    await container.read(scriptProvider.notifier).importFile(file);
+
+    expect(container.read(scriptProvider), isNull);
+  });
+
+  test('RTF import rejects oversized text safely', () async {
+    final dir = await Directory.systemTemp.createTemp('rtf_safety_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final file = File('${dir.path}/too_big.rtf');
+    final sink = file.openWrite();
+    try {
+      sink.add(utf8.encode('{\\rtf1 '));
+      final chunk = List<int>.filled(1024 * 1024, 0x41);
+      for (var i = 0; i < 26; i++) {
+        sink.add(chunk);
+      }
+      sink.add(utf8.encode('}'));
+    } finally {
+      await sink.close();
+    }
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(parsed.isError, isTrue);
+    expect(text, contains('too large'));
+    expect(text, contains('25MB'));
+  });
+
+  test('DOCX import rejects oversized internal XML safely', () async {
+    final dir = await Directory.systemTemp.createTemp('docx_xml_safety_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final archive = Archive();
+    final xml = List<int>.filled(31 * 1024 * 1024, 0x20);
+    archive.addFile(ArchiveFile('word/document.xml', xml.length, xml));
+    final file = File('${dir.path}/too_big_xml.docx');
+    await file.writeAsBytes(ZipEncoder().encode(archive)!);
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(parsed.isError, isTrue);
+    expect(text, contains('internal file'));
+    expect(text, contains('too large'));
+  });
+
+  test('PAGES import rejects archives with too many entries safely', () async {
+    final dir = await Directory.systemTemp.createTemp('pages_safety_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final archive = Archive();
+    for (var i = 0; i < 2001; i++) {
+      archive.addFile(ArchiveFile('Data/$i.xml', 2, utf8.encode('<x/>')));
+    }
+    final file = File('${dir.path}/too_many_entries.pages');
+    await file.writeAsBytes(ZipEncoder().encode(archive)!);
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(parsed.isError, isTrue);
+    expect(text, contains('too many internal files'));
+  });
+
+  test('PAGES import rejects oversized internal XML safely', () async {
+    final dir = await Directory.systemTemp.createTemp('pages_xml_safety_test_');
+    addTearDown(() => dir.delete(recursive: true));
+
+    final archive = Archive();
+    final xml = List<int>.filled(31 * 1024 * 1024, 0x20);
+    archive.addFile(ArchiveFile('index.xml', xml.length, xml));
+    final file = File('${dir.path}/too_big_xml.pages');
+    await file.writeAsBytes(ZipEncoder().encode(archive)!);
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final dynamic parsed =
+        await container.read(scriptProvider.notifier).parseFile(file);
+    final text = parsed.text as String;
+
+    expect(parsed.isError, isTrue);
+    expect(text, contains('internal file'));
+    expect(text, contains('too large'));
   });
 }
 

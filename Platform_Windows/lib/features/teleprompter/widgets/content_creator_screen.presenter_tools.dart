@@ -4,11 +4,13 @@ class _ContentSearchMatch {
   final int wordIndex;
   final int charStart;
   final int charEnd;
+  final bool isApproximate;
 
   const _ContentSearchMatch({
     required this.wordIndex,
     required this.charStart,
     required this.charEnd,
+    this.isApproximate = false,
   });
 }
 
@@ -178,14 +180,13 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
   int _activeContentIndex() {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return 0;
-    final raw = _isRecording
-        ? _activeWordIndex
-        : ref.read(teleprompterProvider).confirmedWordIndex;
-    return raw.clamp(0, script.words.length - 1).toInt();
+    return _activeWordIndex.clamp(0, script.words.length - 1).toInt();
   }
 
   void _resetContentPosition() {
     _stopAutoScroll();
+    _pendingPositionCommit = null;
+    _positionCommitTimer?.cancel();
     ref.read(teleprompterProvider.notifier).resetPosition();
     _updateContentCreatorState(() => _activeWordIndex = 0);
     if (_scrollController.hasClients) {
@@ -200,8 +201,17 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
   void _jumpToContentWordIndex(int index, {bool immediate = false}) {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
+    if (_contentResumeDecisionPending) {
+      _contentEntryResumeIndex = 0;
+      _resumeDialogShown = true;
+      _updateContentCreatorState(() {
+        _contentResumeDecisionPending = false;
+      });
+    }
     final target = index.clamp(0, script.words.length - 1).toInt();
     _stopAutoScroll();
+    _pendingPositionCommit = null;
+    _positionCommitTimer?.cancel();
     _updateContentCreatorState(() => _activeWordIndex = target);
     ref.read(teleprompterProvider.notifier).jumpToPosition(
           target,
@@ -213,9 +223,37 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
   void _scrollToContentWordIndex(int index, {bool immediate = false}) {
     if (index < 0 || index >= _wordKeys.length) return;
     final ctx = _wordKeys[index].currentContext;
-    final box = ctx?.findRenderObject() as RenderBox?;
-    if (box == null || !_scrollController.hasClients) return;
+    if (ctx == null || !_scrollController.hasClients) return;
     final settings = ref.read(settingsProvider);
+    if (_contentUsesVerticalReadingLine(settings)) {
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      final size = MediaQuery.of(context).size;
+      final targetLine = _contentReadingLineCoordinate(settings, size);
+      final center = box.localToGlobal(box.size.center(Offset.zero));
+      final turns = _contentQuarterTurns(settings);
+      final delta = turns == 1
+          ? center.dx - targetLine
+          : targetLine - center.dx;
+      final target = (_scrollController.offset + delta)
+          .clamp(0.0, _scrollController.position.maxScrollExtent)
+          .toDouble();
+      if (immediate) {
+        _scrollController.jumpTo(target);
+        _syncContentVisibleWordWindow();
+      } else {
+        _scrollController
+            .animateTo(
+              target,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+            )
+            .whenComplete(_syncContentVisibleWordWindow);
+      }
+      return;
+    }
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null) return;
     final screenH = MediaQuery.of(context).size.height;
     final targetY = screenH * settings.scrollLead;
     final wordPos =
@@ -225,12 +263,80 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
         .toDouble();
     if (immediate) {
       _scrollController.jumpTo(target);
+      _syncContentVisibleWordWindow();
     } else {
-      _scrollController.animateTo(
-        target,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-      );
+      _scrollController
+          .animateTo(
+            target,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(_syncContentVisibleWordWindow);
+    }
+  }
+
+  void _restoreContentScrollAfterRotation({
+    required double? preservedOffset,
+    required int fallbackIndex,
+    bool allowOffsetFallback = true,
+  }) {
+    final script = ref.read(scriptProvider);
+    final canRestoreByWord = script != null &&
+        script.words.isNotEmpty &&
+        fallbackIndex >= 0 &&
+        fallbackIndex < _wordKeys.length &&
+        _wordKeys[fallbackIndex].currentContext != null;
+    if (canRestoreByWord) {
+      _scrollToContentWordIndex(fallbackIndex, immediate: true);
+      return;
+    }
+
+    final shouldWaitForWord = script != null &&
+        script.words.isNotEmpty &&
+        fallbackIndex >= 0 &&
+        fallbackIndex < _wordKeys.length;
+    if (shouldWaitForWord && !allowOffsetFallback) return;
+
+    if (!_scrollController.hasClients) return;
+    final target = preservedOffset;
+    if (target == null) {
+      return;
+    }
+    final max = _scrollController.position.maxScrollExtent;
+    _scrollController.jumpTo(target.clamp(0.0, max).toDouble());
+    _syncContentVisibleWordWindow();
+  }
+
+  void _scheduleContentRotationRestore({
+    required double? preservedOffset,
+    required int fallbackIndex,
+  }) {
+    const delays = [
+      Duration.zero,
+      Duration(milliseconds: 45),
+      Duration(milliseconds: 110),
+      Duration(milliseconds: 220),
+      Duration(milliseconds: 420),
+    ];
+    for (var i = 0; i < delays.length; i++) {
+      final delay = delays[i];
+      final isLast = i == delays.length - 1;
+      void restore() {
+        if (!mounted) return;
+        _updateContentCreatorState(() => _activeWordIndex = fallbackIndex);
+        _restoreContentScrollAfterRotation(
+          preservedOffset: preservedOffset,
+          fallbackIndex: fallbackIndex,
+          allowOffsetFallback: false,
+        );
+        if (isLast) _syncContentVisibleWordWindow();
+      }
+
+      if (delay == Duration.zero) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => restore());
+      } else {
+        Future<void>.delayed(delay, restore);
+      }
     }
   }
 
@@ -356,6 +462,43 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
       from = end > match ? end : match + 1;
     }
     if (matches.isEmpty) {
+      final approximateMatches =
+          const ApproximateSpokenSearchService().findRanked(
+        words: script.words,
+        spokenText: query,
+        limit: 5,
+      );
+      if (approximateMatches.isNotEmpty) {
+        final ordered = [...approximateMatches]
+          ..sort((a, b) => a.startWordIndex.compareTo(b.startWordIndex));
+        matches.addAll(ordered.map(
+          (match) => _ContentSearchMatch(
+            wordIndex:
+                match.startWordIndex.clamp(0, script.words.length - 1).toInt(),
+            charStart: 0,
+            charEnd: 0,
+            isApproximate: true,
+          ),
+        ));
+        final current = _activeContentIndex();
+        final next = matches.indexWhere((m) => m.wordIndex > current);
+        final initial = next >= 0 ? next : 0;
+        _updateContentCreatorState(() {
+          _contentSearchToolbarVisible = true;
+          _contentSearchMatches = matches;
+          _contentSearchMatchIndex = initial;
+        });
+        _jumpToContentSearchMatchAt(initial);
+        final best = approximateMatches.first;
+        final preview = best.matchedText.length <= 54
+            ? best.matchedText
+            : '${best.matchedText.substring(0, 54)}...';
+        _showSnack(
+          'Approximate matches: ${matches.length} '
+          '(best ${(best.score * 100).round()}%): $preview',
+        );
+        return;
+      }
       _updateContentCreatorState(() {
         _contentSearchToolbarVisible = false;
         _contentSearchMatches = const [];
@@ -435,162 +578,4 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     return RegExp(r'[A-Za-z0-9\u0590-\u05FF]').hasMatch(value);
   }
 
-  Widget _buildContentControlBar(AppSettings settings) {
-    final isReady = _cameraController?.value.isInitialized == true;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.94),
-            Colors.black.withValues(alpha: 0.68),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _barIcon(
-              Icons.arrow_back, 'Back to editor', () => Navigator.pop(context)),
-          _barIcon(Icons.skip_previous, 'Previous bookmark',
-              () => _jumpContentBookmark(-1)),
-          _barText('A', 'Smaller font', () => _applyContentFontDelta(-4)),
-          _recordButton(isReady),
-          _barText('A', 'Larger font', () => _applyContentFontDelta(4),
-              large: true),
-          _barIcon(
-              Icons.bookmark_add_outlined, 'Add bookmark', _addContentBookmark),
-          _barIcon(Icons.bookmark_remove_outlined, 'Remove bookmark',
-              _deleteContentBookmarkAtCurrentPosition),
-          _barIcon(
-              Icons.photo_camera, 'Camera source', _showContentCreatorSettings),
-          _barIcon(Icons.tune, 'Prompter settings', _showPrompterSettings),
-          _barIcon(
-              Icons.skip_next, 'Next bookmark', () => _jumpContentBookmark(1)),
-          _barIcon(Icons.replay, 'Restart script', _resetContentPosition),
-          _barIcon(Icons.search, 'Search script', _showContentSearchDialog),
-        ],
-      ),
-    );
-  }
-
-  Widget _recordButton(bool isReady) {
-    return GestureDetector(
-      onTap: _toggleRecording,
-      child: Tooltip(
-        message: _isRecording ? 'Stop recording' : 'Start recording',
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
-          ),
-          child: Container(
-            width: 62,
-            height: 62,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _isRecording
-                  ? Colors.red
-                  : (isReady ? Colors.red : Colors.red.withValues(alpha: 0.45)),
-            ),
-            child: Icon(
-              _isRecording ? Icons.stop : Icons.videocam,
-              color: Colors.white,
-              size: 32,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _barIcon(IconData icon, String tooltip, VoidCallback? onPressed) {
-    return IconButton(
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      onPressed: onPressed,
-      icon: Icon(icon,
-          color: onPressed == null ? Colors.white24 : Colors.white70),
-    );
-  }
-
-  Widget _barText(String text, String tooltip, VoidCallback onPressed,
-      {bool large = false}) {
-    return IconButton(
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      onPressed: onPressed,
-      icon: Text(
-        text,
-        style: TextStyle(
-          color: Colors.white70,
-          fontSize: large ? 22 : 16,
-          fontWeight: large ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContentSearchToolbar() {
-    if (!_contentSearchToolbarVisible || _lastSearchQuery.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    final hasMatches = _contentSearchMatches.isNotEmpty;
-    final label = hasMatches
-        ? '${_contentSearchMatchIndex + 1}/${_contentSearchMatches.length}'
-        : '0/0';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.88),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0x66FFBF00), width: 1),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              _barIcon(Icons.keyboard_arrow_left, 'Previous result',
-                  hasMatches ? () => _jumpContentSearchResult(-1) : null),
-              SizedBox(
-                width: 86,
-                child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              _barIcon(Icons.keyboard_arrow_right, 'Next result',
-                  hasMatches ? () => _jumpContentSearchResult(1) : null),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  _lastSearchQuery,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
-              const SizedBox(width: 6),
-              _barIcon(
-                  Icons.search, 'Search new text', _showContentSearchDialog),
-              _barIcon(Icons.close, 'Close search toolbar',
-                  _closeContentSearchToolbar),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

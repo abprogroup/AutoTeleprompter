@@ -1,4 +1,5 @@
 import 'package:autoteleprompter/features/script/models/script_word.dart';
+import 'package:autoteleprompter/features/settings/providers/settings_provider.dart';
 import 'package:autoteleprompter/features/teleprompter/providers/teleprompter_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -106,6 +107,74 @@ void main() {
       ];
 
       expect(TeleprompterNotifier.resolveInitialSttLocale(words), 'he_IL');
+    });
+
+    test('settings language mode can force the initial STT locale', () {
+      final words = [
+        _word(_hToday, 0, rtl: true),
+        _word(_hHope, 1, rtl: true),
+      ];
+
+      expect(
+        TeleprompterNotifier.resolveInitialSttLocaleForSettings(
+          words,
+          const AppSettings(languageMode: AppSettings.languageModeEnglish),
+        ),
+        'en_US',
+      );
+      expect(
+        TeleprompterNotifier.resolveInitialSttLocaleForSettings(
+          words,
+          const AppSettings(languageMode: AppSettings.languageModeHebrew),
+        ),
+        'he_IL',
+      );
+    });
+
+    test('auto speech engine chooses offline for English-only scripts', () {
+      expect(
+        TeleprompterNotifier.shouldUseWindowsOfflineSpeech(
+          settings: const AppSettings(),
+          initialLocale: 'en_US',
+          sectionLocales: const ['en_US', 'en_US'],
+        ),
+        isTrue,
+      );
+    });
+
+    test('auto speech engine keeps browser route for mixed-language scripts',
+        () {
+      expect(
+        TeleprompterNotifier.shouldUseWindowsOfflineSpeech(
+          settings: const AppSettings(),
+          initialLocale: 'en_US',
+          sectionLocales: const ['en_US', 'he_IL'],
+        ),
+        isFalse,
+      );
+    });
+
+    test('explicit speech engine setting overrides auto choice', () {
+      expect(
+        TeleprompterNotifier.shouldUseWindowsOfflineSpeech(
+          settings: const AppSettings(
+            sttEngine: AppSettings.sttEngineWindowsOffline,
+          ),
+          initialLocale: 'he_IL',
+          sectionLocales: const ['he_IL'],
+        ),
+        isTrue,
+      );
+      expect(
+        TeleprompterNotifier.shouldUseWindowsOfflineSpeech(
+          settings: const AppSettings(
+            sttEngine: AppSettings.sttEngineBrowserOnline,
+          ),
+          initialLocale: 'en_US',
+          sectionLocales: const ['en_US'],
+        ),
+        isFalse,
+      );
     });
   });
 }

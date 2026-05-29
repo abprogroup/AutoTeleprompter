@@ -7,8 +7,16 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       _lastChosenTextColor = Color(settings.lastTextColor);
       _lastChosenHighlightColor = Color(settings.lastHighlightColor);
 
-      await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
       final result = await ref.read(scriptProvider.notifier).parseFile(file);
+      if (result.isError) {
+        if (!mounted) return;
+        await _showImportErrorDialog(
+          title: file.path.split(RegExp(r'[\\/]')).last,
+          message: result.errorMessage ?? result.text,
+        );
+        return;
+      }
+      await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
       final String content = result.text;
       final String title = file.path.split(RegExp(r'[\\/]')).last;
 
@@ -26,7 +34,17 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             existingMeta = meta;
             break;
           }
-        } catch (_) {}
+        } catch (error) {
+          LightweightDiagnostics.instance.record(
+            'script',
+            'ignored malformed recent metadata during file conflict check',
+            data: {
+              'source': 'fileLoadConflictCheck',
+              'title': title,
+              'error': error.toString(),
+            },
+          );
+        }
       }
 
       String finalContent = content;
@@ -124,7 +142,13 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           _history.addAll(historyData.map((d) => EditorState.fromJson(d)));
           _historyIndex = _history.length - 1;
           if (_history.isNotEmpty) _applyState(_history.last);
-        } catch (_) {}
+        } catch (error, stack) {
+          LightweightDiagnostics.instance.recordError(
+            error,
+            stack,
+            source: 'scriptEditor.fileHistoryRestore',
+          );
+        }
       } else {
         _saveHistory(description: 'Import');
       }
@@ -132,6 +156,55 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     } finally {
       if (mounted) _setEditorState(() => _isPendingLoad = false);
     }
+  }
+
+  Future<void> _showImportErrorDialog({
+    required String title,
+    required String message,
+  }) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [
+          Icon(Icons.block_rounded, color: Colors.redAccent, size: 22),
+          SizedBox(width: 10),
+          Text(
+            'Import Blocked',
+            style: TextStyle(color: Colors.white, fontSize: 17),
+          ),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(message, style: const TextStyle(color: Colors.white70)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'OK',
+              style: TextStyle(
+                color: Color(0xFFFFBF00),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _clearControllers() {

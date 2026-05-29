@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/security/encrypted_file_store.dart';
+import 'lightweight_diagnostics.dart';
 
 const feedbackEndpoint = String.fromEnvironment('FEEDBACK_ENDPOINT');
 
@@ -12,12 +14,14 @@ class FeedbackSendResult {
   final bool queued;
   final String reportId;
   final String message;
+  final String? failureClass;
 
   const FeedbackSendResult({
     required this.sent,
     required this.queued,
     required this.reportId,
     required this.message,
+    this.failureClass,
   });
 }
 
@@ -25,11 +29,15 @@ class FeedbackOutboxRetryResult {
   final int sent;
   final int remaining;
   final String message;
+  final String? lastFailureClass;
+  final String? lastFailureMessage;
 
   const FeedbackOutboxRetryResult({
     required this.sent,
     required this.remaining,
     required this.message,
+    this.lastFailureClass,
+    this.lastFailureMessage,
   });
 }
 
@@ -37,11 +45,13 @@ class FeedbackReportService {
   static const int inlinePayloadThresholdBytes = 48 * 1024;
   static const int maxPendingReports = 3;
   static const int maxRedirects = 5;
+  static const Duration defaultRequestTimeout = Duration(seconds: 20);
 
   FeedbackReportService({
     HttpClient? client,
     Future<Directory> Function()? outboxDirectory,
     String endpoint = feedbackEndpoint,
+    this.requestTimeout = defaultRequestTimeout,
   })  : _client = client ?? HttpClient(),
         _outboxDirectory = outboxDirectory,
         _endpoint = _sanitizeEndpoint(endpoint),
@@ -50,6 +60,7 @@ class FeedbackReportService {
   final HttpClient _client;
   final Future<Directory> Function()? _outboxDirectory;
   final String _endpoint;
+  final Duration requestTimeout;
   final EncryptedFileStore _encryptedStore;
 
   static String _sanitizeEndpoint(String endpoint) =>
@@ -124,6 +135,7 @@ class FeedbackReportService {
         sent: false,
         queued: queueOnFailure,
         reportId: reportId,
+        failureClass: 'endpointMissing',
         message: queueOnFailure
             ? 'Feedback service is not configured. Report saved locally.'
             : 'Feedback service is not configured yet.',
@@ -132,13 +144,26 @@ class FeedbackReportService {
 
     try {
       final uri = _feedbackUri(_endpoint);
+      if (!_isAllowedFeedbackUri(uri)) {
+        if (queueOnFailure) await _queueReport(reportId, payload);
+        _recordFailure('endpointRejected', reportId,
+            {'scheme': uri.scheme, 'host': uri.host});
+        return FeedbackSendResult(
+          sent: false,
+          queued: queueOnFailure,
+          reportId: reportId,
+          failureClass: 'endpointRejected',
+          message: 'Feedback service endpoint must use HTTPS.'
+              '${queueOnFailure ? " Report saved locally." : ""}',
+        );
+      }
       final bytes = utf8.encode(payload);
       final response = await _sendWithRedirects(
         uri: uri,
         reportId: reportId,
         body: bytes,
         gzipped: false,
-      );
+      ).timeout(requestTimeout);
       if (response.isAccepted) {
         return FeedbackSendResult(
           sent: true,
@@ -151,10 +176,15 @@ class FeedbackReportService {
       }
       if (queueOnFailure) await _queueReport(reportId, payload);
       final serverMessage = response.serverMessage;
+      _recordFailure('serverRejected', reportId, {
+        'statusCode': response.statusCode,
+        if (serverMessage != null) 'serverMessage': serverMessage,
+      });
       return FeedbackSendResult(
         sent: false,
         queued: queueOnFailure,
         reportId: reportId,
+        failureClass: 'serverRejected',
         message: (serverMessage == null
                 ? 'Server returned ${response.statusCode}.'
                 : 'Feedback service rejected the report: $serverMessage.') +
@@ -162,10 +192,16 @@ class FeedbackReportService {
       );
     } catch (error) {
       if (queueOnFailure) await _queueReport(reportId, payload);
+      final failureClass = _transportFailureClass(error);
+      _recordFailure(failureClass, reportId, {
+        'errorType': error.runtimeType.toString(),
+        'error': error.toString(),
+      });
       return FeedbackSendResult(
         sent: false,
         queued: queueOnFailure,
         reportId: reportId,
+        failureClass: failureClass,
         message: 'Could not send feedback.'
             '${queueOnFailure ? " Report saved locally." : ""}',
       );
@@ -234,7 +270,11 @@ class FeedbackReportService {
       try {
         await file.delete();
         deleted++;
-      } catch (_) {}
+      } catch (error) {
+        _recordFailure('pendingDeleteFailed', _reportIdFromFile(file), {
+          'error': error.toString(),
+        });
+      }
     }
     return deleted;
   }
@@ -243,6 +283,8 @@ class FeedbackReportService {
     final dir = await _ensureOutboxDirectory();
     final files = _pendingFiles(dir);
     var sent = 0;
+    String? lastFailureClass;
+    String? lastFailureMessage;
     for (final file in files) {
       try {
         final payload = await _readPendingPayload(file);
@@ -255,25 +297,43 @@ class FeedbackReportService {
         if (result.sent) {
           await file.delete();
           sent++;
+        } else {
+          lastFailureClass = result.failureClass;
+          lastFailureMessage = result.message;
         }
-      } catch (_) {}
+      } catch (error) {
+        lastFailureClass = 'retryReadOrSendFailed';
+        lastFailureMessage = error.toString();
+        _recordFailure('retryReadOrSendFailed', _reportIdFromFile(file),
+            {'error': error.toString()});
+      }
     }
     final remaining = await pendingReportCount();
+    final failure = lastFailureMessage;
+    final failureSuffix = failure == null
+        ? ''
+        : ' Last failure: ${_compactFailureMessage(failure)}';
     return FeedbackOutboxRetryResult(
       sent: sent,
       remaining: remaining,
+      lastFailureClass: lastFailureClass,
+      lastFailureMessage: lastFailureMessage,
       message: sent == 0
-          ? 'No pending reports were sent. $remaining still saved locally.'
-          : 'Sent $sent pending report(s). $remaining still saved locally.',
+          ? 'No pending reports were sent. $remaining still saved locally. '
+              'Check the feedback endpoint, token, HTTPS connection, or '
+              'internet access, then retry.$failureSuffix'
+          : 'Sent $sent pending report(s). $remaining still saved locally.'
+              '$failureSuffix',
     );
   }
 
   Future<void> _queueReport(String reportId, String payload) async {
     final dir = await _ensureOutboxDirectory();
+    final safeReportId = _safeReportId(reportId);
     final file = File(
-      '${dir.path}${Platform.pathSeparator}$reportId.json.gz.atpe',
+      '${dir.path}${Platform.pathSeparator}$safeReportId.json.gz.atpe',
     );
-    final encrypted = _encryptedStore.protectToEnvelope(
+    final encrypted = await _encryptedStore.protectToEnvelopeAsync(
       gzip.encode(utf8.encode(payload)),
       kind: 'feedback-report',
       compress: false,
@@ -288,7 +348,11 @@ class FeedbackReportService {
     for (final file in files.skip(maxPendingReports)) {
       try {
         await file.delete();
-      } catch (_) {}
+      } catch (error) {
+        _recordFailure('outboxLimitDeleteFailed', _reportIdFromFile(file), {
+          'error': error.toString(),
+        });
+      }
     }
   }
 
@@ -315,14 +379,18 @@ class FeedbackReportService {
         .toList();
     for (final file in legacyFiles) {
       try {
-        final encrypted = _encryptedStore.protectToEnvelope(
+        final encrypted = await _encryptedStore.protectToEnvelopeAsync(
           await file.readAsBytes(),
           kind: 'feedback-report',
           compress: false,
         );
         await File('${file.path}.atpe').writeAsString(encrypted, flush: true);
         await file.delete();
-      } catch (_) {}
+      } catch (error) {
+        _recordFailure('legacyOutboxMigrationFailed', _reportIdFromFile(file), {
+          'error': error.toString(),
+        });
+      }
     }
   }
 
@@ -332,6 +400,13 @@ class FeedbackReportService {
       return uri.replace(path: '/v1/feedback');
     }
     return uri;
+  }
+
+  bool _isAllowedFeedbackUri(Uri uri) {
+    if (uri.scheme == 'https') return true;
+    if (uri.scheme != 'http') return false;
+    final host = uri.host.toLowerCase();
+    return host == 'localhost' || host == '127.0.0.1' || host == '::1';
   }
 
   List<File> _pendingFiles(Directory dir) => dir
@@ -359,6 +434,42 @@ class FeedbackReportService {
 
   String _newReportId() =>
       'rpt_${DateTime.now().toUtc().millisecondsSinceEpoch}';
+
+  String _safeReportId(String reportId) {
+    final safe = reportId
+        .replaceAll(RegExp(r'[^A-Za-z0-9_.-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^[_\.-]+|[_\.-]+$'), '');
+    if (safe.isEmpty) return _newReportId();
+    return safe.length > 90 ? safe.substring(0, 90) : safe;
+  }
+
+  void _recordFailure(
+    String failureClass,
+    String reportId,
+    Map<String, Object?> data,
+  ) {
+    LightweightDiagnostics.instance.record(
+      'feedback',
+      'feedback $failureClass',
+      data: {'reportId': reportId, ...data},
+    );
+  }
+
+  String _compactFailureMessage(String value) {
+    final compact = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= 180) return compact;
+    return '${compact.substring(0, 177)}...';
+  }
+
+  String _transportFailureClass(Object error) {
+    if (error is TimeoutException) return 'timeout';
+    if (error is HandshakeException) return 'tlsHandshake';
+    if (error is SocketException) return 'networkSocket';
+    if (error is HttpException) return 'httpTransport';
+    if (error is FormatException) return 'badEndpointFormat';
+    return 'transportError';
+  }
 }
 
 class _FeedbackHttpResponse {
@@ -373,25 +484,25 @@ class _FeedbackHttpResponse {
     if (!isOk) return false;
     final trimmed = body.trim();
     if (trimmed.isEmpty) return false;
-    try {
-      final decoded = jsonDecode(trimmed);
-      return decoded is Map && decoded['ok'] == true;
-    } catch (_) {
-      return false;
-    }
+    return _decodedBodyMap(trimmed)?['ok'] == true;
   }
 
   String? get serverMessage {
     final trimmed = body.trim();
     if (trimmed.isEmpty) return null;
-    try {
-      final decoded = jsonDecode(trimmed);
-      if (decoded is Map) {
-        final error = decoded['error'] ?? decoded['message'];
-        if (error != null) return error.toString();
-      }
-    } catch (_) {}
+    final decoded = _decodedBodyMap(trimmed);
+    final error = decoded == null ? null : decoded['error'] ?? decoded['message'];
+    if (error != null) return error.toString();
     if (isOk) return 'unexpected response from feedback inbox';
     return null;
+  }
+
+  Map<Object?, Object?>? _decodedBodyMap(String trimmed) {
+    try {
+      final decoded = jsonDecode(trimmed);
+      return decoded is Map<Object?, Object?> ? decoded : null;
+    } on FormatException {
+      return null;
+    }
   }
 }

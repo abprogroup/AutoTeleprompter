@@ -1,9 +1,10 @@
 # Project: AutoTeleprompter
 # NEVER TRACK BACKUPS - THEY CAUSE LOOPS
 backups/
+_backups/
 AutoTeleprompter_BACKUP_*
 
-# Platform baseline folders (separate standalone repos — not submodules)
+# Platform baseline folders (separate standalone repos, not submodules)
 /android/
 /ios-baseline/
 /macos-baseline/

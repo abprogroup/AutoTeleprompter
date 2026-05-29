@@ -1,10 +1,25 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
-import 'package:gal/gal.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:webview_windows/webview_windows.dart';
+import '../../../platform/webview2/webview2_runtime_config.dart';
+import '../models/alignment_result.dart';
+import '../services/content_camera_device_classifier.dart';
+import '../services/presenter_input_lock_service.dart';
+import '../services/recording_media_probe_service.dart';
+import '../services/recording_export_service.dart';
 import '../providers/teleprompter_provider.dart';
+import '../services/approximate_spoken_search_service.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
+import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
@@ -14,8 +29,16 @@ import '../../script/services/markup_decoration_service.dart';
 import 'teleprompter_screen.dart';
 
 part 'content_creator_screen.widgets.dart';
+part 'content_creator_screen.controls.dart';
 part 'content_creator_screen.presenter_tools.dart';
 part 'content_creator_screen.presenter_view.dart';
+part 'content_creator_screen.session.dart';
+part 'content_creator_screen.debug.dart';
+part 'content_creator_screen.camera.dart';
+part 'content_creator_screen.scroll_state.dart';
+part 'content_creator_screen.camera_settings.dart';
+part 'content_creator_screen.camera_settings_controls.dart';
+part 'content_creator_screen.camera_widgets.dart';
 
 final _contentCreatorTagStripRe = RegExp(
     r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
@@ -40,15 +63,25 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   bool _isInit = false;
   bool _isCameraInitializing = true;
   bool _cameraWasChosenByUser = false;
+  bool _cameraAudioEnabled = false;
   _ContentCameraSourceMode _cameraSourceMode = _ContentCameraSourceMode.native;
+  int _cameraInitGeneration = 0;
   bool _isRecording = false;
   String? _cameraError;
   int _countdown = 0;
   int _recordSeconds = 0;
   int _activeWordIndex = 0;
+  bool _recordStartInFlight = false;
+  bool _recordingStartedSpeechSession = false;
+  double? _recordExportProgress;
+  String? _activeScriptSeedKey;
   Timer? _recordTimer;
   Timer? _autoScrollTimer;
   Timer? _wordTrackTimer;
+  Timer? _positionCommitTimer;
+  WebviewController? _contentWebviewController;
+  String? _loadedContentWebViewUrl;
+  int? _pendingPositionCommit;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
@@ -59,242 +92,56 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   List<_ContentSearchMatch> _contentSearchMatches = const [];
   int _contentSearchMatchIndex = -1;
   bool _contentSearchToolbarVisible = false;
+  bool _resumeDialogShown = false;
+  bool _contentControlsVisible = true;
+  bool _contentControlsHovering = false;
+  bool _contentDebugConsoleMinimized = false;
+  bool _contentDebugConsolePinned = false;
+  bool _contentFrameConfirmed = false;
+  bool _contentResumeDecisionPending = false;
+  int _lastContentRotation = 0;
+  int _contentEntryResumeIndex = 0;
+  Timer? _hideContentControlsTimer;
+  final List<String> _contentDebugLogs = [];
+  DateTime? _contentRotationRecenterUntil;
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
-  }
-
-  Future<void> _initializeCamera({CameraDescription? preferredCamera}) async {
-    try {
-      setState(() {
-        _isInit = false;
-        _isCameraInitializing = true;
-        _cameraError = null;
-      });
-      final discoveredCameras = await availableCameras().timeout(
-        const Duration(seconds: 8),
-      );
-      final cameras = _orderedCameras(discoveredCameras);
-      if (cameras.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _availableCameras = const [];
-            _selectedCameraName = null;
-            _cameraWasChosenByUser = false;
-            _isInit = false;
-            _isCameraInitializing = false;
-            _cameraError = 'No camera was found on this Windows device.';
-          });
+    _cameraSourceMode = _cameraSourceModeFromSettings(
+      ref.read(settingsProvider).contentCreatorCameraSourceMode,
+    );
+    _contentEntryResumeIndex =
+        ref.read(teleprompterProvider).confirmedWordIndex;
+    _activeWordIndex = _contentEntryResumeIndex;
+    _resumeDialogShown = _contentEntryResumeIndex <= 0;
+    _scrollController.addListener(_handleContentScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl),
+          (prev, next) {
+        if (next == null) {
+          _loadedContentWebViewUrl = null;
+        } else if (next != _loadedContentWebViewUrl) {
+          _loadContentSttWebView(next);
         }
-        return;
-      }
-
-      final selectedCamera = _resolveCamera(cameras, preferredCamera);
-      if (mounted) {
-        setState(() {
-          _availableCameras = cameras;
-          _selectedCameraName = selectedCamera.name;
-        });
-      }
-
-      final settings = ref.read(settingsProvider);
-      ResolutionPreset preset = ResolutionPreset.medium; // 720p
-      if (settings.videoResolution.contains('1080')) {
-        preset = ResolutionPreset.high;
-      } else if (settings.videoResolution.contains('480')) {
-        preset = ResolutionPreset.low;
-      }
-
-      await _cameraController?.dispose();
-      _cameraController =
-          CameraController(selectedCamera, preset, enableAudio: true);
-      await _cameraController!.initialize().timeout(
-            const Duration(seconds: 10),
-          );
-      if (mounted) {
-        setState(() {
-          _isInit = true;
-          _isCameraInitializing = false;
-          _cameraError = null;
-        });
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Camera error: $e');
-      if (mounted) {
-        setState(() {
-          if (_availableCameras.isEmpty && _selectedCameraName == null) {
-            _selectedCameraName = preferredCamera?.name;
-          }
-          _isInit = false;
-          _isCameraInitializing = false;
-          _cameraError =
-              'Camera could not start. Check Windows camera and microphone permissions.';
-        });
-      }
-    }
-  }
-
-  CameraDescription _resolveCamera(
-    List<CameraDescription> cameras,
-    CameraDescription? preferredCamera,
-  ) {
-    final preferredName = preferredCamera?.name ??
-        (_cameraWasChosenByUser ? _selectedCameraName : null);
-    if (preferredName != null) {
-      for (final camera in cameras) {
-        if (camera.name == preferredName) return camera;
-      }
-    }
-    final sourceCameras = _camerasForSourceMode(cameras, _cameraSourceMode);
-    return sourceCameras.isNotEmpty ? sourceCameras.first : cameras.first;
-  }
-
-  List<CameraDescription> _camerasForSourceMode(
-    List<CameraDescription> cameras,
-    _ContentCameraSourceMode mode,
-  ) {
-    if (mode == _ContentCameraSourceMode.all) return cameras;
-    return cameras.where((camera) {
-      final name = camera.name.toLowerCase();
-      return switch (mode) {
-        _ContentCameraSourceMode.native => !_isVirtualCameraName(name) &&
-            !_isIrOrDepthCameraName(name) &&
-            _isIntegratedCameraName(name),
-        _ContentCameraSourceMode.usb => !_isVirtualCameraName(name) &&
-            !_isIrOrDepthCameraName(name) &&
-            _isUsbCameraName(name),
-        _ContentCameraSourceMode.virtual => _isVirtualCameraName(name),
-        _ContentCameraSourceMode.all => true,
-      };
-    }).toList();
-  }
-
-  List<CameraDescription> _orderedCameras(List<CameraDescription> cameras) {
-    final ordered = List<CameraDescription>.of(cameras);
-    ordered.sort((a, b) {
-      final priority = _cameraPriority(a).compareTo(_cameraPriority(b));
-      if (priority != 0) return priority;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+      ref.listenManual(
+          teleprompterProvider.select((s) => s.isListening || s.isStarting),
+          (prev, next) {
+        if (mounted) _syncContentControlsForActiveSession(next || _isRecording);
+      });
+      ref.listenManual(teleprompterProvider.select((s) => s.confirmedWordIndex),
+          (prev, next) {
+        if (!mounted) return;
+        final live = ref.read(teleprompterProvider);
+        if (!live.isListening || next <= 0) return;
+        _updateContentCreatorState(() => _activeWordIndex = next);
+        _scrollToContentWordIndex(next);
+      });
+      _initContentWebViewController();
     });
-    return ordered;
-  }
-
-  int _cameraPriority(CameraDescription camera) {
-    final name = camera.name.toLowerCase();
-    var score = 0;
-    if (_isVirtualCameraName(name)) score += 1000;
-    if (_isIrOrDepthCameraName(name)) score += 320;
-    if (_isIntegratedCameraName(name)) score -= 320;
-    if (name.contains('webcam') || name.contains('web camera')) score -= 220;
-    if (_isUsbCameraName(name)) score -= 120;
-    if (camera.lensDirection == CameraLensDirection.front) score -= 40;
-    if (camera.lensDirection == CameraLensDirection.back) score += 40;
-    return score;
-  }
-
-  bool _isIntegratedCameraName(String name) {
-    return name.contains('integrated') ||
-        name.contains('built-in') ||
-        name.contains('builtin') ||
-        name.contains('internal') ||
-        name.contains('asus fhd') ||
-        name.contains('fhd webcam') ||
-        name.contains('hd webcam');
-  }
-
-  bool _isIrOrDepthCameraName(String name) {
-    return name.contains(' ir ') ||
-        name.startsWith('ir ') ||
-        name.endsWith(' ir') ||
-        name.contains('infrared') ||
-        name.contains('depth');
-  }
-
-  bool _isUsbCameraName(String name) {
-    return name.contains('usb') ||
-        name.contains('uvc') ||
-        name.contains('external');
-  }
-
-  bool _isVirtualCameraName(String name) {
-    return name.contains('ndi') ||
-        name.contains('obs') ||
-        name.contains('virtual') ||
-        name.contains('droidcam') ||
-        name.contains('iriun') ||
-        name.contains('epoccam') ||
-        name.contains('camo') ||
-        name.contains('snap camera') ||
-        name.contains('ip camera') ||
-        name.contains('lightform') ||
-        name.contains('screen capture');
-  }
-
-  String _cameraSourceType(CameraDescription camera) {
-    final name = camera.name.toLowerCase();
-    if (_isVirtualCameraName(name)) return 'Wi-Fi / virtual camera';
-    if (_isIrOrDepthCameraName(name)) return 'IR / depth camera';
-    if (_isUsbCameraName(name)) return 'USB camera';
-    if (_isIntegratedCameraName(name)) return 'Native camera';
-    return 'Camera';
-  }
-
-  String _cameraSourceModeLabel(_ContentCameraSourceMode mode) {
-    return switch (mode) {
-      _ContentCameraSourceMode.native => 'Native',
-      _ContentCameraSourceMode.usb => 'USB',
-      _ContentCameraSourceMode.virtual => 'Wi-Fi / virtual',
-      _ContentCameraSourceMode.all => 'All',
-    };
-  }
-
-  String _cameraSourceModeHelp(_ContentCameraSourceMode mode) {
-    return switch (mode) {
-      _ContentCameraSourceMode.native => 'Built-in laptop/webcam first.',
-      _ContentCameraSourceMode.usb => 'USB cameras exposed by Windows.',
-      _ContentCameraSourceMode.virtual =>
-        'NDI, OBS, phone bridges, or Wi-Fi virtual cameras.',
-      _ContentCameraSourceMode.all => 'Every Windows camera device.',
-    };
-  }
-
-  Future<void> _setCameraSourceMode(_ContentCameraSourceMode mode) async {
-    if (_isRecording) {
-      _showSnack('Stop recording before changing camera source.');
-      return;
-    }
-    final matching = _camerasForSourceMode(_availableCameras, mode);
-    final preferred = matching.isEmpty ? null : matching.first;
-    setState(() {
-      _cameraSourceMode = mode;
-      _selectedCameraName = preferred?.name;
-      _cameraWasChosenByUser = preferred != null;
-    });
-    await _initializeCamera(preferredCamera: preferred);
-  }
-
-  Future<void> _selectCamera(CameraDescription camera) async {
-    if (_isRecording) {
-      _showSnack('Stop recording before changing camera.');
-      return;
-    }
-    setState(() {
-      _selectedCameraName = camera.name;
-      _cameraWasChosenByUser = true;
-    });
-    await _initializeCamera(preferredCamera: camera);
-  }
-
-  String _cameraLabel(CameraDescription camera, int index) {
-    final rawDirection = camera.lensDirection.name;
-    final direction = rawDirection.isEmpty
-        ? 'Camera'
-        : '${rawDirection[0].toUpperCase()}${rawDirection.substring(1)}';
-    final trimmed = camera.name.trim();
-    final name = trimmed.isEmpty ? 'Camera ${index + 1}' : trimmed;
-    return '$name - ${_cameraSourceType(camera)} - $direction';
+    _initializeCamera();
   }
 
   @override
@@ -302,62 +149,23 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     _recordTimer?.cancel();
     _autoScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
+    _positionCommitTimer?.cancel();
+    _hideContentControlsTimer?.cancel();
     _cameraController?.dispose();
+    unawaited(_stopContentSpeechSessionIfOwnedByRecording());
+    try {
+      ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'contentCreator.disposeVisibleWindow',
+      );
+    }
+    _contentWebviewController?.dispose();
+    _scrollController.removeListener(_handleContentScroll);
     _scrollController.dispose();
     super.dispose();
-  }
-
-  Future<void> _toggleRecording() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      _showSnack(
-        _cameraError ?? 'Camera is still preparing. Try again in a moment.',
-      );
-      return;
-    }
-
-    if (_isRecording) {
-      final file = await _cameraController!.stopVideoRecording();
-      _recordTimer?.cancel();
-      _stopAutoScroll();
-      setState(() {
-        _isRecording = false;
-        _recordSeconds = 0;
-      });
-      try {
-        await Gal.putVideo(file.path);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Video saved to gallery!'),
-                backgroundColor: Colors.green),
-          );
-        }
-      } catch (e) {
-        if (kDebugMode) debugPrint('Save error: $e');
-        _showSnack('Recording saved locally, but gallery export failed.');
-      }
-    } else {
-      // Professional Countdown
-      for (int i = 3; i > 0; i--) {
-        if (!mounted) return;
-        setState(() => _countdown = i);
-        await Future.delayed(const Duration(seconds: 1));
-      }
-      if (!mounted) return;
-      setState(() => _countdown = 0);
-
-      await _cameraController!.startVideoRecording();
-      _recordSeconds = 0;
-      _recordTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-        if (mounted) setState(() => _recordSeconds = t.tick);
-      });
-      ref.read(settingsProvider.notifier).setScrollSpeed(100);
-      setState(() {
-        _isRecording = true;
-        _activeWordIndex = ref.read(teleprompterProvider).confirmedWordIndex;
-      });
-      _startAutoScroll();
-    }
   }
 
   void _showSnack(String message) {
@@ -372,82 +180,48 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     setState(update);
   }
 
-  Future<void> _setVideoResolution(String resolution) async {
-    if (_isRecording) {
-      _showSnack('Stop recording before changing video resolution.');
-      return;
-    }
-    await ref.read(settingsProvider.notifier).setVideoResolution(resolution);
-    await _initializeCamera();
+  bool _contentSessionActive(TeleprompterState tState) {
+    return _isRecording ||
+        _recordStartInFlight ||
+        tState.isListening ||
+        tState.isStarting;
   }
 
-  void _startAutoScroll() {
-    if (!_scrollController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _isRecording) _startAutoScroll();
-      });
-      return;
-    }
-    _autoScrollTimer?.cancel();
-    _wordTrackTimer?.cancel();
-
-    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
-      if (!mounted || !_isRecording || !_scrollController.hasClients) return;
-      final settings = ref.read(settingsProvider);
-      final speed = settings.scrollSpeed;
-      if (speed == 0) return;
-
-      final pxPerTick = speed.abs() * 3.0 * 16.0 / 1000.0;
-      final delta = speed < 0 ? -pxPerTick : pxPerTick;
-      final max = _scrollController.position.maxScrollExtent;
-      final next = (_scrollController.offset + delta).clamp(0.0, max);
-      _scrollController.jumpTo(next);
-      if (next == 0.0 || next == max) _stopAutoScroll();
-    });
-
-    _wordTrackTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
-      _updateActiveWordFromScroll();
-    });
-  }
-
-  void _stopAutoScroll() {
-    _autoScrollTimer?.cancel();
-    _wordTrackTimer?.cancel();
-  }
-
-  void _updateActiveWordFromScroll() {
-    if (!mounted || !_scrollController.hasClients || _wordKeys.isEmpty) return;
-    final settings = ref.read(settingsProvider);
-    final targetY = MediaQuery.of(context).size.height * settings.scrollLead;
-    final start = (_activeWordIndex - 5).clamp(0, _wordKeys.length - 1);
-    final end = (_activeWordIndex + 25).clamp(0, _wordKeys.length - 1);
-
-    var bestIndex = _activeWordIndex;
-    var bestDistance = double.infinity;
-    for (var i = start; i <= end; i++) {
-      final ctx = _wordKeys[i].currentContext;
-      if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null || !box.hasSize) continue;
-      final distance = (box.localToGlobal(Offset.zero).dy - targetY).abs();
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
+  void _scheduleHideContentControls() {
+    _hideContentControlsTimer?.cancel();
+    if (!_contentSessionActive(ref.read(teleprompterProvider))) {
+      if (mounted && !_contentControlsVisible) {
+        _updateContentCreatorState(() => _contentControlsVisible = true);
       }
+      return;
     }
-    if (bestIndex != _activeWordIndex) {
-      setState(() => _activeWordIndex = bestIndex);
+    _hideContentControlsTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (!mounted || _contentControlsHovering) return;
+      _updateContentCreatorState(() => _contentControlsVisible = false);
+    });
+  }
+
+  void _showContentControls() {
+    final active = _contentSessionActive(ref.read(teleprompterProvider));
+    if (active && !_contentControlsHovering) return;
+    _updateContentCreatorState(() => _contentControlsVisible = true);
+    if (active) _scheduleHideContentControls();
+  }
+
+  void _showContentControlsFromHotZone() {
+    _hideContentControlsTimer?.cancel();
+    if (mounted && !_contentControlsVisible) {
+      _updateContentCreatorState(() => _contentControlsVisible = true);
     }
   }
 
-  String _formatTimer(int totalSeconds) {
-    final h = totalSeconds ~/ 3600;
-    final m = (totalSeconds % 3600) ~/ 60;
-    final s = totalSeconds % 60;
-    if (h > 0) {
-      return "$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
-    }
-    return "${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
+  void _syncContentControlsForActiveSession(bool active) {
+    if (!mounted) return;
+    _hideContentControlsTimer?.cancel();
+    _contentControlsHovering = false;
+    _updateContentCreatorState(
+      () => _contentControlsVisible = _recordStartInFlight || !active,
+    );
   }
 
   @override
@@ -455,20 +229,60 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     final script = ref.watch(scriptProvider);
     final settings = ref.watch(settingsProvider);
     final tState = ref.watch(teleprompterProvider);
-    final activeWordIndex =
-        _isRecording ? _activeWordIndex : tState.confirmedWordIndex;
+
+    if (!_contentFrameConfirmed) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: _buildCameraPreviewEntry(settings),
+      );
+    }
+
+    final normalizedRotation = ((settings.flipRotation % 360) + 360) % 360;
+    if (_lastContentRotation != normalizedRotation) {
+      final preservedOffset =
+          _scrollController.hasClients ? _scrollController.offset : null;
+      final preservedIndex = _activeContentIndex();
+      _lastContentRotation = normalizedRotation;
+      _contentRotationRecenterUntil =
+          DateTime.now().add(const Duration(milliseconds: 650));
+      _scheduleContentRotationRestore(
+        preservedOffset: preservedOffset,
+        fallbackIndex: preservedIndex,
+      );
+    }
 
     if (script != null) {
+      final seedKey =
+          '${script.sessionId}|${script.title}|${script.words.length}';
+      if (_activeScriptSeedKey != seedKey) {
+        _activeScriptSeedKey = seedKey;
+        _activeWordIndex = tState.confirmedWordIndex
+            .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
+            .toInt();
+        _pendingPositionCommit = null;
+        _positionCommitTimer?.cancel();
+      }
       while (_wordKeys.length < script.words.length) {
         _wordKeys.add(GlobalKey());
       }
+      if (_wordKeys.length > script.words.length) {
+        _wordKeys.removeRange(script.words.length, _wordKeys.length);
+      }
       unawaited(_loadBookmarksForScript(script));
+      _maybeShowContentResumePrompt(script);
     }
+    final activeWordIndex = script == null || script.words.isEmpty
+        ? 0
+        : _activeWordIndex.clamp(0, script.words.length - 1).toInt();
 
     final paragraphs =
         script == null ? <List<ScriptWord>>[] : _paragraphsForScript(script);
     final presentationFontSize = settings.fontSize * 2.0;
     final presenterWordGap = _contentWordGap(presentationFontSize, settings);
+    final activeStt = tState.isListening || tState.isStarting;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncContentVisibleWordWindow();
+    });
     final bookmarkWordIndexes = script == null
         ? <int>{}
         : _bookmarks
@@ -496,46 +310,138 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
             bookmarkWordIndexes: bookmarkWordIndexes,
             presentationFontSize: presentationFontSize,
             presenterWordGap: presenterWordGap,
+            allowWordJump: !activeStt && !_contentResumeDecisionPending,
           );
+
+    final contentSessionActive = _contentSessionActive(tState);
+    const controlsReservedHeight = 104.0;
+    final debugConsoleExpanded = settings.debugMode &&
+        !_contentDebugConsoleMinimized &&
+        (_contentControlsVisible || _contentDebugConsolePinned);
+    final debugConsoleHeight =
+        settings.debugMode ? (debugConsoleExpanded ? 220.0 : 38.0) : 0.0;
+    final debugConsoleBottom = settings.debugMode
+        ? (debugConsoleExpanded
+            ? (_contentDebugConsolePinned && !_contentControlsVisible
+                ? 10.0
+                : controlsReservedHeight)
+            : (_contentControlsVisible ? controlsReservedHeight : 10.0))
+        : 10.0;
+    final allowActiveManualScroll =
+        PresenterInputLockService.allowActiveManualScroll(
+      settingEnabled: settings.allowScrollDuringActiveSession,
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+    );
+    final activeInputLocked = PresenterInputLockService.inputLocked(
+      isWindows: Platform.isWindows,
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+      allowActiveManualScroll: allowActiveManualScroll,
+    );
+    final inputLocked = activeInputLocked || _contentResumeDecisionPending;
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          _buildCameraBackgroundLayer(),
-          _buildReadingSurfaceLayer(),
-
-          // 2. Eye-Contact Prompter (Top 60%)
-          SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  flex: 6,
+      body: GestureDetector(
+        onTap: inputLocked ? null : _showContentControls,
+        child: Stack(
+          children: [
+            _buildCameraBackgroundLayer(),
+            _buildReadingSurfaceLayer(),
+            if (settings.readFadeIntensity > 0)
+              _buildContentReadFadeOverlay(settings),
+            _buildContentReadingLine(settings),
+            _buildContentPresenterStage(
+              settings: settings,
+              child: SafeArea(
+                child: Listener(
+                  onPointerSignal: (event) {
+                    if (inputLocked && event is PointerScrollEvent) {
+                      GestureBinding.instance.pointerSignalResolver
+                          .register(event, (_) {});
+                    }
+                  },
                   child: SingleChildScrollView(
                     controller: _scrollController,
+                    physics: inputLocked
+                        ? const NeverScrollableScrollPhysics()
+                        : const ClampingScrollPhysics(),
                     child: wordList,
                   ),
                 ),
-                const Spacer(flex: 4),
-              ],
+              ),
             ),
-          ),
-
-          Positioned(
-            top: 8,
-            left: 0,
-            right: 0,
-            child: Center(child: _buildContentSearchToolbar()),
-          ),
-
-          // 3. Recording Controls & Floating Buttons
-          Positioned(
-            bottom: 16,
-            left: 32,
-            right: 32,
-            child: _buildContentControlBar(settings),
-          ),
-        ],
+            if (_contentWebviewController != null &&
+                tState.sttWebViewUrl != null)
+              Positioned(
+                left: 0,
+                bottom: 0,
+                width: 1,
+                height: 1,
+                child: IgnorePointer(
+                  ignoring: true,
+                  child: Opacity(
+                    opacity: 0.01,
+                    child: Webview(_contentWebviewController!),
+                  ),
+                ),
+              ),
+            if (_isInit &&
+                settings.contentCreatorFeedMode ==
+                    AppSettings.contentCreatorFeedBubble)
+              _buildCameraBubble(settings),
+            if (_isRecording) _buildRecordingTimerHud(),
+            if (_recordExportProgress != null) _buildRecordingExportHud(),
+            if (_countdown > 0) _buildCountdownOverlay(),
+            if (_contentResumeDecisionPending) _buildContentResumeBlocker(),
+            Positioned(
+              top: 8,
+              left: 0,
+              right: 0,
+              child: Center(child: _buildContentSearchToolbar()),
+            ),
+            if (contentSessionActive)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 92,
+                child: MouseRegion(
+                  opaque: false,
+                  onEnter: (_) {
+                    _contentControlsHovering = true;
+                    _showContentControlsFromHotZone();
+                  },
+                  onExit: (_) {
+                    _contentControlsHovering = false;
+                    _scheduleHideContentControls();
+                  },
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _buildContentControlsOverlay(
+                settings: settings,
+                tState: tState,
+              ),
+            ),
+            if (settings.debugMode)
+              _buildContentCreatorDebugConsole(
+                context,
+                tState,
+                bottom: debugConsoleBottom,
+                height: debugConsoleHeight,
+                expanded: debugConsoleExpanded,
+                accentColor: Color(settings.currentWordColor),
+                settings: settings,
+                wordCount: script?.words.length ?? 0,
+              ),
+          ],
+        ),
       ),
     );
   }

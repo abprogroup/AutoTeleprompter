@@ -2,8 +2,10 @@ part of 'markup_decoration_service.dart';
 
 class MarkupRenderEditableGeometry {
   static List<Rect> selectionRects(
-      RenderEditable editable, TextSelection selection,
-      {String? rawText}) {
+    RenderEditable editable,
+    TextSelection selection, {
+    String? rawText,
+  }) {
     final normalized = normalizedSelection(
       editable,
       selection,
@@ -24,7 +26,11 @@ class MarkupRenderEditableGeometry {
     double gapTolerance = MarkupDecorationBoxMerger.styleBackgroundGapTolerance,
   }) {
     return mergedBandsForRects(
-      selectionRects(editable, selection, rawText: rawText),
+      selectionRects(
+        editable,
+        selection,
+        rawText: rawText,
+      ),
       gapTolerance: gapTolerance,
     );
   }

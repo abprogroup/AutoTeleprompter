@@ -17,6 +17,7 @@ class RemoteStatusCard extends ConsumerWidget {
     final remote = ref.watch(remoteControlProvider);
     final isRunning = remote.isRunning;
     final accent = isRunning ? const Color(0xFFFFBF00) : Colors.white38;
+    final runningUrl = isRunning ? remote.preferredUrl() : null;
 
     return Material(
       color: Colors.transparent,
@@ -59,35 +60,51 @@ class RemoteStatusCard extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      isRunning
-                          ? 'Running at ${remote.localUrl}'
-                          : 'Stopped. Start it when you want a phone controller.',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                        height: 1.3,
+                    if (runningUrl == null)
+                      const Text(
+                        'Stopped. Start it when you want a phone controller.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                          height: 1.3,
+                        ),
+                      )
+                    else
+                      FutureBuilder<String>(
+                        future: runningUrl,
+                        builder: (context, snapshot) {
+                          final url = snapshot.data ?? remote.localUrl;
+                          return Text(
+                            'Running at $url',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                              height: 1.3,
+                            ),
+                          );
+                        },
                       ),
-                    ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
               if (isRunning)
                 Tooltip(
-                  message: 'Copy remote URL',
+                  message: 'Copy paired remote URL',
                   child: IconButton(
                     visualDensity: VisualDensity.compact,
                     onPressed: () async {
-                      final url = remote.localUrl;
+                      final url = await remote.preferredUrl();
                       if (url.isEmpty) return;
                       await Clipboard.setData(ClipboardData(text: url));
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Remote URL copied.'),
+                          content: Text('Paired remote URL copied.'),
                           duration: Duration(seconds: 2),
                         ),
                       );

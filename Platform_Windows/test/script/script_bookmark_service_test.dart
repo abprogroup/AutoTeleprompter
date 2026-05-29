@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:autoteleprompter/features/script/models/script_word.dart';
 import 'package:autoteleprompter/features/script/services/script_bookmark_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 ScriptWord _word(
   String raw,
@@ -47,6 +50,37 @@ void main() {
 
       expect(
           ScriptBookmarkService.nearestBookmarkableWordIndex(words, 0), isNull);
+    });
+  });
+
+  group('ScriptBookmarkService encrypted persistence', () {
+    test('load migrates legacy plaintext bookmarks and removes old key',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final key = ScriptBookmarkService.scopeKey(
+        'session-privacy-test',
+        'Sensitive script title',
+      );
+      await prefs.setStringList(key, [
+        jsonEncode({
+          'id': 'bookmark-1',
+          'label': 'Private bookmark phrase',
+          'wordIndex': 4,
+          'blockIndex': 1,
+          'offset': 12,
+          'createdAt': '2026-05-28T20:00:00.000Z',
+        }),
+      ]);
+
+      final loaded = await ScriptBookmarkService.load(key);
+      final secureRaw = prefs.getString('$key.secure');
+
+      expect(loaded, hasLength(1));
+      expect(loaded.single.label, 'Private bookmark phrase');
+      expect(prefs.getStringList(key), isNull);
+      expect(secureRaw, isNotNull);
+      expect(secureRaw, isNot(contains('Private bookmark phrase')));
     });
   });
 }

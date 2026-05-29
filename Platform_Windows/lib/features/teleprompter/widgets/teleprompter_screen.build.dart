@@ -74,9 +74,18 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         )
         .whereType<int>()
         .toSet();
-    final allowActiveManualScroll = settings.allowScrollDuringActiveSession &&
-        tState.isListening &&
-        !tState.isStarting;
+    final allowActiveManualScroll =
+        PresenterInputLockService.allowActiveManualScroll(
+      settingEnabled: settings.allowScrollDuringActiveSession,
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+    );
+    final activeInputLocked = PresenterInputLockService.inputLocked(
+      isWindows: Platform.isWindows,
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+      allowActiveManualScroll: allowActiveManualScroll,
+    );
 
     final wordList = _buildPresenterWordList(
       context: context,
@@ -115,23 +124,27 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 }),
               },
               child: GestureDetector(
-                onTap: (Platform.isWindows &&
-                        (tState.isListening || tState.isStarting) &&
-                        !allowActiveManualScroll)
-                    ? null
-                    : _showControls,
+                onTap: activeInputLocked ? null : _showControls,
                 child: Stack(
                   children: [
                     // Scrollable script
                     NotificationListener<ScrollNotification>(
                       onNotification: _handleStoppedBrowsingScroll,
-                      child: SingleChildScrollView(
-                        controller: _scrollController,
-                        physics: ((tState.isListening || tState.isStarting) &&
-                                !allowActiveManualScroll)
-                            ? const NeverScrollableScrollPhysics()
-                            : const ClampingScrollPhysics(),
-                        child: wordList,
+                      child: Listener(
+                        onPointerSignal: (event) {
+                          if (activeInputLocked &&
+                              event is PointerScrollEvent) {
+                            GestureBinding.instance.pointerSignalResolver
+                                .register(event, (_) {});
+                          }
+                        },
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          physics: activeInputLocked
+                              ? const NeverScrollableScrollPhysics()
+                              : const ClampingScrollPhysics(),
+                          child: wordList,
+                        ),
                       ),
                     ),
                     // Reading fade overlay: gradient that dims already-read text above the reading line
@@ -291,6 +304,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       ),
 
                     // Controls overlay: control bar + speed slider stacked at bottom.
+                    _buildFloatingManualSpeedSlider(
+                      settings: settings,
+                      tState: tState,
+                    ),
                     Positioned(
                       bottom: 0,
                       left: 0,

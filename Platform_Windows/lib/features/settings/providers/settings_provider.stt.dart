@@ -15,9 +15,10 @@ mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
   }
 
   Future<void> setReadFadeIntensity(double intensity) async {
-    state = state.copyWith(readFadeIntensity: intensity);
+    final normalized = intensity.clamp(0.0, 1.0).toDouble();
+    state = state.copyWith(readFadeIntensity: normalized);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_readFadeIntensityKey, intensity);
+    await prefs.setDouble(_readFadeIntensityKey, normalized);
   }
 
   Future<void> setSttInputDevice(String deviceId, String label) async {

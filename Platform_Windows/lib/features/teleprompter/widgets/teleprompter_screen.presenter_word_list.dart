@@ -46,11 +46,12 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                 break;
             }
           } else {
-            try {
-              paraAlign = para.firstWhere((w) => w.alignment != null).alignment;
-            } catch (_) {
-              paraAlign = firstWord.alignment;
+            for (final word in para) {
+              if (word.alignment == null) continue;
+              paraAlign = word.alignment;
+              break;
             }
+            paraAlign ??= firstWord.alignment;
           }
 
           return Padding(
@@ -98,7 +99,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   wordKeys: _wordKeys,
                   words: script.words,
                   confirmedWordIndex: tState.confirmedWordIndex,
-                  isManualMode: settings.scrollMode == 'manual',
+                  isManualMode: false,
                   type: MarkupDecorationType.background,
                   gapTolerance: _decorationGapTolerance(presenterWordGap),
                 ),
@@ -114,7 +115,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   wordKeys: _wordKeys,
                   words: script.words,
                   confirmedWordIndex: tState.confirmedWordIndex,
-                  isManualMode: settings.scrollMode == 'manual',
+                  isManualMode: false,
                   type: MarkupDecorationType.underline,
                   gapTolerance: _decorationGapTolerance(presenterWordGap),
                 ),
@@ -153,9 +154,8 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
   }) {
     final i = word.index;
     final hasBookmark = bookmarkWordIndexes.contains(i);
-    final isManual = settings.scrollMode == 'manual';
-    final isCurrent = !isManual && i == tState.confirmedWordIndex;
-    final isPast = !isManual && i < tState.confirmedWordIndex;
+    final isCurrent = i == tState.confirmedWordIndex;
+    final isPast = i < tState.confirmedWordIndex;
     final visibleWordText = word.raw
         .replaceAll(_tagStripRe, '')
         .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');

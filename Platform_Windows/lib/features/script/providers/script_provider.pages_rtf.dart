@@ -2,14 +2,16 @@ part of 'script_provider.dart';
 
 extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
   ParsedFile _parsePages(List<int> rawBytes) {
-    final archive = ZipDecoder().decodeBytes(rawBytes);
+    final archive = _decodeCheckedArchive(rawBytes, 'PAGES');
     final buf = StringBuffer();
 
     // Old Pages format: index.xml contains <sf:p> paragraph elements
     final indexFile = archive.findFile('index.xml');
     if (indexFile != null) {
-      final xml =
-          utf8.decode(indexFile.content as List<int>, allowMalformed: true);
+      final xml = utf8.decode(
+        _archiveFileBytes(indexFile, format: 'PAGES', isXml: true),
+        allowMalformed: true,
+      );
       // Extract text from <sf:p> and <sf:s> (span) elements
       final paraMatches =
           RegExp(r'<sf:p\b[^>]*>(.*?)</sf:p>', dotAll: true).allMatches(xml);
@@ -28,8 +30,10 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
       final name = file.name.toLowerCase();
       if (!name.endsWith('.xml') && !name.endsWith('.iwa')) continue;
       try {
-        final content =
-            utf8.decode(file.content as List<int>, allowMalformed: true);
+        final content = utf8.decode(
+          _archiveFileBytes(file, format: 'PAGES', isXml: true),
+          allowMalformed: true,
+        );
         // Extract anything that looks like readable paragraph text
         final matches =
             RegExp(r'<[^>]*p[^>]*>(.*?)</[^>]*p[^>]*>', dotAll: true)
@@ -39,7 +43,14 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
               (m.group(1) ?? '').replaceAll(RegExp(r'<[^>]+>'), '').trim();
           if (text.length > 2) buf.writeln(text);
         }
-      } catch (_) {}
+      } catch (e, stack) {
+        LightweightDiagnostics.instance.recordError(
+          e,
+          stack,
+          source: 'import.pagesEntry',
+          data: {'entry': file.name},
+        );
+      }
     }
 
     final result = buf.toString().trim();

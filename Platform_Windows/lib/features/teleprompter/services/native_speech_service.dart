@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import 'speech_service.dart';
 
 /// Native Android speech recognition service.
 ///
 /// Uses Android's SpeechRecognizer.createOnDeviceSpeechRecognizer() on API 31+,
 /// which runs in OUR app's process and uses OUR microphone permission.
-/// This bypasses the issue on ColorOS/MIUI/OneUI where the Google app's
-/// microphone permission is restricted to foreground-only, blocking the
+/// This bypasses the issue on ColorOS/MIUI/OneUI where the external speech
+/// service microphone permission is restricted to foreground-only, blocking the
 /// standard speech_to_text plugin from accessing the mic.
 class NativeSpeechService {
   static const _channel = MethodChannel('autoteleprompter/stt');
@@ -18,6 +19,7 @@ class NativeSpeechService {
   void Function(String)? onError;
   void Function(double level)? onSoundLevelChange;
   void Function(String requestedLocale)? onLanguageUnavailable;
+
   /// Fires when the device needs an offline speech pack download
   /// (ColorOS/MIUI devices where regular STT mic is blocked).
   void Function(String locale)? onNeedLanguagePack;
@@ -66,7 +68,12 @@ class NativeSpeechService {
     try {
       final result = await _channel.invokeMethod('isAvailable');
       return Map<String, dynamic>.from(result as Map);
-    } catch (e) {
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'nativeSpeech.checkAvailability',
+      );
       return {'available': false, 'onDevice': false, 'apiLevel': 0};
     }
   }
@@ -89,14 +96,20 @@ class NativeSpeechService {
         _isActive = false;
         return SpeechStartResult(
           success: false,
-          message: data['message'] as String? ?? 'Native STT failed to start',
+          message: data['message'] as String? ??
+              'Native speech-to-text failed to start',
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'nativeSpeech.start',
+      );
       _isActive = false;
       return SpeechStartResult(
         success: false,
-        message: 'Native STT not available: $e',
+        message: 'Native speech-to-text is not available: $e',
       );
     }
   }
@@ -105,7 +118,13 @@ class NativeSpeechService {
     _isActive = false;
     try {
       await _channel.invokeMethod('stop');
-    } catch (_) {}
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'nativeSpeech.stop',
+      );
+    }
     onStatusChange?.call(SpeechStatus.idle);
   }
 

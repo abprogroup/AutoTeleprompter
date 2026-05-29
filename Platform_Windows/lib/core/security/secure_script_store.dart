@@ -4,6 +4,13 @@ import 'dart:isolate';
 
 import 'encrypted_file_store.dart';
 
+typedef SecureScriptMigrationIssueReporter = void Function(
+  String issue,
+  Object error,
+  StackTrace stackTrace,
+  int index,
+);
+
 class SecureScriptData {
   final String text;
   final String? historyJson;
@@ -99,7 +106,10 @@ class SecureScriptStore {
     return next;
   }
 
-  Future<List<String>> migrateRecentMetadata(List<String> rawRecents) async {
+  Future<List<String>> migrateRecentMetadata(
+    List<String> rawRecents, {
+    SecureScriptMigrationIssueReporter? onIssue,
+  }) async {
     final result = <String>[];
     for (var i = 0; i < rawRecents.length; i++) {
       try {
@@ -129,8 +139,29 @@ class SecureScriptStore {
             ..remove('snippet');
           result.add(jsonEncode(decoded));
         }
-      } catch (_) {
-        result.add(rawRecents[i]);
+      } catch (error, stackTrace) {
+        onIssue?.call(
+          'secure-recent-migration-failed',
+          error,
+          stackTrace,
+          i,
+        );
+        try {
+          final decoded = Map<String, dynamic>.from(jsonDecode(rawRecents[i]))
+            ..remove('fullText')
+            ..remove('historyJson')
+            ..remove('snippet');
+          result.add(jsonEncode(decoded));
+        } catch (sanitizeError, sanitizeStackTrace) {
+          onIssue?.call(
+            'secure-recent-migration-scrub-failed',
+            sanitizeError,
+            sanitizeStackTrace,
+            i,
+          );
+          // If the legacy record is not valid JSON, do not preserve it. Keeping
+          // an unreadable raw value can also keep script text in plaintext prefs.
+        }
       }
     }
     return result;

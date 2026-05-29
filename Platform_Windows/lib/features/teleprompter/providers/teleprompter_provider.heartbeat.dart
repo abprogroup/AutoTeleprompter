@@ -36,20 +36,15 @@ extension TeleprompterHeartbeat on TeleprompterNotifier {
       return;
     }
 
-    final now = DateTime.now();
-    final lastHeartbeat = _lastBrowserHeartbeatAt;
-    final heartbeatStale = lastHeartbeat != null &&
-        now.difference(lastHeartbeat) > const Duration(seconds: 18);
-    final lastRecoverableError = _lastRecoverableSttErrorAt;
-    final repeatedRecoverableErrors = lastRecoverableError != null &&
-        now.difference(lastRecoverableError) < const Duration(seconds: 30) &&
-        _recoverableSttErrorCount >= 3;
+    final reason = SttRecognitionPolicyService.browserRecoveryReason(
+      now: DateTime.now(),
+      sessionStart: _sessionStartTime,
+      lastHeartbeat: _lastBrowserHeartbeatAt,
+      lastRecoverableError: _lastRecoverableSttErrorAt,
+      recoverableErrorCount: _recoverableSttErrorCount,
+    );
+    if (reason == null) return;
 
-    if (!heartbeatStale && !repeatedRecoverableErrors) return;
-
-    final reason = heartbeatStale
-        ? 'stale browser heartbeat'
-        : 'recoverable browser errors';
     _recoverableSttErrorCount = 0;
     _lastRecoverableSttErrorAt = null;
     unawaited(_recoverBrowserStt(script, reason: reason));
@@ -140,10 +135,10 @@ extension TeleprompterHeartbeat on TeleprompterNotifier {
     _addDebugLog(
         'SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
     _addDebugLog(
-        'FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
+        'FIX: Check Windows Settings > Privacy & security > Microphone, and install the needed Windows speech pack if available.');
     _safeSetState((s) => s.copyWith(
           statusMessage:
-              'Microphone signal weak or blocked.\n1. Check Privacy Settings -> Microphone.\n2. Ensure "Online Speech Recognition" is enabled.',
+              'Microphone signal weak or blocked.\n1. Check Windows Settings > Privacy & security > Microphone.\n2. Check Windows Settings > Time & Language > Speech.',
           hasError: true,
         ));
   }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:autoteleprompter/features/script/models/script_word.dart';
+import 'package:autoteleprompter/features/feedback/services/lightweight_diagnostics.dart';
 import 'package:autoteleprompter/core/security/encrypted_file_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -64,13 +65,19 @@ class ScriptBookmarkService {
     final secureRaw = prefs.getString(secureKey);
     if (secureRaw != null && secureRaw.isNotEmpty) {
       try {
-        final bytes = EncryptedFileStore().unprotectEnvelope(
+        final bytes = await EncryptedFileStore().unprotectEnvelopeAsync(
           secureRaw,
           expectedKind: 'script-bookmarks',
         );
         final raw = (jsonDecode(utf8.decode(bytes)) as List).cast<dynamic>();
         return _decodeBookmarks(raw);
-      } catch (_) {
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'scriptBookmark.loadSecure',
+          data: {'scopeKey': key},
+        );
         return const [];
       }
     }
@@ -87,7 +94,7 @@ class ScriptBookmarkService {
     final prefs = await SharedPreferences.getInstance();
     final sorted = [...bookmarks]
       ..sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
-    final encrypted = EncryptedFileStore().protectToEnvelope(
+    final encrypted = await EncryptedFileStore().protectToEnvelopeAsync(
       utf8.encode(jsonEncode(sorted.map((b) => b.toJson()).toList())),
       kind: 'script-bookmarks',
     );
@@ -103,7 +110,13 @@ class ScriptBookmarkService {
         result.add(
           ScriptBookmark.fromJson(Map<String, dynamic>.from(decoded as Map)),
         );
-      } catch (_) {}
+      } catch (error) {
+        LightweightDiagnostics.instance.record(
+          'script',
+          'ignored malformed bookmark metadata',
+          data: {'error': error.toString()},
+        );
+      }
     }
     result.sort((a, b) => a.wordIndex.compareTo(b.wordIndex));
     return result;

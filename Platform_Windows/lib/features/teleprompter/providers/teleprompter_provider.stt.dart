@@ -38,10 +38,18 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
             .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
         return;
       }
-    } catch (_) {}
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'teleprompterProvider.voiceCommandSettings',
+      );
+    }
 
     _accumulatedTranscript = result.words;
-    final alignmentTranscript = _recentTranscriptWindow(_accumulatedTranscript);
+    final alignmentWindows = _recentTranscriptWindows(_accumulatedTranscript);
+    var alignmentTranscript =
+        alignmentWindows.isEmpty ? '' : alignmentWindows.first;
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
     final policy = TeleprompterNotifier.recognitionPolicyForSettings(settings);
@@ -53,17 +61,38 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       visibleWordEnd: _visibleWordEnd,
     );
 
-    final aligned = WordAligner.align(
-      script: script.words,
-      transcript: alignmentTranscript,
-      lastConfirmedIndex: _currentState.confirmedWordIndex,
-      visibleSkipStartIndex:
-          maxSkipTargetIndex == null ? null : _visibleWordStart,
-      maxSkipTargetIndex: maxSkipTargetIndex,
-      strictBulletMode: strictBulletMode,
-      policy: policy,
-      readingStandby: _sttReadingStandby,
-    );
+    AlignmentResult alignWindow(String transcriptWindow) => WordAligner.align(
+          script: script.words,
+          transcript: transcriptWindow,
+          lastConfirmedIndex: _currentState.confirmedWordIndex,
+          visibleSkipStartIndex:
+              maxSkipTargetIndex == null ? null : _visibleWordStart,
+          maxSkipTargetIndex: maxSkipTargetIndex,
+          strictBulletMode: strictBulletMode,
+          policy: policy,
+          readingStandby: _sttReadingStandby,
+        );
+
+    var aligned = alignWindow(alignmentTranscript);
+    if (!aligned.shouldAdvance &&
+        !aligned.shouldEnterStandby &&
+        alignmentWindows.length > 1) {
+      for (var i = 1; i < alignmentWindows.length; i++) {
+        final candidateTranscript = alignmentWindows[i];
+        final candidate = alignWindow(candidateTranscript);
+        if (candidate.shouldAdvance &&
+            candidate.confirmedWordIndex > _currentState.confirmedWordIndex) {
+          alignmentTranscript = candidateTranscript;
+          aligned = AlignmentResult(
+            candidate.confirmedWordIndex,
+            candidate.confidence,
+            '${candidate.debugInfo} | rollingWindow=${i + 1}/${alignmentWindows.length}',
+            candidate.decision,
+          );
+          break;
+        }
+      }
+    }
 
     final currentIdx = _currentState.confirmedWordIndex;
     final nextExpected = (currentIdx + 1 < script.words.length)
@@ -177,15 +206,18 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         _checkAndSwitchLocale();
       }
 
+      final relockTranscript = _accumulatedTranscript.trim().isEmpty
+          ? alignmentTranscript
+          : _accumulatedTranscript;
       final relockTarget = _relockTargetFromTranscript(
         script,
-        alignmentTranscript,
+        relockTranscript,
       );
       if (relockTarget != null &&
           relockTarget > _currentState.confirmedWordIndex) {
         final relockedWord = script.words[relockTarget].raw;
         _addDebugLog(
-          '$engineTag RELOCK -> #$relockTarget "$relockedWord" | heard: "$alignmentTranscript"',
+          '$engineTag RELOCK ${_lastRelockScope.toUpperCase()} -> #$relockTarget "$relockedWord" | heard: "$relockTranscript"',
         );
         LightweightDiagnostics.instance.record(
           'stt',
@@ -194,7 +226,8 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
             'from': _currentState.confirmedWordIndex,
             'to': relockTarget,
             'word': relockedWord,
-            'heard': alignmentTranscript,
+            'scope': _lastRelockScope,
+            'heard': relockTranscript,
           },
         );
         _noProgressCount = 0;

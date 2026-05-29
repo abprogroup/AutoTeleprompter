@@ -104,7 +104,7 @@ class _SttStartingIndicator extends StatelessWidget {
             ),
             const SizedBox(width: 9),
             const Text(
-              'STARTING STT',
+              'STARTING SPEECH',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 11,

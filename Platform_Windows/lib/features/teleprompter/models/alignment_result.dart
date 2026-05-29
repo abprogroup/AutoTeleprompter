@@ -15,7 +15,8 @@ class TeleprompterState {
   /// The UI should show a dialog prompting the user to download it.
   final String? missingLanguage;
 
-  /// Live microphone input level: 0.0 (silent) → 1.0 (max). Only meaningful when isListening.
+  /// Live microphone input level: 0.0 (silent) to 1.0 (max).
+  /// Only meaningful when isListening.
   final double soundLevel;
 
   /// URL of the embedded STT WebView (Windows only). Null on other platforms.

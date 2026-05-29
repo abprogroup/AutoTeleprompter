@@ -377,7 +377,17 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
               if (mi is int) freshHistoryIndex = mi;
               break;
             }
-          } catch (_) {}
+          } catch (error) {
+            LightweightDiagnostics.instance.record(
+              'script',
+              'ignored malformed recent metadata during editor init',
+              data: {
+                'source': 'editorInitHistoryIndex',
+                'sessionId': _currentSessionId,
+                'error': error.toString(),
+              },
+            );
+          }
         }
       }
 
@@ -387,7 +397,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           _history.clear();
           _history.addAll(historyData.map((d) => EditorState.fromJson(d)));
           _historyIndex = _history.length - 1;
-        } catch (_) {}
+        } catch (error, stack) {
+          LightweightDiagnostics.instance.recordError(
+            error,
+            stack,
+            source: 'scriptEditor.initialHistoryRestore',
+          );
+        }
       }
 
       final resolvedHistoryIndex = freshHistoryIndex ?? script?.historyIndex;

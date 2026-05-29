@@ -259,7 +259,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
       editable,
       activeSelection,
       rawText: _rawText,
-      gapTolerance: MarkupDecorationBoxMerger.styleBackgroundGapTolerance,
+      gapTolerance: MarkupDecorationBoxMerger.activeSelectionGapTolerance,
     );
     _paintBands(
       canvas,
@@ -364,13 +364,12 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     List<Rect> bands, {
     required bool applyBackgroundTail,
   }) {
-    final sorted = bands
-        .where((band) => band.width > 0 && band.height > 0)
-        .toList()
-      ..sort((a, b) {
-        final top = a.top.compareTo(b.top);
-        return top != 0 ? top : a.left.compareTo(b.left);
-      });
+    final sorted =
+        bands.where((band) => band.width > 0 && band.height > 0).toList()
+          ..sort((a, b) {
+            final top = a.top.compareTo(b.top);
+            return top != 0 ? top : a.left.compareTo(b.left);
+          });
     if (sorted.isEmpty) return const [];
 
     final pad = applyBackgroundTail
@@ -381,11 +380,12 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
         Rect.fromLTRB(band.left, band.top - pad, band.right, band.bottom + pad)
     ];
     final lineHeight = editable.preferredLineHeight;
-    final bridgeGapLimit = lineHeight * 0.45;
+    final bridgeGapLimit =
+        applyBackgroundTail ? lineHeight * 0.90 : lineHeight * 0.55;
     final maxAdjacentDistance = lineHeight * 1.55;
     final boundaryOverlap = applyBackgroundTail
-        ? (lineHeight * 0.035).clamp(1.25, 3.0).toDouble()
-        : 0.0;
+        ? (lineHeight * 0.080).clamp(2.5, 7.0).toDouble()
+        : (lineHeight * 0.030).clamp(0.75, 2.25).toDouble();
 
     for (var i = 0; i < sorted.length - 1; i++) {
       final current = sorted[i];
@@ -421,11 +421,11 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
   }
 
   double _styleBandVerticalPadding(RenderEditable editable) {
-    return (editable.preferredLineHeight * 0.08).clamp(1.5, 8.0).toDouble();
+    return (editable.preferredLineHeight * 0.16).clamp(3.0, 14.0).toDouble();
   }
 
   double _selectionBandVerticalPadding(RenderEditable editable) {
-    return (editable.preferredLineHeight * 0.045).clamp(1.0, 4.0).toDouble();
+    return (editable.preferredLineHeight * 0.06).clamp(1.25, 5.0).toDouble();
   }
 }
 

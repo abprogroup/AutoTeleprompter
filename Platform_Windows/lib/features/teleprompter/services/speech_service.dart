@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 
 enum SpeechStatus { idle, listening, paused, error }
 
@@ -101,7 +102,7 @@ class SpeechService {
 
   /// Fires with diagnostic messages (init results, locale list, etc.) for the debug panel.
   void Function(String)? onDiagnostic;
-  bool debugLogging = true;
+  bool debugLogging = false;
 
   Future<bool> initialize() async {
     try {
@@ -144,8 +145,8 @@ class SpeechService {
           if (fatal) {
             _isActive = false;
             final userMsg = msg == 'error_audio'
-                ? 'Microphone blocked or in use by another app. Check Windows Settings > Privacy > Microphone.'
-                : 'Microphone permission denied. Enable in Windows Settings > Privacy > Microphone.';
+                ? 'Microphone blocked or in use by another app. Check Windows Settings > Privacy & security > Microphone.'
+                : 'Microphone permission denied. Enable microphone access in Windows Settings > Privacy & security > Microphone.';
             onError?.call(userMsg);
             onStatusChange?.call(SpeechStatus.error);
             return;
@@ -193,13 +194,18 @@ class SpeechService {
         // are routed through onDiagnostic/debugMode instead.
         debugLogging: false,
       );
-    } catch (e) {
-      onError?.call('STT init failed: $e');
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'speechService.initialize',
+      );
+      onError?.call('Speech-to-text setup failed: $e');
       _isInitialized = false;
     }
     onDiagnostic?.call(_isInitialized
         ? '[STT] init OK'
-        : '[STT] init FAILED - check Windows Settings > Privacy > Microphone, and Time & Language > Speech');
+        : '[STT] init FAILED - check Windows Settings > Privacy & security > Microphone, and Time & Language > Speech');
     return _isInitialized;
   }
 
@@ -255,15 +261,15 @@ class SpeechService {
   Future<SpeechStartResult> start({String? localeId}) async {
     final hasPermission = await _stt.hasPermission;
 
-    onDiagnostic
-        ?.call('[STT] hasPermission=$hasPermission, initialized=$_isInitialized');
+    onDiagnostic?.call(
+        '[STT] hasPermission=$hasPermission, initialized=$_isInitialized');
     if (!_isInitialized || !hasPermission) {
       final ok = await initialize();
       if (!ok) {
         return SpeechStartResult(
           success: false,
           message:
-              'Speech recognition failed to start.\n\nOn Windows, check:\n1. Settings > Privacy > Microphone > allow desktop apps\n2. Settings > Time & Language > Speech > install a speech language pack',
+              'Speech recognition failed to start.\n\nOn Windows, check:\n1. Settings > Privacy & security > Microphone > allow desktop apps\n2. Settings > Time & Language > Speech > install a speech language pack',
         );
       }
     }
@@ -330,8 +336,9 @@ class SpeechService {
       await _stt.listen(
         onResult: (SpeechRecognitionResult result) {
           _consecutiveErrors = 0;
-          // Verbose logging for recognition shards (helps debug "silent" Windows engines)
-          if (debugLogging) {
+          // Verbose logging for recognition shards is only allowed in debug
+          // builds; release diagnostics must flow through app-owned channels.
+          if (debugLogging && kDebugMode) {
             debugPrint(
               '[SpeechService] onResult: words="${result.recognizedWords}", final=${result.finalResult}',
             );
@@ -354,7 +361,12 @@ class SpeechService {
         ),
         localeId: useLocale,
       );
-    } catch (e) {
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'speechService.listen',
+      );
       onError?.call('Listen failed: $e');
       if (_isActive && !_isRestarting) {
         _isInitialized = false;
@@ -368,7 +380,15 @@ class SpeechService {
     _isRestarting = false;
     _consecutiveErrors = 0;
     _errorResetTimer?.cancel();
-    await _stt.stop();
+    try {
+      await _stt.stop();
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'speechService.stop',
+      );
+    }
     onStatusChange?.call(SpeechStatus.idle);
   }
 
@@ -376,7 +396,15 @@ class SpeechService {
     _isActive = false;
     _isRestarting = false;
     _errorResetTimer?.cancel();
-    await _stt.stop();
+    try {
+      await _stt.stop();
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'speechService.pause',
+      );
+    }
     onStatusChange?.call(SpeechStatus.paused);
   }
 

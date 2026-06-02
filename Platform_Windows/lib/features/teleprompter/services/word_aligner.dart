@@ -38,6 +38,31 @@ class WordAligner {
   static List<ScriptWord> tokenize(String text) =>
       _WordAlignerTokenizer.tokenize(text);
 
+  static int nextSpeakableIndex(List<ScriptWord> script, int startIndex) {
+    var i = startIndex.clamp(0, script.length).toInt();
+    while (i < script.length &&
+        (script[i].isNewline || _isUnspeakable(script[i]))) {
+      i++;
+    }
+    return i;
+  }
+
+  static double spokenWordSimilarity(String spoken, ScriptWord word) {
+    if (word.normalized.isEmpty) return 0.0;
+    return _wordSimilarity(spoken, word.normalized, word.isRtl);
+  }
+
+  static bool spokenWordMatchesNext(
+    String spoken,
+    ScriptWord word, {
+    bool strictBulletMode = false,
+  }) {
+    if (spoken.isEmpty || word.normalized.isEmpty) return false;
+    final threshold =
+        strictBulletMode ? _strictMatchThreshold : (word.isRtl ? 0.45 : 0.55);
+    return spokenWordSimilarity(spoken, word) >= threshold;
+  }
+
   // -- Aligner -----------------------------------------------------------------
 
   /// Core alignment: given a script word list and a speech transcript,
@@ -104,12 +129,7 @@ class WordAligner {
 
     // Find the search start: skip over newlines AND unspeakable tokens
     // (numbers, dates, punctuation that STT won't produce reliably)
-    int searchStart = lastConfirmedIndex + 1;
-    while (searchStart < script.length &&
-        (script[searchStart].isNewline ||
-            _isUnspeakable(script[searchStart]))) {
-      searchStart++;
-    }
+    final searchStart = nextSpeakableIndex(script, lastConfirmedIndex + 1);
     if (searchStart >= script.length) {
       return AlignmentResult(
           lastConfirmedIndex, 0.0, 'AT_END', SttAlignmentDecision.wait);
@@ -341,9 +361,8 @@ class WordAligner {
           ? 1 << 30
           : (bestSeqStartIdx - seqSearchStart).abs();
       final clearlyBetter = normalizedScore > bestSeqScore + 0.06;
-      final nearTieButCloser =
-          (normalizedScore - bestSeqScore).abs() <= 0.06 &&
-              candidateDistance < bestDistance;
+      final nearTieButCloser = (normalizedScore - bestSeqScore).abs() <= 0.06 &&
+          candidateDistance < bestDistance;
       if ((clearlyBetter || nearTieButCloser) && matchCount >= 1) {
         final seqJump = (si - 1) - lastConfirmedIndex;
         final maxSeqJump = visibleMaxSkipTargetIndex == null
@@ -488,9 +507,8 @@ class WordAligner {
           final adjustedScore =
               (score / spokenPhrase.length) - (distance * 0.018);
           final clearlyBetter = adjustedScore > bestScore + 0.06;
-          final nearTieButCloser =
-              (adjustedScore - bestScore).abs() <= 0.06 &&
-                  (bestStart < 0 || i < bestStart);
+          final nearTieButCloser = (adjustedScore - bestScore).abs() <= 0.06 &&
+              (bestStart < 0 || i < bestStart);
           if (clearlyBetter || nearTieButCloser) {
             bestScore = adjustedScore;
             bestStart = i;

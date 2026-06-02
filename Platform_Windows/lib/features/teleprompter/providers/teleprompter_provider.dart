@@ -14,6 +14,7 @@ import '../../script/models/script_word.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
+import '../../../core/extensions/string_extensions.dart';
 
 import '../../../platform/stt/stt_service_factory.dart';
 part 'teleprompter_provider.heartbeat.dart';
@@ -54,6 +55,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   bool _activeSttCanSwitchLocale = true;
   String _activeSttEngineLabel = 'Browser Online';
   String _lastRelockScope = 'none';
+  int? _sequentialSttBaseIndex;
+  int? _sequentialSttEndIndex;
+  double _sequentialSttEvidence = 0.0;
+  bool _sequentialSttUnlocked = false;
+  String? _sequentialSttLastToken;
+  DateTime? _sequentialSttLastTokenAt;
   DateTime? _lastBrowserHeartbeatAt;
   DateTime? _lastRecoverableSttErrorAt;
   int _recoverableSttErrorCount = 0;
@@ -372,6 +379,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
     _silentWarningFired = false;
@@ -570,6 +578,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     _lastVolLog = null;
     _scriptLanguageLocale = null;
     _activeLocale = null;
@@ -611,6 +620,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('POSITION RESET -> 0');
@@ -629,6 +639,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(

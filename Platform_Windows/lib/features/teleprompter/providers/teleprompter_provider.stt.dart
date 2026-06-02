@@ -208,6 +208,47 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       if (!strictBulletMode) {
         _sttReadingStandby = false;
       }
+
+      final sequential = _consumeSequentialSttStreak(
+        script: script,
+        transcript: alignmentTranscript,
+        policy: policy,
+        strictBulletMode: strictBulletMode,
+      );
+      if (sequential != null) {
+        if (sequential.targetIndex != null &&
+            sequential.targetIndex! > _currentState.confirmedWordIndex) {
+          final target = sequential.targetIndex!;
+          final advancedWord =
+              target < script.words.length ? script.words[target].raw : '?';
+          _fluidAdvanceTimer?.cancel();
+          _noProgressCount = 0;
+          _sttReadingStandby = true;
+          _resetVisibleLocaleAssist();
+          _addDebugLog(
+            '$engineTag SEQUENTIAL ADVANCE -> #$target "$advancedWord" | ${sequential.debugInfo}',
+          );
+          LightweightDiagnostics.instance.record(
+            'stt',
+            'sequential advanced',
+            data: {
+              'to': target,
+              'word': advancedWord,
+              'heard': alignmentTranscript,
+              'debug': sequential.debugInfo,
+            },
+          );
+          _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
+          _syncLocaleForPosition(script, target + 1, reason: 'sequential');
+          return;
+        }
+
+        _noProgressCount = 0;
+        _sttReadingStandby = true;
+        _addDebugLog('$engineTag SEQUENTIAL HOLD | ${sequential.debugInfo}');
+        return;
+      }
+
       _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
         currentCount: _noProgressCount,
         improvising: improvising,
@@ -274,6 +315,132 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         return;
       }
     }
+  }
+
+  _SequentialSttProgress? _consumeSequentialSttStreak({
+    required Script script,
+    required String transcript,
+    required SttRecognitionPolicy policy,
+    required bool strictBulletMode,
+  }) {
+    final rawTokens = transcript
+        .split(RegExp(r'\s+'))
+        .map((word) => word.trim().normalizeForMatching())
+        .where((word) => word.isNotEmpty)
+        .toList(growable: false);
+    final tokens = rawTokens.length > 12
+        ? rawTokens.sublist(rawTokens.length - 12)
+        : rawTokens;
+    if (tokens.isEmpty || script.words.isEmpty) {
+      _resetSequentialSttStreak();
+      return null;
+    }
+
+    final currentIndex = _currentState.confirmedWordIndex;
+    if (_sequentialSttBaseIndex != currentIndex &&
+        _sequentialSttEndIndex != currentIndex) {
+      _resetSequentialSttStreak();
+    }
+
+    _sequentialSttBaseIndex ??= currentIndex;
+    _sequentialSttEndIndex ??= currentIndex;
+    var probeIndex = _sequentialSttEndIndex!;
+    var evidence = _sequentialSttEvidence;
+    var matched = 0;
+    var duplicateIgnored = 0;
+    var consumedPrefixIgnored = 0;
+    final now = DateTime.now();
+
+    for (final token in tokens) {
+      final nextIndex = WordAligner.nextSpeakableIndex(
+        script.words,
+        probeIndex + 1,
+      );
+      if (nextIndex >= script.words.length) break;
+      final nextWord = script.words[nextIndex];
+      if (WordAligner.spokenWordMatchesNext(
+        token,
+        nextWord,
+        strictBulletMode: strictBulletMode,
+      )) {
+        probeIndex = nextIndex;
+        evidence += policy.startAdvance.evidenceCost(nextWord.normalized);
+        matched++;
+        _sequentialSttLastToken = token;
+        _sequentialSttLastTokenAt = now;
+        continue;
+      }
+
+      final baseIndex = _sequentialSttBaseIndex!;
+      final endIndex = _sequentialSttEndIndex!;
+      var matchedConsumedPrefix = false;
+      for (var i = baseIndex + 1; i <= endIndex; i++) {
+        if (i < 0 || i >= script.words.length) continue;
+        if (WordAligner.spokenWordMatchesNext(
+          token,
+          script.words[i],
+          strictBulletMode: strictBulletMode,
+        )) {
+          matchedConsumedPrefix = true;
+          break;
+        }
+      }
+      if (matchedConsumedPrefix) {
+        consumedPrefixIgnored++;
+        continue;
+      }
+
+      final lastTokenAt = _sequentialSttLastTokenAt;
+      final repeatedRecentToken = _sequentialSttLastToken == token &&
+          lastTokenAt != null &&
+          now.difference(lastTokenAt) < const Duration(milliseconds: 1400);
+      if (repeatedRecentToken) {
+        duplicateIgnored++;
+        continue;
+      }
+
+      _resetSequentialSttStreak();
+      return null;
+    }
+
+    if (matched == 0) {
+      return duplicateIgnored > 0 || consumedPrefixIgnored > 0
+          ? const _SequentialSttProgress(
+              null,
+              'repeated token ignored; streak waiting',
+            )
+          : null;
+    }
+
+    _sequentialSttEndIndex = probeIndex;
+    _sequentialSttEvidence = evidence;
+    final threshold = policy.startAdvance;
+    final needed = threshold.smallWords.toDouble();
+    final reachedThreshold = evidence >= needed;
+    if (!_sequentialSttUnlocked && !reachedThreshold) {
+      return _SequentialSttProgress(
+        null,
+        'matched=$matched ignored=${duplicateIgnored + consumedPrefixIgnored} evidence=${evidence.toStringAsFixed(1)}/${needed.toStringAsFixed(1)} end=$probeIndex',
+      );
+    }
+
+    _sequentialSttUnlocked = true;
+    _sequentialSttBaseIndex = probeIndex;
+    _sequentialSttEndIndex = probeIndex;
+    _sequentialSttEvidence = 0.0;
+    return _SequentialSttProgress(
+      probeIndex,
+      'matched=$matched ignored=${duplicateIgnored + consumedPrefixIgnored} evidence=${evidence.toStringAsFixed(1)}/${needed.toStringAsFixed(1)}',
+    );
+  }
+
+  void _resetSequentialSttStreak() {
+    _sequentialSttBaseIndex = null;
+    _sequentialSttEndIndex = null;
+    _sequentialSttEvidence = 0.0;
+    _sequentialSttUnlocked = false;
+    _sequentialSttLastToken = null;
+    _sequentialSttLastTokenAt = null;
   }
 
   /// Animate word advancement from current position to [target],
@@ -357,6 +524,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     _scriptLanguageLocale = locale;
     _accumulatedTranscript = '';
     _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     final engineName = _sttService.platformName.toUpperCase();
     _addDebugLog('STT LOCALE [$engineName]: $previous -> $locale ($reason)');
     _safeSetState((s) => s.copyWith(isStarting: true, soundLevel: 0.0));
@@ -502,4 +670,11 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     }
     return active;
   }
+}
+
+class _SequentialSttProgress {
+  final int? targetIndex;
+  final String debugInfo;
+
+  const _SequentialSttProgress(this.targetIndex, this.debugInfo);
 }

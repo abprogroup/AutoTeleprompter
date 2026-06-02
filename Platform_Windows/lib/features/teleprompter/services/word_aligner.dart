@@ -235,6 +235,18 @@ class WordAligner {
       }
     }
 
+    final nextPhrase = _contiguousNextPhraseMatch(
+      script: script,
+      transcriptWords: transcriptWords,
+      searchStart: searchStart,
+      lastConfirmedIndex: lastConfirmedIndex,
+      maxPhraseWords: _localRecoveryPhraseMaxWords,
+      evidenceThreshold: effectivePolicy.safetyRecovery,
+      overrideWordThreshold: policyBulletMode ? _strictPhraseThreshold : null,
+      minPhraseScore: policyBulletMode ? _strictPhraseThreshold : 0.70,
+    );
+    if (nextPhrase != null) return nextPhrase;
+
     final localPhrase = _nearbyPhrasePriorityMatch(
       script: script,
       transcriptWords: transcriptWords,
@@ -505,6 +517,76 @@ class WordAligner {
       if (phraseBestStart >= 0) {
         return AlignmentResult(phraseBestEnd, phraseBestScore,
             '$debugPrefix@$phraseBestStart: words=$phraseLen transcript=$phraseBestTranscriptStart end=$phraseBestEnd score=${phraseBestScore.toStringAsFixed(2)} gapCost=${phraseBestGapCost.toStringAsFixed(1)}');
+      }
+    }
+
+    return null;
+  }
+
+  static AlignmentResult? _contiguousNextPhraseMatch({
+    required List<ScriptWord> script,
+    required List<String> transcriptWords,
+    required int searchStart,
+    required int lastConfirmedIndex,
+    required int maxPhraseWords,
+    required SttEvidenceThreshold evidenceThreshold,
+    double? overrideWordThreshold,
+    double minPhraseScore = _matchThreshold,
+  }) {
+    if (transcriptWords.length < 2 || searchStart >= script.length) {
+      return null;
+    }
+
+    final nextScript = <ScriptWord>[];
+    for (var i = searchStart;
+        i < script.length && nextScript.length < maxPhraseWords;
+        i++) {
+      final word = script[i];
+      if (word.isNewline || word.normalized.isEmpty || _isUnspeakable(word)) {
+        continue;
+      }
+      nextScript.add(word);
+    }
+    if (nextScript.length < 2) return null;
+
+    final longest = [
+      maxPhraseWords,
+      transcriptWords.length,
+      nextScript.length,
+    ].reduce((a, b) => a < b ? a : b);
+
+    for (var phraseLen = longest; phraseLen >= 2; phraseLen--) {
+      final spokenPhrase =
+          transcriptWords.sublist(transcriptWords.length - phraseLen);
+      if (!evidenceThreshold.passes(spokenPhrase)) continue;
+
+      var score = 0.0;
+      var matched = true;
+      for (var i = 0; i < phraseLen; i++) {
+        final scriptWord = nextScript[i];
+        final threshold = overrideWordThreshold ??
+            (scriptWord.isRtl ? _hebrewMatchThreshold : _matchThreshold);
+        final sim = _wordSimilarity(
+          spokenPhrase[i],
+          scriptWord.normalized,
+          scriptWord.isRtl,
+        );
+        if (sim < threshold) {
+          matched = false;
+          break;
+        }
+        score += sim;
+      }
+      if (!matched) continue;
+
+      final average = score / phraseLen;
+      final target = nextScript[phraseLen - 1].index;
+      if (average >= minPhraseScore && target > lastConfirmedIndex) {
+        return AlignmentResult(
+          target,
+          average,
+          'NEXT_PHRASE: words=$phraseLen end=$target score=${average.toStringAsFixed(2)}',
+        );
       }
     }
 

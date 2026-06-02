@@ -1,4 +1,5 @@
 import '../../script/models/script_word.dart';
+import '../../../core/extensions/string_extensions.dart';
 
 class ApproximateSpokenSearchMatch {
   final int startWordIndex;
@@ -115,11 +116,15 @@ class ApproximateSpokenSearchService {
       if (_isTokenRune(rune)) {
         buffer.writeCharCode(rune);
       } else if (buffer.isNotEmpty) {
-        tokens.add(buffer.toString());
+        final token = buffer.toString().normalizeForMatching();
+        if (token.isNotEmpty) tokens.add(token);
         buffer.clear();
       }
     }
-    if (buffer.isNotEmpty) tokens.add(buffer.toString());
+    if (buffer.isNotEmpty) {
+      final token = buffer.toString().normalizeForMatching();
+      if (token.isNotEmpty) tokens.add(token);
+    }
     return tokens;
   }
 

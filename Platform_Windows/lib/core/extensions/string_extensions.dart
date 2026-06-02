@@ -11,6 +11,16 @@ extension HebrewNormalization on String {
     return replaceAll(RegExp(r'[\u0591-\u05C7]'), '');
   }
 
+  /// Collapse decorative Hebrew elongation used in scripts for emphasis.
+  /// Speech engines usually return "שלנו" for visible text like "שלנווווו",
+  /// so matching tokens should normalize it while display text stays intact.
+  String collapseHebrewSpeechElongation() {
+    return replaceAllMapped(
+      RegExp(r'([\u05D0-\u05EA])\1{2,}'),
+      (match) => match.group(1)!,
+    );
+  }
+
   /// Strip common Hebrew prefix letters that attach without spaces:
   /// ו (and), ה (the), ב (in), ל (to), מ (from), כ (like), ש (that)
   /// Also handles multi-prefix combos: ובה, ולה, מה, שב, etc.
@@ -41,6 +51,7 @@ extension HebrewNormalization on String {
     if (isHebrew) {
       return stripHebrewDiacritics()
           .replaceAll(RegExp(r'[^\u05D0-\u05EA\u05F0-\u05F40-9]'), '')
+          .collapseHebrewSpeechElongation()
           .trim();
     }
     return toLowerCase().replaceAll(RegExp(r"[^a-z0-9']"), '').trim();

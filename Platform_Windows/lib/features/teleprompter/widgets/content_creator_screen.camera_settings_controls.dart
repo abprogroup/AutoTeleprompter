@@ -59,7 +59,7 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
         const SizedBox(height: 8),
         const Text(
           'MP4 video and WAV audio are recorded directly. WebM and MOV ProRes '
-          'remain v6 research items so this beta stays light.',
+          'remain future research items so this beta stays light.',
           style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.3),
         ),
       ],
@@ -462,7 +462,7 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Wi-Fi / IP camera support is planned for v6. For now, '
+              'Wi-Fi / IP camera support is planned for future work. For now, '
               'phone, NDI, OBS, Lightform, and bridge cameras work only when '
               'Windows exposes them as camera devices.',
               style:

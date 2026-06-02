@@ -4,7 +4,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
   List<Widget> _accountTab(AppSettings settings, AuthState auth) {
     final signedIn = auth.email != null && auth.email!.trim().isNotEmpty;
     final accountStatus = signedIn
-        ? '${auth.email}${auth.isPro ? ' - Pro' : ' - Beta'}'
+        ? '${auth.email}${auth.isPro ? ' - Pro' : ' - Free'}'
         : 'Not connected';
 
     return [
@@ -24,7 +24,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
         title: signedIn ? 'Account connection' : 'Connect account',
         subtitle: signedIn
             ? accountStatus
-            : 'Connect a beta/pro account when account services are ready',
+            : 'Connect a Pro account when account services are ready',
         onTap: signedIn ? null : _openAccountActivation,
       ),
       if (signedIn) ...[
@@ -32,7 +32,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
         _SettingsTile(
           icon: Icons.logout_rounded,
           title: 'Sign out on this device',
-          subtitle: 'Keeps local scripts, clears the beta account shell',
+          subtitle: 'Keeps local scripts, clears the account shell',
           onTap: _signOutAccount,
         ),
       ],
@@ -42,7 +42,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
       const _SettingsTile(
         icon: Icons.lock_reset_rounded,
         title: 'Password reset',
-        subtitle: 'V6 server-backed account feature',
+        subtitle: 'Future server-backed account feature',
       ),
       const SizedBox(height: 8),
       _SettingsTile(
@@ -50,19 +50,19 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
         title: 'Account migration email',
         subtitle: signedIn
             ? 'Current account email: ${auth.email}'
-            : 'V6 migration will require a verified account email',
+            : 'Future migration will require a verified account email',
       ),
       const SizedBox(height: 8),
       const _SettingsTile(
         icon: Icons.pin_outlined,
         title: 'Account PIN security',
-        subtitle: 'V6 quick unlock and sensitive-action protection',
+        subtitle: 'Future quick unlock and sensitive-action protection',
       ),
       const SizedBox(height: 8),
       const _SettingsTile(
         icon: Icons.devices_other_outlined,
         title: 'Trusted devices',
-        subtitle: 'V6 device review, revocation, and login alerts',
+        subtitle: 'Future device review, revocation, and login alerts',
       ),
       const SizedBox(height: 22),
       const _SectionHeader(title: 'ACCOUNT DATA'),
@@ -70,20 +70,20 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
       const _SettingsTile(
         icon: Icons.download_for_offline_outlined,
         title: 'Export account data',
-        subtitle: 'V6 export for server-backed accounts and cloud records',
+        subtitle: 'Future export for server-backed accounts and cloud records',
       ),
       const SizedBox(height: 8),
       const _SettingsTile(
         icon: Icons.delete_forever_outlined,
         title: 'Delete account data',
-        subtitle: 'V6 account/cloud deletion with confirmation',
+        subtitle: 'Future account/cloud deletion with confirmation',
       ),
       const SizedBox(height: 22),
-      const _SectionHeader(title: 'BETA PRIVACY'),
+      const _SectionHeader(title: 'PRIVACY'),
       const SizedBox(height: 8),
       _SettingsTile(
         icon: Icons.privacy_tip_outlined,
-        title: 'Beta Privacy Consent',
+        title: 'Privacy Consent',
         subtitle: 'Review device key, policy version, and consent status',
         onTap: () => _showBetaConsentDetails(context),
       ),

@@ -445,7 +445,7 @@ class _SpeechDisclosureBox extends StatelessWidget {
               'platform speech provider processing it.',
             ),
             _paragraph(
-              'Future v6 work will improve fully offline speech-to-text so '
+              'Future work will improve fully offline speech-to-text so '
               'users who do not want online speech providers can use an offline '
               'engine path without accepting online speech processing.',
             ),

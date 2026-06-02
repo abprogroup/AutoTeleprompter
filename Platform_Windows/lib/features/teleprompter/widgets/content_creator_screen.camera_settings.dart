@@ -124,7 +124,7 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
                         const Text(
                           'This beta records MP4 video with sound and WAV '
                           'audio-only directly. Extra video formats are '
-                          'planned for v6 research.',
+                          'planned for future platform research.',
                           style: TextStyle(
                             color: Colors.white38,
                             fontSize: 12,

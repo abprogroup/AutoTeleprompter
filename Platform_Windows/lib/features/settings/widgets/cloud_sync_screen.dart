@@ -145,7 +145,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           const _SectionLabel('MANAGED CLOUD'),
           const SizedBox(height: 6),
           const Text(
-            'Waiting for v6 development. This will use AutoTeleprompter '
+            'Waiting for future development. This will use AutoTeleprompter '
             'accounts and company-managed storage, not personal providers.',
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
@@ -402,7 +402,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
         ),
         content: const Text(
           'The current beta can link and open local synced folders. Turning on '
-          'automatic script sync or recording upload needs the v6 account '
+          'automatic script sync or recording upload needs the account '
           'connector, provider sync engine, and conflict-safe file handling.',
           style: TextStyle(color: Colors.white70, height: 1.35),
         ),

@@ -1,5 +1,5 @@
-name: Build Windows EXE (v5.0.4)
-run-name: Windows v5.0.4 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+name: Build Windows EXE (v5.0.5)
+run-name: Windows v5.0.5 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
 
       - name: Build Windows Archive
         run: |
-          $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.4"
+          $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.5"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
           $endpoint = ($env:FEEDBACK_ENDPOINT -replace "`r", "" -replace "`n", "").Trim()
           $googleDriveClientId = ($env:GOOGLE_DRIVE_CLIENT_ID -replace "`r", "" -replace "`n", "").Trim()

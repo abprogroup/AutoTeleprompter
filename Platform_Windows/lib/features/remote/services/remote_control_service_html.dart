@@ -126,7 +126,9 @@ const String remoteControlHtml = '''
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type === 'STATE') applyState(data);
-                } catch (_) {}
+                } catch (_) {
+                    document.getElementById('log').innerText = 'REMOTE STATE ERROR';
+                }
             };
         }
         function send(cmd) {

@@ -59,7 +59,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          'Send Beta Feedback',
+          'Send Feedback',
           style: GoogleFonts.bebasNeue(
             color: const Color(0xFFFFBF00),
             fontSize: 24,

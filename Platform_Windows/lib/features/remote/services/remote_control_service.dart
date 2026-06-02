@@ -301,7 +301,7 @@ class RemoteControlService extends ChangeNotifier {
     _notifyChanged();
     if (kDebugMode) {
       debugPrint(
-        'V5 Remote Server active at http://${_server!.address.address}:$port',
+        'Remote server active at http://${_server!.address.address}:$port',
       );
     }
   }

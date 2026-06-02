@@ -54,7 +54,7 @@ class _PremiumHubSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = _hasProAccess ? 'Pro access active' : 'Free plan';
     final subtitle = _hasProAccess
-        ? 'Remote control, online cloud beta, creator tools, and recording '
+        ? 'Remote control, online cloud tools, creator tools, and recording '
             'features are unlocked for this account.'
         : 'Local scripts and local app storage are available. Connect a Pro '
             'account to unlock remote control and online cloud tools.';

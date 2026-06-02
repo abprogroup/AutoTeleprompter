@@ -120,7 +120,7 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                     IconButton(
                       icon: const Icon(Icons.bug_report_outlined,
                           color: Colors.orange, size: 16),
-                      tooltip: 'Send beta feedback',
+                      tooltip: 'Send Feedback',
                       padding: EdgeInsets.zero,
                       constraints:
                           const BoxConstraints(minWidth: 28, minHeight: 28),

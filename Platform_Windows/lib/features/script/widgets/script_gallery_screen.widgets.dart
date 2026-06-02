@@ -83,7 +83,7 @@ class _ProDashboard extends StatelessWidget {
     final title = isActive ? 'Pro access active' : 'Free plan';
     final subtitle = isActive
         ? auth.isAdmin
-            ? 'Admin workspace unlocked: creator, remote, cloud beta, and '
+            ? 'Admin workspace unlocked: creator, remote, cloud tools, and '
                 'recording tools'
             : 'Professional tools are unlocked on this device'
         : 'Local scripts and local storage are active. Remote and online '

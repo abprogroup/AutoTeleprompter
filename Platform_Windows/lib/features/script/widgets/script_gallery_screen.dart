@@ -130,7 +130,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               onLockedPressed: () => _showPremiumHub(context, auth),
             ),
             IconButton(
-              tooltip: 'Send beta feedback',
+              tooltip: 'Send Feedback',
               icon:
                   const Icon(Icons.bug_report_outlined, color: Colors.white54),
               onPressed: () => Navigator.push(

@@ -44,8 +44,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     bool success = false;
     if (license.isNotEmpty) {
       success = await authNotifier.activateLicense(license);
-    } else if (email == 'abmpro.office@gmail.com') {
-      success = true; // Admin auto-pro
+    } else {
+      success = ref.read(authProvider).isPro;
     }
 
     setState(() => _isLoading = false);
@@ -54,7 +54,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Professional Suite Activated!'),
+            content: Text('Professional suite activated.'),
             backgroundColor: Colors.green,
           ),
         );

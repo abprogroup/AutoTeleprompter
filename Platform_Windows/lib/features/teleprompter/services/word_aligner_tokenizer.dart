@@ -22,6 +22,8 @@ class _WordAlignerTokenizer {
         ));
       } else {
         final parsed = _parseMarkup(line);
+        final lineSkipsSpeech = _isProductionCueLine(line);
+        var visiblePartIndex = 0;
 
         for (final token in parsed) {
           final clean = token.text.trim();
@@ -38,12 +40,16 @@ class _WordAlignerTokenizer {
                     r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr)(?:=[^\]]+)?\]|\*\*'),
                 '');
             final isRtl = cleanPart.isHebrew;
-            final normalized = cleanPart.normalizeForMatching();
+            final skipSpeech = lineSkipsSpeech ||
+                _isLeadingSpeakerLabel(cleanPart, visiblePartIndex);
+            final normalized =
+                skipSpeech ? '' : cleanPart.normalizeForMatching();
             if (normalized.isEmpty &&
                 _isStandaloneNeutralPunctuation(cleanPart)) {
               continue;
             }
             if (normalized.isEmpty && cleanPart.trim().isEmpty) continue;
+            visiblePartIndex++;
             words.add(ScriptWord(
               raw: part,
               normalized: normalized,
@@ -75,6 +81,54 @@ class _WordAlignerTokenizer {
     }
     return words;
   }
+
+  static bool _isProductionCueLine(String line) {
+    final visible = line
+        .replaceAll(
+            RegExp(
+                r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr|y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc)(?:=[^\]]+)?\]|\*\*'),
+            ' ')
+        .trim();
+    if (visible.isEmpty) return false;
+
+    final parts = _mergeStandaloneNeutralParts(visible.split(RegExp(r'\s+')));
+    final normalized = parts
+        .map((part) => part.normalizeForMatching())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (normalized.isEmpty || normalized.length > 12) return false;
+
+    final hasTechnicalCue =
+        normalized.any((part) => _technicalCueMarkers.contains(part));
+    if (hasTechnicalCue) return true;
+
+    final rawLower = visible.toLowerCase();
+    if (RegExp(r'(^|\s)(music|cue)\s*:').hasMatch(rawLower)) return true;
+    if (RegExp(r'(^|\s)\u05de\u05d5\u05d6\u05d9\u05e7\u05d4\s*:')
+        .hasMatch(visible)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool _isLeadingSpeakerLabel(String text, int visiblePartIndex) {
+    if (visiblePartIndex != 0) return false;
+    final trimmed = text.trim();
+    if (!trimmed.endsWith(':')) return false;
+    final label =
+        trimmed.substring(0, trimmed.length - 1).normalizeForMatching();
+    if (label.isEmpty || label.length > 24) return false;
+    return RegExp(r'[\u0590-\u05FFA-Za-z]').hasMatch(label);
+  }
+
+  static const Set<String> _technicalCueMarkers = {
+    'vtr',
+    'vt',
+    'sot',
+    'vo',
+    'cg',
+  };
 
   static List<String> _mergeStandaloneNeutralParts(Iterable<String> parts) {
     final merged = <String>[];

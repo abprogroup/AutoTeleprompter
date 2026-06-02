@@ -68,7 +68,8 @@ class TeleprompterLocaleResolver {
 
   static String? explicitLocaleForWord(ScriptWord word) {
     if (word.isNewline) return null;
-    final text = '${word.raw} ${word.normalized}';
+    if (word.normalized.isEmpty) return null;
+    final text = word.normalized;
     if (RegExp(r'[\u0590-\u05FF]').hasMatch(text)) return 'he_IL';
     if (RegExp(r'[A-Za-z]').hasMatch(text)) return 'en_US';
     return null;

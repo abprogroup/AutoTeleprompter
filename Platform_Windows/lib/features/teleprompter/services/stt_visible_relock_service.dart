@@ -87,6 +87,7 @@ class SttVisibleRelockService {
     final candidateWords = words
         .where((word) =>
             !word.isNewline &&
+            word.normalized.isNotEmpty &&
             word.index > currentIndex &&
             word.index >= safeStart &&
             word.index <= safeEnd)

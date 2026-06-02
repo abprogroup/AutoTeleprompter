@@ -99,7 +99,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     final nextExpected = (currentIdx + 1 < script.words.length)
         ? script.words
             .skip(currentIdx + 1)
-            .where((w) => !w.isNewline)
+            .where((w) => !w.isNewline && w.normalized.isNotEmpty)
             .take(3)
             .map((w) => w.raw)
             .join(' ')

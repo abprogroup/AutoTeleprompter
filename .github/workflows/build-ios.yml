@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main, master ]
     # Only trigger when iOS platform files or this workflow change.
-    # paths alone is sufficient — paths-ignore cannot coexist with paths on
+    # paths alone is sufficient; paths-ignore cannot coexist with paths on
     # the same event (GitHub Actions validation error).
     paths:
       - 'Platform_iOS/**'
@@ -57,8 +57,7 @@ jobs:
       - name: Build iOS (No Signing)
         # We add 'v' for verbose logging so we can see the exact error if it fails
         run: |
-          endpoint="${FEEDBACK_ENDPOINT//$'\r'/}"
-          endpoint="${endpoint//$'\n'/}"
+          endpoint="$(python3 ../.github/scripts/sanitize_feedback_endpoint.py "$FEEDBACK_ENDPOINT")"
           flutter build ios --release --no-codesign -v "--dart-define=APP_VERSION=5.0.0+8" "--dart-define=FEEDBACK_ENDPOINT=$endpoint"
         working-directory: Platform_iOS
         env:

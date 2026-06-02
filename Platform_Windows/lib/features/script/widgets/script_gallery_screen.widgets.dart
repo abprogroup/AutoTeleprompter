@@ -70,10 +70,16 @@ class _ProDashboard extends StatelessWidget {
   final AuthState auth;
   final bool compact;
   final VoidCallback onTap;
+  final VoidCallback? onOpenRemote;
+  final VoidCallback onOpenCloud;
+  final VoidCallback onLockedFeature;
 
   const _ProDashboard({
     required this.auth,
     required this.onTap,
+    required this.onOpenCloud,
+    required this.onLockedFeature,
+    this.onOpenRemote,
     this.compact = false,
   });
 
@@ -83,8 +89,7 @@ class _ProDashboard extends StatelessWidget {
     final title = isActive ? 'Pro access active' : 'Free plan';
     final subtitle = isActive
         ? 'Professional tools active: creator, remote, cloud, and recording'
-        : 'Local scripts and local storage are active. Remote and online '
-            'cloud tools need Pro.';
+        : 'Local scripts and local storage are active. Pro tools are locked.';
 
     return Material(
       color: Colors.transparent,
@@ -101,78 +106,168 @@ class _ProDashboard extends StatelessWidget {
               color: const Color(0xFFFFBF00).withValues(alpha: 0.25),
             ),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: compact ? 34 : 42,
-                height: compact ? 34 : 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFBF00).withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(compact ? 10 : 12),
-                ),
-                child: Icon(
-                  isActive
-                      ? Icons.verified_rounded
-                      : Icons.workspace_premium_outlined,
-                  color: const Color(0xFFFFBF00),
-                  size: compact ? 20 : 24,
-                ),
+              Row(
+                children: [
+                  Container(
+                    width: compact ? 34 : 42,
+                    height: compact ? 34 : 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFBF00).withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(compact ? 10 : 12),
+                    ),
+                    child: Icon(
+                      isActive
+                          ? Icons.verified_rounded
+                          : Icons.workspace_premium_outlined,
+                      color: const Color(0xFFFFBF00),
+                      size: compact ? 20 : 24,
+                    ),
+                  ),
+                  SizedBox(width: compact ? 10 : 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: compact ? 13 : 15,
+                          ),
+                        ),
+                        SizedBox(height: compact ? 2 : 3),
+                        Text(
+                          subtitle,
+                          maxLines: compact ? 2 : 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: compact ? 11 : 12,
+                            height: 1.25,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: compact ? 8 : 12),
+                  if (isActive && !compact)
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 8 : 10,
+                        vertical: compact ? 4 : 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Text(
+                        'ACTIVE',
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: compact ? 10 : 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    )
+                  else
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Colors.white24,
+                    ),
+                ],
               ),
-              SizedBox(width: compact ? 10 : 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: compact ? 13 : 15,
+              SizedBox(height: compact ? 10 : 12),
+              Row(
+                children: [
+                  if (Platform.isWindows)
+                    Expanded(
+                      child: _ProFeaturePill(
+                        icon: Icons.settings_remote_outlined,
+                        label: 'Remote',
+                        active: isActive && onOpenRemote != null,
+                        onTap: isActive && onOpenRemote != null
+                            ? onOpenRemote!
+                            : onLockedFeature,
                       ),
                     ),
-                    SizedBox(height: compact ? 2 : 3),
-                    Text(
-                      subtitle,
-                      maxLines: compact ? 2 : 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: compact ? 11 : 12,
-                        height: 1.25,
-                      ),
+                  if (Platform.isWindows) const SizedBox(width: 8),
+                  Expanded(
+                    child: _ProFeaturePill(
+                      icon: Icons.cloud_outlined,
+                      label: 'Cloud',
+                      active: isActive,
+                      onTap: isActive ? onOpenCloud : onLockedFeature,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProFeaturePill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _ProFeaturePill({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? const Color(0xFFFFBF00) : Colors.white30;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: active
+                ? const Color(0xFFFFBF00).withValues(alpha: .10)
+                : Colors.white.withValues(alpha: .04),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: active
+                  ? const Color(0xFFFFBF00).withValues(alpha: .24)
+                  : Colors.white.withValues(alpha: .08),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(active ? icon : Icons.lock_outline_rounded,
+                  color: color, size: 17),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: active ? Colors.white70 : Colors.white38,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              SizedBox(width: compact ? 8 : 12),
-              if (isActive)
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: compact ? 8 : 10,
-                    vertical: compact ? 4 : 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: Colors.green.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  child: Text(
-                    'ACTIVE',
-                    style: TextStyle(
-                      color: Colors.greenAccent,
-                      fontSize: compact ? 10 : 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                )
-              else
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.white24,
-                ),
             ],
           ),
         ),

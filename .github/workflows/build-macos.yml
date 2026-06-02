@@ -47,8 +47,7 @@ jobs:
 
       - name: Build macOS App
         run: |
-          endpoint="${FEEDBACK_ENDPOINT//$'\r'/}"
-          endpoint="${endpoint//$'\n'/}"
+          endpoint="$(python3 ../.github/scripts/sanitize_feedback_endpoint.py "$FEEDBACK_ENDPOINT")"
           flutter build macos --release "--dart-define=APP_VERSION=5.0.0+11" "--dart-define=FEEDBACK_ENDPOINT=$endpoint"
         working-directory: Platform_macOS
         env:

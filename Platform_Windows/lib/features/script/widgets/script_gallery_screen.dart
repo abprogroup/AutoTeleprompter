@@ -13,7 +13,6 @@ import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
-import '../../remote/widgets/remote_status_card.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
@@ -67,6 +66,23 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     final auth = ref.watch(authProvider);
     final hasProAccess = auth.isPro || auth.isAdmin;
 
+    void openPremiumHub() => _showPremiumHub(context, auth);
+
+    void openRemoteSettings() => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AppSettingsScreen(
+              initialTab: AppSettingsTab.remote,
+            ),
+          ),
+        );
+
+    void openCloudSettings() => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
+        );
+    final remoteSettingsAction = Platform.isWindows ? openRemoteSettings : null;
+
     return AbsorbPointer(
       absorbing: _inputShielded,
       child: Scaffold(
@@ -108,26 +124,16 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 tooltip: 'Local Remote Control',
                 lockedTooltip: 'Connect a Pro account to use Remote Control',
                 icon: Icons.wifi_tethering_rounded,
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AppSettingsScreen(
-                      initialTab: AppSettingsTab.remote,
-                    ),
-                  ),
-                ),
-                onLockedPressed: () => _showPremiumHub(context, auth),
+                onPressed: remoteSettingsAction ?? openPremiumHub,
+                onLockedPressed: openPremiumHub,
               ),
             _PremiumShortcutIcon(
               enabled: hasProAccess,
               tooltip: 'Cloud Storage',
               lockedTooltip: 'Connect a Pro account to use online Cloud',
               icon: Icons.cloud_outlined,
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
-              ),
-              onLockedPressed: () => _showPremiumHub(context, auth),
+              onPressed: openCloudSettings,
+              onLockedPressed: openPremiumHub,
             ),
             IconButton(
               tooltip: 'Send Feedback',
@@ -182,7 +188,10 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                   final pro = _ProDashboard(
                     auth: auth,
                     compact: true,
-                    onTap: () => _showPremiumHub(context, auth),
+                    onTap: openPremiumHub,
+                    onOpenRemote: remoteSettingsAction,
+                    onOpenCloud: openCloudSettings,
+                    onLockedFeature: openPremiumHub,
                   );
                   if (constraints.maxWidth < 760) {
                     return Column(
@@ -240,37 +249,6 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                             const ScriptEditorScreen(shouldAutoLoad: true)),
                   );
                 },
-              ),
-              const SizedBox(height: 12),
-              if (Platform.isWindows) ...[
-                RemoteStatusCard(
-                  onOpenSettings: () {
-                    if (!hasProAccess) {
-                      _showPremiumHub(context, auth);
-                      return;
-                    }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AppSettingsScreen(
-                          initialTab: AppSettingsTab.remote,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-              ],
-              _GalleryActionCard(
-                title: 'Cloud Storage',
-                subtitle:
-                    'Link local folders or connect Google Drive and Dropbox',
-                icon: Icons.cloud_outlined,
-                color: const Color(0xFFFFBF00),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
-                ),
               ),
               const SizedBox(height: 38),
               Row(

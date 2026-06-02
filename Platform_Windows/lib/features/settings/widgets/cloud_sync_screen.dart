@@ -788,9 +788,9 @@ class _AutomationRow extends StatelessWidget {
         subtitle,
         style: const TextStyle(color: Colors.white30, fontSize: 12),
       ),
-      trailing: Switch(
-        value: false,
-        onChanged: (_) => onActivate(),
+      trailing: TextButton(
+        onPressed: onActivate,
+        child: const Text('Details'),
       ),
     );
   }

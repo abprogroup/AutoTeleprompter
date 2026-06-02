@@ -11,6 +11,8 @@ import 'cloud_connection_store.dart';
 const googleDriveOAuthClientId =
     String.fromEnvironment('GOOGLE_DRIVE_CLIENT_ID');
 const dropboxOAuthClientId = String.fromEnvironment('DROPBOX_CLIENT_ID');
+const cloudOAuthRedirectPort =
+    int.fromEnvironment('CLOUD_OAUTH_REDIRECT_PORT', defaultValue: 51747);
 
 class CloudAccountInfo {
   final String providerId;
@@ -204,7 +206,19 @@ class CloudOAuthService {
 
     HttpServer? callbackServer;
     try {
-      callbackServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      try {
+        callbackServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          cloudOAuthRedirectPort,
+        );
+      } on SocketException {
+        return const CloudAccountConnectResult(
+          connected: false,
+          message: 'Cloud sign-in callback port $cloudOAuthRedirectPort is '
+              'already in use. Close the other local service or build with '
+              'CLOUD_OAUTH_REDIRECT_PORT set to the registered redirect port.',
+        );
+      }
       final redirectUri =
           'http://127.0.0.1:${callbackServer.port}/oauth/callback';
       final state = _randomBase64Url(24);
@@ -397,7 +411,10 @@ class CloudOAuthService {
 
   Future<void> _openBrowser(Uri uri) async {
     if (Platform.isWindows) {
-      await Process.run('cmd', ['/c', 'start', '', uri.toString()]);
+      await Process.run(
+        'rundll32',
+        ['url.dll,FileProtocolHandler', uri.toString()],
+      );
     } else {
       await Process.run('open', [uri.toString()]);
     }

@@ -264,7 +264,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               _GalleryActionCard(
                 title: 'Cloud Storage',
                 subtitle:
-                    'Link local folders or connect provider accounts when available',
+                    'Link local folders or connect Google Drive and Dropbox',
                 icon: Icons.cloud_outlined,
                 color: const Color(0xFFFFBF00),
                 onTap: () => Navigator.push(

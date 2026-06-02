@@ -97,10 +97,10 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Connect Google Drive or Dropbox accounts with provider '
-            'credentials, or link folders already synced by iCloud, Google '
+            'Connect Google Drive or Dropbox accounts when app credentials '
+            'are configured, or link folders already synced by iCloud, Google '
             'Drive, or Dropbox. Windows iCloud uses the local iCloud Drive '
-            'folder bridge in this Windows build.',
+            'folder bridge.',
             style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
           const SizedBox(height: 16),
@@ -402,9 +402,9 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'This build supports manual account sync and local synced folders. '
-          'Turning on automatic script sync or recording upload needs the '
-          'background sync scheduler and conflict-safe file handling.',
+          'Manual account sync and local synced folders are available now. '
+          'Turning on automatic script sync or recording upload still needs '
+          'the background sync scheduler and conflict-safe file handling.',
           style: TextStyle(color: Colors.white70, height: 1.35),
         ),
         actions: [

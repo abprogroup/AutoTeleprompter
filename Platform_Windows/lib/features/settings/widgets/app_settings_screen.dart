@@ -266,7 +266,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           icon: Icons.cleaning_services_outlined,
           title: 'Repair old microphone permission setting',
           subtitle: 'Removes an older Windows speech permission workaround if '
-              'this build saved it before the local-process fix.',
+              'this app saved it before the local-process fix.',
           onTap: _clearLegacyWebView2EnvVar,
         ),
         const SizedBox(height: 8),

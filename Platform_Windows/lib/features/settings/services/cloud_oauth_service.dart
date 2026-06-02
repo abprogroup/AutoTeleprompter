@@ -192,7 +192,7 @@ class CloudOAuthService {
         unsupported: true,
         message:
             '${provider.label} direct account sign-in is not available in this '
-            'Windows build. Use the local synced folder for now.',
+            'Windows app yet. Use the local synced folder for now.',
       );
     }
     if (config.clientId.trim().isEmpty) {
@@ -200,7 +200,7 @@ class CloudOAuthService {
         connected: false,
         missingCredentials: true,
         message: '${provider.label} account sign-in is ready in code, but this '
-            'build is missing ${config.clientIdDefineName}.',
+            'installation is missing ${config.clientIdDefineName}.',
       );
     }
 

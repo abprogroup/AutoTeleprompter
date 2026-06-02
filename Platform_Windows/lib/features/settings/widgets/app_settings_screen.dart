@@ -575,7 +575,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text(
-          'Beta Privacy Consent',
+          'Privacy Consent',
           style: TextStyle(color: Colors.white),
         ),
         content: Column(

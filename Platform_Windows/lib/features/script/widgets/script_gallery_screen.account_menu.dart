@@ -27,7 +27,7 @@ class _AccountMenuButton extends ConsumerWidget {
         ? 'Admin'
         : auth.isPro
             ? 'Pro'
-            : 'Beta';
+            : 'Free';
 
     return PopupMenuButton<String>(
       tooltip: 'Account',

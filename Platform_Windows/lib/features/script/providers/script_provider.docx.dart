@@ -45,6 +45,8 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
         bool isUnderline = paragraphRunDefaults.isUnderline;
         String? color = paragraphRunDefaults.color;
         String? highlightColor = paragraphRunDefaults.highlightColor;
+        double? runFontSize = paragraphRunDefaults.fontSize;
+        String? runFontFamily = paragraphRunDefaults.fontFamily;
 
         if (rPr != null) {
           final bold = rPr.getElement('w:b');
@@ -67,19 +69,9 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
             highlightColor = _docxRunHighlightColor(rPr);
           }
 
-          if (detectedFontSize == null) {
-            final sizeElement = rPr.getElement('w:sz');
-            final complexSizeElement = rPr.getElement('w:szCs');
-            final sz =
-                (sizeElement == null ? null : _docxAttr(sizeElement, 'val')) ??
-                    (complexSizeElement == null
-                        ? null
-                        : _docxAttr(complexSizeElement, 'val'));
-            if (sz != null) {
-              final halfPoints = double.tryParse(sz);
-              if (halfPoints != null) detectedFontSize = halfPoints / 2.0;
-            }
-          }
+          runFontSize = _docxRunFontSize(rPr) ?? runFontSize;
+          runFontFamily = _docxRunFontFamily(rPr) ?? runFontFamily;
+          detectedFontSize ??= runFontSize;
         }
 
         if (_docxIsDecorationWhitespace(text)) {
@@ -96,6 +88,8 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
               isUnderline: isUnderline,
               color: _docxNormalizeTextColor(color),
               highlightColor: _docxNormalizeColor(highlightColor),
+              fontSize: runFontSize,
+              fontFamily: runFontFamily,
             ));
       }
 
@@ -108,6 +102,8 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
           isUnderline: segment.isUnderline,
           color: segment.color,
           highlightColor: segment.highlightColor,
+          fontSize: segment.fontSize,
+          fontFamily: segment.fontFamily,
         ));
       }
 
@@ -224,6 +220,8 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     required bool isUnderline,
     required String? color,
     required String? highlightColor,
+    required double? fontSize,
+    required String? fontFamily,
   }) {
     if (text.isEmpty) return '';
     return text.split('\n').map((line) {
@@ -236,6 +234,13 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       final normalizedHighlight = _docxNormalizeColor(highlightColor);
       if (normalizedHighlight != null) {
         wrapped = '[bg=#$normalizedHighlight]$wrapped[/bg]';
+      }
+      if (fontSize != null) {
+        wrapped = '[size=${_docxFormatFontSize(fontSize)}]$wrapped[/size]';
+      }
+      final normalizedFont = _docxNormalizeFontFamily(fontFamily);
+      if (normalizedFont != null) {
+        wrapped = '[font=$normalizedFont]$wrapped[/font]';
       }
       if (isUnderline) wrapped = '[u]$wrapped[/u]';
       if (isItalic) wrapped = '[i]$wrapped[/i]';
@@ -274,6 +279,31 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       highlightColor: _docxRunHasHighlightProperty(rPr)
           ? _docxNormalizeColor(_docxRunHighlightColor(rPr))
           : null,
+      fontSize: _docxRunFontSize(rPr),
+      fontFamily: _docxRunFontFamily(rPr),
+    );
+  }
+
+  static double? _docxRunFontSize(XmlElement runProperties) {
+    final sizeElement = runProperties.getElement('w:sz');
+    final complexSizeElement = runProperties.getElement('w:szCs');
+    final sz = (sizeElement == null ? null : _docxAttr(sizeElement, 'val')) ??
+        (complexSizeElement == null
+            ? null
+            : _docxAttr(complexSizeElement, 'val'));
+    final halfPoints = sz == null ? null : double.tryParse(sz);
+    if (halfPoints == null || halfPoints <= 0) return null;
+    return halfPoints / 2.0;
+  }
+
+  static String? _docxRunFontFamily(XmlElement runProperties) {
+    final fonts = runProperties.getElement('w:rFonts');
+    if (fonts == null) return null;
+    return _docxNormalizeFontFamily(
+      _docxAttr(fonts, 'ascii') ??
+          _docxAttr(fonts, 'hAnsi') ??
+          _docxAttr(fonts, 'cs') ??
+          _docxAttr(fonts, 'eastAsia'),
     );
   }
 
@@ -309,6 +339,18 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     if (color == null || color == 'auto') return null;
     final hex = color.trim().replaceFirst('#', '').toUpperCase();
     return RegExp(r'^[0-9A-F]{6}$').hasMatch(hex) ? hex : null;
+  }
+
+  static String _docxFormatFontSize(double size) {
+    if ((size - size.roundToDouble()).abs() < 0.001) {
+      return size.round().toString();
+    }
+    return size.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  static String? _docxNormalizeFontFamily(String? family) {
+    final trimmed = family?.trim().replaceAll(']', '');
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   static const String _docxNamespace =

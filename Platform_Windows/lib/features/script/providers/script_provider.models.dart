@@ -20,6 +20,8 @@ class _DocxRunStyle {
   final bool isUnderline;
   final String? color;
   final String? highlightColor;
+  final double? fontSize;
+  final String? fontFamily;
 
   const _DocxRunStyle({
     this.isBold = false,
@@ -27,6 +29,8 @@ class _DocxRunStyle {
     this.isUnderline = false,
     this.color,
     this.highlightColor,
+    this.fontSize,
+    this.fontFamily,
   });
 }
 
@@ -37,6 +41,8 @@ class _DocxRunSegment {
   final bool isUnderline;
   final String? color;
   final String? highlightColor;
+  final double? fontSize;
+  final String? fontFamily;
 
   const _DocxRunSegment(
     this.text, {
@@ -45,6 +51,8 @@ class _DocxRunSegment {
     required this.isUnderline,
     required this.color,
     required this.highlightColor,
+    required this.fontSize,
+    required this.fontFamily,
   });
 
   bool sameStyle(_DocxRunSegment other) =>
@@ -52,7 +60,9 @@ class _DocxRunSegment {
       isItalic == other.isItalic &&
       isUnderline == other.isUnderline &&
       color == other.color &&
-      highlightColor == other.highlightColor;
+      highlightColor == other.highlightColor &&
+      fontSize == other.fontSize &&
+      fontFamily == other.fontFamily;
 
   _DocxRunSegment copyWith({required String text}) => _DocxRunSegment(
         text,
@@ -61,6 +71,8 @@ class _DocxRunSegment {
         isUnderline: isUnderline,
         color: color,
         highlightColor: highlightColor,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
       );
 }
 

@@ -3,9 +3,9 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   Future<void> _runPendingFileLoad(File file) async {
     try {
-      final settings = ref.read(settingsProvider);
-      _lastChosenTextColor = Color(settings.lastTextColor);
-      _lastChosenHighlightColor = Color(settings.lastHighlightColor);
+      final settingsBeforeImport = ref.read(settingsProvider);
+      _lastChosenTextColor = Color(settingsBeforeImport.lastTextColor);
+      _lastChosenHighlightColor = Color(settingsBeforeImport.lastHighlightColor);
 
       final result = await ref.read(scriptProvider.notifier).parseFile(file);
       if (result.isError) {
@@ -16,7 +16,18 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         );
         return;
       }
-      await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
+      final parsedSettings = ref.read(settingsProvider);
+      final settingsNotifier = ref.read(settingsProvider.notifier);
+      if (settingsBeforeImport.importColorMode ==
+          AppSettings.importColorModeDocument) {
+        final parsedBgChanged =
+            parsedSettings.scriptBgColor != settingsBeforeImport.scriptBgColor;
+        await settingsNotifier.setDocumentImportAppearance(
+          scriptBgColor: parsedBgChanged ? parsedSettings.scriptBgColor : null,
+        );
+      } else {
+        await settingsNotifier.resetToDefaultAppearance();
+      }
       final String content = result.text;
       final String title = file.path.split(RegExp(r'[\\/]')).last;
 
@@ -307,8 +318,12 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (node.hasFocus) {
           _lastFocusedController = controller;
           // Restore native-selection rendering on focus regain by clearing
-          // any externalSelection sentinel set during focus loss.
+          // only the collapsed externalSelection sentinel set during focus
+          // loss. A non-collapsed externalSelection is an app-owned selection
+          // that must survive toolbar focus changes so typing/replacing still
+          // edits the selected text instead of appending at its end.
           if (controller.externalSelection != null &&
+              controller.externalSelection!.isCollapsed &&
               !_isGlobalSelection &&
               !(_overlayKey.currentState?.hasSelection ?? false)) {
             controller.externalSelection = null;
@@ -332,6 +347,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           // (their externalSelection values must not be overwritten here).
           final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
           if (!_isGlobalSelection &&
+              !_editorToolbarFocusGuard &&
               !overlayActive &&
               !controller.isGlobalSelected &&
               controller.externalVisibleSelection == null &&
@@ -371,6 +387,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           }
           return;
         }
+        final previousText = lastText;
         final hadAppSelectionBeforeEdit = !_isCommandExecuting &&
             (controller.isGlobalSelected ||
                 _isGlobalSelection ||
@@ -378,6 +395,18 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
                 (controller.externalSelection != null &&
                     controller.externalSelection!.isValid &&
                     !controller.externalSelection!.isCollapsed));
+        if (hadAppSelectionBeforeEdit &&
+            _replaceAppSelectionWithText(
+              editedController: controller,
+              previousText: previousText,
+              currentText: controller.text,
+            )) {
+          lastText = controller.text;
+          _isDirty = true;
+          _verticalArrowPreferredX = null;
+          _onBlockChanged();
+          return;
+        }
         lastText = controller.text;
         _isDirty = true;
         _verticalArrowPreferredX = null;
@@ -674,6 +703,9 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     if (!mounted) return;
     final controller = _activeController;
     if (controller != null) {
+      if (_editorToolbarFocusGuard && !_isCommandExecuting) {
+        return;
+      }
       // v3.9.5.1: Synchronize selection with status broadcast logic
       // Only reset Global Selection if a manual PARTIAL selection occurs.
       // If the selection is collapsed (cursor) or spans the whole block, keep the flag.
@@ -685,6 +717,17 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         // or drag is in progress), do NOT clear - focus events fire before
         // _isCommandExecuting is set and would prematurely destroy the selection.
         if (_overlayKey.currentState?.hasSelection ?? false) return;
+        final globalMarkersStillFull = _controllers.isNotEmpty &&
+            _controllers.every((c) {
+              if (c.text.isEmpty) return true;
+              if (c.isGlobalSelected) return true;
+              final external = c.externalSelection;
+              return external != null &&
+                  external.isValid &&
+                  external.start <= 0 &&
+                  external.end >= c.text.length;
+            });
+        if (globalMarkersStillFull) return;
         final textLen = controller.text.length;
         final isFullBlock = !controller.selection.isCollapsed &&
             controller.selection.start == 0 &&
@@ -744,6 +787,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     }
     _lastFocusedController = editedController;
   }
+
 }
 
 class _EnterSelectionRange {

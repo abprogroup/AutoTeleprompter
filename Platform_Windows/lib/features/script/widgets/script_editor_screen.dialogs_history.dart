@@ -34,35 +34,14 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
 
   String _getRefinedFullText() => _controllers.map((c) => c.text).join('\n');
 
-  /// Commit a history snapshot immediately (no debounce).
-  void _commitHistory(String description) {
-    if (_isCleaning) return;
-    _historyTimer?.cancel();
-    _typingBulkTimer?.cancel();
-    _suiteAutoSaveTimer?.cancel();
-    _typingCharCount = 0;
-
-    final currentText = _getRefinedFullText();
-    // Skip duplicate: don't commit if text + settings match the current head
-    if (_historyIndex >= 0 && _historyIndex < _history.length) {
-      final head = _history[_historyIndex];
-      final settings = ref.read(settingsProvider);
-      if (head.text == currentText &&
-          head.fontSize == settings.fontSize &&
-          head.fontFamily == settings.fontFamily &&
-          head.lineSpacing == settings.lineSpacing &&
-          head.letterSpacing == settings.letterSpacing &&
-          head.wordSpacing == settings.wordSpacing) {
-        return; // No change — skip
-      }
-    }
-
+  EditorState _buildHistoryState(String description) {
     final settings = ref.read(settingsProvider);
     final focusIndex = _focusedBlockIndexForHistory();
     final focusSelection =
         focusIndex == null ? null : _controllers[focusIndex].selection;
-    final state = EditorState(
-      text: currentText,
+    final appSelection = _appSelectionForHistory();
+    return EditorState(
+      text: _getRefinedFullText(),
       timestamp: DateTime.now(),
       description: description,
       fontSize: settings.fontSize,
@@ -77,10 +56,61 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       focusBlockIndex: focusIndex,
       selectionBaseOffset: focusSelection?.baseOffset,
       selectionExtentOffset: focusSelection?.extentOffset,
+      appSelectionActive: appSelection.active,
+      appSelectionStartBlock: appSelection.startBlock,
+      appSelectionStartOffset: appSelection.startOffset,
+      appSelectionEndBlock: appSelection.endBlock,
+      appSelectionEndOffset: appSelection.endOffset,
       scrollOffset: _editorScrollController.hasClients
           ? _editorScrollController.offset
           : null,
     );
+  }
+
+  bool _historyContentEquals(EditorState a, EditorState b) {
+    return a.text == b.text &&
+        a.fontSize == b.fontSize &&
+        a.fontFamily == b.fontFamily &&
+        a.lineSpacing == b.lineSpacing &&
+        a.letterSpacing == b.letterSpacing &&
+        a.wordSpacing == b.wordSpacing &&
+        a.scriptBgColor == b.scriptBgColor &&
+        a.currentWordColor == b.currentWordColor &&
+        a.futureWordColor == b.futureWordColor &&
+        a.textAlign == b.textAlign;
+  }
+
+  bool _historyVisibleStyleEquals(EditorState a, EditorState b) {
+    return a.fontSize == b.fontSize &&
+        a.fontFamily == b.fontFamily &&
+        a.lineSpacing == b.lineSpacing &&
+        a.letterSpacing == b.letterSpacing &&
+        a.wordSpacing == b.wordSpacing &&
+        a.scriptBgColor == b.scriptBgColor &&
+        a.currentWordColor == b.currentWordColor &&
+        a.futureWordColor == b.futureWordColor &&
+        a.textAlign == b.textAlign &&
+        StylingService.semanticStyleSignature(a.text) ==
+            StylingService.semanticStyleSignature(b.text);
+  }
+
+  /// Commit a history snapshot immediately (no debounce).
+  void _commitHistory(String description) {
+    if (_isCleaning) return;
+    _historyTimer?.cancel();
+    _typingBulkTimer?.cancel();
+    _suiteAutoSaveTimer?.cancel();
+    _typingCharCount = 0;
+
+    final state = _buildHistoryState(description);
+    // Skip duplicate: don't commit if text + settings match the current head
+    if (_historyIndex >= 0 && _historyIndex < _history.length) {
+      final head = _history[_historyIndex];
+      if (_historyContentEquals(head, state)) {
+        return; // No change — skip
+      }
+    }
+
     _setEditorState(() {
       if (_historyIndex < _history.length - 1) {
         _history.removeRange(_historyIndex + 1, _history.length);
@@ -94,6 +124,90 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     _scheduleRecentUpdate();
   }
 
+  void _beginSuiteHistoryTransaction(EditorSuite suite) {
+    if (suite == EditorSuite.none) return;
+    _suiteAutoSaveTimer?.cancel();
+    _suiteTransactionSuite = suite;
+    _suiteBaselineState = _historyIndex >= 0 && _historyIndex < _history.length
+        ? _history[_historyIndex]
+        : _buildHistoryState('${suite.name} Baseline');
+    _suiteLiveHistoryIndex = null;
+    _suiteSection = null;
+    _isSuiteDirty = false;
+  }
+
+  void _endSuiteHistoryTransaction() {
+    _suiteAutoSaveTimer?.cancel();
+    _suiteTransactionSuite = null;
+    _suiteBaselineState = null;
+    _suiteLiveHistoryIndex = null;
+    _suiteSection = null;
+    _isSuiteDirty = false;
+  }
+
+  void _removeSuiteLiveHistoryEntry() {
+    final index = _suiteLiveHistoryIndex;
+    if (index == null || index < 0 || index >= _history.length) {
+      _suiteLiveHistoryIndex = null;
+      _isSuiteDirty = false;
+      return;
+    }
+    _setEditorState(() {
+      _history.removeAt(index);
+      if (_history.isEmpty) {
+        _historyIndex = -1;
+      } else if (_historyIndex > index) {
+        _historyIndex--;
+      } else {
+        _historyIndex = (index - 1).clamp(0, _history.length - 1).toInt();
+      }
+    });
+    _suiteLiveHistoryIndex = null;
+    _isSuiteDirty = false;
+    _scheduleRecentUpdate();
+  }
+
+  void _recordSuiteHistoryChange(String description) {
+    if (_activeSuite == EditorSuite.none) {
+      _commitHistory(description);
+      return;
+    }
+    if (_suiteBaselineState == null || _suiteTransactionSuite != _activeSuite) {
+      _beginSuiteHistoryTransaction(_activeSuite);
+    }
+    final baseline = _suiteBaselineState;
+    if (baseline == null) return;
+
+    _suiteSection = description;
+    final state = _buildHistoryState(description);
+    if (_historyContentEquals(state, baseline) ||
+        _historyVisibleStyleEquals(state, baseline)) {
+      _removeSuiteLiveHistoryEntry();
+      return;
+    }
+
+    _setEditorState(() {
+      if (_historyIndex < _history.length - 1) {
+        _history.removeRange(_historyIndex + 1, _history.length);
+        _suiteLiveHistoryIndex = null;
+      }
+      final liveIndex = _suiteLiveHistoryIndex;
+      if (liveIndex != null && liveIndex >= 0 && liveIndex < _history.length) {
+        _history[liveIndex] = state;
+        _historyIndex = liveIndex;
+      } else {
+        _history.add(state);
+        if (_history.length > _ScriptEditorScreenState._maxHistory) {
+          _history.removeAt(0);
+        }
+        _suiteLiveHistoryIndex = _history.length - 1;
+        _historyIndex = _suiteLiveHistoryIndex!;
+      }
+    });
+    _isSuiteDirty = true;
+    _scheduleRecentUpdate();
+  }
+
   int? _focusedBlockIndexForHistory() {
     final active = _lastFocusedController ?? _activeController;
     if (active == null) return _controllers.isEmpty ? null : 0;
@@ -102,12 +216,72 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     return _controllers.isEmpty ? null : 0;
   }
 
+  ({
+    bool active,
+    int? startBlock,
+    int? startOffset,
+    int? endBlock,
+    int? endOffset,
+  }) _appSelectionForHistory() {
+    final selected = <({int block, int start, int end})>[];
+    for (var i = 0; i < _controllers.length; i++) {
+      final controller = _controllers[i];
+      final external = controller.externalSelection;
+      if (controller.isGlobalSelected) {
+        selected.add((block: i, start: 0, end: controller.text.length));
+      } else if (external != null &&
+          external.isValid &&
+          !external.isCollapsed) {
+        selected.add((
+          block: i,
+          start: external.start.clamp(0, controller.text.length).toInt(),
+          end: external.end.clamp(0, controller.text.length).toInt(),
+        ));
+      }
+    }
+    if (selected.isEmpty) {
+      return (
+        active: false,
+        startBlock: null,
+        startOffset: null,
+        endBlock: null,
+        endOffset: null,
+      );
+    }
+    selected.sort((a, b) => a.block.compareTo(b.block));
+    final first = selected.first;
+    final last = selected.last;
+    return (
+      active: true,
+      startBlock: first.block,
+      startOffset: first.start,
+      endBlock: last.block,
+      endOffset: last.end,
+    );
+  }
+
   void _flushPendingTypingHistoryForTraversal() {
     if (_isCleaning) return;
     final hasPendingTyping =
         _typingCharCount > 0 || (_typingBulkTimer?.isActive ?? false);
     if (!hasPendingTyping) return;
     _commitHistory('Edit Text');
+  }
+
+  void _flushPendingHistoryForTraversal() {
+    _flushPendingTypingHistoryForTraversal();
+    if (_isCleaning) return;
+    if (_activeSuite == EditorSuite.none || !_isSuiteDirty) return;
+    _recordSuiteHistoryChange(_suiteSection ?? '${_activeSuite.name} Session');
+  }
+
+  bool _hasPendingHistoryContentChange() {
+    if (_isCleaning) return false;
+    if (_historyIndex < 0 || _historyIndex >= _history.length) {
+      return _controllers.any((controller) => controller.text.isNotEmpty);
+    }
+    final state = _buildHistoryState('Pending');
+    return !_historyContentEquals(state, _history[_historyIndex]);
   }
 
   /// Legacy-compatible entry point used by style commands and explicit saves.
@@ -121,30 +295,13 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     _commitHistory(description);
   }
 
-  /// Track suite section changes. If the function section changes within the
-  /// same suite session, commit the previous section's edits first.
+  /// Track which control inside the open suite produced the live history entry.
   void _trackSuiteSection(String section) {
     if (_activeSuite == EditorSuite.none) return;
-    if (_suiteSection != null && _suiteSection != section && _isSuiteDirty) {
-      // Section changed — commit previous section
-      _commitHistory(_suiteSection!);
-      _isSuiteDirty = false;
+    if (_suiteBaselineState == null || _suiteTransactionSuite != _activeSuite) {
+      _beginSuiteHistoryTransaction(_activeSuite);
     }
     _suiteSection = section;
-    _startSuiteAutoSave();
-  }
-
-  /// 3-second auto-checkpoint while a suite is open.
-  /// Resets on every interaction. If 3s passes with no new interaction
-  /// and the suite is dirty, commits a checkpoint.
-  void _startSuiteAutoSave() {
-    _suiteAutoSaveTimer?.cancel();
-    _suiteAutoSaveTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _activeSuite != EditorSuite.none && _isSuiteDirty) {
-        _commitHistory(_suiteSection ?? '${_activeSuite.name} Auto-Save');
-        _isSuiteDirty = false;
-      }
-    });
   }
 
   /// 10-char / 10-second typing bulking.
@@ -165,7 +322,15 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   }
 
   void _undo() {
-    _flushPendingTypingHistoryForTraversal();
+    final noUndoAvailable = _historyIndex <= 0;
+    final redoAvailable =
+        _historyIndex >= 0 && _historyIndex < _history.length - 1;
+    if (noUndoAvailable &&
+        redoAvailable &&
+        !_hasPendingHistoryContentChange()) {
+      return;
+    }
+    _flushPendingHistoryForTraversal();
     if (_historyIndex > 0) {
       _isCommandExecuting = true;
       _isDirty = false;
@@ -186,7 +351,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   }
 
   void _redo() {
-    _flushPendingTypingHistoryForTraversal();
+    _flushPendingHistoryForTraversal();
     if (_historyIndex < _history.length - 1) {
       _isCommandExecuting = true;
       _isDirty = false;
@@ -248,8 +413,23 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   }
 
   void _applyState(EditorState state) {
+    _clearHistoryAppSelectionVisuals();
     _loadText(state.text);
     _applySettingsFromState(state);
+  }
+
+  void _clearHistoryAppSelectionVisuals() {
+    _overlayKey.currentState?.clearSelection();
+    _preservedSelection = null;
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
+    _isGlobalSelection = false;
+    for (final c in _controllers) {
+      c.externalSelection = null;
+      c.externalVisibleSelection = null;
+      c.isGlobalSelected = false;
+      c.refresh();
+    }
   }
 
   void _restoreHistoryFocusAndScroll(
@@ -272,16 +452,14 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
           0;
       final targetIdx = rawTarget.clamp(0, _controllers.length - 1).toInt();
       final controller = _controllers[targetIdx];
-      final base = (focusState?.selectionBaseOffset ??
-              targetState.selectionBaseOffset ??
-              0)
+      final base = (targetState.selectionBaseOffset ?? 0)
           .clamp(0, controller.text.length)
           .toInt();
-      final extent = (focusState?.selectionExtentOffset ??
-              focusState?.selectionBaseOffset ??
-              targetState.selectionExtentOffset ??
-              targetState.selectionBaseOffset ??
-              base)
+      final extent = (targetState.appSelectionActive
+              ? (targetState.selectionExtentOffset ??
+                  targetState.selectionBaseOffset ??
+                  base)
+              : base)
           .clamp(0, controller.text.length)
           .toInt();
 
@@ -291,9 +469,26 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         baseOffset: base,
         extentOffset: extent,
       );
+      if (targetState.appSelectionActive &&
+          targetState.appSelectionStartBlock != null &&
+          targetState.appSelectionStartOffset != null &&
+          targetState.appSelectionEndBlock != null &&
+          targetState.appSelectionEndOffset != null) {
+        _overlayKey.currentState?.setKeyboardSelection(
+          anchorBlock: targetState.appSelectionStartBlock!,
+          anchorOffset: targetState.appSelectionStartOffset!,
+          focusBlock: targetState.appSelectionEndBlock!,
+          focusOffset: targetState.appSelectionEndOffset!,
+        );
+      } else {
+        _clearHistoryAppSelectionVisuals();
+      }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        if (!targetState.appSelectionActive) {
+          _clearHistoryAppSelectionVisuals();
+        }
         final restoreScrollOffset =
             focusState?.scrollOffset ?? targetState.scrollOffset;
         if (restoreScrollOffset != null && _editorScrollController.hasClients) {
@@ -333,11 +528,36 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   }
 
   void handleBgColorChange(int color) {
-    _isSuiteDirty =
-        true; // Always treat as session change if color picker is involved
     ref.read(settingsProvider.notifier).setScriptBgColor(color);
     if (_activeSuite == EditorSuite.none) {
       _saveHistory(description: 'Change Background', debounce: true);
+    } else {
+      _recordSuiteHistoryChange('Background Color');
+    }
+    if (mounted) _setEditorState(() {});
+  }
+
+  Future<void> handleInvertColors() async {
+    _restoreSelectionIfNeeded();
+    final settings = ref.read(settingsProvider);
+    final nextBackground =
+        ScriptColorInversionService.nextBackgroundColor(settings);
+    final nextFutureText =
+        ScriptColorInversionService.futureTextColorForBackground(
+      nextBackground,
+    );
+    final notifier = ref.read(settingsProvider.notifier);
+    await notifier.setScriptBgColor(nextBackground);
+    await notifier.setFutureWordColor(nextFutureText);
+    await notifier.setShowUpcomingWordColor(true);
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          scriptBgColor: nextBackground,
+          futureWordColor: nextFutureText,
+        );
+    if (_activeSuite == EditorSuite.none) {
+      _saveHistory(description: 'Invert Colors', debounce: true);
+    } else {
+      _recordSuiteHistoryChange('Invert Colors');
     }
     if (mounted) _setEditorState(() {});
   }

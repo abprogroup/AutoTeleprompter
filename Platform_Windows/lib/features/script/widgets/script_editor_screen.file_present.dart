@@ -308,18 +308,50 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     }
   }
 
-  void _startContentCreator() async {
+  void _startContentCreator() {
+    unawaited(_openContentCreator());
+  }
+
+  void _startAudioOnlyContentCreator() {
+    unawaited(_openContentCreator(audioOnly: true));
+  }
+
+  Future<void> _openContentCreator({bool audioOnly = false}) async {
     LightweightDiagnostics.instance.record(
       'editor',
-      'content creator opened',
+      audioOnly ? 'audio-only creator opened' : 'content creator opened',
       data: {
         'title': _currentTitle,
         'sessionId': _currentSessionId,
         'blockCount': _controllers.length,
+        'audioOnly': audioOnly,
       },
     );
     try {
       final settings = ref.read(settingsProvider);
+      if (audioOnly) {
+        await ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingFormat(
+              AppSettings.contentCreatorRecordingFormatWav,
+            );
+        await ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingAudioMode(
+              AppSettings.contentCreatorRecordingAudioCamera,
+            );
+      } else {
+        await ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingFormat(
+              AppSettings.contentCreatorRecordingFormatMp4,
+            );
+        await ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingAudioMode(
+              AppSettings.contentCreatorRecordingAudioCamera,
+            );
+      }
       ref.read(scriptProvider.notifier).loadText(
             _getRefinedFullTextWithoutBookmarkSigns(),
             title: _currentTitle,
@@ -349,10 +381,15 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       );
     }
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ContentCreatorScreen()),
+    final returnWordIndex = await Navigator.of(context).push<int>(
+      MaterialPageRoute(
+        builder: (_) => ContentCreatorScreen(audioOnlyEntry: audioOnly),
+      ),
     );
     if (!mounted) return;
+    if (returnWordIndex != null) {
+      _focusEditorWordIndex(returnWordIndex);
+    }
     _onSelectionChanged();
   }
 }

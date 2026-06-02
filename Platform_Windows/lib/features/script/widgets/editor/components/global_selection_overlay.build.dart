@@ -19,16 +19,28 @@ extension GlobalSelectionOverlayBuild on GlobalSelectionOverlayState {
             // handles follow the text even when the user scrolls while a
             // selection is active. Using NotificationListener instead of a
             // scroll-controller addListener keeps the overlay self-contained.
-            NotificationListener<ScrollNotification>(
-              onNotification: (_) {
-                if (_isSelecting) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) refreshPositions();
-                  });
-                }
-                return false; // let notification bubble
-              },
-              child: widget.child,
+            CustomPaint(
+              painter: _EditorHighlightOverlayPainter(
+                stackKey: _stackKey,
+                controllers: widget.controllers,
+                blockKeys: widget.blockKeys,
+                highlightBackgroundsAsText:
+                    ScriptColorInversionService.highlightsMoveToText(
+                  widget.settings,
+                ),
+                repaint: widget.scrollController,
+              ),
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (_) {
+                  if (_isSelecting) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) refreshPositions();
+                    });
+                  }
+                  return false; // let notification bubble
+                },
+                child: widget.child,
+              ),
             ),
             if (_handleDrag?.activeEndpointIsStart == false) ...[
               if (start != null) _buildHandle(start, true),

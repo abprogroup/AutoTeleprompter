@@ -122,9 +122,9 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
                         _buildRecordingOutputSelector(settings),
                         const SizedBox(height: 8),
                         const Text(
-                          'This beta records MP4 directly, with or without '
-                          'camera audio. Extra native formats are planned for '
-                          'v6 research.',
+                          'This beta records MP4 video with sound and WAV '
+                          'audio-only directly. Extra video formats are '
+                          'planned for v6 research.',
                           style: TextStyle(
                             color: Colors.white38,
                             fontSize: 12,
@@ -182,15 +182,38 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
   }
 
   void _showPrompterSettings() {
-    final lockBackground = ref.read(settingsProvider).contentCreatorFeedMode ==
-        AppSettings.contentCreatorFeedFull;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => TeleprompterSettingsPanel(
-        scriptBackgroundLocked: lockBackground,
+        onInvertColors: _toggleContentColorInversion,
       ),
+    );
+  }
+
+  Future<void> _toggleContentColorInversion() async {
+    final settings = ref.read(settingsProvider);
+    final nextBackground =
+        ScriptColorInversionService.nextBackgroundColor(settings);
+    final nextFutureText =
+        ScriptColorInversionService.futureTextColorForBackground(
+      nextBackground,
+    );
+
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    await settingsNotifier.setScriptBgColor(nextBackground);
+    await settingsNotifier.setFutureWordColor(nextFutureText);
+    await settingsNotifier.setShowUpcomingWordColor(true);
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          scriptBgColor: nextBackground,
+          futureWordColor: nextFutureText,
+        );
+    if (!mounted) return;
+    _showSnack(
+      Color(nextBackground).computeLuminance() > 0.5
+          ? 'Script colors inverted: light background'
+          : 'Script colors inverted: dark background',
     );
   }
 }

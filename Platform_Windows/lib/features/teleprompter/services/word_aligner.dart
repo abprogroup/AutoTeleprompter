@@ -285,6 +285,7 @@ class WordAligner {
 
     double bestSeqScore = 0.0;
     int bestSeqEndIdx = lastConfirmedIndex;
+    int bestSeqStartIdx = -1;
     String bestSeqDebug = '';
 
     final seqSearchStart = visibleSkipEnabled ? visibleScanStart : searchStart;
@@ -323,7 +324,15 @@ class WordAligner {
       final normalizedScore =
           available > 0 ? (seqScore / available) - distPenalty : 0.0;
 
-      if (normalizedScore > bestSeqScore && matchCount >= 1) {
+      final candidateDistance = i - seqSearchStart;
+      final bestDistance = bestSeqStartIdx < 0
+          ? 1 << 30
+          : (bestSeqStartIdx - seqSearchStart).abs();
+      final clearlyBetter = normalizedScore > bestSeqScore + 0.06;
+      final nearTieButCloser =
+          (normalizedScore - bestSeqScore).abs() <= 0.06 &&
+              candidateDistance < bestDistance;
+      if ((clearlyBetter || nearTieButCloser) && matchCount >= 1) {
         final seqJump = (si - 1) - lastConfirmedIndex;
         final maxSeqJump = visibleMaxSkipTargetIndex == null
             ? _maxSingleJump
@@ -336,9 +345,10 @@ class WordAligner {
         final matchedWords = recentWords.take(matchCount);
         if (thresholdForSeq.passes(matchedWords) && seqJump <= maxSeqJump) {
           bestSeqScore = normalizedScore;
+          bestSeqStartIdx = i;
           bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);
           bestSeqDebug =
-              'SEQ@$i: matched=$matchCount/$available score=${normalizedScore.toStringAsFixed(2)} end=$bestSeqEndIdx jump=$seqJump';
+              'SEQ@$i: matched=$matchCount/$available score=${normalizedScore.toStringAsFixed(2)} end=$bestSeqEndIdx jump=$seqJump nearest=${candidateDistance < bestDistance}';
         }
       }
     }
@@ -464,9 +474,12 @@ class WordAligner {
 
           final distance = i - searchStart;
           final adjustedScore =
-              (score / spokenPhrase.length) - (distance * 0.006);
-          if (adjustedScore > bestScore ||
-              (adjustedScore == bestScore && i < bestStart)) {
+              (score / spokenPhrase.length) - (distance * 0.018);
+          final clearlyBetter = adjustedScore > bestScore + 0.06;
+          final nearTieButCloser =
+              (adjustedScore - bestScore).abs() <= 0.06 &&
+                  (bestStart < 0 || i < bestStart);
+          if (clearlyBetter || nearTieButCloser) {
             bestScore = adjustedScore;
             bestStart = i;
             bestEnd = endIdx;

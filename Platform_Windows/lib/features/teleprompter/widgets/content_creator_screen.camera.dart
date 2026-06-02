@@ -330,6 +330,14 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       return;
     }
 
+    final settings = ref.read(settingsProvider);
+    if (_isAudioOnlyRecording ||
+        settings.contentCreatorRecordingFormat ==
+            AppSettings.contentCreatorRecordingFormatWav) {
+      await _toggleAudioOnlyRecording();
+      return;
+    }
+
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       _showSnack(
         _cameraError ?? 'Camera is still preparing. Try again in a moment.',
@@ -376,7 +384,6 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       }
       _logContentDebug('recording stopped seconds=$recordedSeconds');
     } else {
-      final settings = ref.read(settingsProvider);
       const recordingExporter = RecordingExportService();
       if (!await recordingExporter.canExport(
         settings.contentCreatorRecordingFormat,
@@ -387,8 +394,8 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
               AppSettings.contentCreatorRecordingFormatMp4,
             );
         _showSnack(
-          'This beta records MP4 directly. Extra native file types are '
-          'planned for v6.',
+          'This beta records MP4 video and WAV audio directly. Extra video '
+          'file types are planned for v6.',
         );
         _logContentDebug('recording reset unsupported format='
             '${settings.contentCreatorRecordingFormat}');
@@ -425,8 +432,8 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         _syncContentControlsForActiveSession(false);
         _showSnack(
           recordCameraAudio
-              ? 'Recording could not start with Video with sound. Check '
-                  'microphone permission or choose Video without sound.'
+              ? 'Recording could not start with sound. Check microphone '
+                  'permission or the camera audio device.'
               : 'Recording could not start because the camera is not ready.',
         );
         _logContentDebug('recording blocked camera audio ready=false '
@@ -472,6 +479,100 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       _syncContentControlsForActiveSession(true);
       _logContentDebug('recording started word=$_activeWordIndex '
           'audio=${recordCameraAudio ? 'camera' : 'silent'}');
+    }
+  }
+
+  Future<void> _toggleAudioOnlyRecording() async {
+    if (_isRecording && _isAudioOnlyRecording) {
+      String? savedPath;
+      try {
+        savedPath = await _wavAudioRecorder.stop();
+      } catch (e, stack) {
+        _showSnack('Audio recording could not be stopped cleanly.');
+        _logContentDebug('wav recording stop failed $e');
+        LightweightDiagnostics.instance.recordError(
+          e,
+          stack,
+          source: 'contentCreator.wavRecordingStop',
+        );
+      }
+      final recordedSeconds = _recordSeconds;
+      _recordTimer?.cancel();
+      _updateContentCreatorState(() {
+        _isRecording = false;
+        _isAudioOnlyRecording = false;
+        _recordStartInFlight = false;
+        _recordSeconds = 0;
+      });
+      _syncContentControlsForActiveSession(false);
+      if (savedPath != null) _showSnack('Audio recording saved: $savedPath');
+      _logContentDebug('wav recording stopped seconds=$recordedSeconds');
+      return;
+    }
+
+    var micStatus = await Permission.microphone.status;
+    if (micStatus.isPermanentlyDenied) {
+      _showSnack('Microphone permission is blocked. Open Windows Settings.');
+      await openAppSettings();
+      return;
+    }
+    if (!micStatus.isGranted) {
+      micStatus = await Permission.microphone.request();
+    }
+    if (!micStatus.isGranted) {
+      _showSnack('Microphone permission is required for WAV recording.');
+      return;
+    }
+
+    _updateContentCreatorState(() {
+      _recordStartInFlight = true;
+      _countdown = 3;
+      _contentControlsVisible = true;
+    });
+    _hideContentControlsTimer?.cancel();
+    _logContentDebug('wav recording countdown started');
+
+    for (int i = 3; i > 0; i--) {
+      if (!mounted || !_recordStartInFlight) return;
+      _updateContentCreatorState(() => _countdown = i);
+      await Future.delayed(const Duration(seconds: 1));
+    }
+    if (!mounted || !_recordStartInFlight) return;
+    _updateContentCreatorState(() => _countdown = 0);
+
+    try {
+      final directory = Directory(await _effectiveRecordingFolderPath());
+      final savedPath = await _wavAudioRecorder.start(
+        destinationDirectory: directory,
+        createdAt: DateTime.now(),
+      );
+      _recordSeconds = 0;
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (mounted) _updateContentCreatorState(() => _recordSeconds = t.tick);
+      });
+      _updateContentCreatorState(() {
+        _isRecording = true;
+        _isAudioOnlyRecording = true;
+        _recordStartInFlight = false;
+      });
+      _syncContentControlsForActiveSession(true);
+      _showSnack('Audio recording started: $savedPath');
+      _logContentDebug('wav recording started path=$savedPath');
+    } catch (e, stack) {
+      _updateContentCreatorState(() {
+        _isRecording = false;
+        _isAudioOnlyRecording = false;
+        _recordStartInFlight = false;
+        _countdown = 0;
+      });
+      _syncContentControlsForActiveSession(false);
+      _showSnack('Audio recording could not start. Check microphone access.');
+      _logContentDebug('wav recording start failed $e');
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'contentCreator.wavRecordingStart',
+      );
     }
   }
 

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const betaPrivacyPolicyVersion = '2026-05-24-beta-feedback-v1';
+const betaSpeechDisclosureVersion = '2026-05-30-speech-disclosure-v1';
+const betaCloudDisclosureVersion = '2026-06-01-cloud-disclosure-v1';
 const betaFeedbackContactEmail = 'autoteleprompter@gmail.com';
 const betaFeedbackControllerName = 'AB Pro Group';
 const betaAppVersion = String.fromEnvironment(
@@ -15,6 +17,8 @@ class BetaConsentState {
   final bool loaded;
   final String deviceKey;
   final String acceptedPolicyVersion;
+  final String acceptedSpeechDisclosureVersion;
+  final String acceptedCloudDisclosureVersion;
   final String acceptedAtIso;
   final String acceptedAppVersion;
 
@@ -22,17 +26,35 @@ class BetaConsentState {
     this.loaded = false,
     this.deviceKey = '',
     this.acceptedPolicyVersion = '',
+    this.acceptedSpeechDisclosureVersion = '',
+    this.acceptedCloudDisclosureVersion = '',
     this.acceptedAtIso = '',
     this.acceptedAppVersion = '',
   });
 
-  bool get hasAcceptedCurrentPolicy =>
+  bool get hasAcceptedFeedbackPolicy =>
       loaded && acceptedPolicyVersion == betaPrivacyPolicyVersion;
+
+  bool get hasAcceptedSpeechDisclosure =>
+      loaded && acceptedSpeechDisclosureVersion == betaSpeechDisclosureVersion;
+
+  bool get hasAcceptedCloudDisclosure =>
+      loaded && acceptedCloudDisclosureVersion == betaCloudDisclosureVersion;
+
+  bool get hasAcceptedCurrentPolicy =>
+      hasAcceptedFeedbackPolicy &&
+      hasAcceptedSpeechDisclosure &&
+      hasAcceptedCloudDisclosure;
+
+  bool get hasAcceptedFeedbackAndSpeech =>
+      hasAcceptedFeedbackPolicy && hasAcceptedSpeechDisclosure;
 
   BetaConsentState copyWith({
     bool? loaded,
     String? deviceKey,
     String? acceptedPolicyVersion,
+    String? acceptedSpeechDisclosureVersion,
+    String? acceptedCloudDisclosureVersion,
     String? acceptedAtIso,
     String? acceptedAppVersion,
   }) {
@@ -41,6 +63,10 @@ class BetaConsentState {
       deviceKey: deviceKey ?? this.deviceKey,
       acceptedPolicyVersion:
           acceptedPolicyVersion ?? this.acceptedPolicyVersion,
+      acceptedSpeechDisclosureVersion: acceptedSpeechDisclosureVersion ??
+          this.acceptedSpeechDisclosureVersion,
+      acceptedCloudDisclosureVersion:
+          acceptedCloudDisclosureVersion ?? this.acceptedCloudDisclosureVersion,
       acceptedAtIso: acceptedAtIso ?? this.acceptedAtIso,
       acceptedAppVersion: acceptedAppVersion ?? this.acceptedAppVersion,
     );
@@ -50,6 +76,10 @@ class BetaConsentState {
 class BetaConsentNotifier extends Notifier<BetaConsentState> {
   static const _deviceKeyKey = 'betaFeedbackDeviceKey';
   static const _acceptedPolicyVersionKey = 'betaPrivacyPolicyVersion';
+  static const _acceptedSpeechDisclosureVersionKey =
+      'betaSpeechDisclosureVersion';
+  static const _acceptedCloudDisclosureVersionKey =
+      'betaCloudDisclosureVersion';
   static const _acceptedAtKey = 'betaPrivacyAcceptedAt';
   static const _acceptedAppVersionKey = 'betaPrivacyAcceptedAppVersion';
 
@@ -66,6 +96,12 @@ class BetaConsentNotifier extends Notifier<BetaConsentState> {
   }
 
   Future<void> acceptCurrentPolicy() async {
+    await acceptFeedbackPolicy();
+    await acceptSpeechDisclosure();
+    await acceptCloudDisclosure();
+  }
+
+  Future<void> acceptFeedbackPolicy() async {
     await ensureLoaded();
     final prefs = await SharedPreferences.getInstance();
     final acceptedAt = DateTime.now().toUtc().toIso8601String();
@@ -79,14 +115,52 @@ class BetaConsentNotifier extends Notifier<BetaConsentState> {
     );
   }
 
+  Future<void> acceptSpeechDisclosure() async {
+    await ensureLoaded();
+    final prefs = await SharedPreferences.getInstance();
+    final acceptedAt = DateTime.now().toUtc().toIso8601String();
+    await prefs.setString(
+      _acceptedSpeechDisclosureVersionKey,
+      betaSpeechDisclosureVersion,
+    );
+    await prefs.setString(_acceptedAtKey, acceptedAt);
+    await prefs.setString(_acceptedAppVersionKey, betaAppVersion);
+    state = state.copyWith(
+      acceptedSpeechDisclosureVersion: betaSpeechDisclosureVersion,
+      acceptedAtIso: acceptedAt,
+      acceptedAppVersion: betaAppVersion,
+    );
+  }
+
+  Future<void> acceptCloudDisclosure() async {
+    await ensureLoaded();
+    final prefs = await SharedPreferences.getInstance();
+    final acceptedAt = DateTime.now().toUtc().toIso8601String();
+    await prefs.setString(
+      _acceptedCloudDisclosureVersionKey,
+      betaCloudDisclosureVersion,
+    );
+    await prefs.setString(_acceptedAtKey, acceptedAt);
+    await prefs.setString(_acceptedAppVersionKey, betaAppVersion);
+    state = state.copyWith(
+      acceptedCloudDisclosureVersion: betaCloudDisclosureVersion,
+      acceptedAtIso: acceptedAt,
+      acceptedAppVersion: betaAppVersion,
+    );
+  }
+
   Future<void> withdrawConsent() async {
     await ensureLoaded();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_acceptedPolicyVersionKey);
+    await prefs.remove(_acceptedSpeechDisclosureVersionKey);
+    await prefs.remove(_acceptedCloudDisclosureVersionKey);
     await prefs.remove(_acceptedAtKey);
     await prefs.remove(_acceptedAppVersionKey);
     state = state.copyWith(
       acceptedPolicyVersion: '',
+      acceptedSpeechDisclosureVersion: '',
+      acceptedCloudDisclosureVersion: '',
       acceptedAtIso: '',
       acceptedAppVersion: '',
     );
@@ -103,6 +177,10 @@ class BetaConsentNotifier extends Notifier<BetaConsentState> {
       loaded: true,
       deviceKey: deviceKey,
       acceptedPolicyVersion: prefs.getString(_acceptedPolicyVersionKey) ?? '',
+      acceptedSpeechDisclosureVersion:
+          prefs.getString(_acceptedSpeechDisclosureVersionKey) ?? '',
+      acceptedCloudDisclosureVersion:
+          prefs.getString(_acceptedCloudDisclosureVersionKey) ?? '',
       acceptedAtIso: prefs.getString(_acceptedAtKey) ?? '',
       acceptedAppVersion: prefs.getString(_acceptedAppVersionKey) ?? '',
     );

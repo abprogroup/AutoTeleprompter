@@ -5,12 +5,17 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final script = ref.watch(scriptProvider);
     final tState = ref.watch(teleprompterProvider);
     final settings = ref.watch(settingsProvider);
+    _publishPresenterStateIfChanged(script, tState, settings);
     if (script != null) {
       while (_wordKeys.length < script.words.length) {
         _wordKeys.add(GlobalKey());
       }
       unawaited(_loadBookmarksForScript(script));
-      _scheduleVisibleWordWindowSync();
+      final layoutKey = _presenterLayoutKey(context, script, settings);
+      if (_visibleWindowLayoutKey != layoutKey) {
+        _visibleWindowLayoutKey = layoutKey;
+        _scheduleVisibleWordWindowSync(force: true);
+      }
     }
 
     // Auto-scroll on speech recognition
@@ -31,20 +36,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       );
     }
 
-    final paragraphs = <List<ScriptWord>>[];
-    List<ScriptWord> currentParagraph = [];
-    for (final word in script.words) {
-      if (word.isNewline) {
-        if (currentParagraph.isNotEmpty) {
-          paragraphs.add(currentParagraph);
-          currentParagraph = [];
-        }
-        paragraphs.add([word]);
-      } else {
-        currentParagraph.add(word);
-      }
-    }
-    if (currentParagraph.isNotEmpty) paragraphs.add(currentParagraph);
+    final paragraphs = _paragraphsForScript(script);
 
     // Presentation mode is a viewing surface, so it renders the single saved
     // font-size value larger without changing the metadata number shared with
@@ -283,7 +275,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     ),
 
                     if (Platform.isWindows &&
-                        (tState.isListening || tState.isStarting))
+                        (tState.isListening ||
+                            tState.isStarting ||
+                            _manualScrolling))
                       Positioned(
                         left: 0,
                         right: 0,
@@ -325,5 +319,85 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         ),
       ),
     );
+  }
+
+  void _publishPresenterStateIfChanged(
+    Script? script,
+    TeleprompterState tState,
+    AppSettings settings,
+  ) {
+    final scriptActive = script != null && !script.isEmpty;
+    final sessionActive =
+        tState.isListening || tState.isStarting || _manualScrolling;
+    final isStarting = tState.isStarting;
+    final mode = settings.scrollMode == 'manual' ? 'manual' : 'auto';
+    final speed = settings.scrollSpeed.clamp(-300.0, 300.0).toDouble();
+    if (_lastPublishedRemoteScriptActive == scriptActive &&
+        _lastPublishedRemoteSessionActive == sessionActive &&
+        _lastPublishedRemoteIsStarting == isStarting &&
+        _lastPublishedRemoteScrollMode == mode &&
+        _lastPublishedRemoteScrollSpeed == speed) {
+      return;
+    }
+    _lastPublishedRemoteScriptActive = scriptActive;
+    _lastPublishedRemoteSessionActive = sessionActive;
+    _lastPublishedRemoteIsStarting = isStarting;
+    _lastPublishedRemoteScrollMode = mode;
+    _lastPublishedRemoteScrollSpeed = speed;
+    ref.read(remoteControlProvider).publishPresenterState(
+          scriptActive: scriptActive,
+          sessionActive: sessionActive,
+          isStarting: isStarting,
+          scrollMode: mode,
+          scrollSpeed: speed,
+        );
+  }
+
+  String _presenterLayoutKey(
+    BuildContext context,
+    Script script,
+    AppSettings settings,
+  ) {
+    final media = MediaQuery.of(context);
+    return [
+      script.sessionId,
+      script.words.length,
+      identityHashCode(script.words),
+      media.size.width.round(),
+      media.size.height.round(),
+      settings.fontSize,
+      settings.lineSpacing,
+      settings.wordSpacing,
+      settings.letterSpacing,
+      settings.textAlign,
+      settings.showAlignmentOverride,
+      settings.flipRotation,
+      settings.mirrorHorizontal,
+      settings.mirrorVertical,
+    ].join('|');
+  }
+
+  List<List<ScriptWord>> _paragraphsForScript(Script script) {
+    final key = '${script.sessionId}|${script.words.length}|'
+        '${identityHashCode(script.words)}';
+    if (_paragraphCacheKey == key) return _paragraphCache;
+
+    final paragraphs = <List<ScriptWord>>[];
+    List<ScriptWord> currentParagraph = [];
+    for (final word in script.words) {
+      if (word.isNewline) {
+        if (currentParagraph.isNotEmpty) {
+          paragraphs.add(currentParagraph);
+          currentParagraph = [];
+        }
+        paragraphs.add([word]);
+      } else {
+        currentParagraph.add(word);
+      }
+    }
+    if (currentParagraph.isNotEmpty) paragraphs.add(currentParagraph);
+    _paragraphCacheKey = key;
+    _paragraphCache = paragraphs;
+    return _paragraphCache;
   }
 }

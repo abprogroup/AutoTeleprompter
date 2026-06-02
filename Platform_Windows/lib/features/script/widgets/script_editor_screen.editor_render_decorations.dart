@@ -1,5 +1,8 @@
 part of 'script_editor_screen.dart';
 
+bool get _paintEditorLocalBackgrounds => false;
+bool get _paintEditorLocalUnderlines => false;
+
 class _EditorRenderEditableDecorations extends SingleChildRenderObjectWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -144,8 +147,10 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     canvas.save();
     canvas.translate(
         offset.dx + editableOffset.dx, offset.dy + editableOffset.dy);
-    _paintStyleBackgrounds(canvas, editable);
-    _paintActiveSelection(canvas, editable);
+    if (_paintEditorLocalBackgrounds) {
+      _paintStyleBackgrounds(canvas, editable);
+      _paintActiveSelection(canvas, editable);
+    }
     canvas.restore();
 
     super.paint(context, offset);
@@ -153,7 +158,9 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     canvas.save();
     canvas.translate(
         offset.dx + editableOffset.dx, offset.dy + editableOffset.dy);
-    _paintUnderlines(canvas, editable);
+    if (_paintEditorLocalUnderlines) {
+      _paintUnderlines(canvas, editable);
+    }
     canvas.restore();
   }
 
@@ -169,6 +176,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
 
   void _paintStyleBackgrounds(Canvas canvas, RenderEditable editable) {
     if (!kUseCustomDocxDecorationPainting || _rawText.isEmpty) return;
+    final bandsByColor = <Color, List<Rect>>{};
     for (final run in _backgroundPaintRuns()) {
       final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
         editable,
@@ -179,11 +187,14 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
         rawText: _rawText,
         gapTolerance: _styleBackgroundGapTolerance(editable),
       );
+      bandsByColor.putIfAbsent(run.color, () => <Rect>[]).addAll(bands);
+    }
+    for (final entry in bandsByColor.entries) {
       _paintBands(
         canvas,
         editable,
-        bands,
-        run.color,
+        entry.value,
+        entry.key,
         applyBackgroundTail: true,
       );
     }
@@ -329,9 +340,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     required bool applyBackgroundTail,
   }) {
     if (color.a <= 0 || bands.isEmpty) return;
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
+    final paintBands = <Rect>[];
     for (final rect in _verticalPaintBands(
       editable,
       bands,
@@ -348,15 +357,28 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
               ? MarkupDecorationBoxMerger.styleBackgroundInnerTail
               : MarkupDecorationBoxMerger.styleBackgroundVisualEndTail;
       final band = Rect.fromLTRB(
-        (rect.left - leftTail).clamp(0.0, editable.size.width).toDouble(),
-        rect.top.clamp(0.0, editable.size.height).toDouble(),
-        (rect.right + rightTail).clamp(0.0, editable.size.width).toDouble(),
-        rect.bottom.clamp(0.0, editable.size.height).toDouble(),
+        (rect.left - leftTail)
+            .clamp(0.0, editable.size.width)
+            .toDouble()
+            .floorToDouble(),
+        _roundBandTop(rect, editable.size.height, applyBackgroundTail),
+        (rect.right + rightTail)
+            .clamp(0.0, editable.size.width)
+            .toDouble()
+            .ceilToDouble(),
+        _roundBandBottom(rect, editable.size.height, applyBackgroundTail),
       );
       if (band.width <= 0 || band.height <= 0) continue;
-      final radius = Radius.circular((band.height * 0.10).clamp(2.0, 6.0));
-      canvas.drawRRect(RRect.fromRectAndRadius(band, radius), paint);
+      paintBands.add(band);
     }
+    HighlightBandPainter.paintConnectedRegion(
+      canvas,
+      paintBands,
+      color,
+      editable.size,
+      radius: HighlightBandPainter.suggestedRadius(paintBands),
+      connectRows: true,
+    );
   }
 
   List<Rect> _verticalPaintBands(
@@ -372,60 +394,28 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
           });
     if (sorted.isEmpty) return const [];
 
-    final pad = applyBackgroundTail
-        ? _styleBandVerticalPadding(editable)
-        : _selectionBandVerticalPadding(editable);
-    final painted = [
-      for (final band in sorted)
-        Rect.fromLTRB(band.left, band.top - pad, band.right, band.bottom + pad)
-    ];
-    final lineHeight = editable.preferredLineHeight;
-    final bridgeGapLimit =
-        applyBackgroundTail ? lineHeight * 0.90 : lineHeight * 0.55;
-    final maxAdjacentDistance = lineHeight * 1.55;
-    final boundaryOverlap = applyBackgroundTail
-        ? (lineHeight * 0.080).clamp(2.5, 7.0).toDouble()
-        : (lineHeight * 0.030).clamp(0.75, 2.25).toDouble();
-
-    for (var i = 0; i < sorted.length - 1; i++) {
-      final current = sorted[i];
-      final next = sorted[i + 1];
-      final centerDistance = next.center.dy - current.center.dy;
-      if (centerDistance <= lineHeight * 0.25 ||
-          centerDistance > maxAdjacentDistance) {
-        continue;
-      }
-
-      final rowGap = next.top - current.bottom;
-      if (rowGap > bridgeGapLimit) continue;
-
-      final boundary = (current.bottom + next.top) / 2.0;
-      if (boundary <= painted[i].top || boundary >= painted[i + 1].bottom) {
-        continue;
-      }
-      painted[i] = Rect.fromLTRB(
-        painted[i].left,
-        painted[i].top,
-        painted[i].right,
-        boundary + boundaryOverlap,
-      );
-      painted[i + 1] = Rect.fromLTRB(
-        painted[i + 1].left,
-        boundary - boundaryOverlap,
-        painted[i + 1].right,
-        painted[i + 1].bottom,
-      );
-    }
-
-    return painted;
+    return HighlightBandPainter.textLaneBands(
+      sorted,
+      editable.size,
+      topPaddingRatio: applyBackgroundTail ? 0.02 : 0.02,
+      bottomPaddingRatio: applyBackgroundTail ? 0.24 : 0.14,
+      minHeight: applyBackgroundTail ? 8.0 : 6.0,
+      maxHeight: applyBackgroundTail ? 200.0 : 160.0,
+    );
   }
 
-  double _styleBandVerticalPadding(RenderEditable editable) {
-    return (editable.preferredLineHeight * 0.16).clamp(3.0, 14.0).toDouble();
+  double _roundBandTop(Rect rect, double maxHeight, bool applyBackgroundTail) {
+    final value = rect.top.clamp(0.0, maxHeight).toDouble();
+    return applyBackgroundTail ? value.floorToDouble() : value.roundToDouble();
   }
 
-  double _selectionBandVerticalPadding(RenderEditable editable) {
-    return (editable.preferredLineHeight * 0.06).clamp(1.25, 5.0).toDouble();
+  double _roundBandBottom(
+    Rect rect,
+    double maxHeight,
+    bool applyBackgroundTail,
+  ) {
+    final value = rect.bottom.clamp(0.0, maxHeight).toDouble();
+    return applyBackgroundTail ? value.ceilToDouble() : value.roundToDouble();
   }
 }
 

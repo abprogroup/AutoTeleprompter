@@ -18,6 +18,9 @@ class RemoteStatusCard extends ConsumerWidget {
     final isRunning = remote.isRunning;
     final accent = isRunning ? const Color(0xFFFFBF00) : Colors.white38;
     final runningUrl = isRunning ? remote.preferredUrl() : null;
+    final profileCount = remote.controllerProfiles.length;
+    final profileLabel =
+        profileCount == 1 ? '1 named remote' : '$profileCount named remotes';
 
     return Material(
       color: Colors.transparent,
@@ -61,11 +64,11 @@ class RemoteStatusCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 3),
                     if (runningUrl == null)
-                      const Text(
-                        'Stopped. Start it when you want a phone controller.',
+                      Text(
+                        'Stopped. $profileLabel ready for phones, tablets, or operators.',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white54,
                           fontSize: 12,
                           height: 1.3,
@@ -77,7 +80,8 @@ class RemoteStatusCard extends ConsumerWidget {
                         builder: (context, snapshot) {
                           final url = snapshot.data ?? remote.localUrl;
                           return Text(
-                            'Running at $url',
+                            'Running at $url - $profileLabel, '
+                            '${remote.connectedClientCount} connected',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

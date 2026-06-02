@@ -37,10 +37,14 @@ jobs:
           $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.4"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
           $endpoint = ($env:FEEDBACK_ENDPOINT -replace "`r", "" -replace "`n", "").Trim()
-          flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.4+19 --dart-define=FEEDBACK_ENDPOINT="$endpoint"
+          $googleDriveClientId = ($env:GOOGLE_DRIVE_CLIENT_ID -replace "`r", "" -replace "`n", "").Trim()
+          $dropboxClientId = ($env:DROPBOX_CLIENT_ID -replace "`r", "" -replace "`n", "").Trim()
+          flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.5+20 --dart-define=FEEDBACK_ENDPOINT="$endpoint" --dart-define=GOOGLE_DRIVE_CLIENT_ID="$googleDriveClientId" --dart-define=DROPBOX_CLIENT_ID="$dropboxClientId"
         working-directory: Platform_Windows
         env:
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          DROPBOX_CLIENT_ID: ${{ secrets.DROPBOX_CLIENT_ID }}
 
       - name: Package Artifacts
         run: |

@@ -2,6 +2,11 @@ class AppSettings {
   static const String sttEngineAuto = 'windows_auto';
   static const String sttEngineWindowsOffline = 'windows_offline';
   static const String sttEngineBrowserOnline = 'browser_online';
+  static const String importColorModePrompter = 'prompter_contrast';
+  static const String importColorModeDocument = 'document_original';
+  static const String updateChannelStable = 'stable';
+  static const String updateChannelBeta = 'beta';
+  static const String updateChannelInternal = 'internal';
   static const String languageModeAuto = 'auto';
   static const String languageModeHebrew = 'he';
   static const String languageModeEnglish = 'en';
@@ -27,6 +32,8 @@ class AppSettings {
   static const String contentCreatorRecordingFormatMovProRes = 'mov_prores';
   static const String contentCreatorRecordingFormatWav = 'wav';
   static const String contentCreatorRecordingAudioCamera = 'camera_audio';
+  // Legacy persisted value from the removed soundless-video beta option.
+  // Normalizers keep old installs on camera audio; no active UI should expose it.
   static const String contentCreatorRecordingAudioSilent = 'silent_video';
   static const String manualScrollBarBottom = 'bottom';
   static const String manualScrollBarTop = 'top';
@@ -131,6 +138,10 @@ class AppSettings {
   final String contentCreatorRecordingFolder;
   final String contentCreatorRecordingFormat;
   final String contentCreatorRecordingAudioMode;
+  final String importColorMode;
+  final bool reduceMotion;
+  final double uiScale;
+  final String updateChannel;
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -198,6 +209,10 @@ class AppSettings {
     this.contentCreatorRecordingFolder = '',
     this.contentCreatorRecordingFormat = contentCreatorRecordingFormatMp4,
     this.contentCreatorRecordingAudioMode = contentCreatorRecordingAudioCamera,
+    this.importColorMode = importColorModePrompter,
+    this.reduceMotion = false,
+    this.uiScale = 1.0,
+    this.updateChannel = updateChannelStable,
   });
 
   AppSettings copyWith({
@@ -266,6 +281,10 @@ class AppSettings {
     String? contentCreatorRecordingFolder,
     String? contentCreatorRecordingFormat,
     String? contentCreatorRecordingAudioMode,
+    String? importColorMode,
+    bool? reduceMotion,
+    double? uiScale,
+    String? updateChannel,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -365,6 +384,10 @@ class AppSettings {
           contentCreatorRecordingFormat ?? this.contentCreatorRecordingFormat,
       contentCreatorRecordingAudioMode: contentCreatorRecordingAudioMode ??
           this.contentCreatorRecordingAudioMode,
+      importColorMode: importColorMode ?? this.importColorMode,
+      reduceMotion: reduceMotion ?? this.reduceMotion,
+      uiScale: uiScale ?? this.uiScale,
+      updateChannel: updateChannel ?? this.updateChannel,
     );
   }
 }

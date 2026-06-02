@@ -13,14 +13,15 @@ import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
-import '../../remote/widgets/remote_status_card.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
+import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
 import '../services/styling_service.dart';
 
 part 'script_gallery_screen.account_menu.dart';
 part 'script_gallery_screen.history_sheet.dart';
+part 'script_gallery_screen.premium_hub.dart';
 part 'script_gallery_screen.recent_item.dart';
 part 'script_gallery_screen.widgets.dart';
 
@@ -63,6 +64,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final auth = ref.watch(authProvider);
+    final hasProAccess = auth.isPro || auth.isAdmin;
 
     return AbsorbPointer(
       absorbing: _inputShielded,
@@ -100,10 +102,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           elevation: 0,
           actions: [
             if (Platform.isWindows)
-              IconButton(
+              _PremiumShortcutIcon(
+                enabled: hasProAccess,
                 tooltip: 'Local Remote Control',
-                icon: const Icon(Icons.wifi_tethering_rounded,
-                    color: Colors.white54),
+                lockedTooltip: 'Connect a Pro account to use Remote Control',
+                icon: Icons.wifi_tethering_rounded,
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -112,7 +115,19 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                     ),
                   ),
                 ),
+                onLockedPressed: () => _showPremiumHub(context, auth),
               ),
+            _PremiumShortcutIcon(
+              enabled: hasProAccess,
+              tooltip: 'Cloud Storage',
+              lockedTooltip: 'Connect a Pro account to use online Cloud',
+              icon: Icons.cloud_outlined,
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
+              ),
+              onLockedPressed: () => _showPremiumHub(context, auth),
+            ),
             IconButton(
               tooltip: 'Send beta feedback',
               icon:
@@ -143,17 +158,52 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Welcome Back, ${settings.displayName}.',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text('Ready for your next broadcast?',
-                  style: TextStyle(color: Colors.white54, fontSize: 15)),
-              const SizedBox(height: 18),
-              _ProDashboard(auth: auth),
-              const SizedBox(height: 40),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final welcome = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Welcome Back, ${settings.displayName}.',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Ready for your next broadcast?',
+                        style: TextStyle(color: Colors.white54, fontSize: 15),
+                      ),
+                    ],
+                  );
+                  final pro = _ProDashboard(
+                    auth: auth,
+                    compact: true,
+                    onTap: () => _showPremiumHub(context, auth),
+                  );
+                  if (constraints.maxWidth < 760) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        welcome,
+                        const SizedBox(height: 14),
+                        pro,
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: welcome),
+                      const SizedBox(width: 18),
+                      SizedBox(width: 390, child: pro),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 28),
               _GalleryActionCard(
                 title: 'New Script',
                 subtitle: 'Start with a blank canvas',
@@ -190,20 +240,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                   );
                 },
               ),
-              if (Platform.isWindows) ...[
-                const SizedBox(height: 12),
-                RemoteStatusCard(
-                  onOpenSettings: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AppSettingsScreen(
-                        initialTab: AppSettingsTab.remote,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 48),
+              const SizedBox(height: 38),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -299,6 +336,55 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                     color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPremiumHub(BuildContext context, AuthState auth) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PremiumHubSheet(
+        auth: auth,
+        onOpenRemote: Platform.isWindows
+            ? () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AppSettingsScreen(
+                      initialTab: AppSettingsTab.remote,
+                    ),
+                  ),
+                );
+              }
+            : null,
+        onOpenCloud: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
+          );
+        },
+        onSignIn: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        },
+        onOpenAccount: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AppSettingsScreen(
+                initialTab: AppSettingsTab.account,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

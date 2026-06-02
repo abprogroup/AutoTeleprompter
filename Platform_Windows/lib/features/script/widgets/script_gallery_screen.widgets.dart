@@ -68,95 +68,117 @@ class _GalleryActionCard extends StatelessWidget {
 
 class _ProDashboard extends StatelessWidget {
   final AuthState auth;
+  final bool compact;
+  final VoidCallback onTap;
 
-  const _ProDashboard({required this.auth});
+  const _ProDashboard({
+    required this.auth,
+    required this.onTap,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isActive = auth.isPro || auth.isAdmin;
-    final title = isActive ? 'Pro access active' : 'Beta Pro access';
+    final title = isActive ? 'Pro access active' : 'Free plan';
     final subtitle = isActive
         ? auth.isAdmin
-            ? 'Admin workspace unlocked'
+            ? 'Admin workspace unlocked: creator, remote, cloud beta, and '
+                'recording tools'
             : 'Professional tools are unlocked on this device'
-        : 'Activate a license when premium publishing tools are ready';
+        : 'Local scripts and local storage are active. Remote and online '
+            'cloud tools need Pro.';
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFFFBF00).withValues(alpha: 0.25),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFBF00).withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              isActive
-                  ? Icons.verified_rounded
-                  : Icons.workspace_premium_outlined,
-              color: const Color(0xFFFFBF00),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(compact ? 12 : 16),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(compact ? 12 : 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(compact ? 12 : 16),
+            border: Border.all(
+              color: const Color(0xFFFFBF00).withValues(alpha: 0.25),
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
+          child: Row(
+            children: [
+              Container(
+                width: compact ? 34 : 42,
+                height: compact ? 34 : 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFBF00).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(compact ? 10 : 12),
+                ),
+                child: Icon(
+                  isActive
+                      ? Icons.verified_rounded
+                      : Icons.workspace_premium_outlined,
+                  color: const Color(0xFFFFBF00),
+                  size: compact ? 20 : 24,
+                ),
+              ),
+              SizedBox(width: compact ? 10 : 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: compact ? 13 : 15,
+                      ),
+                    ),
+                    SizedBox(height: compact ? 2 : 3),
+                    Text(
+                      subtitle,
+                      maxLines: compact ? 2 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: compact ? 11 : 12,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: compact ? 8 : 12),
+              if (isActive)
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 8 : 10,
+                    vertical: compact ? 4 : 6,
                   ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.green.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    'ACTIVE',
+                    style: TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: compact ? 10 : 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white24,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
-            ),
+            ],
           ),
-          const SizedBox(width: 12),
-          if (isActive)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
-              ),
-              child: const Text(
-                'ACTIVE',
-                style: TextStyle(
-                  color: Colors.greenAccent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            )
-          else
-            TextButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              ),
-              child: const Text('Activate'),
-            ),
-        ],
+        ),
       ),
     );
   }

@@ -29,7 +29,9 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
     AppSettings settings,
     TeleprompterState tState,
   ) {
-    final isReady = _cameraController?.value.isInitialized == true;
+    final audioOnly = settings.contentCreatorRecordingFormat ==
+        AppSettings.contentCreatorRecordingFormatWav;
+    final isReady = audioOnly || _cameraController?.value.isInitialized == true;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
@@ -48,11 +50,14 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             _barIcon(Icons.arrow_back, 'Back to editor',
-                () => Navigator.pop(context)),
+                _exitContentCreatorAtCurrentPosition),
+            _barIcon(Icons.edit_note, 'Edit current position',
+                _exitContentCreatorAtCurrentPosition),
             _barIcon(Icons.skip_previous, 'Previous bookmark',
                 () => _jumpContentBookmark(-1)),
             _barText('A', 'Smaller font', () => _applyContentFontDelta(-4)),
-            _recordButton(isReady),
+            _contentSpeechButton(settings, tState),
+            _recordButton(isReady, audioOnly: audioOnly),
             _barText('A', 'Larger font', () => _applyContentFontDelta(4),
                 large: true),
             _barIcon(Icons.bookmark_add_outlined, 'Add bookmark',
@@ -62,6 +67,11 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
             _barIcon(Icons.photo_camera, 'Camera source',
                 _showContentCreatorSettings),
             _barIcon(Icons.tune, 'Prompter settings', _showPrompterSettings),
+            _barIcon(
+              _contentFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              _contentFullscreen ? 'Exit fullscreen' : 'Fullscreen',
+              _toggleContentFullscreen,
+            ),
             _barIcon(Icons.skip_next, 'Next bookmark',
                 () => _jumpContentBookmark(1)),
             _barIcon(Icons.replay, 'Restart script', _resetContentPosition),
@@ -72,12 +82,51 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
     );
   }
 
-  Widget _recordButton(bool isReady) {
+  Widget _contentSpeechButton(AppSettings settings, TeleprompterState tState) {
+    final manual = settings.scrollMode == 'manual';
+    final active = manual ? _contentManualScrolling : tState.isListening;
+    final booting = !manual && tState.isStarting;
+    final icon = manual
+        ? (active ? Icons.pause : Icons.play_arrow)
+        : (booting ? Icons.hourglass_top : (active ? Icons.stop : Icons.mic));
+    final tooltip = manual
+        ? (active ? 'Pause manual scroll' : 'Start manual scroll')
+        : (active || booting ? 'Stop speech-to-text' : 'Start speech-to-text');
+    return GestureDetector(
+      onTap: booting ? null : _toggleContentSpeechSession,
+      child: Tooltip(
+        message: tooltip,
+        child: Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: active
+                ? Colors.red
+                : (booting
+                    ? const Color(0xFFFFBF00).withValues(alpha: 0.72)
+                    : const Color(0xFFFFBF00)),
+          ),
+          child: Icon(
+            icon,
+            color: active ? Colors.white : Colors.black,
+            size: 28,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _recordButton(bool isReady, {required bool audioOnly}) {
     final canStopOrCancel = _isRecording || _recordStartInFlight;
-    final icon = canStopOrCancel ? Icons.stop : Icons.videocam;
+    final icon = canStopOrCancel
+        ? Icons.stop
+        : (audioOnly ? Icons.mic_none_outlined : Icons.videocam);
     final tooltip = _recordStartInFlight
         ? 'Cancel recording countdown'
-        : (_isRecording ? 'Stop recording' : 'Start recording');
+        : (_isRecording
+            ? 'Stop recording'
+            : (audioOnly ? 'Start audio recording' : 'Start recording'));
     return GestureDetector(
       onTap: isReady || canStopOrCancel ? _toggleRecording : null,
       child: Tooltip(

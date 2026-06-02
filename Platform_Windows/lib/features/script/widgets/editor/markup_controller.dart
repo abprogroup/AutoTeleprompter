@@ -26,6 +26,10 @@ class MarkupController extends TextEditingController {
   /// Whether the entire block is selected (e.g. during Select All).
   bool isGlobalSelected = false;
 
+  /// When script colors are inverted, background highlights become the text
+  /// color target and the overlay suppresses the painted background bands.
+  bool backgroundHighlightsAsText = false;
+
   /// Force a repaint after mutating [externalSelection] or [isGlobalSelected].
   /// These fields live outside [value], so listeners otherwise won't fire.
   void refresh() => notifyListeners();
@@ -339,6 +343,9 @@ class MarkupController extends TextEditingController {
         s = s.copyWith(decoration: TextDecoration.underline);
       }
       if (textColors.isNotEmpty) s = s.copyWith(color: textColors.last);
+      if (backgroundHighlightsAsText && bgColors.isNotEmpty) {
+        s = s.copyWith(color: bgColors.last);
+      }
       if (bgColors.isNotEmpty && !kUseCustomDocxDecorationPainting) {
         s = s.copyWith(backgroundColor: bgColors.last);
       }

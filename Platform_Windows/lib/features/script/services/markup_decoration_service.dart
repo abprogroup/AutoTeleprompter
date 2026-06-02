@@ -11,7 +11,7 @@ const bool kUseCustomEditorSelectionPainting = true;
 class MarkupDecorationBoxMerger {
   static const double styleBackgroundGapTolerance = 28.0;
   static const double styleUnderlineGapTolerance = 14.0;
-  static const double activeSelectionGapTolerance = 2.0;
+  static const double activeSelectionGapTolerance = 28.0;
   static const double styleBackgroundInnerTail = 2.0;
   static const double styleBackgroundVisualEndTail = 6.0;
   static const double styleUnderlineVisualEndTail = 3.0;

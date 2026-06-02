@@ -9,12 +9,14 @@ const _presenterSectionStyle = TextStyle(
 class TeleprompterSettingsPanel extends ConsumerWidget {
   final ValueChanged<double>? onFontSizeChanged;
   final VoidCallback? onLayoutChanged;
+  final Future<void> Function()? onInvertColors;
   final bool scriptBackgroundLocked;
 
   const TeleprompterSettingsPanel({
     super.key,
     this.onFontSizeChanged,
     this.onLayoutChanged,
+    this.onInvertColors,
     this.scriptBackgroundLocked = false,
   });
 
@@ -422,6 +424,27 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
 
           // -- Colors ---------------------------------------------------------
           const Text('Colors', style: _presenterSectionStyle),
+          if (onInvertColors != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => unawaited(onInvertColors!()),
+                icon: const Icon(Icons.invert_colors_outlined),
+                label: const Text('Invert colors'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Color(settings.currentWordColor),
+                  side: BorderSide(
+                    color: Color(settings.currentWordColor)
+                        .withValues(alpha: 0.65),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
 
           Row(

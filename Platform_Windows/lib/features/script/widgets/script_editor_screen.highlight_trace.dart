@@ -193,6 +193,16 @@ extension _ScriptEditorHighlightTraceParts on _ScriptEditorScreenState {
             rawSelection,
             rawText: raw,
           );
+    final finalPaintLanes = editable == null
+        ? const <Rect>[]
+        : HighlightBandPainter.textLaneBands(
+            finalRenderBands,
+            editable.size,
+            topPaddingRatio: 0.02,
+            bottomPaddingRatio: 0.14,
+            minHeight: 6.0,
+            maxHeight: 160.0,
+          );
     final rawPainterBoxes = rawSelection == null
         ? const <Rect>[]
         : rawGeometry.selectionRects(
@@ -251,6 +261,8 @@ extension _ScriptEditorHighlightTraceParts on _ScriptEditorScreenState {
       'ownershipBoxes=RenderEditable.getBoxesForSelection(raw actual)',
       'renderEditableBoxes(raw actual): ${_formatRects(renderEditableBoxes)}',
       'finalRenderBands(raw actual): ${_formatRects(finalRenderBands)}',
+      'finalPaintLanes(selection overlay): ${_formatRects(finalPaintLanes)}',
+      'finalPaintRegion(selection overlay): ${editable == null ? "none" : HighlightBandPainter.describeConnectedRegion(finalPaintLanes, editable.size)}',
       'rawPainterBoxes(raw hidden-tags): ${_formatRects(rawPainterBoxes)}',
       'rawAlignedPainterBoxes(active input): ${_formatRects(rawAlignedPainterBoxes)}',
       'serviceTightBoxes(diagnostic only): ${_formatRects(rawOwnershipBoxes)}',

@@ -49,17 +49,17 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _recordingOutputSection(
-          title: 'MP4 video',
+          title: 'Recording type',
           options: const [
-            MapEntry('video_sound_mp4', 'Video with sound'),
-            MapEntry('video_silent_mp4', 'Video without sound'),
+            MapEntry('video_sound_mp4', 'Video with Sound (MP4)'),
+            MapEntry('audio_only_wav', 'Audio Only (WAV)'),
           ],
           settings: settings,
         ),
         const SizedBox(height: 8),
         const Text(
-          'Extra native formats, including audio-only WAV, WebM, and MOV '
-          'ProRes, are v6 research items so this beta stays light.',
+          'MP4 video and WAV audio are recorded directly. WebM and MOV ProRes '
+          'remain v6 research items so this beta stays light.',
           style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.3),
         ),
       ],
@@ -104,11 +104,11 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
   }
 
   String _recordingOutputKey(AppSettings settings) {
-    final prefix = settings.contentCreatorRecordingAudioMode ==
-            AppSettings.contentCreatorRecordingAudioSilent
-        ? 'video_silent'
-        : 'video_sound';
-    return '${prefix}_${AppSettings.contentCreatorRecordingFormatMp4}';
+    if (settings.contentCreatorRecordingFormat ==
+        AppSettings.contentCreatorRecordingFormatWav) {
+      return 'audio_only_wav';
+    }
+    return 'video_sound_${AppSettings.contentCreatorRecordingFormatMp4}';
   }
 
   Future<void> _setRecordingOutput(String key) async {
@@ -118,12 +118,12 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
     }
     final notifier = ref.read(settingsProvider.notifier);
     switch (key) {
-      case 'video_silent_mp4':
+      case 'audio_only_wav':
         await notifier.setContentCreatorRecordingFormat(
-          AppSettings.contentCreatorRecordingFormatMp4,
+          AppSettings.contentCreatorRecordingFormatWav,
         );
         await notifier.setContentCreatorRecordingAudioMode(
-          AppSettings.contentCreatorRecordingAudioSilent,
+          AppSettings.contentCreatorRecordingAudioCamera,
         );
         break;
       case 'video_sound_mp4':
@@ -137,7 +137,20 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
         break;
     }
     _logContentDebug('recording output selected $key');
-    await _initializeCamera();
+    if (key == 'audio_only_wav') {
+      final previousController = _cameraController;
+      _updateContentCreatorState(() {
+        _cameraController = null;
+        _isInit = false;
+        _cameraAudioEnabled = false;
+        _isCameraInitializing = false;
+        _cameraError = null;
+        _contentFrameConfirmed = true;
+      });
+      await previousController?.dispose();
+    } else {
+      await _initializeCamera();
+    }
   }
 
   Widget _buildContentFeedControls(AppSettings settings) {

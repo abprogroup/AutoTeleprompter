@@ -64,3 +64,7 @@ const _contentCreatorTextScrimKey = 'contentCreatorTextScrim';
 const _contentCreatorRecordingFolderKey = 'contentCreatorRecordingFolder';
 const _contentCreatorRecordingFormatKey = 'contentCreatorRecordingFormat';
 const _contentCreatorRecordingAudioModeKey = 'contentCreatorRecordingAudioMode';
+const _importColorModeKey = 'importColorMode';
+const _reduceMotionKey = 'reduceMotion';
+const _uiScaleKey = 'uiScale';
+const _updateChannelKey = 'updateChannel';

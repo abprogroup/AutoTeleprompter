@@ -4,6 +4,51 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
   void _stopAutoScroll() {
     _autoScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
+    _autoScrollTimer = null;
+    _wordTrackTimer = null;
+    if (_contentManualScrolling) {
+      if (mounted) {
+        _updateContentCreatorState(() => _contentManualScrolling = false);
+      } else {
+        _contentManualScrolling = false;
+      }
+    }
+  }
+
+  void _startContentManualScroll() {
+    if (!_scrollController.hasClients) return;
+    final settings = ref.read(settingsProvider);
+    if (settings.scrollMode != 'manual') return;
+    if (settings.scrollSpeed == 0) {
+      _showSnack('Set manual scroll speed above 0 to start.');
+      return;
+    }
+    _autoScrollTimer?.cancel();
+    _wordTrackTimer?.cancel();
+    _updateContentCreatorState(() => _contentManualScrolling = true);
+    _syncContentControlsForActiveSession(true);
+    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final liveSettings = ref.read(settingsProvider);
+      if (liveSettings.scrollMode != 'manual') {
+        _stopAutoScroll();
+        return;
+      }
+      final speed = liveSettings.scrollSpeed;
+      if (speed == 0) {
+        _stopAutoScroll();
+        return;
+      }
+      final pxPerTick = speed.abs() * 3.0 * 16.0 / 1000.0;
+      final delta = speed < 0 ? -pxPerTick : pxPerTick;
+      final max = _scrollController.position.maxScrollExtent;
+      final next = (_scrollController.offset + delta).clamp(0.0, max);
+      _scrollController.jumpTo(next.toDouble());
+      if (next == 0.0 || next == max) _stopAutoScroll();
+    });
+    _wordTrackTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      _updateActiveWordFromScroll(commitProvider: true);
+    });
   }
 
   void _handleContentScroll() {

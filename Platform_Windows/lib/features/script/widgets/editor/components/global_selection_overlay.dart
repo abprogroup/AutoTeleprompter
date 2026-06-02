@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../../../../settings/models/app_settings.dart';
 import '../../../services/editor_text_geometry_service.dart';
+import '../../../services/highlight_band_painter.dart';
 import '../../../services/markup_decoration_service.dart';
+import '../../../services/script_color_inversion_service.dart';
 import '../markup_controller.dart';
 
 part 'global_selection_overlay.handles.dart';
@@ -11,6 +13,7 @@ part 'global_selection_overlay.selection.dart';
 part 'global_selection_overlay.body_drag.dart';
 part 'global_selection_overlay.geometry.dart';
 part 'global_selection_overlay.build.dart';
+part 'global_selection_overlay.highlights.dart';
 
 /// Walk a render tree to find the first RenderEditable.
 RenderEditable? _findRenderEditable(RenderObject obj) {

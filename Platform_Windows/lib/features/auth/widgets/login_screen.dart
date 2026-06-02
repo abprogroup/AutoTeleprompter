@@ -54,7 +54,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('V5 Professional Suite Activated!'),
+            content: Text('Professional Suite Activated!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -171,7 +171,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text(
-          'V5 Pro Access',
+          'Pro Access',
           style: TextStyle(color: Colors.white),
         ),
         content: const Column(

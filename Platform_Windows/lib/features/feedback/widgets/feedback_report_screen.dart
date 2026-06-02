@@ -141,7 +141,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'This beta feedback report includes your full active script and diagnostic data.',
+            'This feedback report includes your full active script and diagnostic data.',
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w800,
@@ -326,6 +326,8 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
       'reportId': reportId,
       'deviceKey': consent.deviceKey,
       'consentVersion': consent.acceptedPolicyVersion,
+      'speechDisclosureVersion': consent.acceptedSpeechDisclosureVersion,
+      'cloudDisclosureVersion': consent.acceptedCloudDisclosureVersion,
       'appVersion': betaAppVersion,
       'platform': 'windows',
       'createdAt': DateTime.now().toUtc().toIso8601String(),

@@ -35,158 +35,35 @@ class _ConsentDetailRow extends StatelessWidget {
   }
 }
 
-class _SpeechEngineTile extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  const _SpeechEngineTile({
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final normalizedValue = {
-      AppSettings.sttEngineAuto,
-      AppSettings.sttEngineWindowsOffline,
-      AppSettings.sttEngineBrowserOnline,
-    }.contains(value)
-        ? value
-        : AppSettings.sttEngineAuto;
-    final hasUnsupportedSavedValue = value != normalizedValue;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.record_voice_over_outlined,
-                color: Colors.white54,
-                size: 22,
-              ),
-              SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Speech-to-text engine',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Controls the speech-to-text system used in Present mode',
-                      style: TextStyle(color: Colors.white38, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            // Flutter 3.32 on GitHub Actions still requires value.
-            // ignore: deprecated_member_use
-            value: normalizedValue,
-            dropdownColor: const Color(0xFF1A1A1A),
-            iconEnabledColor: const Color(0xFFFFBF00),
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: const Color(0xFF111111),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white12),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFFFBF00)),
-              ),
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: AppSettings.sttEngineAuto,
-                child: Text('Auto: offline English / online fallback'),
-              ),
-              DropdownMenuItem(
-                value: AppSettings.sttEngineWindowsOffline,
-                child: Text('Windows offline speech'),
-              ),
-              DropdownMenuItem(
-                value: AppSettings.sttEngineBrowserOnline,
-                child: Text('Online browser speech'),
-              ),
-            ],
-            onChanged: (engine) {
-              if (engine == null) return;
-              onChanged(engine);
-            },
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Offline English uses the Windows speech pack installed on this '
-            'computer. If that pack is missing, Auto may fall back to online '
-            'browser speech.',
-            style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.35),
-          ),
-          if (hasUnsupportedSavedValue) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Offline Whisper was saved in an older build, but it is not '
-              'enabled for this Windows beta. Auto speech recognition will '
-              'be used instead.',
-              style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => onChanged(AppSettings.sttEngineAuto),
-                icon: const Icon(Icons.restore, size: 16),
-                label: const Text('Use auto engine'),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFFFFBF00),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _RemoteControlTile extends StatelessWidget {
+  final String title;
   final bool isRunning;
   final bool isBusy;
   final String url;
   final String pairingPin;
+  final int connectedClientCount;
+  final DateTime? sessionExpiresAt;
   final String? error;
   final VoidCallback onStart;
   final VoidCallback onStop;
+  final VoidCallback onRename;
+  final VoidCallback onRevoke;
   final VoidCallback onCopy;
   final VoidCallback onOpen;
 
   const _RemoteControlTile({
+    required this.title,
     required this.isRunning,
     required this.isBusy,
     required this.url,
     required this.pairingPin,
+    required this.connectedClientCount,
+    required this.sessionExpiresAt,
     required this.error,
     required this.onStart,
     required this.onStop,
+    required this.onRename,
+    required this.onRevoke,
     required this.onCopy,
     required this.onOpen,
   });
@@ -216,25 +93,31 @@ class _RemoteControlTile extends StatelessWidget {
                 size: 22,
               ),
               const SizedBox(width: 14),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Local Remote Control',
-                      style: TextStyle(
+                      title,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Start a phone/browser controller for Present mode',
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Phone/browser controller for Present mode',
                       style: TextStyle(color: Colors.white38, fontSize: 13),
                     ),
                   ],
                 ),
+              ),
+              IconButton(
+                tooltip: 'Rename selected remote',
+                visualDensity: VisualDensity.compact,
+                onPressed: onRename,
+                icon: const Icon(Icons.edit_outlined, size: 18),
               ),
               if (isBusy)
                 const SizedBox(
@@ -264,7 +147,25 @@ class _RemoteControlTile extends StatelessWidget {
               'Only devices with this session PIN can control the prompter.',
               style: TextStyle(color: Colors.white38, fontSize: 12),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Connected remotes: $connectedClientCount',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            if (sessionExpiresAt != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Session token expires: ${_formatRemoteExpiry(sessionExpiresAt!)}',
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+            ],
           ],
+          const SizedBox(height: 8),
+          const Text(
+            'Use only on a trusted local network. Stop remote control when the '
+            'phone/browser controller is no longer needed.',
+            style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.3),
+          ),
           if (error != null) ...[
             const SizedBox(height: 8),
             Text(error!, style: const TextStyle(color: Colors.orangeAccent)),
@@ -293,6 +194,15 @@ class _RemoteControlTile extends StatelessWidget {
                 ),
               ),
               OutlinedButton.icon(
+                onPressed: isRunning && !isBusy ? onRevoke : null,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('New PIN'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white24),
+                ),
+              ),
+              OutlinedButton.icon(
                 onPressed: isRunning ? onOpen : null,
                 icon: const Icon(Icons.open_in_browser_rounded, size: 18),
                 label: const Text('Open'),
@@ -307,103 +217,11 @@ class _RemoteControlTile extends StatelessWidget {
       ),
     );
   }
-}
 
-class _LanguageModeTile extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  const _LanguageModeTile({
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final normalized = AppSettings.normalizeLanguageMode(value);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.language_rounded,
-                color: Colors.white54,
-                size: 22,
-              ),
-              SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Script language',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Auto detects the first readable words; use Hebrew or '
-                      'English only when the script needs a fixed start mode',
-                      style: TextStyle(color: Colors.white38, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            selected: {normalized},
-            showSelectedIcon: false,
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                return states.contains(WidgetState.selected)
-                    ? const Color(0xFFFFBF00)
-                    : const Color(0xFF111111);
-              }),
-              foregroundColor: WidgetStateProperty.resolveWith((states) {
-                return states.contains(WidgetState.selected)
-                    ? Colors.black
-                    : Colors.white70;
-              }),
-              side: WidgetStateProperty.resolveWith((states) {
-                return BorderSide(
-                  color: states.contains(WidgetState.selected)
-                      ? const Color(0xFFFFBF00)
-                      : Colors.white24,
-                );
-              }),
-            ),
-            segments: const [
-              ButtonSegment(
-                value: AppSettings.languageModeAuto,
-                label: Text('Auto'),
-              ),
-              ButtonSegment(
-                value: AppSettings.languageModeHebrew,
-                label: Text('Hebrew'),
-              ),
-              ButtonSegment(
-                value: AppSettings.languageModeEnglish,
-                label: Text('English'),
-              ),
-            ],
-            onSelectionChanged: (selection) => onChanged(selection.first),
-          ),
-        ],
-      ),
-    );
+  String _formatRemoteExpiry(DateTime expiresAt) {
+    final local = expiresAt.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(local.hour)}:${two(local.minute)}';
   }
 }
 
@@ -480,17 +298,100 @@ class _SettingsTile extends StatelessWidget {
   }
 }
 
-class _SettingsControlTile extends StatelessWidget {
+class _SettingsSwitchTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final List<Widget> children;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
-  const _SettingsControlTile({
+  const _SettingsSwitchTile({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.children,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: Colors.white54, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: value,
+                // Flutter 3.32 on GitHub Actions still requires activeColor.
+                // ignore: deprecated_member_use
+                activeColor: const Color(0xFFFFBF00),
+                onChanged: onChanged,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsChoice<T> {
+  final String label;
+  final T value;
+
+  const _SettingsChoice({
+    required this.label,
+    required this.value,
+  });
+}
+
+class _SettingsChoiceTile<T> extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final T value;
+  final List<_SettingsChoice<T>> choices;
+  final ValueChanged<T> onChanged;
+
+  const _SettingsChoiceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.choices,
+    required this.onChanged,
   });
 
   @override
@@ -532,88 +433,72 @@ class _SettingsControlTile extends StatelessWidget {
               ),
             ],
           ),
-          if (children.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            ...children,
-          ],
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: choices.map((choice) {
+              final selected = choice.value == value;
+              return ChoiceChip(
+                selected: selected,
+                showCheckmark: true,
+                checkmarkColor: Colors.black,
+                selectedColor: const Color(0xFFFFBF00),
+                backgroundColor: Colors.transparent,
+                side: BorderSide(
+                  color: selected ? Colors.transparent : Colors.white54,
+                ),
+                labelStyle: TextStyle(
+                  color: selected ? Colors.black : Colors.white70,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+                label: Text(choice.label),
+                onSelected: (_) => onChanged(choice.value),
+              );
+            }).toList(),
+          ),
         ],
       ),
     );
   }
 }
 
-class _SettingsChipGroup<T> extends StatelessWidget {
-  final T selected;
-  final List<T> values;
-  final String Function(T value) labelFor;
-  final ValueChanged<T> onSelected;
-
-  const _SettingsChipGroup({
-    required this.selected,
-    required this.values,
-    required this.labelFor,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final value in values)
-          ChoiceChip(
-            label: Text(labelFor(value)),
-            selected: value == selected,
-            selectedColor: const Color(0xFFFFBF00),
-            backgroundColor: const Color(0xFF111111),
-            side: BorderSide(
-              color:
-                  value == selected ? const Color(0xFFFFBF00) : Colors.white24,
-            ),
-            labelStyle: TextStyle(
-              color: value == selected ? Colors.black : Colors.white70,
-              fontWeight: value == selected ? FontWeight.bold : FontWeight.w500,
-            ),
-            onSelected: (_) => onSelected(value),
-          ),
-      ],
-    );
-  }
-}
-
-class _SettingsSwitchTile extends StatelessWidget {
+class _SettingsSliderTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final bool enabled;
+  final double value;
+  final double min;
+  final double max;
+  final int? divisions;
+  final String valueLabel;
+  final ValueChanged<double> onChanged;
 
-  const _SettingsSwitchTile({
+  const _SettingsSliderTile({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.valueLabel,
     required this.onChanged,
-    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? () => onChanged(!value) : null,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
         borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          ),
-          child: Row(
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
               Icon(icon, color: Colors.white54, size: 22),
               const SizedBox(width: 14),
@@ -638,16 +523,113 @@ class _SettingsSwitchTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Switch.adaptive(
-                value: value,
-                // Flutter 3.32 on GitHub Actions still requires activeColor.
-                // ignore: deprecated_member_use
-                activeColor: const Color(0xFFFFBF00),
-                onChanged: enabled ? onChanged : null,
+              Text(
+                valueLabel,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 10),
+          Slider(
+            value: value.clamp(min, max).toDouble(),
+            min: min,
+            max: max,
+            divisions: divisions,
+            activeColor: const Color(0xFFFFBF00),
+            inactiveColor: Colors.white24,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsAction {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  const _SettingsAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+}
+
+class _SettingsActionsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<_SettingsAction> actions;
+
+  const _SettingsActionsTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: Colors.white54, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: actions
+                .map(
+                  (action) => TextButton.icon(
+                    onPressed: action.onPressed,
+                    icon: Icon(action.icon, size: 18),
+                    label: Text(action.label),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFFFBF00),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
       ),
     );
   }

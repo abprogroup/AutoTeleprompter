@@ -8,6 +8,7 @@ import '../../../models/cursor_style.dart';
 class ColorSuite extends ConsumerWidget {
   final ValueChanged<String> onTextColor, onBgColor;
   final ValueChanged<int> onBgColorChange;
+  final VoidCallback onInvertColors;
   final Color lastTextColor, lastHighlightColor;
 
   const ColorSuite({
@@ -15,6 +16,7 @@ class ColorSuite extends ConsumerWidget {
     required this.onTextColor,
     required this.onBgColor,
     required this.onBgColorChange,
+    required this.onInvertColors,
     required this.lastTextColor,
     required this.lastHighlightColor,
   });
@@ -32,6 +34,7 @@ class ColorSuite extends ConsumerWidget {
       child: Wrap(
         spacing: 24,
         runSpacing: 16,
+        alignment: WrapAlignment.center,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           _ColorPickerItem(
@@ -53,6 +56,18 @@ class ColorSuite extends ConsumerWidget {
             color: Color(settings.scriptBgColor),
             onChanged: onBgColorChange,
             title: 'BACKGROUND PICKER',
+          ),
+          Tooltip(
+            message: 'Invert script colors',
+            child: IconButton(
+              onPressed: onInvertColors,
+              icon: const Icon(Icons.invert_colors, color: Color(0xFFFFBF00)),
+              style: IconButton.styleFrom(
+                side: const BorderSide(color: Colors.white24),
+                backgroundColor: const Color(0xFF2A2A2A),
+                fixedSize: const Size(44, 44),
+              ),
+            ),
           ),
         ],
       ),

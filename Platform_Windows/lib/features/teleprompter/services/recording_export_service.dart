@@ -31,6 +31,21 @@ class RecordingExportService {
   Future<bool> canExport(String format) async =>
       _normalizeFormat(format) == 'mp4';
 
+  Future<File> reserveTargetFile({
+    required Directory destinationDirectory,
+    required String format,
+    DateTime? createdAt,
+  }) async {
+    if (!await destinationDirectory.exists()) {
+      await destinationDirectory.create(recursive: true);
+    }
+    final normalized = _normalizeFormat(format);
+    return _nonCollidingTarget(
+      destinationDirectory,
+      _fileNameForFormat(createdAt ?? DateTime.now(), normalized),
+    );
+  }
+
   Future<RecordingExportResult> export({
     required File sourceFile,
     required Directory destinationDirectory,
@@ -49,8 +64,9 @@ class RecordingExportService {
     }
 
     throw const RecordingExportUnsupportedException(
-      'This beta records MP4 directly. Extra native file types are planned '
-      'for v6 after platform-specific recording research.',
+      'This beta exports camera recordings as MP4 directly. Extra video '
+      'file types are planned for v6 after platform-specific recording '
+      'research.',
     );
   }
 
@@ -63,13 +79,10 @@ class RecordingExportService {
     if (!await sourceFile.exists()) {
       throw const FileSystemException('Recording source file is missing.');
     }
-    if (!await destinationDirectory.exists()) {
-      await destinationDirectory.create(recursive: true);
-    }
-
-    final target = await _nonCollidingTarget(
-      destinationDirectory,
-      _fileName(createdAt ?? DateTime.now()),
+    final target = await reserveTargetFile(
+      destinationDirectory: destinationDirectory,
+      format: 'mp4',
+      createdAt: createdAt,
     );
     final bytesWritten = await _copyToTargetOrCleanup(
       sourceFile: sourceFile,
@@ -97,10 +110,6 @@ class RecordingExportService {
       sourceDeleted: sourceDeleted,
       format: 'mp4',
     );
-  }
-
-  String _fileName(DateTime date) {
-    return _fileNameForFormat(date, 'mp4');
   }
 
   String _fileNameForFormat(DateTime date, String format) {
@@ -191,11 +200,15 @@ class RecordingExportService {
   String _normalizeFormat(String format) {
     return switch (format) {
       'mp4' => 'mp4',
+      'wav' => 'wav',
       _ => format,
     };
   }
 
   String _extensionForFormat(String format) {
-    return 'mp4';
+    return switch (format) {
+      'wav' => 'wav',
+      _ => 'mp4',
+    };
   }
 }

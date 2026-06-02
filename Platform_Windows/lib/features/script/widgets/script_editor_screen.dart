@@ -36,13 +36,18 @@ import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
 import '../services/markup_export_service.dart';
 import '../services/markup_decoration_service.dart';
+import '../services/highlight_band_painter.dart';
 import '../services/editor_text_geometry_service.dart';
+import '../services/editor_inline_style_operation.dart';
+import '../services/script_color_inversion_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../models/script_word.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
 part 'script_editor_screen.load_blocks.dart';
+part 'script_editor_screen.text_replacement.dart';
+part 'script_editor_screen.toolbar_selection_guard.dart';
 part 'script_editor_screen.recent_persistence.dart';
 part 'script_editor_screen.cursor_detection.dart';
 part 'script_editor_screen.vertical_layout.dart';
@@ -218,26 +223,35 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isLoading = false;
   bool _isPendingLoad = false;
   bool _isBulkLoadingBlocks = false;
+  bool _editorToolbarFocusGuard = false;
   bool _recentPersistRunning = false;
   bool _recentPersistQueued = false;
   String? _lastRecentPersistFingerprint;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer, _clipboardGuardTimer;
+  Timer? _editorToolbarFocusGuardTimer;
   Timer?
       _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
 
   // v3.9.6: Professional History Bulking
   int _typingCharCount = 0; // chars typed since last history commit
   Timer? _typingBulkTimer; // 10-second typing bulk window
-  Timer? _suiteAutoSaveTimer; // 3-second auto-checkpoint while suite is open
+  Timer? _suiteAutoSaveTimer; // legacy timer; canceled by live suite history
   String?
       _suiteSection; // current function section within a suite (e.g. 'Bold', 'Font Size')
+  EditorState? _suiteBaselineState;
+  int? _suiteLiveHistoryIndex;
+  EditorSuite? _suiteTransactionSuite;
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
   final GlobalKey _appSelectionToolbarKey = GlobalKey();
+  final GlobalKey _formattingToolbarKey = GlobalKey();
 
   void _clearGlobalSelection() {
     if (!mounted) return;
+    _preservedSelection = null;
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
     setState(() {
       _isGlobalSelection = false;
       _overlayKey.currentState?.clearSelection();
@@ -462,6 +476,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _autoSaveTimer?.cancel();
     _typingBulkTimer?.cancel();
     _suiteAutoSaveTimer?.cancel();
+    _editorToolbarFocusGuardTimer?.cancel();
     _highlightTraceTimer?.cancel();
     _editorScrollController.dispose();
     _clearControllers();

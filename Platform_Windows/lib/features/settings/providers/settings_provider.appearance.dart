@@ -251,6 +251,33 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setString(_contentCreatorRecordingAudioModeKey, normalized);
   }
 
+  Future<void> setImportColorMode(String mode) async {
+    final normalized = _normalizeImportColorMode(mode);
+    state = state.copyWith(importColorMode: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_importColorModeKey, normalized);
+  }
+
+  Future<void> setReduceMotion(bool enabled) async {
+    state = state.copyWith(reduceMotion: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_reduceMotionKey, enabled);
+  }
+
+  Future<void> setUiScale(double scale) async {
+    final normalized = _normalizeUiScale(scale);
+    state = state.copyWith(uiScale: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_uiScaleKey, normalized);
+  }
+
+  Future<void> setUpdateChannel(String channel) async {
+    final normalized = _normalizeUpdateChannel(channel);
+    state = state.copyWith(updateChannel: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_updateChannelKey, normalized);
+  }
+
   Future<void> setDisplayName(String name) async {
     final normalized = name.trim();
     if (normalized.isEmpty) return;
@@ -310,6 +337,19 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setDouble(_letterSpacingKey, 0.0);
     await prefs.setDouble(_fontSizeKey, 18.0);
     await prefs.setString(_fontFamilyKey, 'Inter');
+  }
+
+  Future<void> setDocumentImportAppearance({int? scriptBgColor}) async {
+    final normalizedBg = _normalizeColor(scriptBgColor, 0xFFFFFFFF);
+    state = state.copyWith(
+      scriptBgColor: normalizedBg,
+      currentWordColor: 0xFFFFBF00,
+      futureWordColor: 0xFF000000,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_scriptBgColorKey, normalizedBg);
+    await prefs.setInt(_currentWordColorKey, 0xFFFFBF00);
+    await prefs.setInt(_futureWordColorKey, 0xFF000000);
   }
 
   Future<void> applySessionStyles(Map<String, dynamic> styles) async {

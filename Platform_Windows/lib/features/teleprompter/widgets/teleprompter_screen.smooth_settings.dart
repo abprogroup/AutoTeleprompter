@@ -39,6 +39,7 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
       builder: (_) => TeleprompterSettingsPanel(
         onFontSizeChanged: _preserveReadingPositionAfterLayoutChange,
         onLayoutChanged: () => _preserveReadingPositionAfterLayoutChange(0),
+        onInvertColors: _togglePresenterColorInversion,
       ),
     );
   }

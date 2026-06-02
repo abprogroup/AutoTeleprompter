@@ -9,7 +9,8 @@ import 'history_suite_mvp.dart';
 // v3.9.5.59: Sovereign Formatting Toolbar (Orchestrator MVP)
 class FormattingToolbarMVP extends StatelessWidget {
   final VoidCallback onBold, onUnderline, onItalic, onClear, onUndo, onRedo;
-  final ValueChanged<int> onFontSize;
+  final VoidCallback onInvertColors;
+  final ValueChanged<double> onFontSize;
   final ValueChanged<String> onAlign,
       onDirection,
       onTextColor,
@@ -31,6 +32,7 @@ class FormattingToolbarMVP extends StatelessWidget {
       required this.onUnderline,
       required this.onItalic,
       required this.onClear,
+      required this.onInvertColors,
       required this.onFontSize,
       required this.onAlign,
       required this.onDirection,
@@ -158,6 +160,7 @@ class FormattingToolbarMVP extends StatelessWidget {
             onTextColor: onTextColor,
             onBgColor: onBgColor,
             onBgColorChange: onBgColorChange,
+            onInvertColors: onInvertColors,
             lastTextColor: lastTextColor,
             lastHighlightColor: lastHighlightColor);
       default:

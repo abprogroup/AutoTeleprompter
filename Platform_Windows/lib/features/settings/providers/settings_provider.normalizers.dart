@@ -145,6 +145,7 @@ String _normalizeContentCreatorBubbleShape(String? value) {
 String _normalizeContentCreatorRecordingFormat(String? value) {
   switch (value) {
     case AppSettings.contentCreatorRecordingFormatMp4:
+    case AppSettings.contentCreatorRecordingFormatWav:
       return value!;
     default:
       return AppSettings.contentCreatorRecordingFormatMp4;
@@ -154,8 +155,9 @@ String _normalizeContentCreatorRecordingFormat(String? value) {
 String _normalizeContentCreatorRecordingAudioMode(String? value) {
   switch (value) {
     case AppSettings.contentCreatorRecordingAudioCamera:
-    case AppSettings.contentCreatorRecordingAudioSilent:
       return value!;
+    case AppSettings.contentCreatorRecordingAudioSilent:
+      return AppSettings.contentCreatorRecordingAudioCamera;
     default:
       return AppSettings.contentCreatorRecordingAudioCamera;
   }
@@ -170,5 +172,30 @@ String _normalizeManualScrollBarPlacement(String? value) {
       return value!;
     default:
       return AppSettings.manualScrollBarBottom;
+  }
+}
+
+String _normalizeImportColorMode(String? value) {
+  switch (value) {
+    case AppSettings.importColorModePrompter:
+    case AppSettings.importColorModeDocument:
+      return value!;
+    default:
+      return AppSettings.importColorModePrompter;
+  }
+}
+
+double _normalizeUiScale(double? value) {
+  return (value ?? 1.0).clamp(0.90, 1.25).toDouble();
+}
+
+String _normalizeUpdateChannel(String? value) {
+  switch (value) {
+    case AppSettings.updateChannelStable:
+    case AppSettings.updateChannelBeta:
+    case AppSettings.updateChannelInternal:
+      return value!;
+    default:
+      return AppSettings.updateChannelStable;
   }
 }

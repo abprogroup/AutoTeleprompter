@@ -54,7 +54,8 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
 
   Widget _buildCameraBackgroundLayer() {
     final settings = ref.watch(settingsProvider);
-    if (settings.contentCreatorFeedMode ==
+    if (_contentAudioOnlyMode(settings) ||
+        settings.contentCreatorFeedMode ==
         AppSettings.contentCreatorFeedBubble) {
       return Positioned.fill(
         child: DecoratedBox(
@@ -63,7 +64,9 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
       );
     }
     return Positioned.fill(
-      child: _isInit ? _buildFadedCameraPreviewLayer() : _buildCameraFallback(),
+      child: _cameraPreviewReady
+          ? _buildFadedCameraPreviewLayer()
+          : _buildCameraFallback(),
     );
   }
 
@@ -71,8 +74,9 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
     return Stack(
       children: [
         Positioned.fill(
-          child:
-              _isInit ? _buildCameraPreviewBackdrop() : _buildCameraFallback(),
+          child: _cameraPreviewReady
+              ? _buildCameraPreviewBackdrop()
+              : _buildCameraFallback(),
         ),
         Positioned(
           left: 24,
@@ -103,7 +107,7 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
                   icon: Icons.check_circle_outline,
                   label: 'Confirm frame',
                   emphasized: true,
-                  onPressed: _isInit ? _confirmContentFrame : null,
+                  onPressed: _cameraPreviewReady ? _confirmContentFrame : null,
                 ),
               ],
             ),
@@ -140,6 +144,7 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
   }
 
   Widget _buildCameraPreviewBackdrop() {
+    if (!_cameraPreviewReady) return _buildCameraFallback();
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -271,6 +276,7 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
   }
 
   Widget _buildFadedCameraPreviewLayer() {
+    if (!_cameraPreviewReady) return _buildCameraFallback();
     final settings = ref.watch(settingsProvider);
     final opacity = switch (settings.contentCreatorLayoutPreset) {
       AppSettings.contentCreatorLayoutCamera =>
@@ -346,6 +352,7 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
   }
 
   Widget _buildCameraBubble(AppSettings settings) {
+    if (!_cameraPreviewReady) return const SizedBox.shrink();
     final size = MediaQuery.sizeOf(context);
     final shape = settings.contentCreatorBubbleShape;
     final isCircle = shape == AppSettings.contentCreatorBubbleShapeCircle;
@@ -454,14 +461,20 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
   }
 
   Widget _buildCameraPreviewFit(BoxFit fit) {
-    final preview = _cameraController!.value.previewSize!;
+    final controller = _cameraController;
+    final preview = controller?.value.previewSize;
+    if (controller == null ||
+        preview == null ||
+        !controller.value.isInitialized) {
+      return _buildCameraFallback(compact: true);
+    }
     return ClipRect(
       child: FittedBox(
         fit: fit,
         child: SizedBox(
           width: preview.width,
           height: preview.height,
-          child: CameraPreview(_cameraController!),
+          child: CameraPreview(controller),
         ),
       ),
     );

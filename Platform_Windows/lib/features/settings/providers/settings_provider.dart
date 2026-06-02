@@ -263,6 +263,14 @@ class SettingsNotifier extends Notifier<AppSettings>
           _normalizeContentCreatorRecordingAudioMode(
         prefs.getString(_contentCreatorRecordingAudioModeKey),
       ),
+      importColorMode: _normalizeImportColorMode(
+        prefs.getString(_importColorModeKey),
+      ),
+      reduceMotion: prefs.getBool(_reduceMotionKey) ?? false,
+      uiScale: _normalizeUiScale(prefs.getDouble(_uiScaleKey)),
+      updateChannel: _normalizeUpdateChannel(
+        prefs.getString(_updateChannelKey),
+      ),
     );
   }
 

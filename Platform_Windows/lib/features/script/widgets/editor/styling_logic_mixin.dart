@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import './markup_controller.dart';
+import '../../services/editor_inline_style_operation.dart';
 
 // v3.9.5.60: Hardened Geometric Styling Logic
 // — Proper nested-style toggle: uses regex search instead of boundary-only matching
@@ -53,7 +54,14 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
     final end = selection.end;
 
     // Check if cursor/selection is INSIDE this style (detect mode)
-    final isActive = _isStyleActiveAt(text, start, end, open, close);
+    final isActive = selection.isCollapsed
+        ? _isStyleActiveAt(text, start, end, open, close)
+        : EditorInlineStyleOperation.selectionState(
+            text,
+            selection,
+            open: open,
+            close: close,
+          ).fullyStyled;
 
     if (isActive) {
       // ── TOGGLE OFF: Find the enclosing open/close pair and remove them ──
@@ -70,26 +78,70 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
     } else {
       // ── TOGGLE ON: Wrap selection with tags ────────────────────────────
       if (selection.isCollapsed) {
-        final left = text.substring(0, start);
-        final right = text.substring(start);
-        controller.value = TextEditingValue(
-          text: left + open + close + right,
-          selection: TextSelection.collapsed(offset: start + open.length),
+        controller.value = EditorInlineStyleOperation.applyForced(
+          text: text,
+          selection: selection,
+          open: open,
+          close: close,
+          enable: true,
         );
       } else {
-        final before = text.substring(0, start);
-        final selected = text.substring(start, end);
-        final after = text.substring(end);
-        controller.value = TextEditingValue(
-          text: before + open + selected + close + after,
-          selection: TextSelection(
-            baseOffset: start + open.length,
-            extentOffset: end + open.length,
-          ),
+        controller.value = EditorInlineStyleOperation.applyForced(
+          text: text,
+          selection: selection,
+          open: open,
+          close: close,
+          enable: true,
         );
       }
     }
     if (!skipHistory) saveHistory(description: 'Toggle Style: $open');
+  }
+
+  SelectionStyleState selectionStyleState(
+    String open,
+    String close, {
+    MarkupController? controllerOverride,
+  }) {
+    final controller = controllerOverride ?? activeController;
+    if (controller == null) return const SelectionStyleState(0, false);
+    final selection = (controller.externalSelection != null &&
+            controller.externalSelection!.isValid &&
+            !controller.externalSelection!.isCollapsed)
+        ? controller.externalSelection!
+        : controller.selection;
+    if (!selection.isValid) return const SelectionStyleState(0, false);
+    return EditorInlineStyleOperation.selectionState(
+      controller.text,
+      selection,
+      open: open,
+      close: close,
+    );
+  }
+
+  void forceSelectionStyle(
+    String open,
+    String close, {
+    required bool enable,
+    MarkupController? controllerOverride,
+    bool skipHistory = false,
+  }) {
+    final controller = controllerOverride ?? activeController;
+    if (controller == null) return;
+    final selection = (controller.externalSelection != null &&
+            controller.externalSelection!.isValid &&
+            !controller.externalSelection!.isCollapsed)
+        ? controller.externalSelection!
+        : controller.selection;
+    if (!selection.isValid) return;
+    controller.value = EditorInlineStyleOperation.applyForced(
+      text: controller.text,
+      selection: selection,
+      open: open,
+      close: close,
+      enable: enable,
+    );
+    if (!skipHistory) saveHistory(description: 'Set Style: $open');
   }
 
   /// Specialized logic for parameterized inline styles (like `[size=40]`, `[font=Inter]`).

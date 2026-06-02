@@ -54,7 +54,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
             paraAlign ??= firstWord.alignment;
           }
 
-          return Padding(
+          final paragraphWidget = Padding(
             padding: EdgeInsets.only(
               bottom: presentationFontSize *
                   (settings.lineSpacing - 1.0).clamp(0.0, 1.0),
@@ -80,9 +80,14 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                 }).toList(),
               ),
             ),
-          )
-              .animate(key: ValueKey('para_${para.first.index}'))
-              .fadeIn(duration: 300.ms);
+          );
+          final liveReading =
+              tState.isListening || tState.isStarting || _manualScrolling;
+          return liveReading
+              ? paragraphWidget
+              : paragraphWidget
+                  .animate(key: ValueKey('para_${para.first.index}'))
+                  .fadeIn(duration: 300.ms);
         }).toList(),
       ),
     );
@@ -102,6 +107,10 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   isManualMode: false,
                   type: MarkupDecorationType.background,
                   gapTolerance: _decorationGapTolerance(presenterWordGap),
+                  moveHighlightsToText:
+                      ScriptColorInversionService.highlightsMoveToText(
+                    settings,
+                  ),
                 ),
               ),
             ),
@@ -118,6 +127,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   isManualMode: false,
                   type: MarkupDecorationType.underline,
                   gapTolerance: _decorationGapTolerance(presenterWordGap),
+                  underlineColor: Color(settings.futureWordColor),
                 ),
               ),
             ),
@@ -154,7 +164,11 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
   }) {
     final i = word.index;
     final hasBookmark = bookmarkWordIndexes.contains(i);
-    final isCurrent = i == tState.confirmedWordIndex;
+    final readingActive = tState.isListening ||
+        tState.isStarting ||
+        _manualScrolling ||
+        tState.confirmedWordIndex > 0;
+    final isCurrent = readingActive && i == tState.confirmedWordIndex;
     final isPast = i < tState.confirmedWordIndex;
     final visibleWordText = word.raw
         .replaceAll(_tagStripRe, '')
@@ -285,14 +299,14 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     required int currentIndex,
     required AppSettings settings,
   }) {
+    Color baseColor;
     if (isCurrent) {
-      return settings.showCurrentWordHighlight
+      baseColor = settings.showCurrentWordHighlight
           ? Color(settings.currentWordColor)
           : (settings.showUpcomingWordColor
               ? Color(settings.futureWordColor)
               : (word.textColor ?? Color(settings.futureWordColor)));
-    }
-    if (isPast) {
+    } else if (isPast) {
       final base = settings.showUpcomingWordColor
           ? Color(settings.futureWordColor)
           : (word.textColor ?? Color(settings.futureWordColor));
@@ -301,10 +315,16 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
           ? settings.pastWordOpacity +
               (1.0 - settings.pastWordOpacity) * (1.0 - pastDist / 3.0) * 0.5
           : settings.pastWordOpacity;
-      return base.withValues(alpha: gradOpacity.clamp(0.0, 1.0));
+      baseColor = base.withValues(alpha: gradOpacity.clamp(0.0, 1.0));
+    } else {
+      baseColor = settings.showUpcomingWordColor
+          ? Color(settings.futureWordColor)
+          : (word.textColor ?? const Color(0xFFFFFFFF));
     }
-    return settings.showUpcomingWordColor
-        ? Color(settings.futureWordColor)
-        : (word.textColor ?? const Color(0xFFFFFFFF));
+    return ScriptColorInversionService.presenterTextColor(
+      word: word,
+      settings: settings,
+      fallback: baseColor,
+    );
   }
 }

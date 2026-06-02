@@ -15,6 +15,11 @@ class EditorState {
   final int? focusBlockIndex;
   final int? selectionBaseOffset;
   final int? selectionExtentOffset;
+  final bool appSelectionActive;
+  final int? appSelectionStartBlock;
+  final int? appSelectionStartOffset;
+  final int? appSelectionEndBlock;
+  final int? appSelectionEndOffset;
   final double? scrollOffset;
 
   EditorState({
@@ -33,6 +38,11 @@ class EditorState {
     this.focusBlockIndex,
     this.selectionBaseOffset,
     this.selectionExtentOffset,
+    this.appSelectionActive = false,
+    this.appSelectionStartBlock,
+    this.appSelectionStartOffset,
+    this.appSelectionEndBlock,
+    this.appSelectionEndOffset,
     this.scrollOffset,
   });
 
@@ -54,6 +64,15 @@ class EditorState {
           'selectionBaseOffset': selectionBaseOffset,
         if (selectionExtentOffset != null)
           'selectionExtentOffset': selectionExtentOffset,
+        'appSelectionActive': appSelectionActive,
+        if (appSelectionStartBlock != null)
+          'appSelectionStartBlock': appSelectionStartBlock,
+        if (appSelectionStartOffset != null)
+          'appSelectionStartOffset': appSelectionStartOffset,
+        if (appSelectionEndBlock != null)
+          'appSelectionEndBlock': appSelectionEndBlock,
+        if (appSelectionEndOffset != null)
+          'appSelectionEndOffset': appSelectionEndOffset,
         if (scrollOffset != null) 'scrollOffset': scrollOffset,
       };
 
@@ -74,6 +93,11 @@ class EditorState {
         focusBlockIndex: json['focusBlockIndex'] as int?,
         selectionBaseOffset: json['selectionBaseOffset'] as int?,
         selectionExtentOffset: json['selectionExtentOffset'] as int?,
+        appSelectionActive: json['appSelectionActive'] as bool? ?? false,
+        appSelectionStartBlock: json['appSelectionStartBlock'] as int?,
+        appSelectionStartOffset: json['appSelectionStartOffset'] as int?,
+        appSelectionEndBlock: json['appSelectionEndBlock'] as int?,
+        appSelectionEndOffset: json['appSelectionEndOffset'] as int?,
         scrollOffset: (json['scrollOffset'] as num?)?.toDouble(),
       );
 }

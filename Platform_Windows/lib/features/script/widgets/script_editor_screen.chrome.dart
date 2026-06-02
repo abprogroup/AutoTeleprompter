@@ -2,6 +2,8 @@ part of 'script_editor_screen.dart';
 
 extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
   Widget _buildBottomActions({bool keyboardVisible = false}) {
+    const actionHeight = 42.0;
+    const actionRadius = 12.0;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -34,26 +36,56 @@ extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
             children: [
               const SizedBox(width: 16),
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _startPresenting,
-                  icon: const Icon(Icons.play_circle_filled_rounded, size: 24),
-                  label: const Text(
-                    'PRESENT',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                      letterSpacing: 1.5,
+                child: SizedBox(
+                  height: actionHeight,
+                  child: ElevatedButton.icon(
+                    onPressed: _startPresenting,
+                    icon:
+                        const Icon(Icons.play_circle_filled_rounded, size: 22),
+                    label: const Text(
+                      'PRESENT',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFBF00),
+                      foregroundColor: Colors.black,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, actionHeight),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(actionRadius),
+                      ),
+                      elevation: 12,
+                      shadowColor:
+                          const Color(0xFFFFBF00).withValues(alpha: 0.5),
                     ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFBF00),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Tooltip(
+                message: 'Audio only recording',
+                child: SizedBox(
+                  width: 50,
+                  height: actionHeight,
+                  child: OutlinedButton(
+                    onPressed: _startAudioOnlyContentCreator,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFFBF00),
+                      side: const BorderSide(color: Color(0xFFFFBF00)),
+                      minimumSize: const Size(50, actionHeight),
+                      maximumSize: const Size(50, actionHeight),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(actionRadius),
+                      ),
+                      padding: EdgeInsets.zero,
                     ),
-                    elevation: 12,
-                    shadowColor: const Color(0xFFFFBF00).withValues(alpha: 0.5),
+                    child: const Icon(Icons.mic_none_outlined, size: 22),
                   ),
                 ),
               ),
@@ -61,19 +93,22 @@ extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
               Tooltip(
                 message: 'Content Creator',
                 child: SizedBox(
-                  width: 54,
-                  height: 48,
+                  width: 50,
+                  height: actionHeight,
                   child: OutlinedButton(
                     onPressed: _startContentCreator,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFFFBF00),
                       side: const BorderSide(color: Color(0xFFFFBF00)),
+                      minimumSize: const Size(50, actionHeight),
+                      maximumSize: const Size(50, actionHeight),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(actionRadius),
                       ),
                       padding: EdgeInsets.zero,
                     ),
-                    child: const Icon(Icons.videocam_rounded, size: 24),
+                    child: const Icon(Icons.videocam_rounded, size: 22),
                   ),
                 ),
               ),
@@ -102,8 +137,13 @@ extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
     return false;
   }
 
-  bool _isPointInsideAppSelectionToolbar(Offset globalPosition) {
-    final context = _appSelectionToolbarKey.currentContext;
+  bool _isPointInsideSelectionPreservingChrome(Offset globalPosition) {
+    return _isPointInsideKey(_appSelectionToolbarKey, globalPosition) ||
+        _isPointInsideKey(_formattingToolbarKey, globalPosition);
+  }
+
+  bool _isPointInsideKey(GlobalKey key, Offset globalPosition) {
+    final context = key.currentContext;
     if (context == null) return false;
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return false;

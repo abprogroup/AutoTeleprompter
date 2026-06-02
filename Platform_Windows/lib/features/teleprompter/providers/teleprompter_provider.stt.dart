@@ -46,7 +46,8 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       );
     }
 
-    _accumulatedTranscript = result.words;
+    _accumulatedTranscript =
+        TeleprompterNotifier.capTranscriptForRelock(result.words);
     final alignmentWindows = _recentTranscriptWindows(_accumulatedTranscript);
     var alignmentTranscript =
         alignmentWindows.isEmpty ? '' : alignmentWindows.first;

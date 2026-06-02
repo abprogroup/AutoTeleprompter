@@ -55,7 +55,30 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _updateManualWordIndex() {
     if (!mounted || !_scrollController.hasClients) return;
-    final bestIndex = _wordIndexNearestReadingLine() ?? _manualWordIndex;
+    if (_scrollController.offset <= 1.0) {
+      final script = ref.read(scriptProvider);
+      if (_manualWordIndex != 0) {
+        _setTeleprompterState(() => _manualWordIndex = 0);
+      }
+      if (script != null &&
+          ref.read(teleprompterProvider).confirmedWordIndex != 0) {
+        ref
+            .read(teleprompterProvider.notifier)
+            .jumpToPosition(0, script: script);
+      }
+      return;
+    }
+    var bestIndex = _wordIndexNearestReadingLine() ?? _manualWordIndex;
+    final settings = ref.read(settingsProvider);
+
+    if (_manualScrolling && settings.scrollMode == 'manual') {
+      final speed = settings.scrollSpeed;
+      if (speed > 0 && bestIndex < _manualWordIndex) {
+        bestIndex = _manualWordIndex;
+      } else if (speed < 0 && bestIndex > _manualWordIndex) {
+        bestIndex = _manualWordIndex;
+      }
+    }
 
     if (bestIndex != _manualWordIndex) {
       _setTeleprompterState(() => _manualWordIndex = bestIndex);
@@ -116,12 +139,12 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _smoothScrollActive = false;
   }
 
-  void _scheduleVisibleWordWindowSync() {
+  void _scheduleVisibleWordWindowSync({bool force = false}) {
     if (_visibleWindowSyncScheduled) return;
     _visibleWindowSyncScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _visibleWindowSyncScheduled = false;
-      if (mounted) _syncVisibleWordWindow(force: true);
+      if (mounted) _syncVisibleWordWindow(force: force);
     });
   }
 
@@ -300,23 +323,46 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         notification.dragDetails != null;
     final isUserScrollUpdate = notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle;
+    final isScrollPositionUpdate =
+        notification is ScrollUpdateNotification && _userBrowsingWhileStopped;
     if (isUserScrollStart || isUserScrollUpdate) {
       _userBrowsingWhileStopped = true;
       _cancelSmoothScroll();
       _stopManualScroll();
     }
 
+    if (_userBrowsingWhileStopped &&
+        (isUserScrollStart || isUserScrollUpdate || isScrollPositionUpdate)) {
+      _syncVisibleWordWindow(force: true);
+      _syncResumePointToReadingLine(throttled: true);
+    }
+
     if (notification is ScrollEndNotification && _userBrowsingWhileStopped) {
       _userBrowsingWhileStopped = false;
+      _lastBrowsingWordSync = null;
       _syncVisibleWordWindow(force: true);
       _syncResumePointToReadingLine();
     }
     return false;
   }
 
-  void _syncResumePointToReadingLine() {
+  void _syncResumePointToReadingLine({bool throttled = false}) {
+    if (throttled) {
+      final now = DateTime.now();
+      final previous = _lastBrowsingWordSync;
+      if (previous != null && now.difference(previous).inMilliseconds < 80) {
+        return;
+      }
+      _lastBrowsingWordSync = now;
+    }
+
     final script = ref.read(scriptProvider);
     if (script == null) return;
+    if (_scrollController.hasClients && _scrollController.offset <= 1.0) {
+      _setTeleprompterState(() => _manualWordIndex = 0);
+      ref.read(teleprompterProvider.notifier).jumpToPosition(0, script: script);
+      return;
+    }
     final targetIndex = _wordIndexNearestReadingLine();
     if (targetIndex == null) return;
     _setTeleprompterState(() => _manualWordIndex = targetIndex);

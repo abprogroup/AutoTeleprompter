@@ -1,6 +1,13 @@
 part of 'content_creator_screen.dart';
 
 extension _ContentCreatorCameraWidgets on _ContentCreatorScreenState {
+  bool get _cameraPreviewReady {
+    final controller = _cameraController;
+    return controller != null &&
+        controller.value.isInitialized &&
+        controller.value.previewSize != null;
+  }
+
   Widget _buildCameraFallback({bool compact = false}) {
     if (_isCameraInitializing) {
       return const Center(

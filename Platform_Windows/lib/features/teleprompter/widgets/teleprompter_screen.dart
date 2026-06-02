@@ -13,10 +13,12 @@ import '../models/alignment_result.dart';
 import '../providers/teleprompter_provider.dart';
 import '../services/approximate_spoken_search_service.dart';
 import '../services/presenter_input_lock_service.dart';
+import '../../script/services/script_color_inversion_service.dart';
 import '../../script/providers/script_provider.dart';
 import '../../script/models/script.dart';
 import '../../script/services/script_bookmark_service.dart';
 import '../../script/services/markup_decoration_service.dart';
+import '../../script/services/highlight_band_painter.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
@@ -94,7 +96,16 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _bookmarksLoaded = false;
   List<ScriptBookmark> _bookmarks = const [];
   bool _visibleWindowSyncScheduled = false;
+  String? _visibleWindowLayoutKey;
+  String? _paragraphCacheKey;
+  List<List<ScriptWord>> _paragraphCache = const [];
+  String? _lastPublishedRemoteScrollMode;
+  double? _lastPublishedRemoteScrollSpeed;
+  bool? _lastPublishedRemoteScriptActive;
+  bool? _lastPublishedRemoteSessionActive;
+  bool? _lastPublishedRemoteIsStarting;
   DateTime? _lastVisibleWindowSync;
+  DateTime? _lastBrowsingWordSync;
   bool _windowsControlsHovering = false;
   bool _presenterFullscreen = false;
 
@@ -162,6 +173,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _wordTrackTimer?.cancel();
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
+    ref.read(remoteControlProvider).publishPresenterState(
+          scriptActive: false,
+          sessionActive: false,
+          isStarting: false,
+          scrollMode: 'auto',
+          scrollSpeed: 0,
+        );
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
     _webviewController?.dispose();

@@ -2,7 +2,7 @@ part of 'teleprompter_provider.dart';
 
 extension TeleprompterNotifierRelock on TeleprompterNotifier {
   List<String> _recentTranscriptWindows(String transcript) =>
-      TeleprompterNotifier.rollingTranscriptWindowsForAlignment(transcript);
+      TeleprompterNotifier.liveTranscriptWindowsForAlignment(transcript);
 
   int? _relockTargetFromTranscript(Script script, String transcript) {
     _lastRelockScope = 'none';

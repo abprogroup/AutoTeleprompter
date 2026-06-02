@@ -75,6 +75,8 @@ class _EditorBlock extends StatelessWidget {
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
     final maxFontSize = EditorTextGeometryService.maxFontSize(
         controller.text, settings.fontSize);
+    controller.backgroundHighlightsAsText =
+        ScriptColorInversionService.highlightsMoveToText(settings);
     final editorTextStyle = TextStyle(
       color: Colors.white,
       fontSize: settings.fontSize,
@@ -252,9 +254,9 @@ class _EditorBlock extends StatelessWidget {
                       onTap: onTap,
                       textDirection: textDirection,
                       textAlign: textAlign,
+                      selectionHeightStyle: ui.BoxHeightStyle.strut,
                       selectionWidthStyle: ui.BoxWidthStyle.tight,
                       cursorColor: Colors.amber,
-                      cursorHeight: maxFontSize,
                       strutStyle: editorStrutStyle,
                       style: editorTextStyle,
                       decoration: const InputDecoration(
@@ -341,20 +343,37 @@ class _AppSelectionReplacementFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    if (newValue.text.contains('\n')) {
-      return oldValue;
-    }
-    final external = controller.externalSelection;
-    if (external == null ||
-        !external.isValid ||
-        external.isCollapsed ||
-        oldValue.text == newValue.text) {
-      return newValue;
-    }
-    final replacement = _replacementDelta(oldValue.text, newValue.text);
+    return EditorSelectionReplacement.format(
+      oldValue: oldValue,
+      newValue: newValue,
+      externalSelection: controller.externalSelection,
+      isGlobalSelected: controller.isGlobalSelected,
+    );
+  }
+}
+
+@visibleForTesting
+class EditorSelectionReplacement {
+  static TextEditingValue format({
+    required TextEditingValue oldValue,
+    required TextEditingValue newValue,
+    required TextSelection? externalSelection,
+    required bool isGlobalSelected,
+  }) {
+    if (oldValue.text == newValue.text) return newValue;
+    final replacement = replacementDelta(oldValue.text, newValue.text);
     if (replacement == null) return newValue;
-    final start = external.start.clamp(0, oldValue.text.length).toInt();
-    final end = external.end.clamp(start, oldValue.text.length).toInt();
+    if (replacement.contains('\n')) return oldValue;
+
+    final selection = _activeReplacementSelection(
+      oldValue: oldValue,
+      externalSelection: externalSelection,
+      isGlobalSelected: isGlobalSelected,
+    );
+    if (selection == null) return newValue;
+
+    final start = selection.start.clamp(0, oldValue.text.length).toInt();
+    final end = selection.end.clamp(start, oldValue.text.length).toInt();
     if (end <= start) return newValue;
     final suffixPrefix =
         start == 0 ? MarkupController.openTagsAt(oldValue.text, end) : '';
@@ -370,7 +389,29 @@ class _AppSelectionReplacementFormatter extends TextInputFormatter {
     );
   }
 
-  String? _replacementDelta(String oldText, String newText) {
+  static TextSelection? _activeReplacementSelection({
+    required TextEditingValue oldValue,
+    required TextSelection? externalSelection,
+    required bool isGlobalSelected,
+  }) {
+    final external = externalSelection;
+    if (external != null && external.isValid && !external.isCollapsed) {
+      return TextSelection(
+        baseOffset: external.start,
+        extentOffset: external.end,
+      );
+    }
+    final native = oldValue.selection;
+    if (native.isValid && !native.isCollapsed) {
+      return TextSelection(baseOffset: native.start, extentOffset: native.end);
+    }
+    if (isGlobalSelected && oldValue.text.isNotEmpty) {
+      return TextSelection(baseOffset: 0, extentOffset: oldValue.text.length);
+    }
+    return null;
+  }
+
+  static String? replacementDelta(String oldText, String newText) {
     var prefix = 0;
     while (prefix < oldText.length &&
         prefix < newText.length &&

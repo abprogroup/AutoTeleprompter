@@ -63,7 +63,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   // STT tuning
   static const int _maxAdvancePerUpdate = 30;
   static const int _visibleLocaleAssistAfterWaits = 2;
+  static const int _sttLiveAlignmentWindowWords = 10;
   static const int _sttAlignmentWindowWords = 18;
+  static const int _sttRelockTranscriptMaxWords = 96;
   static const int _stuckRelockAfterWaits = 10;
   static const int _relaxedVisibleRelockAfterWaits = 24;
   static const int _globalRelockAfterWaits = 18;
@@ -178,6 +180,28 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         transcript,
         windowWords: windowWords,
         maxWindows: maxWindows,
+      );
+
+  static List<String> liveTranscriptWindowsForAlignment(
+    String transcript, {
+    int shortWindowWords = _sttLiveAlignmentWindowWords,
+    int longWindowWords = _sttAlignmentWindowWords,
+    int maxWindows = 8,
+  }) =>
+      SttRecognitionPolicyService.liveTranscriptWindowsForAlignment(
+        transcript,
+        shortWindowWords: shortWindowWords,
+        longWindowWords: longWindowWords,
+        maxWindows: maxWindows,
+      );
+
+  static String capTranscriptForRelock(
+    String transcript, {
+    int maxWords = _sttRelockTranscriptMaxWords,
+  }) =>
+      SttRecognitionPolicyService.capTranscriptWords(
+        transcript,
+        maxWords: maxWords,
       );
 
   /// Common handler for STT results - shared between Google and Whisper.

@@ -226,6 +226,16 @@ extension _ScriptEditorSelectionTraceParts on _ScriptEditorScreenState {
             safeSelection,
             rawText: raw,
           );
+    final lanes = editable == null
+        ? const <Rect>[]
+        : HighlightBandPainter.textLaneBands(
+            rects,
+            editable.size,
+            topPaddingRatio: 0.02,
+            bottomPaddingRatio: 0.14,
+            minHeight: 6.0,
+            maxHeight: 160.0,
+          );
     return [
       '',
       'BLOCK $blockIndex',
@@ -238,6 +248,8 @@ extension _ScriptEditorSelectionTraceParts on _ScriptEditorScreenState {
           'visible=${_formatSelection(visibleSelection)}',
       'visibleContext=${visibleSelection == null ? "none" : _debugVisibleContext(visible, visibleSelection.start)}',
       'renderEditableBands=${_formatRects(rects)}',
+      'finalPaintLanes=${_formatRects(lanes)}',
+      'finalPaintRegion=${editable == null ? "none" : HighlightBandPainter.describeConnectedRegion(lanes, editable.size)}',
     ].join('\n');
   }
 

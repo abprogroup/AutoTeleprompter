@@ -9,23 +9,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_windows/webview_windows.dart';
+import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/webview2/webview2_runtime_config.dart';
 import '../models/alignment_result.dart';
 import '../services/content_camera_device_classifier.dart';
 import '../services/presenter_input_lock_service.dart';
 import '../services/recording_media_probe_service.dart';
 import '../services/recording_export_service.dart';
+import '../../script/services/script_color_inversion_service.dart';
+import '../services/wav_audio_recorder_service.dart';
 import '../providers/teleprompter_provider.dart';
 import '../services/approximate_spoken_search_service.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
+import '../../../core/window/presenter_fullscreen_service.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
 import '../../script/services/script_bookmark_service.dart';
 import '../../script/services/markup_decoration_service.dart';
+import '../../script/services/highlight_band_painter.dart';
 import 'teleprompter_screen.dart';
 
 part 'content_creator_screen.widgets.dart';
@@ -46,7 +52,9 @@ final _contentCreatorTagStripRe = RegExp(
 enum _ContentCameraSourceMode { native, usb, virtual, all }
 
 class ContentCreatorScreen extends ConsumerStatefulWidget {
-  const ContentCreatorScreen({super.key});
+  final bool audioOnlyEntry;
+
+  const ContentCreatorScreen({super.key, this.audioOnlyEntry = false});
 
   @override
   ConsumerState<ContentCreatorScreen> createState() =>
@@ -59,6 +67,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   List<CameraDescription> _availableCameras = const [];
   String? _selectedCameraName;
   final ScrollController _scrollController = ScrollController();
+  final WavAudioRecorderService _wavAudioRecorder = WavAudioRecorderService();
   final List<GlobalKey> _wordKeys = [];
   bool _isInit = false;
   bool _isCameraInitializing = true;
@@ -67,6 +76,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   _ContentCameraSourceMode _cameraSourceMode = _ContentCameraSourceMode.native;
   int _cameraInitGeneration = 0;
   bool _isRecording = false;
+  bool _isAudioOnlyRecording = false;
   String? _cameraError;
   int _countdown = 0;
   int _recordSeconds = 0;
@@ -95,9 +105,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   bool _resumeDialogShown = false;
   bool _contentControlsVisible = true;
   bool _contentControlsHovering = false;
+  bool _contentManualScrolling = false;
   bool _contentDebugConsoleMinimized = false;
   bool _contentDebugConsolePinned = false;
   bool _contentFrameConfirmed = false;
+  bool _contentFullscreen = false;
   bool _contentResumeDecisionPending = false;
   int _lastContentRotation = 0;
   int _contentEntryResumeIndex = 0;
@@ -141,7 +153,28 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       });
       _initContentWebViewController();
     });
-    _initializeCamera();
+    final settings = ref.read(settingsProvider);
+    if (widget.audioOnlyEntry &&
+        settings.contentCreatorRecordingFormat !=
+            AppSettings.contentCreatorRecordingFormatWav) {
+      unawaited(
+        ref.read(settingsProvider.notifier).setContentCreatorRecordingFormat(
+              AppSettings.contentCreatorRecordingFormatWav,
+            ),
+      );
+      unawaited(
+        ref.read(settingsProvider.notifier).setContentCreatorRecordingAudioMode(
+              AppSettings.contentCreatorRecordingAudioCamera,
+            ),
+      );
+    }
+    if (widget.audioOnlyEntry || _contentAudioOnlyMode(settings)) {
+      _contentFrameConfirmed = true;
+      _isCameraInitializing = false;
+      _logContentDebug('audio-only content creator entry');
+    } else {
+      _initializeCamera();
+    }
   }
 
   @override
@@ -151,7 +184,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     _wordTrackTimer?.cancel();
     _positionCommitTimer?.cancel();
     _hideContentControlsTimer?.cancel();
+    unawaited(_setContentFullscreen(false));
     _cameraController?.dispose();
+    unawaited(_wavAudioRecorder.cancel());
     unawaited(_stopContentSpeechSessionIfOwnedByRecording());
     try {
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
@@ -183,8 +218,14 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   bool _contentSessionActive(TeleprompterState tState) {
     return _isRecording ||
         _recordStartInFlight ||
+        _contentManualScrolling ||
         tState.isListening ||
         tState.isStarting;
+  }
+
+  bool _contentAudioOnlyMode(AppSettings settings) {
+    return settings.contentCreatorRecordingFormat ==
+        AppSettings.contentCreatorRecordingFormatWav;
   }
 
   void _scheduleHideContentControls() {
@@ -229,8 +270,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     final script = ref.watch(scriptProvider);
     final settings = ref.watch(settingsProvider);
     final tState = ref.watch(teleprompterProvider);
+    final audioOnlyMode = _contentAudioOnlyMode(settings);
 
-    if (!_contentFrameConfirmed) {
+    if (!audioOnlyMode && !_contentFrameConfirmed) {
       return Scaffold(
         backgroundColor: Colors.black,
         body: _buildCameraPreviewEntry(settings),
@@ -269,7 +311,6 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         _wordKeys.removeRange(script.words.length, _wordKeys.length);
       }
       unawaited(_loadBookmarksForScript(script));
-      _maybeShowContentResumePrompt(script);
     }
     final activeWordIndex = script == null || script.words.isEmpty
         ? 0
@@ -387,7 +428,8 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                   ),
                 ),
               ),
-            if (_isInit &&
+            if (!audioOnlyMode &&
+                _isInit &&
                 settings.contentCreatorFeedMode ==
                     AppSettings.contentCreatorFeedBubble)
               _buildCameraBubble(settings),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'markup_decoration_service.dart';
+
 // v3.9.5.60: Sovereign Styling Service
 // ── Core Styling Engine ──────────────────────────────────────────────────────
 
@@ -10,6 +12,98 @@ class StylingService {
     final regex = RegExp(
         r'\[\/?(u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
     return text.replaceAll(regex, '');
+  }
+
+  /// Stable visible-style signature used for editor history cancellation.
+  ///
+  /// Raw inline markup can legitimately normalize while a user toggles a style
+  /// on and back off during one open toolbar session. History should treat that
+  /// as a canceled action when the visible text and effective visible styles are
+  /// back at the baseline.
+  static String semanticStyleSignature(String text) {
+    if (text.isEmpty) return '';
+
+    final buffer = StringBuffer();
+    var bold = false;
+    var underline = false;
+    var italic = false;
+    final colors = <String>[];
+    final backgrounds = <String>[];
+    final sizes = <String>[];
+    final fonts = <String>[];
+    final aligns = <String>[];
+    final directions = <String>[];
+
+    String styleKey() => [
+          bold ? 'b1' : 'b0',
+          underline ? 'u1' : 'u0',
+          italic ? 'i1' : 'i0',
+          colors.isEmpty ? 'c=' : 'c=${colors.last}',
+          backgrounds.isEmpty ? 'bg=' : 'bg=${backgrounds.last}',
+          sizes.isEmpty ? 's=' : 's=${sizes.last}',
+          fonts.isEmpty ? 'f=' : 'f=${fonts.last}',
+          aligns.isEmpty ? 'a=' : 'a=${aligns.last}',
+          directions.isEmpty ? 'd=' : 'd=${directions.last}',
+        ].join('|');
+
+    void emit(String visibleText) {
+      if (visibleText.isEmpty) return;
+      buffer
+        ..write(styleKey())
+        ..write('\u001f')
+        ..write(visibleText)
+        ..write('\u001e');
+    }
+
+    var cursor = 0;
+    for (final match in MarkupDecorationParser.tagRegex.allMatches(text)) {
+      if (match.start > cursor) emit(text.substring(cursor, match.start));
+      final tag = match.group(0)!;
+      if (tag == '**') {
+        bold = !bold;
+      } else if (tag == '[u]') {
+        underline = true;
+      } else if (tag == '[/u]') {
+        underline = false;
+      } else if (tag == '[i]') {
+        italic = true;
+      } else if (tag == '[/i]') {
+        italic = false;
+      } else if (tag.startsWith('[color=')) {
+        colors.add(tag.substring('[color='.length, tag.length - 1));
+      } else if (tag == '[/color]') {
+        if (colors.isNotEmpty) colors.removeLast();
+      } else if (tag.startsWith('[bg=')) {
+        backgrounds.add(tag.substring('[bg='.length, tag.length - 1));
+      } else if (tag == '[/bg]') {
+        if (backgrounds.isNotEmpty) backgrounds.removeLast();
+      } else if (tag.startsWith('[size=')) {
+        sizes.add(tag.substring('[size='.length, tag.length - 1));
+      } else if (tag == '[/size]') {
+        if (sizes.isNotEmpty) sizes.removeLast();
+      } else if (tag.startsWith('[font=')) {
+        fonts.add(tag.substring('[font='.length, tag.length - 1));
+      } else if (tag == '[/font]') {
+        if (fonts.isNotEmpty) fonts.removeLast();
+      } else if (tag.startsWith('[align=')) {
+        aligns.add(tag.substring('[align='.length, tag.length - 1));
+      } else if (tag.startsWith('[/align')) {
+        if (aligns.isNotEmpty) aligns.removeLast();
+      } else if (tag == '[center]' || tag == '[left]' || tag == '[right]') {
+        aligns.add(tag.substring(1, tag.length - 1));
+      } else if (tag == '[/center]' ||
+          tag == '[/left]' ||
+          tag == '[/right]') {
+        if (aligns.isNotEmpty) aligns.removeLast();
+      } else if (tag == '[rtl]' || tag == '[ltr]') {
+        directions.add(tag.substring(1, tag.length - 1));
+      } else if (tag == '[/rtl]' || tag == '[/ltr]') {
+        if (directions.isNotEmpty) directions.removeLast();
+      }
+      cursor = match.end;
+    }
+    if (cursor < text.length) emit(text.substring(cursor));
+    return buffer.toString();
   }
 
   static String recentScriptPreviewText({

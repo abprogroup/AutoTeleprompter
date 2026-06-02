@@ -220,7 +220,7 @@ class CloudOAuthService {
         );
       }
       final redirectUri =
-          'http://127.0.0.1:${callbackServer.port}/oauth/callback';
+          'http://localhost:${callbackServer.port}/oauth/callback';
       final state = _randomBase64Url(24);
       final verifier = _randomBase64Url(64);
       final challenge = _pkceChallenge(verifier);

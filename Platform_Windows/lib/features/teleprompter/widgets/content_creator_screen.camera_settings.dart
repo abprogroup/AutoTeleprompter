@@ -122,9 +122,9 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
                         _buildRecordingOutputSelector(settings),
                         const SizedBox(height: 8),
                         const Text(
-                          'This build records MP4 video with sound and WAV '
-                          'audio-only directly. Extra video formats are '
-                          'planned for future platform research.',
+                          'This app records MP4 video with sound and WAV '
+                          'audio-only directly. Additional video formats '
+                          'require platform-specific recording support.',
                           style: TextStyle(
                             color: Colors.white38,
                             fontSize: 12,

@@ -394,8 +394,8 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
               AppSettings.contentCreatorRecordingFormatMp4,
         );
         _showSnack(
-          'This build records MP4 video and WAV audio directly. Extra video '
-          'file types are planned for future platform work.',
+          'This app records MP4 video and WAV audio directly. Extra video '
+          'file types require platform-specific recording support.',
         );
         _logContentDebug('recording reset unsupported format='
             '${settings.contentCreatorRecordingFormat}');

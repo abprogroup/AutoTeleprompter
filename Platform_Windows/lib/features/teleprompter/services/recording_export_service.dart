@@ -64,9 +64,8 @@ class RecordingExportService {
     }
 
     throw const RecordingExportUnsupportedException(
-      'This build exports camera recordings as MP4 directly. Extra video '
-      'file types are planned after platform-specific recording '
-      'research.',
+      'This app exports camera recordings as MP4 directly. Extra video '
+      'file types require platform-specific recording support.',
     );
   }
 

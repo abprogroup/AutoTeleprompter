@@ -59,7 +59,7 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
         const SizedBox(height: 8),
         const Text(
           'MP4 video and WAV audio are recorded directly. WebM and MOV ProRes '
-          'remain future research items so this build stays light.',
+          'need native platform recording support before they are enabled.',
           style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.3),
         ),
       ],
@@ -458,9 +458,9 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Wi-Fi / IP camera support is planned for future work. For now, '
-              'phone, NDI, OBS, Lightform, and bridge cameras work only when '
-              'Windows exposes them as camera devices.',
+              'Wi-Fi / IP cameras work when Windows exposes them as camera '
+              'devices. Phone, NDI, OBS, Lightform, and bridge cameras use '
+              'the same Windows camera-device path.',
               style:
                   TextStyle(color: Colors.white54, fontSize: 12, height: 1.3),
             ),

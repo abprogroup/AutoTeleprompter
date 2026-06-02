@@ -63,6 +63,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
 
   /// Parses RTF, extracts text with style markup (bold, color, size).
   ParsedFile _parseRtf(String raw) {
+    final codePage = _rtfAnsiCodePage(raw);
     double? detectedFontSize;
     // -- Step 1: Extract color table --
     final colorTable = <String>['000000']; // index 0 = auto/default
@@ -193,13 +194,13 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
           continue;
         }
 
-        // Hex escape \' XX (Windows-1252 codepage for bytes 0x80-0x9F)
+        // Hex escape \'XX. Decode through the document ANSI code page.
         if (next == '\'') {
           i++;
           if (i + 1 < raw.length) {
             final code = int.tryParse(raw.substring(i, i + 2), radix: 16);
             if (code != null && code > 31) {
-              currentText.writeCharCode(_win1252ToUnicode(code));
+              currentText.writeCharCode(_rtfAnsiByteToUnicode(code, codePage));
             }
             i += 2;
           }
@@ -308,7 +309,9 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
 
       // Regular text character (skip bare CR/LF - RTF uses \par)
       if (c != '\r' && c != '\n') {
-        currentText.write(c);
+        final code = raw.codeUnitAt(i);
+        currentText.writeCharCode(
+            code > 0x7F ? _rtfAnsiByteToUnicode(code, codePage) : code);
       }
       i++;
     }
@@ -342,6 +345,101 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
   static bool _isAlpha(int codeUnit) =>
       (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
       (codeUnit >= 0x61 && codeUnit <= 0x7A);
+
+  static int _rtfAnsiCodePage(String raw) {
+    final match = RegExp(r'\\ansicpg(\d+)').firstMatch(raw);
+    return int.tryParse(match?.group(1) ?? '') ?? 1252;
+  }
+
+  static int _rtfAnsiByteToUnicode(int code, int codePage) {
+    if (code < 0x80) return code;
+    return switch (codePage) {
+      1255 => _win1255ToUnicode(code),
+      _ => _win1252ToUnicode(code),
+    };
+  }
+
+  /// Maps Windows-1255 Hebrew RTF bytes to Unicode.
+  static int _win1255ToUnicode(int code) {
+    const map = {
+      0x80: 0x20AC,
+      0x82: 0x201A,
+      0x83: 0x0192,
+      0x84: 0x201E,
+      0x85: 0x2026,
+      0x86: 0x2020,
+      0x87: 0x2021,
+      0x88: 0x02C6,
+      0x89: 0x2030,
+      0x8B: 0x2039,
+      0x91: 0x2018,
+      0x92: 0x2019,
+      0x93: 0x201C,
+      0x94: 0x201D,
+      0x95: 0x2022,
+      0x96: 0x2013,
+      0x97: 0x2014,
+      0x99: 0x2122,
+      0x9B: 0x203A,
+      0xA4: 0x20AA,
+      0xAA: 0x00D7,
+      0xBA: 0x00F7,
+      0xC0: 0x05B0,
+      0xC1: 0x05B1,
+      0xC2: 0x05B2,
+      0xC3: 0x05B3,
+      0xC4: 0x05B4,
+      0xC5: 0x05B5,
+      0xC6: 0x05B6,
+      0xC7: 0x05B7,
+      0xC8: 0x05B8,
+      0xC9: 0x05B9,
+      0xCB: 0x05BB,
+      0xCC: 0x05BC,
+      0xCD: 0x05BD,
+      0xCE: 0x05BE,
+      0xCF: 0x05BF,
+      0xD0: 0x05C0,
+      0xD1: 0x05C1,
+      0xD2: 0x05C2,
+      0xD3: 0x05C3,
+      0xD4: 0x05F0,
+      0xD5: 0x05F1,
+      0xD6: 0x05F2,
+      0xD7: 0x05F3,
+      0xD8: 0x05F4,
+      0xE0: 0x05D0,
+      0xE1: 0x05D1,
+      0xE2: 0x05D2,
+      0xE3: 0x05D3,
+      0xE4: 0x05D4,
+      0xE5: 0x05D5,
+      0xE6: 0x05D6,
+      0xE7: 0x05D7,
+      0xE8: 0x05D8,
+      0xE9: 0x05D9,
+      0xEA: 0x05DA,
+      0xEB: 0x05DB,
+      0xEC: 0x05DC,
+      0xED: 0x05DD,
+      0xEE: 0x05DE,
+      0xEF: 0x05DF,
+      0xF0: 0x05E0,
+      0xF1: 0x05E1,
+      0xF2: 0x05E2,
+      0xF3: 0x05E3,
+      0xF4: 0x05E4,
+      0xF5: 0x05E5,
+      0xF6: 0x05E6,
+      0xF7: 0x05E7,
+      0xF8: 0x05E8,
+      0xF9: 0x05E9,
+      0xFA: 0x05EA,
+      0xFD: 0x200E,
+      0xFE: 0x200F,
+    };
+    return map[code] ?? _win1252ToUnicode(code);
+  }
 
   /// Maps Windows-1252 bytes 0x80-0x9F to their Unicode equivalents.
   static int _win1252ToUnicode(int code) {

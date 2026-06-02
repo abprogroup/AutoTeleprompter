@@ -420,11 +420,12 @@ class ScriptNotifier extends Notifier<Script?> {
       } else if (lower.endsWith('.pages')) {
         result = _parsePages(rawBytes);
       } else if (lower.endsWith('.rtf') || lower.endsWith('.doc')) {
-        final raw = utf8.decode(rawBytes, allowMalformed: true);
-        if (raw.trimLeft().startsWith('{\\rtf')) {
-          result = _parseRtf(raw);
+        final rawRtf = latin1.decode(rawBytes);
+        if (rawRtf.trimLeft().startsWith('{\\rtf')) {
+          result = _parseRtf(rawRtf);
         } else if (lower.endsWith('.rtf')) {
           // Non-RTF content in a .rtf file (e.g. saved before the fix) - treat as UTF-8
+          final raw = utf8.decode(rawBytes, allowMalformed: true);
           result = ParsedFile(raw.trim());
         } else {
           // Legacy .doc binary files - strip non-printable bytes

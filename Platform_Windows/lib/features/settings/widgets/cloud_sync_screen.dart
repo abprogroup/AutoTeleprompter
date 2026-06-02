@@ -50,8 +50,9 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final anyConnected = _connections.any((item) => item.isConnected);
-    final body = _buildCloudManagementBody(anyConnected);
+    final anyCloudConnection =
+        _connections.any((item) => item.isConnected) || _accounts.isNotEmpty;
+    final body = _buildCloudManagementBody(anyCloudConnection);
 
     if (widget.embedded) {
       return body;

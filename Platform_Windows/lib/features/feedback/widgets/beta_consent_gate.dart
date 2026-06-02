@@ -151,7 +151,6 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
             activeColor: const Color(0xFFFFBF00),
             checkColor: Colors.black,
             contentPadding: EdgeInsets.zero,
-            minVerticalPadding: 0,
             controlAffinity: ListTileControlAffinity.leading,
             title: Text(
               isCloudStep

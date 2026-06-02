@@ -789,7 +789,6 @@ class _AutomationRow extends StatelessWidget {
       ),
       trailing: Switch(
         value: false,
-        activeThumbColor: const Color(0xFFFFBF00),
         onChanged: (_) => onActivate(),
       ),
     );

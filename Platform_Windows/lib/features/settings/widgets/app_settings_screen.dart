@@ -550,7 +550,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content:
-              Text('Legacy WebView2 permission flag could not be checked.'),
+              Text('Old microphone permission setting could not be checked.'),
         ),
       );
       return;
@@ -561,8 +561,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       SnackBar(
         content: Text(
           deleted
-              ? 'Legacy WebView2 permission flag cleared.'
-              : 'No legacy WebView2 permission flag was found.',
+              ? 'Old microphone permission setting cleared.'
+              : 'No old microphone permission setting was found.',
         ),
       ),
     );

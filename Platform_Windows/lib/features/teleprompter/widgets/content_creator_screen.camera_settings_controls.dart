@@ -462,7 +462,7 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Wi-Fi / IP camera support is planned for v6. In v5.0.4, '
+              'Wi-Fi / IP camera support is planned for v6. For now, '
               'phone, NDI, OBS, Lightform, and bridge cameras work only when '
               'Windows exposes them as camera devices.',
               style:

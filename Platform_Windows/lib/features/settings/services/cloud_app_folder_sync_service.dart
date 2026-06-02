@@ -83,7 +83,7 @@ class CloudAppFolderSyncService {
         ),
       _ => const CloudSyncResult(
           ok: false,
-          message: 'This provider does not support account sync in v5.',
+          message: 'This provider does not support account sync in this build.',
         ),
     };
   }

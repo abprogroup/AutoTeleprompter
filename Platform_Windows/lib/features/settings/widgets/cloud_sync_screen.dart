@@ -87,7 +87,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Local Folder Bridge',
+            'Cloud Connections',
             style: TextStyle(
               color: Colors.white,
               fontSize: 20,
@@ -96,16 +96,16 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Connect Google Drive or Dropbox accounts when this build has '
-            'provider credentials, or link local folders that are already '
-            'synced by iCloud, Google Drive, or Dropbox. Windows iCloud uses '
-            'the local iCloud Drive folder bridge in this Windows build.',
+            'Connect Google Drive or Dropbox accounts with provider '
+            'credentials, or link folders already synced by iCloud, Google '
+            'Drive, or Dropbox. Windows iCloud uses the local iCloud Drive '
+            'folder bridge in this Windows build.',
             style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
           const SizedBox(height: 16),
           const _CloudDisclosureNote(),
           const SizedBox(height: 32),
-          const _SectionLabel('LOCAL SYNCED FOLDERS'),
+          const _SectionLabel('PERSONAL CLOUD STORAGE'),
           const SizedBox(height: 12),
           if (_loading)
             const Center(
@@ -401,9 +401,9 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'The current beta can link and open local synced folders. Turning on '
-          'automatic script sync or recording upload needs the account '
-          'connector, provider sync engine, and conflict-safe file handling.',
+          'This build supports manual account sync and local synced folders. '
+          'Turning on automatic script sync or recording upload needs the '
+          'background sync scheduler and conflict-safe file handling.',
           style: TextStyle(color: Colors.white70, height: 1.35),
         ),
         actions: [
@@ -451,9 +451,9 @@ class _CloudDisclosureNote extends StatelessWidget {
             Border.all(color: const Color(0xFFFFBF00).withValues(alpha: .2)),
       ),
       child: const Text(
-        'Cloud disclosure: local folder links use folders already synced on '
-        'this device. Google Drive and Dropbox account connections use the '
-        'selected provider account and its terms. AutoTeleprompter Cloud is a '
+        'Cloud disclosure: Google Drive and Dropbox account connections use '
+        'the selected provider account and its terms. Local folder links use '
+        'folders already synced on this device. AutoTeleprompter Cloud is a '
         'separate future managed service and is not active in this build.',
         style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.35),
       ),
@@ -737,20 +737,20 @@ class _AutomationCard extends StatelessWidget {
           _AutomationRow(
             title: 'Auto-sync on save',
             subtitle: anyConnected
-                ? 'Use the linked folder manually in this beta. Automatic '
-                    'copy/sync is not active yet.'
-                : 'Choose a local synced folder first. Automatic copy/sync is '
-                    'not active yet.',
+                ? 'Use manual account sync or the linked folder for now. '
+                    'Automatic copy/sync is not active yet.'
+                : 'Connect an account or choose a local synced folder first. '
+                    'Automatic copy/sync is not active yet.',
             onActivate: onActivate,
           ),
           const Divider(color: Colors.white12),
           _AutomationRow(
             title: 'Upload recordings automatically',
             subtitle: anyConnected
-                ? 'Use Open folder after recording. Automatic recording copy '
-                    'is not active yet.'
-                : 'Choose a local synced folder first. Automatic recording '
-                    'copy is not active yet.',
+                ? 'Use manual account sync or Open folder after recording. '
+                    'Automatic recording copy is not active yet.'
+                : 'Connect an account or choose a local synced folder first. '
+                    'Automatic recording copy is not active yet.',
             onActivate: onActivate,
           ),
         ],

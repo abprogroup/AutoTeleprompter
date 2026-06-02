@@ -100,7 +100,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       return null;
     }
     final axis = _presenterScrollAxis();
-    final targetAxis = _presenterReadingLineAxis(axis);
+    final targetAxis = _presenterReadingTargetAxis(axis);
 
     int? bestIndex;
     double bestDist = double.infinity;
@@ -115,7 +115,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       if (ctx == null) continue;
       final box = ctx.findRenderObject() as RenderBox?;
       if (box == null || !box.attached) continue;
-      final wordAxis = _presenterBoxAxisCenter(box, axis);
+      final wordAxis = _presenterBoxAxisLeading(box, axis);
       final dist = (wordAxis - targetAxis).abs();
       if (dist < bestDist) {
         bestDist = dist;
@@ -226,8 +226,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final settings = ref.read(settingsProvider);
     final screenH = MediaQuery.of(context).size.height;
     final axis = _presenterScrollAxis();
-    final wordAxis = _presenterBoxAxisCenter(box, axis);
-    final targetAxis = _presenterReadingLineAxis(axis);
+    final wordAxis = _presenterBoxAxisLeading(box, axis);
+    final targetAxis = _presenterReadingTargetAxis(axis);
     final rowProgress = anticipate ? _visualRowProgress(targetIndex, box) : 0.0;
     final lineAdvance =
         (box.size.height * settings.lineSpacing).clamp(0.0, screenH * 0.22);
@@ -395,5 +395,13 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(targetIndex, script: script);
+  }
+
+  double _presenterReadingTargetAxis(_PresenterScrollAxis axis) {
+    final settings = ref.read(settingsProvider);
+    final lineAxis = _presenterReadingLineAxis(axis);
+    final fontSize = settings.fontSize * 2.0;
+    final gap = (fontSize * 0.10).clamp(4.0, 14.0);
+    return lineAxis + axis.direction * gap;
   }
 }

@@ -149,6 +149,17 @@ extension _TeleprompterPresenterTransformParts on _TeleprompterScreenState {
     return _presenterAxisValue(center, axis);
   }
 
+  double _presenterBoxAxisLeading(
+    RenderBox box,
+    _PresenterScrollAxis axis,
+  ) {
+    final bounds = _presenterGlobalRect(box);
+    if (axis.horizontal) {
+      return axis.direction >= 0 ? bounds.left : bounds.right;
+    }
+    return axis.direction >= 0 ? bounds.top : bounds.bottom;
+  }
+
   Rect _presenterGlobalRect(RenderBox box) {
     final points = [
       box.localToGlobal(Offset.zero),

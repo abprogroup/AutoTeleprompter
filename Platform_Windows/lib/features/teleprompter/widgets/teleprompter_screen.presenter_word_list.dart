@@ -183,7 +183,6 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
       word: word,
       isCurrent: isCurrent,
       isPast: isPast,
-      currentIndex: tState.confirmedWordIndex,
       settings: settings,
     );
     final joinsPreviousHighlight = _sameHighlightColor(
@@ -283,7 +282,6 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     required ScriptWord word,
     required bool isCurrent,
     required bool isPast,
-    required int currentIndex,
     required AppSettings settings,
   }) {
     Color baseColor;
@@ -297,12 +295,9 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
       final base = settings.showUpcomingWordColor
           ? Color(settings.futureWordColor)
           : (word.textColor ?? Color(settings.futureWordColor));
-      final pastDist = (word.index - currentIndex).abs();
-      final gradOpacity = pastDist <= 3
-          ? settings.pastWordOpacity +
-              (1.0 - settings.pastWordOpacity) * (1.0 - pastDist / 3.0) * 0.5
-          : settings.pastWordOpacity;
-      baseColor = base.withValues(alpha: gradOpacity.clamp(0.0, 1.0));
+      baseColor = base.withValues(
+        alpha: settings.pastWordOpacity.clamp(0.0, 1.0),
+      );
     } else {
       baseColor = settings.showUpcomingWordColor
           ? Color(settings.futureWordColor)

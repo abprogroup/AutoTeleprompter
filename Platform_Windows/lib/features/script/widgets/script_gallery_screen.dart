@@ -13,6 +13,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
+import '../../remote/widgets/remote_status_card.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
@@ -239,6 +240,37 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                             const ScriptEditorScreen(shouldAutoLoad: true)),
                   );
                 },
+              ),
+              const SizedBox(height: 12),
+              if (Platform.isWindows) ...[
+                RemoteStatusCard(
+                  onOpenSettings: () {
+                    if (!hasProAccess) {
+                      _showPremiumHub(context, auth);
+                      return;
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AppSettingsScreen(
+                          initialTab: AppSettingsTab.remote,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+              _GalleryActionCard(
+                title: 'Cloud Storage',
+                subtitle:
+                    'Link local folders or connect provider accounts when available',
+                icon: Icons.cloud_outlined,
+                color: const Color(0xFFFFBF00),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
+                ),
               ),
               const SizedBox(height: 38),
               Row(

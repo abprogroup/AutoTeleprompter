@@ -13,6 +13,7 @@ import '../../../core/security/secure_script_store.dart';
 import '../../../features/teleprompter/services/word_aligner.dart';
 
 part 'script_provider.docx.dart';
+part 'script_provider.docx_numbering.dart';
 part 'script_provider.pages_rtf.dart';
 part 'script_provider.models.dart';
 

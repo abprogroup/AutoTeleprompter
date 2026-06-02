@@ -27,6 +27,7 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     final xmlStr = utf8.decode(bytes, allowMalformed: true);
     final document = XmlDocument.parse(xmlStr);
     final paragraphs = document.findAllElements('w:p').toList();
+    final numbering = _docxNumberingFromArchive(archive);
     final parsedParagraphs = <String>[];
     double? uniformDocumentFontSize;
     var uniformDocumentFontSizeValid = true;
@@ -120,8 +121,14 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
         ));
       }
 
+      var paragraphText = paragraph.toString();
+      final listLabel = numbering.labelForParagraph(p);
+      if (listLabel != null && paragraphText.trim().isNotEmpty) {
+        paragraphText = '$listLabel $paragraphText';
+      }
+
       parsedParagraphs.add(_docxWrapParagraph(
-        paragraph.toString(),
+        paragraphText,
         paragraphAlign,
       ));
     }
@@ -156,7 +163,8 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
             uniformDocumentFontSize != null
         ? uniformDocumentFontSize
         : detectedFontSize;
-    final importedText = _normalizeImportedDocxText(parsedParagraphs.join('\n'));
+    final importedText =
+        _normalizeImportedDocxText(parsedParagraphs.join('\n'));
     final normalizedText = baseFontSize != null &&
             uniformDocumentFontSizeValid &&
             uniformDocumentFontSize != null
@@ -459,6 +467,24 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
 
   static String _normalizeImportedDocxText(String text) =>
       text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trimRight();
+
+  _DocxNumberingResolver _docxNumberingFromArchive(Archive archive) {
+    final entry = archive.findFile('word/numbering.xml') ??
+        archive.findFile('word/Numbering.xml');
+    if (entry == null) return _DocxNumberingResolver.empty();
+    try {
+      return _DocxNumberingResolver.fromXmlBytes(
+        _archiveFileBytes(entry, format: 'DOCX', isXml: true),
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'import.docxNumbering',
+      );
+      return _DocxNumberingResolver.empty();
+    }
+  }
 
   /// Parses Apple Pages files (.pages) as a ZIP archive.
   /// Handles both the old XML-based format (index.xml) and the newer

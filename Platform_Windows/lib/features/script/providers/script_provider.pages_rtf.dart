@@ -98,9 +98,9 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
       'footnote', 'ftnsep', 'ftnsepc', 'ftncn',
       // Fields
       'field', 'fldinst', 'datafield',
-      // List / numbering (produces stray "0", "1.", etc.)
-      'listtable', 'listoverridetable', 'listtext',
-      'pn', 'pntext', 'pntxta', 'pntxtb', 'pnseclvl',
+      // List metadata. Visible list labels live in listtext/pntext groups and
+      // must stay readable so numbered paragraphs keep their source labels.
+      'listtable', 'listoverridetable', 'pnseclvl',
       // Revision / metadata tables
       'revtbl', 'rsidtbl',
       // Theme / XML
@@ -373,6 +373,9 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
               flushRun();
               currentText.write('\n');
               flushRun();
+              break;
+            case 'tab':
+              currentText.write(' ');
               break;
             case 'plain':
               flushRun();

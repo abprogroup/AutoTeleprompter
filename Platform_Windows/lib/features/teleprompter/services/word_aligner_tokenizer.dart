@@ -186,7 +186,8 @@ class _WordAlignerTokenizer {
       r'|\[i\](.*?)\[\/i\]'
       r'|\[(rtl|ltr)\](.*?)\[\/\26\]'
       r'|\[color=([^\]]+)\](.*?)\[\/color\]'
-      r'|\[bg=([^\]]+)\](.*?)\[\/bg\]',
+      r'|\[bg=([^\]]+)\](.*?)\[\/bg\]'
+      r'|\[font=([^\]]+)\](.*?)\[\/font\]',
       dotAll: true,
     );
     int last = 0;
@@ -319,6 +320,11 @@ class _WordAlignerTokenizer {
         } else {
           spans.addAll(_parseMarkupRecursive(m.group(31)!, base));
         }
+      } else if (m.group(32) != null && m.group(33) != null) {
+        // [font=Family] is visual metadata only for the presenter/STT word
+        // list. Consume the tag so family names with spaces never become
+        // spoken words or visible presenter text.
+        spans.addAll(_parseMarkupRecursive(m.group(33)!, base));
       }
       last = m.end;
     }

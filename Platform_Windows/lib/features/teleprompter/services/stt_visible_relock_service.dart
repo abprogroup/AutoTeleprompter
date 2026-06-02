@@ -75,6 +75,8 @@ class SttVisibleRelockService {
   }) {
     if (visibleWordStart == null || visibleWordEnd == null) return null;
     if (transcript.trim().isEmpty || words.isEmpty) return null;
+    final queryTokens = ApproximateSpokenSearchService.tokenize(transcript);
+    if (queryTokens.length < 4) return null;
 
     final start =
         visibleWordStart <= visibleWordEnd ? visibleWordStart : visibleWordEnd;
@@ -90,14 +92,30 @@ class SttVisibleRelockService {
             word.index <= safeEnd)
         .toList(growable: false);
     if (candidateWords.length < 4) return null;
+    final maxAdvance = _maxApproximateAdvance(queryTokens.length);
 
-    final match = const ApproximateSpokenSearchService().findBest(
+    final matches = const ApproximateSpokenSearchService().findRanked(
       words: candidateWords,
       spokenText: transcript,
       minimumScore: minimumScore,
+      limit: 12,
     );
-    if (match == null || match.endWordIndex <= currentIndex) return null;
-    return match.endWordIndex;
+    final safeMatches = matches
+        .where((match) =>
+            match.endWordIndex > currentIndex &&
+            match.endWordIndex - currentIndex <= maxAdvance)
+        .toList(growable: false);
+    if (safeMatches.isEmpty) return null;
+    safeMatches.sort(
+      (a, b) => a.startWordIndex.compareTo(b.startWordIndex),
+    );
+    return safeMatches.first.endWordIndex;
+  }
+
+  static int _maxApproximateAdvance(int tokenCount) {
+    if (tokenCount >= 8) return 96;
+    if (tokenCount >= 6) return 64;
+    return 32;
   }
 
   int? globalApproximateTarget({

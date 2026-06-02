@@ -201,10 +201,6 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
             onChanged:
                 ref.read(settingsProvider.notifier).setContentCreatorTextScrim,
           ),
-          const Text(
-            'Script background color is locked while full camera feed is active.',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
-          ),
         ],
       );
     }

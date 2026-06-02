@@ -10,14 +10,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   final ValueChanged<double>? onFontSizeChanged;
   final VoidCallback? onLayoutChanged;
   final Future<void> Function()? onInvertColors;
-  final bool scriptBackgroundLocked;
 
   const TeleprompterSettingsPanel({
     super.key,
     this.onFontSizeChanged,
     this.onLayoutChanged,
     this.onInvertColors,
-    this.scriptBackgroundLocked = false,
   });
 
   @override
@@ -447,34 +445,11 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ],
           const SizedBox(height: 14),
 
-          Row(
-            children: [
-              const Text('Script Background', style: labelStyle),
-              if (scriptBackgroundLocked) ...[
-                const SizedBox(width: 8),
-                const Icon(Icons.lock_outline, color: Colors.white38, size: 15),
-              ],
-            ],
-          ),
-          if (scriptBackgroundLocked)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Text(
-                'Locked while Content Creator full camera feed is active.',
-                style: TextStyle(color: Colors.white38, fontSize: 12),
-              ),
-            ),
+          const Text('Script Background', style: labelStyle),
           const SizedBox(height: 8),
-          AnimatedOpacity(
-            opacity: scriptBackgroundLocked ? 0.36 : 1.0,
-            duration: const Duration(milliseconds: 160),
-            child: IgnorePointer(
-              ignoring: scriptBackgroundLocked,
-              child: _ColorGrid(
-                selected: settings.scriptBgColor,
-                onSelected: notifier.setScriptBgColor,
-              ),
-            ),
+          _ColorGrid(
+            selected: settings.scriptBgColor,
+            onSelected: notifier.setScriptBgColor,
           ),
           const SizedBox(height: 16),
 

@@ -61,11 +61,11 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
     return ParsedFile(result);
   }
 
-  /// Parses RTF, extracts text with style markup (bold, color, size).
+  /// Parses RTF, extracts text with style markup.
   ParsedFile _parseRtf(String raw) {
     final codePage = _rtfAnsiCodePage(raw);
     double? detectedFontSize;
-    // -- Step 1: Extract color table --
+    // -- Step 1: Extract shared RTF tables --
     final colorTable = <String>['000000']; // index 0 = auto/default
     final ctMatch = RegExp(r'\{\\colortbl\s*;?([^}]*)\}').firstMatch(raw);
     if (ctMatch != null) {
@@ -78,12 +78,14 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
         if (r != null && g != null && b != null) {
           colorTable.add(
             '${int.parse(r.group(1)!).toRadixString(16).padLeft(2, '0')}'
-            '${int.parse(g.group(1)!).toRadixString(16).padLeft(2, '0')}'
-            '${int.parse(b.group(1)!).toRadixString(16).padLeft(2, '0')}',
+                    '${int.parse(g.group(1)!).toRadixString(16).padLeft(2, '0')}'
+                    '${int.parse(b.group(1)!).toRadixString(16).padLeft(2, '0')}'
+                .toUpperCase(),
           );
         }
       }
     }
+    final fontTable = _rtfFontTable(raw);
 
     // -- Step 2: Walk the document --
     const skipGroupWords = {
@@ -107,9 +109,15 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
       'pgdsctbl', 'wgrffmtfilter', 'filetbl', 'upr',
     };
 
-    // Formatting state (no size - teleprompter controls its own font size)
+    // Formatting state.
     bool bold = false;
-    int cfIndex = 0;
+    bool italic = false;
+    bool underline = false;
+    int colorIndex = 0;
+    int highlightIndex = 0;
+    double? currentFontSize;
+    String? currentFontFamily;
+    String? paragraphAlign;
 
     // Collect styled runs
     final runs = <_RtfRun>[];
@@ -117,7 +125,23 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
 
     void flushRun() {
       if (currentText.isEmpty) return;
-      runs.add(_RtfRun(currentText.toString(), bold, cfIndex));
+      final next = _RtfRun(
+        currentText.toString(),
+        isBold: bold,
+        isItalic: italic,
+        isUnderline: underline,
+        colorIndex: colorIndex,
+        highlightIndex: highlightIndex,
+        fontSize: currentFontSize,
+        fontFamily: currentFontFamily,
+        align: paragraphAlign,
+      );
+      if (runs.isNotEmpty && runs.last.sameStyle(next)) {
+        final previous = runs.removeLast();
+        runs.add(previous.copyWith(text: previous.text + next.text));
+      } else {
+        runs.add(next);
+      }
       currentText = StringBuffer();
     }
 
@@ -273,19 +297,75 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
                 bold = newBold;
               }
               break;
+            case 'i':
+              final newItalic = param != '0';
+              if (newItalic != italic) {
+                flushRun();
+                italic = newItalic;
+              }
+              break;
+            case 'ul':
+              if (!underline) {
+                flushRun();
+                underline = true;
+              }
+              break;
+            case 'ulnone':
+              if (underline) {
+                flushRun();
+                underline = false;
+              }
+              break;
             case 'fs':
-              if (detectedFontSize == null) {
-                final halfPoints = double.tryParse(param);
-                if (halfPoints != null && halfPoints > 0) {
-                  detectedFontSize = halfPoints / 2.0;
-                }
+              final halfPoints = double.tryParse(param);
+              final newSize = halfPoints == null || halfPoints <= 0
+                  ? null
+                  : halfPoints / 2.0;
+              detectedFontSize ??= newSize;
+              if (newSize != currentFontSize) {
+                flushRun();
+                currentFontSize = newSize;
               }
               break;
             case 'cf':
               final newCf = int.tryParse(param) ?? 0;
-              if (newCf != cfIndex) {
+              if (newCf != colorIndex) {
                 flushRun();
-                cfIndex = newCf;
+                colorIndex = newCf;
+              }
+              break;
+            case 'highlight':
+              final newHighlight = int.tryParse(param) ?? 0;
+              if (newHighlight != highlightIndex) {
+                flushRun();
+                highlightIndex = newHighlight;
+              }
+              break;
+            case 'f':
+              final fontIndex = int.tryParse(param);
+              final newFamily =
+                  fontIndex == null ? currentFontFamily : fontTable[fontIndex];
+              if (newFamily != currentFontFamily) {
+                flushRun();
+                currentFontFamily = newFamily;
+              }
+              break;
+            case 'ql':
+              if (paragraphAlign != 'left') {
+                flushRun();
+                paragraphAlign = 'left';
+              }
+              break;
+            case 'qr':
+              if (paragraphAlign != 'right') {
+                flushRun();
+                paragraphAlign = 'right';
+              }
+              break;
+            case 'qc':
+              if (paragraphAlign != 'center') {
+                flushRun();
+                paragraphAlign = 'center';
               }
               break;
             case 'par':
@@ -297,7 +377,16 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
             case 'plain':
               flushRun();
               bold = false;
-              cfIndex = 0;
+              italic = false;
+              underline = false;
+              colorIndex = 0;
+              highlightIndex = 0;
+              currentFontSize = null;
+              currentFontFamily = null;
+              break;
+            case 'pard':
+              flushRun();
+              paragraphAlign = null;
               break;
           }
           continue;
@@ -317,29 +406,155 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
     }
     flushRun();
 
-    // -- Step 3: Convert runs to internal markup --
-    final buf = StringBuffer();
+    final fontStats = _rtfUniformFontSize(runs);
+    final baseFontSize =
+        fontStats.uniformValid ? fontStats.uniformSize : detectedFontSize;
+    final result = _rtfRunsToMarkup(
+      runs,
+      colorTable,
+      emitInlineFontSize: !fontStats.uniformValid,
+    );
+    return ParsedFile(result.trim(), fontSize: baseFontSize);
+  }
+
+  static Map<int, String> _rtfFontTable(String raw) {
+    final start = raw.indexOf(r'{\fonttbl');
+    if (start < 0) return const {};
+    var depth = 0;
+    var end = -1;
+    for (var i = start; i < raw.length; i++) {
+      if (raw[i] == '{') {
+        depth++;
+      } else if (raw[i] == '}') {
+        depth--;
+        if (depth == 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (end <= start) return const {};
+
+    final table = raw.substring(start, end);
+    final fonts = <int, String>{};
+    for (final match in RegExp(r'\{\\f(\d+)[^{};]*;').allMatches(table)) {
+      final index = int.tryParse(match.group(1) ?? '');
+      if (index == null) continue;
+      var body = match.group(0) ?? '';
+      body = body
+          .replaceAll(RegExp(r'\\[a-zA-Z]+-?\d* ?'), '')
+          .replaceAll(RegExp(r'[{};]'), '')
+          .trim();
+      final family = _ScriptProviderDocxParsing._docxNormalizeFontFamily(body);
+      if (family != null) fonts[index] = family;
+    }
+    return fonts;
+  }
+
+  static ({bool uniformValid, double? uniformSize}) _rtfUniformFontSize(
+      List<_RtfRun> runs) {
+    var sawVisibleText = false;
+    var valid = true;
+    double? size;
     for (final run in runs) {
-      String text = run.text;
-      if (text.isEmpty) continue;
+      if (run.text.trim().isEmpty) continue;
+      sawVisibleText = true;
+      if (run.fontSize == null) {
+        valid = false;
+        break;
+      }
+      if (size == null) {
+        size = run.fontSize;
+      } else if ((size - run.fontSize!).abs() > 0.001) {
+        valid = false;
+        break;
+      }
+    }
+    return (
+      uniformValid: sawVisibleText && valid && size != null,
+      uniformSize: size
+    );
+  }
 
-      // Don't wrap newlines in style tags
-      if (text == '\n') {
-        buf.write('\n');
-        continue;
+  static String _rtfRunsToMarkup(
+    List<_RtfRun> runs,
+    List<String> colorTable, {
+    required bool emitInlineFontSize,
+  }) {
+    final lines = <List<_RtfRun>>[<_RtfRun>[]];
+    for (final run in runs) {
+      final parts = run.text.split('\n');
+      for (var i = 0; i < parts.length; i++) {
+        if (parts[i].isNotEmpty) {
+          lines.last.add(run.copyWith(text: parts[i]));
+        }
+        if (i < parts.length - 1) lines.add(<_RtfRun>[]);
       }
-
-      if (run.cfIndex > 0 && run.cfIndex < colorTable.length) {
-        text = '[color=#${colorTable[run.cfIndex]}]$text[/color]';
-      }
-      if (run.bold) {
-        text = '**$text**';
-      }
-      buf.write(text);
     }
 
-    final result = buf.toString();
-    return ParsedFile(result.trim(), fontSize: detectedFontSize);
+    final buf = StringBuffer();
+    for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      if (lineIndex > 0) buf.write('\n');
+      final lineRuns = _rtfAttachLeadingColon(lines[lineIndex]);
+      final align = _rtfLineAlign(lineRuns);
+      final line = StringBuffer();
+      for (final run in lineRuns) {
+        final text = run.text;
+        if (text.isEmpty) continue;
+        final isDecorationWhitespace = text.trim().isEmpty;
+        line.write(_ScriptProviderDocxParsing._docxWrapRun(
+          text,
+          isBold: run.isBold,
+          isItalic: run.isItalic,
+          isUnderline: !isDecorationWhitespace && run.isUnderline,
+          color: _rtfColorAt(colorTable, run.colorIndex),
+          highlightColor: isDecorationWhitespace
+              ? null
+              : _rtfHighlightColorAt(colorTable, run.highlightIndex),
+          fontSize: emitInlineFontSize ? run.fontSize : null,
+          fontFamily: run.fontFamily,
+        ));
+      }
+      final lineText = line.toString();
+      if (lineText.isNotEmpty && align != null) {
+        buf.write('[align=$align]$lineText[/align=$align]');
+      } else {
+        buf.write(lineText);
+      }
+    }
+    return buf.toString();
+  }
+
+  static List<_RtfRun> _rtfAttachLeadingColon(List<_RtfRun> runs) {
+    final normalized = <_RtfRun>[];
+    for (final run in runs) {
+      var text = run.text;
+      final colon = RegExp(r'^\s*:\s*').firstMatch(text);
+      if (colon != null && normalized.isNotEmpty) {
+        final previous = normalized.removeLast();
+        final previousText = previous.text.replaceFirst(RegExp(r'\s+$'), '');
+        normalized.add(previous.copyWith(text: '$previousText: '));
+        text = text.substring(colon.end);
+        if (text.isEmpty) continue;
+      }
+      normalized.add(run.copyWith(text: text));
+    }
+    return normalized;
+  }
+
+  static String? _rtfLineAlign(List<_RtfRun> runs) {
+    for (final run in runs) {
+      if (run.text.trim().isNotEmpty && run.align != null) return run.align;
+    }
+    return null;
+  }
+
+  static String? _rtfColorAt(List<String> colorTable, int index) =>
+      index > 0 && index < colorTable.length ? colorTable[index] : null;
+
+  static String? _rtfHighlightColorAt(List<String> colorTable, int index) {
+    final color = _rtfColorAt(colorTable, index);
+    return color == '000000' ? null : color;
   }
 
   static bool _isAlpha(int codeUnit) =>

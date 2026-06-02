@@ -78,7 +78,46 @@ class _DocxRunSegment {
 
 class _RtfRun {
   final String text;
-  final bool bold;
-  final int cfIndex;
-  _RtfRun(this.text, this.bold, this.cfIndex);
+  final bool isBold;
+  final bool isItalic;
+  final bool isUnderline;
+  final int colorIndex;
+  final int highlightIndex;
+  final double? fontSize;
+  final String? fontFamily;
+  final String? align;
+
+  const _RtfRun(
+    this.text, {
+    required this.isBold,
+    required this.isItalic,
+    required this.isUnderline,
+    required this.colorIndex,
+    required this.highlightIndex,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.align,
+  });
+
+  bool sameStyle(_RtfRun other) =>
+      isBold == other.isBold &&
+      isItalic == other.isItalic &&
+      isUnderline == other.isUnderline &&
+      colorIndex == other.colorIndex &&
+      highlightIndex == other.highlightIndex &&
+      fontSize == other.fontSize &&
+      fontFamily == other.fontFamily &&
+      align == other.align;
+
+  _RtfRun copyWith({required String text}) => _RtfRun(
+        text,
+        isBold: isBold,
+        isItalic: isItalic,
+        isUnderline: isUnderline,
+        colorIndex: colorIndex,
+        highlightIndex: highlightIndex,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        align: align,
+      );
 }

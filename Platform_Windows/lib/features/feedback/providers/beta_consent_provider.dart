@@ -10,7 +10,7 @@ const betaFeedbackContactEmail = 'autoteleprompter@gmail.com';
 const betaFeedbackControllerName = 'AB Pro Group';
 const betaAppVersion = String.fromEnvironment(
   'APP_VERSION',
-  defaultValue: '5.0.4+19',
+  defaultValue: '5.0.5+20',
 );
 
 class BetaConsentState {

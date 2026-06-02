@@ -54,5 +54,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-Windows-v5.0.4-EXE
+          name: AutoTeleprompter-Windows-v5.0.5-EXE
           path: build-zip\AutoTeleprompter-Windows

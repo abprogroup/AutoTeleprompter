@@ -37,48 +37,6 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
         ),
       ],
       const SizedBox(height: 22),
-      const _SectionHeader(title: 'ACCOUNT SECURITY'),
-      const SizedBox(height: 8),
-      const _SettingsTile(
-        icon: Icons.lock_reset_rounded,
-        title: 'Password reset',
-        subtitle: 'Future server-backed account feature',
-      ),
-      const SizedBox(height: 8),
-      _SettingsTile(
-        icon: Icons.alternate_email_rounded,
-        title: 'Account migration email',
-        subtitle: signedIn
-            ? 'Current account email: ${auth.email}'
-            : 'Future migration will require a verified account email',
-      ),
-      const SizedBox(height: 8),
-      const _SettingsTile(
-        icon: Icons.pin_outlined,
-        title: 'Account PIN security',
-        subtitle: 'Future quick unlock and sensitive-action protection',
-      ),
-      const SizedBox(height: 8),
-      const _SettingsTile(
-        icon: Icons.devices_other_outlined,
-        title: 'Trusted devices',
-        subtitle: 'Future device review, revocation, and login alerts',
-      ),
-      const SizedBox(height: 22),
-      const _SectionHeader(title: 'ACCOUNT DATA'),
-      const SizedBox(height: 8),
-      const _SettingsTile(
-        icon: Icons.download_for_offline_outlined,
-        title: 'Export account data',
-        subtitle: 'Future export for server-backed accounts and cloud records',
-      ),
-      const SizedBox(height: 8),
-      const _SettingsTile(
-        icon: Icons.delete_forever_outlined,
-        title: 'Delete account data',
-        subtitle: 'Future account/cloud deletion with confirmation',
-      ),
-      const SizedBox(height: 22),
       const _SectionHeader(title: 'PRIVACY'),
       const SizedBox(height: 8),
       _SettingsTile(

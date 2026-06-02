@@ -84,6 +84,15 @@ class SecureScriptStore {
     return null;
   }
 
+  Future<void> delete(String? recordId) async {
+    if (recordId == null || recordId.trim().isEmpty) return;
+    await _fileStore.delete(
+      collection: 'scripts',
+      id: recordId,
+      extension: 'atps',
+    );
+  }
+
   Future<Map<String, dynamic>> secureMetadata(
     Map<String, dynamic> meta, {
     required String text,

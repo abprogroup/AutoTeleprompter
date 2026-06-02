@@ -5,7 +5,8 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     try {
       final settingsBeforeImport = ref.read(settingsProvider);
       _lastChosenTextColor = Color(settingsBeforeImport.lastTextColor);
-      _lastChosenHighlightColor = Color(settingsBeforeImport.lastHighlightColor);
+      _lastChosenHighlightColor =
+          Color(settingsBeforeImport.lastHighlightColor);
 
       final result = await ref.read(scriptProvider.notifier).parseFile(file);
       if (result.isError) {
@@ -60,6 +61,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
       String finalContent = content;
       String finalType = title.split('.').last.toUpperCase();
+      String finalSourcePath = file.path;
       String? finalSessionId;
       String? finalHistoryJson;
 
@@ -71,6 +73,10 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         final String existingContent = secureData?.text ?? '';
         final String sessionId = decoded['sessionId'];
         final String type = decoded['type'] ?? 'TXT';
+        final metaSourcePath = decoded['sourcePath'];
+        if (metaSourcePath is String && metaSourcePath.trim().isNotEmpty) {
+          finalSourcePath = metaSourcePath;
+        }
 
         if (normalize(existingContent) == normalizedNew) {
           finalContent = existingContent;
@@ -142,6 +148,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       if (!mounted) return;
       _currentTitle = title;
       _sourceType = finalType;
+      _currentSourcePath = finalSourcePath;
       _currentSessionId = finalSessionId ?? _currentSessionId;
       _loadText(finalContent);
       unawaited(_loadBookmarksForCurrentScript());
@@ -787,7 +794,6 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     }
     _lastFocusedController = editedController;
   }
-
 }
 
 class _EnterSelectionRange {

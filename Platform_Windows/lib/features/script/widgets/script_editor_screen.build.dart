@@ -44,7 +44,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
             title: _currentTitle,
             onBack: () => Navigator.pop(context),
             onPresent: _startPresenting,
-            onClear: _clearScript,
+            onClear: () => unawaited(_confirmDeleteCurrentScript()),
             onSave: _saveScript,
             onImport: _importFile,
             onRename: _showRenameDialog,

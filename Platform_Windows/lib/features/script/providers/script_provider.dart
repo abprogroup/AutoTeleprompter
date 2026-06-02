@@ -66,6 +66,7 @@ class ScriptNotifier extends Notifier<Script?> {
     String? sessionId;
     int? historyIndex;
     String? historyJson;
+    String? sourcePath;
     double? fontSize, lineSpacing, letterSpacing, wordSpacing;
     String? fontFamily, textAlign;
     int? scriptBgColor, currentWordColor, futureWordColor;
@@ -78,6 +79,7 @@ class ScriptNotifier extends Notifier<Script?> {
             meta['title'] == lastTitle) {
           sourceType = meta['type'] ?? 'TEMP';
           sessionId = meta['sessionId'];
+          sourcePath = meta['sourcePath'] as String?;
           final metaIdx = meta['historyIndex'];
           if (metaIdx != null) historyIndex = metaIdx;
           final metaHistJson = meta['historyJson'];
@@ -130,6 +132,7 @@ class ScriptNotifier extends Notifier<Script?> {
         lastText,
         title: lastTitle.isNotEmpty ? lastTitle : null,
         sourceType: sourceType,
+        sourcePath: sourcePath,
         sessionId: sessionId,
         historyIndex: historyIndex ?? settings.lastHistoryIndex,
         historyJson: historyJson,
@@ -222,6 +225,7 @@ class ScriptNotifier extends Notifier<Script?> {
             ? settings.lastScriptTitle
             : meta?['title'] as String?,
         sourceType: meta?['type'] as String?,
+        sourcePath: meta?['sourcePath'] as String?,
         sessionId: meta?['sessionId'] as String?,
         historyJson: data.historyJson,
         historyIndex: meta?['historyIndex'] as int?,
@@ -248,6 +252,7 @@ class ScriptNotifier extends Notifier<Script?> {
     String text, {
     String? title,
     String? sourceType,
+    String? sourcePath,
     String? sessionId,
     String? historyJson,
     int? historyIndex,
@@ -279,6 +284,7 @@ class ScriptNotifier extends Notifier<Script?> {
       words: words,
       isRtl: isRtl,
       sourceType: sourceType ?? 'TEMP',
+      sourcePath: sourcePath,
       sessionId: sessionId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       historyJson: historyJson,
       historyIndex: historyIndex ?? -1,
@@ -298,6 +304,7 @@ class ScriptNotifier extends Notifier<Script?> {
     String text, {
     String? title,
     String? sourceType,
+    String? sourcePath,
     String? sessionId,
     String? historyJson,
     int? historyIndex,
@@ -317,6 +324,7 @@ class ScriptNotifier extends Notifier<Script?> {
       text,
       title: title,
       sourceType: sourceType,
+      sourcePath: sourcePath,
       sessionId: sessionId,
       historyJson: historyJson,
       historyIndex: historyIndex,
@@ -347,6 +355,7 @@ class ScriptNotifier extends Notifier<Script?> {
             text,
             title: title,
             type: sourceType,
+            sourcePath: sourcePath,
             sessionId: sessionId,
             historyIndex: historyIndex,
             fontSize: fontSize,
@@ -392,6 +401,7 @@ class ScriptNotifier extends Notifier<Script?> {
           next.rawText,
           title: next.title,
           type: next.sourceType,
+          sourcePath: next.sourcePath,
           historyIndex: next.historyIndex,
           sessionId: next.sessionId,
           fontSize: next.fontSize,
@@ -435,6 +445,7 @@ class ScriptNotifier extends Notifier<Script?> {
           next.rawText,
           title: next.title,
           type: next.sourceType,
+          sourcePath: next.sourcePath,
           historyIndex: next.historyIndex,
           sessionId: next.sessionId,
           fontSize: next.fontSize,
@@ -604,11 +615,14 @@ class ScriptNotifier extends Notifier<Script?> {
       } else {
         await settingsNotifier.resetToDefaultAppearance();
       }
-      final title = file.path.split('/').last;
+      final title = file.path.split(RegExp(r'[\\/]')).last;
       final extension =
           title.contains('.') ? title.split('.').last.toUpperCase() : 'FILE';
       loadText(result.text,
-          title: title, sourceType: extension, fontSize: result.fontSize);
+          title: title,
+          sourceType: extension,
+          sourcePath: file.path,
+          fontSize: result.fontSize);
     }
   }
 
@@ -624,6 +638,11 @@ class ScriptNotifier extends Notifier<Script?> {
     state = null;
     LightweightDiagnostics.instance.record('script', 'script cleared');
     ref.read(settingsProvider.notifier).saveScript('', title: '');
+  }
+
+  void discardActive() {
+    state = null;
+    LightweightDiagnostics.instance.record('script', 'script discarded');
   }
 }
 

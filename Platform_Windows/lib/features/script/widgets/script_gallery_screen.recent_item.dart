@@ -138,12 +138,12 @@ class _ScriptListItem extends ConsumerWidget {
     );
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final scriptNotifier = ref.read(scriptProvider.notifier);
+    Map<String, dynamic>? decodedMeta;
 
     try {
       final recentScripts = ref.read(settingsProvider).recentScripts;
       final targetMeta = _findRecentMetadata(recentScripts);
 
-      Map<String, dynamic>? decodedMeta;
       var resolvedText = fullText;
       String? resolvedHistoryJson;
       if (targetMeta != null) {
@@ -163,6 +163,7 @@ class _ScriptListItem extends ConsumerWidget {
         resolvedText,
         title: title,
         sourceType: type,
+        sourcePath: decodedMeta?['sourcePath'] as String?,
         sessionId: sessionId,
         historyJson: resolvedHistoryJson,
         fontSize: (decodedMeta?['style']?['fontSize'] as num?)?.toDouble(),
@@ -201,6 +202,7 @@ class _ScriptListItem extends ConsumerWidget {
         fullText,
         title: title,
         sourceType: type,
+        sourcePath: decodedMeta?['sourcePath'] as String?,
         sessionId: sessionId,
         tokenize: false,
       );

@@ -167,6 +167,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   MarkupController? _lastFocusedController;
 
   String _sourceType = 'TEMP';
+  String? _currentSourcePath;
   String? _currentSessionId;
   final List<EditorState> _history = [];
   int _historyIndex = -1;
@@ -305,6 +306,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (widget.pendingFile != null) {
       _isInit = true;
       _isPendingLoad = true;
+      _currentSourcePath = widget.pendingFile!.path;
       _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _runPendingFileLoad(widget.pendingFile!);
@@ -360,6 +362,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         initialText = script.rawText;
         initialTitle = script.title;
         _sourceType = script.sourceType;
+        _currentSourcePath = script.sourcePath;
         _currentSessionId = script.sessionId;
         Future.microtask(() {
           if (!mounted) return;
@@ -389,6 +392,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
             if (meta['sessionId'] == _currentSessionId) {
               final mi = meta['historyIndex'];
               if (mi is int) freshHistoryIndex = mi;
+              final sourcePath = meta['sourcePath'];
+              if (sourcePath is String && sourcePath.trim().isNotEmpty) {
+                _currentSourcePath = sourcePath;
+              }
               break;
             }
           } catch (error) {

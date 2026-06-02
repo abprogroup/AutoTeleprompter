@@ -278,6 +278,7 @@ class SettingsNotifier extends Notifier<AppSettings>
     String text, {
     String? title,
     String? type,
+    String? sourcePath,
     int? historyIndex,
     String? sessionId,
     bool isSilent = false,
@@ -344,6 +345,9 @@ class SettingsNotifier extends Notifier<AppSettings>
           if (historyIndex != null) decoded['historyIndex'] = historyIndex;
           if (type != null) decoded['type'] = type;
           if (decoded['type'] == null) decoded['type'] = 'FILE';
+          if (sourcePath != null && sourcePath.trim().isNotEmpty) {
+            decoded['sourcePath'] = sourcePath;
+          }
 
           final styleMap = decoded['style'] as Map<String, dynamic>? ?? {};
           if (fontSize != null) styleMap['fontSize'] = fontSize;
@@ -411,6 +415,8 @@ class SettingsNotifier extends Notifier<AppSettings>
       final newEntry = {
         'title': currentTitle,
         'type': type ?? 'FILE', // v3.9.5.54: Restore Label Integrity
+        if (sourcePath != null && sourcePath.trim().isNotEmpty)
+          'sourcePath': sourcePath,
         'sessionId': effectiveSessionId,
         SecureScriptStore.recordIdKey: secureRecordId,
         SecureScriptStore.storageVersionKey: SecureScriptStore.storageVersion,
@@ -493,19 +499,37 @@ class SettingsNotifier extends Notifier<AppSettings>
     }
   }
 
-  Future<void> removeFromRecent(String sessionId) async {
+  Future<void> deleteRecentScript({
+    String? sessionId,
+    String? title,
+  }) async {
     final list = List<String>.from(state.recentScripts);
+    final removedRecordIds = <String>{};
+    var removedActiveScript = false;
     list.removeWhere((item) {
       try {
-        final decoded = jsonDecode(item);
-        return decoded['sessionId'] == sessionId;
+        final decoded = Map<String, dynamic>.from(jsonDecode(item));
+        final itemSessionId = decoded['sessionId'] as String?;
+        final itemRecordId = SecureScriptStore.recordIdFromMetadata(decoded);
+        final itemTitle = decoded['title'] as String?;
+        final matches = (sessionId != null && itemSessionId == sessionId) ||
+            (sessionId != null && itemRecordId == sessionId) ||
+            (sessionId == null && title != null && itemTitle == title);
+        if (!matches) return false;
+        final recordId = itemRecordId;
+        if (recordId != null) removedRecordIds.add(recordId);
+        removedActiveScript = removedActiveScript ||
+            recordId == state.lastScriptSessionId ||
+            itemSessionId == state.lastScriptSessionId;
+        return true;
       } catch (e) {
         LightweightDiagnostics.instance.record(
           'settings',
           'ignored malformed recent metadata while removing script',
           data: {
             'source': 'removeFromRecent',
-            'sessionId': sessionId,
+            'sessionId': sessionId ?? '',
+            'title': title ?? '',
             'error': e.toString(),
           },
         );
@@ -513,9 +537,38 @@ class SettingsNotifier extends Notifier<AppSettings>
       }
     });
 
-    state = state.copyWith(recentScripts: list);
+    for (final recordId in removedRecordIds) {
+      try {
+        await SecureScriptStore().delete(recordId);
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'settings.deleteSecureRecentScript',
+          data: {'recordId': recordId},
+        );
+      }
+    }
+
+    state = state.copyWith(
+      recentScripts: list,
+      lastScript: removedActiveScript ? '' : state.lastScript,
+      lastScriptSessionId: removedActiveScript ? '' : state.lastScriptSessionId,
+      lastScriptTitle: removedActiveScript ? '' : state.lastScriptTitle,
+    );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_recentScriptsKey, list);
+    if (removedActiveScript) {
+      await Future.wait([
+        prefs.remove(_lastScriptKey),
+        prefs.remove(_lastScriptSessionIdKey),
+        prefs.remove('last_script_title'),
+      ]);
+    }
+  }
+
+  Future<void> removeFromRecent(String sessionId) async {
+    await deleteRecentScript(sessionId: sessionId);
   }
 }
 

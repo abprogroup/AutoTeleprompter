@@ -41,7 +41,9 @@ class ProjectActionsSuite extends StatelessWidget {
                 tooltip: 'Find in script',
                 onPressed: onSearch),
             IconButton(
-                icon: const Icon(Icons.delete_outline), onPressed: onClear),
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete script',
+                onPressed: onClear),
             IconButton(icon: const Icon(Icons.save_alt), onPressed: onSave),
             IconButton(
                 icon: const Icon(Icons.folder_open), onPressed: onImport),

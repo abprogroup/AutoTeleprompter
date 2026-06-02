@@ -155,6 +155,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       fileName: name,
       format: format,
       text: text,
+      sourcePath: finalPath,
     );
     if (!mounted) return;
     if (!savedPath.endsWith('.$format')) {
@@ -187,6 +188,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     required String fileName,
     required String format,
     required String text,
+    required String sourcePath,
   }) async {
     final exportType = format.toUpperCase();
     final identityChanged =
@@ -198,11 +200,13 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       _setEditorState(() {
         _currentTitle = fileName;
         _sourceType = exportType;
+        _currentSourcePath = sourcePath;
         _currentSessionId =
             'save_${DateTime.now().microsecondsSinceEpoch.toString()}';
       });
     } else {
       _sourceType = exportType;
+      _currentSourcePath = sourcePath;
     }
 
     final settings = ref.read(settingsProvider);
@@ -211,6 +215,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           text,
           title: _currentTitle,
           type: _sourceType,
+          sourcePath: _currentSourcePath,
           sessionId: _currentSessionId,
           historyIndex: _historyIndex,
           fontSize: settings.fontSize,
@@ -229,6 +234,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           text,
           title: _currentTitle,
           sourceType: _sourceType,
+          sourcePath: _currentSourcePath,
           sessionId: _currentSessionId,
           historyIndex: _historyIndex,
           historyJson: historyJson,
@@ -244,12 +250,147 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         );
   }
 
-  void _clearScript() {
-    LightweightDiagnostics.instance.record('editor', 'script cleared');
-    _setEditorState(() {
-      _loadText('');
-      _saveHistory(description: 'Clear');
-    });
+  Future<void> _confirmDeleteCurrentScript() async {
+    final sourcePath = _currentSourcePath?.trim();
+    final sourceFile =
+        sourcePath == null || sourcePath.isEmpty ? null : File(sourcePath);
+    final canDeleteSource = sourceFile != null && await sourceFile.exists();
+    var deleteSourceFile = false;
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(
+                Icons.delete_forever_rounded,
+                color: Colors.redAccent,
+                size: 22,
+              ),
+              SizedBox(width: 10),
+              Text(
+                'Delete script?',
+                style: TextStyle(color: Colors.white, fontSize: 17),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '"$_currentTitle"',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'This permanently removes the script from the app and from '
+                'Recent Activity.',
+                style: TextStyle(color: Colors.white70, height: 1.35),
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: canDeleteSource && deleteSourceFile,
+                onChanged: canDeleteSource
+                    ? (value) => setDialogState(
+                          () => deleteSourceFile = value ?? false,
+                        )
+                    : null,
+                activeColor: const Color(0xFFFFBF00),
+                checkColor: Colors.black,
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'Delete file also from folder',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  canDeleteSource
+                      ? sourcePath!
+                      : 'No original folder file is linked to this script.',
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    final shouldDeleteOriginal = canDeleteSource && deleteSourceFile;
+    _autoSaveTimer?.cancel();
+    _recentTimer?.cancel();
+    _recentPersistQueued = false;
+
+    try {
+      await ref.read(settingsProvider.notifier).deleteRecentScript(
+            sessionId: _currentSessionId,
+            title: _currentTitle,
+          );
+      if (shouldDeleteOriginal) {
+        await sourceFile.delete();
+      }
+      ref.read(scriptProvider.notifier).discardActive();
+      LightweightDiagnostics.instance.record(
+        'editor',
+        'script deleted',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+          'deletedSourceFile': shouldDeleteOriginal,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            shouldDeleteOriginal
+                ? 'Deleted script and source file.'
+                : 'Deleted script from the app.',
+          ),
+        ),
+      );
+      if (Navigator.canPop(context)) Navigator.pop(context);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'scriptEditor.deleteScript',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+          'sourcePath': sourcePath ?? '',
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete this script.')),
+      );
+    }
   }
 
   void _startPresenting() async {
@@ -269,6 +410,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             _getRefinedFullTextWithoutBookmarkSigns(),
             title: _currentTitle,
             sourceType: _sourceType,
+            sourcePath: _currentSourcePath,
             sessionId: _currentSessionId,
             historyIndex: _historyIndex,
             historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
@@ -356,6 +498,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             _getRefinedFullTextWithoutBookmarkSigns(),
             title: _currentTitle,
             sourceType: _sourceType,
+            sourcePath: _currentSourcePath,
             sessionId: _currentSessionId,
             historyIndex: _historyIndex,
             historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),

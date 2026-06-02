@@ -148,8 +148,8 @@ class _PremiumHubSheet extends StatelessWidget {
                 icon: Icons.cloud_outlined,
                 title: 'Online Cloud Storage',
                 subtitle:
-                    'Connect provider accounts and manage cloud files when '
-                    'the online sync layer is active.',
+                    'Connect Google Drive or Dropbox accounts, or use linked '
+                    'cloud folders.',
                 locked: !_hasProAccess,
                 onTap: onOpenCloud,
               ),
@@ -196,7 +196,7 @@ class _PremiumHubSheet extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Upgrade website is not configured for this build yet.',
+            'Upgrade website is not configured on this installation.',
           ),
         ),
       );

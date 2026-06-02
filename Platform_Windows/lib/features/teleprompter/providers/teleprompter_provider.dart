@@ -68,7 +68,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const int _sttRelockTranscriptMaxWords = 96;
   static const int _stuckRelockAfterWaits = 10;
   static const int _relaxedVisibleRelockAfterWaits = 24;
-  static const int _globalRelockAfterWaits = 18;
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =

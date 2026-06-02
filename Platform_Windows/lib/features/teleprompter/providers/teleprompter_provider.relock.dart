@@ -26,6 +26,11 @@ extension TeleprompterNotifierRelock on TeleprompterNotifier {
   }
 
   int? _relockTargetFromTranscriptWindow(Script script, String transcript) {
+    if (_visibleWordStart == null || _visibleWordEnd == null) {
+      _lastRelockScope = 'no-visible-window';
+      return null;
+    }
+
     const relockService = SttVisibleRelockService();
     final fuzzyTarget = relockService.fuzzyTarget(
       words: script.words,
@@ -54,21 +59,8 @@ extension TeleprompterNotifierRelock on TeleprompterNotifier {
       return visibleApproximateTarget;
     }
 
-    if (_noProgressCount < TeleprompterNotifier._globalRelockAfterWaits) {
-      return null;
-    }
-    final globalMinimumScore =
-        _noProgressCount >= TeleprompterNotifier._relaxedVisibleRelockAfterWaits
-            ? 0.78
-            : 0.86;
-    final globalTarget = relockService.globalApproximateTarget(
-      words: script.words,
-      transcript: transcript,
-      currentIndex: _currentState.confirmedWordIndex,
-      minimumScore: globalMinimumScore,
-    );
-    if (globalTarget != null) _lastRelockScope = 'global-approximate';
-    return globalTarget;
+    _lastRelockScope = 'visible-only-no-match';
+    return null;
   }
 
   AbstractSttService _resolveWindowsSpeechService(

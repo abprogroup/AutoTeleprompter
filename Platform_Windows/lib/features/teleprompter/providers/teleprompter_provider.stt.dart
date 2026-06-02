@@ -125,17 +125,48 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
     if (aligned.shouldAdvance &&
         aligned.confirmedWordIndex > _currentState.confirmedWordIndex) {
-      _sttReadingStandby = true;
-      _noProgressCount = 0;
-      _resetVisibleLocaleAssist();
+      final advanceFrom = _currentState.confirmedWordIndex;
       final visibleSkipTargetTrusted =
           TeleprompterNotifier.isTrustedVisibleSkipTarget(
         alignedIndex: aligned.confirmedWordIndex,
         visibleWordStart: _visibleWordStart,
         visibleWordEnd: _visibleWordEnd,
       );
+      final rawJump = aligned.confirmedWordIndex - advanceFrom;
+      if (!visibleSkipTargetTrusted && rawJump > 5) {
+        _fluidAdvanceTimer?.cancel();
+        if (!strictBulletMode) {
+          _sttReadingStandby = false;
+        }
+        _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
+          currentCount: _noProgressCount,
+          improvising: false,
+          visibleAssistThreshold:
+              TeleprompterNotifier._visibleLocaleAssistAfterWaits,
+        );
+        _addDebugLog(
+          '$engineTag WAIT #$_noProgressCount | blocked off-screen advance '
+          '->${aligned.confirmedWordIndex} | heard: "$alignmentTranscript"',
+        );
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'blocked off-screen advance',
+          data: {
+            'from': advanceFrom,
+            'aligned': aligned.confirmedWordIndex,
+            'visibleStart': _visibleWordStart,
+            'visibleEnd': _visibleWordEnd,
+            'heard': alignmentTranscript,
+          },
+        );
+        return;
+      }
+
+      _sttReadingStandby = true;
+      _noProgressCount = 0;
+      _resetVisibleLocaleAssist();
       final target = TeleprompterNotifier.resolveAdvanceTarget(
-        currentIndex: _currentState.confirmedWordIndex,
+        currentIndex: advanceFrom,
         alignedIndex: aligned.confirmedWordIndex,
         visibleMaxSkipTargetIndex:
             visibleSkipTargetTrusted ? maxSkipTargetIndex : null,
@@ -158,8 +189,8 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
       // Fluid advancement: if jumping more than 3 words, animate
       // through intermediate words so the user's eye can follow.
-      final jump = target - _currentState.confirmedWordIndex;
-      if (visibleSkipTargetTrusted || jump <= 3) {
+      final jump = target - advanceFrom;
+      if (visibleSkipTargetTrusted || jump <= 5) {
         // Small jumps and trusted visible-skip targets are instant.
         _fluidAdvanceTimer?.cancel();
         _safeSetState((s) => s.copyWith(confirmedWordIndex: target));

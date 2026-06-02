@@ -122,7 +122,7 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
                         _buildRecordingOutputSelector(settings),
                         const SizedBox(height: 8),
                         const Text(
-                          'This beta records MP4 video with sound and WAV '
+                          'This build records MP4 video with sound and WAV '
                           'audio-only directly. Extra video formats are '
                           'planned for future platform research.',
                           style: TextStyle(

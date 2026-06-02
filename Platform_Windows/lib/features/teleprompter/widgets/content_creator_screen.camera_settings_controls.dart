@@ -59,7 +59,7 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
         const SizedBox(height: 8),
         const Text(
           'MP4 video and WAV audio are recorded directly. WebM and MOV ProRes '
-          'remain future research items so this beta stays light.',
+          'remain future research items so this build stays light.',
           style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.3),
         ),
       ],

@@ -192,7 +192,7 @@ class CloudOAuthService {
         unsupported: true,
         message:
             '${provider.label} direct account sign-in is not available in this '
-            'Windows beta. Use the local synced folder for now.',
+            'Windows build. Use the local synced folder for now.',
       );
     }
     if (config.clientId.trim().isEmpty) {

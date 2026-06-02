@@ -183,7 +183,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               style: TextStyle(color: Colors.white70),
             ),
             Text(
-              '- Beta feedback and diagnostics support',
+              '- Feedback and diagnostics support',
               style: TextStyle(color: Colors.white70),
             ),
             Text(
@@ -196,8 +196,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             SizedBox(height: 16),
             Text(
-              'Purchases are not connected in this beta. Enter your beta '
-              'license key on the activation screen when one is provided.',
+              'Purchases are not connected in this build. Enter your access '
+              'key on the activation screen when one is provided.',
               style: TextStyle(
                 color: Color(0xFFFFBF00),
                 fontWeight: FontWeight.bold,

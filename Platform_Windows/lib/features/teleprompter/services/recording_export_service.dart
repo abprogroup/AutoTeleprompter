@@ -64,7 +64,7 @@ class RecordingExportService {
     }
 
     throw const RecordingExportUnsupportedException(
-      'This beta exports camera recordings as MP4 directly. Extra video '
+      'This build exports camera recordings as MP4 directly. Extra video '
       'file types are planned after platform-specific recording '
       'research.',
     );

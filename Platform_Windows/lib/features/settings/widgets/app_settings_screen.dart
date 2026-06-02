@@ -372,7 +372,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         _SettingsTile(
           icon: Icons.settings_remote_outlined,
           title: 'Local Remote Control',
-          subtitle: 'Available on Windows in this beta',
+          subtitle: 'Available on Windows desktop',
         ),
       ];
     }

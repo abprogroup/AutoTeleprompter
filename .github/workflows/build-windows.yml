@@ -36,7 +36,44 @@ jobs:
         run: |
           $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.5"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
+          function Remove-ClientCredentialQuery([string] $value) {
+            $clean = ($value -replace "`r", "" -replace "`n", "").Trim()
+            if ([string]::IsNullOrWhiteSpace($clean)) { return "" }
+            try {
+              $uri = [Uri] $clean
+              if ([string]::IsNullOrWhiteSpace($uri.Query)) { return $clean }
+              $blockedNames = @(
+                "token",
+                "access_token",
+                "api_key",
+                "apikey",
+                "key",
+                "secret",
+                "client_secret",
+                "auth"
+              )
+              $pairs = $uri.Query.TrimStart("?").Split("&", [System.StringSplitOptions]::RemoveEmptyEntries)
+              $kept = New-Object System.Collections.Generic.List[string]
+              $removed = $false
+              foreach ($pair in $pairs) {
+                $name = [Uri]::UnescapeDataString(($pair -split "=", 2)[0]).ToLowerInvariant()
+                if ($blockedNames -contains $name) {
+                  $removed = $true
+                } else {
+                  $kept.Add($pair)
+                }
+              }
+              if (-not $removed) { return $clean }
+              Write-Warning "Removed token-like query parameter from FEEDBACK_ENDPOINT before compiling the public artifact."
+              $builder = [UriBuilder] $uri
+              $builder.Query = ($kept -join "&")
+              return $builder.Uri.AbsoluteUri
+            } catch {
+              return $clean
+            }
+          }
           $endpoint = ($env:FEEDBACK_ENDPOINT -replace "`r", "" -replace "`n", "").Trim()
+          $endpoint = Remove-ClientCredentialQuery $endpoint
           $googleDriveClientId = ($env:GOOGLE_DRIVE_CLIENT_ID -replace "`r", "" -replace "`n", "").Trim()
           $dropboxClientId = ($env:DROPBOX_CLIENT_ID -replace "`r", "" -replace "`n", "").Trim()
           flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.5+20 --dart-define=FEEDBACK_ENDPOINT="$endpoint" --dart-define=GOOGLE_DRIVE_CLIENT_ID="$googleDriveClientId" --dart-define=DROPBOX_CLIENT_ID="$dropboxClientId"

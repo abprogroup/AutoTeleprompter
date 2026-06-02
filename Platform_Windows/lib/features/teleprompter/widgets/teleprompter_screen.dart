@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
@@ -37,6 +38,7 @@ part 'teleprompter_screen.presenter_search.dart';
 part 'teleprompter_screen.smooth_settings.dart';
 part 'teleprompter_screen.chrome.dart';
 part 'teleprompter_screen.presenter_word_list.dart';
+part 'teleprompter_screen.presenter_transform.dart';
 part 'teleprompter_screen.build.dart';
 part 'teleprompter_screen.debug_console.dart';
 part 'teleprompter_screen.decoration_painter.dart';
@@ -65,6 +67,7 @@ class TeleprompterScreen extends ConsumerStatefulWidget {
 class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _presenterContentKey = GlobalKey();
+  final GlobalKey _presenterReadingLineKey = GlobalKey();
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
   bool _debugConsoleMinimized = false;

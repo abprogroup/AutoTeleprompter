@@ -119,54 +119,37 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 onTap: activeInputLocked ? null : _showControls,
                 child: Stack(
                   children: [
-                    // Scrollable script
-                    NotificationListener<ScrollNotification>(
-                      onNotification: _handleStoppedBrowsingScroll,
-                      child: Listener(
-                        onPointerSignal: (event) {
-                          if (activeInputLocked &&
-                              event is PointerScrollEvent) {
-                            GestureBinding.instance.pointerSignalResolver
-                                .register(event, (_) {});
-                          }
-                        },
-                        child: SingleChildScrollView(
-                          controller: _scrollController,
-                          physics: activeInputLocked
-                              ? const NeverScrollableScrollPhysics()
-                              : const ClampingScrollPhysics(),
-                          child: wordList,
-                        ),
-                      ),
-                    ),
-                    // Reading fade overlay: gradient that dims already-read text above the reading line
-                    if (settings.readFadeIntensity > 0)
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: MediaQuery.of(context).size.height *
-                                settings.scrollLead +
-                            20,
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Color(settings.scriptBgColor).withValues(
-                                      alpha: settings.readFadeIntensity),
-                                  Color(settings.scriptBgColor).withValues(
-                                      alpha: settings.readFadeIntensity * 0.6),
-                                  Colors.transparent,
-                                ],
-                                stops: const [0.0, 0.7, 1.0],
+                    _buildPresenterReadingSurface(
+                      settings: settings,
+                      child: Stack(
+                        children: [
+                          // Scrollable script
+                          NotificationListener<ScrollNotification>(
+                            onNotification: _handleStoppedBrowsingScroll,
+                            child: Listener(
+                              onPointerSignal: (event) {
+                                if (activeInputLocked &&
+                                    event is PointerScrollEvent) {
+                                  GestureBinding.instance.pointerSignalResolver
+                                      .register(event, (_) {});
+                                }
+                              },
+                              child: SingleChildScrollView(
+                                controller: _scrollController,
+                                physics: activeInputLocked
+                                    ? const NeverScrollableScrollPhysics()
+                                    : const ClampingScrollPhysics(),
+                                child: wordList,
                               ),
                             ),
                           ),
-                        ),
+                          // Reading fade overlay: gradient that dims already-read text above the reading line
+                          if (settings.readFadeIntensity > 0)
+                            _buildPresenterReadFadeOverlay(settings),
+                          _buildPresenterReadingLine(settings),
+                        ],
                       ),
+                    ),
                     if (tState.isStarting && !tState.hasError)
                       Positioned(
                         top: 22,
@@ -206,20 +189,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                           ),
                         ),
                       ),
-
-                    // Reading line
-                    Positioned(
-                      top: MediaQuery.of(context).size.height *
-                              settings.scrollLead -
-                          2,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        height: 3,
-                        color: Color(settings.currentWordColor)
-                            .withValues(alpha: 0.35),
-                      ),
-                    ),
 
                     // Error banner with actionable guidance
                     if (tState.hasError && tState.statusMessage.isNotEmpty)

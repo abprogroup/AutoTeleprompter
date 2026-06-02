@@ -136,19 +136,6 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
       );
     }
 
-    if (settings.mirrorHorizontal || settings.mirrorVertical) {
-      wordList = Transform.scale(
-        scaleX: settings.mirrorHorizontal ? -1 : 1,
-        scaleY: settings.mirrorVertical ? -1 : 1,
-        child: wordList,
-      );
-    }
-    if (settings.flipRotation != 0) {
-      wordList = RotatedBox(
-        quarterTurns: settings.flipRotation ~/ 90,
-        child: wordList,
-      );
-    }
     return wordList;
   }
 

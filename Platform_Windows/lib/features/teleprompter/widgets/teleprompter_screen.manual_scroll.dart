@@ -99,9 +99,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         _wordKeys.isEmpty) {
       return null;
     }
-    final settings = ref.read(settingsProvider);
-    final targetScreenY =
-        MediaQuery.of(context).size.height * settings.scrollLead;
+    final axis = _presenterScrollAxis();
+    final targetAxis = _presenterReadingLineAxis(axis);
 
     int? bestIndex;
     double bestDist = double.infinity;
@@ -116,8 +115,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       if (ctx == null) continue;
       final box = ctx.findRenderObject() as RenderBox?;
       if (box == null || !box.attached) continue;
-      final posY = box.localToGlobal(Offset.zero).dy;
-      final dist = (posY - targetScreenY).abs();
+      final wordAxis = _presenterBoxAxisCenter(box, axis);
+      final dist = (wordAxis - targetAxis).abs();
       if (dist < bestDist) {
         bestDist = dist;
         bestIndex = i;
@@ -164,7 +163,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         !_scrollController.hasClients) {
       return;
     }
-    final viewportH = MediaQuery.of(context).size.height;
+    final viewport = Offset.zero & MediaQuery.sizeOf(context);
     int? firstVisible;
     int? lastVisible;
 
@@ -175,9 +174,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       if (ctx == null) continue;
       final box = ctx.findRenderObject() as RenderBox?;
       if (box == null || !box.attached) continue;
-      final top = box.localToGlobal(Offset.zero).dy;
-      final bottom = top + box.size.height;
-      if (bottom < 0 || top > viewportH) continue;
+      final bounds = _presenterGlobalRect(box);
+      if (!bounds.overlaps(viewport)) continue;
       firstVisible ??= i;
       lastVisible = i;
     }
@@ -227,16 +225,14 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
     final settings = ref.read(settingsProvider);
     final screenH = MediaQuery.of(context).size.height;
-    final targetY = screenH * settings.scrollLead;
-
-    final wordPos =
-        box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
+    final axis = _presenterScrollAxis();
+    final wordAxis = _presenterBoxAxisCenter(box, axis);
+    final targetAxis = _presenterReadingLineAxis(axis);
     final rowProgress = anticipate ? _visualRowProgress(targetIndex, box) : 0.0;
     final lineAdvance =
         (box.size.height * settings.lineSpacing).clamp(0.0, screenH * 0.22);
     final rawTarget = _scrollController.offset +
-        wordPos.dy -
-        targetY +
+        (wordAxis - targetAxis) * axis.direction +
         rowProgress * lineAdvance;
     _scrollTarget =
         rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
@@ -271,15 +267,16 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   double _visualRowProgress(int index, RenderBox currentBox) {
     if (index < 0 || index >= _wordKeys.length) return 0.0;
-    final currentDy = currentBox.localToGlobal(Offset.zero).dy;
+    final axis = _presenterScrollAxis();
+    final currentAxis = _presenterBoxAxisCenter(currentBox, axis);
     final tolerance = (currentBox.size.height * 0.7).clamp(10.0, 90.0);
 
     var rowStart = index;
     for (var i = index - 1; i >= 0; i--) {
       final box = _boxForWordIndex(i);
       if (box == null) break;
-      final dy = box.localToGlobal(Offset.zero).dy;
-      if ((dy - currentDy).abs() > tolerance) break;
+      final boxAxis = _presenterBoxAxisCenter(box, axis);
+      if ((boxAxis - currentAxis).abs() > tolerance) break;
       rowStart = i;
     }
 
@@ -287,8 +284,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     for (var i = index + 1; i < _wordKeys.length; i++) {
       final box = _boxForWordIndex(i);
       if (box == null) break;
-      final dy = box.localToGlobal(Offset.zero).dy;
-      if ((dy - currentDy).abs() > tolerance) break;
+      final boxAxis = _presenterBoxAxisCenter(box, axis);
+      if ((boxAxis - currentAxis).abs() > tolerance) break;
       rowEnd = i;
     }
 

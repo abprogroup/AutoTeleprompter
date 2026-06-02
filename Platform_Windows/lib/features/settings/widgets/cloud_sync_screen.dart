@@ -398,7 +398,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF151515),
         title: const Text(
-          'Automatic sync is not active yet',
+          'Automatic background sync is unavailable',
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
@@ -455,7 +455,7 @@ class _CloudDisclosureNote extends StatelessWidget {
         'Cloud disclosure: Google Drive and Dropbox account connections use '
         'the selected provider account and its terms. Local folder links use '
         'folders already synced on this device. AutoTeleprompter Cloud is a '
-        'separate future managed service and is not active in this build.',
+        'separate managed service planned for a later account release.',
         style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.35),
       ),
     );
@@ -739,9 +739,9 @@ class _AutomationCard extends StatelessWidget {
             title: 'Auto-sync on save',
             subtitle: anyConnected
                 ? 'Use manual account sync or the linked folder for now. '
-                    'Automatic copy/sync is not active yet.'
+                    'Background copy/sync is unavailable.'
                 : 'Connect an account or choose a local synced folder first. '
-                    'Automatic copy/sync is not active yet.',
+                    'Background copy/sync is unavailable.',
             onActivate: onActivate,
           ),
           const Divider(color: Colors.white12),
@@ -749,9 +749,9 @@ class _AutomationCard extends StatelessWidget {
             title: 'Upload recordings automatically',
             subtitle: anyConnected
                 ? 'Use manual account sync or Open folder after recording. '
-                    'Automatic recording copy is not active yet.'
+                    'Background recording copy is unavailable.'
                 : 'Connect an account or choose a local synced folder first. '
-                    'Automatic recording copy is not active yet.',
+                    'Background recording copy is unavailable.',
             onActivate: onActivate,
           ),
         ],

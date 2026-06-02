@@ -196,7 +196,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             SizedBox(height: 16),
             Text(
-              'Purchases are not connected in this build. Enter your access '
+              'Purchases are not connected in this installation. Enter your access '
               'key on the activation screen when one is provided.',
               style: TextStyle(
                 color: Color(0xFFFFBF00),

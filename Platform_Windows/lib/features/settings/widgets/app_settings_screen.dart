@@ -179,8 +179,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         icon: Icons.speed_outlined,
         title: 'Reduce motion',
         subtitle: settings.reduceMotion
-            ? 'Large UI transitions are reduced'
-            : 'Use normal app transitions and motion',
+            ? 'Nonessential animations are reduced for a steadier live reading experience'
+            : 'Uses full UI animations; turn on to reduce transitions during live work',
         value: settings.reduceMotion,
         onChanged: ref.read(settingsProvider.notifier).setReduceMotion,
       ),

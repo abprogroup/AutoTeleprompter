@@ -119,28 +119,33 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
               child: GestureDetector(
                 onTap: activeInputLocked ? null : _showControls,
                 child: Stack(
+                  fit: StackFit.expand,
                   children: [
                     _buildPresenterReadingSurface(
                       settings: settings,
                       child: Stack(
+                        fit: StackFit.expand,
                         children: [
                           // Scrollable script
-                          NotificationListener<ScrollNotification>(
-                            onNotification: _handleStoppedBrowsingScroll,
-                            child: Listener(
-                              onPointerSignal: (event) {
-                                if (activeInputLocked &&
-                                    event is PointerScrollEvent) {
-                                  GestureBinding.instance.pointerSignalResolver
-                                      .register(event, (_) {});
-                                }
-                              },
-                              child: SingleChildScrollView(
-                                controller: _scrollController,
-                                physics: activeInputLocked
-                                    ? const NeverScrollableScrollPhysics()
-                                    : const ClampingScrollPhysics(),
-                                child: wordList,
+                          Positioned.fill(
+                            child: NotificationListener<ScrollNotification>(
+                              onNotification: _handleStoppedBrowsingScroll,
+                              child: Listener(
+                                onPointerSignal: (event) {
+                                  if (activeInputLocked &&
+                                      event is PointerScrollEvent) {
+                                    GestureBinding
+                                        .instance.pointerSignalResolver
+                                        .register(event, (_) {});
+                                  }
+                                },
+                                child: SingleChildScrollView(
+                                  controller: _scrollController,
+                                  physics: activeInputLocked
+                                      ? const NeverScrollableScrollPhysics()
+                                      : const ClampingScrollPhysics(),
+                                  child: wordList,
+                                ),
                               ),
                             ),
                           ),

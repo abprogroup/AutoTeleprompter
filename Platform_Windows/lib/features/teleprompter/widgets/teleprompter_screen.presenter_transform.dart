@@ -15,7 +15,7 @@ extension _TeleprompterPresenterTransformParts on _TeleprompterScreenState {
     required AppSettings settings,
     required Widget child,
   }) {
-    Widget transformed = child;
+    Widget transformed = SizedBox.expand(child: child);
     if (settings.mirrorHorizontal || settings.mirrorVertical) {
       transformed = Transform.scale(
         scaleX: settings.mirrorHorizontal ? -1 : 1,

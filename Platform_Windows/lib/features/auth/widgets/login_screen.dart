@@ -62,10 +62,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     } else {
       if (mounted) {
+        final message = isLocalProLicenseActivationConfigured
+            ? 'Invalid License Key. Please check and try again.'
+            : 'License verification is not configured in this installation.';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid License Key. Please check and try again.'),
-          ),
+          SnackBar(content: Text(message)),
         );
       }
     }
@@ -196,8 +197,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             SizedBox(height: 16),
             Text(
-              'Purchases are not connected in this installation. Enter your access '
-              'key on the activation screen when one is provided.',
+              'Purchases are not connected in this installation. A license '
+              'key can activate Pro only when license verification is '
+              'configured for the build.',
               style: TextStyle(
                 color: Color(0xFFFFBF00),
                 fontWeight: FontWeight.bold,

@@ -22,6 +22,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex),
         (prev, next) {
       final liveState = ref.read(teleprompterProvider);
+      if (_activeManualCorrection) return;
       if (settings.scrollMode == 'auto' && liveState.isListening && next > 0) {
         _scrollToWordIndex(next, anticipate: true);
       }

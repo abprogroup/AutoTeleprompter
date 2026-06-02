@@ -304,6 +304,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
     final sttState = ref.read(teleprompterProvider);
     final settings = ref.read(settingsProvider);
+    final speechActive = sttState.isListening || sttState.isStarting;
     final activeManualOverride =
         PresenterInputLockService.allowActiveManualScroll(
       settingEnabled: settings.allowScrollDuringActiveSession,
@@ -326,21 +327,49 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       _userBrowsingWhileStopped = true;
       _cancelSmoothScroll();
       _stopManualScroll();
+      if (speechActive && activeManualOverride) {
+        _activeManualCorrection = true;
+      }
     }
 
     if (_userBrowsingWhileStopped &&
         (isUserScrollStart || isUserScrollUpdate || isScrollPositionUpdate)) {
       _syncVisibleWordWindow(force: true);
-      _syncResumePointToReadingLine(throttled: true);
+      if (speechActive && activeManualOverride) {
+        _scheduleActiveManualCorrectionCommit();
+      } else {
+        _syncResumePointToReadingLine(throttled: true);
+      }
     }
 
     if (notification is ScrollEndNotification && _userBrowsingWhileStopped) {
       _userBrowsingWhileStopped = false;
       _lastBrowsingWordSync = null;
       _syncVisibleWordWindow(force: true);
-      _syncResumePointToReadingLine();
+      if (speechActive && activeManualOverride) {
+        _finishActiveManualCorrection();
+      } else {
+        _syncResumePointToReadingLine();
+      }
     }
     return false;
+  }
+
+  void _scheduleActiveManualCorrectionCommit() {
+    _activeManualCorrectionTimer?.cancel();
+    _activeManualCorrectionTimer =
+        Timer(const Duration(milliseconds: 420), _finishActiveManualCorrection);
+  }
+
+  void _finishActiveManualCorrection() {
+    _activeManualCorrectionTimer?.cancel();
+    _activeManualCorrectionTimer = null;
+    if (!_activeManualCorrection) return;
+    _activeManualCorrection = false;
+    _userBrowsingWhileStopped = false;
+    _lastBrowsingWordSync = null;
+    _syncVisibleWordWindow(force: true);
+    _syncResumePointToReadingLine();
   }
 
   void _syncResumePointToReadingLine({bool throttled = false}) {

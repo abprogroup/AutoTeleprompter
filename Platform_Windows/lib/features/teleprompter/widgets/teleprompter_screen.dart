@@ -76,6 +76,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   Timer? _wordTrackTimer;
   Timer? _hideControlsTimer;
   Timer? _smoothScrollTimer;
+  Timer? _activeManualCorrectionTimer;
   double _scrollTarget = 0.0;
   bool _smoothScrollActive = false;
   int _manualWordIndex = 0;
@@ -83,6 +84,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _scrollingBackward = false;
   bool _closingPresentation = false;
   bool _userBrowsingWhileStopped = false;
+  bool _activeManualCorrection = false;
   StreamSubscription? _remoteCmdSub;
   WebviewController? _webviewController;
   String? _loadedWebViewUrl;
@@ -176,6 +178,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _wordTrackTimer?.cancel();
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
+    _activeManualCorrectionTimer?.cancel();
     ref.read(remoteControlProvider).publishPresenterState(
           scriptActive: false,
           sessionActive: false,

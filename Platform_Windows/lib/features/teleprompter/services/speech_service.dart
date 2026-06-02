@@ -190,7 +190,7 @@ class SpeechService {
             onStatusChange?.call(SpeechStatus.listening);
           }
         },
-        // Keep plugin-level chatter off in beta builds. App-owned diagnostics
+        // Keep plugin-level chatter off in release builds. App-owned diagnostics
         // are routed through onDiagnostic/debugMode instead.
         debugLogging: false,
       );

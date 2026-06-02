@@ -32,7 +32,7 @@ class AppSettings {
   static const String contentCreatorRecordingFormatMovProRes = 'mov_prores';
   static const String contentCreatorRecordingFormatWav = 'wav';
   static const String contentCreatorRecordingAudioCamera = 'camera_audio';
-  // Legacy persisted value from the removed soundless-video beta option.
+  // Legacy persisted value from the removed soundless-video option.
   // Normalizers keep old installs on camera audio; no active UI should expose it.
   static const String contentCreatorRecordingAudioSilent = 'silent_video';
   static const String manualScrollBarBottom = 'bottom';

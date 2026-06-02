@@ -95,7 +95,7 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
                 ? 'Cloud Storage Disclosure'
                 : isSpeechStep
                     ? 'Speech-To-Text Disclosure'
-                    : 'AutoTeleprompter Beta Privacy Notice',
+                    : 'AutoTeleprompter Privacy Notice',
             style: GoogleFonts.bebasNeue(
               color: const Color(0xFFFFBF00),
               fontSize: 30,
@@ -108,15 +108,15 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
                 ? 'Cloud features can connect to personal storage providers or '
                     'future AutoTeleprompter managed storage. You must understand '
                     'where script and recording files may be stored before using '
-                    'this beta.'
+                    'this app.'
                 : isSpeechStep
                     ? 'Speech-to-text can listen to your microphone to advance '
                         'the prompter. Depending on the engine and platform, audio '
                         'may be processed on-device or by the platform speech '
                         'provider.'
-                    : 'This beta is free to use, but participation requires '
-                        'diagnostic feedback data so AB Pro Group can find and '
-                        'fix bugs.',
+                    : 'Using this app requires accepting the feedback and '
+                        'diagnostics disclosure so AB Pro Group can find and fix '
+                        'bugs.',
             style: const TextStyle(
                 color: Colors.white, fontSize: 15, height: 1.45),
           ),
@@ -155,11 +155,11 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
             title: Text(
               isCloudStep
                   ? 'I understand and agree to the cloud storage disclosure for '
-                      'this beta.'
+                      'this app.'
                   : isSpeechStep
                       ? 'I understand and agree to the speech-to-text disclosure '
-                          'for this beta.'
-                      : 'I understand and agree that beta feedback reports include '
+                          'for this app.'
+                      : 'I understand and agree that feedback reports include '
                           'my full active script and diagnostic data.',
               style: const TextStyle(
                 color: Colors.white,
@@ -173,7 +173,7 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
               TextButton.icon(
                 onPressed: () => exit(0),
                 icon: const Icon(Icons.close, color: Colors.white54),
-                label: const Text('Exit beta',
+                label: const Text('Exit app',
                     style: TextStyle(color: Colors.white70)),
               ),
               const Spacer(),
@@ -196,7 +196,7 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
                 ),
                 label: Text(
                   _accepting
-                      ? 'Entering beta...'
+                      ? 'Opening app...'
                       : isCloudStep
                           ? 'Accept and continue'
                           : isSpeechStep
@@ -343,21 +343,21 @@ class _PolicyBox extends StatelessWidget {
               'to send.',
             ),
             _paragraph(
-              'Why we collect it: to reproduce beta bugs, group repeated reports '
+              'Why we collect it: to reproduce reported bugs, group repeated reports '
               'from the same device, improve speech recognition/editor behavior, '
               'and stabilize the app before public release.',
             ),
             _paragraph(
-              'Retention: beta feedback reports are kept for up to 180 days, then '
+              'Retention: feedback reports are kept for up to 180 days, then '
               'deleted or anonymized unless needed for an active bug investigation.',
             ),
             _paragraph(
-              'Your choices: if you do not agree, you can exit the beta. To ask '
+              'Your choices: if you do not agree, you can exit the app. To ask '
               'for deletion or privacy help, email $betaFeedbackContactEmail and '
               'include your device key or report ID.',
             ),
             _paragraph(
-              'AB Pro Group does not sell beta feedback data and does not use it '
+              'AB Pro Group does not sell feedback data and does not use it '
               'for third-party advertising.',
             ),
           ],
@@ -435,7 +435,7 @@ class _SpeechDisclosureBox extends StatelessWidget {
               'Group servers for normal speech-to-text operation.',
             ),
             _paragraph(
-              'If you send beta feedback while speech-to-text is active, the '
+              'If you send feedback while speech-to-text is active, the '
               'feedback report may include speech-to-text diagnostic events and '
               'recent recognized text needed to reproduce bugs.',
             ),
@@ -503,7 +503,7 @@ class _CloudDisclosureBox extends StatelessWidget {
               'or managed AutoTeleprompter Cloud storing those files.',
             ),
             _paragraph(
-              'Current beta builds may show cloud connection options before the '
+              'Current builds may show cloud connection options before the '
               'sync backend is fully active. Features marked planned or coming '
               'soon do not upload normal scripts until the provider connection '
               'and sync flow are implemented and enabled.',

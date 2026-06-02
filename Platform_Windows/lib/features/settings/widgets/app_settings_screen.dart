@@ -626,7 +626,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             const SizedBox(height: 14),
             const Text(
               'Withdrawing consent keeps your device key for support and '
-              'deletion requests, then returns the app to the beta consent gate.',
+              'deletion requests, then returns the app to the consent screen.',
               style: TextStyle(color: Colors.white54, height: 1.35),
             ),
           ],
@@ -672,11 +672,11 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text(
-          'Withdraw beta consent?',
+          'Withdraw consent?',
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'The beta app cannot be used without accepting the current feedback '
+          'The app cannot be used without accepting the current feedback '
           'privacy notice and speech-to-text disclosure. You can accept again '
           'from the consent screen.',
           style: TextStyle(color: Colors.white70, height: 1.35),

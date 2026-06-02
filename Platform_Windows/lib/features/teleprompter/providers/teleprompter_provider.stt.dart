@@ -278,7 +278,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     });
   }
 
-  /// Current v5 metadata safely resolves Hebrew/RTL and English/LTR only.
+  /// Current metadata safely resolves Hebrew/RTL and English/LTR only.
   /// Neutral tokens such as punctuation, brackets, dashes, dates, and numbers
   /// do not own a language. They inherit nearby real word context so `15.10`
   /// starts Hebrew STT in a Hebrew paragraph and English STT in English text.

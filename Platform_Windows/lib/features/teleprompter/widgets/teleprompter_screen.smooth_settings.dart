@@ -11,7 +11,7 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
     final current = _scrollController.offset;
     final diff = _scrollTarget - current;
 
-    // Close enough — snap and stop
+    // Close enough - snap and stop
     if (diff.abs() < 0.2) {
       _scrollController.jumpTo(_scrollTarget);
       timer.cancel();

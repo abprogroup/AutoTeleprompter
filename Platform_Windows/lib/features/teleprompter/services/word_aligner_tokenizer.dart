@@ -180,7 +180,7 @@ class _WordAlignerTokenizer {
       r'|\[cc\](.*?)\[\/cc\]'
       r'|\[pkc\](.*?)\[\/pkc\]'
       r'|\[u\](.*?)\[\/u\]'
-      r'|\[size=(\d+)\](.*?)\[\/size\]'
+      r'|\[size=(\d+(?:\.\d+)?)\](.*?)\[\/size\]'
       r'|\[(center|left|right)\](.*?)\[\/\21\]'
       r'|\[align=(center|left|right)\](.*?)\[\/align=\23\]'
       r'|\[i\](.*?)\[\/i\]'

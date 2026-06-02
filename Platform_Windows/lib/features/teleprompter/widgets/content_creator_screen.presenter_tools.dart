@@ -342,11 +342,10 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
 
   void _applyContentFontDelta(double delta) {
     final settings = ref.read(settingsProvider);
-    final size = (settings.fontSize + delta).clamp(14.0, 120.0).toDouble();
-    unawaited(ref.read(settingsProvider.notifier).setFontSize(size));
-    unawaited(
-      ref.read(scriptProvider.notifier).updateStyleMetadata(fontSize: size),
-    );
+    final effectiveFontSize =
+        ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
+    final size = (effectiveFontSize + delta).clamp(14.0, 120.0).toDouble();
+    unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(size));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _scrollToContentWordIndex(_activeContentIndex(), immediate: true);

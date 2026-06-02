@@ -407,6 +407,77 @@ class ScriptNotifier extends Notifier<Script?> {
         );
   }
 
+  double effectiveFontSize(double fallback) {
+    final current = state;
+    if (current == null) return fallback;
+    return _uniformInlineFontSize(current.words) ?? current.fontSize;
+  }
+
+  Future<void> applyBaseFontSize(double size) async {
+    final clamped = size.clamp(14.0, 120.0).toDouble();
+    await ref.read(settingsProvider.notifier).setFontSize(clamped);
+
+    final current = state;
+    if (current == null) return;
+    final uniformInlineSize = _uniformInlineFontSize(current.words);
+    final rawText = uniformInlineSize == null
+        ? current.rawText
+        : _stripUniformInlineFontSize(current.rawText, uniformInlineSize);
+    final next = current.copyWith(
+      rawText: rawText,
+      words: rawText == current.rawText
+          ? current.words
+          : WordAligner.tokenize(rawText),
+      fontSize: clamped,
+    );
+    state = next;
+    await ref.read(settingsProvider.notifier).saveScript(
+          next.rawText,
+          title: next.title,
+          type: next.sourceType,
+          historyIndex: next.historyIndex,
+          sessionId: next.sessionId,
+          fontSize: next.fontSize,
+          fontFamily: next.fontFamily,
+          lineSpacing: next.lineSpacing,
+          letterSpacing: next.letterSpacing,
+          wordSpacing: next.wordSpacing,
+          textAlign: next.textAlign,
+          scriptBgColor: next.scriptBgColor,
+          currentWordColor: next.currentWordColor,
+          futureWordColor: next.futureWordColor,
+          historyJson: next.historyJson,
+        );
+  }
+
+  static double? _uniformInlineFontSize(List<ScriptWord> words) {
+    double? size;
+    for (final word in words) {
+      if (word.isNewline) continue;
+      final wordSize = word.fontSize;
+      if (wordSize == null) return null;
+      if (size == null) {
+        size = wordSize;
+      } else if ((size - wordSize).abs() > 0.001) {
+        return null;
+      }
+    }
+    return size;
+  }
+
+  static String _stripUniformInlineFontSize(String text, double fontSize) {
+    final withoutOpenTags = text.replaceAllMapped(
+      RegExp(r'\[size=(\d+(?:\.\d+)?)\]'),
+      (match) {
+        final value = double.tryParse(match.group(1)!);
+        return value != null && (value - fontSize).abs() < 0.001
+            ? ''
+            : match.group(0)!;
+      },
+    );
+    return withoutOpenTags.replaceAll('[/size]', '');
+  }
+
   Future<ParsedFile> parseFile(File file) async {
     final lower = file.path.toLowerCase();
     ParsedFile result = ParsedFile('');

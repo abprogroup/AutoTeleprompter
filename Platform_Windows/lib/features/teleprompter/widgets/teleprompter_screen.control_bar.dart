@@ -55,15 +55,12 @@ class _ControlBar extends ConsumerWidget {
         ? (isManualScrolling && settings.scrollSpeed != 0)
         : isListening;
     final isBooting = !isManualMode && isStarting;
+    final effectiveFontSize =
+        ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
-      unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
-      unawaited(
-        ref.read(scriptProvider.notifier).updateStyleMetadata(
-              fontSize: clamped,
-            ),
-      );
+      unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(clamped));
       onFontSizeChanged(clamped);
     }
 
@@ -99,7 +96,7 @@ class _ControlBar extends ConsumerWidget {
               icon: const Text('A',
                   style: TextStyle(color: Colors.white70, fontSize: 16)),
               onPressed: () {
-                applyPresenterFontSize(settings.fontSize - 4);
+                applyPresenterFontSize(effectiveFontSize - 4);
               },
               tooltip: 'Smaller font',
             ),
@@ -133,7 +130,7 @@ class _ControlBar extends ConsumerWidget {
                       fontSize: 22,
                       fontWeight: FontWeight.bold)),
               onPressed: () {
-                applyPresenterFontSize(settings.fontSize + 4);
+                applyPresenterFontSize(effectiveFontSize + 4);
               },
               tooltip: 'Larger font',
             ),

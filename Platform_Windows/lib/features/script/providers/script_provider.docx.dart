@@ -28,6 +28,9 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     final document = XmlDocument.parse(xmlStr);
     final paragraphs = document.findAllElements('w:p').toList();
     final parsedParagraphs = <String>[];
+    double? uniformDocumentFontSize;
+    var uniformDocumentFontSizeValid = true;
+    var sawVisibleDocumentText = false;
 
     for (final p in paragraphs) {
       final paragraph = StringBuffer();
@@ -71,7 +74,17 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
 
           runFontSize = _docxRunFontSize(rPr) ?? runFontSize;
           runFontFamily = _docxRunFontFamily(rPr) ?? runFontFamily;
-          detectedFontSize ??= runFontSize;
+        }
+        detectedFontSize ??= runFontSize;
+        if (text.trim().isNotEmpty) {
+          sawVisibleDocumentText = true;
+          if (runFontSize == null) {
+            uniformDocumentFontSizeValid = false;
+          } else if (uniformDocumentFontSize == null) {
+            uniformDocumentFontSize = runFontSize;
+          } else if ((uniformDocumentFontSize - runFontSize).abs() > 0.001) {
+            uniformDocumentFontSizeValid = false;
+          }
         }
 
         if (_docxIsDecorationWhitespace(text)) {
@@ -138,10 +151,19 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       );
     }
 
-    return ParsedFile(
-      _normalizeImportedDocxText(parsedParagraphs.join('\n')),
-      fontSize: detectedFontSize,
-    );
+    final baseFontSize = sawVisibleDocumentText &&
+            uniformDocumentFontSizeValid &&
+            uniformDocumentFontSize != null
+        ? uniformDocumentFontSize
+        : detectedFontSize;
+    final importedText = _normalizeImportedDocxText(parsedParagraphs.join('\n'));
+    final normalizedText = baseFontSize != null &&
+            uniformDocumentFontSizeValid &&
+            uniformDocumentFontSize != null
+        ? _docxStripUniformFontSize(importedText, uniformDocumentFontSize)
+        : importedText;
+
+    return ParsedFile(normalizedText, fontSize: baseFontSize);
   }
 
   static void _addDocxRunSegment(
@@ -346,6 +368,19 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       return size.round().toString();
     }
     return size.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  static String _docxStripUniformFontSize(String text, double fontSize) {
+    final withoutOpenTags = text.replaceAllMapped(
+      RegExp(r'\[size=(\d+(?:\.\d+)?)\]'),
+      (match) {
+        final value = double.tryParse(match.group(1)!);
+        return value != null && (value - fontSize).abs() < 0.001
+            ? ''
+            : match.group(0)!;
+      },
+    );
+    return withoutOpenTags.replaceAll('[/size]', '');
   }
 
   static String? _docxNormalizeFontFamily(String? family) {

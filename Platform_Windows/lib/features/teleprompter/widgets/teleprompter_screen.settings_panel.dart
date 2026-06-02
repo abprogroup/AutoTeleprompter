@@ -21,16 +21,14 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    ref.watch(scriptProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    final effectiveFontSize =
+        ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
-      unawaited(notifier.setFontSize(clamped));
-      unawaited(
-        ref.read(scriptProvider.notifier).updateStyleMetadata(
-              fontSize: clamped,
-            ),
-      );
+      unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(clamped));
       if (onFontSizeChanged != null) {
         onFontSizeChanged!(clamped);
       } else {
@@ -321,14 +319,14 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           Row(children: [
             const Text('Font Size', style: labelStyle),
             const Spacer(),
-            Text('${settings.fontSize.round()}px',
+            Text('${effectiveFontSize.round()}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
           sliderWithReset(
             tooltip: 'Reset Font Size',
             onReset: () => applyPresenterFontSize(20.0),
             slider: Slider(
-              value: settings.fontSize.clamp(14.0, 120.0).toDouble(),
+              value: effectiveFontSize.clamp(14.0, 120.0).toDouble(),
               min: 14,
               max: 120,
               activeColor: Color(settings.currentWordColor),

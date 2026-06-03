@@ -517,8 +517,18 @@ class _AutomationRow extends StatelessWidget {
       trailing: Switch.adaptive(
         value: enabled && value,
         onChanged: enabled ? onChanged : null,
-        activeThumbColor: const Color(0xFFFFBF00),
-        activeTrackColor: const Color(0x66FFBF00),
+        thumbColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFFFFBF00);
+          }
+          return null;
+        }),
+        trackColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0x66FFBF00);
+          }
+          return null;
+        }),
       ),
     );
   }

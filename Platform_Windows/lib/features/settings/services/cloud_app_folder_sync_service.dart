@@ -5,7 +5,7 @@ import 'cloud_connection_store.dart';
 import 'cloud_oauth_service.dart';
 
 const dropboxSyncRootPath = String.fromEnvironment('DROPBOX_SYNC_ROOT_PATH',
-    defaultValue: '/AutoTeleprompter');
+    defaultValue: '');
 
 class CloudSyncedFile {
   final String id;
@@ -72,12 +72,7 @@ class CloudAppFolderSyncService {
         message: 'Connect this cloud account before uploading.',
       );
     }
-    final safeTitle = _safeFileName(title.isEmpty ? 'Untitled script' : title);
-    final timestamp = DateTime.now()
-        .toUtc()
-        .toIso8601String()
-        .replaceAll(RegExp(r'[:.]'), '-');
-    final resolvedFileName = fileName ?? '$safeTitle-$timestamp.atp.txt';
+    final resolvedFileName = fileName ?? stableScriptFileName(title);
     return switch (providerId) {
       CloudConnectionStore.googleDrive => _uploadGoogleScript(
           session: session,

@@ -245,11 +245,12 @@ extension _AppSettingsMediaDefaults on _AppSettingsScreenState {
   }
 
   String _cameraDisplayName(String rawName) {
-    final withoutMoniker = rawName
-        .replaceFirst(RegExp(r'\s*<.*$'), '')
-        .replaceAll(RegExp(r'[\x00-\x1F]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    var visible = rawName.replaceAll(RegExp(r'[\x00-\x1F]'), ' ');
+    for (final marker in ['<', r'\\?\', r'\root#', r'\usb#', '#vid_']) {
+      final index = visible.toLowerCase().indexOf(marker.toLowerCase());
+      if (index > 0) visible = visible.substring(0, index);
+    }
+    final withoutMoniker = visible.replaceAll(RegExp(r'\s+'), ' ').trim();
     return withoutMoniker.isEmpty ? 'Unknown camera' : withoutMoniker;
   }
 

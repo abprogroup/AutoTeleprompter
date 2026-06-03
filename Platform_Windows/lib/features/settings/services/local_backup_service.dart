@@ -398,7 +398,7 @@ class LocalBackupService {
         .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
-    return safe.isEmpty ? 'script.atp.txt' : safe;
+    return safe.isEmpty ? 'script' : safe;
   }
 
   static bool _samePath(String a, String b) {

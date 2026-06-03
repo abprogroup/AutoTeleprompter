@@ -10,17 +10,11 @@ import 'cloud_connection_store.dart';
 
 const googleDriveOAuthClientId =
     String.fromEnvironment('GOOGLE_DRIVE_CLIENT_ID');
-const googleDriveOAuthClientSecret =
-    String.fromEnvironment('GOOGLE_DRIVE_CLIENT_SECRET');
 const dropboxOAuthClientId = String.fromEnvironment('DROPBOX_CLIENT_ID');
 const cloudOAuthRedirectPort =
     int.fromEnvironment('CLOUD_OAUTH_REDIRECT_PORT', defaultValue: 51747);
 
 String _cleanOAuthClientId(String value) {
-  return value.replaceAll(RegExp(r'\s+'), '').trim();
-}
-
-String _cleanOAuthClientSecret(String value) {
   return value.replaceAll(RegExp(r'\s+'), '').trim();
 }
 
@@ -364,21 +358,6 @@ class CloudOAuthService {
     required String verifier,
     required String redirectUri,
   }) async {
-    try {
-      return await _postTokenRequest(
-        config: config,
-        parameters: {
-          'grant_type': 'authorization_code',
-          'client_id': config.clientId,
-          'code': code,
-          'code_verifier': verifier,
-          'redirect_uri': redirectUri,
-        },
-        includeClientSecret: false,
-      );
-    } on _CloudOAuthTokenException catch (error) {
-      if (!error.clientSecretMissing || config.clientSecret.isEmpty) rethrow;
-    }
     return _postTokenRequest(
       config: config,
       parameters: {
@@ -388,14 +367,12 @@ class CloudOAuthService {
         'code_verifier': verifier,
         'redirect_uri': redirectUri,
       },
-      includeClientSecret: true,
     );
   }
 
   Future<Map<String, dynamic>> _postTokenRequest({
     required _OAuthProviderConfig config,
     required Map<String, String> parameters,
-    required bool includeClientSecret,
   }) async {
     final request = await _httpClient.postUrl(config.tokenEndpoint);
     request.headers.contentType = ContentType(
@@ -403,12 +380,7 @@ class CloudOAuthService {
       'x-www-form-urlencoded',
       charset: 'utf-8',
     );
-    final payload = <String, String>{
-      ...parameters,
-      if (includeClientSecret && config.clientSecret.isNotEmpty)
-        'client_secret': config.clientSecret,
-    };
-    request.write(Uri(queryParameters: payload).query);
+    request.write(Uri(queryParameters: parameters).query);
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -435,21 +407,10 @@ class CloudOAuthService {
       'client_id': config.clientId,
       'refresh_token': refreshToken,
     };
-    Map<String, dynamic> decoded;
-    try {
-      decoded = await _postTokenRequest(
-        config: config,
-        parameters: parameters,
-        includeClientSecret: false,
-      );
-    } on _CloudOAuthTokenException catch (error) {
-      if (!error.clientSecretMissing || config.clientSecret.isEmpty) rethrow;
-      decoded = await _postTokenRequest(
-        config: config,
-        parameters: parameters,
-        includeClientSecret: true,
-      );
-    }
+    final decoded = await _postTokenRequest(
+      config: config,
+      parameters: parameters,
+    );
     return {
       ...previousPayload,
       ...decoded,
@@ -537,7 +498,6 @@ class CloudOAuthService {
     return switch (provider.id) {
       CloudConnectionStore.googleDrive => _OAuthProviderConfig.googleDrive(
           clientId: googleDriveOAuthClientId,
-          clientSecret: googleDriveOAuthClientSecret,
         ),
       CloudConnectionStore.dropbox => _OAuthProviderConfig.dropbox(
           clientId: dropboxOAuthClientId,
@@ -550,12 +510,10 @@ class CloudOAuthService {
 class _CloudOAuthTokenException implements Exception {
   final String message;
   final bool isCredentialConfigurationIssue;
-  final bool clientSecretMissing;
 
   const _CloudOAuthTokenException(
     this.message, {
     this.isCredentialConfigurationIssue = false,
-    this.clientSecretMissing = false,
   });
 
   factory _CloudOAuthTokenException.fromTokenResponse({
@@ -564,28 +522,13 @@ class _CloudOAuthTokenException implements Exception {
     required String body,
   }) {
     final lower = body.toLowerCase();
-    final mentionsClientSecret =
-        lower.contains('client_secret') || lower.contains('client secret');
     if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
-        mentionsClientSecret &&
-        lower.contains('missing')) {
+        lower.contains('invalid_client')) {
       return const _CloudOAuthTokenException(
-        'Google Drive sign-in reached Google successfully, but this build is '
-        'missing GOOGLE_DRIVE_CLIENT_SECRET for the Desktop app OAuth token '
-        'exchange. Add the Google Desktop OAuth client secret as an injected '
-        'build secret, then rebuild. Do not hardcode it in source.',
-        isCredentialConfigurationIssue: true,
-        clientSecretMissing: true,
-      );
-    }
-    if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
-        mentionsClientSecret &&
-        lower.contains('invalid')) {
-      return const _CloudOAuthTokenException(
-        'Google Drive rejected GOOGLE_DRIVE_CLIENT_SECRET. The app will use '
-        'Google Desktop PKCE without the secret first; if Google still asks '
-        'for a secret, copy the Client ID and Client secret again from the '
-        'same Google Desktop OAuth client and rebuild.',
+        'Google Drive rejected the OAuth client. Verify that '
+        'GOOGLE_DRIVE_CLIENT_ID is the Desktop app Client ID from the same '
+        'Google Cloud project and rebuild. The app uses a native PKCE flow '
+        'and does not compile the client secret into the desktop binary.',
         isCredentialConfigurationIssue: true,
       );
     }
@@ -607,7 +550,6 @@ class _OAuthCallback {
 
 class _OAuthProviderConfig {
   final String clientId;
-  final String clientSecret;
   final String clientIdDefineName;
   final Uri tokenEndpoint;
   final bool allowDynamicLoopbackPort;
@@ -621,7 +563,6 @@ class _OAuthProviderConfig {
 
   const _OAuthProviderConfig({
     required this.clientId,
-    this.clientSecret = '',
     required this.clientIdDefineName,
     required this.tokenEndpoint,
     required this.allowDynamicLoopbackPort,
@@ -640,13 +581,10 @@ class _OAuthProviderConfig {
 
   factory _OAuthProviderConfig.googleDrive({
     required String clientId,
-    required String clientSecret,
   }) {
     final normalizedClientId = _cleanOAuthClientId(clientId);
-    final normalizedClientSecret = _cleanOAuthClientSecret(clientSecret);
     return _OAuthProviderConfig(
       clientId: normalizedClientId,
-      clientSecret: normalizedClientSecret,
       clientIdDefineName: 'GOOGLE_DRIVE_CLIENT_ID',
       tokenEndpoint: Uri.parse('https://oauth2.googleapis.com/token'),
       allowDynamicLoopbackPort: true,

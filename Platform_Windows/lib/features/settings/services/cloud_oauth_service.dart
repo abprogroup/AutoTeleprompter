@@ -14,6 +14,15 @@ const dropboxOAuthClientId = String.fromEnvironment('DROPBOX_CLIENT_ID');
 const cloudOAuthRedirectPort =
     int.fromEnvironment('CLOUD_OAUTH_REDIRECT_PORT', defaultValue: 51747);
 
+String _cleanOAuthClientId(String value) {
+  return value.replaceAll(RegExp(r'\s+'), '').trim();
+}
+
+bool _looksLikeGoogleOAuthClientId(String value) {
+  return RegExp(r'^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$')
+      .hasMatch(value);
+}
+
 class CloudAccountInfo {
   final String providerId;
   final String providerLabel;
@@ -201,6 +210,14 @@ class CloudOAuthService {
         missingCredentials: true,
         message: '${provider.label} account sign-in is ready in code, but this '
             'installation is missing ${config.clientIdDefineName}.',
+      );
+    }
+    final credentialIssue = config.credentialIssue;
+    if (credentialIssue != null) {
+      return CloudAccountConnectResult(
+        connected: false,
+        missingCredentials: true,
+        message: credentialIssue,
       );
     }
 
@@ -490,9 +507,19 @@ class _OAuthProviderConfig {
     required this.accountLabel,
   });
 
+  String? get credentialIssue {
+    if (clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
+        !_looksLikeGoogleOAuthClientId(clientId)) {
+      return 'Google Drive account sign-in is ready in code, but '
+          'GOOGLE_DRIVE_CLIENT_ID is not a valid OAuth Desktop app Client ID.';
+    }
+    return null;
+  }
+
   factory _OAuthProviderConfig.googleDrive({required String clientId}) {
+    final normalizedClientId = _cleanOAuthClientId(clientId);
     return _OAuthProviderConfig(
-      clientId: clientId,
+      clientId: normalizedClientId,
       clientIdDefineName: 'GOOGLE_DRIVE_CLIENT_ID',
       tokenEndpoint: Uri.parse('https://oauth2.googleapis.com/token'),
       authorizationUri: ({
@@ -501,7 +528,7 @@ class _OAuthProviderConfig {
         required String challenge,
       }) =>
           Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-        'client_id': clientId,
+        'client_id': normalizedClientId,
         'redirect_uri': redirectUri,
         'response_type': 'code',
         'scope': 'openid email profile '
@@ -517,8 +544,9 @@ class _OAuthProviderConfig {
   }
 
   factory _OAuthProviderConfig.dropbox({required String clientId}) {
+    final normalizedClientId = _cleanOAuthClientId(clientId);
     return _OAuthProviderConfig(
-      clientId: clientId,
+      clientId: normalizedClientId,
       clientIdDefineName: 'DROPBOX_CLIENT_ID',
       tokenEndpoint: Uri.parse('https://api.dropboxapi.com/oauth2/token'),
       authorizationUri: ({
@@ -527,7 +555,7 @@ class _OAuthProviderConfig {
         required String challenge,
       }) =>
           Uri.https('www.dropbox.com', '/oauth2/authorize', {
-        'client_id': clientId,
+        'client_id': normalizedClientId,
         'redirect_uri': redirectUri,
         'response_type': 'code',
         'token_access_type': 'offline',

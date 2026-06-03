@@ -796,9 +796,4 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   }
 }
 
-class _EnterSelectionRange {
-  final int blockIndex;
-  final TextSelection selection;
-
-  const _EnterSelectionRange(this.blockIndex, this.selection);
-}
+class _EnterSelectionRange { final int blockIndex; final TextSelection selection; const _EnterSelectionRange(this.blockIndex, this.selection); }

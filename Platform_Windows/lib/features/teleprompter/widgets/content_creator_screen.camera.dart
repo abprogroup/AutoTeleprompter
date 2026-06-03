@@ -109,8 +109,11 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     List<CameraDescription> cameras,
     CameraDescription? preferredCamera,
   ) {
+    final defaultName =
+        ref.read(settingsProvider).defaultCameraDeviceName.trim();
     final preferredName = preferredCamera?.name ??
-        (_cameraWasChosenByUser ? _selectedCameraName : null);
+        (_cameraWasChosenByUser ? _selectedCameraName : null) ??
+        (defaultName.isEmpty ? null : defaultName);
     if (preferredName != null) {
       for (final camera in cameras) {
         if (camera.name == preferredName) return camera;
@@ -361,6 +364,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         _updateContentCreatorState(() => _recordExportProgress = 0.0);
         final savedPath = await _saveRecordingToChosenFolder(file.path);
         final settings = ref.read(settingsProvider);
+        await _backupRecordingIfEnabled(savedPath);
         final saveMessage = await _recordingSaveMessage(
           savedPath,
           format: settings.contentCreatorRecordingFormat,
@@ -392,7 +396,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
             .read(settingsProvider.notifier)
             .setContentCreatorRecordingFormat(
               AppSettings.contentCreatorRecordingFormatMp4,
-        );
+            );
         _showSnack(
           'This app records MP4 video and WAV audio directly. Extra video '
           'file types require platform-specific recording support.',
@@ -409,10 +413,15 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         _contentControlsVisible = true;
       });
       _hideContentControlsTimer?.cancel();
-      _logContentDebug(
-        'recording start keeps speech session separate '
-        'audio=${recordCameraAudio ? 'camera' : 'silent'}',
-      );
+      await _startContentSpeechSessionForRecording(settings);
+      if (!mounted || !_recordStartInFlight) {
+        await _stopContentSpeechSessionIfOwnedByRecording();
+        await _releaseCameraAudioAfterRecording();
+        _syncContentControlsForActiveSession(false);
+        return;
+      }
+      _logContentDebug('recording start preparing camera '
+          'audio=${recordCameraAudio ? 'camera' : 'silent'}');
       final cameraReady = await _prepareCameraAudioForRecording(
         recordCameraAudio: recordCameraAudio,
       );
@@ -504,7 +513,9 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         _recordStartInFlight = false;
         _recordSeconds = 0;
       });
+      await _stopContentSpeechSessionIfOwnedByRecording();
       _syncContentControlsForActiveSession(false);
+      await _backupRecordingIfEnabled(savedPath);
       if (savedPath != null) _showSnack('Audio recording saved: $savedPath');
       _logContentDebug('wav recording stopped seconds=$recordedSeconds');
       return;
@@ -530,6 +541,13 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       _contentControlsVisible = true;
     });
     _hideContentControlsTimer?.cancel();
+    final settings = ref.read(settingsProvider);
+    await _startContentSpeechSessionForRecording(settings);
+    if (!mounted || !_recordStartInFlight) {
+      await _stopContentSpeechSessionIfOwnedByRecording();
+      _syncContentControlsForActiveSession(false);
+      return;
+    }
     _logContentDebug('wav recording countdown started');
 
     for (int i = 3; i > 0; i--) {
@@ -565,6 +583,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         _recordStartInFlight = false;
         _countdown = 0;
       });
+      await _stopContentSpeechSessionIfOwnedByRecording();
       _syncContentControlsForActiveSession(false);
       _showSnack('Audio recording could not start. Check microphone access.');
       _logContentDebug('wav recording start failed $e');
@@ -662,6 +681,44 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     return _defaultRecordingFolderPath();
   }
 
+  Future<void> _backupRecordingIfEnabled(String? savedPath) async {
+    if (savedPath == null || savedPath.trim().isEmpty) return;
+    if (!ref.read(settingsProvider).recordingAutoBackup) return;
+    final accounts = await CloudOAuthService().loadAccounts();
+    if (accounts.isEmpty) {
+      _logContentDebug('recording cloud backup skipped: no cloud account');
+      return;
+    }
+    try {
+      final sync = CloudAppFolderSyncService();
+      var uploaded = 0;
+      final failures = <String>[];
+      for (final providerId in accounts.keys) {
+        final result = await sync.uploadRecording(
+          providerId: providerId,
+          sourcePath: savedPath,
+        );
+        if (result.ok) {
+          uploaded++;
+        } else {
+          failures.add(result.message);
+        }
+      }
+      _logContentDebug(
+        'recording cloud backup uploaded=$uploaded '
+        'failed=${failures.length} path=$savedPath',
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'contentCreator.recordingCloudBackup',
+        data: {'path': savedPath},
+      );
+      _logContentDebug('recording cloud backup failed $error');
+    }
+  }
+
   Future<String> _defaultRecordingFolderPath() async {
     final userProfile = Platform.environment['USERPROFILE'];
     if (userProfile != null && userProfile.trim().isNotEmpty) {
@@ -720,50 +777,5 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     await ref.read(settingsProvider.notifier).setVideoResolution(resolution);
     _logContentDebug('video resolution selected $resolution');
     await _initializeCamera();
-  }
-
-  Future<void> _initContentWebViewController() async {
-    if (_contentWebviewController != null) return;
-    try {
-      final controller = WebviewController();
-      await controller.initialize();
-      if (!mounted) {
-        controller.dispose();
-        return;
-      }
-      _updateContentCreatorState(() {
-        _contentWebviewController = controller;
-      });
-      final url = ref.read(teleprompterProvider).sttWebViewUrl;
-      if (url != null && url != _loadedContentWebViewUrl) {
-        await _loadContentSttWebView(url);
-      }
-    } catch (e, stack) {
-      _logContentDebug('content webview init failed $e');
-      LightweightDiagnostics.instance.recordError(
-        e,
-        stack,
-        source: 'contentCreator.webviewInit',
-      );
-    }
-  }
-
-  Future<void> _loadContentSttWebView(String url) async {
-    WebView2RuntimeConfig.configureForLocalSttUrl(url);
-    _loadedContentWebViewUrl = url;
-    if (_contentWebviewController == null) {
-      await _initContentWebViewController();
-    }
-    try {
-      await _contentWebviewController?.loadUrl(url);
-      _logContentDebug('content webview loaded $url');
-    } catch (e, stack) {
-      _logContentDebug('content webview load failed $e');
-      LightweightDiagnostics.instance.recordError(
-        e,
-        stack,
-        source: 'contentCreator.webviewLoad',
-      );
-    }
   }
 }

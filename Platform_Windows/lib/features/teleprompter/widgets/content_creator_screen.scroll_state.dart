@@ -70,6 +70,11 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
     )) {
       return;
     }
+    if ((sttState.isListening || sttState.isStarting) &&
+        _contentProgrammaticScrollCommitActive()) {
+      _syncContentVisibleWordWindow();
+      return;
+    }
     _updateActiveWordFromScroll(commitProvider: true);
   }
 
@@ -127,6 +132,20 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
     return false;
   }
 
+  void _suppressContentScrollPositionCommit({required bool immediate}) {
+    _contentProgrammaticScrollCommitBlockedUntil = DateTime.now().add(
+      Duration(milliseconds: immediate ? 380 : 820),
+    );
+  }
+
+  bool _contentProgrammaticScrollCommitActive() {
+    final until = _contentProgrammaticScrollCommitBlockedUntil;
+    if (until == null) return false;
+    if (DateTime.now().isBefore(until)) return true;
+    _contentProgrammaticScrollCommitBlockedUntil = null;
+    return false;
+  }
+
   int _contentQuarterTurns(AppSettings settings) {
     return ((settings.flipRotation ~/ 90) % 4 + 4) % 4;
   }
@@ -179,6 +198,11 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
   void _scheduleContentPositionCommit(int index) {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
+    final sttState = ref.read(teleprompterProvider);
+    if ((sttState.isListening || sttState.isStarting) &&
+        _contentProgrammaticScrollCommitActive()) {
+      return;
+    }
     final target = index.clamp(0, script.words.length - 1).toInt();
     if (_pendingPositionCommit == target &&
         _positionCommitTimer?.isActive == true) {
@@ -197,7 +221,16 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
         return;
       }
       final clamped = pending.clamp(0, activeScript.words.length - 1).toInt();
-      final current = ref.read(teleprompterProvider).confirmedWordIndex;
+      final live = ref.read(teleprompterProvider);
+      if ((live.isListening || live.isStarting) &&
+          _contentProgrammaticScrollCommitActive()) {
+        _logContentDebug(
+          'scroll position commit suppressed during speech target=$clamped '
+          'current=${live.confirmedWordIndex}',
+        );
+        return;
+      }
+      final current = live.confirmedWordIndex;
       if (current == clamped) return;
       ref.read(teleprompterProvider.notifier).jumpToPosition(
             clamped,

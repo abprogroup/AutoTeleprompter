@@ -90,7 +90,7 @@ extension _ContentCreatorDebug on _ContentCreatorScreenState {
       'device=$cameraName',
       'resolution=${settings.videoResolution} preview=${preview == null ? 'none' : '${preview.width.round()}x${preview.height.round()}'}',
       'initGen=$_cameraInitGeneration init=$_isInit recording=$_isRecording pending=$_recordStartInFlight countdown=$_countdown',
-      'recordingAudio=${settings.contentCreatorRecordingAudioMode} format=${settings.contentCreatorRecordingFormat}',
+      'recordingAudio=${settings.contentCreatorRecordingAudioMode} format=${settings.contentCreatorRecordingFormat} speechLink=${settings.contentCreatorRecordingControlsSpeech}',
       'feed=${settings.contentCreatorFeedMode} layout=${settings.contentCreatorLayoutPreset} opacity=${settings.contentCreatorCameraOpacity.toStringAsFixed(2)}',
       'bubble=${settings.contentCreatorBubblePosition}/${settings.contentCreatorBubbleShape} size=${settings.contentCreatorBubbleSize.toStringAsFixed(2)} opacity=${settings.contentCreatorBubbleOpacity.toStringAsFixed(2)} offset=${settings.contentCreatorBubbleOffsetX.toStringAsFixed(2)},${settings.contentCreatorBubbleOffsetY.toStringAsFixed(2)}',
       'stt=${settings.sttEngine} language=${settings.languageMode}',

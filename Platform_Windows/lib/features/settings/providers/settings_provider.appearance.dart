@@ -139,6 +139,13 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setString(_contentCreatorCameraSourceModeKey, normalized);
   }
 
+  Future<void> setDefaultCameraDeviceName(String name) async {
+    final normalized = name.trim();
+    state = state.copyWith(defaultCameraDeviceName: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_defaultCameraDeviceNameKey, normalized);
+  }
+
   Future<void> setContentCreatorLayoutPreset(String preset) async {
     final normalized = _normalizeContentCreatorLayout(preset);
     state = state.copyWith(contentCreatorLayoutPreset: normalized);
@@ -251,6 +258,12 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setString(_contentCreatorRecordingAudioModeKey, normalized);
   }
 
+  Future<void> setContentCreatorRecordingControlsSpeech(bool enabled) async {
+    state = state.copyWith(contentCreatorRecordingControlsSpeech: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_contentCreatorRecordingControlsSpeechKey, enabled);
+  }
+
   Future<void> setImportColorMode(String mode) async {
     final normalized = _normalizeImportColorMode(mode);
     state = state.copyWith(importColorMode: normalized);
@@ -276,6 +289,18 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     state = state.copyWith(updateChannel: normalized);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_updateChannelKey, normalized);
+  }
+
+  Future<void> setCloudAutoSyncOnSave(bool enabled) async {
+    state = state.copyWith(cloudAutoSyncOnSave: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_cloudAutoSyncOnSaveKey, enabled);
+  }
+
+  Future<void> setRecordingAutoBackup(bool enabled) async {
+    state = state.copyWith(recordingAutoBackup: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_recordingAutoBackupKey, enabled);
   }
 
   Future<void> setDisplayName(String name) async {

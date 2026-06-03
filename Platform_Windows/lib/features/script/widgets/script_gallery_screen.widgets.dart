@@ -88,20 +88,35 @@ class _ProDashboard extends StatelessWidget {
     final isActive = auth.isPro || auth.isAdmin;
     final title = isActive ? 'Pro access active' : 'Free plan';
     final subtitle = isActive
-        ? 'Professional tools active: creator, remote, cloud, and recording'
-        : 'Local scripts and local storage are active. Pro tools are locked.';
+        ? 'Premium tools: cloud, remote, content creation, audio recorder.'
+        : 'Pro tools locked: cloud, remote, content creation, audio recorder.';
+
+    if (compact) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return _buildCompact(
+            title: title,
+            subtitle: subtitle,
+            isActive: isActive,
+          );
+        },
+      );
+    }
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(compact ? 12 : 16),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
           width: double.infinity,
-          padding: EdgeInsets.all(compact ? 12 : 16),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
           decoration: BoxDecoration(
             color: const Color(0xFF111111),
-            borderRadius: BorderRadius.circular(compact ? 12 : 16),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: const Color(0xFFFFBF00).withValues(alpha: 0.25),
             ),
@@ -112,53 +127,53 @@ class _ProDashboard extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    width: compact ? 34 : 42,
-                    height: compact ? 34 : 42,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
                       color: const Color(0xFFFFBF00).withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(compact ? 10 : 12),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       isActive
                           ? Icons.verified_rounded
                           : Icons.workspace_premium_outlined,
                       color: const Color(0xFFFFBF00),
-                      size: compact ? 20 : 24,
+                      size: 24,
                     ),
                   ),
-                  SizedBox(width: compact ? 10 : 14),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           title,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
-                            fontSize: compact ? 13 : 15,
+                            fontSize: 15,
                           ),
                         ),
-                        SizedBox(height: compact ? 2 : 3),
+                        const SizedBox(height: 3),
                         Text(
                           subtitle,
-                          maxLines: compact ? 2 : 2,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white54,
-                            fontSize: compact ? 11 : 12,
+                            fontSize: 12,
                             height: 1.25,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  SizedBox(width: compact ? 8 : 12),
-                  if (isActive && !compact)
+                  const SizedBox(width: 12),
+                  if (isActive)
                     Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: compact ? 8 : 10,
-                        vertical: compact ? 4 : 6,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.green.withValues(alpha: 0.14),
@@ -167,11 +182,11 @@ class _ProDashboard extends StatelessWidget {
                           color: Colors.green.withValues(alpha: 0.35),
                         ),
                       ),
-                      child: Text(
+                      child: const Text(
                         'ACTIVE',
                         style: TextStyle(
                           color: Colors.greenAccent,
-                          fontSize: compact ? 10 : 11,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -183,30 +198,143 @@ class _ProDashboard extends StatelessWidget {
                     ),
                 ],
               ),
-              SizedBox(height: compact ? 10 : 12),
-              Row(
+              if (!compact) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    if (Platform.isWindows)
+                      Expanded(
+                        child: _ProFeaturePill(
+                          icon: Icons.settings_remote_outlined,
+                          label: 'Remote',
+                          active: isActive && onOpenRemote != null,
+                          onTap: isActive && onOpenRemote != null
+                              ? onOpenRemote!
+                              : onLockedFeature,
+                        ),
+                      ),
+                    if (Platform.isWindows) const SizedBox(width: 8),
+                    Expanded(
+                      child: _ProFeaturePill(
+                        icon: Icons.cloud_outlined,
+                        label: 'Cloud',
+                        active: isActive,
+                        onTap: isActive ? onOpenCloud : onLockedFeature,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompact({
+    required String title,
+    required String subtitle,
+    required bool isActive,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFBF00).withValues(alpha: 0.36),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFBF00).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isActive
+                      ? Icons.verified_rounded
+                      : Icons.workspace_premium_outlined,
+                  color: const Color(0xFFFFBF00),
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        height: 1.05,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFFFFBF00),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        height: 1.12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (Platform.isWindows)
-                    Expanded(
+                    SizedBox(
+                      width: 94,
                       child: _ProFeaturePill(
                         icon: Icons.settings_remote_outlined,
                         label: 'Remote',
                         active: isActive && onOpenRemote != null,
+                        dense: true,
                         onTap: isActive && onOpenRemote != null
                             ? onOpenRemote!
                             : onLockedFeature,
                       ),
                     ),
-                  if (Platform.isWindows) const SizedBox(width: 8),
-                  Expanded(
+                  if (Platform.isWindows) const SizedBox(height: 4),
+                  SizedBox(
+                    width: 94,
                     child: _ProFeaturePill(
                       icon: Icons.cloud_outlined,
                       label: 'Cloud',
                       active: isActive,
+                      dense: true,
                       onTap: isActive ? onOpenCloud : onLockedFeature,
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white24,
               ),
             ],
           ),
@@ -221,12 +349,14 @@ class _ProFeaturePill extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final bool dense;
 
   const _ProFeaturePill({
     required this.icon,
     required this.label,
     required this.active,
     required this.onTap,
+    this.dense = false,
   });
 
   @override
@@ -236,15 +366,15 @@ class _ProFeaturePill extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(dense ? 8 : 10),
         child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          height: dense ? 28 : 36,
+          padding: EdgeInsets.symmetric(horizontal: dense ? 7 : 10),
           decoration: BoxDecoration(
             color: active
                 ? const Color(0xFFFFBF00).withValues(alpha: .10)
                 : Colors.white.withValues(alpha: .04),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(dense ? 8 : 10),
             border: Border.all(
               color: active
                   ? const Color(0xFFFFBF00).withValues(alpha: .24)
@@ -255,15 +385,15 @@ class _ProFeaturePill extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(active ? icon : Icons.lock_outline_rounded,
-                  color: color, size: 17),
-              const SizedBox(width: 6),
+                  color: color, size: dense ? 14 : 17),
+              SizedBox(width: dense ? 4 : 6),
               Flexible(
                 child: Text(
                   label,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: active ? Colors.white70 : Colors.white38,
-                    fontSize: 11,
+                    fontSize: dense ? 10 : 11,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

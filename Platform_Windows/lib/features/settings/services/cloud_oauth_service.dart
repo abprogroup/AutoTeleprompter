@@ -10,11 +10,17 @@ import 'cloud_connection_store.dart';
 
 const googleDriveOAuthClientId =
     String.fromEnvironment('GOOGLE_DRIVE_CLIENT_ID');
+const googleDriveOAuthClientSecret =
+    String.fromEnvironment('GOOGLE_DRIVE_CLIENT_SECRET');
 const dropboxOAuthClientId = String.fromEnvironment('DROPBOX_CLIENT_ID');
 const cloudOAuthRedirectPort =
     int.fromEnvironment('CLOUD_OAUTH_REDIRECT_PORT', defaultValue: 51747);
 
 String _cleanOAuthClientId(String value) {
+  return value.replaceAll(RegExp(r'\s+'), '').trim();
+}
+
+String _cleanOAuthClientSecret(String value) {
   return value.replaceAll(RegExp(r'\s+'), '').trim();
 }
 
@@ -380,7 +386,11 @@ class CloudOAuthService {
       'x-www-form-urlencoded',
       charset: 'utf-8',
     );
-    request.write(Uri(queryParameters: parameters).query);
+    final payload = <String, String>{
+      ...parameters,
+      if (config.clientSecret.isNotEmpty) 'client_secret': config.clientSecret,
+    };
+    request.write(Uri(queryParameters: payload).query);
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -498,6 +508,7 @@ class CloudOAuthService {
     return switch (provider.id) {
       CloudConnectionStore.googleDrive => _OAuthProviderConfig.googleDrive(
           clientId: googleDriveOAuthClientId,
+          clientSecret: googleDriveOAuthClientSecret,
         ),
       CloudConnectionStore.dropbox => _OAuthProviderConfig.dropbox(
           clientId: dropboxOAuthClientId,
@@ -522,13 +533,25 @@ class _CloudOAuthTokenException implements Exception {
     required String body,
   }) {
     final lower = body.toLowerCase();
+    final mentionsClientSecret =
+        lower.contains('client_secret') || lower.contains('client secret');
+    if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
+        mentionsClientSecret &&
+        lower.contains('missing')) {
+      return const _CloudOAuthTokenException(
+        'Google Drive reached the token exchange, but this build is missing '
+        'GOOGLE_DRIVE_CLIENT_SECRET. Desktop OAuth clients can require the '
+        'client secret at the token endpoint. Add the secret as a GitHub '
+        'Actions secret or local build define, then rebuild.',
+        isCredentialConfigurationIssue: true,
+      );
+    }
     if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
         lower.contains('invalid_client')) {
       return const _CloudOAuthTokenException(
-        'Google Drive rejected the OAuth client. Verify that '
-        'GOOGLE_DRIVE_CLIENT_ID is the Desktop app Client ID from the same '
-        'Google Cloud project and rebuild. The app uses a native PKCE flow '
-        'and does not compile the client secret into the desktop binary.',
+        'Google Drive rejected the Desktop OAuth credentials. Verify that '
+        'GOOGLE_DRIVE_CLIENT_ID and GOOGLE_DRIVE_CLIENT_SECRET both came from '
+        'the same Google Cloud Desktop OAuth client, then rebuild.',
         isCredentialConfigurationIssue: true,
       );
     }
@@ -550,6 +573,7 @@ class _OAuthCallback {
 
 class _OAuthProviderConfig {
   final String clientId;
+  final String clientSecret;
   final String clientIdDefineName;
   final Uri tokenEndpoint;
   final bool allowDynamicLoopbackPort;
@@ -563,6 +587,7 @@ class _OAuthProviderConfig {
 
   const _OAuthProviderConfig({
     required this.clientId,
+    this.clientSecret = '',
     required this.clientIdDefineName,
     required this.tokenEndpoint,
     required this.allowDynamicLoopbackPort,
@@ -581,10 +606,13 @@ class _OAuthProviderConfig {
 
   factory _OAuthProviderConfig.googleDrive({
     required String clientId,
+    required String clientSecret,
   }) {
     final normalizedClientId = _cleanOAuthClientId(clientId);
+    final normalizedClientSecret = _cleanOAuthClientSecret(clientSecret);
     return _OAuthProviderConfig(
       clientId: normalizedClientId,
+      clientSecret: normalizedClientSecret,
       clientIdDefineName: 'GOOGLE_DRIVE_CLIENT_ID',
       tokenEndpoint: Uri.parse('https://oauth2.googleapis.com/token'),
       allowDynamicLoopbackPort: true,

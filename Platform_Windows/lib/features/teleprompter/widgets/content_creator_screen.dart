@@ -27,6 +27,8 @@ import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../../core/window/presenter_fullscreen_service.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../settings/services/cloud_app_folder_sync_service.dart';
+import '../../settings/services/cloud_oauth_service.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
 import '../../script/services/script_bookmark_service.dart';
@@ -41,6 +43,7 @@ part 'content_creator_screen.presenter_view.dart';
 part 'content_creator_screen.session.dart';
 part 'content_creator_screen.debug.dart';
 part 'content_creator_screen.camera.dart';
+part 'content_creator_screen.camera_webview.dart';
 part 'content_creator_screen.scroll_state.dart';
 part 'content_creator_screen.camera_settings.dart';
 part 'content_creator_screen.camera_settings_controls.dart';
@@ -116,6 +119,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   Timer? _hideContentControlsTimer;
   final List<String> _contentDebugLogs = [];
   DateTime? _contentRotationRecenterUntil;
+  DateTime? _contentProgrammaticScrollCommitBlockedUntil;
 
   @override
   void initState() {

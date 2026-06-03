@@ -191,6 +191,8 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     required String sourcePath,
   }) async {
     final exportType = format.toUpperCase();
+    final previousSessionId = _currentSessionId;
+    final previousSourceType = _sourceType.toUpperCase();
     final identityChanged =
         _currentTitle != fileName || _sourceType.toUpperCase() != exportType;
 
@@ -248,100 +250,30 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           currentWordColor: settings.currentWordColor,
           futureWordColor: settings.futureWordColor,
         );
+
+    if (identityChanged &&
+        previousSourceType == 'TEMP' &&
+        previousSessionId != _currentSessionId) {
+      await ref.read(settingsProvider.notifier).deleteRecentScript(
+            sessionId: previousSessionId,
+          );
+    }
   }
 
   Future<void> _confirmDeleteCurrentScript() async {
     final sourcePath = _currentSourcePath?.trim();
     final sourceFile =
         sourcePath == null || sourcePath.isEmpty ? null : File(sourcePath);
-    final canDeleteSource = sourceFile != null && await sourceFile.exists();
-    var deleteSourceFile = false;
 
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Row(
-            children: [
-              Icon(
-                Icons.delete_forever_rounded,
-                color: Colors.redAccent,
-                size: 22,
-              ),
-              SizedBox(width: 10),
-              Text(
-                'Delete script?',
-                style: TextStyle(color: Colors.white, fontSize: 17),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '"$_currentTitle"',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'This permanently removes the script from the app and from '
-                'Recent Activity.',
-                style: TextStyle(color: Colors.white70, height: 1.35),
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: canDeleteSource && deleteSourceFile,
-                onChanged: canDeleteSource
-                    ? (value) => setDialogState(
-                          () => deleteSourceFile = value ?? false,
-                        )
-                    : null,
-                activeColor: const Color(0xFFFFBF00),
-                checkColor: Colors.black,
-                contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'Delete file also from folder',
-                  style: TextStyle(color: Colors.white),
-                ),
-                subtitle: Text(
-                  canDeleteSource
-                      ? sourcePath!
-                      : 'No original folder file is linked to this script.',
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
-      ),
+    final choice = await showScriptDeleteDialog(
+      context,
+      title: _currentTitle,
+      sourcePath: sourcePath,
     );
 
-    if (confirmed != true || !mounted) return;
-    final shouldDeleteOriginal = canDeleteSource && deleteSourceFile;
+    if (choice == null || !mounted) return;
+    final shouldDeleteOriginal = choice.deleteSourceFile && sourceFile != null;
     _autoSaveTimer?.cancel();
     _recentTimer?.cancel();
     _recentPersistQueued = false;
@@ -404,6 +336,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       },
     );
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
+    await _forceRecentUpdate();
     try {
       final settings = ref.read(settingsProvider);
       ref.read(scriptProvider.notifier).loadText(
@@ -469,6 +402,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         'audioOnly': audioOnly,
       },
     );
+    await _forceRecentUpdate();
     try {
       final settings = ref.read(settingsProvider);
       if (audioOnly) {

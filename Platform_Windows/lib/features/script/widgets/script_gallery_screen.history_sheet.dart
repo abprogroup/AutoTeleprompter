@@ -41,6 +41,7 @@ class _FullHistorySheet extends ConsumerWidget {
                     snippet: meta['snippet'],
                     sessionId: meta['sessionId'],
                     secureRecordId: meta[SecureScriptStore.recordIdKey],
+                    sourcePath: meta['sourcePath'],
                   );
                 },
               );

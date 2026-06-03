@@ -121,6 +121,7 @@ class AppSettings {
   final int sttManualVisibleSkipSmallWords; // 0 = Off
   final int sttManualVisibleSkipBigWords; // 0 = Off
   final int sttManualBigWordMinLetters;
+  final String defaultCameraDeviceName;
   final String contentCreatorCameraSourceMode;
   final String contentCreatorLayoutPreset;
   final double contentCreatorCameraOpacity;
@@ -138,10 +139,13 @@ class AppSettings {
   final String contentCreatorRecordingFolder;
   final String contentCreatorRecordingFormat;
   final String contentCreatorRecordingAudioMode;
+  final bool contentCreatorRecordingControlsSpeech;
   final String importColorMode;
   final bool reduceMotion;
   final double uiScale;
   final String updateChannel;
+  final bool cloudAutoSyncOnSave;
+  final bool recordingAutoBackup;
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -192,6 +196,7 @@ class AppSettings {
     this.sttManualVisibleSkipSmallWords = 0,
     this.sttManualVisibleSkipBigWords = 0,
     this.sttManualBigWordMinLetters = 5,
+    this.defaultCameraDeviceName = '',
     this.contentCreatorCameraSourceMode = contentCreatorSourceNative,
     this.contentCreatorLayoutPreset = contentCreatorLayoutReading,
     this.contentCreatorCameraOpacity = 0.72,
@@ -209,10 +214,13 @@ class AppSettings {
     this.contentCreatorRecordingFolder = '',
     this.contentCreatorRecordingFormat = contentCreatorRecordingFormatMp4,
     this.contentCreatorRecordingAudioMode = contentCreatorRecordingAudioCamera,
+    this.contentCreatorRecordingControlsSpeech = false,
     this.importColorMode = importColorModePrompter,
     this.reduceMotion = false,
     this.uiScale = 1.0,
     this.updateChannel = updateChannelStable,
+    this.cloudAutoSyncOnSave = true,
+    this.recordingAutoBackup = false,
   });
 
   AppSettings copyWith({
@@ -264,6 +272,7 @@ class AppSettings {
     int? sttManualVisibleSkipSmallWords,
     int? sttManualVisibleSkipBigWords,
     int? sttManualBigWordMinLetters,
+    String? defaultCameraDeviceName,
     String? contentCreatorCameraSourceMode,
     String? contentCreatorLayoutPreset,
     double? contentCreatorCameraOpacity,
@@ -281,10 +290,13 @@ class AppSettings {
     String? contentCreatorRecordingFolder,
     String? contentCreatorRecordingFormat,
     String? contentCreatorRecordingAudioMode,
+    bool? contentCreatorRecordingControlsSpeech,
     String? importColorMode,
     bool? reduceMotion,
     double? uiScale,
     String? updateChannel,
+    bool? cloudAutoSyncOnSave,
+    bool? recordingAutoBackup,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -350,6 +362,8 @@ class AppSettings {
           sttManualVisibleSkipBigWords ?? this.sttManualVisibleSkipBigWords,
       sttManualBigWordMinLetters:
           sttManualBigWordMinLetters ?? this.sttManualBigWordMinLetters,
+      defaultCameraDeviceName:
+          defaultCameraDeviceName ?? this.defaultCameraDeviceName,
       contentCreatorCameraSourceMode:
           contentCreatorCameraSourceMode ?? this.contentCreatorCameraSourceMode,
       contentCreatorLayoutPreset:
@@ -384,10 +398,15 @@ class AppSettings {
           contentCreatorRecordingFormat ?? this.contentCreatorRecordingFormat,
       contentCreatorRecordingAudioMode: contentCreatorRecordingAudioMode ??
           this.contentCreatorRecordingAudioMode,
+      contentCreatorRecordingControlsSpeech:
+          contentCreatorRecordingControlsSpeech ??
+              this.contentCreatorRecordingControlsSpeech,
       importColorMode: importColorMode ?? this.importColorMode,
       reduceMotion: reduceMotion ?? this.reduceMotion,
       uiScale: uiScale ?? this.uiScale,
       updateChannel: updateChannel ?? this.updateChannel,
+      cloudAutoSyncOnSave: cloudAutoSyncOnSave ?? this.cloudAutoSyncOnSave,
+      recordingAutoBackup: recordingAutoBackup ?? this.recordingAutoBackup,
     );
   }
 }

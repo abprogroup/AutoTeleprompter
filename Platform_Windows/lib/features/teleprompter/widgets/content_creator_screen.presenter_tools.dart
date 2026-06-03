@@ -224,6 +224,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     if (index < 0 || index >= _wordKeys.length) return;
     final ctx = _wordKeys[index].currentContext;
     if (ctx == null || !_scrollController.hasClients) return;
+    _suppressContentScrollPositionCommit(immediate: immediate);
     final settings = ref.read(settingsProvider);
     if (_contentUsesVerticalReadingLine(settings)) {
       final box = ctx.findRenderObject() as RenderBox?;
@@ -232,9 +233,8 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
       final targetLine = _contentReadingLineCoordinate(settings, size);
       final center = box.localToGlobal(box.size.center(Offset.zero));
       final turns = _contentQuarterTurns(settings);
-      final delta = turns == 1
-          ? center.dx - targetLine
-          : targetLine - center.dx;
+      final delta =
+          turns == 1 ? center.dx - targetLine : targetLine - center.dx;
       final target = (_scrollController.offset + delta)
           .clamp(0.0, _scrollController.position.maxScrollExtent)
           .toDouble();
@@ -576,5 +576,4 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     if (value.isEmpty) return false;
     return RegExp(r'[A-Za-z0-9\u0590-\u05FF]').hasMatch(value);
   }
-
 }

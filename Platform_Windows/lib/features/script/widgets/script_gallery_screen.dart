@@ -18,6 +18,7 @@ import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
 import '../services/styling_service.dart';
+import 'script_delete_dialog.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 
 part 'script_gallery_screen.account_menu.dart';
@@ -89,7 +90,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFF0A0A0A),
         appBar: AppBar(
-          toolbarHeight: 80,
+          toolbarHeight: 64,
           title: GestureDetector(
             onTap: () async {
               setState(() => _logoTaps++);
@@ -162,17 +163,20 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
         ),
         body: SingleChildScrollView(
           physics: const ClampingScrollPhysics(),
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
+                  final welcomeTitle = 'Welcome Back, ${settings.displayName}.';
                   final welcome = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Welcome Back, ${settings.displayName}.',
+                        welcomeTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 26,
@@ -194,27 +198,40 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                     onOpenCloud: openCloudSettings,
                     onLockedFeature: openPremiumHub,
                   );
-                  if (constraints.maxWidth < 760) {
+                  final titlePainter = TextPainter(
+                    text: TextSpan(
+                      text: welcomeTitle,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    maxLines: 1,
+                    textDirection: TextDirection.ltr,
+                  )..layout();
+                  final shouldStack =
+                      constraints.maxWidth < titlePainter.width + 18 + 465;
+                  if (shouldStack) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         welcome,
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
                         pro,
                       ],
                     );
                   }
                   return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Expanded(child: welcome),
+                      Expanded(flex: 6, child: welcome),
                       const SizedBox(width: 18),
-                      SizedBox(width: 390, child: pro),
+                      Expanded(flex: 7, child: pro),
                     ],
                   );
                 },
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
               _GalleryActionCard(
                 title: 'New Script',
                 subtitle: 'Start with a blank canvas',
@@ -292,6 +309,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                           snippet: meta['snippet'],
                           sessionId: meta['sessionId'],
                           secureRecordId: meta[SecureScriptStore.recordIdKey],
+                          sourcePath: meta['sourcePath'],
                         );
                       }).toList(),
               ),

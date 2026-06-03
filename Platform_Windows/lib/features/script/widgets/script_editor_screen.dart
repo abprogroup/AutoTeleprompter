@@ -16,6 +16,7 @@ import './editor/editor_dialogs.dart';
 import './editor/suites/project_actions_mvp.dart';
 import './editor/suites/formatting_toolbar_mvp.dart';
 import './editor/components/editor_primitives.dart';
+import 'script_delete_dialog.dart';
 import './editor/styling_logic_mixin.dart';
 import './editor/markup_controller.dart';
 import './editor/components/global_selection_overlay.dart';
@@ -475,6 +476,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
   @override
   void dispose() {
+    _persistRecentSafely('dispose');
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
     _clipboardGuardTimer?.cancel();

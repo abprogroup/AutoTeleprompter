@@ -5,6 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/security/secure_script_store.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../models/app_settings.dart';
+import '../services/cloud_app_folder_sync_service.dart';
+import '../services/cloud_connection_store.dart';
+import '../services/cloud_oauth_service.dart';
+import '../services/local_backup_service.dart';
 
 export '../models/app_settings.dart';
 
@@ -203,6 +207,8 @@ class SettingsNotifier extends Notifier<AppSettings>
       sttManualVisibleSkipSmallWords: manualVisibleSmall,
       sttManualVisibleSkipBigWords: manualVisibleBig,
       sttManualBigWordMinLetters: manualBigWordMinLetters,
+      defaultCameraDeviceName:
+          prefs.getString(_defaultCameraDeviceNameKey) ?? '',
       contentCreatorCameraSourceMode: _normalizeContentCreatorCameraSource(
         prefs.getString(_contentCreatorCameraSourceModeKey),
       ),
@@ -263,6 +269,8 @@ class SettingsNotifier extends Notifier<AppSettings>
           _normalizeContentCreatorRecordingAudioMode(
         prefs.getString(_contentCreatorRecordingAudioModeKey),
       ),
+      contentCreatorRecordingControlsSpeech:
+          prefs.getBool(_contentCreatorRecordingControlsSpeechKey) ?? false,
       importColorMode: _normalizeImportColorMode(
         prefs.getString(_importColorModeKey),
       ),
@@ -271,6 +279,8 @@ class SettingsNotifier extends Notifier<AppSettings>
       updateChannel: _normalizeUpdateChannel(
         prefs.getString(_updateChannelKey),
       ),
+      cloudAutoSyncOnSave: prefs.getBool(_cloudAutoSyncOnSaveKey) ?? true,
+      recordingAutoBackup: prefs.getBool(_recordingAutoBackupKey) ?? false,
     );
   }
 
@@ -444,6 +454,89 @@ class SettingsNotifier extends Notifier<AppSettings>
     if (historyIndex != null) {
       await prefs.setInt(_lastHistoryIndexKey, historyIndex);
     }
+    if (!isSilent && state.cloudAutoSyncOnSave) {
+      await _syncSavedScriptSnapshot(
+        title: currentTitle,
+        text: text,
+        sourceType: type,
+        sourcePath: sourcePath,
+        historyJson: historyJson,
+      );
+    }
+  }
+
+  Future<void> _syncSavedScriptSnapshot({
+    required String title,
+    required String text,
+    String? sourceType,
+    String? sourcePath,
+    String? historyJson,
+  }) async {
+    final export = LocalBackupService.buildScriptExport(
+      title: title,
+      text: text,
+      sourceType: sourceType,
+      sourcePath: sourcePath,
+    );
+    if (export.readableText.trim().isEmpty) return;
+    try {
+      await LocalBackupService().backupScript(
+        title: title,
+        text: text,
+        sourceType: sourceType,
+        sourcePath: sourcePath,
+        historyJson: historyJson,
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'settings.localBackupSnapshot',
+        data: {'title': title},
+      );
+    }
+
+    try {
+      final oauth = CloudOAuthService();
+      final accounts = await oauth.loadAccounts();
+      final providerIds = accounts.keys
+          .where((id) =>
+              id == CloudConnectionStore.googleDrive ||
+              id == CloudConnectionStore.dropbox)
+          .toList(growable: false);
+      if (providerIds.isEmpty) return;
+
+      final sync = CloudAppFolderSyncService(oauth: oauth);
+      for (final providerId in providerIds) {
+        final result = await sync.uploadScript(
+          providerId: providerId,
+          title: title,
+          text: export.readableText,
+          fileName: export.fileName,
+          bytes: export.bytes,
+          mimeType: export.mimeType,
+          replaceExisting: true,
+        );
+        if (!result.ok) {
+          LightweightDiagnostics.instance.record(
+            'settings',
+            'cloud autosync failed',
+            data: {
+              'title': title,
+              'providerId': providerId,
+              'message': result.message,
+            },
+          );
+        }
+      }
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'settings.cloudAutoSyncSnapshot',
+        data: {'title': title},
+      );
+    }
   }
 
   Future<void> addToRecent(String metadataJson) async {
@@ -505,6 +598,7 @@ class SettingsNotifier extends Notifier<AppSettings>
   }) async {
     final list = List<String>.from(state.recentScripts);
     final removedRecordIds = <String>{};
+    final removedItems = <Map<String, dynamic>>[];
     var removedActiveScript = false;
     list.removeWhere((item) {
       try {
@@ -518,6 +612,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         if (!matches) return false;
         final recordId = itemRecordId;
         if (recordId != null) removedRecordIds.add(recordId);
+        removedItems.add(decoded);
         removedActiveScript = removedActiveScript ||
             recordId == state.lastScriptSessionId ||
             itemSessionId == state.lastScriptSessionId;
@@ -537,9 +632,31 @@ class SettingsNotifier extends Notifier<AppSettings>
       }
     });
 
+    final secureStore = SecureScriptStore();
+    for (final item in removedItems) {
+      try {
+        final data = await secureStore.readFromMetadata(item);
+        await LocalBackupService().backupDeletedScript(
+          title: item['title']?.toString() ?? title ?? 'Untitled script',
+          text: data?.text ?? '',
+          sourcePath: item['sourcePath']?.toString(),
+        );
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'settings.backupDeletedScript',
+          data: {
+            'sessionId': item['sessionId']?.toString() ?? '',
+            'title': item['title']?.toString() ?? '',
+          },
+        );
+      }
+    }
+
     for (final recordId in removedRecordIds) {
       try {
-        await SecureScriptStore().delete(recordId);
+        await secureStore.delete(recordId);
       } catch (error, stack) {
         LightweightDiagnostics.instance.recordError(
           error,

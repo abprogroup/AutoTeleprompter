@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../platform/stt/abstract_stt_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
@@ -14,12 +16,14 @@ import '../../feedback/providers/beta_consent_provider.dart';
 import '../../feedback/widgets/beta_consent_gate.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/services/remote_control_service.dart';
+import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../providers/settings_provider.dart';
 import 'cloud_sync_screen.dart';
 
 part 'app_settings_screen.tiles.dart';
 part 'app_settings_screen.account_remote.dart';
 part 'app_settings_screen.remote_profiles.dart';
+part 'app_settings_screen.media_defaults.dart';
 
 enum AppSettingsTab {
   general,
@@ -139,6 +143,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         ],
         onChanged: ref.read(settingsProvider.notifier).setImportColorMode,
       ),
+      const SizedBox(height: 22),
+      ..._mediaDefaultsSection(settings),
       const SizedBox(height: 22),
       const _SectionHeader(title: 'STORAGE'),
       const SizedBox(height: 8),

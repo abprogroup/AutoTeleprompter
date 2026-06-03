@@ -54,10 +54,10 @@ class _PremiumHubSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = _hasProAccess ? 'Pro access active' : 'Free plan';
     final subtitle = _hasProAccess
-        ? 'Remote control, online cloud tools, creator tools, and recording '
+        ? 'Remote control, cloud and backup storage, creator tools, and recording '
             'features are unlocked for this account.'
         : 'Local scripts and local app storage are available. Connect a Pro '
-            'account to unlock remote control and online cloud tools.';
+            'account to unlock remote control and cloud backup tools.';
 
     return SafeArea(
       child: Align(
@@ -146,10 +146,10 @@ class _PremiumHubSheet extends StatelessWidget {
               const SizedBox(height: 10),
               _PremiumFeatureTile(
                 icon: Icons.cloud_outlined,
-                title: 'Online Cloud Storage',
+                title: 'Cloud And Backup Storage',
                 subtitle:
-                    'Connect Google Drive or Dropbox accounts, or use linked '
-                    'cloud folders.',
+                    'Connect Google Drive or Dropbox accounts, or use Local '
+                    'Backup storage.',
                 locked: !_hasProAccess,
                 onTap: onOpenCloud,
               ),

@@ -32,6 +32,7 @@ class CloudSyncResult {
 
 class CloudAppFolderSyncService {
   static const _folderName = 'AutoTeleprompter';
+  static const _recordingsFolderName = 'Recordings';
 
   CloudAppFolderSyncService({
     CloudOAuthService? oauth,
@@ -56,6 +57,10 @@ class CloudAppFolderSyncService {
     required String providerId,
     required String title,
     required String text,
+    String? fileName,
+    List<int>? bytes,
+    String mimeType = 'text/plain; charset=utf-8',
+    bool replaceExisting = false,
   }) async {
     final session = await _oauth.authorizeAccount(providerId);
     if (session == null) {
@@ -69,21 +74,64 @@ class CloudAppFolderSyncService {
         .toUtc()
         .toIso8601String()
         .replaceAll(RegExp(r'[:.]'), '-');
-    final fileName = '$safeTitle-$timestamp.atp.txt';
+    final resolvedFileName = fileName ?? '$safeTitle-$timestamp.atp.txt';
     return switch (providerId) {
       CloudConnectionStore.googleDrive => _uploadGoogleScript(
           session: session,
-          fileName: fileName,
-          text: text,
+          fileName: resolvedFileName,
+          bytes: bytes ?? utf8.encode(text),
+          mimeType: mimeType,
+          replaceExisting: replaceExisting,
         ),
       CloudConnectionStore.dropbox => _uploadDropboxScript(
           session: session,
-          fileName: fileName,
-          text: text,
+          fileName: resolvedFileName,
+          bytes: bytes ?? utf8.encode(text),
+          replaceExisting: replaceExisting,
         ),
       _ => const CloudSyncResult(
           ok: false,
           message: 'This provider does not support account sync yet.',
+        ),
+    };
+  }
+
+  Future<CloudSyncResult> uploadRecording({
+    required String providerId,
+    required String sourcePath,
+  }) async {
+    final session = await _oauth.authorizeAccount(providerId);
+    if (session == null) {
+      return const CloudSyncResult(
+        ok: false,
+        message: 'Connect this cloud account before uploading recordings.',
+      );
+    }
+    final file = File(sourcePath);
+    if (!await file.exists()) {
+      return const CloudSyncResult(
+        ok: false,
+        message: 'Recording file no longer exists.',
+      );
+    }
+    final fileName = _safeFileName(_basename(sourcePath));
+    final bytes = await file.readAsBytes();
+    final mimeType = _recordingMimeType(fileName);
+    return switch (providerId) {
+      CloudConnectionStore.googleDrive => _uploadGoogleRecording(
+          session: session,
+          fileName: fileName,
+          bytes: bytes,
+          mimeType: mimeType,
+        ),
+      CloudConnectionStore.dropbox => _uploadDropboxRecording(
+          session: session,
+          fileName: fileName,
+          bytes: bytes,
+        ),
+      _ => const CloudSyncResult(
+          ok: false,
+          message: 'This provider does not support recording upload yet.',
         ),
     };
   }
@@ -137,27 +185,54 @@ class CloudAppFolderSyncService {
   Future<CloudSyncResult> _uploadGoogleScript({
     required CloudAuthorizedSession session,
     required String fileName,
-    required String text,
+    required List<int> bytes,
+    required String mimeType,
+    required bool replaceExisting,
+    String? folderId,
   }) async {
-    final folderId = await _googleFolderId(session);
+    final targetFolderId = folderId ?? await _googleFolderId(session);
+    if (replaceExisting) {
+      final existingId = await _googleFileIdByName(
+        session: session,
+        folderId: targetFolderId,
+        fileName: fileName,
+      );
+      if (existingId != null) {
+        return _updateGoogleScriptContent(
+          session: session,
+          fileId: existingId,
+          fileName: fileName,
+          bytes: bytes,
+          mimeType: mimeType,
+        );
+      }
+    }
     final boundary = 'atp-${DateTime.now().microsecondsSinceEpoch}';
     final metadata = jsonEncode({
       'name': fileName,
-      'parents': [folderId],
-      'mimeType': 'text/plain',
+      'parents': [targetFolderId],
+      'mimeType': mimeType.split(';').first.trim(),
     });
-    final body = [
+    final header = [
       '--$boundary',
       'Content-Type: application/json; charset=UTF-8',
       '',
       metadata,
       '--$boundary',
-      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Type: $mimeType',
       '',
-      text,
+      '',
+    ].join('\r\n');
+    final footer = [
+      '',
       '--$boundary--',
       '',
     ].join('\r\n');
+    final bodyBytes = [
+      ...utf8.encode(header),
+      ...bytes,
+      ...utf8.encode(footer),
+    ];
     final request = await _httpClient.postUrl(
       Uri.https('www.googleapis.com', '/upload/drive/v3/files', {
         'uploadType': 'multipart',
@@ -168,19 +243,82 @@ class CloudAppFolderSyncService {
         .set(HttpHeaders.authorizationHeader, 'Bearer ${session.accessToken}');
     request.headers
         .set('Content-Type', 'multipart/related; boundary=$boundary');
-    request.write(body);
+    request.contentLength = bodyBytes.length;
+    request.add(bodyBytes);
     final response = await request.close();
     final responseBody = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
       return CloudSyncResult(
         ok: false,
-        message: 'Google Drive upload failed (${response.statusCode}).',
+        message: _providerFailure(
+          'Google Drive upload failed',
+          response.statusCode,
+          responseBody,
+        ),
       );
     }
     final decoded = jsonDecode(responseBody);
     final name = decoded is Map<String, dynamic> ? decoded['name'] : fileName;
     return CloudSyncResult(
         ok: true, message: 'Uploaded $name to Google Drive.');
+  }
+
+  Future<CloudSyncResult> _uploadGoogleRecording({
+    required CloudAuthorizedSession session,
+    required String fileName,
+    required List<int> bytes,
+    required String mimeType,
+  }) async {
+    final rootId = await _googleFolderId(session);
+    final recordingsId = await _googleFolderId(
+      session,
+      folderName: _recordingsFolderName,
+      parentId: rootId,
+    );
+    return _uploadGoogleScript(
+      session: session,
+      fileName: fileName,
+      bytes: bytes,
+      mimeType: mimeType,
+      replaceExisting: true,
+      folderId: recordingsId,
+    );
+  }
+
+  Future<CloudSyncResult> _updateGoogleScriptContent({
+    required CloudAuthorizedSession session,
+    required String fileId,
+    required String fileName,
+    required List<int> bytes,
+    required String mimeType,
+  }) async {
+    final request = await _httpClient.patchUrl(
+      Uri.https('www.googleapis.com', '/upload/drive/v3/files/$fileId', {
+        'uploadType': 'media',
+        'fields': 'id,name',
+      }),
+    );
+    request.headers
+        .set(HttpHeaders.authorizationHeader, 'Bearer ${session.accessToken}');
+    request.headers.set(HttpHeaders.contentTypeHeader, mimeType);
+    request.contentLength = bytes.length;
+    request.add(bytes);
+    final response = await request.close();
+    final responseBody = await response.transform(utf8.decoder).join();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return CloudSyncResult(
+        ok: false,
+        message: _providerFailure(
+          'Google Drive sync failed',
+          response.statusCode,
+          responseBody,
+        ),
+      );
+    }
+    return CloudSyncResult(
+      ok: true,
+      message: 'Synced $fileName to Google Drive.',
+    );
   }
 
   Future<String?> _downloadGoogleScript({
@@ -201,9 +339,14 @@ class CloudAppFolderSyncService {
         : null;
   }
 
-  Future<String> _googleFolderId(CloudAuthorizedSession session) async {
-    const query =
-        "mimeType='application/vnd.google-apps.folder' and name='AutoTeleprompter' and trashed=false";
+  Future<String> _googleFolderId(
+    CloudAuthorizedSession session, {
+    String folderName = _folderName,
+    String? parentId,
+  }) async {
+    final parentClause = parentId == null ? '' : " and '$parentId' in parents";
+    final query = "mimeType='application/vnd.google-apps.folder' and "
+        "name=${_driveQueryLiteral(folderName)} and trashed=false$parentClause";
     final list = await _jsonRequest(
       Uri.https('www.googleapis.com', '/drive/v3/files', {
         'q': query,
@@ -226,8 +369,9 @@ class CloudAppFolderSyncService {
         .set(HttpHeaders.authorizationHeader, 'Bearer ${session.accessToken}');
     request.headers.contentType = ContentType.json;
     request.write(jsonEncode({
-      'name': _folderName,
+      'name': folderName,
       'mimeType': 'application/vnd.google-apps.folder',
+      if (parentId != null) 'parents': [parentId],
     }));
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
@@ -236,6 +380,28 @@ class CloudAppFolderSyncService {
     }
     final decoded = jsonDecode(body);
     return (decoded as Map<String, dynamic>)['id'].toString();
+  }
+
+  Future<String?> _googleFileIdByName({
+    required CloudAuthorizedSession session,
+    required String folderId,
+    required String fileName,
+  }) async {
+    final query =
+        "'$folderId' in parents and name=${_driveQueryLiteral(fileName)} and trashed=false";
+    final decoded = await _jsonRequest(
+      Uri.https('www.googleapis.com', '/drive/v3/files', {
+        'q': query,
+        'spaces': 'drive',
+        'fields': 'files(id,name)',
+      }),
+      token: session.accessToken,
+    );
+    final files = decoded['files'];
+    if (files is List && files.isNotEmpty && files.first is Map) {
+      return (files.first as Map)['id']?.toString();
+    }
+    return null;
   }
 
   Future<List<CloudSyncedFile>> _listDropboxScripts(
@@ -265,9 +431,11 @@ class CloudAppFolderSyncService {
   Future<CloudSyncResult> _uploadDropboxScript({
     required CloudAuthorizedSession session,
     required String fileName,
-    required String text,
+    required List<int> bytes,
+    required bool replaceExisting,
+    String folderPath = '/$_folderName',
   }) async {
-    await _ensureDropboxFolder(session);
+    await _ensureDropboxFolder(session, path: folderPath);
     final request = await _httpClient.postUrl(
       Uri.parse('https://content.dropboxapi.com/2/files/upload'),
     );
@@ -276,21 +444,46 @@ class CloudAppFolderSyncService {
     request.headers.set(
         'Dropbox-API-Arg',
         jsonEncode({
-          'path': '/$_folderName/$fileName',
-          'mode': 'add',
-          'autorename': true,
+          'path': '$folderPath/$fileName',
+          'mode': replaceExisting ? 'overwrite' : 'add',
+          'autorename': !replaceExisting,
           'mute': false,
         }));
     request.headers.contentType = ContentType.binary;
-    request.add(utf8.encode(text));
+    request.contentLength = bytes.length;
+    request.add(bytes);
     final response = await request.close();
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = await response.transform(utf8.decoder).join();
       return CloudSyncResult(
         ok: false,
-        message: 'Dropbox upload failed (${response.statusCode}).',
+        message: _providerFailure(
+          'Dropbox upload failed',
+          response.statusCode,
+          body,
+        ),
       );
     }
-    return CloudSyncResult(ok: true, message: 'Uploaded $fileName to Dropbox.');
+    return CloudSyncResult(
+      ok: true,
+      message: replaceExisting
+          ? 'Synced $fileName to Dropbox.'
+          : 'Uploaded $fileName to Dropbox.',
+    );
+  }
+
+  Future<CloudSyncResult> _uploadDropboxRecording({
+    required CloudAuthorizedSession session,
+    required String fileName,
+    required List<int> bytes,
+  }) async {
+    return _uploadDropboxScript(
+      session: session,
+      fileName: fileName,
+      bytes: bytes,
+      replaceExisting: true,
+      folderPath: '/$_folderName/$_recordingsFolderName',
+    );
   }
 
   Future<String?> _downloadDropboxScript({
@@ -310,12 +503,27 @@ class CloudAppFolderSyncService {
         : null;
   }
 
-  Future<void> _ensureDropboxFolder(CloudAuthorizedSession session) async {
+  Future<void> _ensureDropboxFolder(
+    CloudAuthorizedSession session, {
+    String path = '/$_folderName',
+  }) async {
+    final parts = path.split('/').where((part) => part.isNotEmpty).toList();
+    var current = '';
+    for (final part in parts) {
+      current = '$current/$part';
+      await _createDropboxFolderIfNeeded(session, current);
+    }
+  }
+
+  Future<void> _createDropboxFolderIfNeeded(
+    CloudAuthorizedSession session,
+    String path,
+  ) async {
     try {
       await _jsonPost(
         Uri.parse('https://api.dropboxapi.com/2/files/create_folder_v2'),
         token: session.accessToken,
-        body: {'path': '/$_folderName', 'autorename': false},
+        body: {'path': path, 'autorename': false},
       );
     } catch (_) {
       // Existing folder is acceptable; list/upload will report real failures.
@@ -363,11 +571,42 @@ class CloudAppFolderSyncService {
     return decoded;
   }
 
-  String _safeFileName(String title) {
+  static String _safeFileName(String title) {
     final clean = title
         .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     return clean.isEmpty ? 'Untitled script' : clean;
+  }
+
+  static String _basename(String path) => path.split(RegExp(r'[\\/]')).last;
+
+  static String _recordingMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.wav')) return 'audio/wav';
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    if (lower.endsWith('.webm')) return 'video/webm';
+    return 'application/octet-stream';
+  }
+
+  static String stableScriptFileName(String title) {
+    final safeTitle = _safeFileName(title.isEmpty ? 'Untitled script' : title);
+    final baseName = safeTitle.replaceFirst(
+      RegExp(r'\.(?:docx?|rtf|txt|pdf|atp\.txt)$', caseSensitive: false),
+      '',
+    );
+    return '${baseName.isEmpty ? 'Untitled script' : baseName}.atp.txt';
+  }
+
+  String _driveQueryLiteral(String value) {
+    return "'${value.replaceAll(r'\', r'\\').replaceAll("'", r"\'")}'";
+  }
+
+  String _providerFailure(String prefix, int statusCode, String body) {
+    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.isEmpty) return '$prefix ($statusCode).';
+    final clipped =
+        compact.length > 220 ? '${compact.substring(0, 220)}...' : compact;
+    return '$prefix ($statusCode): $clipped';
   }
 }

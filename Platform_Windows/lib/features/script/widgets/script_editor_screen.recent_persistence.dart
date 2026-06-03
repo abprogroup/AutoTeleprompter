@@ -7,10 +7,6 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
         timer.cancel();
         return;
       }
-      if (_typingCharCount > 0 || (_typingBulkTimer?.isActive ?? false)) {
-        _scheduleRecentUpdate();
-        return;
-      }
       final text = _getRefinedFullTextWithoutBookmarkSigns();
       if (text.isEmpty && _currentTitle == 'New Project') return;
       _persistRecentSafely('autosaveTimer');
@@ -18,7 +14,7 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
   }
 
   void _scheduleRecentUpdate({
-    Duration delay = const Duration(seconds: 4),
+    Duration delay = const Duration(seconds: 30),
   }) {
     _recentTimer?.cancel();
     _recentTimer = Timer(delay, () {
@@ -88,7 +84,7 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
       _recentPersistRunning = false;
       if (_recentPersistQueued && mounted) {
         _recentPersistQueued = false;
-        _scheduleRecentUpdate(delay: const Duration(seconds: 2));
+        _scheduleRecentUpdate(delay: const Duration(seconds: 30));
       }
     }
   }

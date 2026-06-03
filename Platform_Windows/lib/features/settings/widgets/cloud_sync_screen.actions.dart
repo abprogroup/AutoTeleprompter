@@ -1,0 +1,707 @@
+part of 'cloud_sync_screen.dart';
+
+extension _CloudSyncScreenActions on _CloudSyncScreenState {
+  Future<void> _uploadLocalBackupScripts() async {
+    if (_syncingScripts) return;
+    final scripts = await _scriptPayloadsForSync();
+    if (scripts.isEmpty) {
+      _showSnack('No saved scripts are available to back up.');
+      return;
+    }
+    final selected = await _chooseScriptsForCloudAction(
+      scripts: scripts,
+      title: 'Back up scripts locally',
+      actionLabel: 'Back up selected',
+      defaultSelectAll: false,
+    );
+    if (selected == null || selected.isEmpty) return;
+
+    _setSyncingScripts(true);
+    try {
+      final count = await _writeLocalBackupScripts(selected);
+      _showSnack('Backed up $count scripts to Local Backup.');
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'cloud.uploadLocalBackupScripts',
+      );
+      _showSnack('Local Backup failed: ${_shortError(error)}');
+    } finally {
+      _setSyncingScripts(false);
+    }
+  }
+
+  Future<void> _showLocalBackupScripts() async {
+    final folder = _localBackup?.folderPath.trim() ?? '';
+    if (folder.isEmpty) return;
+    final files = <File>[];
+    try {
+      await LocalBackupService().migrateHistorySidecarsFromBackupFolder();
+      final directory = Directory(folder);
+      if (await directory.exists()) {
+        await for (final entity in directory.list()) {
+          if (entity is! File) continue;
+          final lower = entity.path.toLowerCase();
+          if (lower.endsWith('.rtf') ||
+              lower.endsWith('.docx') ||
+              lower.endsWith('.doc') ||
+              lower.endsWith('.txt')) {
+            files.add(entity);
+          }
+        }
+      }
+      files.sort((a, b) {
+        final aStat = a.statSync();
+        final bStat = b.statSync();
+        return bStat.modified.compareTo(aStat.modified);
+      });
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'cloud.localBackupList',
+      );
+      _showSnack('Could not list Local Backup scripts.');
+      return;
+    }
+
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF151515),
+        title: const Text(
+          'Local Backup scripts',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: SizedBox(
+          width: 560,
+          child: files.isEmpty
+              ? const Text(
+                  'No backed-up scripts are in this folder yet.',
+                  style: TextStyle(color: Colors.white70),
+                )
+              : ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 360),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: files.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Colors.white12),
+                    itemBuilder: (context, index) {
+                      final file = files[index];
+                      final stat = file.statSync();
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          file.uri.pathSegments.last,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          '${stat.modified}',
+                          style: const TextStyle(color: Colors.white38),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _openFolder(folder);
+            },
+            icon: const Icon(Icons.open_in_new_rounded),
+            label: const Text('Open folder'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openFolder(String path) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.run('explorer', [path]);
+      } else {
+        await Process.run('open', [path]);
+      }
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'cloud.openFolder',
+      );
+      _showSnack('Could not open the folder.');
+    }
+  }
+
+  Future<void> _connectProviderAccount(CloudProviderDefinition provider) async {
+    final result = await _oauth.connect(provider);
+    await _loadConnections();
+    if (!mounted) return;
+    if (result.connected) {
+      _showSnack(result.message);
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF151515),
+        title: Text(
+          result.missingCredentials
+              ? '${provider.label} needs app credentials'
+              : '${provider.label} account connection',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          result.message,
+          style: const TextStyle(color: Colors.white70, height: 1.35),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _chooseLocalBackupFolder();
+            },
+            icon: const Icon(Icons.folder_open_outlined),
+            label: const Text('Choose Local Backup folder'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _disconnectProviderAccount(String providerId) async {
+    await _oauth.disconnect(providerId);
+    await _loadConnections();
+    _showSnack('Cloud account disconnected.');
+  }
+
+  Future<void> _setAutoSyncScripts(bool enabled) async {
+    if (enabled && _accounts.isEmpty && !(_localBackup?.isConnected ?? false)) {
+      _showSnack(
+          'Connect a cloud account or choose a Local Backup folder first.');
+      return;
+    }
+    await ref.read(settingsProvider.notifier).setCloudAutoSyncOnSave(enabled);
+    _showSnack(
+      enabled
+          ? 'Script auto-sync enabled. Changes sync every 30 seconds and before reading/recording.'
+          : 'Script auto-sync disabled.',
+    );
+  }
+
+  Future<void> _setRecordingAutoBackup(bool enabled) async {
+    if (enabled && _accounts.isEmpty) {
+      _showSnack(
+          'Connect Google Drive or Dropbox before uploading recordings.');
+      return;
+    }
+    await ref.read(settingsProvider.notifier).setRecordingAutoBackup(enabled);
+    _showSnack(
+      enabled
+          ? 'Recording cloud upload enabled for completed recordings.'
+          : 'Recording cloud upload disabled.',
+    );
+  }
+
+  Future<void> _uploadSelectedScripts(String providerId) async {
+    if (_syncingScripts) return;
+    final scripts = await _scriptPayloadsForSync();
+    if (scripts.isEmpty) {
+      _showSnack('No saved scripts are available to upload.');
+      return;
+    }
+    final selected = await _chooseScriptsForCloudAction(
+      scripts: scripts,
+      title: 'Upload scripts',
+      actionLabel: 'Upload selected',
+      defaultSelectAll: false,
+    );
+    if (selected == null || selected.isEmpty) return;
+
+    _setSyncingScripts(true);
+    _showSnack('Uploading ${selected.length} selected scripts...');
+    var ok = 0;
+    final failures = <String>[];
+    try {
+      for (final script in selected) {
+        final export = LocalBackupService.buildScriptExport(
+          title: script.title,
+          text: script.text,
+          sourceType: script.sourceType,
+          sourcePath: script.sourcePath,
+        );
+        if (export.readableText.trim().isEmpty) {
+          failures.add('${script.title} has no readable text to upload.');
+          continue;
+        }
+        final result = await _sync.uploadScript(
+          providerId: providerId,
+          title: script.title,
+          text: export.readableText,
+          fileName: export.fileName,
+          bytes: export.bytes,
+          mimeType: export.mimeType,
+          replaceExisting: true,
+        );
+        if (result.ok) {
+          ok++;
+        } else {
+          failures.add(result.message);
+        }
+      }
+      if (failures.isEmpty) {
+        _showSnack('Uploaded $ok scripts.');
+      } else {
+        _showSnack(
+          'Uploaded $ok scripts; ${failures.length} failed. '
+          '${failures.first}',
+        );
+      }
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'cloud.uploadSelectedScripts',
+      );
+      _showSnack('Cloud upload failed: ${_shortError(error)}');
+    } finally {
+      _setSyncingScripts(false);
+    }
+  }
+
+  Future<void> _syncAllScripts() async {
+    if (_syncingScripts) return;
+    final providers = _accounts.keys.where(_providerSupportsAccount).toList();
+    final hasLocalBackup = _localBackup?.isConnected == true;
+    if (providers.isEmpty && !hasLocalBackup) {
+      _showSnack('Connect a cloud account or choose a Local Backup folder.');
+      return;
+    }
+
+    final availableScripts = await _scriptPayloadsForSync();
+    if (availableScripts.isEmpty) {
+      _showSnack('No saved scripts are available to sync.');
+      return;
+    }
+    final scripts = await _chooseScriptsForCloudAction(
+      scripts: availableScripts,
+      title: 'Sync scripts',
+      actionLabel: 'Sync selected',
+      defaultSelectAll: true,
+    );
+    if (scripts == null || scripts.isEmpty) return;
+
+    _setSyncingScripts(true);
+    _showSnack('Syncing ${scripts.length} saved scripts...');
+    var cloudOk = 0;
+    var cloudFailed = 0;
+    final failures = <String>[];
+    try {
+      for (final script in scripts) {
+        final export = LocalBackupService.buildScriptExport(
+          title: script.title,
+          text: script.text,
+          sourceType: script.sourceType,
+          sourcePath: script.sourcePath,
+        );
+        if (export.readableText.trim().isEmpty) {
+          failures.add('${script.title} has no readable text to sync.');
+          continue;
+        }
+        for (final providerId in providers) {
+          final result = await _sync.uploadScript(
+            providerId: providerId,
+            title: script.title,
+            text: export.readableText,
+            fileName: export.fileName,
+            bytes: export.bytes,
+            mimeType: export.mimeType,
+            replaceExisting: true,
+          );
+          if (result.ok) {
+            cloudOk++;
+          } else {
+            cloudFailed++;
+            failures.add(result.message);
+          }
+        }
+      }
+
+      var localCount = 0;
+      if (hasLocalBackup) {
+        try {
+          localCount = await _writeLocalBackupScripts(scripts);
+        } catch (error, stack) {
+          LightweightDiagnostics.instance.recordError(
+            error,
+            stack,
+            source: 'cloud.localBackupSync',
+          );
+          failures.add('Local backup failed: ${_shortError(error)}');
+        }
+      }
+
+      final targetText = [
+        if (providers.isNotEmpty) '$cloudOk cloud uploads',
+        if (localCount > 0) '$localCount local backups',
+      ].join(', ');
+      if (failures.isEmpty && cloudFailed == 0) {
+        _showSnack('Synced ${scripts.length} scripts ($targetText).');
+      } else {
+        _showSnack(
+          'Sync finished with $cloudFailed cloud failures. ${failures.first}',
+        );
+      }
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'cloud.syncAllScripts',
+      );
+      _showSnack('Cloud sync failed: ${_shortError(error)}');
+    } finally {
+      _setSyncingScripts(false);
+    }
+  }
+
+  Future<List<_CloudScriptPayload>?> _chooseScriptsForCloudAction({
+    required List<_CloudScriptPayload> scripts,
+    required String title,
+    required String actionLabel,
+    required bool defaultSelectAll,
+  }) async {
+    final active = ref.read(scriptProvider);
+    final activeIdentity = active?.sessionId.trim() ?? '';
+    final selected = <String>{
+      if (defaultSelectAll)
+        for (final script in scripts) script.identity
+      else if (activeIdentity.isNotEmpty &&
+          scripts.any((script) => script.identity == activeIdentity))
+        activeIdentity
+      else if (scripts.length == 1)
+        scripts.first.identity,
+    };
+
+    return showDialog<List<_CloudScriptPayload>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          void selectAll() => setDialogState(() {
+                selected
+                  ..clear()
+                  ..addAll(scripts.map((script) => script.identity));
+              });
+          void clearAll() => setDialogState(selected.clear);
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF151515),
+            title: Text(
+              title,
+              style: const TextStyle(color: Colors.white),
+            ),
+            content: SizedBox(
+              width: 620,
+              height: 420,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: selectAll,
+                        icon: const Icon(Icons.done_all_rounded),
+                        label: const Text('Select all'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: clearAll,
+                        icon: const Icon(Icons.clear_all_rounded),
+                        label: const Text('Clear all'),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${selected.length}/${scripts.length} selected',
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: scripts.length,
+                      itemBuilder: (context, index) {
+                        final script = scripts[index];
+                        final checked = selected.contains(script.identity);
+                        return CheckboxListTile(
+                          value: checked,
+                          onChanged: (value) => setDialogState(() {
+                            if (value ?? false) {
+                              selected.add(script.identity);
+                            } else {
+                              selected.remove(script.identity);
+                            }
+                          }),
+                          activeColor: const Color(0xFFFFBF00),
+                          checkColor: Colors.black,
+                          title: Text(
+                            script.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          subtitle: Text(
+                            _scriptPayloadSubtitle(script),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 12,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: selected.isEmpty
+                    ? null
+                    : () => Navigator.pop(
+                          dialogContext,
+                          [
+                            for (final script in scripts)
+                              if (selected.contains(script.identity)) script,
+                          ],
+                        ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFBF00),
+                  foregroundColor: Colors.black,
+                ),
+                child: Text(actionLabel),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  String _scriptPayloadSubtitle(_CloudScriptPayload script) {
+    final source = script.sourcePath?.trim() ?? '';
+    final readable = LocalBackupService.exportReadableScriptText(script.text);
+    final words = readable
+        .split(RegExp(r'\s+'))
+        .where((word) => word.trim().isNotEmpty)
+        .length;
+    if (source.isEmpty) return '$words words';
+    final fileName = source.split(RegExp(r'[\\/]')).last;
+    return '$words words - $fileName';
+  }
+
+  Future<List<_CloudScriptPayload>> _scriptPayloadsForSync() async {
+    final scripts = <_CloudScriptPayload>[];
+    final seen = <String>{};
+    final active = ref.read(scriptProvider);
+    if (active != null && active.rawText.trim().isNotEmpty) {
+      _addPayload(
+        scripts,
+        seen,
+        _CloudScriptPayload(
+          title: active.title,
+          text: active.rawText,
+          sourcePath: active.sourcePath,
+          sourceType: active.sourceType,
+          identity: active.sessionId,
+        ),
+      );
+    }
+
+    final secureStore = SecureScriptStore();
+    for (final item in ref.read(settingsProvider).recentScripts) {
+      try {
+        final meta = Map<String, dynamic>.from(jsonDecode(item));
+        final data = await secureStore.readFromMetadata(meta);
+        final text = data?.text ?? '';
+        if (text.trim().isEmpty) continue;
+        final title = meta['title']?.toString().trim();
+        final recordId = SecureScriptStore.recordIdFromMetadata(meta);
+        _addPayload(
+          scripts,
+          seen,
+          _CloudScriptPayload(
+            title: title?.isNotEmpty == true ? title! : 'Untitled script',
+            text: text,
+            sourcePath: meta['sourcePath'] as String?,
+            sourceType: meta['type']?.toString(),
+            identity: recordId ?? meta['sessionId']?.toString() ?? title ?? '',
+          ),
+        );
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'cloud.scriptPayload',
+        );
+      }
+    }
+    return scripts;
+  }
+
+  void _addPayload(
+    List<_CloudScriptPayload> scripts,
+    Set<String> seen,
+    _CloudScriptPayload payload,
+  ) {
+    final key = payload.identity.isNotEmpty ? payload.identity : payload.title;
+    if (seen.add(key)) scripts.add(payload);
+  }
+
+  Future<int> _writeLocalBackupScripts(
+    List<_CloudScriptPayload> scripts,
+  ) async {
+    if (!(_localBackup?.isConnected ?? false)) return 0;
+    final backup = LocalBackupService();
+    var written = 0;
+    for (final script in scripts) {
+      final ok = await backup.backupScript(
+        title: script.title,
+        text: script.text,
+        sourceType: script.sourceType,
+        sourcePath: script.sourcePath,
+      );
+      if (ok) written++;
+    }
+    return written;
+  }
+
+  Future<void> _showSyncedScripts(CloudProviderDefinition provider) async {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF151515),
+        title: Text(
+          '${provider.label} scripts',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: SizedBox(
+          width: 520,
+          child: FutureBuilder<List<CloudSyncedFile>>(
+            future: _sync.listScripts(provider.id),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFFFBF00),
+                    ),
+                  ),
+                );
+              }
+              if (snapshot.hasError) {
+                return Text(
+                  'Could not list scripts: ${_shortError(snapshot.error!)}',
+                  style: const TextStyle(color: Colors.white70, height: 1.35),
+                );
+              }
+              final files = snapshot.data ?? const <CloudSyncedFile>[];
+              if (files.isEmpty) {
+                return const Text(
+                  'No scripts are synced in the AutoTeleprompter app folder yet.',
+                  style: TextStyle(color: Colors.white70, height: 1.35),
+                );
+              }
+              return ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: files.length,
+                  separatorBuilder: (_, __) =>
+                      const Divider(color: Colors.white12),
+                  itemBuilder: (context, index) {
+                    final file = files[index];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        file.name,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        file.modifiedAtIso ?? 'Cloud script',
+                        style: const TextStyle(color: Colors.white38),
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => _downloadSyncedScript(file),
+                        child: const Text('Download'),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _downloadSyncedScript(CloudSyncedFile file) async {
+    try {
+      final text = await _sync.downloadScript(
+        providerId: file.providerId,
+        fileId: file.id,
+      );
+      if (text == null || text.isEmpty) {
+        _showSnack('Cloud download failed.');
+        return;
+      }
+      ref.read(scriptProvider.notifier).loadText(
+            text,
+            title: file.name,
+            sourceType: 'CLOUD',
+            sessionId: 'cloud_${DateTime.now().microsecondsSinceEpoch}',
+          );
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      _showSnack('Downloaded ${file.name}.');
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'cloud.downloadSyncedScript',
+      );
+      _showSnack('Cloud download failed: ${_shortError(error)}');
+    }
+  }
+}

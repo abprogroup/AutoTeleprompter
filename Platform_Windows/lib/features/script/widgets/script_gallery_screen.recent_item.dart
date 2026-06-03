@@ -10,6 +10,7 @@ class _ScriptListItem extends ConsumerWidget {
   final String? snippet;
   final String? sessionId;
   final String? secureRecordId;
+  final String? sourcePath;
 
   const _ScriptListItem({
     super.key,
@@ -20,6 +21,7 @@ class _ScriptListItem extends ConsumerWidget {
     this.snippet,
     this.sessionId,
     this.secureRecordId,
+    this.sourcePath,
   });
 
   @override
@@ -106,13 +108,7 @@ class _ScriptListItem extends ConsumerWidget {
                   color: Colors.white24,
                   size: 20,
                 ),
-                onPressed: () {
-                  if (sessionId != null) {
-                    ref
-                        .read(settingsProvider.notifier)
-                        .removeFromRecent(sessionId!);
-                  }
-                },
+                onPressed: () => _confirmDeleteRecentScript(context, ref),
               ),
             ),
             const Padding(
@@ -123,6 +119,59 @@ class _ScriptListItem extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteRecentScript(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final choice = await showScriptDeleteDialog(
+      context,
+      title: title,
+      sourcePath: sourcePath,
+    );
+    if (choice == null || !context.mounted) return;
+    try {
+      if (sessionId != null) {
+        await ref.read(settingsProvider.notifier).deleteRecentScript(
+              sessionId: sessionId,
+              title: title,
+            );
+      } else {
+        await ref.read(settingsProvider.notifier).deleteRecentScript(
+              title: title,
+            );
+      }
+      if (choice.deleteSourceFile && sourcePath != null) {
+        final file = File(sourcePath!);
+        if (await file.exists()) await file.delete();
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            choice.deleteSourceFile
+                ? 'Deleted script and source file.'
+                : 'Deleted script from the app.',
+          ),
+        ),
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'gallery.deleteRecentScript',
+        data: {
+          'title': title,
+          'sessionId': sessionId ?? '',
+          'sourcePath': sourcePath ?? '',
+        },
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete this script.')),
+      );
+    }
   }
 
   Future<void> _openRecentScript(BuildContext context, WidgetRef ref) async {

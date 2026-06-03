@@ -115,6 +115,31 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
     _logContentDebug('reader speech session started word=$currentIndex');
   }
 
+  Future<void> _startContentSpeechSessionForRecording(
+    AppSettings settings,
+  ) async {
+    if (!settings.contentCreatorRecordingControlsSpeech) {
+      _recordingStartedSpeechSession = false;
+      _logContentDebug('recording start keeps speech session separate');
+      return;
+    }
+    final live = ref.read(teleprompterProvider);
+    if (live.isListening || live.isStarting) {
+      _recordingStartedSpeechSession = false;
+      _logContentDebug('recording uses existing speech session');
+      return;
+    }
+    _recordingStartedSpeechSession = true;
+    await _requestAndStartContentSpeech();
+    final afterStart = ref.read(teleprompterProvider);
+    if (!afterStart.isListening && !afterStart.isStarting) {
+      _recordingStartedSpeechSession = false;
+      _logContentDebug('recording speech link did not start session');
+    } else {
+      _logContentDebug('recording speech session started');
+    }
+  }
+
   Future<void> _stopContentSpeechSessionIfOwnedByRecording() async {
     if (!_recordingStartedSpeechSession) return;
     _recordingStartedSpeechSession = false;

@@ -62,7 +62,64 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
           'need native platform recording support before they are enabled.',
           style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.3),
         ),
+        const SizedBox(height: 12),
+        _recordingSpeechLinkToggle(settings),
       ],
+    );
+  }
+
+  Widget _recordingSpeechLinkToggle(AppSettings settings) {
+    final locked = _isRecording || _recordStartInFlight;
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF161616),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.record_voice_over, color: Colors.white54, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Start speech with recording',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  settings.contentCreatorRecordingControlsSpeech
+                      ? 'Record buttons start and stop the reader STT session.'
+                      : 'Recording and reader STT stay as separate controls.',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: settings.contentCreatorRecordingControlsSpeech,
+            activeThumbColor: const Color(0xFFFFBF00),
+            activeTrackColor: const Color(0x66FFBF00),
+            onChanged: locked
+                ? null
+                : (value) => unawaited(
+                      ref
+                          .read(settingsProvider.notifier)
+                          .setContentCreatorRecordingControlsSpeech(value),
+                    ),
+          ),
+        ],
+      ),
     );
   }
 

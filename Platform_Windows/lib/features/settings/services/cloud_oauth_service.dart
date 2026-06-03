@@ -364,21 +364,51 @@ class CloudOAuthService {
     required String verifier,
     required String redirectUri,
   }) async {
+    try {
+      return await _postTokenRequest(
+        config: config,
+        parameters: {
+          'grant_type': 'authorization_code',
+          'client_id': config.clientId,
+          'code': code,
+          'code_verifier': verifier,
+          'redirect_uri': redirectUri,
+        },
+        includeClientSecret: false,
+      );
+    } on _CloudOAuthTokenException catch (error) {
+      if (!error.clientSecretMissing || config.clientSecret.isEmpty) rethrow;
+    }
+    return _postTokenRequest(
+      config: config,
+      parameters: {
+        'grant_type': 'authorization_code',
+        'client_id': config.clientId,
+        'code': code,
+        'code_verifier': verifier,
+        'redirect_uri': redirectUri,
+      },
+      includeClientSecret: true,
+    );
+  }
+
+  Future<Map<String, dynamic>> _postTokenRequest({
+    required _OAuthProviderConfig config,
+    required Map<String, String> parameters,
+    required bool includeClientSecret,
+  }) async {
     final request = await _httpClient.postUrl(config.tokenEndpoint);
     request.headers.contentType = ContentType(
       'application',
       'x-www-form-urlencoded',
       charset: 'utf-8',
     );
-    final parameters = <String, String>{
-      'grant_type': 'authorization_code',
-      'client_id': config.clientId,
-      'code': code,
-      'code_verifier': verifier,
-      'redirect_uri': redirectUri,
-      if (config.clientSecret.isNotEmpty) 'client_secret': config.clientSecret,
+    final payload = <String, String>{
+      ...parameters,
+      if (includeClientSecret && config.clientSecret.isNotEmpty)
+        'client_secret': config.clientSecret,
     };
-    request.write(Uri(queryParameters: parameters).query);
+    request.write(Uri(queryParameters: payload).query);
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -400,27 +430,25 @@ class CloudOAuthService {
     required String refreshToken,
     required Map<String, dynamic> previousPayload,
   }) async {
-    final request = await _httpClient.postUrl(config.tokenEndpoint);
-    request.headers.contentType = ContentType(
-      'application',
-      'x-www-form-urlencoded',
-      charset: 'utf-8',
-    );
     final parameters = <String, String>{
       'grant_type': 'refresh_token',
       'client_id': config.clientId,
       'refresh_token': refreshToken,
-      if (config.clientSecret.isNotEmpty) 'client_secret': config.clientSecret,
     };
-    request.write(Uri(queryParameters: parameters).query);
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('token refresh failed (${response.statusCode}): $body');
-    }
-    final decoded = jsonDecode(body);
-    if (decoded is! Map<String, dynamic>) {
-      throw StateError('token refresh returned invalid JSON');
+    Map<String, dynamic> decoded;
+    try {
+      decoded = await _postTokenRequest(
+        config: config,
+        parameters: parameters,
+        includeClientSecret: false,
+      );
+    } on _CloudOAuthTokenException catch (error) {
+      if (!error.clientSecretMissing || config.clientSecret.isEmpty) rethrow;
+      decoded = await _postTokenRequest(
+        config: config,
+        parameters: parameters,
+        includeClientSecret: true,
+      );
     }
     return {
       ...previousPayload,
@@ -522,10 +550,12 @@ class CloudOAuthService {
 class _CloudOAuthTokenException implements Exception {
   final String message;
   final bool isCredentialConfigurationIssue;
+  final bool clientSecretMissing;
 
   const _CloudOAuthTokenException(
     this.message, {
     this.isCredentialConfigurationIssue = false,
+    this.clientSecretMissing = false,
   });
 
   factory _CloudOAuthTokenException.fromTokenResponse({
@@ -534,8 +564,10 @@ class _CloudOAuthTokenException implements Exception {
     required String body,
   }) {
     final lower = body.toLowerCase();
+    final mentionsClientSecret =
+        lower.contains('client_secret') || lower.contains('client secret');
     if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
-        lower.contains('client_secret') &&
+        mentionsClientSecret &&
         lower.contains('missing')) {
       return const _CloudOAuthTokenException(
         'Google Drive sign-in reached Google successfully, but this build is '
@@ -543,16 +575,17 @@ class _CloudOAuthTokenException implements Exception {
         'exchange. Add the Google Desktop OAuth client secret as an injected '
         'build secret, then rebuild. Do not hardcode it in source.',
         isCredentialConfigurationIssue: true,
+        clientSecretMissing: true,
       );
     }
     if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
-        lower.contains('client_secret') &&
+        mentionsClientSecret &&
         lower.contains('invalid')) {
       return const _CloudOAuthTokenException(
-        'Google Drive rejected GOOGLE_DRIVE_CLIENT_SECRET. Copy the Client ID '
-        'and Client secret again from the same Google Desktop OAuth client, '
-        'then update the local build define or GitHub repository secret and '
-        'rebuild. Do not use a secret from another OAuth client.',
+        'Google Drive rejected GOOGLE_DRIVE_CLIENT_SECRET. The app will use '
+        'Google Desktop PKCE without the secret first; if Google still asks '
+        'for a secret, copy the Client ID and Client secret again from the '
+        'same Google Desktop OAuth client and rebuild.',
         isCredentialConfigurationIssue: true,
       );
     }

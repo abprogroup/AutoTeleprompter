@@ -624,11 +624,15 @@ class CloudAppFolderSyncService {
 
   static String stableScriptFileName(String title) {
     final safeTitle = _safeFileName(title.isEmpty ? 'Untitled script' : title);
+    if (RegExp(r'\.(?:docx?|rtf|txt)$', caseSensitive: false)
+        .hasMatch(safeTitle)) {
+      return safeTitle;
+    }
     final baseName = safeTitle.replaceFirst(
       RegExp(r'\.(?:docx?|rtf|txt|pdf|atp\.txt)$', caseSensitive: false),
       '',
     );
-    return '${baseName.isEmpty ? 'Untitled script' : baseName}.atp.txt';
+    return '${baseName.isEmpty ? 'Untitled script' : baseName}.txt';
   }
 
   String _driveQueryLiteral(String value) {

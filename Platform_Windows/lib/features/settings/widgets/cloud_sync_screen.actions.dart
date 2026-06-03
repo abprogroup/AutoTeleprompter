@@ -287,7 +287,12 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
 
   Future<void> _syncAllScripts() async {
     if (_syncingScripts) return;
-    final providers = _accounts.keys.where(_providerSupportsAccount).toList();
+    final providers = [
+      for (final provider in CloudConnectionStore.providers)
+        if (_accounts.containsKey(provider.id) &&
+            _providerSupportsAccount(provider.id))
+          provider.id,
+    ];
     final hasLocalBackup = _localBackup?.isConnected == true;
     if (providers.isEmpty && !hasLocalBackup) {
       _showSnack('Connect a cloud account or choose a Local Backup folder.');
@@ -309,8 +314,12 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
 
     _setSyncingScripts(true);
     _showSnack('Syncing ${scripts.length} saved scripts...');
-    var cloudOk = 0;
-    var cloudFailed = 0;
+    final cloudOkByProvider = {
+      for (final providerId in providers) providerId: 0,
+    };
+    final cloudFailedByProvider = {
+      for (final providerId in providers) providerId: 0,
+    };
     final failures = <String>[];
     try {
       for (final script in scripts) {
@@ -335,10 +344,12 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
             replaceExisting: true,
           );
           if (result.ok) {
-            cloudOk++;
+            cloudOkByProvider[providerId] =
+                (cloudOkByProvider[providerId] ?? 0) + 1;
           } else {
-            cloudFailed++;
-            failures.add(result.message);
+            cloudFailedByProvider[providerId] =
+                (cloudFailedByProvider[providerId] ?? 0) + 1;
+            failures.add('${_providerLabel(providerId)}: ${result.message}');
           }
         }
       }
@@ -358,14 +369,18 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
       }
 
       final targetText = [
-        if (providers.isNotEmpty) '$cloudOk cloud uploads',
+        for (final providerId in providers)
+          '${_providerLabel(providerId)}: ${cloudOkByProvider[providerId] ?? 0}',
         if (localCount > 0) '$localCount local backups',
       ].join(', ');
+      final cloudFailed = cloudFailedByProvider.values
+          .fold<int>(0, (sum, count) => sum + count);
       if (failures.isEmpty && cloudFailed == 0) {
         _showSnack('Synced ${scripts.length} scripts ($targetText).');
       } else {
         _showSnack(
-          'Sync finished with $cloudFailed cloud failures. ${failures.first}',
+          'Sync finished ($targetText) with $cloudFailed cloud failures. '
+          '${failures.first}',
         );
       }
     } catch (error, stack) {
@@ -520,6 +535,14 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
     if (source.isEmpty) return '$words words';
     final fileName = source.split(RegExp(r'[\\/]')).last;
     return '$words words - $fileName';
+  }
+
+  String _providerLabel(String providerId) {
+    return switch (providerId) {
+      CloudConnectionStore.googleDrive => 'Google Drive',
+      CloudConnectionStore.dropbox => 'Dropbox',
+      _ => providerId,
+    };
   }
 
   Future<List<_CloudScriptPayload>> _scriptPayloadsForSync() async {

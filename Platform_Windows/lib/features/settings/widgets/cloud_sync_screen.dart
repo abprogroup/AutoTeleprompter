@@ -116,7 +116,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Connect Google Drive or Dropbox accounts for online app-folder '
+            'Connect Google Drive or Dropbox accounts for online '
             'sync. Use Local Backup once for free local folder backup, including '
             'folders already synced by desktop cloud apps.',
             style: TextStyle(color: Colors.white54, fontSize: 14),

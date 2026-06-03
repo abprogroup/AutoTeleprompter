@@ -193,7 +193,6 @@ String _normalizeUpdateChannel(String? value) {
   switch (value) {
     case AppSettings.updateChannelStable:
     case AppSettings.updateChannelBeta:
-    case AppSettings.updateChannelInternal:
       return value!;
     default:
       return AppSettings.updateChannelStable;

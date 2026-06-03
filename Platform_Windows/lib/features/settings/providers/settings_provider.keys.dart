@@ -71,5 +71,6 @@ const _importColorModeKey = 'importColorMode';
 const _reduceMotionKey = 'reduceMotion';
 const _uiScaleKey = 'uiScale';
 const _updateChannelKey = 'updateChannel';
+const _checkUpdatesOnStartupKey = 'checkUpdatesOnStartup';
 const _cloudAutoSyncOnSaveKey = 'cloudAutoSyncOnSave';
 const _recordingAutoBackupKey = 'recordingAutoBackup';

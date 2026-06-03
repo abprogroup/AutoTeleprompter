@@ -1,13 +1,14 @@
 part of 'content_creator_screen.dart';
 
 extension _ContentCreatorSession on _ContentCreatorScreenState {
-  Future<void> _exitContentCreatorAtCurrentPosition() async {
+  Future<void> _exitContentCreator({bool returnCurrentPosition = false}) async {
     if (_isRecording || _recordStartInFlight) {
       _showSnack('Stop recording before returning to the editor.');
       return;
     }
     final navigator = Navigator.of(context);
-    final returnWordIndex = _activeContentIndex();
+    final returnWordIndex =
+        returnCurrentPosition ? _activeContentIndex() : null;
     _stopAutoScroll();
     try {
       await ref.read(teleprompterProvider.notifier).stopSession();
@@ -20,6 +21,10 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
     }
     await _setContentFullscreen(false);
     if (mounted) navigator.pop(returnWordIndex);
+  }
+
+  Future<void> _exitContentCreatorAtCurrentPosition() async {
+    await _exitContentCreator(returnCurrentPosition: true);
   }
 
   Future<void> _toggleContentFullscreen() async {

@@ -45,7 +45,7 @@ class CloudConnectionStore {
     CloudProviderDefinition(
       id: dropbox,
       label: 'Dropbox',
-      subtitle: 'Connect your Dropbox account for app-folder sync',
+      subtitle: 'Connect your Dropbox account for AutoTeleprompter sync',
     ),
   ];
 

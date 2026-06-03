@@ -279,6 +279,7 @@ class SettingsNotifier extends Notifier<AppSettings>
       updateChannel: _normalizeUpdateChannel(
         prefs.getString(_updateChannelKey),
       ),
+      checkUpdatesOnStartup: prefs.getBool(_checkUpdatesOnStartupKey) ?? true,
       cloudAutoSyncOnSave: prefs.getBool(_cloudAutoSyncOnSaveKey) ?? true,
       recordingAutoBackup: prefs.getBool(_recordingAutoBackupKey) ?? false,
     );

@@ -49,8 +49,7 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _barIcon(Icons.arrow_back, 'Back to editor',
-                _exitContentCreatorAtCurrentPosition),
+            _barIcon(Icons.arrow_back, 'Back to editor', _exitContentCreator),
             _barIcon(Icons.edit_note, 'Edit current position',
                 _exitContentCreatorAtCurrentPosition),
             _barIcon(Icons.skip_previous, 'Previous bookmark',

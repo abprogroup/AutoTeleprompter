@@ -14,6 +14,7 @@ import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../settings/services/update_check_service.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
@@ -41,6 +42,7 @@ class ScriptGalleryScreen extends ConsumerStatefulWidget {
 }
 
 class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
+  static bool _startupUpdateCheckRan = false;
   int _logoTaps = 0;
   Timer? _inputShieldTimer;
   bool _inputShielded = false;
@@ -54,6 +56,9 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
         if (mounted) setState(() => _inputShielded = false);
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_maybeCheckForUpdatesOnStartup());
+    });
   }
 
   @override
@@ -414,6 +419,55 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _maybeCheckForUpdatesOnStartup() async {
+    if (_startupUpdateCheckRan) return;
+    _startupUpdateCheckRan = true;
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+    final settings = ref.read(settingsProvider);
+    if (!settings.checkUpdatesOnStartup) return;
+    final result = await UpdateCheckService().check(
+      channel: settings.updateChannel,
+    );
+    if (!mounted || result.status != UpdateCheckStatus.updateAvailable) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Update available',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          '${result.message}\n\n'
+          'Current: ${result.currentVersion}\n'
+          'Latest: ${result.latestVersion ?? 'Unknown'}',
+          style: const TextStyle(color: Colors.white70, height: 1.35),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Later'),
+          ),
+          if (result.hasDownload)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                unawaited(Process.run(
+                  'cmd',
+                  ['/c', 'start', '', result.downloadUrl!],
+                ));
+              },
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: const Text('Open download'),
+            ),
+        ],
       ),
     );
   }

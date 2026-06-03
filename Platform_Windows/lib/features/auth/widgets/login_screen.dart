@@ -30,7 +30,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your workspace email.')),
+        const SnackBar(
+          content: Text('Please enter your workspace email.'),
+          duration: Duration(seconds: 3),
+        ),
       );
       return;
     }
@@ -56,6 +59,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SnackBar(
             content: Text('Professional suite activated.'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
         Navigator.pop(context);
@@ -63,10 +67,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } else {
       if (mounted) {
         final message = isLocalProLicenseActivationConfigured
-            ? 'Invalid License Key. Please check and try again.'
+            ? 'Invalid license or admin code. Please check and try again.'
             : 'License verification is not configured in this installation.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
     }
@@ -119,7 +126,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 16),
               _LoginTextField(
                 controller: _licenseCtrl,
-                label: 'Professional License',
+                label: 'Professional License / Admin Code',
                 icon: Icons.vpn_key_outlined,
                 isObscure: true,
               ),

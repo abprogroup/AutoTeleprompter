@@ -4,6 +4,49 @@ extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
   Widget _buildBottomActions({bool keyboardVisible = false}) {
     const actionHeight = 42.0;
     const actionRadius = 12.0;
+    const proColor = Color(0xFFFFBF00);
+    const lockedColor = Color(0xFF5F5F5F);
+    final hasPremiumAccess = _watchEditorPremiumAccess();
+    final premiumForeground = hasPremiumAccess ? proColor : lockedColor;
+    final premiumBorder = BorderSide(color: premiumForeground);
+
+    Widget premiumAction({
+      required String featureName,
+      required String enabledTooltip,
+      required IconData enabledIcon,
+      required VoidCallback onPressed,
+    }) {
+      return Tooltip(
+        message: hasPremiumAccess
+            ? enabledTooltip
+            : '$featureName requires Pro access',
+        child: SizedBox(
+          width: 50,
+          height: actionHeight,
+          child: OutlinedButton(
+            onPressed: hasPremiumAccess
+                ? onPressed
+                : () => unawaited(_ensureEditorPremiumAccess(featureName)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: premiumForeground,
+              side: premiumBorder,
+              minimumSize: const Size(50, actionHeight),
+              maximumSize: const Size(50, actionHeight),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(actionRadius),
+              ),
+              padding: EdgeInsets.zero,
+            ),
+            child: Icon(
+              hasPremiumAccess ? enabledIcon : Icons.lock_outline_rounded,
+              size: 22,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -51,7 +94,7 @@ extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFBF00),
+                      backgroundColor: proColor,
                       foregroundColor: Colors.black,
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(0, actionHeight),
@@ -60,57 +103,24 @@ extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
                         borderRadius: BorderRadius.circular(actionRadius),
                       ),
                       elevation: 12,
-                      shadowColor:
-                          const Color(0xFFFFBF00).withValues(alpha: 0.5),
+                      shadowColor: proColor.withValues(alpha: 0.5),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              Tooltip(
-                message: 'Audio only recording',
-                child: SizedBox(
-                  width: 50,
-                  height: actionHeight,
-                  child: OutlinedButton(
-                    onPressed: _startAudioOnlyContentCreator,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFFFBF00),
-                      side: const BorderSide(color: Color(0xFFFFBF00)),
-                      minimumSize: const Size(50, actionHeight),
-                      maximumSize: const Size(50, actionHeight),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(actionRadius),
-                      ),
-                      padding: EdgeInsets.zero,
-                    ),
-                    child: const Icon(Icons.mic_none_outlined, size: 22),
-                  ),
-                ),
+              premiumAction(
+                featureName: 'Audio-only recording',
+                enabledTooltip: 'Audio only recording',
+                enabledIcon: Icons.mic_none_outlined,
+                onPressed: _startAudioOnlyContentCreator,
               ),
               const SizedBox(width: 10),
-              Tooltip(
-                message: 'Content Creator',
-                child: SizedBox(
-                  width: 50,
-                  height: actionHeight,
-                  child: OutlinedButton(
-                    onPressed: _startContentCreator,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFFFBF00),
-                      side: const BorderSide(color: Color(0xFFFFBF00)),
-                      minimumSize: const Size(50, actionHeight),
-                      maximumSize: const Size(50, actionHeight),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(actionRadius),
-                      ),
-                      padding: EdgeInsets.zero,
-                    ),
-                    child: const Icon(Icons.videocam_rounded, size: 22),
-                  ),
-                ),
+              premiumAction(
+                featureName: 'Content Creator',
+                enabledTooltip: 'Content Creator',
+                enabledIcon: Icons.videocam_rounded,
+                onPressed: _startContentCreator,
               ),
               const SizedBox(width: 16),
             ],

@@ -291,6 +291,12 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setString(_updateChannelKey, normalized);
   }
 
+  Future<void> setCheckUpdatesOnStartup(bool enabled) async {
+    state = state.copyWith(checkUpdatesOnStartup: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_checkUpdatesOnStartupKey, enabled);
+  }
+
   Future<void> setCloudAutoSyncOnSave(bool enabled) async {
     state = state.copyWith(cloudAutoSyncOnSave: enabled);
     final prefs = await SharedPreferences.getInstance();

@@ -4,6 +4,9 @@ import 'dart:io';
 import 'cloud_connection_store.dart';
 import 'cloud_oauth_service.dart';
 
+const dropboxSyncRootPath = String.fromEnvironment('DROPBOX_SYNC_ROOT_PATH',
+    defaultValue: '/AutoTeleprompter');
+
 class CloudSyncedFile {
   final String id;
   final String name;
@@ -407,11 +410,12 @@ class CloudAppFolderSyncService {
   Future<List<CloudSyncedFile>> _listDropboxScripts(
     CloudAuthorizedSession session,
   ) async {
-    await _ensureDropboxFolder(session);
+    final folderPath = _dropboxRootPath();
+    await _ensureDropboxFolder(session, path: folderPath);
     final decoded = await _jsonPost(
       Uri.parse('https://api.dropboxapi.com/2/files/list_folder'),
       token: session.accessToken,
-      body: {'path': '/$_folderName', 'recursive': false},
+      body: {'path': folderPath, 'recursive': false},
     );
     final entries = decoded['entries'];
     if (entries is! List) return const [];
@@ -433,9 +437,10 @@ class CloudAppFolderSyncService {
     required String fileName,
     required List<int> bytes,
     required bool replaceExisting,
-    String folderPath = '/$_folderName',
+    String? folderPath,
   }) async {
-    await _ensureDropboxFolder(session, path: folderPath);
+    final targetFolderPath = folderPath ?? _dropboxRootPath();
+    await _ensureDropboxFolder(session, path: targetFolderPath);
     final request = await _httpClient.postUrl(
       Uri.parse('https://content.dropboxapi.com/2/files/upload'),
     );
@@ -444,7 +449,7 @@ class CloudAppFolderSyncService {
     request.headers.set(
         'Dropbox-API-Arg',
         jsonEncode({
-          'path': '$folderPath/$fileName',
+          'path': _dropboxFilePath(targetFolderPath, fileName),
           'mode': replaceExisting ? 'overwrite' : 'add',
           'autorename': !replaceExisting,
           'mute': false,
@@ -467,8 +472,8 @@ class CloudAppFolderSyncService {
     return CloudSyncResult(
       ok: true,
       message: replaceExisting
-          ? 'Synced $fileName to Dropbox.'
-          : 'Uploaded $fileName to Dropbox.',
+          ? 'Synced $fileName to Dropbox${_dropboxPathLabel(targetFolderPath)}.'
+          : 'Uploaded $fileName to Dropbox${_dropboxPathLabel(targetFolderPath)}.',
     );
   }
 
@@ -482,7 +487,7 @@ class CloudAppFolderSyncService {
       fileName: fileName,
       bytes: bytes,
       replaceExisting: true,
-      folderPath: '/$_folderName/$_recordingsFolderName',
+      folderPath: _dropboxChildPath(_dropboxRootPath(), _recordingsFolderName),
     );
   }
 
@@ -513,6 +518,34 @@ class CloudAppFolderSyncService {
       current = '$current/$part';
       await _createDropboxFolderIfNeeded(session, current);
     }
+  }
+
+  String _dropboxRootPath() {
+    final configured = dropboxSyncRootPath
+        .replaceAll(RegExp(r'\\+'), '/')
+        .replaceAll(RegExp(r'/+'), '/')
+        .trim();
+    if (configured.isEmpty || configured == '/' || configured == '.') {
+      return '';
+    }
+    final noTrailing = configured.replaceFirst(RegExp(r'/+$'), '');
+    return noTrailing.startsWith('/') ? noTrailing : '/$noTrailing';
+  }
+
+  String _dropboxChildPath(String parent, String child) {
+    final safeChild = child.replaceAll(RegExp(r'^/+|/+$'), '');
+    if (parent.isEmpty) return '/$safeChild';
+    return '$parent/$safeChild';
+  }
+
+  String _dropboxFilePath(String folderPath, String fileName) {
+    if (folderPath.isEmpty) return '/$fileName';
+    return '$folderPath/$fileName';
+  }
+
+  String _dropboxPathLabel(String folderPath) {
+    if (folderPath.isEmpty) return ' app folder root';
+    return ' $folderPath';
   }
 
   Future<void> _createDropboxFolderIfNeeded(

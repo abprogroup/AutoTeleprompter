@@ -6,6 +6,8 @@ class AppSettings {
   static const String importColorModeDocument = 'document_original';
   static const String updateChannelStable = 'stable';
   static const String updateChannelBeta = 'beta';
+  // Legacy persisted value from the removed local-development channel.
+  // Normalizers map it back to stable; no released UI should expose it.
   static const String updateChannelInternal = 'internal';
   static const String languageModeAuto = 'auto';
   static const String languageModeHebrew = 'he';
@@ -144,6 +146,7 @@ class AppSettings {
   final bool reduceMotion;
   final double uiScale;
   final String updateChannel;
+  final bool checkUpdatesOnStartup;
   final bool cloudAutoSyncOnSave;
   final bool recordingAutoBackup;
 
@@ -219,6 +222,7 @@ class AppSettings {
     this.reduceMotion = false,
     this.uiScale = 1.0,
     this.updateChannel = updateChannelStable,
+    this.checkUpdatesOnStartup = true,
     this.cloudAutoSyncOnSave = true,
     this.recordingAutoBackup = false,
   });
@@ -295,6 +299,7 @@ class AppSettings {
     bool? reduceMotion,
     double? uiScale,
     String? updateChannel,
+    bool? checkUpdatesOnStartup,
     bool? cloudAutoSyncOnSave,
     bool? recordingAutoBackup,
   }) {
@@ -405,6 +410,8 @@ class AppSettings {
       reduceMotion: reduceMotion ?? this.reduceMotion,
       uiScale: uiScale ?? this.uiScale,
       updateChannel: updateChannel ?? this.updateChannel,
+      checkUpdatesOnStartup:
+          checkUpdatesOnStartup ?? this.checkUpdatesOnStartup,
       cloudAutoSyncOnSave: cloudAutoSyncOnSave ?? this.cloudAutoSyncOnSave,
       recordingAutoBackup: recordingAutoBackup ?? this.recordingAutoBackup,
     );

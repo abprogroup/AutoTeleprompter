@@ -18,12 +18,14 @@ import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/update_check_service.dart';
 import 'cloud_sync_screen.dart';
 
 part 'app_settings_screen.tiles.dart';
 part 'app_settings_screen.account_remote.dart';
 part 'app_settings_screen.remote_profiles.dart';
 part 'app_settings_screen.media_defaults.dart';
+part 'app_settings_screen.updates.dart';
 
 enum AppSettingsTab {
   general,
@@ -54,6 +56,11 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   String? _remoteUrlProfileId;
   String? _remoteError;
   String? _selectedRemoteProfileId;
+  bool _checkingUpdates = false;
+
+  void _setCheckingUpdates(bool value) {
+    if (mounted) setState(() => _checkingUpdates = value);
+  }
 
   @override
   void initState() {
@@ -207,27 +214,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       const SizedBox(height: 22),
       const _SectionHeader(title: 'UPDATES / CHANNEL'),
       const SizedBox(height: 8),
-      _SettingsChoiceTile<String>(
-        icon: Icons.system_update_alt_outlined,
-        title: 'Preferred update channel',
-        subtitle: _updateChannelDescription(settings.updateChannel),
-        value: settings.updateChannel,
-        choices: const [
-          _SettingsChoice(
-            label: 'Stable',
-            value: AppSettings.updateChannelStable,
-          ),
-          _SettingsChoice(
-            label: 'Beta',
-            value: AppSettings.updateChannelBeta,
-          ),
-          _SettingsChoice(
-            label: 'Internal',
-            value: AppSettings.updateChannelInternal,
-          ),
-        ],
-        onChanged: ref.read(settingsProvider.notifier).setUpdateChannel,
-      ),
+      ..._updatesSection(settings),
       const SizedBox(height: 22),
       const _SectionHeader(title: 'LANGUAGE'),
       const SizedBox(height: 8),
@@ -293,17 +280,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     return settings.contentCreatorRecordingFolder.isEmpty
         ? r'Videos\AutoTeleprompter'
         : settings.contentCreatorRecordingFolder;
-  }
-
-  String _updateChannelDescription(String channel) {
-    switch (channel) {
-      case AppSettings.updateChannelBeta:
-        return 'Prefer beta builds when update checks are connected';
-      case AppSettings.updateChannelInternal:
-        return 'Internal testing channel for local development builds';
-      default:
-        return 'Prefer stable builds when update checks are connected';
-    }
   }
 
   String _languageModeDescription(String mode) {

@@ -10,9 +10,13 @@ const autoTeleprompterAdminEmail = String.fromEnvironment(
 const autoTeleprompterProLicenseHash = String.fromEnvironment(
   'AUTOTELEPROMPTER_PRO_LICENSE_SHA256',
 );
+const autoTeleprompterAdminCodeHash = String.fromEnvironment(
+  'AUTOTELEPROMPTER_ADMIN_CODE_SHA256',
+);
 
 bool get isLocalProLicenseActivationConfigured =>
-    autoTeleprompterProLicenseHash.trim().isNotEmpty;
+    autoTeleprompterProLicenseHash.trim().isNotEmpty ||
+    autoTeleprompterAdminCodeHash.trim().isNotEmpty;
 
 class AuthState {
   final String? email;
@@ -54,8 +58,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
     final email = prefs.getString(_emailKey);
-    final isPro = prefs.getBool(_proKey) ?? false;
-    final licenseKey = prefs.getString(_licenseKey);
+    var isPro = prefs.getBool(_proKey) ?? false;
+    var licenseKey = prefs.getString(_licenseKey);
+    if (licenseKey == 'build-admin' &&
+        autoTeleprompterAdminCodeHash.trim().isNotEmpty) {
+      await prefs.remove(_proKey);
+      await prefs.remove(_licenseKey);
+      isPro = false;
+      licenseKey = null;
+    }
 
     state = AuthState(
       email: email,
@@ -76,9 +87,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isAdmin: isAdmin,
     );
 
-    if (isAdmin) {
-      await _activatePro('build-admin');
-    }
+    if (!isAdmin) return;
+    if (autoTeleprompterAdminCodeHash.trim().isEmpty) return;
   }
 
   Future<void> logout() async {
@@ -90,12 +100,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<bool> activateLicense(String key) async {
-    final expectedHash = autoTeleprompterProLicenseHash.trim().toLowerCase();
     final normalizedKey = key.trim();
-    if (expectedHash.isEmpty || normalizedKey.isEmpty) return false;
+    if (normalizedKey.isEmpty) return false;
     final actualHash = sha256.convert(utf8.encode(normalizedKey)).toString();
-    if (actualHash.toLowerCase() != expectedHash) return false;
-    await _activatePro('verified-local-license');
+    if (state.isAdmin &&
+        _hashMatches(actualHash, autoTeleprompterAdminCodeHash)) {
+      await _activatePro('verified-admin-code');
+      return true;
+    }
+    if (!_hashMatches(actualHash, autoTeleprompterProLicenseHash)) {
+      return false;
+    }
+    await _activatePro('verified-pro-license');
     return true;
   }
 
@@ -110,6 +126,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final configured = autoTeleprompterAdminEmail.trim().toLowerCase();
     final candidate = (email ?? '').trim().toLowerCase();
     return configured.isNotEmpty && candidate == configured;
+  }
+
+  bool _hashMatches(String actualHash, String expectedHash) {
+    final expected = expectedHash.trim().toLowerCase();
+    return expected.isNotEmpty && actualHash.toLowerCase() == expected;
   }
 }
 

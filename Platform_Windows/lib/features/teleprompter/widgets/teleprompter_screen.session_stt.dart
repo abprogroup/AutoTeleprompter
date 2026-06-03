@@ -127,10 +127,12 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     await ref.read(teleprompterProvider.notifier).stopSession();
   }
 
-  Future<void> _exitPresentation() async {
+  Future<void> _exitPresentation({bool returnCurrentPosition = false}) async {
     if (_closingPresentation) return;
     final navigator = Navigator.of(context);
-    final returnWordIndex = ref.read(teleprompterProvider).confirmedWordIndex;
+    final returnWordIndex = returnCurrentPosition
+        ? ref.read(teleprompterProvider).confirmedWordIndex
+        : null;
     if (mounted) {
       _setTeleprompterState(() => _closingPresentation = true);
     } else {
@@ -142,7 +144,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   Future<void> _editCurrentPresenterPosition() async {
-    await _exitPresentation();
+    await _exitPresentation(returnCurrentPosition: true);
   }
 
   Future<void> _togglePresenterFullscreen() async {

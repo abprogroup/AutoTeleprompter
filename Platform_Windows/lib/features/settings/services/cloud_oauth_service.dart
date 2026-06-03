@@ -10,11 +10,17 @@ import 'cloud_connection_store.dart';
 
 const googleDriveOAuthClientId =
     String.fromEnvironment('GOOGLE_DRIVE_CLIENT_ID');
+const googleDriveOAuthClientSecret =
+    String.fromEnvironment('GOOGLE_DRIVE_CLIENT_SECRET');
 const dropboxOAuthClientId = String.fromEnvironment('DROPBOX_CLIENT_ID');
 const cloudOAuthRedirectPort =
     int.fromEnvironment('CLOUD_OAUTH_REDIRECT_PORT', defaultValue: 51747);
 
 String _cleanOAuthClientId(String value) {
+  return value.replaceAll(RegExp(r'\s+'), '').trim();
+}
+
+String _cleanOAuthClientSecret(String value) {
   return value.replaceAll(RegExp(r'\s+'), '').trim();
 }
 
@@ -224,16 +230,16 @@ class CloudOAuthService {
     HttpServer? callbackServer;
     try {
       try {
-        callbackServer = await HttpServer.bind(
-          InternetAddress.loopbackIPv4,
-          cloudOAuthRedirectPort,
-        );
+        callbackServer = await _bindOAuthCallbackServer(config);
       } on SocketException {
-        return const CloudAccountConnectResult(
+        final portText = config.allowDynamicLoopbackPort
+            ? '$cloudOAuthRedirectPort-${cloudOAuthRedirectPort + 20}'
+            : '$cloudOAuthRedirectPort';
+        return CloudAccountConnectResult(
           connected: false,
-          message: 'Cloud sign-in callback port $cloudOAuthRedirectPort is '
-              'already in use. Close the other local service or build with '
-              'CLOUD_OAUTH_REDIRECT_PORT set to the registered redirect port.',
+          message: 'Cloud sign-in callback port $portText is already in use. '
+              'Close the older sign-in tab or restart AutoTeleprompter, then '
+              'try again.',
         );
       }
       final redirectUri =
@@ -299,6 +305,12 @@ class CloudOAuthService {
         connected: false,
         message: '${provider.label} sign-in timed out.',
       );
+    } on _CloudOAuthTokenException catch (error) {
+      return CloudAccountConnectResult(
+        connected: false,
+        missingCredentials: error.isCredentialConfigurationIssue,
+        message: error.message,
+      );
     } catch (error) {
       return CloudAccountConnectResult(
         connected: false,
@@ -328,6 +340,24 @@ class CloudOAuthService {
     );
   }
 
+  Future<HttpServer> _bindOAuthCallbackServer(
+    _OAuthProviderConfig config,
+  ) async {
+    const firstPort = cloudOAuthRedirectPort;
+    final lastPort =
+        config.allowDynamicLoopbackPort ? firstPort + 20 : firstPort;
+    SocketException? lastError;
+    for (var port = firstPort; port <= lastPort; port++) {
+      try {
+        return await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+      } on SocketException catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ??
+        const SocketException('No cloud OAuth callback port available.');
+  }
+
   Future<Map<String, dynamic>> _exchangeCode({
     required _OAuthProviderConfig config,
     required String code,
@@ -340,17 +370,23 @@ class CloudOAuthService {
       'x-www-form-urlencoded',
       charset: 'utf-8',
     );
-    request.write(Uri(queryParameters: {
+    final parameters = <String, String>{
       'grant_type': 'authorization_code',
       'client_id': config.clientId,
       'code': code,
       'code_verifier': verifier,
       'redirect_uri': redirectUri,
-    }).query);
+      if (config.clientSecret.isNotEmpty) 'client_secret': config.clientSecret,
+    };
+    request.write(Uri(queryParameters: parameters).query);
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('token exchange failed (${response.statusCode}): $body');
+      throw _CloudOAuthTokenException.fromTokenResponse(
+        config: config,
+        statusCode: response.statusCode,
+        body: body,
+      );
     }
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) {
@@ -370,11 +406,13 @@ class CloudOAuthService {
       'x-www-form-urlencoded',
       charset: 'utf-8',
     );
-    request.write(Uri(queryParameters: {
+    final parameters = <String, String>{
       'grant_type': 'refresh_token',
       'client_id': config.clientId,
       'refresh_token': refreshToken,
-    }).query);
+      if (config.clientSecret.isNotEmpty) 'client_secret': config.clientSecret,
+    };
+    request.write(Uri(queryParameters: parameters).query);
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -471,6 +509,7 @@ class CloudOAuthService {
     return switch (provider.id) {
       CloudConnectionStore.googleDrive => _OAuthProviderConfig.googleDrive(
           clientId: googleDriveOAuthClientId,
+          clientSecret: googleDriveOAuthClientSecret,
         ),
       CloudConnectionStore.dropbox => _OAuthProviderConfig.dropbox(
           clientId: dropboxOAuthClientId,
@@ -478,6 +517,52 @@ class CloudOAuthService {
       _ => null,
     };
   }
+}
+
+class _CloudOAuthTokenException implements Exception {
+  final String message;
+  final bool isCredentialConfigurationIssue;
+
+  const _CloudOAuthTokenException(
+    this.message, {
+    this.isCredentialConfigurationIssue = false,
+  });
+
+  factory _CloudOAuthTokenException.fromTokenResponse({
+    required _OAuthProviderConfig config,
+    required int statusCode,
+    required String body,
+  }) {
+    final lower = body.toLowerCase();
+    if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
+        lower.contains('client_secret') &&
+        lower.contains('missing')) {
+      return const _CloudOAuthTokenException(
+        'Google Drive sign-in reached Google successfully, but this build is '
+        'missing GOOGLE_DRIVE_CLIENT_SECRET for the Desktop app OAuth token '
+        'exchange. Add the Google Desktop OAuth client secret as an injected '
+        'build secret, then rebuild. Do not hardcode it in source.',
+        isCredentialConfigurationIssue: true,
+      );
+    }
+    if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
+        lower.contains('client_secret') &&
+        lower.contains('invalid')) {
+      return const _CloudOAuthTokenException(
+        'Google Drive rejected GOOGLE_DRIVE_CLIENT_SECRET. Copy the Client ID '
+        'and Client secret again from the same Google Desktop OAuth client, '
+        'then update the local build define or GitHub repository secret and '
+        'rebuild. Do not use a secret from another OAuth client.',
+        isCredentialConfigurationIssue: true,
+      );
+    }
+    return _CloudOAuthTokenException(
+      'Token exchange failed ($statusCode): $body',
+    );
+  }
+
+  @override
+  String toString() => message;
 }
 
 class _OAuthCallback {
@@ -489,8 +574,10 @@ class _OAuthCallback {
 
 class _OAuthProviderConfig {
   final String clientId;
+  final String clientSecret;
   final String clientIdDefineName;
   final Uri tokenEndpoint;
+  final bool allowDynamicLoopbackPort;
   final Uri Function({
     required String redirectUri,
     required String state,
@@ -501,8 +588,10 @@ class _OAuthProviderConfig {
 
   const _OAuthProviderConfig({
     required this.clientId,
+    this.clientSecret = '',
     required this.clientIdDefineName,
     required this.tokenEndpoint,
+    required this.allowDynamicLoopbackPort,
     required this.authorizationUri,
     required this.accountLabel,
   });
@@ -516,12 +605,18 @@ class _OAuthProviderConfig {
     return null;
   }
 
-  factory _OAuthProviderConfig.googleDrive({required String clientId}) {
+  factory _OAuthProviderConfig.googleDrive({
+    required String clientId,
+    required String clientSecret,
+  }) {
     final normalizedClientId = _cleanOAuthClientId(clientId);
+    final normalizedClientSecret = _cleanOAuthClientSecret(clientSecret);
     return _OAuthProviderConfig(
       clientId: normalizedClientId,
+      clientSecret: normalizedClientSecret,
       clientIdDefineName: 'GOOGLE_DRIVE_CLIENT_ID',
       tokenEndpoint: Uri.parse('https://oauth2.googleapis.com/token'),
+      allowDynamicLoopbackPort: true,
       authorizationUri: ({
         required String redirectUri,
         required String state,
@@ -549,6 +644,7 @@ class _OAuthProviderConfig {
       clientId: normalizedClientId,
       clientIdDefineName: 'DROPBOX_CLIENT_ID',
       tokenEndpoint: Uri.parse('https://api.dropboxapi.com/oauth2/token'),
+      allowDynamicLoopbackPort: false,
       authorizationUri: ({
         required String redirectUri,
         required String state,

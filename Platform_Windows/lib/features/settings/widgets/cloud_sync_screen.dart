@@ -490,6 +490,7 @@ class _CloudOption extends StatelessWidget {
     final connected = connection.isConnected;
     final account = this.account;
     final accountConnected = account != null;
+    final accountPrimary = onConnectAccount != null;
     final icon = _providerIcon(connection.provider.id);
     final color = _providerColor(connection.provider.id);
     return Container(
@@ -539,16 +540,31 @@ class _CloudOption extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     ElevatedButton.icon(
-                      onPressed: onConnect,
-                      icon: Icon(connected
-                          ? Icons.drive_folder_upload_outlined
-                          : Icons.folder_open_outlined),
+                      onPressed: accountPrimary ? onConnectAccount : onConnect,
+                      icon: Icon(accountPrimary
+                          ? Icons.account_circle_outlined
+                          : connected
+                              ? Icons.drive_folder_upload_outlined
+                              : Icons.folder_open_outlined),
                       label: Text(
-                        connected ? 'Change folder' : 'Choose folder',
+                        accountPrimary
+                            ? accountConnected
+                                ? 'Reconnect account'
+                                : 'Connect account'
+                            : connected
+                                ? 'Change folder'
+                                : 'Choose folder',
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFFBF00),
                         foregroundColor: Colors.black,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: onConnect,
+                      icon: const Icon(Icons.folder_open_outlined, size: 18),
+                      label: Text(
+                        connected ? 'Change folder' : 'Choose local folder',
                       ),
                     ),
                     OutlinedButton.icon(
@@ -560,20 +576,6 @@ class _CloudOption extends StatelessWidget {
                       onPressed: onDisconnect,
                       icon: const Icon(Icons.link_off_rounded, size: 18),
                       label: const Text('Forget folder'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: onConnectAccount,
-                      icon: const Icon(
-                        Icons.account_circle_outlined,
-                        size: 18,
-                      ),
-                      label: Text(
-                        accountConnected
-                            ? 'Reconnect account'
-                            : onConnectAccount == null
-                                ? 'Local bridge only'
-                                : 'Connect account',
-                      ),
                     ),
                     OutlinedButton.icon(
                       onPressed: onUploadAccount,

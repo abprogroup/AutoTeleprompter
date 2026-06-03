@@ -10,13 +10,17 @@ AutoTeleprompter_BACKUP_*
 /macos-baseline/
 /windows-baseline/
 
-# Root/manual QA test artifacts stay private. Platform automated tests are source.
+# Tests and QA artifacts stay private in this workspace.
 test/
-!Platform_*/test/
-!Platform_*/test/**
+Platform_*/test/
 schemes/
 guidelines_and_planning/
 AutoTeleprompter_TEST_*
+_artifacts/
+artifacts/
+qa_artifacts/
+test_artifacts/
+coverage/
 
 # NEVER TRACK AGENTS - THEY ARE PRIVATE
 _agent/
@@ -28,9 +32,26 @@ readable_history/
 _v5_archive/
 _debug/
 debug/
+debug_traces/
+arrow_traces/
+highlight_traces/
+selection_traces/
+**/debug_traces/
+**/arrow_traces/
+**/highlight_traces/
+**/selection_traces/
+*.atpe
 
 # Local planning/governance files are private workspace state.
 Plans/
+Private/
+private/
+private_docs/
+Private_Docs/
+MVP_Docs/
+MVP_PRIVATE/
+*_PRIVATE.md
+*_private.md
 PLATFORM_TESTING_README.md
 AI_PROTOCOL.md
 DAILY_LOG.md
@@ -47,6 +68,20 @@ development/
 TeleSmart/
 releases/
 releases/v*/
+
+# Local credentials, provider secrets, and private build inputs.
+.env
+.env.*
+*.secret
+*.secrets
+*.key
+*.pem
+client_secret*.json
+credentials*.json
+oauth_credentials*.json
+oauth_client_secret*.json
+google_drive_client*.json
+dropbox_client*.json
 
 # General Code Ignores
 **/.flutter-plugins

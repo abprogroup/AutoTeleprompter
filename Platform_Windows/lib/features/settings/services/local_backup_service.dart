@@ -149,21 +149,6 @@ class LocalBackupService {
     return backedUp;
   }
 
-  Future<bool> backupRecording(String sourcePath) async {
-    final root = await _backupRoot();
-    if (root == null) return false;
-    final source = File(sourcePath);
-    if (!await source.exists()) return false;
-    await _pruneExpiredDeletedBackups(root);
-    final recordings = Directory(_join(root.path, 'Recordings'));
-    await recordings.create(recursive: true);
-    final target =
-        File(_join(recordings.path, _safeName(_basename(sourcePath))));
-    if (_samePath(source.path, target.path)) return true;
-    await source.copy(target.path);
-    return true;
-  }
-
   Future<Directory?> _backupRoot() async {
     final connection = await _store.loadLocalBackupConnection();
     final folderPath = connection.folderPath.trim();
@@ -416,11 +401,6 @@ class LocalBackupService {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     return safe.isEmpty ? 'script' : safe;
-  }
-
-  static bool _samePath(String a, String b) {
-    String norm(String value) => File(value).absolute.path.toLowerCase();
-    return norm(a) == norm(b);
   }
 
   static String _join(String a, String b) => '$a${Platform.pathSeparator}$b';

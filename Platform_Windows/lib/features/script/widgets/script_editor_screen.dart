@@ -163,6 +163,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final ScrollController _editorScrollController = ScrollController();
   final GlobalKey _editorArrowTraceBoundaryKey = GlobalKey();
   double? _editorScrollOffsetBeforeWindowHide;
+  int _editorModeReturnRestoreToken = 0;
   String _currentTitle = 'New Project';
 
   /// Preserved non-collapsed selection - survives focus loss from dialogs.

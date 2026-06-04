@@ -4,21 +4,22 @@ class _EditorModeReturnSnapshot {
   final double? scrollOffset;
   final int? activeBlock;
   final TextSelection? selection;
+  final bool hadFocus;
 
   const _EditorModeReturnSnapshot({
     required this.scrollOffset,
     required this.activeBlock,
     required this.selection,
+    required this.hadFocus,
   });
 }
 
 extension _ScriptEditorModeReturnParts on _ScriptEditorScreenState {
   _EditorModeReturnSnapshot _captureEditorModeReturnSnapshot() {
-    var activeBlock = _lastFocusedController == null
-        ? -1
-        : _controllers.indexOf(_lastFocusedController!);
-    if (activeBlock < 0) {
-      activeBlock = _focusNodes.indexWhere((node) => node.hasFocus);
+    final focusedBlock = _focusNodes.indexWhere((node) => node.hasFocus);
+    var activeBlock = focusedBlock;
+    if (activeBlock < 0 && _lastFocusedController != null) {
+      activeBlock = _controllers.indexOf(_lastFocusedController!);
     }
     final controller = activeBlock >= 0 && activeBlock < _controllers.length
         ? _controllers[activeBlock]
@@ -32,13 +33,17 @@ extension _ScriptEditorModeReturnParts on _ScriptEditorScreenState {
           : null,
       activeBlock: activeBlock >= 0 ? activeBlock : null,
       selection: selection,
+      hadFocus: focusedBlock >= 0,
     );
   }
 
   void _restoreEditorModeReturnSnapshot(
     _EditorModeReturnSnapshot snapshot,
   ) {
+    final token = ++_editorModeReturnRestoreToken;
+
     void restoreSelection() {
+      if (token != _editorModeReturnRestoreToken) return;
       final block = snapshot.activeBlock;
       final selection = snapshot.selection;
       if (block == null ||
@@ -52,26 +57,42 @@ extension _ScriptEditorModeReturnParts on _ScriptEditorScreenState {
       if (selection.start > textLength || selection.end > textLength) return;
       controller.selection = selection;
       _lastFocusedController = controller;
+      if (snapshot.hadFocus) {
+        _focusNodes[block].requestFocus();
+      }
     }
 
     void restoreScroll() {
+      if (token != _editorModeReturnRestoreToken) return;
       final offset = snapshot.scrollOffset;
       if (offset == null || !_editorScrollController.hasClients) return;
       final max = _editorScrollController.position.maxScrollExtent;
       _editorScrollController.jumpTo(offset.clamp(0.0, max).toDouble());
     }
 
+    if (!snapshot.hadFocus) {
+      FocusScope.of(context).unfocus();
+    }
     restoreSelection();
     restoreScroll();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      restoreSelection();
-      restoreScroll();
+
+    void restoreAfterFrame(int remainingFrames) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+        if (!mounted || token != _editorModeReturnRestoreToken) return;
+        restoreSelection();
         restoreScroll();
-        _onSelectionChanged();
+        if (remainingFrames > 1) {
+          restoreAfterFrame(remainingFrames - 1);
+        } else {
+          Future<void>.delayed(const Duration(milliseconds: 80), () {
+            if (!mounted || token != _editorModeReturnRestoreToken) return;
+            restoreScroll();
+            _onSelectionChanged();
+          });
+        }
       });
-    });
+    }
+
+    restoreAfterFrame(3);
   }
 }

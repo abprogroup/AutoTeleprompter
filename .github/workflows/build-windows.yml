@@ -81,9 +81,6 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($dropboxSyncRootPath)) {
             $dropboxSyncRootPath = ($env:DROPBOX_SYNC_ROOT_PATH_VAR -replace "`r", "" -replace "`n", "").Trim()
           }
-          if ([string]::IsNullOrWhiteSpace($dropboxSyncRootPath)) {
-            $dropboxSyncRootPath = "/AutoTeleprompter"
-          }
           $adminEmail = ($env:AUTOTELEPROMPTER_ADMIN_EMAIL -replace "`r", "" -replace "`n", "").Trim()
           $adminCodeHash = ($env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256 -replace "\s", "").Trim().ToLowerInvariant()
           $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_SECRET -replace "`r", "" -replace "`n", "").Trim()

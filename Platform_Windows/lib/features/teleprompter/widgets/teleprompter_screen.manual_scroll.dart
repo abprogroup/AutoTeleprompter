@@ -348,8 +348,14 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         notification.dragDetails != null;
     final isUserScrollUpdate = notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle;
-    final userScrollIntent =
-        isUserScrollStart || _recentPresenterUserScrollSignal();
+    final isPointerWheelScrollUpdate =
+        notification is ScrollUpdateNotification &&
+            notification.dragDetails == null &&
+            _recentPresenterUserScrollSignal();
+    final userScrollIntent = isUserScrollStart ||
+        isUserScrollUpdate ||
+        isPointerWheelScrollUpdate ||
+        _recentPresenterUserScrollSignal();
     if (speechActive &&
         _presenterProgrammaticPositionCommitActive() &&
         !userScrollIntent) {
@@ -358,7 +364,9 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
     final isScrollPositionUpdate =
         notification is ScrollUpdateNotification && _userBrowsingWhileStopped;
-    if (isUserScrollStart || isUserScrollUpdate) {
+    final userScrollActive =
+        isUserScrollStart || isUserScrollUpdate || isPointerWheelScrollUpdate;
+    if (userScrollActive) {
       _userBrowsingWhileStopped = true;
       _cancelSmoothScroll();
       _stopManualScroll();
@@ -368,7 +376,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
 
     if (_userBrowsingWhileStopped &&
-        (isUserScrollStart || isUserScrollUpdate || isScrollPositionUpdate)) {
+        (userScrollActive || isScrollPositionUpdate)) {
       _syncVisibleWordWindow(force: true);
       if (speechActive && activeManualOverride) {
         _scheduleActiveManualCorrectionCommit();

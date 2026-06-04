@@ -111,6 +111,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool? _lastPublishedRemoteIsStarting;
   DateTime? _lastVisibleWindowSync;
   DateTime? _lastBrowsingWordSync;
+  DateTime? _presenterProgrammaticCommitBlockedUntil;
+  DateTime? _lastPresenterUserScrollSignalAt;
   bool _windowsControlsHovering = false;
   bool _presenterFullscreen = false;
 

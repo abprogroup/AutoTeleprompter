@@ -132,8 +132,11 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                               onNotification: _handleStoppedBrowsingScroll,
                               child: Listener(
                                 onPointerSignal: (event) {
-                                  if (activeInputLocked &&
-                                      event is PointerScrollEvent) {
+                                  if (event is PointerScrollEvent) {
+                                    if (!activeInputLocked) {
+                                      _notePresenterUserScrollSignal();
+                                    }
+                                    if (!activeInputLocked) return;
                                     GestureBinding
                                         .instance.pointerSignalResolver
                                         .register(event, (_) {});

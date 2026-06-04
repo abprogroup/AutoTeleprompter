@@ -138,6 +138,32 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _smoothScrollActive = false;
   }
 
+  void _notePresenterUserScrollSignal() {
+    _lastPresenterUserScrollSignalAt = DateTime.now();
+  }
+
+  bool _recentPresenterUserScrollSignal() {
+    final signalAt = _lastPresenterUserScrollSignalAt;
+    return signalAt != null &&
+        DateTime.now().difference(signalAt) < const Duration(milliseconds: 420);
+  }
+
+  void _suppressPresenterProgrammaticPositionCommit({
+    required bool immediate,
+  }) {
+    _presenterProgrammaticCommitBlockedUntil = DateTime.now().add(
+      Duration(milliseconds: immediate ? 380 : 220),
+    );
+  }
+
+  bool _presenterProgrammaticPositionCommitActive() {
+    final until = _presenterProgrammaticCommitBlockedUntil;
+    if (until == null) return false;
+    if (DateTime.now().isBefore(until)) return true;
+    _presenterProgrammaticCommitBlockedUntil = null;
+    return false;
+  }
+
   void _scheduleVisibleWordWindowSync({bool force = false}) {
     if (_visibleWindowSyncScheduled) return;
     _visibleWindowSyncScheduled = true;
@@ -236,6 +262,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         rowProgress * lineAdvance;
     _scrollTarget =
         rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
+    _suppressPresenterProgrammaticPositionCommit(immediate: immediate);
 
     if (immediate) {
       _cancelSmoothScroll();
@@ -321,6 +348,14 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         notification.dragDetails != null;
     final isUserScrollUpdate = notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle;
+    final userScrollIntent =
+        isUserScrollStart || _recentPresenterUserScrollSignal();
+    if (speechActive &&
+        _presenterProgrammaticPositionCommitActive() &&
+        !userScrollIntent) {
+      _syncVisibleWordWindow();
+      return false;
+    }
     final isScrollPositionUpdate =
         notification is ScrollUpdateNotification && _userBrowsingWhileStopped;
     if (isUserScrollStart || isUserScrollUpdate) {

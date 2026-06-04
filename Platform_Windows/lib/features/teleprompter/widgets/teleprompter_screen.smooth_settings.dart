@@ -19,6 +19,7 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
       return;
     }
 
+    _suppressPresenterProgrammaticPositionCommit(immediate: false);
     var step = diff * 0.035;
     step = step.clamp(-7.0, 7.0).toDouble();
     if (step.abs() < 0.25) step = diff.isNegative ? -0.25 : 0.25;

@@ -1,5 +1,5 @@
 name: Build Windows EXE (v5.0.6)
-run-name: Windows v5.0.6 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+run-name: Windows v5.0.6 ${{ github.event.inputs.release_channel || 'beta' }} EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   push:
@@ -45,8 +45,9 @@ jobs:
         run: |
           $releaseChannel = "${{ github.event.inputs.release_channel }}"
           if ([string]::IsNullOrWhiteSpace($releaseChannel)) {
-            $releaseChannel = "stable"
+            $releaseChannel = "beta"
           }
+          Write-Host "Building Windows v5.0.6 artifact for update channel: $releaseChannel"
           $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.6"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
           function Remove-ClientCredentialQuery([string] $value) {
@@ -135,5 +136,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-Windows-v5.0.6-${{ github.event.inputs.release_channel || 'stable' }}-EXE
+          name: AutoTeleprompter-Windows-v5.0.6-${{ github.event.inputs.release_channel || 'beta' }}-EXE
           path: build-zip\AutoTeleprompter-Windows

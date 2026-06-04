@@ -9,6 +9,15 @@ on:
       - 'Platform_Windows/**'
       - '.github/workflows/build-windows.yml'
   workflow_dispatch:
+    inputs:
+      release_channel:
+        description: 'Update channel for this Windows artifact'
+        required: true
+        default: 'beta'
+        type: choice
+        options:
+          - beta
+          - stable
 
 jobs:
   build:
@@ -34,6 +43,10 @@ jobs:
 
       - name: Build Windows Archive
         run: |
+          $releaseChannel = "${{ github.event.inputs.release_channel }}"
+          if ([string]::IsNullOrWhiteSpace($releaseChannel)) {
+            $releaseChannel = "stable"
+          }
           $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.6"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
           function Remove-ClientCredentialQuery([string] $value) {
@@ -122,5 +135,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-Windows-v5.0.6-EXE
+          name: AutoTeleprompter-Windows-v5.0.6-${{ github.event.inputs.release_channel || 'stable' }}-EXE
           path: build-zip\AutoTeleprompter-Windows

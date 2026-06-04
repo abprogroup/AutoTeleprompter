@@ -36,12 +36,16 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
         title: 'Check for update',
         subtitle: _checkingUpdates
             ? 'Checking ${settings.updateChannel} channel...'
-            : _updateCheckDescription(settings.updateChannel),
+            : _downloadingUpdate
+                ? 'Downloading update package...'
+                : _updateCheckDescription(settings.updateChannel),
         actions: [
           _SettingsAction(
             icon: Icons.refresh_rounded,
             label: _checkingUpdates ? 'Checking...' : 'Check now',
-            onPressed: _checkingUpdates ? null : _checkForUpdatesNow,
+            onPressed: _checkingUpdates || _downloadingUpdate
+                ? null
+                : _checkForUpdatesNow,
           ),
         ],
       ),
@@ -63,6 +67,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
   }
 
   Future<void> _checkForUpdatesNow() async {
+    if (_checkingUpdates || _downloadingUpdate) return;
     _setCheckingUpdates(true);
     final settings = ref.read(settingsProvider);
     final result = await UpdateCheckService().check(
@@ -112,29 +117,41 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
-                unawaited(_openUpdateDownload(result.downloadUrl!));
+                unawaited(_downloadUpdatePackage(result));
               },
-              icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              label: const Text('Open download'),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text('Download update'),
             ),
         ],
       ),
     );
   }
 
-  Future<void> _openUpdateDownload(String url) async {
+  Future<void> _downloadUpdatePackage(UpdateCheckResult result) async {
+    if (_downloadingUpdate) return;
+    _setDownloadingUpdate(true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Downloading update package...')),
+    );
     try {
-      await Process.run('cmd', ['/c', 'start', '', url]);
+      final file = await UpdateDownloadService().download(result);
+      await Process.run('explorer.exe', ['/select,${file.path}']);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Update downloaded: ${file.path}')),
+      );
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,
         stack,
-        source: 'settings.openUpdateDownload',
+        source: 'settings.downloadUpdatePackage',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Update download could not be opened.')),
+        SnackBar(content: Text('Update download failed: $error')),
       );
+    } finally {
+      _setDownloadingUpdate(false);
     }
   }
 }

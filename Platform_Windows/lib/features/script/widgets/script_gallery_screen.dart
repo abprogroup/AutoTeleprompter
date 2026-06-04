@@ -15,6 +15,7 @@ import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/services/update_check_service.dart';
+import '../../settings/services/update_download_service.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
@@ -459,17 +460,38 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
-                unawaited(Process.run(
-                  'cmd',
-                  ['/c', 'start', '', result.downloadUrl!],
-                ));
+                unawaited(_downloadStartupUpdate(result));
               },
-              icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              label: const Text('Open download'),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text('Download update'),
             ),
         ],
       ),
     );
+  }
+
+  Future<void> _downloadStartupUpdate(UpdateCheckResult result) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Downloading update package...')),
+    );
+    try {
+      final file = await UpdateDownloadService().download(result);
+      await Process.run('explorer.exe', ['/select,${file.path}']);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Update downloaded: ${file.path}')),
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'gallery.downloadStartupUpdate',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Update download failed: $error')),
+      );
+    }
   }
 }
 

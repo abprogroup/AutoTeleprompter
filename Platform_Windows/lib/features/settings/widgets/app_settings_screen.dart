@@ -19,6 +19,7 @@ import '../../remote/services/remote_control_service.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/update_check_service.dart';
+import '../services/update_download_service.dart';
 import 'cloud_sync_screen.dart';
 
 part 'app_settings_screen.tiles.dart';
@@ -57,9 +58,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   String? _remoteError;
   String? _selectedRemoteProfileId;
   bool _checkingUpdates = false;
+  bool _downloadingUpdate = false;
 
   void _setCheckingUpdates(bool value) {
     if (mounted) setState(() => _checkingUpdates = value);
+  }
+
+  void _setDownloadingUpdate(bool value) {
+    if (mounted) setState(() => _downloadingUpdate = value);
   }
 
   @override

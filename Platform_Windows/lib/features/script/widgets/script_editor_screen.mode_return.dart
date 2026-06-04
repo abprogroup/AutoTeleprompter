@@ -17,10 +17,7 @@ class _EditorModeReturnSnapshot {
 extension _ScriptEditorModeReturnParts on _ScriptEditorScreenState {
   _EditorModeReturnSnapshot _captureEditorModeReturnSnapshot() {
     final focusedBlock = _focusNodes.indexWhere((node) => node.hasFocus);
-    var activeBlock = focusedBlock;
-    if (activeBlock < 0 && _lastFocusedController != null) {
-      activeBlock = _controllers.indexOf(_lastFocusedController!);
-    }
+    final activeBlock = focusedBlock;
     final controller = activeBlock >= 0 && activeBlock < _controllers.length
         ? _controllers[activeBlock]
         : null;
@@ -44,6 +41,7 @@ extension _ScriptEditorModeReturnParts on _ScriptEditorScreenState {
 
     void restoreSelection() {
       if (token != _editorModeReturnRestoreToken) return;
+      if (!snapshot.hadFocus) return;
       final block = snapshot.activeBlock;
       final selection = snapshot.selection;
       if (block == null ||
@@ -57,9 +55,7 @@ extension _ScriptEditorModeReturnParts on _ScriptEditorScreenState {
       if (selection.start > textLength || selection.end > textLength) return;
       controller.selection = selection;
       _lastFocusedController = controller;
-      if (snapshot.hadFocus) {
-        _focusNodes[block].requestFocus();
-      }
+      _focusNodes[block].requestFocus();
     }
 
     void restoreScroll() {

@@ -4,8 +4,8 @@ import 'dart:io';
 import 'cloud_connection_store.dart';
 import 'cloud_oauth_service.dart';
 
-const dropboxSyncRootPath = String.fromEnvironment('DROPBOX_SYNC_ROOT_PATH',
-    defaultValue: '');
+const dropboxSyncRootPath =
+    String.fromEnvironment('DROPBOX_SYNC_ROOT_PATH', defaultValue: '');
 
 class CloudSyncedFile {
   final String id;
@@ -443,7 +443,7 @@ class CloudAppFolderSyncService {
         .set(HttpHeaders.authorizationHeader, 'Bearer ${session.accessToken}');
     request.headers.set(
         'Dropbox-API-Arg',
-        jsonEncode({
+        _asciiHeaderJson({
           'path': _dropboxFilePath(targetFolderPath, fileName),
           'mode': replaceExisting ? 'overwrite' : 'add',
           'autorename': !replaceExisting,
@@ -495,7 +495,7 @@ class CloudAppFolderSyncService {
     );
     request.headers
         .set(HttpHeaders.authorizationHeader, 'Bearer ${session.accessToken}');
-    request.headers.set('Dropbox-API-Arg', jsonEncode({'path': path}));
+    request.headers.set('Dropbox-API-Arg', _asciiHeaderJson({'path': path}));
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     return response.statusCode >= 200 && response.statusCode < 300
@@ -615,6 +615,21 @@ class CloudAppFolderSyncService {
     if (lower.endsWith('.mp4')) return 'video/mp4';
     if (lower.endsWith('.webm')) return 'video/webm';
     return 'application/octet-stream';
+  }
+
+  static String _asciiHeaderJson(Map<String, Object?> value) {
+    final encoded = jsonEncode(value);
+    final buffer = StringBuffer();
+    for (var i = 0; i < encoded.length; i++) {
+      final unit = encoded.codeUnitAt(i);
+      if (unit >= 0x20 && unit <= 0x7E) {
+        buffer.writeCharCode(unit);
+      } else {
+        buffer.write(r'\u');
+        buffer.write(unit.toRadixString(16).padLeft(4, '0'));
+      }
+    }
+    return buffer.toString();
   }
 
   static String stableScriptFileName(String title) {

@@ -368,7 +368,7 @@ class LocalBackupService {
     ];
     for (final value in candidates) {
       if (value == null || value.isEmpty) continue;
-      final lower = value.toLowerCase();
+      final lower = _stripAppExportSuffixes(value.toLowerCase());
       for (final ext in ['docx', 'doc', 'rtf', 'txt']) {
         if (lower == ext || lower.endsWith('.$ext')) return ext;
       }
@@ -383,12 +383,29 @@ class LocalBackupService {
     final rawName = (sourcePath?.trim().isNotEmpty ?? false)
         ? _basename(sourcePath!.trim())
         : title.trim();
-    final withoutKnownExtension = rawName.replaceFirst(
-      RegExp(r'\.(?:docx?|rtf|txt|pdf|atp\.txt)$', caseSensitive: false),
+    final withoutKnownExtension = _stripAppExportSuffixes(rawName).replaceFirst(
+      RegExp(r'\.(?:docx?|rtf|txt|pdf)$', caseSensitive: false),
       '',
     );
     final safe = _safeName(withoutKnownExtension);
     return safe.isEmpty ? 'Untitled script' : safe;
+  }
+
+  static String _stripAppExportSuffixes(String value) {
+    var result = value.trim();
+    var changed = true;
+    while (changed) {
+      changed = false;
+      final next = result.replaceFirst(
+        RegExp(r'\.(?:atp|atp\.txt)$', caseSensitive: false),
+        '',
+      );
+      if (next != result) {
+        result = next;
+        changed = true;
+      }
+    }
+    return result;
   }
 
   static String _basename(String path) => path.split(RegExp(r'[\\/]')).last;

@@ -10,6 +10,8 @@ import 'cloud_connection_store.dart';
 
 const googleDriveOAuthClientId =
     String.fromEnvironment('GOOGLE_DRIVE_CLIENT_ID');
+const googleDriveOAuthClientSecret =
+    String.fromEnvironment('GOOGLE_DRIVE_CLIENT_SECRET');
 const dropboxOAuthClientId = String.fromEnvironment('DROPBOX_CLIENT_ID');
 const cloudOAuthRedirectPort =
     int.fromEnvironment('CLOUD_OAUTH_REDIRECT_PORT', defaultValue: 51747);
@@ -387,6 +389,18 @@ class CloudOAuthService {
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (config.shouldRetryWithClientSecret(
+        parameters: parameters,
+        responseBody: body,
+      )) {
+        return _postTokenRequest(
+          config: config,
+          parameters: {
+            ...parameters,
+            'client_secret': config.clientSecret!,
+          },
+        );
+      }
       throw _CloudOAuthTokenException.fromTokenResponse(
         config: config,
         statusCode: response.statusCode,
@@ -501,6 +515,7 @@ class CloudOAuthService {
     return switch (provider.id) {
       CloudConnectionStore.googleDrive => _OAuthProviderConfig.googleDrive(
           clientId: googleDriveOAuthClientId,
+          clientSecret: googleDriveOAuthClientSecret,
         ),
       CloudConnectionStore.dropbox => _OAuthProviderConfig.dropbox(
           clientId: dropboxOAuthClientId,
@@ -565,6 +580,7 @@ class _OAuthCallback {
 
 class _OAuthProviderConfig {
   final String clientId;
+  final String? clientSecret;
   final String clientIdDefineName;
   final Uri tokenEndpoint;
   final bool allowDynamicLoopbackPort;
@@ -578,6 +594,7 @@ class _OAuthProviderConfig {
 
   const _OAuthProviderConfig({
     required this.clientId,
+    this.clientSecret,
     required this.clientIdDefineName,
     required this.tokenEndpoint,
     required this.allowDynamicLoopbackPort,
@@ -594,12 +611,26 @@ class _OAuthProviderConfig {
     return null;
   }
 
+  bool shouldRetryWithClientSecret({
+    required Map<String, String> parameters,
+    required String responseBody,
+  }) {
+    if (clientIdDefineName != 'GOOGLE_DRIVE_CLIENT_ID') return false;
+    if (parameters.containsKey('client_secret')) return false;
+    final secret = clientSecret?.trim();
+    if (secret == null || secret.isEmpty) return false;
+    final lower = responseBody.toLowerCase();
+    return lower.contains('client_secret') && lower.contains('missing');
+  }
+
   factory _OAuthProviderConfig.googleDrive({
     required String clientId,
+    required String clientSecret,
   }) {
     final normalizedClientId = _cleanOAuthClientId(clientId);
     return _OAuthProviderConfig(
       clientId: normalizedClientId,
+      clientSecret: clientSecret.replaceAll(RegExp(r'\s+'), '').trim(),
       clientIdDefineName: 'GOOGLE_DRIVE_CLIENT_ID',
       tokenEndpoint: Uri.parse('https://oauth2.googleapis.com/token'),
       allowDynamicLoopbackPort: true,

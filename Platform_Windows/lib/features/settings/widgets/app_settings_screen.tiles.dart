@@ -551,7 +551,7 @@ class _SettingsSliderTile extends StatelessWidget {
 class _SettingsAction {
   final IconData icon;
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const _SettingsAction({
     required this.icon,

@@ -39,8 +39,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     bool success = false;
     if (license.isNotEmpty) {
       success = await authNotifier.activateLicense(license);
-    } else if (email == 'abmpro.office@gmail.com') {
-      success = true; // Admin auto-pro
+    } else if (ref.read(authProvider).isAdmin) {
+      success = true;
     }
 
     setState(() => _isLoading = false);
@@ -48,7 +48,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (success) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('V3 Professional Suite Activated!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Professional suite activated.'), backgroundColor: Colors.green),
         );
         Navigator.pop(context);
       }
@@ -122,7 +122,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Upgrade to V3 Pro', style: TextStyle(color: Colors.white)),
+        title: const Text('Upgrade to Pro', style: TextStyle(color: Colors.white)),
         content: const Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,7 +140,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mock IAP: Purchase verification starting...')));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Purchase flow is not connected yet.')));
             },
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFBF00), foregroundColor: Colors.black),
             child: const Text('PURCHASE NOW'),

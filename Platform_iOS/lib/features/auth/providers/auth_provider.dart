@@ -33,7 +33,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   static const _emailKey = 'auth_email';
   static const _proKey = 'auth_is_pro';
   static const _licenseKey = 'auth_license_key';
-  static const _adminEmail = 'abmpro.office@gmail.com';
+  static const _adminEmail =
+      String.fromEnvironment('AUTOTELEPROMPTER_ADMIN_EMAIL');
 
   AuthNotifier() : super(AuthState()) {
     _loadState();
@@ -44,11 +45,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final email = prefs.getString(_emailKey);
     final isPro = prefs.getBool(_proKey) ?? false;
     final licenseKey = prefs.getString(_licenseKey);
-    
+
     state = AuthState(
       email: email,
       isPro: isPro,
-      isAdmin: email == _adminEmail,
+      isAdmin: _isAdminEmail(email),
       licenseKey: licenseKey,
     );
   }
@@ -56,12 +57,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> login(String email) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_emailKey, email);
-    
+
     state = state.copyWith(
       email: email,
-      isAdmin: email == _adminEmail,
+      isAdmin: _isAdminEmail(email),
     );
-    
+
     // Auto-activate Pro for Admin
     if (state.isAdmin) {
       await activateLicense('PRO-ADMIN-V3');
@@ -86,6 +87,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return true;
     }
     return false;
+  }
+
+  bool _isAdminEmail(String? email) {
+    return _adminEmail.isNotEmpty &&
+        email != null &&
+        email.toLowerCase() == _adminEmail.toLowerCase();
   }
 }
 

@@ -41,7 +41,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
           _SettingsAction(
             icon: Icons.refresh_rounded,
             label: _checkingUpdates ? 'Checking...' : 'Check now',
-            onPressed: _checkingUpdates ? () {} : _checkForUpdatesNow,
+            onPressed: _checkingUpdates ? null : _checkForUpdatesNow,
           ),
         ],
       ),

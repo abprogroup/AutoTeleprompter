@@ -190,7 +190,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const Text('Layout & Typography', style: sectionStyle),
           const SizedBox(height: 14),
 
-          // V3 Professional: Broadcast Profiles
+          // Professional: Broadcast Profiles
           const Text('Broadcast Profile', style: labelStyle),
           const SizedBox(height: 8),
           SingleChildScrollView(

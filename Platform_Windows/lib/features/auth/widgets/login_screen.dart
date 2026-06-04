@@ -48,7 +48,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (license.isNotEmpty) {
       success = await authNotifier.activateLicense(license);
     } else {
-      success = ref.read(authProvider).isPro;
+      success = ref.read(authProvider).hasPremiumAccess;
     }
 
     setState(() => _isLoading = false);

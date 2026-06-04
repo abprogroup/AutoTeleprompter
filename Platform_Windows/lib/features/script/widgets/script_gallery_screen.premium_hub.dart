@@ -48,7 +48,7 @@ class _PremiumHubSheet extends StatelessWidget {
     required this.onOpenAccount,
   });
 
-  bool get _hasProAccess => auth.isPro || auth.isAdmin;
+  bool get _hasProAccess => auth.hasPremiumAccess;
 
   @override
   Widget build(BuildContext context) {

@@ -23,9 +23,9 @@ class _AccountMenuButton extends ConsumerWidget {
     final displayName = _accountDisplayName(settings.displayName, email);
     final initial =
         displayName.isEmpty ? 'A' : displayName.characters.first.toUpperCase();
-    final badge = auth.isAdmin
+    final badge = auth.isAdmin && auth.hasPremiumAccess
         ? 'Admin'
-        : auth.isPro
+        : auth.hasPremiumAccess
             ? 'Pro'
             : 'Free';
 

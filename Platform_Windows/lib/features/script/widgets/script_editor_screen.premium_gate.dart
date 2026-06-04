@@ -3,12 +3,12 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorPremiumGate on _ScriptEditorScreenState {
   bool get _hasEditorPremiumAccess {
     final auth = ref.read(authProvider);
-    return auth.isPro || auth.isAdmin;
+    return auth.hasPremiumAccess;
   }
 
   bool _watchEditorPremiumAccess() {
     final auth = ref.watch(authProvider);
-    return auth.isPro || auth.isAdmin;
+    return auth.hasPremiumAccess;
   }
 
   Future<bool> _ensureEditorPremiumAccess(String featureName) async {

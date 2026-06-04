@@ -4,7 +4,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
   List<Widget> _accountTab(AppSettings settings, AuthState auth) {
     final signedIn = auth.email != null && auth.email!.trim().isNotEmpty;
     final accountStatus = signedIn
-        ? '${auth.email}${auth.isPro ? ' - Pro' : ' - Free'}'
+        ? '${auth.email}${auth.hasPremiumAccess ? ' - Pro' : ' - Free'}'
         : 'Not connected';
 
     return [

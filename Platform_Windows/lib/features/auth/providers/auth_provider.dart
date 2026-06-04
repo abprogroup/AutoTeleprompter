@@ -31,6 +31,10 @@ class AuthState {
     this.licenseKey,
   });
 
+  bool get isSignedIn => email != null && email!.trim().isNotEmpty;
+
+  bool get hasPremiumAccess => isSignedIn && isPro;
+
   AuthState copyWith({
     String? email,
     bool? isPro,

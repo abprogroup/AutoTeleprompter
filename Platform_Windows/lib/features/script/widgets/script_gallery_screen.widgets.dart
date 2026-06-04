@@ -85,7 +85,7 @@ class _ProDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isActive = auth.isPro || auth.isAdmin;
+    final isActive = auth.hasPremiumAccess;
     final title = isActive ? 'Pro access active' : 'Free plan';
     final subtitle = isActive
         ? 'Premium tools: cloud, remote, content creation, audio recorder.'

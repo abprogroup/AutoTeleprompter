@@ -71,7 +71,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final auth = ref.watch(authProvider);
-    final hasProAccess = auth.isPro || auth.isAdmin;
+    final hasProAccess = auth.hasPremiumAccess;
 
     void openPremiumHub() => _showPremiumHub(context, auth);
 

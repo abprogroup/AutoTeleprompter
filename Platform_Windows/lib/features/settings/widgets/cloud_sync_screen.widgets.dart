@@ -5,6 +5,19 @@ class _CloudScriptPayload {
   final String text;
   final String? sourcePath;
   final String? sourceType;
+  final String? sessionId;
+  final String? historyJson;
+  final int? historyIndex;
+  final double? fontSize;
+  final String? fontFamily;
+  final double? lineSpacing;
+  final double? letterSpacing;
+  final double? wordSpacing;
+  final String? textAlign;
+  final int? scriptBgColor;
+  final int? currentWordColor;
+  final int? futureWordColor;
+  final List<ScriptBookmark> bookmarks;
   final String identity;
 
   const _CloudScriptPayload({
@@ -12,6 +25,19 @@ class _CloudScriptPayload {
     required this.text,
     required this.sourcePath,
     required this.sourceType,
+    required this.sessionId,
+    required this.historyJson,
+    required this.historyIndex,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.lineSpacing,
+    required this.letterSpacing,
+    required this.wordSpacing,
+    required this.textAlign,
+    required this.scriptBgColor,
+    required this.currentWordColor,
+    required this.futureWordColor,
+    required this.bookmarks,
     required this.identity,
   });
 }
@@ -51,8 +77,10 @@ class _CloudDisclosureNote extends StatelessWidget {
       ),
       child: const Text(
         'Cloud disclosure: Google Drive and Dropbox account connections use '
-        'the selected provider account and its terms. Local Backup writes '
-        'script files to one local folder chosen on this device. '
+        'the selected provider account and its terms. Online sync stores '
+        'readable script files plus AutoTeleprompter restore metadata for '
+        'bookmarks, highlights, history, and script settings. Local Backup '
+        'writes readable script files to one folder on this device. '
         'AutoTeleprompter Cloud is planned for a later account release.',
         style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.35),
       ),
@@ -88,9 +116,9 @@ class _CloudActionBar extends StatelessWidget {
           ),
         ),
         const Text(
-          'Sync scripts updates all saved scripts in connected cloud accounts '
-          'and the Local Backup folder. Upload script remains available for '
-          'manual single-script upload on each connected provider.',
+          'Sync scripts updates readable files and restore metadata in '
+          'connected cloud accounts, plus readable files in Local Backup. '
+          'Upload script remains available for selected manual uploads.',
           style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
         ),
       ],
@@ -269,7 +297,7 @@ class _CloudOption extends StatelessWidget {
                 Text(
                   accountConnected
                       ? 'Account: ${account.accountLabel}'
-                      : connection.provider.subtitle,
+                      : _providerSubtitle(connection.provider),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -326,6 +354,15 @@ class _CloudOption extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _providerSubtitle(CloudProviderDefinition provider) {
+    if (provider.id == CloudConnectionStore.dropbox) {
+      return '${provider.subtitle}. Dropbox App Folder apps appear under Apps; '
+          'keep scripts in Apps/AutoTeleprompter. Root-level folders require '
+          'a Full Dropbox app.';
+    }
+    return provider.subtitle;
   }
 
   IconData _providerIcon(String providerId) {

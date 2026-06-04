@@ -1,5 +1,5 @@
-name: Build Windows EXE (v5.0.5)
-run-name: Windows v5.0.5 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+name: Build Windows EXE (v5.0.6)
+run-name: Windows v5.0.6 EXE - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
 
       - name: Build Windows Archive
         run: |
-          $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.5"
+          $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\windows-v5.0.6"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
           function Remove-ClientCredentialQuery([string] $value) {
             $clean = ($value -replace "`r", "" -replace "`n", "").Trim()
@@ -95,7 +95,7 @@ jobs:
               $adminCodeHash -notmatch '^[a-f0-9]{64}$') {
             throw "AUTOTELEPROMPTER_ADMIN_CODE_SHA256 must be a lowercase SHA-256 hash."
           }
-          flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.5+20 --dart-define=FEEDBACK_ENDPOINT="$endpoint" --dart-define=GOOGLE_DRIVE_CLIENT_ID="$googleDriveClientId" --dart-define=GOOGLE_DRIVE_CLIENT_SECRET="$googleDriveClientSecret" --dart-define=DROPBOX_CLIENT_ID="$dropboxClientId" --dart-define=DROPBOX_SYNC_ROOT_PATH="$dropboxSyncRootPath" --dart-define=AUTOTELEPROMPTER_ADMIN_EMAIL="$adminEmail" --dart-define=AUTOTELEPROMPTER_ADMIN_CODE_SHA256="$adminCodeHash" --dart-define=UPDATE_MANIFEST_URL="$updateManifestUrl"
+          flutter build windows --release --obfuscate --split-debug-info="$symbols" --dart-define=APP_VERSION=5.0.6+21 --dart-define=FEEDBACK_ENDPOINT="$endpoint" --dart-define=GOOGLE_DRIVE_CLIENT_ID="$googleDriveClientId" --dart-define=GOOGLE_DRIVE_CLIENT_SECRET="$googleDriveClientSecret" --dart-define=DROPBOX_CLIENT_ID="$dropboxClientId" --dart-define=DROPBOX_SYNC_ROOT_PATH="$dropboxSyncRootPath" --dart-define=AUTOTELEPROMPTER_ADMIN_EMAIL="$adminEmail" --dart-define=AUTOTELEPROMPTER_ADMIN_CODE_SHA256="$adminCodeHash" --dart-define=UPDATE_MANIFEST_URL="$updateManifestUrl"
         working-directory: Platform_Windows
         env:
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
@@ -122,5 +122,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-Windows-v5.0.5-EXE
+          name: AutoTeleprompter-Windows-v5.0.6-EXE
           path: build-zip\AutoTeleprompter-Windows

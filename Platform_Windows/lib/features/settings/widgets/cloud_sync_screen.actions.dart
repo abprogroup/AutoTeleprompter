@@ -46,7 +46,13 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
           if (lower.endsWith('.rtf') ||
               lower.endsWith('.docx') ||
               lower.endsWith('.doc') ||
-              lower.endsWith('.txt')) {
+              lower.endsWith('.txt') ||
+              lower.endsWith('.text') ||
+              lower.endsWith('.log') ||
+              lower.endsWith('.md') ||
+              lower.endsWith('.pdf') ||
+              lower.endsWith('.odt') ||
+              lower.endsWith('.pages')) {
             files.add(entity);
           }
         }
@@ -240,24 +246,9 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
     final failures = <String>[];
     try {
       for (final script in selected) {
-        final export = LocalBackupService.buildScriptExport(
-          title: script.title,
-          text: script.text,
-          sourceType: script.sourceType,
-          sourcePath: script.sourcePath,
-        );
-        if (export.readableText.trim().isEmpty) {
-          failures.add('${script.title} has no readable text to upload.');
-          continue;
-        }
-        final result = await _sync.uploadScript(
+        final result = await _uploadScriptAndMetadata(
           providerId: providerId,
-          title: script.title,
-          text: export.readableText,
-          fileName: export.fileName,
-          bytes: export.bytes,
-          mimeType: export.mimeType,
-          replaceExisting: true,
+          script: script,
         );
         if (result.ok) {
           ok++;
@@ -323,25 +314,10 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
     final failures = <String>[];
     try {
       for (final script in scripts) {
-        final export = LocalBackupService.buildScriptExport(
-          title: script.title,
-          text: script.text,
-          sourceType: script.sourceType,
-          sourcePath: script.sourcePath,
-        );
-        if (export.readableText.trim().isEmpty) {
-          failures.add('${script.title} has no readable text to sync.');
-          continue;
-        }
         for (final providerId in providers) {
-          final result = await _sync.uploadScript(
+          final result = await _uploadScriptAndMetadata(
             providerId: providerId,
-            title: script.title,
-            text: export.readableText,
-            fileName: export.fileName,
-            bytes: export.bytes,
-            mimeType: export.mimeType,
-            replaceExisting: true,
+            script: script,
           );
           if (result.ok) {
             cloudOkByProvider[providerId] =
@@ -545,62 +521,70 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
     };
   }
 
-  Future<List<_CloudScriptPayload>> _scriptPayloadsForSync() async {
-    final scripts = <_CloudScriptPayload>[];
-    final seen = <String>{};
-    final active = ref.read(scriptProvider);
-    if (active != null && active.rawText.trim().isNotEmpty) {
-      _addPayload(
-        scripts,
-        seen,
-        _CloudScriptPayload(
-          title: active.title,
-          text: active.rawText,
-          sourcePath: active.sourcePath,
-          sourceType: active.sourceType,
-          identity: active.sessionId,
-        ),
+  Future<CloudSyncResult> _uploadScriptAndMetadata({
+    required String providerId,
+    required _CloudScriptPayload script,
+  }) async {
+    late final ScriptBackupExport readable;
+    try {
+      readable = _readableExportFor(script);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'cloud.prepareReadableExport',
+        data: {'title': script.title, 'providerId': providerId},
+      );
+      return CloudSyncResult(
+        ok: false,
+        message: '${script.title}: ${_shortError(error)}',
+      );
+    }
+    if (readable.readableText.trim().isEmpty) {
+      return CloudSyncResult(
+        ok: false,
+        message: '${script.title} has no readable script text to upload.',
       );
     }
 
-    final secureStore = SecureScriptStore();
-    for (final item in ref.read(settingsProvider).recentScripts) {
-      try {
-        final meta = Map<String, dynamic>.from(jsonDecode(item));
-        final data = await secureStore.readFromMetadata(meta);
-        final text = data?.text ?? '';
-        if (text.trim().isEmpty) continue;
-        final title = meta['title']?.toString().trim();
-        final recordId = SecureScriptStore.recordIdFromMetadata(meta);
-        _addPayload(
-          scripts,
-          seen,
-          _CloudScriptPayload(
-            title: title?.isNotEmpty == true ? title! : 'Untitled script',
-            text: text,
-            sourcePath: meta['sourcePath'] as String?,
-            sourceType: meta['type']?.toString(),
-            identity: recordId ?? meta['sessionId']?.toString() ?? title ?? '',
-          ),
-        );
-      } catch (error, stack) {
-        LightweightDiagnostics.instance.recordError(
-          error,
-          stack,
-          source: 'cloud.scriptPayload',
-        );
-      }
-    }
-    return scripts;
-  }
+    final primaryResult = await _sync.uploadScript(
+      providerId: providerId,
+      title: script.title,
+      text: readable.readableText,
+      fileName: readable.fileName,
+      bytes: readable.bytes,
+      mimeType: readable.mimeType,
+      replaceExisting: true,
+    );
+    if (!primaryResult.ok) return primaryResult;
 
-  void _addPayload(
-    List<_CloudScriptPayload> scripts,
-    Set<String> seen,
-    _CloudScriptPayload payload,
-  ) {
-    final key = payload.identity.isNotEmpty ? payload.identity : payload.title;
-    if (seen.add(key)) scripts.add(payload);
+    final metadata = _metadataExportFor(
+      script,
+      primaryFileName: readable.fileName,
+    );
+    final metadataResult = await _sync.uploadScript(
+      providerId: providerId,
+      title: script.title,
+      text: script.text,
+      fileName: metadata.fileName,
+      bytes: metadata.bytes,
+      mimeType: metadata.mimeType,
+      replaceExisting: true,
+    );
+    if (!metadataResult.ok) {
+      return CloudSyncResult(
+        ok: false,
+        message: 'Uploaded ${readable.fileName}, but metadata restore failed: '
+            '${metadataResult.message}',
+      );
+    }
+
+    await _sync.cleanupLegacyScriptArtifacts(
+      providerId: providerId,
+      primaryFileName: readable.fileName,
+    );
+
+    return primaryResult;
   }
 
   Future<int> _writeLocalBackupScripts(
@@ -610,13 +594,23 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
     final backup = LocalBackupService();
     var written = 0;
     for (final script in scripts) {
-      final ok = await backup.backupScript(
-        title: script.title,
-        text: script.text,
-        sourceType: script.sourceType,
-        sourcePath: script.sourcePath,
-      );
-      if (ok) written++;
+      try {
+        final ok = await backup.backupScript(
+          title: script.title,
+          text: script.text,
+          sourceType: script.sourceType,
+          sourcePath: script.sourcePath,
+          bookmarks: script.bookmarks,
+        );
+        if (ok) written++;
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'cloud.writeLocalBackupScript',
+          data: {'title': script.title},
+        );
+      }
     }
     return written;
   }
@@ -701,6 +695,32 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
 
   Future<void> _downloadSyncedScript(CloudSyncedFile file) async {
     try {
+      final metadataText = await _sync.downloadScriptMetadata(
+        providerId: file.providerId,
+        primaryFileName: file.name,
+      );
+      final project = metadataText == null || metadataText.isEmpty
+          ? null
+          : ScriptProjectCodec.tryDecode(metadataText);
+      if (project != null) {
+        await _restoreProjectFromCloud(project);
+        if (!mounted) return;
+        Navigator.of(context, rootNavigator: true).pop();
+        _showSnack('Downloaded ${file.name}.');
+        return;
+      }
+
+      final lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.rtf') ||
+          lowerName.endsWith('.doc') ||
+          lowerName.endsWith('.docx')) {
+        _showSnack(
+          'Cloud metadata is missing for ${file.name}; '
+          'the readable file is still available in the cloud.',
+        );
+        return;
+      }
+
       final text = await _sync.downloadScript(
         providerId: file.providerId,
         fileId: file.id,
@@ -709,12 +729,17 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
         _showSnack('Cloud download failed.');
         return;
       }
-      ref.read(scriptProvider.notifier).loadText(
-            text,
-            title: file.name,
-            sourceType: 'CLOUD',
-            sessionId: 'cloud_${DateTime.now().microsecondsSinceEpoch}',
-          );
+      final legacyProject = ScriptProjectCodec.tryDecode(text);
+      if (legacyProject != null) {
+        await _restoreProjectFromCloud(legacyProject);
+      } else {
+        ref.read(scriptProvider.notifier).loadText(
+              text,
+              title: file.name,
+              sourceType: 'CLOUD',
+              sessionId: 'cloud_${DateTime.now().microsecondsSinceEpoch}',
+            );
+      }
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       _showSnack('Downloaded ${file.name}.');
@@ -726,5 +751,29 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
       );
       _showSnack('Cloud download failed: ${_shortError(error)}');
     }
+  }
+
+  Future<void> _restoreProjectFromCloud(ScriptProjectData project) async {
+    await ScriptBookmarkService.save(
+      ScriptBookmarkService.scopeKey(project.sessionId, project.title),
+      project.bookmarks,
+    );
+    ref.read(scriptProvider.notifier).loadText(
+          project.rawText,
+          title: project.title,
+          sourceType: project.sourceType,
+          sessionId: project.sessionId,
+          historyJson: project.historyJson,
+          historyIndex: project.historyIndex,
+          fontSize: project.fontSize,
+          fontFamily: project.fontFamily,
+          lineSpacing: project.lineSpacing,
+          letterSpacing: project.letterSpacing,
+          wordSpacing: project.wordSpacing,
+          textAlign: project.textAlign,
+          scriptBgColor: project.scriptBgColor,
+          currentWordColor: project.currentWordColor,
+          futureWordColor: project.futureWordColor,
+        );
   }
 }

@@ -8,6 +8,7 @@ import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../script/services/docx_service.dart';
 import '../../script/services/markup_export_service.dart';
 import '../../script/services/rtf_service.dart';
+import '../../script/services/script_bookmark_service.dart';
 import 'cloud_connection_store.dart';
 
 class ScriptBackupExport {
@@ -15,12 +16,16 @@ class ScriptBackupExport {
   final String mimeType;
   final List<int> bytes;
   final String readableText;
+  final String extension;
+  final bool originalSourceCopy;
 
   const ScriptBackupExport({
     required this.fileName,
     required this.mimeType,
     required this.bytes,
     required this.readableText,
+    required this.extension,
+    this.originalSourceCopy = false,
   });
 }
 
@@ -44,6 +49,7 @@ class LocalBackupService {
     String? sourceType,
     String? sourcePath,
     String? historyJson,
+    List<ScriptBookmark> bookmarks = const [],
   }) async {
     final root = await _backupRoot();
     final export = buildScriptExport(
@@ -51,6 +57,7 @@ class LocalBackupService {
       text: text,
       sourceType: sourceType,
       sourcePath: sourcePath,
+      bookmarks: bookmarks,
     );
     if (root == null || export.readableText.trim().isEmpty) return false;
     await _pruneExpiredDeletedBackups(root);
@@ -124,7 +131,7 @@ class LocalBackupService {
     if (readableText.trim().isNotEmpty) {
       final deleted = Directory(_join(root.path, 'Deleted Scripts'));
       await deleted.create(recursive: true);
-      final export = buildScriptExport(
+      final export = _deletedScriptExport(
         title: title,
         text: text,
         sourcePath: sourcePath,
@@ -147,6 +154,36 @@ class LocalBackupService {
       backedUp = true;
     }
     return backedUp;
+  }
+
+  ScriptBackupExport _deletedScriptExport({
+    required String title,
+    required String text,
+    String? sourcePath,
+  }) {
+    try {
+      return buildScriptExport(
+        title: title,
+        text: text,
+        sourcePath: sourcePath,
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'localBackup.deletedScriptReadableFallback',
+        data: {'title': title},
+      );
+      final readableText = exportReadableScriptText(text);
+      final baseName = _safeBaseName(title: title, sourcePath: sourcePath);
+      return ScriptBackupExport(
+        fileName: '$baseName.txt',
+        mimeType: 'text/plain; charset=utf-8',
+        bytes: utf8.encode(readableText),
+        readableText: readableText,
+        extension: 'txt',
+      );
+    }
   }
 
   Future<Directory?> _backupRoot() async {
@@ -276,9 +313,13 @@ class LocalBackupService {
         '${two(now.hour)}${two(now.minute)}${two(now.second)}';
   }
 
-  static String exportReadableScriptText(String text) {
+  static String exportReadableScriptText(
+    String text, {
+    List<ScriptBookmark> bookmarks = const [],
+  }) {
     if (text.trim().isEmpty) return '';
-    final plain = MarkupExportService.toPlainText(text)
+    final exportText = _textWithBookmarkSigns(text, bookmarks);
+    final plain = MarkupExportService.toPlainText(exportText)
         .replaceAll(_residualMarkupTagRe, '')
         .replaceAll('**', '');
     return plain
@@ -296,8 +337,13 @@ class LocalBackupService {
     required String text,
     String? sourceType,
     String? sourcePath,
+    List<ScriptBookmark> bookmarks = const [],
   }) {
-    final readableText = exportReadableScriptText(text);
+    final exportText = _textWithBookmarkSigns(text, bookmarks);
+    final readableText = exportReadableScriptText(
+      exportText,
+      bookmarks: const [],
+    );
     final baseName = _safeBaseName(
       title: title,
       sourcePath: sourcePath,
@@ -313,22 +359,59 @@ class LocalBackupService {
         return ScriptBackupExport(
           fileName: '$baseName.rtf',
           mimeType: 'application/rtf',
-          bytes: RtfService.generate(text),
+          bytes: RtfService.generate(exportText),
           readableText: readableText,
+          extension: extension,
         );
       case 'docx':
         return ScriptBackupExport(
           fileName: '$baseName.docx',
           mimeType:
               'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          bytes: DocxService.generate(text),
+          bytes: DocxService.generate(exportText),
           readableText: readableText,
+          extension: extension,
         );
       case 'doc':
+        final sourceFile = _sourceFile(sourcePath);
+        if (sourceFile != null && !_sourceLooksLikeRtf(sourceFile)) {
+          return _originalSourceExport(
+            sourceFile: sourceFile,
+            extension: extension,
+            readableText: readableText,
+          );
+        }
         return ScriptBackupExport(
           fileName: '$baseName.doc',
           mimeType: 'application/msword',
-          bytes: RtfService.generate(text),
+          bytes: RtfService.generate(exportText),
+          readableText: readableText,
+          extension: extension,
+        );
+      case 'txt':
+      case 'text':
+      case 'log':
+      case 'md':
+        return ScriptBackupExport(
+          fileName: '$baseName.$extension',
+          mimeType: _mimeTypeForExtension(extension),
+          bytes: utf8.encode(readableText),
+          readableText: readableText,
+          extension: extension,
+        );
+      case 'pdf':
+      case 'odt':
+      case 'pages':
+        final sourceFile = _sourceFile(sourcePath);
+        if (sourceFile == null) {
+          throw StateError(
+            'Cannot preserve .$extension backup because the original source '
+            'file is unavailable. Save/export the script before syncing it.',
+          );
+        }
+        return _originalSourceExport(
+          sourceFile: sourceFile,
+          extension: extension,
           readableText: readableText,
         );
       default:
@@ -337,6 +420,7 @@ class LocalBackupService {
           mimeType: 'text/plain; charset=utf-8',
           bytes: utf8.encode(readableText),
           readableText: readableText,
+          extension: 'txt',
         );
     }
   }
@@ -354,7 +438,18 @@ class LocalBackupService {
     for (final value in candidates) {
       if (value == null || value.isEmpty) continue;
       final lower = _stripAppExportSuffixes(value.toLowerCase());
-      for (final ext in ['docx', 'doc', 'rtf', 'txt']) {
+      for (final ext in [
+        'docx',
+        'doc',
+        'rtf',
+        'txt',
+        'text',
+        'log',
+        'md',
+        'pdf',
+        'odt',
+        'pages',
+      ]) {
         if (lower == ext || lower.endsWith('.$ext')) return ext;
       }
     }
@@ -369,7 +464,10 @@ class LocalBackupService {
         ? _basename(sourcePath!.trim())
         : title.trim();
     final withoutKnownExtension = _stripAppExportSuffixes(rawName).replaceFirst(
-      RegExp(r'\.(?:docx?|rtf|txt|pdf)$', caseSensitive: false),
+      RegExp(
+        r'\.(?:docx?|rtf|txt|text|log|md|pdf|odt|pages)$',
+        caseSensitive: false,
+      ),
       '',
     );
     final safe = _safeName(withoutKnownExtension);
@@ -394,6 +492,85 @@ class LocalBackupService {
   }
 
   static String _basename(String path) => path.split(RegExp(r'[\\/]')).last;
+
+  static String _mimeTypeForExtension(String extension) {
+    return switch (extension) {
+      'docx' =>
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'doc' => 'application/msword',
+      'rtf' => 'application/rtf',
+      'md' => 'text/markdown; charset=utf-8',
+      'pdf' => 'application/pdf',
+      'odt' => 'application/vnd.oasis.opendocument.text',
+      'pages' => 'application/octet-stream',
+      _ => 'text/plain; charset=utf-8',
+    };
+  }
+
+  static File? _sourceFile(String? sourcePath) {
+    final path = sourcePath?.trim();
+    if (path == null || path.isEmpty) return null;
+    final file = File(path);
+    return file.existsSync() ? file : null;
+  }
+
+  static bool _sourceLooksLikeRtf(File file) {
+    try {
+      final source = file.openSync(mode: FileMode.read);
+      final length = source.lengthSync().clamp(0, 32).toInt();
+      final header = source.readSync(length);
+      source.closeSync();
+      return latin1.decode(header).trimLeft().startsWith(r'{\rtf');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static ScriptBackupExport _originalSourceExport({
+    required File sourceFile,
+    required String extension,
+    required String readableText,
+  }) {
+    return ScriptBackupExport(
+      fileName: _safeName(_basename(sourceFile.path)),
+      mimeType: _mimeTypeForExtension(extension),
+      bytes: sourceFile.readAsBytesSync(),
+      readableText: readableText,
+      extension: extension,
+      originalSourceCopy: true,
+    );
+  }
+
+  static String _textWithBookmarkSigns(
+    String text,
+    List<ScriptBookmark> bookmarks,
+  ) {
+    if (bookmarks.isEmpty || text.trim().isEmpty) return text;
+    const sign = '\u00BB';
+    final blocks = text
+        .replaceAll('\u00C2\u00BB', sign)
+        .split('\n')
+        .map((block) => block.replaceAll(sign, ''))
+        .toList();
+    final grouped = <int, List<ScriptBookmark>>{};
+    for (final bookmark in bookmarks) {
+      if (bookmark.blockIndex < 0 || bookmark.blockIndex >= blocks.length) {
+        continue;
+      }
+      grouped.putIfAbsent(bookmark.blockIndex, () => []).add(bookmark);
+    }
+    for (final entry in grouped.entries) {
+      final ordered = [...entry.value]
+        ..sort((a, b) => a.offset.compareTo(b.offset));
+      var block = blocks[entry.key];
+      for (final bookmark in ordered) {
+        final offset = bookmark.offset.clamp(0, block.length).toInt();
+        block = '${block.substring(0, offset)}$sign${block.substring(offset)}';
+      }
+      blocks[entry.key] = block;
+    }
+    return blocks.join('\n');
+  }
 
   static String _safeName(String value) {
     final safe = value

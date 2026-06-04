@@ -1,40 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../../script/services/script_project_codec.dart';
 import 'cloud_connection_store.dart';
 import 'cloud_oauth_service.dart';
+
+part 'cloud_app_folder_sync_service.helpers.dart';
 
 const dropboxSyncRootPath =
     String.fromEnvironment('DROPBOX_SYNC_ROOT_PATH', defaultValue: '');
 
-class CloudSyncedFile {
-  final String id;
-  final String name;
-  final String providerId;
-  final String? modifiedAtIso;
-  final int? sizeBytes;
-
-  const CloudSyncedFile({
-    required this.id,
-    required this.name,
-    required this.providerId,
-    this.modifiedAtIso,
-    this.sizeBytes,
-  });
-}
-
-class CloudSyncResult {
-  final bool ok;
-  final String message;
-
-  const CloudSyncResult({
-    required this.ok,
-    required this.message,
-  });
-}
-
 class CloudAppFolderSyncService {
   static const _folderName = 'AutoTeleprompter';
+  static const _metadataFolderName = '_AutoTeleprompter Metadata';
   static const _recordingsFolderName = 'Recordings';
 
   CloudAppFolderSyncService({
@@ -72,7 +50,9 @@ class CloudAppFolderSyncService {
         message: 'Connect this cloud account before uploading.',
       );
     }
-    final resolvedFileName = fileName ?? stableScriptFileName(title);
+    final resolvedFileName = fileName ?? _stableScriptFileName(title);
+    final metadataUpload =
+        ScriptProjectCodec.isMetadataFileName(resolvedFileName);
     return switch (providerId) {
       CloudConnectionStore.googleDrive => _uploadGoogleScript(
           session: session,
@@ -80,12 +60,15 @@ class CloudAppFolderSyncService {
           bytes: bytes ?? utf8.encode(text),
           mimeType: mimeType,
           replaceExisting: replaceExisting,
+          folderId:
+              metadataUpload ? await _googleMetadataFolderId(session) : null,
         ),
       CloudConnectionStore.dropbox => _uploadDropboxScript(
           session: session,
           fileName: resolvedFileName,
           bytes: bytes ?? utf8.encode(text),
           replaceExisting: replaceExisting,
+          folderPath: metadataUpload ? _dropboxMetadataFolderPath() : null,
         ),
       _ => const CloudSyncResult(
           ok: false,
@@ -153,6 +136,66 @@ class CloudAppFolderSyncService {
     };
   }
 
+  Future<String?> downloadScriptMetadata({
+    required String providerId,
+    required String primaryFileName,
+  }) async {
+    final session = await _oauth.authorizeAccount(providerId);
+    if (session == null) return null;
+    final metadataName = ScriptProjectCodec.metadataFileNameFor(
+      primaryFileName,
+    );
+    switch (providerId) {
+      case CloudConnectionStore.googleDrive:
+        return _downloadGoogleMetadata(
+          session: session,
+          fileName: metadataName,
+        );
+      case CloudConnectionStore.dropbox:
+        final fromMetadataFolder = await _downloadDropboxScript(
+          session: session,
+          path: _dropboxFilePath(_dropboxMetadataFolderPath(), metadataName),
+        );
+        if (fromMetadataFolder != null) return fromMetadataFolder;
+        return _downloadDropboxScript(
+          session: session,
+          path: _dropboxFilePath(_dropboxRootPath(), metadataName),
+        );
+      default:
+        return null;
+    }
+  }
+
+  Future<void> cleanupLegacyScriptArtifacts({
+    required String providerId,
+    required String primaryFileName,
+  }) async {
+    final session = await _oauth.authorizeAccount(providerId);
+    if (session == null) return;
+    final names = _legacyArtifactNamesFor(primaryFileName);
+    switch (providerId) {
+      case CloudConnectionStore.googleDrive:
+        final folderId = await _googleFolderId(session);
+        for (final name in names) {
+          await _deleteGoogleFileByName(
+            session: session,
+            folderId: folderId,
+            fileName: name,
+          );
+        }
+        return;
+      case CloudConnectionStore.dropbox:
+        final folderPath = _dropboxRootPath();
+        for (final name in names) {
+          await _deleteDropboxPathIfExists(
+            session: session,
+            path: _dropboxFilePath(folderPath, name),
+          );
+        }
+        return;
+    }
+  }
+
   Future<List<CloudSyncedFile>> _listGoogleScripts(
     CloudAuthorizedSession session,
   ) async {
@@ -162,7 +205,7 @@ class CloudAppFolderSyncService {
       'q': query,
       'spaces': 'drive',
       'orderBy': 'modifiedTime desc',
-      'fields': 'files(id,name,modifiedTime,size)',
+      'fields': 'files(id,name,mimeType,modifiedTime,size)',
     });
     final decoded = await _jsonRequest(uri, token: session.accessToken);
     final files = decoded['files'];
@@ -170,14 +213,18 @@ class CloudAppFolderSyncService {
     return [
       for (final file in files)
         if (file is Map<String, dynamic>)
-          CloudSyncedFile(
-            id: file['id']?.toString() ?? '',
-            name: file['name']?.toString() ?? 'Untitled',
-            providerId: CloudConnectionStore.googleDrive,
-            modifiedAtIso: file['modifiedTime']?.toString(),
-            sizeBytes: int.tryParse(file['size']?.toString() ?? ''),
-          ),
-    ].where((file) => file.id.isNotEmpty).toList(growable: false);
+          if (file['mimeType'] != 'application/vnd.google-apps.folder')
+            CloudSyncedFile(
+              id: file['id']?.toString() ?? '',
+              name: file['name']?.toString() ?? 'Untitled',
+              providerId: CloudConnectionStore.googleDrive,
+              modifiedAtIso: file['modifiedTime']?.toString(),
+              sizeBytes: int.tryParse(file['size']?.toString() ?? ''),
+            ),
+    ]
+        .where((file) =>
+            file.id.isNotEmpty && !_isInternalScriptArtifact(file.name))
+        .toList(growable: false);
   }
 
   Future<CloudSyncResult> _uploadGoogleScript({
@@ -337,6 +384,39 @@ class CloudAppFolderSyncService {
         : null;
   }
 
+  Future<String?> _downloadGoogleMetadata({
+    required CloudAuthorizedSession session,
+    required String fileName,
+  }) async {
+    final metadataFolderId = await _googleMetadataFolderId(session);
+    var fileId = await _googleFileIdByName(
+      session: session,
+      folderId: metadataFolderId,
+      fileName: fileName,
+    );
+    if (fileId == null) {
+      final folderId = await _googleFolderId(session);
+      fileId = await _googleFileIdByName(
+        session: session,
+        folderId: folderId,
+        fileName: fileName,
+      );
+    }
+    if (fileId == null) return null;
+    return _downloadGoogleScript(session: session, fileId: fileId);
+  }
+
+  Future<String> _googleMetadataFolderId(
+    CloudAuthorizedSession session,
+  ) async {
+    final rootId = await _googleFolderId(session);
+    return _googleFolderId(
+      session,
+      folderName: _metadataFolderName,
+      parentId: rootId,
+    );
+  }
+
   Future<String> _googleFolderId(
     CloudAuthorizedSession session, {
     String folderName = _folderName,
@@ -402,29 +482,81 @@ class CloudAppFolderSyncService {
     return null;
   }
 
+  Future<void> _deleteGoogleFileByName({
+    required CloudAuthorizedSession session,
+    required String folderId,
+    required String fileName,
+  }) async {
+    final ids = await _googleFileIdsByName(
+      session: session,
+      folderId: folderId,
+      fileName: fileName,
+    );
+    for (final id in ids) {
+      final request = await _httpClient.deleteUrl(
+        Uri.https('www.googleapis.com', '/drive/v3/files/$id'),
+      );
+      request.headers.set(
+          HttpHeaders.authorizationHeader, 'Bearer ${session.accessToken}');
+      final response = await request.close();
+      await response.drain<void>();
+    }
+  }
+
+  Future<List<String>> _googleFileIdsByName({
+    required CloudAuthorizedSession session,
+    required String folderId,
+    required String fileName,
+  }) async {
+    final query =
+        "'$folderId' in parents and name=${_driveQueryLiteral(fileName)} and trashed=false";
+    final decoded = await _jsonRequest(
+      Uri.https('www.googleapis.com', '/drive/v3/files', {
+        'q': query,
+        'spaces': 'drive',
+        'fields': 'files(id,name)',
+      }),
+      token: session.accessToken,
+    );
+    final files = decoded['files'];
+    if (files is! List) return const [];
+    return [
+      for (final file in files)
+        if (file is Map && file['id']?.toString().isNotEmpty == true)
+          file['id'].toString(),
+    ];
+  }
+
   Future<List<CloudSyncedFile>> _listDropboxScripts(
     CloudAuthorizedSession session,
   ) async {
-    final folderPath = _dropboxRootPath();
-    await _ensureDropboxFolder(session, path: folderPath);
-    final decoded = await _jsonPost(
-      Uri.parse('https://api.dropboxapi.com/2/files/list_folder'),
-      token: session.accessToken,
-      body: {'path': folderPath, 'recursive': false},
-    );
-    final entries = decoded['entries'];
-    if (entries is! List) return const [];
-    return [
-      for (final entry in entries)
-        if (entry is Map<String, dynamic> && entry['.tag'] == 'file')
-          CloudSyncedFile(
-            id: entry['path_lower']?.toString() ?? '',
-            name: entry['name']?.toString() ?? 'Untitled',
-            providerId: CloudConnectionStore.dropbox,
-            modifiedAtIso: entry['server_modified']?.toString(),
-            sizeBytes: entry['size'] is int ? entry['size'] as int : null,
-          ),
-    ].where((file) => file.id.isNotEmpty).toList(growable: false);
+    try {
+      final folderPath = _dropboxRootPath();
+      await _ensureDropboxFolder(session, path: folderPath);
+      final decoded = await _jsonPost(
+        Uri.parse('https://api.dropboxapi.com/2/files/list_folder'),
+        token: session.accessToken,
+        body: {'path': folderPath, 'recursive': false},
+      );
+      final entries = decoded['entries'];
+      if (entries is! List) return const [];
+      return [
+        for (final entry in entries)
+          if (entry is Map<String, dynamic> && entry['.tag'] == 'file')
+            CloudSyncedFile(
+              id: entry['path_lower']?.toString() ?? '',
+              name: entry['name']?.toString() ?? 'Untitled',
+              providerId: CloudConnectionStore.dropbox,
+              modifiedAtIso: entry['server_modified']?.toString(),
+              sizeBytes: entry['size'] is int ? entry['size'] as int : null,
+            ),
+      ]
+          .where((file) =>
+              file.id.isNotEmpty && !_isInternalScriptArtifact(file.name))
+          .toList(growable: false);
+    } catch (error) {
+      throw StateError(_dropboxListFailure(error));
+    }
   }
 
   Future<CloudSyncResult> _uploadDropboxScript({
@@ -457,7 +589,7 @@ class CloudAppFolderSyncService {
       final body = await response.transform(utf8.decoder).join();
       return CloudSyncResult(
         ok: false,
-        message: _providerFailure(
+        message: _dropboxProviderFailure(
           'Dropbox upload failed',
           response.statusCode,
           body,
@@ -503,6 +635,21 @@ class CloudAppFolderSyncService {
         : null;
   }
 
+  Future<void> _deleteDropboxPathIfExists({
+    required CloudAuthorizedSession session,
+    required String path,
+  }) async {
+    try {
+      await _jsonPost(
+        Uri.parse('https://api.dropboxapi.com/2/files/delete_v2'),
+        token: session.accessToken,
+        body: {'path': path},
+      );
+    } catch (_) {
+      // Missing legacy files are acceptable; upload reports real failures.
+    }
+  }
+
   Future<void> _ensureDropboxFolder(
     CloudAuthorizedSession session, {
     String path = '/$_folderName',
@@ -531,6 +678,10 @@ class CloudAppFolderSyncService {
     final safeChild = child.replaceAll(RegExp(r'^/+|/+$'), '');
     if (parent.isEmpty) return '/$safeChild';
     return '$parent/$safeChild';
+  }
+
+  String _dropboxMetadataFolderPath() {
+    return _dropboxChildPath(_dropboxRootPath(), _metadataFolderName);
   }
 
   String _dropboxFilePath(String folderPath, String fileName) {
@@ -597,63 +748,5 @@ class CloudAppFolderSyncService {
       throw StateError('cloud request returned invalid JSON');
     }
     return decoded;
-  }
-
-  static String _safeFileName(String title) {
-    final clean = title
-        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    return clean.isEmpty ? 'Untitled script' : clean;
-  }
-
-  static String _basename(String path) => path.split(RegExp(r'[\\/]')).last;
-
-  static String _recordingMimeType(String fileName) {
-    final lower = fileName.toLowerCase();
-    if (lower.endsWith('.wav')) return 'audio/wav';
-    if (lower.endsWith('.mp4')) return 'video/mp4';
-    if (lower.endsWith('.webm')) return 'video/webm';
-    return 'application/octet-stream';
-  }
-
-  static String _asciiHeaderJson(Map<String, Object?> value) {
-    final encoded = jsonEncode(value);
-    final buffer = StringBuffer();
-    for (var i = 0; i < encoded.length; i++) {
-      final unit = encoded.codeUnitAt(i);
-      if (unit >= 0x20 && unit <= 0x7E) {
-        buffer.writeCharCode(unit);
-      } else {
-        buffer.write(r'\u');
-        buffer.write(unit.toRadixString(16).padLeft(4, '0'));
-      }
-    }
-    return buffer.toString();
-  }
-
-  static String stableScriptFileName(String title) {
-    final safeTitle = _safeFileName(title.isEmpty ? 'Untitled script' : title);
-    if (RegExp(r'\.(?:docx?|rtf|txt)$', caseSensitive: false)
-        .hasMatch(safeTitle)) {
-      return safeTitle;
-    }
-    final baseName = safeTitle.replaceFirst(
-      RegExp(r'\.(?:docx?|rtf|txt|pdf|atp\.txt)$', caseSensitive: false),
-      '',
-    );
-    return '${baseName.isEmpty ? 'Untitled script' : baseName}.txt';
-  }
-
-  String _driveQueryLiteral(String value) {
-    return "'${value.replaceAll(r'\', r'\\').replaceAll("'", r"\'")}'";
-  }
-
-  String _providerFailure(String prefix, int statusCode, String body) {
-    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (compact.isEmpty) return '$prefix ($statusCode).';
-    final clipped =
-        compact.length > 220 ? '${compact.substring(0, 220)}...' : compact;
-    return '$prefix ($statusCode): $clipped';
   }
 }

@@ -6,7 +6,7 @@ import '../models/app_settings.dart';
 
 const autoTeleprompterAppVersion = String.fromEnvironment(
   'APP_VERSION',
-  defaultValue: '5.0.5+20',
+  defaultValue: '5.0.6+21',
 );
 
 const autoTeleprompterUpdateManifestUrl = String.fromEnvironment(

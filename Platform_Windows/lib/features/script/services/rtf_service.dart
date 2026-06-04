@@ -24,6 +24,7 @@ class RtfService {
     for (final paragraph in paragraphs) {
       for (final run in paragraph.runs) {
         addColor(run.color);
+        addColor(run.backgroundColor);
       }
     }
 
@@ -73,6 +74,10 @@ class RtfService {
     if (run.color != null && !_isDefaultDisplayWhite(run.color)) {
       final colorIndex = colorTable.indexOf(run.color!) + 1;
       if (colorIndex > 0) controls.add('\\cf$colorIndex');
+    }
+    if (run.backgroundColor != null) {
+      final highlightIndex = colorTable.indexOf(run.backgroundColor!) + 1;
+      if (highlightIndex > 0) controls.add('\\highlight$highlightIndex');
     }
 
     if (controls.isEmpty) {

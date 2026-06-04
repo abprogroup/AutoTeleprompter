@@ -9,6 +9,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/security/secure_script_store.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../script/providers/script_provider.dart';
+import '../../script/services/script_bookmark_service.dart';
+import '../../script/services/script_project_codec.dart';
 import '../providers/settings_provider.dart';
 import '../services/cloud_app_folder_sync_service.dart';
 import '../services/cloud_connection_store.dart';
@@ -16,6 +18,7 @@ import '../services/cloud_oauth_service.dart';
 import '../services/local_backup_service.dart';
 
 part 'cloud_sync_screen.actions.dart';
+part 'cloud_sync_screen.payloads.dart';
 part 'cloud_sync_screen.widgets.dart';
 
 class CloudSyncScreen extends ConsumerStatefulWidget {
@@ -238,7 +241,8 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   }
 
   String _shortError(Object error) {
-    final compact = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    var compact = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    compact = compact.replaceFirst(RegExp(r'^(Bad state|Exception):\s*'), '');
     if (compact.length <= 220) return compact;
     return '${compact.substring(0, 220)}...';
   }

@@ -78,6 +78,12 @@ class DocxService {
     if (run.color != null && !_isDefaultDisplayWhite(run.color)) {
       buf.write('<w:color w:val="${run.color}"/>');
     }
+    if (run.backgroundColor != null) {
+      buf.write(
+        '<w:shd w:val="clear" w:color="auto" '
+        'w:fill="${run.backgroundColor}"/>',
+      );
+    }
     if (run.fontSize != null) {
       final halfPoints = (run.fontSize! * 2).round();
       buf.write('<w:sz w:val="$halfPoints"/>');

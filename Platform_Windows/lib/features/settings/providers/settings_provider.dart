@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/security/secure_script_store.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
+import '../../script/services/script_bookmark_service.dart';
+import '../../script/services/script_project_codec.dart';
 import '../models/app_settings.dart';
 import '../services/cloud_app_folder_sync_service.dart';
 import '../services/cloud_connection_store.dart';
@@ -461,6 +463,17 @@ class SettingsNotifier extends Notifier<AppSettings>
         text: text,
         sourceType: type,
         sourcePath: sourcePath,
+        sessionId: effectiveSessionId,
+        historyIndex: historyIndex,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        lineSpacing: lineSpacing,
+        letterSpacing: letterSpacing,
+        wordSpacing: wordSpacing,
+        textAlign: textAlign,
+        scriptBgColor: scriptBgColor,
+        currentWordColor: currentWordColor,
+        futureWordColor: futureWordColor,
         historyJson: historyJson,
       );
     }
@@ -471,15 +484,34 @@ class SettingsNotifier extends Notifier<AppSettings>
     required String text,
     String? sourceType,
     String? sourcePath,
+    String? sessionId,
+    int? historyIndex,
+    double? fontSize,
+    String? fontFamily,
+    double? lineSpacing,
+    double? letterSpacing,
+    double? wordSpacing,
+    String? textAlign,
+    int? scriptBgColor,
+    int? currentWordColor,
+    int? futureWordColor,
     String? historyJson,
   }) async {
-    final export = LocalBackupService.buildScriptExport(
-      title: title,
-      text: text,
-      sourceType: sourceType,
-      sourcePath: sourcePath,
-    );
-    if (export.readableText.trim().isEmpty) return;
+    if (text.trim().isEmpty) return;
+    var bookmarks = const <ScriptBookmark>[];
+    try {
+      bookmarks = await ScriptBookmarkService.load(
+        ScriptBookmarkService.scopeKey(sessionId, title),
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'settings.projectBookmarks',
+        data: {'title': title},
+      );
+    }
+
     try {
       await LocalBackupService().backupScript(
         title: title,
@@ -487,6 +519,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         sourceType: sourceType,
         sourcePath: sourcePath,
         historyJson: historyJson,
+        bookmarks: bookmarks,
       );
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
@@ -507,15 +540,44 @@ class SettingsNotifier extends Notifier<AppSettings>
           .toList(growable: false);
       if (providerIds.isEmpty) return;
 
+      final readable = LocalBackupService.buildScriptExport(
+        title: title,
+        text: text,
+        sourceType: sourceType,
+        sourcePath: sourcePath,
+        bookmarks: bookmarks,
+      );
+      if (readable.readableText.trim().isEmpty) return;
+
+      final metadata = ScriptProjectCodec.buildCompanion(
+        primaryFileName: readable.fileName,
+        title: title,
+        rawText: text,
+        sourceType: sourceType,
+        sourcePath: sourcePath,
+        sessionId: sessionId,
+        historyJson: historyJson,
+        historyIndex: historyIndex,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        lineSpacing: lineSpacing,
+        letterSpacing: letterSpacing,
+        wordSpacing: wordSpacing,
+        textAlign: textAlign,
+        scriptBgColor: scriptBgColor,
+        currentWordColor: currentWordColor,
+        futureWordColor: futureWordColor,
+        bookmarks: bookmarks,
+      );
       final sync = CloudAppFolderSyncService(oauth: oauth);
       for (final providerId in providerIds) {
         final result = await sync.uploadScript(
           providerId: providerId,
           title: title,
-          text: export.readableText,
-          fileName: export.fileName,
-          bytes: export.bytes,
-          mimeType: export.mimeType,
+          text: readable.readableText,
+          fileName: readable.fileName,
+          bytes: readable.bytes,
+          mimeType: readable.mimeType,
           replaceExisting: true,
         );
         if (!result.ok) {
@@ -528,7 +590,34 @@ class SettingsNotifier extends Notifier<AppSettings>
               'message': result.message,
             },
           );
+          continue;
         }
+
+        final metadataResult = await sync.uploadScript(
+          providerId: providerId,
+          title: title,
+          text: text,
+          fileName: metadata.fileName,
+          bytes: metadata.bytes,
+          mimeType: metadata.mimeType,
+          replaceExisting: true,
+        );
+        if (!metadataResult.ok) {
+          LightweightDiagnostics.instance.record(
+            'settings',
+            'cloud autosync metadata failed',
+            data: {
+              'title': title,
+              'providerId': providerId,
+              'message': metadataResult.message,
+            },
+          );
+          continue;
+        }
+        await sync.cleanupLegacyScriptArtifacts(
+          providerId: providerId,
+          primaryFileName: readable.fileName,
+        );
       }
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(

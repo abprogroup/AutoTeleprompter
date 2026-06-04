@@ -16,7 +16,7 @@ class MarkupExportService {
     r'|\[\/(?:y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc)\]',
   );
 
-  static const _shorthandColors = <String, String>{
+  static const _shorthandHighlightColors = <String, String>{
     'y': 'FFD700',
     'r': 'FF4444',
     'g': '44DD44',
@@ -25,6 +25,9 @@ class MarkupExportService {
     'p': 'AA44FF',
     'c': '44DDDD',
     'pk': 'FF44AA',
+  };
+
+  static const _shorthandTextColors = <String, String>{
     'yc': 'FFD700',
     'rc': 'FF4444',
     'gc': '44DD44',
@@ -51,6 +54,7 @@ class MarkupExportService {
     bool italic = false;
     bool underline = false;
     final colors = <String>[];
+    final backgrounds = <String>[];
     final sizes = <double>[];
     final fonts = <String>[];
     final runs = <ExportTextRun>[];
@@ -63,6 +67,8 @@ class MarkupExportService {
         isItalic: italic,
         isUnderline: underline,
         color: colors.isEmpty ? null : _normalizeColor(colors.last),
+        backgroundColor:
+            backgrounds.isEmpty ? null : _normalizeColor(backgrounds.last),
         fontSize: sizes.isEmpty ? null : sizes.last,
         fontFamily: fonts.isEmpty ? null : fonts.last,
       ));
@@ -88,6 +94,10 @@ class MarkupExportService {
         colors.add(match.group(1)!);
       } else if (tag == '[/color]') {
         if (colors.isNotEmpty) colors.removeLast();
+      } else if (match.group(2) != null) {
+        backgrounds.add(match.group(2)!);
+      } else if (tag == '[/bg]') {
+        if (backgrounds.isNotEmpty) backgrounds.removeLast();
       } else if (match.group(3) != null) {
         final size = double.tryParse(match.group(3)!);
         if (size != null) sizes.add(size);
@@ -102,11 +112,23 @@ class MarkupExportService {
       } else if (match.group(6) != null) {
         align = match.group(6)!;
       } else if (match.group(7) != null) {
-        colors.add(_shorthandColors[match.group(7)!]!);
+        final shorthand = match.group(7)!;
+        final highlight = _shorthandHighlightColors[shorthand];
+        final textColor = _shorthandTextColors[shorthand];
+        if (highlight != null) {
+          backgrounds.add(highlight);
+        } else if (textColor != null) {
+          colors.add(textColor);
+        }
       } else if (RegExp(
         r'^\[/(?:y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc)\]$',
       ).hasMatch(tag)) {
-        if (colors.isNotEmpty) colors.removeLast();
+        final shorthand = tag.substring(2, tag.length - 1);
+        if (_shorthandHighlightColors.containsKey(shorthand)) {
+          if (backgrounds.isNotEmpty) backgrounds.removeLast();
+        } else if (colors.isNotEmpty) {
+          colors.removeLast();
+        }
       }
       cursor = match.end;
     }
@@ -142,6 +164,7 @@ class ExportTextRun {
   final bool isItalic;
   final bool isUnderline;
   final String? color;
+  final String? backgroundColor;
   final double? fontSize;
   final String? fontFamily;
 
@@ -151,6 +174,7 @@ class ExportTextRun {
     this.isItalic = false,
     this.isUnderline = false,
     this.color,
+    this.backgroundColor,
     this.fontSize,
     this.fontFamily,
   });

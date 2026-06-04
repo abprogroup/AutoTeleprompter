@@ -31,10 +31,11 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
     return ref.read(settingsProvider).debugMode;
   }
 
-  Directory _debugArtifactRootDirectory() {
+  Future<Directory> _debugArtifactRootDirectory() async {
+    final supportDir = await getApplicationSupportDirectory();
     return Directory(
-      '${File(Platform.resolvedExecutable).parent.path}'
-      '${Platform.pathSeparator}debug',
+      '${supportDir.path}${Platform.pathSeparator}'
+      'debug_artifacts',
     );
   }
 
@@ -44,8 +45,9 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
   ) async {
     if (!_shouldWriteDebugArtifacts) return null;
     assert(_allEditorDebugArtifactTypes.contains(type));
+    final root = await _debugArtifactRootDirectory();
     final directory = Directory(
-      '${_debugArtifactRootDirectory().path}${Platform.pathSeparator}'
+      '${root.path}${Platform.pathSeparator}'
       '${type.folderName}${Platform.pathSeparator}session_$sessionId',
     );
     if (!await directory.exists()) {

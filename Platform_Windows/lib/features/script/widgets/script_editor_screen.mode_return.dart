@@ -17,10 +17,19 @@ extension _ScriptEditorModeReturnParts on _ScriptEditorScreenState {
     );
   }
 
+  void _suspendEditorFocusForReaderMode() {
+    _keyboardFocusRepairToken++;
+    FocusScope.of(context).unfocus();
+    for (final focusNode in _focusNodes) {
+      focusNode.unfocus();
+    }
+  }
+
   void _restoreEditorModeReturnSnapshot(
     _EditorModeReturnSnapshot snapshot,
   ) {
     final token = ++_editorModeReturnRestoreToken;
+    _suspendEditorFocusForReaderMode();
 
     void restoreScroll() {
       if (token != _editorModeReturnRestoreToken) return;
@@ -30,7 +39,6 @@ extension _ScriptEditorModeReturnParts on _ScriptEditorScreenState {
       _editorScrollController.jumpTo(offset.clamp(0.0, max).toDouble());
     }
 
-    FocusScope.of(context).unfocus();
     restoreScroll();
 
     void restoreAfterFrame(int remainingFrames) {

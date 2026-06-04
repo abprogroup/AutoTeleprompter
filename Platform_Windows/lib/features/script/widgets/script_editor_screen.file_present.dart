@@ -327,6 +327,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
   void _startPresenting() async {
     final editorSnapshot = _captureEditorModeReturnSnapshot();
+    _suspendEditorFocusForReaderMode();
     LightweightDiagnostics.instance.record(
       'editor',
       'presenter opened',
@@ -398,6 +399,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     final featureName = audioOnly ? 'Audio-only recording' : 'Content Creator';
     if (!await _ensureEditorPremiumAccess(featureName)) return;
     final editorSnapshot = _captureEditorModeReturnSnapshot();
+    _suspendEditorFocusForReaderMode();
     LightweightDiagnostics.instance.record(
       'editor',
       audioOnly ? 'audio-only creator opened' : 'content creator opened',

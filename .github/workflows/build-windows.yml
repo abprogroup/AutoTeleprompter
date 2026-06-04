@@ -115,6 +115,11 @@ jobs:
       - name: Package Artifacts
         run: |
           mkdir build-zip
+          $releaseDir = "Platform_Windows\build\windows\x64\runner\Release"
+          $runtimeDebugDir = Join-Path $releaseDir "debug"
+          if (Test-Path $runtimeDebugDir) {
+            Remove-Item -LiteralPath $runtimeDebugDir -Recurse -Force
+          }
           xcopy /E /I Platform_Windows\build\windows\x64\runner\Release build-zip\AutoTeleprompter-Windows
           
       - name: Upload Artifact

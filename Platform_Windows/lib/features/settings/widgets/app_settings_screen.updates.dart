@@ -2,22 +2,31 @@ part of 'app_settings_screen.dart';
 
 extension _AppSettingsUpdates on _AppSettingsScreenState {
   List<Widget> _updatesSection(AppSettings settings) {
+    final auth = ref.watch(authProvider);
+    final showInternal = auth.isAdmin && auth.hasPremiumAccess;
+    final effectiveChannel = _effectiveUpdateChannel(settings.updateChannel);
+    final choices = <_SettingsChoice<String>>[
+      const _SettingsChoice(
+        label: 'Stable',
+        value: AppSettings.updateChannelStable,
+      ),
+      const _SettingsChoice(
+        label: 'Beta',
+        value: AppSettings.updateChannelBeta,
+      ),
+      if (showInternal)
+        const _SettingsChoice(
+          label: 'Internal',
+          value: AppSettings.updateChannelInternal,
+        ),
+    ];
     return [
       _SettingsChoiceTile<String>(
         icon: Icons.system_update_alt_outlined,
         title: 'Preferred update channel',
-        subtitle: _updateChannelDescription(settings.updateChannel),
-        value: settings.updateChannel,
-        choices: const [
-          _SettingsChoice(
-            label: 'Stable',
-            value: AppSettings.updateChannelStable,
-          ),
-          _SettingsChoice(
-            label: 'Beta',
-            value: AppSettings.updateChannelBeta,
-          ),
-        ],
+        subtitle: _updateChannelDescription(effectiveChannel),
+        value: effectiveChannel,
+        choices: choices,
         onChanged: ref.read(settingsProvider.notifier).setUpdateChannel,
       ),
       const SizedBox(height: 8),
@@ -35,10 +44,10 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
         icon: Icons.download_for_offline_outlined,
         title: 'Check for update',
         subtitle: _checkingUpdates
-            ? 'Checking ${settings.updateChannel} channel...'
+            ? 'Checking $effectiveChannel channel...'
             : _downloadingUpdate
                 ? 'Downloading update package...'
-                : _updateCheckDescription(settings.updateChannel),
+                : _updateCheckDescription(effectiveChannel),
         actions: [
           _SettingsAction(
             icon: Icons.refresh_rounded,
@@ -56,6 +65,8 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
     switch (channel) {
       case AppSettings.updateChannelBeta:
         return 'Get beta builds when the update service publishes them';
+      case AppSettings.updateChannelInternal:
+        return 'Admin-only private builds from the internal release hub';
       default:
         return 'Get stable builds when the update service publishes them';
     }
@@ -71,7 +82,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
     _setCheckingUpdates(true);
     final settings = ref.read(settingsProvider);
     final result = await UpdateCheckService().check(
-      channel: settings.updateChannel,
+      channel: _effectiveUpdateChannel(settings.updateChannel),
     );
     if (!mounted) return;
     _setCheckingUpdates(false);
@@ -153,5 +164,13 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
     } finally {
       _setDownloadingUpdate(false);
     }
+  }
+
+  String _effectiveUpdateChannel(String channel) {
+    if (channel != AppSettings.updateChannelInternal) return channel;
+    final auth = ref.read(authProvider);
+    return auth.isAdmin && auth.hasPremiumAccess
+        ? AppSettings.updateChannelInternal
+        : AppSettings.updateChannelStable;
   }
 }

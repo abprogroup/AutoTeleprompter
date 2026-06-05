@@ -17,6 +17,7 @@ class _CloudScriptPayload {
   final int? scriptBgColor;
   final int? currentWordColor;
   final int? futureWordColor;
+  final bool? isRtl;
   final List<ScriptBookmark> bookmarks;
   final String identity;
 
@@ -37,6 +38,7 @@ class _CloudScriptPayload {
     required this.scriptBgColor,
     required this.currentWordColor,
     required this.futureWordColor,
+    required this.isRtl,
     required this.bookmarks,
     required this.identity,
   });

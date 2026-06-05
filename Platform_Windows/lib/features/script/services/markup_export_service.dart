@@ -50,6 +50,8 @@ class MarkupExportService {
 
   static ExportParagraph _parseParagraph(String markup) {
     String align = 'left';
+    bool hasExplicitAlign = false;
+    bool isRtl = false;
     bool bold = false;
     bool italic = false;
     bool underline = false;
@@ -109,8 +111,14 @@ class MarkupExportService {
         if (fonts.isNotEmpty) fonts.removeLast();
       } else if (match.group(5) != null) {
         align = match.group(5)!;
+        hasExplicitAlign = true;
       } else if (match.group(6) != null) {
         align = match.group(6)!;
+        hasExplicitAlign = true;
+      } else if (tag == '[rtl]') {
+        isRtl = true;
+      } else if (tag == '[ltr]') {
+        isRtl = false;
       } else if (match.group(7) != null) {
         final shorthand = match.group(7)!;
         final highlight = _shorthandHighlightColors[shorthand];
@@ -135,7 +143,12 @@ class MarkupExportService {
     if (cursor < markup.length) {
       emit(markup.substring(cursor));
     }
-    return ExportParagraph(align: align, runs: runs);
+    return ExportParagraph(
+      align: align,
+      hasExplicitAlign: hasExplicitAlign,
+      isRtl: isRtl,
+      runs: runs,
+    );
   }
 
   static String? _normalizeColor(String raw) {
@@ -148,10 +161,14 @@ class MarkupExportService {
 
 class ExportParagraph {
   final String align;
+  final bool hasExplicitAlign;
+  final bool isRtl;
   final List<ExportTextRun> runs;
 
   const ExportParagraph({
     required this.align,
+    this.hasExplicitAlign = false,
+    this.isRtl = false,
     required this.runs,
   });
 

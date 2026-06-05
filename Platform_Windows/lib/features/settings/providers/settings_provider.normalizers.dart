@@ -189,11 +189,15 @@ double _normalizeUiScale(double? value) {
   return (value ?? 1.0).clamp(0.90, 1.25).toDouble();
 }
 
-String _normalizeUpdateChannel(String? value) {
+String _normalizeUpdateChannel(String? value, {bool allowInternal = false}) {
   switch (value) {
     case AppSettings.updateChannelStable:
     case AppSettings.updateChannelBeta:
       return value!;
+    case AppSettings.updateChannelInternal:
+      return allowInternal
+          ? AppSettings.updateChannelInternal
+          : AppSettings.updateChannelStable;
     default:
       return AppSettings.updateChannelStable;
   }

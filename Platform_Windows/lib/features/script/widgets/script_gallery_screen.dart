@@ -431,8 +431,14 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     if (!mounted) return;
     final settings = ref.read(settingsProvider);
     if (!settings.checkUpdatesOnStartup) return;
+    final auth = ref.read(authProvider);
+    final channel =
+        settings.updateChannel == AppSettings.updateChannelInternal &&
+                !(auth.isAdmin && auth.hasPremiumAccess)
+            ? AppSettings.updateChannelStable
+            : settings.updateChannel;
     final result = await UpdateCheckService().check(
-      channel: settings.updateChannel,
+      channel: channel,
     );
     if (!mounted || result.status != UpdateCheckStatus.updateAvailable) {
       return;

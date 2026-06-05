@@ -52,12 +52,21 @@ class EditorDialogs {
               onPressed: () => Navigator.pop(context, 'docx'),
               child: const Text('Word (.docx)')),
           TextButton(
+              onPressed: () => Navigator.pop(context, 'doc'),
+              child: const Text('Word 97-2003 (.doc)')),
+          TextButton(
               onPressed: () => Navigator.pop(context, 'rtf'),
               child: const Text('Rich Text (.rtf)')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, 'odt'),
+              child: const Text('OpenDocument (.odt)')),
           if (PlatformFileImport.supportedExtensions.contains('pages'))
             TextButton(
                 onPressed: () => Navigator.pop(context, 'pages'),
                 child: const Text('Pages (.pages)')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, 'md'),
+              child: const Text('Markdown (.md)')),
           TextButton(
               onPressed: () => Navigator.pop(context, 'txt'),
               child: const Text('Plain Text (.txt)')),

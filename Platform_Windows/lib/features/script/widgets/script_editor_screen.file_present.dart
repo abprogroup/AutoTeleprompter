@@ -94,30 +94,53 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     final text = _getRefinedFullTextWithoutBookmarkSigns();
 
-    // Generate bytes in the correct format for the chosen file type
-    final List<int> bytes;
-    if (format == 'docx') {
-      bytes = DocxService.generate(text);
-    } else if (format == 'rtf') {
-      bytes = RtfService.generate(text);
-    } else if (format == 'pages') {
-      bytes = PagesService.generate(text);
-    } else {
-      // txt, md — plain UTF-8
-      bytes = utf8.encode(MarkupExportService.toPlainText(text));
+    final safeName =
+        _currentTitle.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_').replaceAll(
+              RegExp(
+                r'\.(docx?|rtf|txt|text|log|md|pdf|odt|pages|atp)$',
+                caseSensitive: false,
+              ),
+              '',
+            );
+    final settings = ref.read(settingsProvider);
+    final ScriptBackupExport export;
+    try {
+      export = await LocalBackupService.buildScriptExportAsync(
+        title: '$safeName.$format',
+        text: text,
+        sourceType: format,
+        sourcePath: null,
+        fontSize: settings.fontSize,
+        fontFamily: settings.fontFamily,
+        textAlign: settings.textAlign,
+        futureWordColor: settings.futureWordColor,
+        isRtl: _inferEditorTextDirection(text),
+        bookmarks: _bookmarks,
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'editor.saveExportBuild',
+        data: {'format': format, 'title': _currentTitle},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not export ${format.toUpperCase()}: $error'),
+          backgroundColor: Colors.red[800],
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
     }
 
-    // Build filename with guaranteed extension — strip any prior extension first
-    final safeName = _currentTitle
-        .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
-        .replaceAll(
-            RegExp(r'\.(txt|pdf|docx|rtf|pages|md)$', caseSensitive: false),
-            '');
-    final fileName = '$safeName.$format';
+    // txt, md — plain UTF-8
 
+    // Build filename with guaranteed extension — strip any prior extension first
     final savedPath = await FilePicker.platform.saveFile(
       dialogTitle: 'Save as ${format.toUpperCase()}',
-      fileName: fileName,
+      fileName: export.fileName,
     );
 
     if (!mounted) return;
@@ -136,9 +159,14 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     // On Windows, FilePicker.saveFile only returns the path — it does NOT write
     // the file. We must write it explicitly.
+    final extension = '.${export.extension.toLowerCase()}';
+    final lowerSavedPath = savedPath.toLowerCase();
     final finalPath =
-        savedPath.endsWith('.$format') ? savedPath : '$savedPath.$format';
-    await File(finalPath).writeAsBytes(Uint8List.fromList(bytes));
+        lowerSavedPath.endsWith(extension) ? savedPath : '$savedPath$extension';
+    await File(finalPath).writeAsBytes(
+      Uint8List.fromList(export.bytes),
+      flush: true,
+    );
     LightweightDiagnostics.instance.record(
       'editor',
       'script exported',
@@ -158,7 +186,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       sourcePath: finalPath,
     );
     if (!mounted) return;
-    if (!savedPath.endsWith('.$format')) {
+    if (!lowerSavedPath.endsWith(extension)) {
       // OS stripped the extension — we added it back, but warn the user
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -182,6 +210,22 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         ),
       );
     }
+  }
+
+  bool _inferEditorTextDirection(String text) {
+    var rtl = 0;
+    var ltr = 0;
+    for (final rune in text.runes) {
+      if ((rune >= 0x0590 && rune <= 0x05FF) ||
+          (rune >= 0x0600 && rune <= 0x06FF) ||
+          (rune >= 0x0750 && rune <= 0x077F)) {
+        rtl++;
+      } else if ((rune >= 0x0041 && rune <= 0x005A) ||
+          (rune >= 0x0061 && rune <= 0x007A)) {
+        ltr++;
+      }
+    }
+    return rtl > 0 && rtl >= ltr;
   }
 
   Future<void> _adoptSavedExportAsActiveScript({

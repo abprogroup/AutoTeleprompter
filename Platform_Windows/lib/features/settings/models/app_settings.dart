@@ -6,8 +6,7 @@ class AppSettings {
   static const String importColorModeDocument = 'document_original';
   static const String updateChannelStable = 'stable';
   static const String updateChannelBeta = 'beta';
-  // Legacy persisted value from the removed local-development channel.
-  // Normalizers map it back to stable; no released UI should expose it.
+  // Admin-only channel for private release validation builds.
   static const String updateChannelInternal = 'internal';
   static const String languageModeAuto = 'auto';
   static const String languageModeHebrew = 'he';

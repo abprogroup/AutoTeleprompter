@@ -26,6 +26,7 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
           scriptBgColor: active.scriptBgColor,
           currentWordColor: active.currentWordColor,
           futureWordColor: active.futureWordColor,
+          isRtl: active.isRtl,
           bookmarks: await _loadProjectBookmarks(
             sessionId: active.sessionId,
             title: active.title,
@@ -69,6 +70,7 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
             scriptBgColor: (style['scriptBgColor'] as num?)?.toInt(),
             currentWordColor: (style['currentWordColor'] as num?)?.toInt(),
             futureWordColor: (style['futureWordColor'] as num?)?.toInt(),
+            isRtl: style['isRtl'] as bool?,
             bookmarks: await _loadProjectBookmarks(
               sessionId: meta['sessionId']?.toString(),
               title: resolvedTitle,
@@ -87,12 +89,19 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
     return scripts;
   }
 
-  ScriptBackupExport _readableExportFor(_CloudScriptPayload script) {
-    return LocalBackupService.buildScriptExport(
+  Future<ScriptBackupExport> _readableExportFor(
+    _CloudScriptPayload script,
+  ) {
+    return LocalBackupService.buildScriptExportAsync(
       title: script.title,
       text: script.text,
       sourceType: script.sourceType,
       sourcePath: script.sourcePath,
+      fontSize: script.fontSize,
+      fontFamily: script.fontFamily,
+      textAlign: script.textAlign,
+      futureWordColor: script.futureWordColor,
+      isRtl: script.isRtl,
       bookmarks: script.bookmarks,
     );
   }
@@ -119,6 +128,7 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
       scriptBgColor: script.scriptBgColor,
       currentWordColor: script.currentWordColor,
       futureWordColor: script.futureWordColor,
+      isRtl: script.isRtl,
       bookmarks: script.bookmarks,
     );
   }

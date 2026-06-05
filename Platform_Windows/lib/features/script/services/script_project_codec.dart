@@ -32,6 +32,7 @@ class ScriptProjectData {
   final int? scriptBgColor;
   final int? currentWordColor;
   final int? futureWordColor;
+  final bool? isRtl;
   final List<ScriptBookmark> bookmarks;
 
   const ScriptProjectData({
@@ -52,6 +53,7 @@ class ScriptProjectData {
     required this.scriptBgColor,
     required this.currentWordColor,
     required this.futureWordColor,
+    required this.isRtl,
     required this.bookmarks,
   });
 }
@@ -81,6 +83,7 @@ class ScriptProjectCodec {
     required int? scriptBgColor,
     required int? currentWordColor,
     required int? futureWordColor,
+    bool? isRtl,
     required List<ScriptBookmark> bookmarks,
   }) {
     return _build(
@@ -102,6 +105,7 @@ class ScriptProjectCodec {
       scriptBgColor: scriptBgColor,
       currentWordColor: currentWordColor,
       futureWordColor: futureWordColor,
+      isRtl: isRtl,
       bookmarks: bookmarks,
     );
   }
@@ -123,6 +127,7 @@ class ScriptProjectCodec {
     required int? scriptBgColor,
     required int? currentWordColor,
     required int? futureWordColor,
+    bool? isRtl,
     required List<ScriptBookmark> bookmarks,
   }) {
     final safeTitle = title.trim().isEmpty ? 'Untitled script' : title.trim();
@@ -146,6 +151,7 @@ class ScriptProjectCodec {
       scriptBgColor: scriptBgColor,
       currentWordColor: currentWordColor,
       futureWordColor: futureWordColor,
+      isRtl: isRtl,
       bookmarks: bookmarks,
     );
   }
@@ -169,6 +175,7 @@ class ScriptProjectCodec {
     required int? scriptBgColor,
     required int? currentWordColor,
     required int? futureWordColor,
+    required bool? isRtl,
     required List<ScriptBookmark> bookmarks,
   }) {
     final safeTitle = title.trim().isEmpty ? 'Untitled script' : title.trim();
@@ -202,6 +209,7 @@ class ScriptProjectCodec {
           if (scriptBgColor != null) 'scriptBgColor': scriptBgColor,
           if (currentWordColor != null) 'currentWordColor': currentWordColor,
           if (futureWordColor != null) 'futureWordColor': futureWordColor,
+          if (isRtl != null) 'isRtl': isRtl,
         },
         'bookmarks': bookmarks.map((b) => b.toJson()).toList(growable: false),
       },
@@ -258,6 +266,7 @@ class ScriptProjectCodec {
         scriptBgColor: (style['scriptBgColor'] as num?)?.toInt(),
         currentWordColor: (style['currentWordColor'] as num?)?.toInt(),
         futureWordColor: (style['futureWordColor'] as num?)?.toInt(),
+        isRtl: style['isRtl'] is bool ? style['isRtl'] as bool : null,
         bookmarks: [
           for (final item in bookmarksRaw)
             if (item is Map)

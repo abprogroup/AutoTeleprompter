@@ -29,7 +29,12 @@ class RtfService {
     }
 
     final buf = StringBuffer();
-    buf.write('{\\rtf1\\ansi\\deff0\n');
+    final documentRtl = paragraphs.where((p) => p.isRtl).length >=
+        paragraphs.where((p) => !p.isRtl).length;
+    buf.write('{\\rtf1\\ansi\\deff0');
+    if (documentRtl) buf.write(r'\rtldoc');
+    buf.write(r'{\fonttbl{\f0 Arial;}}');
+    buf.write('\n');
 
     if (colorTable.isNotEmpty) {
       buf.write('{\\colortbl ;');
@@ -47,7 +52,10 @@ class RtfService {
         buf.write('\\par\n');
         continue;
       }
-      buf.write('\\pard ${_rtfAlign(paragraph.align)} ');
+      final direction = paragraph.isRtl ? r'\rtlpar\rtlch' : r'\ltrpar\ltrch';
+      buf.write(
+        '\\pard ${_rtfAlign(paragraph.align, paragraph)}$direction ',
+      );
       for (final run in paragraph.runs) {
         _writeRun(run, colorTable, buf);
       }
@@ -90,7 +98,8 @@ class RtfService {
     buf.write('}');
   }
 
-  static String _rtfAlign(String align) {
+  static String _rtfAlign(String align, ExportParagraph paragraph) {
+    if (paragraph.isRtl && !paragraph.hasExplicitAlign) return r'\qr';
     switch (align) {
       case 'center':
         return r'\qc';

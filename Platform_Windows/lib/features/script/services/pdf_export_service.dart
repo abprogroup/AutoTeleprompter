@@ -1,0 +1,205 @@
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
+import 'markup_export_service.dart';
+
+class PdfExportService {
+  PdfExportService._();
+
+  static pw.Font? _regularFont;
+  static pw.Font? _boldFont;
+  static pw.Font? _italicFont;
+
+  static Future<List<int>> generate(String text) async {
+    final regular = await _loadFont(
+      cached: _regularFont,
+      systemCandidates: const [
+        r'C:\Windows\Fonts\arial.ttf',
+        r'C:\Windows\Fonts\segoeui.ttf',
+      ],
+      assetFallback: 'assets/fonts/google_fonts/Inter-Regular.ttf',
+      assign: (font) => _regularFont = font,
+    );
+    final bold = await _loadFont(
+      cached: _boldFont,
+      systemCandidates: const [
+        r'C:\Windows\Fonts\arialbd.ttf',
+        r'C:\Windows\Fonts\seguisb.ttf',
+      ],
+      assetFallback: 'assets/fonts/google_fonts/Inter-Bold.ttf',
+      assign: (font) => _boldFont = font,
+    );
+    final italic = await _loadFont(
+      cached: _italicFont,
+      systemCandidates: const [
+        r'C:\Windows\Fonts\ariali.ttf',
+        r'C:\Windows\Fonts\segoeuii.ttf',
+      ],
+      assetFallback: 'assets/fonts/google_fonts/Inter-Italic.ttf',
+      assign: (font) => _italicFont = font,
+      allowRegularFallback: true,
+    );
+
+    final document = pw.Document();
+    final paragraphs = MarkupExportService.parse(text);
+    document.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          margin: const pw.EdgeInsets.fromLTRB(36, 42, 36, 42),
+          theme: pw.ThemeData.withFont(
+            base: regular,
+            bold: bold,
+            italic: italic,
+            boldItalic: bold,
+          ),
+        ),
+        textDirection: _documentLooksRtl(paragraphs)
+            ? pw.TextDirection.rtl
+            : pw.TextDirection.ltr,
+        build: (context) => [
+          for (final paragraph in paragraphs)
+            _paragraphWidget(paragraph, regular, bold, italic),
+        ],
+      ),
+    );
+    return document.save();
+  }
+
+  static Future<pw.Font> _loadFont({
+    required pw.Font? cached,
+    required List<String> systemCandidates,
+    required String assetFallback,
+    required void Function(pw.Font font) assign,
+    bool allowRegularFallback = false,
+  }) async {
+    if (cached != null) return cached;
+    for (final path in systemCandidates) {
+      final file = File(path);
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        final font = pw.Font.ttf(ByteData.sublistView(bytes));
+        assign(font);
+        return font;
+      }
+    }
+    try {
+      final data = await rootBundle.load(assetFallback);
+      final font = pw.Font.ttf(data.buffer.asByteData());
+      assign(font);
+      return font;
+    } catch (_) {
+      if (allowRegularFallback) {
+        final regular = _regularFont;
+        if (regular != null) {
+          assign(regular);
+          return regular;
+        }
+      }
+      final font = pw.Font.helvetica();
+      assign(font);
+      return font;
+    }
+  }
+
+  static pw.Widget _paragraphWidget(
+    ExportParagraph paragraph,
+    pw.Font regular,
+    pw.Font bold,
+    pw.Font italic,
+  ) {
+    if (paragraph.isEmpty) return pw.SizedBox(height: 12);
+    return pw.Directionality(
+      textDirection:
+          paragraph.isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+      child: pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.only(bottom: 8),
+        child: pw.RichText(
+          textAlign: _pdfAlign(paragraph),
+          text: pw.TextSpan(
+            children: [
+              for (final run in paragraph.runs)
+                pw.TextSpan(
+                  text: run.text,
+                  style: _runStyle(run, regular, bold, italic),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static pw.TextStyle _runStyle(
+    ExportTextRun run,
+    pw.Font regular,
+    pw.Font bold,
+    pw.Font italic,
+  ) {
+    final isBold = run.isBold;
+    final isItalic = run.isItalic;
+    return pw.TextStyle(
+      font: isBold
+          ? bold
+          : isItalic
+              ? italic
+              : regular,
+      fontSize: (run.fontSize ?? 18).clamp(8, 96).toDouble(),
+      fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      fontStyle: isItalic ? pw.FontStyle.italic : pw.FontStyle.normal,
+      decoration: run.isUnderline
+          ? pw.TextDecoration.underline
+          : pw.TextDecoration.none,
+      color: _pdfColor(run.color, omitWhite: true),
+      background: _pdfBackground(run.backgroundColor),
+    );
+  }
+
+  static pw.BoxDecoration? _pdfBackground(String? hex) {
+    final color = _pdfColor(hex);
+    return color == null ? null : pw.BoxDecoration(color: color);
+  }
+
+  static PdfColor? _pdfColor(String? hex, {bool omitWhite = false}) {
+    final clean = hex?.trim().replaceFirst('#', '').toUpperCase();
+    if (clean == null || clean.length != 6) return null;
+    if (omitWhite && clean == 'FFFFFF') return null;
+    final value = int.tryParse(clean, radix: 16);
+    if (value == null) return null;
+    return PdfColor.fromInt(0xFF000000 | value);
+  }
+
+  static pw.TextAlign _pdfAlign(ExportParagraph paragraph) {
+    if (paragraph.isRtl && !paragraph.hasExplicitAlign) {
+      return pw.TextAlign.right;
+    }
+    return switch (paragraph.align) {
+      'center' => pw.TextAlign.center,
+      'right' => pw.TextAlign.right,
+      _ => pw.TextAlign.left,
+    };
+  }
+
+  static bool _documentLooksRtl(List<ExportParagraph> paragraphs) {
+    var rtl = 0;
+    var ltr = 0;
+    for (final paragraph in paragraphs) {
+      if (paragraph.isRtl) rtl++;
+      for (final run in paragraph.runs) {
+        for (final rune in run.text.runes) {
+          if ((rune >= 0x0590 && rune <= 0x05FF) ||
+              (rune >= 0x0600 && rune <= 0x06FF)) {
+            rtl++;
+          } else if ((rune >= 0x0041 && rune <= 0x005A) ||
+              (rune >= 0x0061 && rune <= 0x007A)) {
+            ltr++;
+          }
+        }
+      }
+    }
+    return rtl > 0 && rtl >= ltr;
+  }
+}

@@ -25,6 +25,7 @@ coverage/
 # NEVER TRACK AGENTS - THEY ARE PRIVATE
 _agent/
 .claude/
+.vscode/
 AutoTeleprompter_AGENT_*
 
 # NEVER TRACK LOCAL HISTORY OR EXPERIMENT ARCHIVES
@@ -74,6 +75,8 @@ releases/v*/
 .env.*
 *.secret
 *.secrets
+*.local.md
+*.local.json
 *.key
 *.pem
 client_secret*.json

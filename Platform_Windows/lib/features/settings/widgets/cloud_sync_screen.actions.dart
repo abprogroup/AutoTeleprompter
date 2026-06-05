@@ -527,7 +527,7 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
   }) async {
     late final ScriptBackupExport readable;
     try {
-      readable = _readableExportFor(script);
+      readable = await _readableExportFor(script);
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,
@@ -600,6 +600,11 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
           text: script.text,
           sourceType: script.sourceType,
           sourcePath: script.sourcePath,
+          fontSize: script.fontSize,
+          fontFamily: script.fontFamily,
+          textAlign: script.textAlign,
+          futureWordColor: script.futureWordColor,
+          isRtl: script.isRtl,
           bookmarks: script.bookmarks,
         );
         if (ok) written++;

@@ -7,9 +7,14 @@ import 'package:path_provider/path_provider.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../script/services/docx_service.dart';
 import '../../script/services/markup_export_service.dart';
+import '../../script/services/odt_service.dart';
+import '../../script/services/pages_service.dart';
+import '../../script/services/pdf_export_service.dart';
 import '../../script/services/rtf_service.dart';
 import '../../script/services/script_bookmark_service.dart';
 import 'cloud_connection_store.dart';
+
+part 'local_backup_service.export_defaults.dart';
 
 class ScriptBackupExport {
   final String fileName;
@@ -49,14 +54,24 @@ class LocalBackupService {
     String? sourceType,
     String? sourcePath,
     String? historyJson,
+    double? fontSize,
+    String? fontFamily,
+    String? textAlign,
+    int? futureWordColor,
+    bool? isRtl,
     List<ScriptBookmark> bookmarks = const [],
   }) async {
     final root = await _backupRoot();
-    final export = buildScriptExport(
+    final export = await buildScriptExportAsync(
       title: title,
       text: text,
       sourceType: sourceType,
       sourcePath: sourcePath,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textAlign: textAlign,
+      futureWordColor: futureWordColor,
+      isRtl: isRtl,
       bookmarks: bookmarks,
     );
     if (root == null || export.readableText.trim().isEmpty) return false;
@@ -119,6 +134,7 @@ class LocalBackupService {
   Future<bool> backupDeletedScript({
     required String title,
     required String text,
+    String? sourceType,
     String? sourcePath,
   }) async {
     final root = await _backupRoot();
@@ -127,13 +143,24 @@ class LocalBackupService {
     final stamp = _timestamp();
     var backedUp = false;
 
+    final movedExisting = await _moveExistingBackupToDeleted(
+      root: root,
+      title: title,
+      text: text,
+      sourceType: sourceType,
+      sourcePath: sourcePath,
+      stamp: stamp,
+    );
+    if (movedExisting) backedUp = true;
+
     final readableText = exportReadableScriptText(text);
-    if (readableText.trim().isNotEmpty) {
+    if (!movedExisting && readableText.trim().isNotEmpty) {
       final deleted = Directory(_join(root.path, 'Deleted Scripts'));
       await deleted.create(recursive: true);
-      final export = _deletedScriptExport(
+      final export = await _deletedScriptExport(
         title: title,
         text: text,
+        sourceType: sourceType,
         sourcePath: sourcePath,
       );
       await _writeBytesAtomically(
@@ -156,15 +183,17 @@ class LocalBackupService {
     return backedUp;
   }
 
-  ScriptBackupExport _deletedScriptExport({
+  Future<ScriptBackupExport> _deletedScriptExport({
     required String title,
     required String text,
+    String? sourceType,
     String? sourcePath,
-  }) {
+  }) async {
     try {
-      return buildScriptExport(
+      return await buildScriptExportAsync(
         title: title,
         text: text,
+        sourceType: sourceType,
         sourcePath: sourcePath,
       );
     } catch (error, stack) {
@@ -184,6 +213,111 @@ class LocalBackupService {
         extension: 'txt',
       );
     }
+  }
+
+  Future<bool> _moveExistingBackupToDeleted({
+    required Directory root,
+    required String title,
+    required String text,
+    required String stamp,
+    String? sourceType,
+    String? sourcePath,
+  }) async {
+    try {
+      final export = await buildScriptExportAsync(
+        title: title,
+        text: text,
+        sourceType: sourceType,
+        sourcePath: sourcePath,
+      );
+      final candidateNames = <String>{
+        export.fileName,
+        _safeName(_basename(sourcePath?.trim() ?? '')),
+      }..removeWhere((name) => name.trim().isEmpty || name == 'script');
+
+      File? sourceBackup;
+      for (final name in candidateNames) {
+        final candidate = File(_join(root.path, name));
+        if (await candidate.exists()) {
+          sourceBackup = candidate;
+          break;
+        }
+      }
+      if (sourceBackup == null) return false;
+
+      final deleted = Directory(_join(root.path, 'Deleted Scripts'));
+      await deleted.create(recursive: true);
+      final target = await _uniqueFile(
+        Directory(deleted.path),
+        '${stamp}_${_basename(sourceBackup.path)}',
+      );
+      await _moveFileAtomically(sourceBackup, target);
+      await _moveHistoryMetadataRecord(
+        oldBackupPath: sourceBackup.path,
+        newBackupPath: target.path,
+        scriptTitle: title,
+      );
+      final legacySidecar = File('${sourceBackup.path}.history.json');
+      if (await legacySidecar.exists()) {
+        await legacySidecar.rename('${target.path}.history.json');
+        await _migrateHistorySidecars(root);
+      }
+      return true;
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'localBackup.moveExistingDeletedBackup',
+        data: {'title': title},
+      );
+      return false;
+    }
+  }
+
+  Future<void> _moveHistoryMetadataRecord({
+    required String oldBackupPath,
+    required String newBackupPath,
+    required String scriptTitle,
+  }) async {
+    final oldFile = await _historyMetadataFileForBackupPath(oldBackupPath);
+    if (!await oldFile.exists()) return;
+    final decoded = jsonDecode(await oldFile.readAsString());
+    final historyJson = decoded is Map<String, dynamic>
+        ? decoded['historyJson']?.toString() ?? ''
+        : '';
+    await oldFile.delete();
+    if (historyJson.trim().isEmpty) return;
+    await _writeHistoryMetadataRecord(
+      backupFilePath: newBackupPath,
+      scriptTitle: scriptTitle,
+      historyJson: historyJson,
+    );
+  }
+
+  Future<void> _moveFileAtomically(File source, File target) async {
+    await target.parent.create(recursive: true);
+    if (await target.exists()) await target.delete();
+    try {
+      await source.rename(target.path);
+    } on FileSystemException {
+      await source.copy(target.path);
+      await source.delete();
+    }
+  }
+
+  Future<File> _uniqueFile(Directory directory, String fileName) async {
+    final safeName = _safeName(fileName);
+    var candidate = File(_join(directory.path, safeName));
+    if (!await candidate.exists()) return candidate;
+    final dot = safeName.lastIndexOf('.');
+    final base = dot <= 0 ? safeName : safeName.substring(0, dot);
+    final ext = dot <= 0 ? '' : safeName.substring(dot);
+    for (var i = 2; i < 1000; i++) {
+      candidate = File(_join(directory.path, '$base ($i)$ext'));
+      if (!await candidate.exists()) return candidate;
+    }
+    return File(_join(directory.path,
+        '${base}_${DateTime.now().microsecondsSinceEpoch}$ext'));
   }
 
   Future<Directory?> _backupRoot() async {
@@ -337,9 +471,22 @@ class LocalBackupService {
     required String text,
     String? sourceType,
     String? sourcePath,
+    double? fontSize,
+    String? fontFamily,
+    String? textAlign,
+    int? futureWordColor,
+    bool? isRtl,
     List<ScriptBookmark> bookmarks = const [],
   }) {
-    final exportText = _textWithBookmarkSigns(text, bookmarks);
+    final styledText = _applyExportDefaults(
+      text,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textAlign: textAlign,
+      futureWordColor: futureWordColor,
+      isRtl: isRtl,
+    );
+    final exportText = _textWithBookmarkSigns(styledText, bookmarks);
     final readableText = exportReadableScriptText(
       exportText,
       bookmarks: const [],
@@ -373,18 +520,26 @@ class LocalBackupService {
           extension: extension,
         );
       case 'doc':
-        final sourceFile = _sourceFile(sourcePath);
-        if (sourceFile != null && !_sourceLooksLikeRtf(sourceFile)) {
-          return _originalSourceExport(
-            sourceFile: sourceFile,
-            extension: extension,
-            readableText: readableText,
-          );
-        }
         return ScriptBackupExport(
           fileName: '$baseName.doc',
           mimeType: 'application/msword',
           bytes: RtfService.generate(exportText),
+          readableText: readableText,
+          extension: extension,
+        );
+      case 'odt':
+        return ScriptBackupExport(
+          fileName: '$baseName.odt',
+          mimeType: _mimeTypeForExtension(extension),
+          bytes: OdtService.generate(exportText),
+          readableText: readableText,
+          extension: extension,
+        );
+      case 'pages':
+        return ScriptBackupExport(
+          fileName: '$baseName.pages',
+          mimeType: _mimeTypeForExtension(extension),
+          bytes: PagesService.generate(exportText),
           readableText: readableText,
           extension: extension,
         );
@@ -400,20 +555,7 @@ class LocalBackupService {
           extension: extension,
         );
       case 'pdf':
-      case 'odt':
-      case 'pages':
-        final sourceFile = _sourceFile(sourcePath);
-        if (sourceFile == null) {
-          throw StateError(
-            'Cannot preserve .$extension backup because the original source '
-            'file is unavailable. Save/export the script before syncing it.',
-          );
-        }
-        return _originalSourceExport(
-          sourceFile: sourceFile,
-          extension: extension,
-          readableText: readableText,
-        );
+        throw StateError('PDF export requires buildScriptExportAsync.');
       default:
         return ScriptBackupExport(
           fileName: '$baseName.txt',
@@ -423,6 +565,58 @@ class LocalBackupService {
           extension: 'txt',
         );
     }
+  }
+
+  static Future<ScriptBackupExport> buildScriptExportAsync({
+    required String title,
+    required String text,
+    String? sourceType,
+    String? sourcePath,
+    double? fontSize,
+    String? fontFamily,
+    String? textAlign,
+    int? futureWordColor,
+    bool? isRtl,
+    List<ScriptBookmark> bookmarks = const [],
+  }) async {
+    final extension = _preferredExtension(
+      title: title,
+      sourceType: sourceType,
+      sourcePath: sourcePath,
+    );
+    if (extension != 'pdf') {
+      return buildScriptExport(
+        title: title,
+        text: text,
+        sourceType: sourceType,
+        sourcePath: sourcePath,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        textAlign: textAlign,
+        futureWordColor: futureWordColor,
+        isRtl: isRtl,
+        bookmarks: bookmarks,
+      );
+    }
+
+    final styledText = _applyExportDefaults(
+      text,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textAlign: textAlign,
+      futureWordColor: futureWordColor,
+      isRtl: isRtl,
+    );
+    final exportText = _textWithBookmarkSigns(styledText, bookmarks);
+    final readableText = exportReadableScriptText(exportText);
+    final baseName = _safeBaseName(title: title, sourcePath: sourcePath);
+    return ScriptBackupExport(
+      fileName: '$baseName.pdf',
+      mimeType: _mimeTypeForExtension('pdf'),
+      bytes: await PdfExportService.generate(exportText),
+      readableText: readableText,
+      extension: 'pdf',
+    );
   }
 
   static String _preferredExtension({
@@ -505,40 +699,6 @@ class LocalBackupService {
       'pages' => 'application/octet-stream',
       _ => 'text/plain; charset=utf-8',
     };
-  }
-
-  static File? _sourceFile(String? sourcePath) {
-    final path = sourcePath?.trim();
-    if (path == null || path.isEmpty) return null;
-    final file = File(path);
-    return file.existsSync() ? file : null;
-  }
-
-  static bool _sourceLooksLikeRtf(File file) {
-    try {
-      final source = file.openSync(mode: FileMode.read);
-      final length = source.lengthSync().clamp(0, 32).toInt();
-      final header = source.readSync(length);
-      source.closeSync();
-      return latin1.decode(header).trimLeft().startsWith(r'{\rtf');
-    } catch (_) {
-      return false;
-    }
-  }
-
-  static ScriptBackupExport _originalSourceExport({
-    required File sourceFile,
-    required String extension,
-    required String readableText,
-  }) {
-    return ScriptBackupExport(
-      fileName: _safeName(_basename(sourceFile.path)),
-      mimeType: _mimeTypeForExtension(extension),
-      bytes: sourceFile.readAsBytesSync(),
-      readableText: readableText,
-      extension: extension,
-      originalSourceCopy: true,
-    );
   }
 
   static String _textWithBookmarkSigns(

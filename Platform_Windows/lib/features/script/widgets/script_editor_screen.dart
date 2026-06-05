@@ -35,10 +35,6 @@ import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../services/styling_service.dart';
 import '../services/script_bookmark_service.dart';
 import '../../../core/services/rich_clipboard.dart';
-import '../services/docx_service.dart';
-import '../services/rtf_service.dart';
-import '../services/pages_service.dart';
-import '../services/markup_export_service.dart';
 import '../services/markup_decoration_service.dart';
 import '../services/highlight_band_painter.dart';
 import '../services/editor_text_geometry_service.dart';
@@ -48,6 +44,7 @@ import '../../teleprompter/services/word_aligner.dart';
 import '../models/script_word.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
+import '../../settings/services/local_backup_service.dart';
 
 part 'script_editor_screen.load_blocks.dart';
 part 'script_editor_screen.text_replacement.dart';

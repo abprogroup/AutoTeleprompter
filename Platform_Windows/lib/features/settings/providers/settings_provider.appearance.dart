@@ -285,7 +285,7 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
   }
 
   Future<void> setUpdateChannel(String channel) async {
-    final normalized = _normalizeUpdateChannel(channel);
+    final normalized = _normalizeUpdateChannel(channel, allowInternal: true);
     state = state.copyWith(updateChannel: normalized);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_updateChannelKey, normalized);

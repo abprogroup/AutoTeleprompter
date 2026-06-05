@@ -159,9 +159,13 @@ class UpdateCheckService {
   }
 
   static String _normalizeChannel(String channel) {
-    return channel == AppSettings.updateChannelBeta
-        ? AppSettings.updateChannelBeta
-        : AppSettings.updateChannelStable;
+    switch (channel) {
+      case AppSettings.updateChannelBeta:
+      case AppSettings.updateChannelInternal:
+        return channel;
+      default:
+        return AppSettings.updateChannelStable;
+    }
   }
 
   static bool _isAllowedManifestUri(Uri uri) {

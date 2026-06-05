@@ -19,9 +19,13 @@ part 'settings_provider.normalizers.dart';
 part 'settings_provider.secure_scripts.dart';
 part 'settings_provider.appearance.dart';
 part 'settings_provider.stt.dart';
+part 'settings_provider.recent_delete.dart';
 
 class SettingsNotifier extends Notifier<AppSettings>
-    with SettingsNotifierAppearance, SettingsNotifierSttSettings {
+    with
+        SettingsNotifierAppearance,
+        SettingsNotifierSttSettings,
+        SettingsNotifierRecentDelete {
   int _loadGeneration = 0;
   bool _isDisposed = false;
 
@@ -332,6 +336,11 @@ class SettingsNotifier extends Notifier<AppSettings>
     }
 
     final recentList = List<String>.from(state.recentScripts);
+    final currentIdentity = _recentIdentityKey(
+      title: currentTitle,
+      type: type,
+      sourcePath: sourcePath,
+    );
     bool updated = false;
 
     for (int i = 0; i < recentList.length; i++) {
@@ -341,13 +350,23 @@ class SettingsNotifier extends Notifier<AppSettings>
         final itemTitle = decoded['title'];
 
         bool isMatch = false;
+        final itemIdentity = _recentIdentityKey(
+          title: itemTitle?.toString(),
+          type: decoded['type']?.toString(),
+          sourcePath: decoded['sourcePath']?.toString(),
+        );
+
         if (sessionId != null && itemSessionId == sessionId) {
+          isMatch = true;
+        } else if (currentIdentity.isNotEmpty &&
+            itemIdentity == currentIdentity) {
           isMatch = true;
         } else if (sessionId == null && itemTitle == currentTitle) {
           isMatch = true;
         }
 
         if (isMatch) {
+          decoded['title'] = currentTitle;
           decoded['sessionId'] = effectiveSessionId;
           decoded[SecureScriptStore.recordIdKey] = secureRecordId;
           decoded[SecureScriptStore.storageVersionKey] =
@@ -381,6 +400,7 @@ class SettingsNotifier extends Notifier<AppSettings>
 
           recentList.removeAt(i);
           recentList.insert(0, jsonEncode(decoded));
+          _dedupeRecentMetadataList(recentList);
 
           updated = true;
           break;
@@ -448,6 +468,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         },
       };
       recentList.insert(0, jsonEncode(newEntry));
+      _dedupeRecentMetadataList(recentList);
       if (!isSilent) {
         state = state.copyWith(recentScripts: recentList);
       }
@@ -519,6 +540,10 @@ class SettingsNotifier extends Notifier<AppSettings>
         sourceType: sourceType,
         sourcePath: sourcePath,
         historyJson: historyJson,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        textAlign: textAlign,
+        futureWordColor: futureWordColor,
         bookmarks: bookmarks,
       );
     } catch (error, stack) {
@@ -540,11 +565,15 @@ class SettingsNotifier extends Notifier<AppSettings>
           .toList(growable: false);
       if (providerIds.isEmpty) return;
 
-      final readable = LocalBackupService.buildScriptExport(
+      final readable = await LocalBackupService.buildScriptExportAsync(
         title: title,
         text: text,
         sourceType: sourceType,
         sourcePath: sourcePath,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        textAlign: textAlign,
+        futureWordColor: futureWordColor,
         bookmarks: bookmarks,
       );
       if (readable.readableText.trim().isEmpty) return;
@@ -634,6 +663,11 @@ class SettingsNotifier extends Notifier<AppSettings>
     final newData = await _secureIncomingRecentMetadata(metadataJson);
     final String? newSessionId = newData['sessionId'] as String?;
     final String? newTitle = newData['title'] as String?;
+    final String newIdentity = _recentIdentityKey(
+      title: newTitle,
+      type: newData['type']?.toString(),
+      sourcePath: newData['sourcePath']?.toString(),
+    );
 
     list.removeWhere((item) {
       try {
@@ -642,7 +676,14 @@ class SettingsNotifier extends Notifier<AppSettings>
             newSessionId != null && decoded['sessionId'] == newSessionId;
         final bool titleMatch =
             newTitle != null && decoded['title'] == newTitle;
-        return idMatch || titleMatch;
+        final identityMatch = newIdentity.isNotEmpty &&
+            _recentIdentityKey(
+                  title: decoded['title']?.toString(),
+                  type: decoded['type']?.toString(),
+                  sourcePath: decoded['sourcePath']?.toString(),
+                ) ==
+                newIdentity;
+        return idMatch || identityMatch || titleMatch;
       } catch (error) {
         LightweightDiagnostics.instance.record(
           'settings',
@@ -680,102 +721,6 @@ class SettingsNotifier extends Notifier<AppSettings>
     if (activation.recentsChanged) {
       await prefs.setStringList(_recentScriptsKey, activation.recentScripts);
     }
-  }
-
-  Future<void> deleteRecentScript({
-    String? sessionId,
-    String? title,
-  }) async {
-    final list = List<String>.from(state.recentScripts);
-    final removedRecordIds = <String>{};
-    final removedItems = <Map<String, dynamic>>[];
-    var removedActiveScript = false;
-    list.removeWhere((item) {
-      try {
-        final decoded = Map<String, dynamic>.from(jsonDecode(item));
-        final itemSessionId = decoded['sessionId'] as String?;
-        final itemRecordId = SecureScriptStore.recordIdFromMetadata(decoded);
-        final itemTitle = decoded['title'] as String?;
-        final matches = (sessionId != null && itemSessionId == sessionId) ||
-            (sessionId != null && itemRecordId == sessionId) ||
-            (sessionId == null && title != null && itemTitle == title);
-        if (!matches) return false;
-        final recordId = itemRecordId;
-        if (recordId != null) removedRecordIds.add(recordId);
-        removedItems.add(decoded);
-        removedActiveScript = removedActiveScript ||
-            recordId == state.lastScriptSessionId ||
-            itemSessionId == state.lastScriptSessionId;
-        return true;
-      } catch (e) {
-        LightweightDiagnostics.instance.record(
-          'settings',
-          'ignored malformed recent metadata while removing script',
-          data: {
-            'source': 'removeFromRecent',
-            'sessionId': sessionId ?? '',
-            'title': title ?? '',
-            'error': e.toString(),
-          },
-        );
-        return false;
-      }
-    });
-
-    final secureStore = SecureScriptStore();
-    for (final item in removedItems) {
-      try {
-        final data = await secureStore.readFromMetadata(item);
-        await LocalBackupService().backupDeletedScript(
-          title: item['title']?.toString() ?? title ?? 'Untitled script',
-          text: data?.text ?? '',
-          sourcePath: item['sourcePath']?.toString(),
-        );
-      } catch (error, stack) {
-        LightweightDiagnostics.instance.recordError(
-          error,
-          stack,
-          source: 'settings.backupDeletedScript',
-          data: {
-            'sessionId': item['sessionId']?.toString() ?? '',
-            'title': item['title']?.toString() ?? '',
-          },
-        );
-      }
-    }
-
-    for (final recordId in removedRecordIds) {
-      try {
-        await secureStore.delete(recordId);
-      } catch (error, stack) {
-        LightweightDiagnostics.instance.recordError(
-          error,
-          stack,
-          source: 'settings.deleteSecureRecentScript',
-          data: {'recordId': recordId},
-        );
-      }
-    }
-
-    state = state.copyWith(
-      recentScripts: list,
-      lastScript: removedActiveScript ? '' : state.lastScript,
-      lastScriptSessionId: removedActiveScript ? '' : state.lastScriptSessionId,
-      lastScriptTitle: removedActiveScript ? '' : state.lastScriptTitle,
-    );
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_recentScriptsKey, list);
-    if (removedActiveScript) {
-      await Future.wait([
-        prefs.remove(_lastScriptKey),
-        prefs.remove(_lastScriptSessionIdKey),
-        prefs.remove('last_script_title'),
-      ]);
-    }
-  }
-
-  Future<void> removeFromRecent(String sessionId) async {
-    await deleteRecentScript(sessionId: sessionId);
   }
 }
 

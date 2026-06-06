@@ -142,6 +142,21 @@ class UpdateCheckService {
       latestVersion.trim(),
       autoTeleprompterAppVersion,
     );
+    if (comparison <= 0 && channel == AppSettings.updateChannelInternal) {
+      final betaEntry = _channelEntry(decoded, AppSettings.updateChannelBeta);
+      final betaVersion =
+          betaEntry == null ? null : _stringValue(betaEntry, 'version');
+      if (betaEntry != null &&
+          betaVersion != null &&
+          _compareVersions(betaVersion.trim(), autoTeleprompterAppVersion) >
+              0) {
+        return _resultForChannelEntry(
+          channelEntry: betaEntry,
+          channel: AppSettings.updateChannelBeta,
+          fallbackMessage: 'No newer internal build is published yet. ',
+        );
+      }
+    }
     if (comparison <= 0) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.upToDate,
@@ -163,7 +178,37 @@ class UpdateCheckService {
       downloadUrl: downloadUrl,
       notes: notes,
       publishedAt: publishedAt,
-      message: '${fallbackMessage}A newer $effectiveChannel build is available.',
+      message:
+          '${fallbackMessage}A newer $effectiveChannel build is available.',
+    );
+  }
+
+  UpdateCheckResult _resultForChannelEntry({
+    required Map<String, dynamic> channelEntry,
+    required String channel,
+    String fallbackMessage = '',
+  }) {
+    final latestVersion = _stringValue(channelEntry, 'version');
+    final downloadUrl = _stringValue(channelEntry, 'url') ??
+        _stringValue(channelEntry, 'downloadUrl');
+    if (latestVersion == null || latestVersion.trim().isEmpty) {
+      throw FormatException('Manifest is missing $channel.version.');
+    }
+    final notes = _stringValue(channelEntry, 'notes') ??
+        _stringValue(channelEntry, 'releaseNotes');
+    final publishedAtText = _stringValue(channelEntry, 'publishedAt');
+    final publishedAt = publishedAtText == null
+        ? null
+        : DateTime.tryParse(publishedAtText)?.toLocal();
+    return UpdateCheckResult(
+      status: UpdateCheckStatus.updateAvailable,
+      channel: channel,
+      currentVersion: autoTeleprompterAppVersion,
+      latestVersion: latestVersion.trim(),
+      downloadUrl: downloadUrl,
+      notes: notes,
+      publishedAt: publishedAt,
+      message: '${fallbackMessage}A newer $channel build is available.',
     );
   }
 

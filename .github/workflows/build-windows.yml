@@ -125,6 +125,7 @@ jobs:
           "manifest_url=$manifestUrl" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Preflight Required Release Credentials
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}

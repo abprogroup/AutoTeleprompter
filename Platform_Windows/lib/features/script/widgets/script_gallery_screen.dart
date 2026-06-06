@@ -14,8 +14,10 @@ import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../settings/services/deleted_scripts_service.dart';
 import '../../settings/services/update_check_service.dart';
 import '../../settings/services/update_download_service.dart';
+import '../../settings/services/update_install_service.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
@@ -24,6 +26,7 @@ import 'script_delete_dialog.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 
 part 'script_gallery_screen.account_menu.dart';
+part 'script_gallery_screen.deleted_scripts.dart';
 part 'script_gallery_screen.history_sheet.dart';
 part 'script_gallery_screen.premium_hub.dart';
 part 'script_gallery_screen.recent_item.dart';
@@ -47,6 +50,8 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   int _logoTaps = 0;
   Timer? _inputShieldTimer;
   bool _inputShielded = false;
+  bool _recentSelectionMode = false;
+  final Set<String> _selectedRecentKeys = <String>{};
 
   @override
   void initState() {
@@ -90,6 +95,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
         );
     final remoteSettingsAction = Platform.isWindows ? openRemoteSettings : null;
+    final visibleRecents = _dedupedRecentMetadata(settings.recentScripts);
 
     return AbsorbPointer(
       absorbing: _inputShielded,
@@ -283,30 +289,106 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                           color: Colors.white70,
                           fontSize: 18,
                           fontWeight: FontWeight.bold)),
-                  if (settings.recentScripts.length > 3)
-                    TextButton(
-                      onPressed: () {
-                        showModalBottomSheet(
-                          context: context,
-                          backgroundColor: const Color(0xFF0A0A0A),
-                          isScrollControlled: true,
-                          builder: (_) => const _FullHistorySheet(),
-                        );
-                      },
-                      child: const Text('show more',
-                          style: TextStyle(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (visibleRecents.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _recentSelectionMode = !_recentSelectionMode;
+                              _selectedRecentKeys.clear();
+                            });
+                          },
+                          child: Text(
+                            _recentSelectionMode ? 'cancel' : 'select',
+                            style: const TextStyle(
                               color: Color(0xFFFFBF00),
                               fontSize: 13,
-                              fontWeight: FontWeight.bold)),
-                    ),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      if (_recentSelectionMode && visibleRecents.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedRecentKeys
+                                ..clear()
+                                ..addAll(visibleRecents.take(3).map((item) {
+                                  final meta = Map<String, dynamic>.from(
+                                    jsonDecode(item),
+                                  );
+                                  return _recentGallerySelectionKey(meta);
+                                }));
+                            });
+                          },
+                          child: const Text(
+                            'select all',
+                            style: TextStyle(
+                              color: Color(0xFFFFBF00),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      if (_recentSelectionMode &&
+                          _selectedRecentKeys.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            setState(() => _selectedRecentKeys.clear());
+                          },
+                          child: const Text(
+                            'clear all',
+                            style: TextStyle(
+                              color: Color(0xFFFFBF00),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      if (_recentSelectionMode &&
+                          _selectedRecentKeys.isNotEmpty)
+                        TextButton(
+                          onPressed: () =>
+                              _deleteSelectedRecentScripts(visibleRecents),
+                          child: Text(
+                            'delete ${_selectedRecentKeys.length}',
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      if (visibleRecents.length > 3)
+                        TextButton(
+                          onPressed: () {
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: const Color(0xFF0A0A0A),
+                              isScrollControlled: true,
+                              builder: (_) => const _FullHistorySheet(),
+                            );
+                          },
+                          child: const Text('show more',
+                              style: TextStyle(
+                                  color: Color(0xFFFFBF00),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
               Column(
-                children: settings.recentScripts.isEmpty
+                children: visibleRecents.isEmpty
                     ? [const _EmptyStatePlaceholder()]
-                    : settings.recentScripts.take(3).map((metaJson) {
-                        final meta = jsonDecode(metaJson);
+                    : visibleRecents.take(3).map((metaJson) {
+                        final meta =
+                            Map<String, dynamic>.from(jsonDecode(metaJson));
+                        final selectionKey = _recentGallerySelectionKey(meta);
                         return _ScriptListItem(
                           title: meta['title'] ?? 'Untitled Script',
                           date: meta['date'] ?? 'Imported',
@@ -316,9 +398,21 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                           sessionId: meta['sessionId'],
                           secureRecordId: meta[SecureScriptStore.recordIdKey],
                           sourcePath: meta['sourcePath'],
+                          selectionMode: _recentSelectionMode,
+                          selected: _selectedRecentKeys.contains(selectionKey),
+                          onSelectionChanged: (selected) {
+                            setState(() {
+                              if (selected) {
+                                _selectedRecentKeys.add(selectionKey);
+                              } else {
+                                _selectedRecentKeys.remove(selectionKey);
+                              }
+                            });
+                          },
                         );
                       }).toList(),
               ),
+              _DeletedScriptsSection(enabled: hasProAccess),
             ],
           ),
         ),
@@ -373,6 +467,60 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteSelectedRecentScripts(List<String> visibleRecents) async {
+    final selected = <Map<String, dynamic>>[];
+    for (final item in visibleRecents) {
+      try {
+        final meta = Map<String, dynamic>.from(jsonDecode(item));
+        if (_selectedRecentKeys.contains(_recentGallerySelectionKey(meta))) {
+          selected.add(meta);
+        }
+      } catch (_) {
+        // Ignore malformed history entries. They are already hidden elsewhere.
+      }
+    }
+    if (selected.isEmpty) return;
+    final choice = await showScriptDeleteDialog(
+      context,
+      title: '${selected.length} selected scripts',
+      sourcePaths: _recentGallerySourcePaths(selected),
+    );
+    if (choice == null || !mounted) return;
+    setState(() {
+      _selectedRecentKeys.clear();
+      _recentSelectionMode = false;
+    });
+    try {
+      final notifier = ref.read(settingsProvider.notifier);
+      await notifier.deleteRecentScripts(selected);
+      var deletedSourceCount = 0;
+      if (choice.deleteSourceFile) {
+        deletedSourceCount = await _deleteRecentGallerySourceFiles(selected);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            deletedSourceCount > 0
+                ? 'Deleted ${selected.length} scripts and $deletedSourceCount source files.'
+                : 'Deleted ${selected.length} scripts.',
+          ),
+        ),
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'gallery.deleteSelectedRecentScripts',
+        data: {'count': selected.length},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete selected scripts.')),
+      );
+    }
   }
 
   void _showPremiumHub(BuildContext context, AuthState auth) {
@@ -434,7 +582,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     final auth = ref.read(authProvider);
     final channel =
         settings.updateChannel == AppSettings.updateChannelInternal &&
-                !(auth.isAdmin && auth.hasPremiumAccess)
+                !auth.isAdmin
             ? AppSettings.updateChannelStable
             : settings.updateChannel;
     final result = await UpdateCheckService().check(
@@ -469,7 +617,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                 unawaited(_downloadStartupUpdate(result));
               },
               icon: const Icon(Icons.download_rounded, size: 18),
-              label: const Text('Download update'),
+              label: const Text('Install update'),
             ),
         ],
       ),
@@ -482,11 +630,14 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     );
     try {
       final file = await UpdateDownloadService().download(result);
-      await Process.run('explorer.exe', ['/select,${file.path}']);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update downloaded: ${file.path}')),
+        const SnackBar(
+          content: Text('Installing update. AutoTeleprompter will restart.'),
+        ),
       );
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await UpdateInstallService().installDownloadedUpdate(file, result);
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,
@@ -495,7 +646,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update download failed: $error')),
+        SnackBar(content: Text('Update install failed: $error')),
       );
     }
   }

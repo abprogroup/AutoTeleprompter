@@ -139,7 +139,7 @@ class CloudOAuthService {
     var account = CloudAccountInfo.fromJson(accountJson);
     if (account == null) return null;
     var tokenPayload = Map<String, dynamic>.from(tokenJson);
-    if (_tokenExpired(account) && tokenPayload['refresh_token'] != null) {
+    if (_shouldRefreshToken(account, tokenPayload)) {
       final provider = CloudConnectionStore.providers.firstWhere(
         (item) => item.id == providerId,
         orElse: () => CloudProviderDefinition(
@@ -509,6 +509,16 @@ class CloudOAuthService {
     return DateTime.now().toUtc().isAfter(
           expiresAt.subtract(const Duration(minutes: 2)),
         );
+  }
+
+  bool _shouldRefreshToken(
+    CloudAccountInfo account,
+    Map<String, dynamic> tokenPayload,
+  ) {
+    if (tokenPayload['refresh_token'] == null) return false;
+    final raw = account.expiresAtIso;
+    if (raw == null || raw.isEmpty) return true;
+    return _tokenExpired(account);
   }
 
   _OAuthProviderConfig? _oauthConfigFor(CloudProviderDefinition provider) {

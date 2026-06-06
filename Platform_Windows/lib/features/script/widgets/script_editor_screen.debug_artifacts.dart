@@ -32,11 +32,7 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
   }
 
   Future<Directory> _debugArtifactRootDirectory() async {
-    final supportDir = await getApplicationSupportDirectory();
-    return Directory(
-      '${supportDir.path}${Platform.pathSeparator}'
-      'debug_artifacts',
-    );
+    return RuntimeFileStorage.visibleFolder('debug_artifacts');
   }
 
   Future<Directory?> _ensureDebugArtifactDirectory(

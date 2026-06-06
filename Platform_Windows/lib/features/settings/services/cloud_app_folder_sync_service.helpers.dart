@@ -112,11 +112,31 @@ String _driveQueryLiteral(String value) {
 }
 
 String _providerFailure(String prefix, int statusCode, String body) {
+  if (_isCloudAuthFailure(statusCode, body)) {
+    return '$prefix. The cloud account authorization expired or was revoked. '
+        'Reconnect this account, then try sync again.';
+  }
   final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (compact.isEmpty) return '$prefix ($statusCode).';
   final clipped =
       compact.length > 220 ? '${compact.substring(0, 220)}...' : compact;
   return '$prefix ($statusCode): $clipped';
+}
+
+bool _isCloudAuthFailure(int statusCode, String body) {
+  if (statusCode != 401) return false;
+  final lower = body.toLowerCase();
+  return lower.contains('invalid authentication credentials') ||
+      lower.contains('invalid_access_token') ||
+      lower.contains('invalid access token') ||
+      lower.contains('unauthorized') ||
+      lower.contains('expired') ||
+      lower.contains('revoked');
+}
+
+String _cloudAuthFailureMessage() {
+  return 'Cloud account authorization expired or was revoked. '
+      'Reconnect this cloud account, then try sync again.';
 }
 
 String _dropboxProviderFailure(String prefix, int statusCode, String body) {

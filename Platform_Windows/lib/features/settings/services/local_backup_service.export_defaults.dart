@@ -9,7 +9,7 @@ String _applyExportDefaults(
   bool? isRtl,
 }) {
   if (text.trim().isEmpty) return text;
-  final resolvedRtl = isRtl ?? _looksRtl(text);
+  final resolvedRtl = _resolveExportRtl(text, isRtl);
   final resolvedAlign =
       _normalizeTextAlign(textAlign) ?? (resolvedRtl ? 'right' : null);
   final resolvedColor = _metadataTextColor(futureWordColor);
@@ -17,30 +17,43 @@ String _applyExportDefaults(
   final resolvedSize =
       fontSize != null && fontSize > 0 ? fontSize.toStringAsFixed(1) : null;
 
-  final addDirection = resolvedRtl && !_hasDirectionMarkup(text);
-  final addAlign = resolvedAlign != null && !_hasAlignMarkup(text);
-  final addColor = resolvedColor != null &&
-      !_isDefaultReadableTextColor(resolvedColor) &&
-      !_hasColorMarkup(text);
-  final addFont = resolvedFont != null && !_hasFontMarkup(text);
-  final addSize = resolvedSize != null && !_hasSizeMarkup(text);
+  final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  final lines = normalized.split('\n');
+  var changed = false;
+  final exported = lines.map((line) {
+    if (line.trim().isEmpty) return line;
+    final addDirection = resolvedRtl && !_hasDirectionMarkup(line);
+    final addAlign = resolvedAlign != null && !_hasAlignMarkup(line);
+    final addColor = resolvedColor != null &&
+        !_isDefaultReadableTextColor(resolvedColor) &&
+        !_hasColorMarkup(line);
+    final addFont = resolvedFont != null && !_hasFontMarkup(line);
+    final addSize = resolvedSize != null && !_hasSizeMarkup(line);
+    if (!addDirection && !addAlign && !addColor && !addFont && !addSize) {
+      return line;
+    }
+    changed = true;
+    var out = line;
+    if (addColor) out = '[color=#$resolvedColor]$out[/color]';
+    if (addSize) out = '[size=$resolvedSize]$out[/size]';
+    if (addFont) out = '[font=$resolvedFont]$out[/font]';
+    if (addAlign) out = '[align=$resolvedAlign]$out[/align=$resolvedAlign]';
+    if (addDirection) out = '[rtl]$out[/rtl]';
+    return out;
+  }).join('\n');
 
-  if (!addDirection && !addAlign && !addColor && !addFont && !addSize) {
+  return changed ? exported : text;
+}
+
+bool _resolveExportRtl(String text, bool? isRtl) =>
+    isRtl == true || _looksRtl(_directionSource(text));
+
+String _directionSource(String text) {
+  try {
+    return MarkupExportService.toPlainText(text);
+  } catch (_) {
     return text;
   }
-
-  return text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n').map(
-    (line) {
-      if (line.trim().isEmpty) return line;
-      var out = line;
-      if (addColor) out = '[color=#$resolvedColor]$out[/color]';
-      if (addSize) out = '[size=$resolvedSize]$out[/size]';
-      if (addFont) out = '[font=$resolvedFont]$out[/font]';
-      if (addAlign) out = '[align=$resolvedAlign]$out[/align=$resolvedAlign]';
-      if (addDirection) out = '[rtl]$out[/rtl]';
-      return out;
-    },
-  ).join('\n');
 }
 
 bool _hasDirectionMarkup(String text) =>

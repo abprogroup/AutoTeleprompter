@@ -67,6 +67,85 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     return _controllers.map((c) => _stripBookmarkSigns(c.text)).join('\n');
   }
 
+  String _getRefinedFullTextWithExportBookmarkSigns() {
+    _normalizeBookmarkSignsInControllers();
+    final originalTexts = _controllers.map((c) => c.text).toList();
+    final exportLines = originalTexts.map(_stripBookmarkSigns).toList();
+    final insertions = <({int block, int offset})>[];
+    final seen = <String>{};
+
+    void addInsertion(int block, int cleanOffset) {
+      if (block < 0 || block >= exportLines.length) return;
+      final offset = cleanOffset.clamp(0, exportLines[block].length).toInt();
+      final key = '$block:$offset';
+      if (!seen.add(key)) return;
+      insertions.add((block: block, offset: offset));
+    }
+
+    for (var block = 0; block < originalTexts.length; block++) {
+      final text = originalTexts[block];
+      var rawOffset = text.indexOf(_bookmarkSign);
+      while (rawOffset >= 0) {
+        addInsertion(
+          block,
+          _cleanBookmarkExportOffset(
+            originalText: text,
+            rawOffset: rawOffset,
+            cleanLength: exportLines[block].length,
+          ),
+        );
+        rawOffset = text.indexOf(_bookmarkSign, rawOffset + 1);
+      }
+    }
+
+    for (final bookmark in _bookmarks) {
+      final position = _editorPositionForBookmark(bookmark);
+      if (position.block < 0 || position.block >= originalTexts.length) {
+        continue;
+      }
+      addInsertion(
+        position.block,
+        _cleanBookmarkExportOffset(
+          originalText: originalTexts[position.block],
+          rawOffset: position.offset,
+          cleanLength: exportLines[position.block].length,
+        ),
+      );
+    }
+
+    insertions.sort((a, b) {
+      final blockCompare = b.block.compareTo(a.block);
+      if (blockCompare != 0) return blockCompare;
+      return b.offset.compareTo(a.offset);
+    });
+    for (final insertion in insertions) {
+      final line = exportLines[insertion.block];
+      exportLines[insertion.block] = line.substring(0, insertion.offset) +
+          _bookmarkSign +
+          line.substring(insertion.offset);
+    }
+    return exportLines.join('\n');
+  }
+
+  int _cleanBookmarkExportOffset({
+    required String originalText,
+    required int rawOffset,
+    required int cleanLength,
+  }) {
+    final safeRaw = rawOffset.clamp(0, originalText.length).toInt();
+    final cleanText = _stripBookmarkSigns(originalText);
+    final signsBefore = RegExp(RegExp.escape(_bookmarkSign))
+        .allMatches(originalText.substring(0, safeRaw))
+        .length;
+    final cleanRaw = (safeRaw - signsBefore).clamp(0, cleanLength).toInt();
+    final visibleOffset =
+        MarkupDecorationParser.rawToVisibleOffset(cleanText, cleanRaw);
+    return MarkupDecorationParser.visibleToRawOffset(
+      cleanText,
+      visibleOffset,
+    ).clamp(0, cleanLength).toInt();
+  }
+
   // Sync text signs to metadata.
 
   Future<void> _syncBookmarksFromEditorSigns({

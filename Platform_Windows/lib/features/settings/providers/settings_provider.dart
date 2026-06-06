@@ -9,6 +9,7 @@ import '../../script/services/script_project_codec.dart';
 import '../models/app_settings.dart';
 import '../services/cloud_app_folder_sync_service.dart';
 import '../services/cloud_connection_store.dart';
+import '../services/deleted_scripts_service.dart';
 import '../services/cloud_oauth_service.dart';
 import '../services/local_backup_service.dart';
 
@@ -108,6 +109,9 @@ class SettingsNotifier extends Notifier<AppSettings>
       sanitizedRecents,
     );
     final migratedRecents = secureMigration.recentScripts;
+    if (_dedupeRecentMetadataList(migratedRecents)) {
+      needsResave = true;
+    }
     if (secureMigration.needsResave) {
       needsResave = true;
     }
@@ -291,6 +295,7 @@ class SettingsNotifier extends Notifier<AppSettings>
     );
   }
 
+  @override
   Future<void> saveScript(
     String text, {
     String? title,
@@ -308,6 +313,7 @@ class SettingsNotifier extends Notifier<AppSettings>
     int? scriptBgColor,
     int? currentWordColor,
     int? futureWordColor,
+    bool? isRtl,
     String? historyJson,
   }) async {
     final currentTitle = title ?? state.lastScriptTitle;
@@ -336,7 +342,7 @@ class SettingsNotifier extends Notifier<AppSettings>
     }
 
     final recentList = List<String>.from(state.recentScripts);
-    final currentIdentity = _recentIdentityKey(
+    final currentIdentityKeys = _recentIdentityKeys(
       title: currentTitle,
       type: type,
       sourcePath: sourcePath,
@@ -350,7 +356,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         final itemTitle = decoded['title'];
 
         bool isMatch = false;
-        final itemIdentity = _recentIdentityKey(
+        final itemIdentityKeys = _recentIdentityKeys(
           title: itemTitle?.toString(),
           type: decoded['type']?.toString(),
           sourcePath: decoded['sourcePath']?.toString(),
@@ -358,8 +364,8 @@ class SettingsNotifier extends Notifier<AppSettings>
 
         if (sessionId != null && itemSessionId == sessionId) {
           isMatch = true;
-        } else if (currentIdentity.isNotEmpty &&
-            itemIdentity == currentIdentity) {
+        } else if (currentIdentityKeys.isNotEmpty &&
+            itemIdentityKeys.any(currentIdentityKeys.contains)) {
           isMatch = true;
         } else if (sessionId == null && itemTitle == currentTitle) {
           isMatch = true;
@@ -395,6 +401,7 @@ class SettingsNotifier extends Notifier<AppSettings>
           if (futureWordColor != null) {
             styleMap['futureWordColor'] = futureWordColor;
           }
+          if (isRtl != null) styleMap['isRtl'] = isRtl;
 
           if (styleMap.isNotEmpty) decoded['style'] = styleMap;
 
@@ -465,6 +472,7 @@ class SettingsNotifier extends Notifier<AppSettings>
           if (scriptBgColor != null) 'scriptBgColor': scriptBgColor,
           if (currentWordColor != null) 'currentWordColor': currentWordColor,
           if (futureWordColor != null) 'futureWordColor': futureWordColor,
+          if (isRtl != null) 'isRtl': isRtl,
         },
       };
       recentList.insert(0, jsonEncode(newEntry));
@@ -495,6 +503,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         scriptBgColor: scriptBgColor,
         currentWordColor: currentWordColor,
         futureWordColor: futureWordColor,
+        isRtl: isRtl,
         historyJson: historyJson,
       );
     }
@@ -516,6 +525,7 @@ class SettingsNotifier extends Notifier<AppSettings>
     int? scriptBgColor,
     int? currentWordColor,
     int? futureWordColor,
+    bool? isRtl,
     String? historyJson,
   }) async {
     if (text.trim().isEmpty) return;
@@ -544,6 +554,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         fontFamily: fontFamily,
         textAlign: textAlign,
         futureWordColor: futureWordColor,
+        isRtl: isRtl,
         bookmarks: bookmarks,
       );
     } catch (error, stack) {
@@ -574,8 +585,10 @@ class SettingsNotifier extends Notifier<AppSettings>
         fontFamily: fontFamily,
         textAlign: textAlign,
         futureWordColor: futureWordColor,
+        isRtl: isRtl,
         bookmarks: bookmarks,
       );
+      LocalBackupService.validateExport(readable);
       if (readable.readableText.trim().isEmpty) return;
 
       final metadata = ScriptProjectCodec.buildCompanion(
@@ -596,6 +609,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         scriptBgColor: scriptBgColor,
         currentWordColor: currentWordColor,
         futureWordColor: futureWordColor,
+        isRtl: isRtl,
         bookmarks: bookmarks,
       );
       final sync = CloudAppFolderSyncService(oauth: oauth);
@@ -663,7 +677,7 @@ class SettingsNotifier extends Notifier<AppSettings>
     final newData = await _secureIncomingRecentMetadata(metadataJson);
     final String? newSessionId = newData['sessionId'] as String?;
     final String? newTitle = newData['title'] as String?;
-    final String newIdentity = _recentIdentityKey(
+    final List<String> newIdentityKeys = _recentIdentityKeys(
       title: newTitle,
       type: newData['type']?.toString(),
       sourcePath: newData['sourcePath']?.toString(),
@@ -676,13 +690,13 @@ class SettingsNotifier extends Notifier<AppSettings>
             newSessionId != null && decoded['sessionId'] == newSessionId;
         final bool titleMatch =
             newTitle != null && decoded['title'] == newTitle;
-        final identityMatch = newIdentity.isNotEmpty &&
-            _recentIdentityKey(
-                  title: decoded['title']?.toString(),
-                  type: decoded['type']?.toString(),
-                  sourcePath: decoded['sourcePath']?.toString(),
-                ) ==
-                newIdentity;
+        final itemIdentityKeys = _recentIdentityKeys(
+          title: decoded['title']?.toString(),
+          type: decoded['type']?.toString(),
+          sourcePath: decoded['sourcePath']?.toString(),
+        );
+        final identityMatch = newIdentityKeys.isNotEmpty &&
+            itemIdentityKeys.any(newIdentityKeys.contains);
         return idMatch || identityMatch || titleMatch;
       } catch (error) {
         LightweightDiagnostics.instance.record(

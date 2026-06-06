@@ -7,7 +7,7 @@ import 'markup_export_service.dart';
 class OdtService {
   OdtService._();
 
-  static List<int> generate(String text) {
+  static List<int> generate(String text, {bool? defaultRtl}) {
     final archive = Archive();
     final mimetype = utf8.encode(
       'application/vnd.oasis.opendocument.text',
@@ -19,25 +19,32 @@ class OdtService {
       ArchiveFile('META-INF/manifest.xml', manifest.length, manifest),
     );
 
-    final content = utf8.encode(_contentXml(text));
+    final content = utf8.encode(_contentXml(text, defaultRtl: defaultRtl));
     archive.addFile(ArchiveFile('content.xml', content.length, content));
     return ZipEncoder().encode(archive)!;
   }
 
-  static String _contentXml(String text) {
+  static String _contentXml(String text, {bool? defaultRtl}) {
     final styleBuffer = StringBuffer();
     final bodyBuffer = StringBuffer();
     var styleIndex = 0;
-    for (final paragraph in MarkupExportService.parse(text)) {
-      final paragraphStyle = paragraph.isRtl ? 'P_RTL' : 'P_LTR';
+    for (final paragraph in MarkupExportService.parse(
+      text,
+      defaultRtl: defaultRtl,
+    )) {
+      final paragraphStyle = _paragraphStyleName(paragraph);
       bodyBuffer.write('<text:p text:style-name="$paragraphStyle">');
-      for (final run in paragraph.runs) {
-        if (run.text.isEmpty) continue;
+      for (final directionalRun in MarkupExportService.documentRuns(
+        paragraph,
+      )) {
+        if (directionalRun.text.isEmpty) continue;
         final styleName = 'T${styleIndex++}';
-        styleBuffer.write(_textStyleXml(styleName, run));
+        styleBuffer.write(
+          _textStyleXml(styleName, directionalRun.run, directionalRun.isRtl),
+        );
         bodyBuffer.write(
           '<text:span text:style-name="$styleName">'
-          '${_escapeXml(run.text)}'
+          '${_escapeXml(directionalRun.text)}'
           '</text:span>',
         );
       }
@@ -53,22 +60,42 @@ class OdtService {
         'xmlns:style-compat="urn:oasis:names:tc:opendocument:xmlns:style:1.0" '
         'office:version="1.2">'
         '<office:automatic-styles>'
-        '<style:style style:name="P_RTL" style:family="paragraph">'
-        '<style:paragraph-properties fo:text-align="right" '
-        'style:writing-mode="rl-tb"/>'
-        '</style:style>'
-        '<style:style style:name="P_LTR" style:family="paragraph">'
-        '<style:paragraph-properties fo:text-align="left" '
-        'style:writing-mode="lr-tb"/>'
-        '</style:style>'
+        '${_paragraphStyleXml('P_RTL_LEFT', 'left', true)}'
+        '${_paragraphStyleXml('P_RTL_CENTER', 'center', true)}'
+        '${_paragraphStyleXml('P_RTL_RIGHT', 'right', true)}'
+        '${_paragraphStyleXml('P_LTR_LEFT', 'left', false)}'
+        '${_paragraphStyleXml('P_LTR_CENTER', 'center', false)}'
+        '${_paragraphStyleXml('P_LTR_RIGHT', 'right', false)}'
         '$styleBuffer'
         '</office:automatic-styles>'
         '<office:body><office:text>$bodyBuffer</office:text></office:body>'
         '</office:document-content>';
   }
 
-  static String _textStyleXml(String name, ExportTextRun run) {
+  static String _paragraphStyleName(ExportParagraph paragraph) {
+    final direction = paragraph.isRtl ? 'RTL' : 'LTR';
+    final align = _paragraphAlign(paragraph).toUpperCase();
+    return 'P_${direction}_$align';
+  }
+
+  static String _paragraphAlign(ExportParagraph paragraph) {
+    if (paragraph.hasExplicitAlign) return paragraph.align;
+    return paragraph.isRtl ? 'right' : 'left';
+  }
+
+  static String _paragraphStyleXml(String name, String align, bool rtl) {
+    final mode = rtl ? 'rl-tb' : 'lr-tb';
+    final direction = rtl ? 'rtl' : 'ltr';
+    return '<style:style style:name="$name" style:family="paragraph">'
+        '<style:paragraph-properties fo:text-align="$align" '
+        'style:writing-mode="$mode" style:direction="$direction"/>'
+        '</style:style>';
+  }
+
+  static String _textStyleXml(String name, ExportTextRun run, bool rtl) {
     final props = <String>[];
+    props.add('style:writing-mode="${rtl ? 'rl-tb' : 'lr-tb'}"');
+    props.add('style:direction="${rtl ? 'rtl' : 'ltr'}"');
     if (run.isBold) props.add('fo:font-weight="bold"');
     if (run.isItalic) props.add('fo:font-style="italic"');
     if (run.isUnderline) {
@@ -77,11 +104,15 @@ class OdtService {
         ..add('style:text-underline-width="auto"')
         ..add('style:text-underline-color="font-color"');
     }
-    if (run.fontSize != null) {
-      props.add('fo:font-size="${run.fontSize!.toStringAsFixed(1)}pt"');
-    }
+    final fontSize = (run.fontSize ?? 18).toStringAsFixed(1);
+    props.add('fo:font-size="${fontSize}pt"');
+    props.add('style:font-size-asian="${fontSize}pt"');
+    props.add('style:font-size-complex="${fontSize}pt"');
     if (run.fontFamily != null) {
-      props.add('fo:font-family="${_escapeXml(run.fontFamily!)}"');
+      final fontFamily = _escapeXml(run.fontFamily!);
+      props.add('fo:font-family="$fontFamily"');
+      props.add('style:font-family-asian="$fontFamily"');
+      props.add('style:font-family-complex="$fontFamily"');
     }
     final color = _styleColor(run.color, omitWhite: true);
     if (color != null) props.add('fo:color="#$color"');
@@ -109,10 +140,23 @@ class OdtService {
       'manifest:media-type="text/xml"/>'
       '</manifest:manifest>';
 
-  static String _escapeXml(String value) => value
+  static String _escapeXml(String value) => _sanitizeXmlText(value)
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&apos;');
+
+  static String _sanitizeXmlText(String value) {
+    return String.fromCharCodes(
+      value.runes.where((rune) {
+        return rune == 0x09 ||
+            rune == 0x0A ||
+            rune == 0x0D ||
+            (rune >= 0x20 && rune <= 0xD7FF) ||
+            (rune >= 0xE000 && rune <= 0xFFFD) ||
+            (rune >= 0x10000 && rune <= 0x10FFFF);
+      }),
+    );
+  }
 }

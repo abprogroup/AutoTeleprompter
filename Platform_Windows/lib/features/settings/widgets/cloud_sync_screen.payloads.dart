@@ -4,8 +4,11 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
   Future<List<_CloudScriptPayload>> _scriptPayloadsForSync() async {
     final scripts = <_CloudScriptPayload>[];
     final seen = <String>{};
+    final recentItems = ref.read(settingsProvider).recentScripts;
     final active = ref.read(scriptProvider);
-    if (active != null && active.rawText.trim().isNotEmpty) {
+    if (active != null &&
+        active.rawText.trim().isNotEmpty &&
+        _activeScriptStillInRecentActivity(active, recentItems)) {
       _addPayload(
         scripts,
         seen,
@@ -37,7 +40,7 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
     }
 
     final secureStore = SecureScriptStore();
-    for (final item in ref.read(settingsProvider).recentScripts) {
+    for (final item in recentItems) {
       try {
         final meta = Map<String, dynamic>.from(jsonDecode(item));
         final data = await secureStore.readFromMetadata(meta);
@@ -89,10 +92,61 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
     return scripts;
   }
 
+  bool _activeScriptStillInRecentActivity(
+    Script active,
+    List<String> recentItems,
+  ) {
+    final activeSessionId = active.sessionId.trim();
+    final activeRecordId = activeSessionId;
+    final activePath = _payloadNormalizePath(active.sourcePath);
+    final activeTitle = _payloadNormalizeTitle(active.title);
+    final activeType = active.sourceType.trim().toLowerCase();
+    for (final item in recentItems) {
+      try {
+        final meta = Map<String, dynamic>.from(jsonDecode(item));
+        final recordId = SecureScriptStore.recordIdFromMetadata(meta) ?? '';
+        final sessionId = meta['sessionId']?.toString().trim() ?? '';
+        if (activeRecordId.isNotEmpty &&
+            (recordId == activeRecordId || sessionId == activeRecordId)) {
+          return true;
+        }
+        if (activeSessionId.isNotEmpty && sessionId == activeSessionId) {
+          return true;
+        }
+        final recentPath = _payloadNormalizePath(
+          meta['sourcePath']?.toString(),
+        );
+        if (activePath.isNotEmpty &&
+            recentPath.isNotEmpty &&
+            activePath == recentPath) {
+          return true;
+        }
+        final recentTitle = _payloadNormalizeTitle(
+          meta['title']?.toString() ?? '',
+        );
+        final recentType = meta['type']?.toString().trim().toLowerCase() ?? '';
+        if (activeTitle.isNotEmpty &&
+            activeTitle == recentTitle &&
+            (activeType.isEmpty ||
+                recentType.isEmpty ||
+                activeType == recentType)) {
+          return true;
+        }
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'cloud.activeRecentMatch',
+        );
+      }
+    }
+    return false;
+  }
+
   Future<ScriptBackupExport> _readableExportFor(
     _CloudScriptPayload script,
-  ) {
-    return LocalBackupService.buildScriptExportAsync(
+  ) async {
+    final export = await LocalBackupService.buildScriptExportAsync(
       title: script.title,
       text: script.text,
       sourceType: script.sourceType,
@@ -104,6 +158,8 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
       isRtl: script.isRtl,
       bookmarks: script.bookmarks,
     );
+    LocalBackupService.validateExport(export);
+    return export;
   }
 
   ScriptProjectExport _metadataExportFor(
@@ -157,7 +213,26 @@ extension _CloudSyncScreenPayloads on _CloudSyncScreenState {
     Set<String> seen,
     _CloudScriptPayload payload,
   ) {
-    final key = payload.identity.isNotEmpty ? payload.identity : payload.title;
+    final key = _payloadIdentityKey(payload);
     if (seen.add(key)) scripts.add(payload);
+  }
+
+  String _payloadIdentityKey(_CloudScriptPayload payload) {
+    final path = payload.sourcePath?.trim();
+    if (path != null && path.isNotEmpty) {
+      return 'path:${_payloadNormalizePath(path)}';
+    }
+    final title = _payloadNormalizeTitle(payload.title);
+    final type = (payload.sourceType ?? '').trim().toLowerCase();
+    if (title.isNotEmpty) return 'title:$type:$title';
+    return payload.identity.isNotEmpty ? payload.identity : 'untitled';
+  }
+
+  String _payloadNormalizePath(String? path) {
+    return (path ?? '').trim().replaceAll('/', '\\').toLowerCase();
+  }
+
+  String _payloadNormalizeTitle(String title) {
+    return title.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
   }
 }

@@ -130,6 +130,7 @@ class _CloudActionBar extends StatelessWidget {
 
 class _LocalBackupCard extends StatelessWidget {
   final CloudProviderConnection connection;
+  final bool enabled;
   final VoidCallback onChoose;
   final VoidCallback? onOpen;
   final VoidCallback? onForget;
@@ -138,6 +139,7 @@ class _LocalBackupCard extends StatelessWidget {
 
   const _LocalBackupCard({
     required this.connection,
+    required this.enabled,
     required this.onChoose,
     required this.onOpen,
     required this.onForget,
@@ -148,6 +150,7 @@ class _LocalBackupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final connected = connection.isConnected;
+    final effectiveConnected = enabled && connected;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -179,10 +182,12 @@ class _LocalBackupCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  connected
-                      ? 'Folder: ${connection.folderPath}'
-                      : 'Choose one local folder for free backup and provider '
-                          'desktop sync folders.',
+                  !enabled
+                      ? 'Connect a Pro account to use Local Backup.'
+                      : connected
+                          ? 'Folder: ${connection.folderPath}'
+                          : 'Choose one local folder for Pro backup and provider '
+                              'desktop sync folders.',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -197,7 +202,7 @@ class _LocalBackupCard extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     ElevatedButton.icon(
-                      onPressed: onChoose,
+                      onPressed: enabled ? onChoose : null,
                       icon: const Icon(Icons.folder_open_outlined),
                       label: Text(
                         connected ? 'Change folder' : 'Choose folder',
@@ -208,22 +213,22 @@ class _LocalBackupCard extends StatelessWidget {
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: onOpen,
+                      onPressed: enabled ? onOpen : null,
                       icon: const Icon(Icons.open_in_new_rounded, size: 18),
                       label: const Text('Open folder'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: onForget,
+                      onPressed: enabled ? onForget : null,
                       icon: const Icon(Icons.link_off_rounded, size: 18),
                       label: const Text('Forget folder'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: onUpload,
+                      onPressed: enabled ? onUpload : null,
                       icon: const Icon(Icons.cloud_upload_outlined, size: 18),
                       label: const Text('Upload script'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: onList,
+                      onPressed: enabled ? onList : null,
                       icon: const Icon(Icons.cloud_sync_outlined, size: 18),
                       label: const Text('Synced scripts'),
                     ),
@@ -232,9 +237,134 @@ class _LocalBackupCard extends StatelessWidget {
               ],
             ),
           ),
-          if (connected)
+          if (effectiveConnected)
             const _StatusPill(
               label: 'LINKED',
+              color: Colors.greenAccent,
+              background: Colors.green,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeletedScriptsFolderCard extends StatelessWidget {
+  final bool enabled;
+  final bool useCustomFolder;
+  final String folderPath;
+  final ValueChanged<bool> onToggleCustomFolder;
+  final VoidCallback onChoose;
+  final VoidCallback? onOpen;
+  final VoidCallback? onForget;
+
+  const _DeletedScriptsFolderCard({
+    required this.enabled,
+    required this.useCustomFolder,
+    required this.folderPath,
+    required this.onToggleCustomFolder,
+    required this.onChoose,
+    required this.onOpen,
+    required this.onForget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFolder = folderPath.trim().isNotEmpty;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151515),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: .06)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.restore_from_trash_outlined,
+            color: Color(0xFFFFBF00),
+            size: 28,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Deleted Scripts folder',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  !enabled
+                      ? 'Connect a Pro account to view or manage deleted-script backups.'
+                      : hasFolder
+                          ? 'Folder: $folderPath'
+                          : 'Uses Local Backup/Deleted Scripts unless you choose a separate folder.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  value: useCustomFolder,
+                  onChanged: enabled
+                      ? (value) => onToggleCustomFolder(value ?? false)
+                      : null,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: const Color(0xFFFFBF00),
+                  checkColor: Colors.black,
+                  title: const Text(
+                    'Select a different folder for deleted scripts',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ),
+                if (useCustomFolder) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: enabled ? onChoose : null,
+                        icon: const Icon(Icons.folder_open_outlined),
+                        label:
+                            Text(hasFolder ? 'Change folder' : 'Choose folder'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFBF00),
+                          foregroundColor: Colors.black,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: enabled ? onOpen : null,
+                        icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                        label: const Text('Open folder'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: enabled ? onForget : null,
+                        icon: const Icon(Icons.link_off_rounded, size: 18),
+                        label: const Text('Forget folder'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (enabled && hasFolder)
+            _StatusPill(
+              label: useCustomFolder ? 'CUSTOM' : 'DEFAULT',
               color: Colors.greenAccent,
               background: Colors.green,
             ),
@@ -468,6 +598,7 @@ class _ManagedCloudCard extends StatelessWidget {
 
 class _AutomationCard extends StatelessWidget {
   final bool anyConnected;
+  final bool premiumUnlocked;
   final bool cloudAccountsConnected;
   final bool autoSyncScripts;
   final bool recordingAutoBackup;
@@ -476,6 +607,7 @@ class _AutomationCard extends StatelessWidget {
 
   const _AutomationCard({
     required this.anyConnected,
+    required this.premiumUnlocked,
     required this.cloudAccountsConnected,
     required this.autoSyncScripts,
     required this.recordingAutoBackup,
@@ -498,20 +630,24 @@ class _AutomationCard extends StatelessWidget {
         children: [
           _AutomationRow(
             title: 'Auto-sync on save',
-            subtitle: anyConnected
-                ? 'Backs up changed scripts every 30 seconds and before reading modes.'
-                : 'Connect an account or choose a Local Backup folder first.',
-            enabled: anyConnected,
+            subtitle: !premiumUnlocked
+                ? 'Connect a Pro account to use script auto-sync.'
+                : anyConnected
+                    ? 'Backs up changed scripts every 30 seconds and before reading modes.'
+                    : 'Connect an account or choose a Local Backup folder first.',
+            enabled: premiumUnlocked && anyConnected,
             value: autoSyncScripts,
             onChanged: onAutoSyncScriptsChanged,
           ),
           const Divider(color: Colors.white12),
           _AutomationRow(
             title: 'Upload recordings automatically',
-            subtitle: cloudAccountsConnected
-                ? 'Uploads completed MP4/WAV recordings to connected cloud accounts.'
-                : 'Connect Google Drive or Dropbox before uploading recordings.',
-            enabled: cloudAccountsConnected,
+            subtitle: !premiumUnlocked
+                ? 'Connect a Pro account to upload recordings automatically.'
+                : cloudAccountsConnected
+                    ? 'Uploads completed MP4/WAV recordings to connected cloud accounts.'
+                    : 'Connect Google Drive or Dropbox before uploading recordings.',
+            enabled: premiumUnlocked && cloudAccountsConnected,
             value: recordingAutoBackup,
             onChanged: onRecordingAutoBackupChanged,
           ),

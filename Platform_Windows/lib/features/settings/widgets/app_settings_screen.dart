@@ -20,6 +20,7 @@ import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/update_check_service.dart';
 import '../services/update_download_service.dart';
+import '../services/update_install_service.dart';
 import 'cloud_sync_screen.dart';
 
 part 'app_settings_screen.tiles.dart';

@@ -320,6 +320,14 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                 if (_activeSuite != EditorSuite.none) {
                                   _beginSuiteHistoryTransaction(_activeSuite);
                                 }
+                                WidgetsBinding.instance
+                                    .addPostFrameCallback((_) {
+                                  if (!mounted) return;
+                                  for (final controller in _controllers) {
+                                    controller.refresh();
+                                  }
+                                  _overlayKey.currentState?.refreshPositions();
+                                });
                                 if (hadActiveSelection) {
                                   WidgetsBinding.instance
                                       .addPostFrameCallback((_) {

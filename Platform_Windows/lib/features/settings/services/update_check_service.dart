@@ -106,6 +106,15 @@ class UpdateCheckService {
     }
 
     final channelEntry = _channelEntry(decoded, channel);
+    if (channelEntry == null) {
+      return UpdateCheckResult(
+        status: UpdateCheckStatus.notConfigured,
+        channel: channel,
+        currentVersion: autoTeleprompterAppVersion,
+        message:
+            'No $channel update channel is published in this manifest yet.',
+      );
+    }
     final latestVersion = _stringValue(channelEntry, 'version');
     final downloadUrl = _stringValue(channelEntry, 'url') ??
         _stringValue(channelEntry, 'downloadUrl');
@@ -147,7 +156,7 @@ class UpdateCheckService {
     );
   }
 
-  Map<String, dynamic> _channelEntry(
+  Map<String, dynamic>? _channelEntry(
     Map<String, dynamic> root,
     String channel,
   ) {
@@ -155,7 +164,7 @@ class UpdateCheckService {
     final raw =
         channels is Map<String, dynamic> ? channels[channel] : root[channel];
     if (raw is Map<String, dynamic>) return raw;
-    throw FormatException('Manifest is missing a $channel channel object.');
+    return null;
   }
 
   static String _normalizeChannel(String channel) {

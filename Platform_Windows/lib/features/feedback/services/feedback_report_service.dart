@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
-
+import '../../../core/services/runtime_file_storage.dart';
 import '../../../core/security/encrypted_file_store.dart';
 import 'lightweight_diagnostics.dart';
 
@@ -358,11 +357,12 @@ class FeedbackReportService {
 
   Future<Directory> _ensureOutboxDirectory() async {
     final outboxDirectory = _outboxDirectory;
-    final base = outboxDirectory == null
-        ? await getApplicationSupportDirectory()
-        : await outboxDirectory();
-    final dir =
-        Directory('${base.path}${Platform.pathSeparator}feedback_outbox');
+    final dir = outboxDirectory == null
+        ? await RuntimeFileStorage.visibleFolder('feedback_outbox')
+        : Directory(
+            '${(await outboxDirectory()).path}${Platform.pathSeparator}'
+            'feedback_outbox',
+          );
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -491,7 +491,8 @@ class _FeedbackHttpResponse {
     final trimmed = body.trim();
     if (trimmed.isEmpty) return null;
     final decoded = _decodedBodyMap(trimmed);
-    final error = decoded == null ? null : decoded['error'] ?? decoded['message'];
+    final error =
+        decoded == null ? null : decoded['error'] ?? decoded['message'];
     if (error != null) return error.toString();
     if (isOk) return 'unexpected response from feedback inbox';
     return null;

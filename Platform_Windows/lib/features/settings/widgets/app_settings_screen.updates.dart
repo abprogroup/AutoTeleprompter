@@ -3,7 +3,10 @@ part of 'app_settings_screen.dart';
 extension _AppSettingsUpdates on _AppSettingsScreenState {
   List<Widget> _updatesSection(AppSettings settings) {
     final auth = ref.watch(authProvider);
-    final showInternal = auth.isAdmin && auth.hasPremiumAccess;
+    final adminUpdateConfigured =
+        autoTeleprompterAdminEmail.trim().isNotEmpty &&
+            autoTeleprompterAdminCodeHash.trim().isNotEmpty;
+    final showInternal = auth.isAdmin && adminUpdateConfigured;
     final effectiveChannel = _effectiveUpdateChannel(settings.updateChannel);
     final choices = <_SettingsChoice<String>>[
       const _SettingsChoice(
@@ -29,6 +32,15 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
         choices: choices,
         onChanged: ref.read(settingsProvider.notifier).setUpdateChannel,
       ),
+      if (auth.isAdmin && !adminUpdateConfigured) ...[
+        const SizedBox(height: 8),
+        const _SettingsTile(
+          icon: Icons.admin_panel_settings_outlined,
+          title: 'Internal channel not configured',
+          subtitle:
+              'Admin update builds need admin email and code hash defines.',
+        ),
+      ],
       const SizedBox(height: 8),
       _SettingsSwitchTile(
         icon: Icons.update_rounded,
@@ -131,7 +143,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
                 unawaited(_downloadUpdatePackage(result));
               },
               icon: const Icon(Icons.download_rounded, size: 18),
-              label: const Text('Download update'),
+              label: const Text('Install update'),
             ),
         ],
       ),
@@ -146,11 +158,14 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
     );
     try {
       final file = await UpdateDownloadService().download(result);
-      await Process.run('explorer.exe', ['/select,${file.path}']);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update downloaded: ${file.path}')),
+        const SnackBar(
+          content: Text('Installing update. AutoTeleprompter will restart.'),
+        ),
       );
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await UpdateInstallService().installDownloadedUpdate(file, result);
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,
@@ -159,7 +174,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update download failed: $error')),
+        SnackBar(content: Text('Update install failed: $error')),
       );
     } finally {
       _setDownloadingUpdate(false);
@@ -169,7 +184,10 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
   String _effectiveUpdateChannel(String channel) {
     if (channel != AppSettings.updateChannelInternal) return channel;
     final auth = ref.read(authProvider);
-    return auth.isAdmin && auth.hasPremiumAccess
+    final adminUpdateConfigured =
+        autoTeleprompterAdminEmail.trim().isNotEmpty &&
+            autoTeleprompterAdminCodeHash.trim().isNotEmpty;
+    return auth.isAdmin && adminUpdateConfigured
         ? AppSettings.updateChannelInternal
         : AppSettings.updateChannelStable;
   }

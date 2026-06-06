@@ -12,10 +12,22 @@ Future<ScriptDeleteChoice?> showScriptDeleteDialog(
   BuildContext context, {
   required String title,
   String? sourcePath,
+  List<String>? sourcePaths,
 }) async {
-  final trimmedPath = sourcePath?.trim() ?? '';
-  final canDeleteSource =
-      trimmedPath.isNotEmpty && await File(trimmedPath).exists();
+  final candidates = <String>[
+    if (sourcePath != null) sourcePath,
+    ...?sourcePaths,
+  ];
+  final linkedFiles = <String>[];
+  final seenPaths = <String>{};
+  for (final candidate in candidates) {
+    final trimmed = candidate.trim();
+    if (trimmed.isEmpty) continue;
+    final key = trimmed.replaceAll('/', '\\').toLowerCase();
+    if (!seenPaths.add(key)) continue;
+    if (await File(trimmed).exists()) linkedFiles.add(trimmed);
+  }
+  final canDeleteSource = linkedFiles.isNotEmpty;
   var deleteSourceFile = false;
 
   if (!context.mounted) return null;
@@ -75,7 +87,9 @@ Future<ScriptDeleteChoice?> showScriptDeleteDialog(
               ),
               subtitle: Text(
                 canDeleteSource
-                    ? trimmedPath
+                    ? linkedFiles.length == 1
+                        ? linkedFiles.first
+                        : '${linkedFiles.length} linked source files will be deleted from their folders.'
                     : 'No original folder file is linked to this script.',
                 style: const TextStyle(color: Colors.white38, fontSize: 12),
               ),

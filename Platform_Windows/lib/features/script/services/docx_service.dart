@@ -58,6 +58,7 @@ class DocxService {
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
       '<w:defaultTabStop w:val="720"/>'
+      '<w:themeFontLang w:val="en-US" w:bidi="he-IL"/>'
       '<w:compat/>'
       '</w:settings>';
 
@@ -69,7 +70,7 @@ class DocxService {
       '</Properties>';
 
   /// Converts internal markup to styled DOCX bytes.
-  static List<int> generate(String text) {
+  static List<int> generate(String text, {bool? defaultRtl}) {
     final archive = Archive();
     final contentTypeBytes = utf8.encode(_contentTypes);
     archive.addFile(ArchiveFile(
@@ -90,7 +91,10 @@ class DocxService {
     _addTextFile(archive, 'docProps/core.xml', _coreXml());
 
     final buf = StringBuffer(_documentXmlRel);
-    for (final paragraph in MarkupExportService.parse(text)) {
+    for (final paragraph in MarkupExportService.parse(
+      text,
+      defaultRtl: defaultRtl,
+    )) {
       if (paragraph.isEmpty) {
         buf.write('<w:p/>');
         continue;
@@ -100,9 +104,22 @@ class DocxService {
       buf.write('<w:pPr>');
       if (paragraph.isRtl) buf.write('<w:bidi/>');
       buf.write('<w:jc w:val="${_docxAlign(paragraph)}"/>');
+      if (paragraph.isRtl) {
+        buf.write(
+          '<w:rPr><w:rtl/><w:lang w:val="he-IL" '
+          'w:bidi="he-IL"/></w:rPr>',
+        );
+      }
       buf.write('</w:pPr>');
-      for (final run in paragraph.runs) {
-        _writeRun(run, buf, paragraph.isRtl);
+      for (final directionalRun in MarkupExportService.documentRuns(
+        paragraph,
+      )) {
+        _writeRun(
+          directionalRun.run,
+          directionalRun.text,
+          buf,
+          directionalRun.isRtl,
+        );
       }
       buf.write('</w:p>');
     }
@@ -118,8 +135,13 @@ class DocxService {
     return ZipEncoder().encode(archive)!;
   }
 
-  static void _writeRun(ExportTextRun run, StringBuffer buf, bool rtl) {
-    if (run.text.isEmpty) return;
+  static void _writeRun(
+    ExportTextRun run,
+    String text,
+    StringBuffer buf,
+    bool rtl,
+  ) {
+    if (text.isEmpty) return;
     buf.write('<w:r>');
     buf.write('<w:rPr>');
     if (run.isBold) buf.write('<w:b/>');
@@ -137,18 +159,19 @@ class DocxService {
         'w:fill="${run.backgroundColor}"/>',
       );
     }
-    if (run.fontSize != null) {
-      final halfPoints = (run.fontSize! * 2).round();
-      buf.write('<w:sz w:val="$halfPoints"/>');
-      buf.write('<w:szCs w:val="$halfPoints"/>');
-    }
+    final halfPoints = ((run.fontSize ?? 18) * 2).round();
+    buf.write('<w:sz w:val="$halfPoints"/>');
+    buf.write('<w:szCs w:val="$halfPoints"/>');
     if (run.fontFamily != null) {
       final font = _escapeXml(run.fontFamily!);
-      buf.write('<w:rFonts w:ascii="$font" w:hAnsi="$font" w:cs="$font"/>');
+      buf.write(
+        '<w:rFonts w:ascii="$font" w:hAnsi="$font" '
+        'w:cs="$font" w:hint="cs"/>',
+      );
     }
-    if (rtl) buf.write('<w:lang w:bidi="he-IL"/>');
+    if (rtl) buf.write('<w:lang w:val="he-IL" w:bidi="he-IL"/>');
     buf.write('</w:rPr>');
-    buf.write('<w:t xml:space="preserve">${_escapeXml(run.text)}</w:t>');
+    buf.write('<w:t xml:space="preserve">${_escapeXml(text)}</w:t>');
     buf.write('</w:r>');
   }
 
@@ -167,12 +190,25 @@ class DocxService {
   static bool _isDefaultDisplayWhite(String? hex) =>
       hex != null && hex.toUpperCase() == 'FFFFFF';
 
-  static String _escapeXml(String s) => s
+  static String _escapeXml(String s) => _sanitizeXmlText(s)
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&apos;');
+
+  static String _sanitizeXmlText(String value) {
+    return String.fromCharCodes(
+      value.runes.where((rune) {
+        return rune == 0x09 ||
+            rune == 0x0A ||
+            rune == 0x0D ||
+            (rune >= 0x20 && rune <= 0xD7FF) ||
+            (rune >= 0xE000 && rune <= 0xFFFD) ||
+            (rune >= 0x10000 && rune <= 0x10FFFF);
+      }),
+    );
+  }
 
   static void _addTextFile(Archive archive, String path, String contents) {
     final bytes = utf8.encode(contents);

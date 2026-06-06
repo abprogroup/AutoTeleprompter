@@ -8,6 +8,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/security/secure_script_store.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../script/models/script.dart';
 import '../../script/providers/script_provider.dart';
 import '../../script/services/script_bookmark_service.dart';
 import '../../script/services/script_project_codec.dart';
@@ -15,10 +17,16 @@ import '../providers/settings_provider.dart';
 import '../services/cloud_app_folder_sync_service.dart';
 import '../services/cloud_connection_store.dart';
 import '../services/cloud_oauth_service.dart';
+import '../services/deleted_scripts_service.dart';
 import '../services/local_backup_service.dart';
 
 part 'cloud_sync_screen.actions.dart';
+part 'cloud_sync_screen.deleted_actions.dart';
+part 'cloud_sync_screen.folder_moves.dart';
+part 'cloud_sync_screen.local_backup_dialogs.dart';
+part 'cloud_sync_screen.managed_sync.dart';
 part 'cloud_sync_screen.payloads.dart';
+part 'cloud_sync_screen.synced_scripts_dialog.dart';
 part 'cloud_sync_screen.widgets.dart';
 
 class CloudSyncScreen extends ConsumerStatefulWidget {
@@ -41,6 +49,8 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   List<CloudProviderConnection> _connections = const [];
   Map<String, CloudAccountInfo> _accounts = const {};
   CloudProviderConnection? _localBackup;
+  bool _deletedFolderOverride = false;
+  String _deletedFolderPath = '';
   bool _loading = true;
   bool _syncingScripts = false;
 
@@ -53,11 +63,16 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   Future<void> _loadConnections() async {
     final connections = await _store.loadConnections();
     final localBackup = await _store.loadLocalBackupConnection();
+    final deletedFolderOverride =
+        await _store.loadDeletedScriptsCustomFolderEnabled();
+    final deletedFolderPath = await _store.loadDeletedScriptsCustomFolderPath();
     final accounts = await _oauth.loadAccounts();
     if (!mounted) return;
     setState(() {
       _connections = connections;
       _localBackup = localBackup;
+      _deletedFolderOverride = deletedFolderOverride;
+      _deletedFolderPath = deletedFolderPath;
       _accounts = accounts;
       _loading = false;
     });
@@ -66,9 +81,15 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
+    final auth = ref.watch(authProvider);
+    final premiumUnlocked = auth.hasPremiumAccess;
     final anyConnected =
         (_localBackup?.isConnected ?? false) || _accounts.isNotEmpty;
-    final body = _buildCloudManagementBody(anyConnected, settings);
+    final body = _buildCloudManagementBody(
+      anyConnected,
+      settings,
+      premiumUnlocked,
+    );
 
     if (widget.embedded) return body;
 
@@ -98,7 +119,11 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
     );
   }
 
-  Widget _buildCloudManagementBody(bool anyConnected, AppSettings settings) {
+  Widget _buildCloudManagementBody(
+    bool anyConnected,
+    AppSettings settings,
+    bool premiumUnlocked,
+  ) {
     final localBackup = _localBackup ??
         const CloudProviderConnection(
           provider: CloudConnectionStore.localBackupProvider,
@@ -120,7 +145,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           const SizedBox(height: 8),
           const Text(
             'Connect Google Drive or Dropbox accounts for online '
-            'sync. Use Local Backup once for free local folder backup, including '
+            'sync. Use Local Backup for Pro local folder backup, including '
             'folders already synced by desktop cloud apps.',
             style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
@@ -128,7 +153,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           const _CloudDisclosureNote(),
           const SizedBox(height: 16),
           _CloudActionBar(
-            enabled: anyConnected && !_syncingScripts,
+            enabled: premiumUnlocked && anyConnected && !_syncingScripts,
             syncing: _syncingScripts,
             onSyncScripts: _syncAllScripts,
           ),
@@ -137,6 +162,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           const SizedBox(height: 12),
           _LocalBackupCard(
             connection: localBackup,
+            enabled: premiumUnlocked,
             onChoose: _chooseLocalBackupFolder,
             onOpen: localBackup.isConnected
                 ? () => _openFolder(localBackup.folderPath)
@@ -145,6 +171,20 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
             onUpload:
                 localBackup.isConnected ? _uploadLocalBackupScripts : null,
             onList: localBackup.isConnected ? _showLocalBackupScripts : null,
+          ),
+          const SizedBox(height: 12),
+          _DeletedScriptsFolderCard(
+            enabled: premiumUnlocked,
+            useCustomFolder: _deletedFolderOverride,
+            folderPath: _resolvedDeletedFolderLabel(localBackup),
+            onToggleCustomFolder: _setDeletedFolderOverride,
+            onChoose: _chooseDeletedScriptsFolder,
+            onOpen: _deletedFolderPath.trim().isNotEmpty
+                ? () => _openFolder(_deletedFolderPath)
+                : null,
+            onForget: _deletedFolderPath.trim().isNotEmpty
+                ? _forgetDeletedScriptsFolder
+                : null,
           ),
           const SizedBox(height: 24),
           const _SectionLabel('PERSONAL CLOUD STORAGE'),
@@ -161,18 +201,20 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
               _CloudOption(
                 connection: connection,
                 account: _accounts[connection.provider.id],
-                onConnectAccount:
-                    _providerSupportsAccount(connection.provider.id)
-                        ? () => _connectProviderAccount(connection.provider)
-                        : null,
-                onUploadAccount: _accounts.containsKey(connection.provider.id)
+                onConnectAccount: premiumUnlocked &&
+                        _providerSupportsAccount(connection.provider.id)
+                    ? () => _connectProviderAccount(connection.provider)
+                    : null,
+                onUploadAccount: premiumUnlocked &&
+                        _accounts.containsKey(connection.provider.id)
                     ? () => _uploadSelectedScripts(connection.provider.id)
                     : null,
-                onListAccount: _accounts.containsKey(connection.provider.id)
+                onListAccount: premiumUnlocked &&
+                        _accounts.containsKey(connection.provider.id)
                     ? () => _showSyncedScripts(connection.provider)
                     : null,
-                onDisconnectAccount: _accounts
-                        .containsKey(connection.provider.id)
+                onDisconnectAccount: premiumUnlocked &&
+                        _accounts.containsKey(connection.provider.id)
                     ? () => _disconnectProviderAccount(connection.provider.id)
                     : null,
               ),
@@ -191,6 +233,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           const SizedBox(height: 8),
           _AutomationCard(
             anyConnected: anyConnected,
+            premiumUnlocked: premiumUnlocked,
             cloudAccountsConnected: _accounts.isNotEmpty,
             autoSyncScripts: settings.cloudAutoSyncOnSave,
             recordingAutoBackup: settings.recordingAutoBackup,
@@ -208,6 +251,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   }
 
   Future<void> _chooseLocalBackupFolder() async {
+    final oldFolder = _localBackup?.folderPath.trim() ?? '';
     final folder = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Choose local backup folder',
     );
@@ -217,6 +261,14 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
       _showSnack('Selected folder does not exist.');
       return;
     }
+    await _maybeMoveExistingFolderContents(
+      oldPath: oldFolder,
+      newPath: folder,
+      title: 'Move existing Local Backup files?',
+      message:
+          'Move existing backed-up scripts and deleted-script folders to the '
+          'new Local Backup folder?',
+    );
     await _store.setLocalBackupPath(folder);
     await _loadConnections();
     _showSnack('Local backup folder linked.');
@@ -226,6 +278,18 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
     await _store.disconnectLocalBackup();
     await _loadConnections();
     _showSnack('Local backup folder forgotten.');
+  }
+
+  String _resolvedDeletedFolderLabel(CloudProviderConnection localBackup) {
+    if (_deletedFolderOverride) {
+      return _deletedFolderPath.trim();
+    }
+    final localPath = localBackup.folderPath.trim();
+    if (localPath.isEmpty) return '';
+    return CloudConnectionStore.joinPath(
+      localPath,
+      CloudConnectionStore.deletedScriptsFolderName,
+    );
   }
 
   void _setSyncingScripts(bool value) {

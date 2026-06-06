@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -15,6 +16,8 @@ import '../../script/services/script_bookmark_service.dart';
 import 'cloud_connection_store.dart';
 
 part 'local_backup_service.export_defaults.dart';
+part 'local_backup_service.deleted.dart';
+part 'local_backup_service.export_validation.dart';
 
 class ScriptBackupExport {
   final String fileName;
@@ -77,7 +80,7 @@ class LocalBackupService {
     if (root == null || export.readableText.trim().isEmpty) return false;
     await _pruneExpiredDeletedBackups(root);
     final file = File(_join(root.path, export.fileName));
-    await _writeBytesAtomically(file, export.bytes);
+    await writeExportAtomically(file, export);
     await _storeHistoryMetadata(
       backupFile: file,
       scriptTitle: title,
@@ -131,195 +134,6 @@ class LocalBackupService {
     }
   }
 
-  Future<bool> backupDeletedScript({
-    required String title,
-    required String text,
-    String? sourceType,
-    String? sourcePath,
-  }) async {
-    final root = await _backupRoot();
-    if (root == null) return false;
-    await _pruneExpiredDeletedBackups(root);
-    final stamp = _timestamp();
-    var backedUp = false;
-
-    final movedExisting = await _moveExistingBackupToDeleted(
-      root: root,
-      title: title,
-      text: text,
-      sourceType: sourceType,
-      sourcePath: sourcePath,
-      stamp: stamp,
-    );
-    if (movedExisting) backedUp = true;
-
-    final readableText = exportReadableScriptText(text);
-    if (!movedExisting && readableText.trim().isNotEmpty) {
-      final deleted = Directory(_join(root.path, 'Deleted Scripts'));
-      await deleted.create(recursive: true);
-      final export = await _deletedScriptExport(
-        title: title,
-        text: text,
-        sourceType: sourceType,
-        sourcePath: sourcePath,
-      );
-      await _writeBytesAtomically(
-        File(_join(deleted.path, '${stamp}_${export.fileName}')),
-        export.bytes,
-      );
-      backedUp = true;
-    }
-
-    final rawSourcePath = sourcePath?.trim() ?? '';
-    final source = rawSourcePath.isEmpty ? null : File(rawSourcePath);
-    if (source != null && await source.exists()) {
-      final originals = Directory(_join(root.path, 'Deleted Source Files'));
-      await originals.create(recursive: true);
-      final originalName = _safeName(_basename(source.path));
-      final target = File(_join(originals.path, '${stamp}_$originalName'));
-      await source.copy(target.path);
-      backedUp = true;
-    }
-    return backedUp;
-  }
-
-  Future<ScriptBackupExport> _deletedScriptExport({
-    required String title,
-    required String text,
-    String? sourceType,
-    String? sourcePath,
-  }) async {
-    try {
-      return await buildScriptExportAsync(
-        title: title,
-        text: text,
-        sourceType: sourceType,
-        sourcePath: sourcePath,
-      );
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'localBackup.deletedScriptReadableFallback',
-        data: {'title': title},
-      );
-      final readableText = exportReadableScriptText(text);
-      final baseName = _safeBaseName(title: title, sourcePath: sourcePath);
-      return ScriptBackupExport(
-        fileName: '$baseName.txt',
-        mimeType: 'text/plain; charset=utf-8',
-        bytes: utf8.encode(readableText),
-        readableText: readableText,
-        extension: 'txt',
-      );
-    }
-  }
-
-  Future<bool> _moveExistingBackupToDeleted({
-    required Directory root,
-    required String title,
-    required String text,
-    required String stamp,
-    String? sourceType,
-    String? sourcePath,
-  }) async {
-    try {
-      final export = await buildScriptExportAsync(
-        title: title,
-        text: text,
-        sourceType: sourceType,
-        sourcePath: sourcePath,
-      );
-      final candidateNames = <String>{
-        export.fileName,
-        _safeName(_basename(sourcePath?.trim() ?? '')),
-      }..removeWhere((name) => name.trim().isEmpty || name == 'script');
-
-      File? sourceBackup;
-      for (final name in candidateNames) {
-        final candidate = File(_join(root.path, name));
-        if (await candidate.exists()) {
-          sourceBackup = candidate;
-          break;
-        }
-      }
-      if (sourceBackup == null) return false;
-
-      final deleted = Directory(_join(root.path, 'Deleted Scripts'));
-      await deleted.create(recursive: true);
-      final target = await _uniqueFile(
-        Directory(deleted.path),
-        '${stamp}_${_basename(sourceBackup.path)}',
-      );
-      await _moveFileAtomically(sourceBackup, target);
-      await _moveHistoryMetadataRecord(
-        oldBackupPath: sourceBackup.path,
-        newBackupPath: target.path,
-        scriptTitle: title,
-      );
-      final legacySidecar = File('${sourceBackup.path}.history.json');
-      if (await legacySidecar.exists()) {
-        await legacySidecar.rename('${target.path}.history.json');
-        await _migrateHistorySidecars(root);
-      }
-      return true;
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'localBackup.moveExistingDeletedBackup',
-        data: {'title': title},
-      );
-      return false;
-    }
-  }
-
-  Future<void> _moveHistoryMetadataRecord({
-    required String oldBackupPath,
-    required String newBackupPath,
-    required String scriptTitle,
-  }) async {
-    final oldFile = await _historyMetadataFileForBackupPath(oldBackupPath);
-    if (!await oldFile.exists()) return;
-    final decoded = jsonDecode(await oldFile.readAsString());
-    final historyJson = decoded is Map<String, dynamic>
-        ? decoded['historyJson']?.toString() ?? ''
-        : '';
-    await oldFile.delete();
-    if (historyJson.trim().isEmpty) return;
-    await _writeHistoryMetadataRecord(
-      backupFilePath: newBackupPath,
-      scriptTitle: scriptTitle,
-      historyJson: historyJson,
-    );
-  }
-
-  Future<void> _moveFileAtomically(File source, File target) async {
-    await target.parent.create(recursive: true);
-    if (await target.exists()) await target.delete();
-    try {
-      await source.rename(target.path);
-    } on FileSystemException {
-      await source.copy(target.path);
-      await source.delete();
-    }
-  }
-
-  Future<File> _uniqueFile(Directory directory, String fileName) async {
-    final safeName = _safeName(fileName);
-    var candidate = File(_join(directory.path, safeName));
-    if (!await candidate.exists()) return candidate;
-    final dot = safeName.lastIndexOf('.');
-    final base = dot <= 0 ? safeName : safeName.substring(0, dot);
-    final ext = dot <= 0 ? '' : safeName.substring(dot);
-    for (var i = 2; i < 1000; i++) {
-      candidate = File(_join(directory.path, '$base ($i)$ext'));
-      if (!await candidate.exists()) return candidate;
-    }
-    return File(_join(directory.path,
-        '${base}_${DateTime.now().microsecondsSinceEpoch}$ext'));
-  }
-
   Future<Directory?> _backupRoot() async {
     final connection = await _store.loadLocalBackupConnection();
     final folderPath = connection.folderPath.trim();
@@ -329,9 +143,17 @@ class LocalBackupService {
     return root;
   }
 
+  Future<Directory?> _deletedRoot() async {
+    final folderPath = await _store.resolveDeletedScriptsFolderPath();
+    if (folderPath.trim().isEmpty) return null;
+    final root = Directory(folderPath);
+    await root.create(recursive: true);
+    return root;
+  }
+
   Future<void> _pruneExpiredDeletedBackups(Directory root) async {
     final cutoff = DateTime.now().subtract(deletedRetention);
-    for (final folderName in ['Deleted Scripts', 'Deleted Source Files']) {
+    for (final folderName in ['Deleted Scripts']) {
       final folder = Directory(_join(root.path, folderName));
       if (!await folder.exists()) continue;
       await for (final entity in folder.list(recursive: true)) {
@@ -346,6 +168,24 @@ class LocalBackupService {
             source: 'localBackup.pruneDeleted',
           );
         }
+      }
+    }
+  }
+
+  Future<void> _pruneExpiredFolder(Directory folder) async {
+    final cutoff = DateTime.now().subtract(deletedRetention);
+    if (!await folder.exists()) return;
+    await for (final entity in folder.list(recursive: true)) {
+      if (entity is! File) continue;
+      try {
+        final stat = await entity.stat();
+        if (stat.modified.isBefore(cutoff)) await entity.delete();
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'localBackup.pruneDeletedFolder',
+        );
       }
     }
   }
@@ -432,6 +272,38 @@ class LocalBackupService {
     await _writeBytesAtomically(file, utf8.encode(text));
   }
 
+  static void validateExport(ScriptBackupExport export) =>
+      _validateScriptExport(export);
+
+  static Future<void> writeExportAtomically(
+    File file,
+    ScriptBackupExport export,
+  ) async {
+    _validateScriptExport(export);
+    await file.parent.create(recursive: true);
+    final temp = File('${file.path}.tmp');
+    final backup = File('${file.path}.replace_backup');
+    try {
+      if (await temp.exists()) await temp.delete();
+      if (await backup.exists()) await backup.delete();
+      await temp.writeAsBytes(export.bytes, flush: true);
+      _validateScriptExport(export);
+      if (await file.exists()) {
+        await file.rename(backup.path);
+      }
+      await temp.rename(file.path);
+      if (await backup.exists()) await backup.delete();
+    } catch (error) {
+      if (await temp.exists()) await temp.delete();
+      if (!await file.exists() && await backup.exists()) {
+        await backup.rename(file.path);
+      } else if (await backup.exists()) {
+        await backup.delete();
+      }
+      throw StateError('Could not save ${export.fileName}: $error');
+    }
+  }
+
   Future<void> _writeBytesAtomically(File file, List<int> bytes) async {
     await file.parent.create(recursive: true);
     final temp = File('${file.path}.tmp');
@@ -466,11 +338,31 @@ class LocalBackupService {
         .trimRight();
   }
 
+  static String exportDirectionalReadableScriptText(
+    String text, {
+    List<ScriptBookmark> bookmarks = const [],
+  }) {
+    if (text.trim().isEmpty) return '';
+    final exportText = _textWithBookmarkSigns(text, bookmarks);
+    final plain = MarkupExportService.toDirectionalPlainText(exportText)
+        .replaceAll(_residualMarkupTagRe, '')
+        .replaceAll('**', '');
+    return plain
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .split('\n')
+        .map((line) => line.replaceAll(RegExp(r'[ \t]+$'), ''))
+        .join('\n')
+        .replaceAll(RegExp(r'\n{4,}'), '\n\n\n')
+        .trimRight();
+  }
+
   static ScriptBackupExport buildScriptExport({
     required String title,
     required String text,
     String? sourceType,
     String? sourcePath,
+    String? preferredExtension,
     double? fontSize,
     String? fontFamily,
     String? textAlign,
@@ -478,13 +370,14 @@ class LocalBackupService {
     bool? isRtl,
     List<ScriptBookmark> bookmarks = const [],
   }) {
+    final resolvedRtl = _resolveExportRtl(text, isRtl);
     final styledText = _applyExportDefaults(
       text,
       fontSize: fontSize,
       fontFamily: fontFamily,
       textAlign: textAlign,
       futureWordColor: futureWordColor,
-      isRtl: isRtl,
+      isRtl: resolvedRtl,
     );
     final exportText = _textWithBookmarkSigns(styledText, bookmarks);
     final readableText = exportReadableScriptText(
@@ -499,6 +392,7 @@ class LocalBackupService {
       title: title,
       sourceType: sourceType,
       sourcePath: sourcePath,
+      preferredExtension: preferredExtension,
     );
 
     switch (extension) {
@@ -506,7 +400,7 @@ class LocalBackupService {
         return ScriptBackupExport(
           fileName: '$baseName.rtf',
           mimeType: 'application/rtf',
-          bytes: RtfService.generate(exportText),
+          bytes: RtfService.generate(exportText, defaultRtl: resolvedRtl),
           readableText: readableText,
           extension: extension,
         );
@@ -515,7 +409,7 @@ class LocalBackupService {
           fileName: '$baseName.docx',
           mimeType:
               'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          bytes: DocxService.generate(exportText),
+          bytes: DocxService.generate(exportText, defaultRtl: resolvedRtl),
           readableText: readableText,
           extension: extension,
         );
@@ -523,7 +417,7 @@ class LocalBackupService {
         return ScriptBackupExport(
           fileName: '$baseName.doc',
           mimeType: 'application/msword',
-          bytes: RtfService.generate(exportText),
+          bytes: RtfService.generate(exportText, defaultRtl: resolvedRtl),
           readableText: readableText,
           extension: extension,
         );
@@ -531,7 +425,7 @@ class LocalBackupService {
         return ScriptBackupExport(
           fileName: '$baseName.odt',
           mimeType: _mimeTypeForExtension(extension),
-          bytes: OdtService.generate(exportText),
+          bytes: OdtService.generate(exportText, defaultRtl: resolvedRtl),
           readableText: readableText,
           extension: extension,
         );
@@ -546,12 +440,23 @@ class LocalBackupService {
       case 'txt':
       case 'text':
       case 'log':
-      case 'md':
         return ScriptBackupExport(
           fileName: '$baseName.$extension',
           mimeType: _mimeTypeForExtension(extension),
           bytes: utf8.encode(readableText),
           readableText: readableText,
+          extension: extension,
+        );
+      case 'md':
+        final markdownText = exportDirectionalReadableScriptText(
+          exportText,
+          bookmarks: const [],
+        );
+        return ScriptBackupExport(
+          fileName: '$baseName.$extension',
+          mimeType: _mimeTypeForExtension(extension),
+          bytes: utf8.encode(markdownText),
+          readableText: markdownText,
           extension: extension,
         );
       case 'pdf':
@@ -572,6 +477,7 @@ class LocalBackupService {
     required String text,
     String? sourceType,
     String? sourcePath,
+    String? preferredExtension,
     double? fontSize,
     String? fontFamily,
     String? textAlign,
@@ -583,6 +489,7 @@ class LocalBackupService {
       title: title,
       sourceType: sourceType,
       sourcePath: sourcePath,
+      preferredExtension: preferredExtension,
     );
     if (extension != 'pdf') {
       return buildScriptExport(
@@ -590,6 +497,7 @@ class LocalBackupService {
         text: text,
         sourceType: sourceType,
         sourcePath: sourcePath,
+        preferredExtension: preferredExtension,
         fontSize: fontSize,
         fontFamily: fontFamily,
         textAlign: textAlign,
@@ -605,7 +513,7 @@ class LocalBackupService {
       fontFamily: fontFamily,
       textAlign: textAlign,
       futureWordColor: futureWordColor,
-      isRtl: isRtl,
+      isRtl: _resolveExportRtl(text, isRtl),
     );
     final exportText = _textWithBookmarkSigns(styledText, bookmarks);
     final readableText = exportReadableScriptText(exportText);
@@ -613,7 +521,10 @@ class LocalBackupService {
     return ScriptBackupExport(
       fileName: '$baseName.pdf',
       mimeType: _mimeTypeForExtension('pdf'),
-      bytes: await PdfExportService.generate(exportText),
+      bytes: await PdfExportService.generate(
+        exportText,
+        defaultRtl: _resolveExportRtl(text, isRtl),
+      ),
       readableText: readableText,
       extension: 'pdf',
     );
@@ -623,7 +534,27 @@ class LocalBackupService {
     required String title,
     String? sourceType,
     String? sourcePath,
+    String? preferredExtension,
   }) {
+    final preferred = preferredExtension
+        ?.trim()
+        .toLowerCase()
+        .replaceFirst(RegExp(r'^\.'), '');
+    const supported = [
+      'docx',
+      'doc',
+      'rtf',
+      'txt',
+      'text',
+      'log',
+      'md',
+      'pdf',
+      'odt',
+      'pages',
+    ];
+    if (preferred != null && supported.contains(preferred)) {
+      return preferred;
+    }
     final candidates = [
       sourcePath?.trim(),
       title.trim(),
@@ -632,18 +563,7 @@ class LocalBackupService {
     for (final value in candidates) {
       if (value == null || value.isEmpty) continue;
       final lower = _stripAppExportSuffixes(value.toLowerCase());
-      for (final ext in [
-        'docx',
-        'doc',
-        'rtf',
-        'txt',
-        'text',
-        'log',
-        'md',
-        'pdf',
-        'odt',
-        'pages',
-      ]) {
+      for (final ext in supported) {
         if (lower == ext || lower.endsWith('.$ext')) return ext;
       }
     }

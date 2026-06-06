@@ -4,8 +4,12 @@ import 'dart:io';
 import '../../script/services/script_project_codec.dart';
 import 'cloud_connection_store.dart';
 import 'cloud_oauth_service.dart';
+import 'local_backup_service.dart';
 
 part 'cloud_app_folder_sync_service.helpers.dart';
+part 'cloud_app_folder_sync_service.deleted.dart';
+part 'cloud_app_folder_sync_service.delete_actions.dart';
+part 'cloud_app_folder_sync_service.deleted_list.dart';
 
 const dropboxSyncRootPath =
     String.fromEnvironment('DROPBOX_SYNC_ROOT_PATH', defaultValue: '');
@@ -237,19 +241,28 @@ class CloudAppFolderSyncService {
   }) async {
     final targetFolderId = folderId ?? await _googleFolderId(session);
     if (replaceExisting) {
-      final existingId = await _googleFileIdByName(
+      final existingIds = await _googleFileIdsByName(
         session: session,
         folderId: targetFolderId,
         fileName: fileName,
       );
-      if (existingId != null) {
-        return _updateGoogleScriptContent(
+      if (existingIds.isNotEmpty) {
+        final result = await _updateGoogleScriptContent(
           session: session,
-          fileId: existingId,
+          fileId: existingIds.first,
           fileName: fileName,
           bytes: bytes,
           mimeType: mimeType,
         );
+        if (result.ok) {
+          for (final duplicateId in existingIds.skip(1)) {
+            await _deleteGoogleFileById(
+              session: session,
+              fileId: duplicateId,
+            );
+          }
+        }
+        return result;
       }
     }
     final boundary = 'atp-${DateTime.now().microsecondsSinceEpoch}';
@@ -718,6 +731,9 @@ class CloudAppFolderSyncService {
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (_isCloudAuthFailure(response.statusCode, body)) {
+        throw StateError(_cloudAuthFailureMessage());
+      }
       throw StateError('cloud request failed (${response.statusCode}): $body');
     }
     final decoded = jsonDecode(body);
@@ -739,6 +755,9 @@ class CloudAppFolderSyncService {
     final response = await request.close();
     final responseBody = await response.transform(utf8.decoder).join();
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (_isCloudAuthFailure(response.statusCode, responseBody)) {
+        throw StateError(_cloudAuthFailureMessage());
+      }
       throw StateError(
         'cloud request failed (${response.statusCode}): $responseBody',
       );

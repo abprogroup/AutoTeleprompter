@@ -92,7 +92,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     final format = await EditorDialogs.showSaveFormatDialog(context);
     if (format == null || !mounted) return;
 
-    final text = _getRefinedFullTextWithoutBookmarkSigns();
+    await _loadBookmarksForCurrentScript();
+    if (!mounted) return;
+    final text = _getRefinedFullTextWithExportBookmarkSigns();
 
     final safeName =
         _currentTitle.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_').replaceAll(
@@ -102,14 +104,45 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
               ),
               '',
             );
+    final nameCtrl = TextEditingController(text: safeName);
+    final nameChoice = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => SaveNameDialog(
+        nameCtrl: nameCtrl,
+        usedNames: const [],
+        format: format,
+      ),
+    );
+    nameCtrl.dispose();
+    if (!mounted) return;
+    if (nameChoice == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Save cancelled.'),
+          backgroundColor: Colors.black54,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    final chosenName = (nameChoice['name'] as String? ?? '').trim();
+    if (chosenName.isEmpty) return;
+    final baseName = chosenName.replaceAll(
+      RegExp(
+        r'\.(docx?|rtf|txt|text|log|md|pdf|odt|pages|atp)$',
+        caseSensitive: false,
+      ),
+      '',
+    );
     final settings = ref.read(settingsProvider);
     final ScriptBackupExport export;
     try {
       export = await LocalBackupService.buildScriptExportAsync(
-        title: '$safeName.$format',
+        title: '$baseName.$format',
         text: text,
         sourceType: format,
         sourcePath: null,
+        preferredExtension: format,
         fontSize: settings.fontSize,
         fontFamily: settings.fontFamily,
         textAlign: settings.textAlign,
@@ -163,10 +196,25 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     final lowerSavedPath = savedPath.toLowerCase();
     final finalPath =
         lowerSavedPath.endsWith(extension) ? savedPath : '$savedPath$extension';
-    await File(finalPath).writeAsBytes(
-      Uint8List.fromList(export.bytes),
-      flush: true,
-    );
+    try {
+      await LocalBackupService.writeExportAtomically(File(finalPath), export);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'editor.saveExportWrite',
+        data: {'format': format, 'path': finalPath},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not save ${format.toUpperCase()}: $error'),
+          backgroundColor: Colors.red[800],
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
     LightweightDiagnostics.instance.record(
       'editor',
       'script exported',
@@ -213,9 +261,10 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   bool _inferEditorTextDirection(String text) {
+    final directionText = _plainTextForDirection(text);
     var rtl = 0;
     var ltr = 0;
-    for (final rune in text.runes) {
+    for (final rune in directionText.runes) {
       if ((rune >= 0x0590 && rune <= 0x05FF) ||
           (rune >= 0x0600 && rune <= 0x06FF) ||
           (rune >= 0x0750 && rune <= 0x077F)) {
@@ -226,6 +275,14 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       }
     }
     return rtl > 0 && rtl >= ltr;
+  }
+
+  String _plainTextForDirection(String text) {
+    try {
+      return MarkupExportService.toPlainText(text);
+    } catch (_) {
+      return text;
+    }
   }
 
   Future<void> _adoptSavedExportAsActiveScript({
@@ -273,6 +330,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           scriptBgColor: settings.scriptBgColor,
           currentWordColor: settings.currentWordColor,
           futureWordColor: settings.futureWordColor,
+          isRtl: _inferEditorTextDirection(text),
           historyJson: historyJson,
         );
 

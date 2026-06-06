@@ -13,7 +13,7 @@ class PdfExportService {
   static pw.Font? _boldFont;
   static pw.Font? _italicFont;
 
-  static Future<List<int>> generate(String text) async {
+  static Future<List<int>> generate(String text, {bool? defaultRtl}) async {
     final regular = await _loadFont(
       cached: _regularFont,
       systemCandidates: const [
@@ -44,11 +44,19 @@ class PdfExportService {
     );
 
     final document = pw.Document();
-    final paragraphs = MarkupExportService.parse(text);
+    final paragraphs = MarkupExportService.parse(
+      text,
+      defaultRtl: defaultRtl,
+    );
+    final rtlParagraphs = paragraphs.where((paragraph) => paragraph.isRtl);
+    final documentDirection = rtlParagraphs.length >= paragraphs.length / 2
+        ? pw.TextDirection.rtl
+        : pw.TextDirection.ltr;
     document.addPage(
       pw.MultiPage(
         pageTheme: pw.PageTheme(
           margin: const pw.EdgeInsets.fromLTRB(36, 42, 36, 42),
+          textDirection: documentDirection,
           theme: pw.ThemeData.withFont(
             base: regular,
             bold: bold,
@@ -56,9 +64,6 @@ class PdfExportService {
             boldItalic: bold,
           ),
         ),
-        textDirection: _documentLooksRtl(paragraphs)
-            ? pw.TextDirection.rtl
-            : pw.TextDirection.ltr,
         build: (context) => [
           for (final paragraph in paragraphs)
             _paragraphWidget(paragraph, regular, bold, italic),
@@ -111,34 +116,112 @@ class PdfExportService {
     pw.Font italic,
   ) {
     if (paragraph.isEmpty) return pw.SizedBox(height: 12);
+    final paragraphBackground = _uniformParagraphBackground(paragraph);
+    final richText = pw.RichText(
+      textDirection:
+          paragraph.isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+      textAlign: _pdfAlign(paragraph),
+      text: pw.TextSpan(
+        children: [
+          for (final directionalRun in MarkupExportService.documentRuns(
+            paragraph,
+          ))
+            _pdfSpan(
+              directionalRun.run,
+              directionalRun.text,
+              isRtl: directionalRun.isRtl,
+              regular: regular,
+              bold: bold,
+              italic: italic,
+              includeBackground: paragraphBackground == null,
+            ),
+        ],
+      ),
+    );
     return pw.Directionality(
       textDirection:
           paragraph.isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
       child: pw.Container(
         width: double.infinity,
         padding: const pw.EdgeInsets.only(bottom: 8),
-        child: pw.RichText(
-          textAlign: _pdfAlign(paragraph),
-          text: pw.TextSpan(
-            children: [
-              for (final run in paragraph.runs)
-                pw.TextSpan(
-                  text: run.text,
-                  style: _runStyle(run, regular, bold, italic),
+        child: paragraphBackground == null
+            ? richText
+            : pw.Align(
+                alignment: _pdfAlignment(paragraph),
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 2),
+                  decoration: pw.BoxDecoration(color: paragraphBackground),
+                  child: richText,
                 ),
-            ],
-          ),
-        ),
+              ),
       ),
     );
+  }
+
+  static PdfColor? _uniformParagraphBackground(ExportParagraph paragraph) {
+    String? background;
+    var sawVisibleText = false;
+    for (final run in paragraph.runs) {
+      if (run.text.trim().isEmpty) continue;
+      sawVisibleText = true;
+      final color = run.backgroundColor;
+      if (color == null) return null;
+      background ??= color;
+      if (background.toUpperCase() != color.toUpperCase()) return null;
+    }
+    if (!sawVisibleText || background == null) return null;
+    return _pdfColor(background);
+  }
+
+  static pw.Alignment _pdfAlignment(ExportParagraph paragraph) {
+    if (paragraph.isRtl && !paragraph.hasExplicitAlign) {
+      return pw.Alignment.centerRight;
+    }
+    return switch (paragraph.align) {
+      'center' => pw.Alignment.center,
+      'right' => pw.Alignment.centerRight,
+      _ => pw.Alignment.centerLeft,
+    };
+  }
+
+  static pw.TextAlign _pdfAlign(ExportParagraph paragraph) {
+    if (paragraph.isRtl && !paragraph.hasExplicitAlign) {
+      return pw.TextAlign.right;
+    }
+    return switch (paragraph.align) {
+      'center' => pw.TextAlign.center,
+      'right' => pw.TextAlign.right,
+      _ => pw.TextAlign.left,
+    };
+  }
+
+  static pw.InlineSpan _pdfSpan(
+    ExportTextRun run,
+    String text, {
+    required bool isRtl,
+    required pw.Font regular,
+    required pw.Font bold,
+    required pw.Font italic,
+    bool includeBackground = true,
+  }) {
+    final displayText = BidiExportMarks.wrap(text, rtl: isRtl);
+    final style = _runStyle(
+      run,
+      regular,
+      bold,
+      italic,
+      includeBackground: includeBackground,
+    );
+    return pw.TextSpan(text: displayText, style: style);
   }
 
   static pw.TextStyle _runStyle(
     ExportTextRun run,
     pw.Font regular,
     pw.Font bold,
-    pw.Font italic,
-  ) {
+    pw.Font italic, {
+    bool includeBackground = true,
+  }) {
     final isBold = run.isBold;
     final isItalic = run.isItalic;
     return pw.TextStyle(
@@ -154,7 +237,8 @@ class PdfExportService {
           ? pw.TextDecoration.underline
           : pw.TextDecoration.none,
       color: _pdfColor(run.color, omitWhite: true),
-      background: _pdfBackground(run.backgroundColor),
+      background:
+          includeBackground ? _pdfBackground(run.backgroundColor) : null,
     );
   }
 
@@ -170,36 +254,5 @@ class PdfExportService {
     final value = int.tryParse(clean, radix: 16);
     if (value == null) return null;
     return PdfColor.fromInt(0xFF000000 | value);
-  }
-
-  static pw.TextAlign _pdfAlign(ExportParagraph paragraph) {
-    if (paragraph.isRtl && !paragraph.hasExplicitAlign) {
-      return pw.TextAlign.right;
-    }
-    return switch (paragraph.align) {
-      'center' => pw.TextAlign.center,
-      'right' => pw.TextAlign.right,
-      _ => pw.TextAlign.left,
-    };
-  }
-
-  static bool _documentLooksRtl(List<ExportParagraph> paragraphs) {
-    var rtl = 0;
-    var ltr = 0;
-    for (final paragraph in paragraphs) {
-      if (paragraph.isRtl) rtl++;
-      for (final run in paragraph.runs) {
-        for (final rune in run.text.runes) {
-          if ((rune >= 0x0590 && rune <= 0x05FF) ||
-              (rune >= 0x0600 && rune <= 0x06FF)) {
-            rtl++;
-          } else if ((rune >= 0x0041 && rune <= 0x005A) ||
-              (rune >= 0x0061 && rune <= 0x007A)) {
-            ltr++;
-          }
-        }
-      }
-    }
-    return rtl > 0 && rtl >= ltr;
   }
 }

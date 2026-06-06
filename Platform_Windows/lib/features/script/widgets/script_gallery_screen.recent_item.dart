@@ -1,5 +1,108 @@
 part of 'script_gallery_screen.dart';
 
+List<String> _dedupedRecentMetadata(List<String> raw) {
+  final seen = <String>{};
+  final visible = <String>[];
+  for (final item in raw) {
+    try {
+      final decoded = Map<String, dynamic>.from(jsonDecode(item));
+      final keys = _recentGalleryIdentityKeys(decoded);
+      if (keys.isEmpty) {
+        visible.add(item);
+        continue;
+      }
+      if (keys.any(seen.contains)) continue;
+      seen.addAll(keys);
+      visible.add(item);
+    } catch (error) {
+      LightweightDiagnostics.instance.record(
+        'gallery',
+        'ignored malformed recent metadata while displaying history',
+        data: {'error': error.toString()},
+      );
+    }
+  }
+  return visible;
+}
+
+List<String> _recentGalleryIdentityKeys(Map<String, dynamic> decoded) {
+  final keys = <String>[];
+  final path = _normalizeRecentGalleryPath(decoded['sourcePath']?.toString());
+  if (path.isNotEmpty) keys.add('path:$path');
+  final title = _normalizeRecentGalleryTitle(decoded['title']?.toString());
+  if (title.isNotEmpty) {
+    final type = (decoded['type']?.toString() ?? '').trim().toUpperCase();
+    keys.add('title:$type:$title');
+  }
+  return keys;
+}
+
+String _recentGallerySelectionKey(Map<String, dynamic> decoded) {
+  final keys = _recentGalleryIdentityKeys(decoded);
+  if (keys.isNotEmpty) return keys.first;
+  final sessionId = decoded['sessionId']?.toString().trim();
+  if (sessionId != null && sessionId.isNotEmpty) return 'session:$sessionId';
+  return 'recent:${jsonEncode(decoded).hashCode}';
+}
+
+List<String> _recentGallerySourcePaths(Iterable<Map<String, dynamic>> rows) {
+  final paths = <String>[];
+  final seen = <String>{};
+  for (final row in rows) {
+    for (final field in const [
+      'sourcePath',
+      'sourceFilePath',
+      'originalPath',
+      'filePath',
+      'path',
+    ]) {
+      final path = row[field]?.toString().trim();
+      if (path == null || path.isEmpty) continue;
+      final key = _normalizeRecentGalleryPath(path);
+      if (key.isEmpty || !seen.add(key)) continue;
+      paths.add(path);
+    }
+  }
+  return paths;
+}
+
+Future<int> _deleteRecentGallerySourceFiles(
+  Iterable<Map<String, dynamic>> rows,
+) async {
+  var deleted = 0;
+  for (final path in _recentGallerySourcePaths(rows)) {
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+      deleted++;
+    }
+  }
+  return deleted;
+}
+
+String _normalizeRecentGalleryPath(String? value) {
+  final path = value?.trim();
+  if (path == null || path.isEmpty) return '';
+  return path.replaceAll('/', '\\').toLowerCase();
+}
+
+String _normalizeRecentGalleryTitle(String? value) {
+  var title = value?.trim().toLowerCase() ?? '';
+  var changed = true;
+  while (changed) {
+    changed = false;
+    final next = title.replaceFirst(
+      RegExp(r'\.(?:atp|atp\.txt)$', caseSensitive: false),
+      '',
+    );
+    if (next != title) {
+      title = next;
+      changed = true;
+    }
+  }
+  return title.replaceAll(RegExp(r'\s+'), ' ');
+}
+
 class _ScriptListItem extends ConsumerWidget {
   static final Map<String, Future<String>> _previewCache = {};
 
@@ -11,6 +114,9 @@ class _ScriptListItem extends ConsumerWidget {
   final String? sessionId;
   final String? secureRecordId;
   final String? sourcePath;
+  final bool selectionMode;
+  final bool selected;
+  final ValueChanged<bool>? onSelectionChanged;
 
   const _ScriptListItem({
     super.key,
@@ -22,6 +128,9 @@ class _ScriptListItem extends ConsumerWidget {
     this.sessionId,
     this.secureRecordId,
     this.sourcePath,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelectionChanged,
   });
 
   @override
@@ -51,11 +160,23 @@ class _ScriptListItem extends ConsumerWidget {
           children: [
             Expanded(
               child: InkWell(
-                onTap: () => _openRecentScript(context, ref),
+                onTap: selectionMode
+                    ? () => onSelectionChanged?.call(!selected)
+                    : () => _openRecentScript(context, ref),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
+                      if (selectionMode) ...[
+                        Checkbox(
+                          value: selected,
+                          onChanged: (value) =>
+                              onSelectionChanged?.call(value ?? false),
+                          activeColor: const Color(0xFFFFBF00),
+                          checkColor: Colors.black,
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                       _ScriptTypePill(type: type, style: labelStyle),
                       const SizedBox(width: 16),
                       Expanded(
@@ -108,7 +229,9 @@ class _ScriptListItem extends ConsumerWidget {
                   color: Colors.white24,
                   size: 20,
                 ),
-                onPressed: () => _confirmDeleteRecentScript(context, ref),
+                onPressed: selectionMode
+                    ? null
+                    : () => _confirmDeleteRecentScript(context, ref),
               ),
             ),
             const Padding(

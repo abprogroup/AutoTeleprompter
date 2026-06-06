@@ -32,108 +32,6 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
     }
   }
 
-  Future<void> _showLocalBackupScripts() async {
-    final folder = _localBackup?.folderPath.trim() ?? '';
-    if (folder.isEmpty) return;
-    final files = <File>[];
-    try {
-      await LocalBackupService().migrateHistorySidecarsFromBackupFolder();
-      final directory = Directory(folder);
-      if (await directory.exists()) {
-        await for (final entity in directory.list()) {
-          if (entity is! File) continue;
-          final lower = entity.path.toLowerCase();
-          if (lower.endsWith('.rtf') ||
-              lower.endsWith('.docx') ||
-              lower.endsWith('.doc') ||
-              lower.endsWith('.txt') ||
-              lower.endsWith('.text') ||
-              lower.endsWith('.log') ||
-              lower.endsWith('.md') ||
-              lower.endsWith('.pdf') ||
-              lower.endsWith('.odt') ||
-              lower.endsWith('.pages')) {
-            files.add(entity);
-          }
-        }
-      }
-      files.sort((a, b) {
-        final aStat = a.statSync();
-        final bStat = b.statSync();
-        return bStat.modified.compareTo(aStat.modified);
-      });
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'cloud.localBackupList',
-      );
-      _showSnack('Could not list Local Backup scripts.');
-      return;
-    }
-
-    if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF151515),
-        title: const Text(
-          'Local Backup scripts',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: SizedBox(
-          width: 560,
-          child: files.isEmpty
-              ? const Text(
-                  'No backed-up scripts are in this folder yet.',
-                  style: TextStyle(color: Colors.white70),
-                )
-              : ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 360),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: files.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(color: Colors.white12),
-                    itemBuilder: (context, index) {
-                      final file = files[index];
-                      final stat = file.statSync();
-                      return ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          file.uri.pathSegments.last,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        subtitle: Text(
-                          '${stat.modified}',
-                          style: const TextStyle(color: Colors.white38),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _openFolder(folder);
-            },
-            icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('Open folder'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _openFolder(String path) async {
     try {
       if (Platform.isWindows) {
@@ -177,14 +75,6 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _chooseLocalBackupFolder();
-            },
-            icon: const Icon(Icons.folder_open_outlined),
-            label: const Text('Choose Local Backup folder'),
           ),
         ],
       ),
@@ -291,24 +181,48 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
     }
 
     final availableScripts = await _scriptPayloadsForSync();
-    if (availableScripts.isEmpty) {
-      _showSnack('No saved scripts are available to sync.');
+    final deletedScripts =
+        await DeletedScriptsService().listLocalDeletedScripts();
+    final cloudOnlyScripts = await _cloudOnlyScriptsForManagedSync(
+      providerIds: providers,
+      localScripts: availableScripts,
+    );
+    final cloudDeletedScripts = await _cloudDeletedScriptsForManagedSync(
+      providerIds: providers,
+    );
+    if (availableScripts.isEmpty &&
+        deletedScripts.isEmpty &&
+        cloudOnlyScripts.isEmpty &&
+        cloudDeletedScripts.isEmpty) {
+      _showSnack(
+          'No saved, deleted, cloud-only, or cloud-deleted scripts are available.');
       return;
     }
-    final scripts = await _chooseScriptsForCloudAction(
-      scripts: availableScripts,
-      title: 'Sync scripts',
-      actionLabel: 'Sync selected',
-      defaultSelectAll: true,
+    final selection = await _chooseManagedSyncAction(
+      savedScripts: availableScripts,
+      deletedScripts: deletedScripts,
+      cloudOnlyScripts: cloudOnlyScripts,
+      cloudDeletedScripts: cloudDeletedScripts,
     );
-    if (scripts == null || scripts.isEmpty) return;
+    if (selection == null) return;
+    if (selection.isEmpty) return;
+    final scripts = selection.savedScripts;
+    final selectedDeletedScripts = selection.deletedScripts;
+    final cloudOnlyToDelete = selection.cloudOnlyScripts;
+    final cloudDeletedToRestore = selection.cloudDeletedScripts;
 
     _setSyncingScripts(true);
-    _showSnack('Syncing ${scripts.length} saved scripts...');
+    _showSnack(
+      'Syncing ${scripts.length} saved scripts and '
+      '${selectedDeletedScripts.length} deleted backups...',
+    );
     final cloudOkByProvider = {
       for (final providerId in providers) providerId: 0,
     };
     final cloudFailedByProvider = {
+      for (final providerId in providers) providerId: 0,
+    };
+    final deletedOkByProvider = {
       for (final providerId in providers) providerId: 0,
     };
     final failures = <String>[];
@@ -329,6 +243,39 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
           }
         }
       }
+      for (final providerId in providers) {
+        final deletedOk = await _syncDeletedScriptsForProvider(
+          providerId: providerId,
+          deletedScripts: selectedDeletedScripts,
+          failures: failures,
+        );
+        deletedOkByProvider[providerId] = deletedOk;
+      }
+      var cloudOnlyMoved = 0;
+      for (final script in cloudOnlyToDelete) {
+        final result = await _sync.moveSyncedScriptToDeleted(
+          providerId: script.providerId,
+          primaryFileName: script.fileName,
+        );
+        if (result.ok) {
+          cloudOnlyMoved++;
+        } else {
+          failures.add('${script.providerLabel}: ${result.message}');
+        }
+      }
+      var cloudDeletedRestored = 0;
+      for (final script in cloudDeletedToRestore) {
+        final result = await _sync.restoreDeletedScript(
+          providerId: script.providerId,
+          deletedFileName: script.fileName,
+          activeFileName: script.activeFileName,
+        );
+        if (result.ok) {
+          cloudDeletedRestored++;
+        } else {
+          failures.add('${script.providerLabel}: ${result.message}');
+        }
+      }
 
       var localCount = 0;
       if (hasLocalBackup) {
@@ -346,16 +293,24 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
 
       final targetText = [
         for (final providerId in providers)
-          '${_providerLabel(providerId)}: ${cloudOkByProvider[providerId] ?? 0}',
+          '${_providerLabel(providerId)}: '
+              '${cloudOkByProvider[providerId] ?? 0} saved, '
+              '${deletedOkByProvider[providerId] ?? 0} deleted',
         if (localCount > 0) '$localCount local backups',
       ].join(', ');
       final cloudFailed = cloudFailedByProvider.values
           .fold<int>(0, (sum, count) => sum + count);
       if (failures.isEmpty && cloudFailed == 0) {
-        _showSnack('Synced ${scripts.length} scripts ($targetText).');
+        _showSnack(
+          'Synced ${scripts.length} scripts and '
+          '${selectedDeletedScripts.length} deleted backups'
+          '${cloudOnlyMoved > 0 ? ', moved $cloudOnlyMoved cloud-only files' : ''} '
+          '${cloudDeletedRestored > 0 ? ', restored $cloudDeletedRestored cloud-deleted files' : ''} '
+          '($targetText).',
+        );
       } else {
         _showSnack(
-          'Sync finished ($targetText) with $cloudFailed cloud failures. '
+          'Sync finished ($targetText) with ${failures.length} failures. '
           '${failures.first}',
         );
       }
@@ -618,167 +573,5 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
       }
     }
     return written;
-  }
-
-  Future<void> _showSyncedScripts(CloudProviderDefinition provider) async {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF151515),
-        title: Text(
-          '${provider.label} scripts',
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: SizedBox(
-          width: 520,
-          child: FutureBuilder<List<CloudSyncedFile>>(
-            future: _sync.listScripts(provider.id),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFFFFBF00),
-                    ),
-                  ),
-                );
-              }
-              if (snapshot.hasError) {
-                return Text(
-                  'Could not list scripts: ${_shortError(snapshot.error!)}',
-                  style: const TextStyle(color: Colors.white70, height: 1.35),
-                );
-              }
-              final files = snapshot.data ?? const <CloudSyncedFile>[];
-              if (files.isEmpty) {
-                return const Text(
-                  'No scripts are synced in the AutoTeleprompter app folder yet.',
-                  style: TextStyle(color: Colors.white70, height: 1.35),
-                );
-              }
-              return ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 360),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: files.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(color: Colors.white12),
-                  itemBuilder: (context, index) {
-                    final file = files[index];
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        file.name,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      subtitle: Text(
-                        file.modifiedAtIso ?? 'Cloud script',
-                        style: const TextStyle(color: Colors.white38),
-                      ),
-                      trailing: TextButton(
-                        onPressed: () => _downloadSyncedScript(file),
-                        child: const Text('Download'),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _downloadSyncedScript(CloudSyncedFile file) async {
-    try {
-      final metadataText = await _sync.downloadScriptMetadata(
-        providerId: file.providerId,
-        primaryFileName: file.name,
-      );
-      final project = metadataText == null || metadataText.isEmpty
-          ? null
-          : ScriptProjectCodec.tryDecode(metadataText);
-      if (project != null) {
-        await _restoreProjectFromCloud(project);
-        if (!mounted) return;
-        Navigator.of(context, rootNavigator: true).pop();
-        _showSnack('Downloaded ${file.name}.');
-        return;
-      }
-
-      final lowerName = file.name.toLowerCase();
-      if (lowerName.endsWith('.rtf') ||
-          lowerName.endsWith('.doc') ||
-          lowerName.endsWith('.docx')) {
-        _showSnack(
-          'Cloud metadata is missing for ${file.name}; '
-          'the readable file is still available in the cloud.',
-        );
-        return;
-      }
-
-      final text = await _sync.downloadScript(
-        providerId: file.providerId,
-        fileId: file.id,
-      );
-      if (text == null || text.isEmpty) {
-        _showSnack('Cloud download failed.');
-        return;
-      }
-      final legacyProject = ScriptProjectCodec.tryDecode(text);
-      if (legacyProject != null) {
-        await _restoreProjectFromCloud(legacyProject);
-      } else {
-        ref.read(scriptProvider.notifier).loadText(
-              text,
-              title: file.name,
-              sourceType: 'CLOUD',
-              sessionId: 'cloud_${DateTime.now().microsecondsSinceEpoch}',
-            );
-      }
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      _showSnack('Downloaded ${file.name}.');
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'cloud.downloadSyncedScript',
-      );
-      _showSnack('Cloud download failed: ${_shortError(error)}');
-    }
-  }
-
-  Future<void> _restoreProjectFromCloud(ScriptProjectData project) async {
-    await ScriptBookmarkService.save(
-      ScriptBookmarkService.scopeKey(project.sessionId, project.title),
-      project.bookmarks,
-    );
-    ref.read(scriptProvider.notifier).loadText(
-          project.rawText,
-          title: project.title,
-          sourceType: project.sourceType,
-          sessionId: project.sessionId,
-          historyJson: project.historyJson,
-          historyIndex: project.historyIndex,
-          fontSize: project.fontSize,
-          fontFamily: project.fontFamily,
-          lineSpacing: project.lineSpacing,
-          letterSpacing: project.letterSpacing,
-          wordSpacing: project.wordSpacing,
-          textAlign: project.textAlign,
-          scriptBgColor: project.scriptBgColor,
-          currentWordColor: project.currentWordColor,
-          futureWordColor: project.futureWordColor,
-        );
   }
 }

@@ -105,88 +105,62 @@ class UpdateCheckService {
       throw const FormatException('Manifest root must be a JSON object.');
     }
 
-    var effectiveChannel = channel;
-    var fallbackMessage = '';
-    var channelEntry = _channelEntry(decoded, channel);
-    if (channelEntry == null && channel == AppSettings.updateChannelInternal) {
-      final betaEntry = _channelEntry(decoded, AppSettings.updateChannelBeta);
-      if (betaEntry != null) {
-        channelEntry = betaEntry;
-        effectiveChannel = AppSettings.updateChannelBeta;
-        fallbackMessage = 'No internal build is published yet. ';
-      }
-    }
-    if (channelEntry == null) {
+    final candidates = _allowedChannels(channel)
+        .map((candidateChannel) {
+          final entry = _channelEntry(decoded, candidateChannel);
+          if (entry == null) return null;
+          return _manifestCandidate(
+            channelEntry: entry,
+            channel: candidateChannel,
+          );
+        })
+        .whereType<_UpdateManifestCandidate>()
+        .toList(growable: false);
+    if (candidates.isEmpty) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.notConfigured,
         channel: channel,
         currentVersion: autoTeleprompterAppVersion,
-        message:
-            'No $channel update channel is published in this manifest yet.',
+        message: _missingChannelMessage(channel),
       );
     }
-    final latestVersion = _stringValue(channelEntry, 'version');
-    final downloadUrl = _stringValue(channelEntry, 'url') ??
-        _stringValue(channelEntry, 'downloadUrl');
-    if (latestVersion == null || latestVersion.trim().isEmpty) {
-      throw FormatException('Manifest is missing $effectiveChannel.version.');
-    }
 
-    final notes = _stringValue(channelEntry, 'notes') ??
-        _stringValue(channelEntry, 'releaseNotes');
-    final publishedAtText = _stringValue(channelEntry, 'publishedAt');
-    final publishedAt = publishedAtText == null
-        ? null
-        : DateTime.tryParse(publishedAtText)?.toLocal();
+    final newest = candidates.reduce((best, candidate) {
+      final comparison =
+          _compareVersions(candidate.latestVersion, best.latestVersion);
+      return comparison > 0 ? candidate : best;
+    });
     final comparison = _compareVersions(
-      latestVersion.trim(),
+      newest.latestVersion,
       autoTeleprompterAppVersion,
     );
-    if (comparison <= 0 && channel == AppSettings.updateChannelInternal) {
-      final betaEntry = _channelEntry(decoded, AppSettings.updateChannelBeta);
-      final betaVersion =
-          betaEntry == null ? null : _stringValue(betaEntry, 'version');
-      if (betaEntry != null &&
-          betaVersion != null &&
-          _compareVersions(betaVersion.trim(), autoTeleprompterAppVersion) >
-              0) {
-        return _resultForChannelEntry(
-          channelEntry: betaEntry,
-          channel: AppSettings.updateChannelBeta,
-          fallbackMessage: 'No newer internal build is published yet. ',
-        );
-      }
-    }
     if (comparison <= 0) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.upToDate,
-        channel: effectiveChannel,
+        channel: newest.channel,
         currentVersion: autoTeleprompterAppVersion,
-        latestVersion: latestVersion.trim(),
-        downloadUrl: downloadUrl,
-        notes: notes,
-        publishedAt: publishedAt,
-        message:
-            '${fallbackMessage}You are already on the latest $effectiveChannel build.',
+        latestVersion: newest.latestVersion,
+        downloadUrl: newest.downloadUrl,
+        notes: newest.notes,
+        publishedAt: newest.publishedAt,
+        message: _upToDateMessage(channel, newest.channel),
       );
     }
     return UpdateCheckResult(
       status: UpdateCheckStatus.updateAvailable,
-      channel: effectiveChannel,
+      channel: newest.channel,
       currentVersion: autoTeleprompterAppVersion,
-      latestVersion: latestVersion.trim(),
-      downloadUrl: downloadUrl,
-      notes: notes,
-      publishedAt: publishedAt,
-      message:
-          '${fallbackMessage}A newer $effectiveChannel build is available.',
+      latestVersion: newest.latestVersion,
+      downloadUrl: newest.downloadUrl,
+      notes: newest.notes,
+      publishedAt: newest.publishedAt,
+      message: _updateAvailableMessage(channel, newest.channel),
     );
   }
 
-  UpdateCheckResult _resultForChannelEntry({
+  _UpdateManifestCandidate _manifestCandidate({
     required Map<String, dynamic> channelEntry,
     required String channel,
-    String fallbackMessage = '',
   }) {
     final latestVersion = _stringValue(channelEntry, 'version');
     final downloadUrl = _stringValue(channelEntry, 'url') ??
@@ -200,16 +174,63 @@ class UpdateCheckService {
     final publishedAt = publishedAtText == null
         ? null
         : DateTime.tryParse(publishedAtText)?.toLocal();
-    return UpdateCheckResult(
-      status: UpdateCheckStatus.updateAvailable,
+    return _UpdateManifestCandidate(
       channel: channel,
-      currentVersion: autoTeleprompterAppVersion,
       latestVersion: latestVersion.trim(),
       downloadUrl: downloadUrl,
       notes: notes,
       publishedAt: publishedAt,
-      message: '${fallbackMessage}A newer $channel build is available.',
     );
+  }
+
+  static List<String> _allowedChannels(String selectedChannel) {
+    switch (selectedChannel) {
+      case AppSettings.updateChannelInternal:
+        return const [
+          AppSettings.updateChannelInternal,
+          AppSettings.updateChannelBeta,
+          AppSettings.updateChannelStable,
+        ];
+      case AppSettings.updateChannelBeta:
+        return const [
+          AppSettings.updateChannelBeta,
+          AppSettings.updateChannelStable,
+        ];
+      default:
+        return const [AppSettings.updateChannelStable];
+    }
+  }
+
+  static String _missingChannelMessage(String selectedChannel) {
+    switch (selectedChannel) {
+      case AppSettings.updateChannelInternal:
+        return 'No internal, beta, or stable update channel is published in '
+            'this manifest yet.';
+      case AppSettings.updateChannelBeta:
+        return 'No beta or stable update channel is published in this manifest '
+            'yet.';
+      default:
+        return 'No stable update channel is published in this manifest yet.';
+    }
+  }
+
+  static String _upToDateMessage(String selectedChannel, String newestChannel) {
+    if (selectedChannel == newestChannel) {
+      return 'You are already on the latest $newestChannel build.';
+    }
+    return 'You are already on the latest build allowed by the '
+        '$selectedChannel channel. Latest available source: $newestChannel.';
+  }
+
+  static String _updateAvailableMessage(
+    String selectedChannel,
+    String newestChannel,
+  ) {
+    if (selectedChannel == newestChannel) {
+      return 'A newer $newestChannel build is available.';
+    }
+    return 'A newer $newestChannel build is available through the '
+        '$selectedChannel update channel.';
   }
 
   Map<String, dynamic>? _channelEntry(
@@ -263,4 +284,20 @@ class UpdateCheckService {
         .map((part) => int.tryParse(part.replaceAll(RegExp(r'\D'), '')) ?? 0)
         .toList(growable: false);
   }
+}
+
+class _UpdateManifestCandidate {
+  final String channel;
+  final String latestVersion;
+  final String? downloadUrl;
+  final String? notes;
+  final DateTime? publishedAt;
+
+  const _UpdateManifestCandidate({
+    required this.channel,
+    required this.latestVersion,
+    this.downloadUrl,
+    this.notes,
+    this.publishedAt,
+  });
 }

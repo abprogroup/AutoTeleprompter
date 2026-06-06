@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
-
 import 'update_check_service.dart';
 
 class UpdateDownloadService {
   UpdateDownloadService({HttpClient? httpClient})
-      : _httpClient = httpClient ?? HttpClient();
+    : _httpClient = httpClient ?? HttpClient();
 
   final HttpClient _httpClient;
 
@@ -19,7 +17,8 @@ class UpdateDownloadService {
     final uri = Uri.tryParse(url);
     if (uri == null || !_isAllowedDownloadUri(uri)) {
       throw const FormatException(
-          'Update download URL is invalid or not HTTPS.');
+        'Update download URL is invalid or not HTTPS.',
+      );
     }
 
     final directory = await _updatesDirectory();
@@ -53,9 +52,10 @@ class UpdateDownloadService {
   }
 
   static Future<Directory> _updatesDirectory() async {
-    final downloads = await getDownloadsDirectory();
-    final root = downloads ?? await getApplicationSupportDirectory();
-    return Directory(_joinPath(root.path, 'AutoTeleprompter Updates'));
+    final installDir = File(Platform.resolvedExecutable).parent;
+    return Directory(
+      _joinPath(_joinPath(installDir.path, 'TMP'), 'AutoTeleprompter Updates'),
+    );
   }
 
   static String _downloadFileName(Uri uri, String? latestVersion) {

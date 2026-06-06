@@ -157,6 +157,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
             enabled: premiumUnlocked && anyConnected && !_syncingScripts,
             syncing: _syncingScripts,
             onSyncScripts: _syncAllScripts,
+            onSyncWithApp: _syncAllBackupsWithApp,
           ),
           const SizedBox(height: 32),
           const _SectionLabel('LOCAL BACKUP'),

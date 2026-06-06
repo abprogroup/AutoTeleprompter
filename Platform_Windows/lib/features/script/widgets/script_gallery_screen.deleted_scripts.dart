@@ -486,6 +486,8 @@ class _DeletedScriptsSectionState
   Future<void> _permanentlyDeleteBatch(
     List<DeletedScriptEntry> entries,
   ) async {
+    final cloudCleanupQueued =
+        ref.read(settingsProvider).syncDeletedScriptsFolder;
     final cloudFailures = await ref
         .read(settingsProvider.notifier)
         .permanentlyDeleteDeletedScripts(entries);
@@ -497,10 +499,13 @@ class _DeletedScriptsSectionState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          cloudFailures > 0
+          cloudCleanupQueued
               ? 'Deleted ${entries.length} backups locally. '
-                  '$cloudFailures cloud cleanup actions need another sync.'
-              : 'Deleted ${entries.length} backups forever.',
+                  'Cloud Deleted Scripts cleanup is running.'
+              : cloudFailures > 0
+                  ? 'Deleted ${entries.length} backups locally. '
+                      '$cloudFailures cloud cleanup actions need another sync.'
+                  : 'Deleted ${entries.length} backups forever.',
         ),
       ),
     );
@@ -580,6 +585,8 @@ class _DeletedScriptsSectionState
       ),
     );
     if (confirmed != true) return;
+    final cloudCleanupQueued =
+        ref.read(settingsProvider).syncDeletedScriptsFolder;
     final cloudFailures = await ref
         .read(settingsProvider.notifier)
         .permanentlyDeleteDeletedScript(entry);
@@ -588,9 +595,11 @@ class _DeletedScriptsSectionState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          cloudFailures > 0
-              ? 'Deleted local backup. Cloud cleanup needs another sync.'
-              : 'Deleted script backup removed permanently.',
+          cloudCleanupQueued
+              ? 'Deleted local backup. Cloud Deleted Scripts cleanup is running.'
+              : cloudFailures > 0
+                  ? 'Deleted local backup. Cloud cleanup needs another sync.'
+                  : 'Deleted script backup removed permanently.',
         ),
         duration: const Duration(seconds: 3),
       ),

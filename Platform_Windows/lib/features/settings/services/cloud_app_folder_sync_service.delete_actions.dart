@@ -109,7 +109,10 @@ extension CloudAppFolderDeleteActions on CloudAppFolderSyncService {
     deleted += await _deleteGoogleNames(
       session: session,
       folderId: deletedId,
-      fileNames: [deletedFileName],
+      fileNames: _deletedPrimaryNameVariants(
+        deletedFileName,
+        activeFileName,
+      ),
     );
     deleted += await _deleteGoogleNames(
       session: session,
@@ -160,7 +163,8 @@ extension CloudAppFolderDeleteActions on CloudAppFolderSyncService {
     required String primaryFileName,
     required String alternateFileName,
   }) async {
-    final expected = _metadataNamesForDeleted(primaryFileName, alternateFileName);
+    final expected =
+        _metadataNamesForDeleted(primaryFileName, alternateFileName);
     final removedIds = <String>{};
     removedIds.addAll(await _googleFileIdsByNames(
       session: session,
@@ -253,11 +257,16 @@ extension CloudAppFolderDeleteActions on CloudAppFolderSyncService {
     );
     var removed = 0;
 
-    if (await _deleteDropboxPathIfPresent(
-      session: session,
-      path: _dropboxFilePath(deleted, deletedFileName),
+    for (final fileName in _deletedPrimaryNameVariants(
+      deletedFileName,
+      activeFileName,
     )) {
-      removed++;
+      if (await _deleteDropboxPathIfPresent(
+        session: session,
+        path: _dropboxFilePath(deleted, fileName),
+      )) {
+        removed++;
+      }
     }
     removed += await _deleteDropboxMetadataVariants(
       session: session,
@@ -361,6 +370,18 @@ extension CloudAppFolderDeleteActions on CloudAppFolderSyncService {
       ..._legacyArtifactNamesFor(deletedFileName),
       ..._legacyArtifactNamesFor(activeFileName),
     }.toList(growable: false);
+  }
+
+  List<String> _deletedPrimaryNameVariants(
+    String deletedFileName,
+    String activeFileName,
+  ) {
+    return {
+      deletedFileName,
+      activeFileName,
+      _activeNameFromDeletedCloudFile(deletedFileName),
+      _activeNameFromDeletedCloudFile(activeFileName),
+    }.where((name) => name.trim().isNotEmpty).toList(growable: false);
   }
 
   String _activeNameFromDeletedCloudFile(String fileName) {

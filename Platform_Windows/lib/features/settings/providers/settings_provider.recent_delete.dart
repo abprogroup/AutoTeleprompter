@@ -347,7 +347,20 @@ mixin SettingsNotifierRecentDelete on Notifier<AppSettings> {
       await service.permanentlyDeleteLocal(entry);
     }
     if (!state.syncDeletedScriptsFolder) return 0;
-    return _permanentlyDeleteConnectedCloudDeletedScripts(entries);
+    unawaited(
+      _permanentlyDeleteConnectedCloudDeletedScripts(entries).then((failures) {
+        if (failures == 0) return;
+        LightweightDiagnostics.instance.record(
+          'settings',
+          'cloud deleted script permanent delete finished with warnings',
+          data: {
+            'count': entries.length,
+            'failures': failures,
+          },
+        );
+      }),
+    );
+    return 0;
   }
 
   Future<int> _permanentlyDeleteConnectedCloudDeletedScripts(

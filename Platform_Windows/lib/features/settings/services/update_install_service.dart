@@ -79,9 +79,9 @@ class UpdateInstallService {
     await root.create(recursive: true);
     final version = _safeName(result.latestVersion ?? 'update');
     final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(
-      RegExp(r'[:.]'),
-      '-',
-    );
+          RegExp(r'[:.]'),
+          '-',
+        );
     final stage = Directory(_joinPath(root.path, 'stage_${version}_$stamp'));
     if (await stage.exists()) await stage.delete(recursive: true);
     await stage.create(recursive: true);
@@ -142,8 +142,10 @@ class UpdateInstallService {
     final command = File(
       _joinPath(root.path, 'install_autoteleprompter_update.cmd'),
     );
-    final content =
-        '''
+    final launcher = File(
+      _joinPath(root.path, 'install_autoteleprompter_update_launcher.vbs'),
+    );
+    final content = '''
 \$ErrorActionPreference = 'Stop'
 \$source = ${_psString(updateRoot.path)}
 \$target = ${_psString(installDir.path)}
@@ -156,6 +158,7 @@ class UpdateInstallService {
 \$backup = \$null
 \$scriptPath = \$PSCommandPath
 \$commandPath = ${_psString(command.path)}
+\$launcherPath = ${_psString(launcher.path)}
 \$logDir = Split-Path -Parent \$log
 New-Item -ItemType Directory -Force -Path \$logDir | Out-Null
 Set-Content -LiteralPath \$started -Value (Get-Date).ToString("o") -Encoding UTF8
@@ -210,11 +213,12 @@ try {
   }
 
   Write-UpdateLog "Relaunching AutoTeleprompter."
-  Start-Process -FilePath \$exePath -WorkingDirectory \$target
+  Start-Process -FilePath \$exePath -WorkingDirectory \$target -WindowStyle Normal
   Set-Content -LiteralPath \$success -Value (Get-Date).ToString("o") -Encoding UTF8
   Start-Sleep -Seconds 2
   try { Remove-Item -LiteralPath \$scriptPath -Force -ErrorAction SilentlyContinue } catch {}
   try { Remove-Item -LiteralPath \$commandPath -Force -ErrorAction SilentlyContinue } catch {}
+  try { Remove-Item -LiteralPath \$launcherPath -Force -ErrorAction SilentlyContinue } catch {}
 } catch {
   Write-UpdateLog ("Update install failed: " + \$_.Exception.Message)
   if (\$backup -and (Test-Path -LiteralPath \$backup)) {
@@ -228,7 +232,7 @@ try {
         \$oldExePath = Join-Path \$target \$exeName
         if (Test-Path -LiteralPath \$oldExePath) {
           Write-UpdateLog "Relaunching previous AutoTeleprompter runtime."
-          Start-Process -FilePath \$oldExePath -WorkingDirectory \$target
+          Start-Process -FilePath \$oldExePath -WorkingDirectory \$target -WindowStyle Normal
         }
       }
     } catch {
@@ -240,15 +244,23 @@ try {
 }
 ''';
     await script.writeAsString(content, flush: true);
-    final commandContent =
-        '''
+    final launcherContent = '''
+Dim shell
+Dim command
+Set shell = CreateObject("WScript.Shell")
+command = Chr(34) & "${_vbsString(_powershellExecutable())}" & Chr(34) & " -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File " & Chr(34) & "${_vbsString(script.path)}" & Chr(34)
+shell.Run command, 0, False
+''';
+    await launcher.writeAsString(launcherContent, flush: true);
+    final commandContent = '''
 @echo off
-start "" /min "${_cmdString(_powershellExecutable())}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${_cmdString(script.path)}"
+start "" /b "${_cmdString(_wscriptExecutable())}" //B //Nologo "${_cmdString(launcher.path)}"
 ''';
     await command.writeAsString(commandContent, flush: true);
     return _UpdateHandoff(
       scriptFile: script,
       commandFile: command,
+      launcherFile: launcher,
       logFile: log,
       startedFile: started,
       successFile: success,
@@ -265,19 +277,14 @@ start "" /min "${_cmdString(_powershellExecutable())}" -NoProfile -NonInteractiv
 
   Future<void> _startInstallerHandoff(_UpdateHandoff handoff) async {
     await Process.start(
-      _powershellExecutable(),
+      _wscriptExecutable(),
       [
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        handoff.scriptFile.path,
+        '//B',
+        '//Nologo',
+        handoff.launcherFile.path,
       ],
       mode: ProcessStartMode.detached,
-      workingDirectory: handoff.scriptFile.parent.path,
+      workingDirectory: handoff.launcherFile.parent.path,
     );
   }
 
@@ -299,10 +306,8 @@ start "" /min "${_cmdString(_powershellExecutable())}" -NoProfile -NonInteractiv
 
   static String _safeArchivePath(String name) {
     final normalized = name.replaceAll('\\', '/');
-    final parts = normalized
-        .split('/')
-        .where((part) => part.trim().isNotEmpty)
-        .toList();
+    final parts =
+        normalized.split('/').where((part) => part.trim().isNotEmpty).toList();
     if (parts.any(
       (part) => part == '.' || part == '..' || part.contains(':'),
     )) {
@@ -322,6 +327,8 @@ start "" /min "${_cmdString(_powershellExecutable())}" -NoProfile -NonInteractiv
 
   static String _cmdString(String value) => value.replaceAll('"', r'\"');
 
+  static String _vbsString(String value) => value.replaceAll('"', '""');
+
   static String _powershellExecutable() {
     final systemRoot = Platform.environment['SystemRoot']?.trim();
     if (systemRoot != null && systemRoot.isNotEmpty) {
@@ -331,6 +338,14 @@ start "" /min "${_cmdString(_powershellExecutable())}" -NoProfile -NonInteractiv
       );
     }
     return 'powershell.exe';
+  }
+
+  static String _wscriptExecutable() {
+    final systemRoot = Platform.environment['SystemRoot']?.trim();
+    if (systemRoot != null && systemRoot.isNotEmpty) {
+      return _joinPath(systemRoot, 'System32\\wscript.exe');
+    }
+    return 'wscript.exe';
   }
 
   static String _baseName(String path) {
@@ -348,6 +363,7 @@ start "" /min "${_cmdString(_powershellExecutable())}" -NoProfile -NonInteractiv
 class _UpdateHandoff {
   final File scriptFile;
   final File commandFile;
+  final File launcherFile;
   final File logFile;
   final File startedFile;
   final File successFile;
@@ -355,6 +371,7 @@ class _UpdateHandoff {
   const _UpdateHandoff({
     required this.scriptFile,
     required this.commandFile,
+    required this.launcherFile,
     required this.logFile,
     required this.startedFile,
     required this.successFile,

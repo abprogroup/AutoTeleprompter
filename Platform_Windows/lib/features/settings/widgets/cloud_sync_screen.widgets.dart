@@ -94,11 +94,13 @@ class _CloudActionBar extends StatelessWidget {
   final bool enabled;
   final bool syncing;
   final VoidCallback onSyncScripts;
+  final VoidCallback onSyncWithApp;
 
   const _CloudActionBar({
     required this.enabled,
     required this.syncing,
     required this.onSyncScripts,
+    required this.onSyncWithApp,
   });
 
   @override
@@ -116,6 +118,11 @@ class _CloudActionBar extends StatelessWidget {
             backgroundColor: const Color(0xFFFFBF00),
             foregroundColor: Colors.black,
           ),
+        ),
+        OutlinedButton.icon(
+          onPressed: enabled ? onSyncWithApp : null,
+          icon: const Icon(Icons.sync_alt_rounded, size: 18),
+          label: const Text('Sync with App'),
         ),
         const Text(
           'Sync scripts updates readable files and restore metadata in '

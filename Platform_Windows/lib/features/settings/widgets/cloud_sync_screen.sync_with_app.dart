@@ -1,6 +1,109 @@
 part of 'cloud_sync_screen.dart';
 
 extension _CloudSyncWithAppActions on _CloudSyncScreenState {
+  Future<void> _syncAllBackupsWithApp() async {
+    if (_syncingScripts) return;
+    final providerIds = [
+      for (final provider in CloudConnectionStore.providers)
+        if (_accounts.containsKey(provider.id) &&
+            _providerSupportsAccount(provider.id))
+          provider.id,
+    ];
+    final hasLocalBackup = _localBackup?.isConnected == true;
+    if (providerIds.isEmpty && !hasLocalBackup) {
+      _showSnack('Connect a cloud account or choose a Local Backup folder.');
+      return;
+    }
+    final confirmed = await _confirmSyncWithApp('all backup folders');
+    if (confirmed != true) return;
+
+    _setSyncingScripts(true);
+    _showSnack('Syncing all backup folders with the app...');
+    final failures = <String>[];
+    try {
+      final scripts = await _scriptPayloadsForSync();
+      final deleted = await DeletedScriptsService().listLocalDeletedScripts();
+      final activeNames = await _activeFileNamesForScripts(scripts, failures);
+      final deletedNames = _deletedOriginalFileNames(deleted);
+
+      var localWritten = 0;
+      var localRemoved = 0;
+      if (hasLocalBackup) {
+        localWritten = await _writeLocalBackupScripts(scripts);
+        localRemoved = await _removeLocalBackupExtras(
+          activeNames: activeNames,
+          failures: failures,
+        );
+      }
+
+      var cloudSaved = 0;
+      var cloudDeletedSynced = 0;
+      var cloudMovedToDeleted = 0;
+      var cloudRemoved = 0;
+      for (final providerId in providerIds) {
+        for (final script in scripts) {
+          final result = await _uploadScriptAndMetadata(
+            providerId: providerId,
+            script: script,
+          );
+          if (result.ok) {
+            cloudSaved++;
+          } else {
+            failures.add('${_providerLabel(providerId)}: ${result.message}');
+          }
+        }
+
+        cloudDeletedSynced += await _syncDeletedScriptsForProvider(
+          providerId: providerId,
+          deletedScripts: deleted,
+          failures: failures,
+        );
+        final activeCleanup = await _reconcileProviderActiveFiles(
+          providerId: providerId,
+          activeNames: activeNames,
+          deletedNames: deletedNames,
+          failures: failures,
+        );
+        cloudMovedToDeleted += activeCleanup.movedToDeleted;
+        cloudRemoved += activeCleanup.removedForever;
+        cloudRemoved += await _reconcileProviderDeletedFiles(
+          providerId: providerId,
+          deletedNames: deletedNames,
+          failures: failures,
+        );
+        await _verifyProviderMatchesApp(
+          providerId: providerId,
+          activeNames: activeNames,
+          deletedNames: deletedNames,
+          failures: failures,
+        );
+      }
+
+      if (failures.isEmpty) {
+        _showSnack(
+          'All backups match the app: $localWritten local saved, '
+          '$localRemoved local removed, $cloudSaved cloud saved, '
+          '$cloudDeletedSynced deleted synced, '
+          '$cloudMovedToDeleted moved to deleted, $cloudRemoved removed.',
+        );
+      } else {
+        _showSnack(
+          'Sync with App finished with ${failures.length} warnings. '
+          '${failures.first}',
+        );
+      }
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'cloud.syncAllBackupsWithApp',
+      );
+      _showSnack('Sync with App failed: ${_shortError(error)}');
+    } finally {
+      _setSyncingScripts(false);
+    }
+  }
+
   Future<void> _syncLocalBackupWithApp() async {
     if (_syncingScripts) return;
     if (!(_localBackup?.isConnected ?? false)) {

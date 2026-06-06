@@ -1,5 +1,8 @@
 name: Build Windows EXE
-run-name: Windows ${{ github.event.inputs.app_version || '5.0.7+30' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
+run-name: Windows ${{ github.event.inputs.app_version || '5.0.7+31' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   push:
@@ -19,9 +22,9 @@ on:
           - beta
           - internal
       app_version:
-        description: 'Flutter app version, for example 5.0.7+30'
+        description: 'Flutter app version, for example 5.0.7+31'
         required: true
-        default: '5.0.7+30'
+        default: '5.0.7+31'
         type: string
       release_label:
         description: 'Human label such as Beta 1 or Stable'
@@ -59,11 +62,11 @@ jobs:
 
           $appVersion = "${{ github.event.inputs.app_version }}"
           if ([string]::IsNullOrWhiteSpace($appVersion)) {
-            $appVersion = "5.0.7+30"
+            $appVersion = "5.0.7+31"
           }
           $appVersion = $appVersion.Trim()
           if ($appVersion -notmatch '^\d+\.\d+\.\d+\+\d+$') {
-            throw "app_version must look like 5.0.7+30."
+            throw "app_version must look like 5.0.7+31."
           }
           $versionName = ($appVersion -split '\+', 2)[0]
 
@@ -208,44 +211,7 @@ jobs:
           $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\${{ steps.release.outputs.tag }}"
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
 
-          function Remove-ClientCredentialQuery([string] $value) {
-            $clean = ($value -replace "`r", "" -replace "`n", "").Trim()
-            if ([string]::IsNullOrWhiteSpace($clean)) { return "" }
-            try {
-              $uri = [Uri] $clean
-              if ([string]::IsNullOrWhiteSpace($uri.Query)) { return $clean }
-              $blockedNames = @(
-                "token",
-                "access_token",
-                "api_key",
-                "apikey",
-                "key",
-                "secret",
-                "client_secret",
-                "auth"
-              )
-              $pairs = $uri.Query.TrimStart("?").Split("&", [System.StringSplitOptions]::RemoveEmptyEntries)
-              $kept = New-Object System.Collections.Generic.List[string]
-              $removed = $false
-              foreach ($pair in $pairs) {
-                $name = [Uri]::UnescapeDataString(($pair -split "=", 2)[0]).ToLowerInvariant()
-                if ($blockedNames -contains $name) {
-                  $removed = $true
-                } else {
-                  $kept.Add($pair)
-                }
-              }
-              if (-not $removed) { return $clean }
-              Write-Warning "Removed token-like query parameter from FEEDBACK_ENDPOINT before compiling the public artifact."
-              $builder = [UriBuilder] $uri
-              $builder.Query = ($kept -join "&")
-              return $builder.Uri.AbsoluteUri
-            } catch {
-              return $clean
-            }
-          }
-
-          $endpoint = Remove-ClientCredentialQuery $env:FEEDBACK_ENDPOINT
+          $endpoint = ($env:FEEDBACK_ENDPOINT -replace "`r", "" -replace "`n", "").Trim()
           $googleDriveClientId = ($env:GOOGLE_DRIVE_CLIENT_ID -replace "\s", "").Trim()
           $googleDriveClientSecret = ($env:GOOGLE_DRIVE_CLIENT_SECRET -replace "\s", "").Trim()
           $dropboxClientId = ($env:DROPBOX_CLIENT_ID -replace "\s", "").Trim()

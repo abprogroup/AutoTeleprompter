@@ -1,5 +1,5 @@
-name: Build Windows EXE (v5.0.6)
-run-name: Windows ${{ github.event.inputs.app_version || '5.0.6+21' }} ${{ github.event.inputs.release_channel || 'beta' }} EXE
+name: Build Windows EXE
+run-name: Windows ${{ github.event.inputs.app_version || '5.0.7+30' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
 
 on:
   push:
@@ -12,21 +12,21 @@ on:
       release_channel:
         description: 'Release channel for this Windows package'
         required: true
-        default: 'beta'
+        default: 'stable'
         type: choice
         options:
           - stable
           - beta
           - internal
       app_version:
-        description: 'Flutter app version, for example 5.0.6+21'
+        description: 'Flutter app version, for example 5.0.7+30'
         required: true
-        default: '5.0.6+21'
+        default: '5.0.7+30'
         type: string
       release_label:
         description: 'Human label such as Beta 1 or Stable'
         required: false
-        default: 'Beta 1'
+        default: 'Stable'
         type: string
       release_number:
         description: 'Beta/internal sequence number'
@@ -50,7 +50,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $releaseChannel = "${{ github.event.inputs.release_channel }}"
           if ([string]::IsNullOrWhiteSpace($releaseChannel)) {
-            $releaseChannel = "beta"
+            $releaseChannel = "stable"
           }
           $releaseChannel = $releaseChannel.Trim().ToLowerInvariant()
           if (@("stable", "beta", "internal") -notcontains $releaseChannel) {
@@ -59,11 +59,11 @@ jobs:
 
           $appVersion = "${{ github.event.inputs.app_version }}"
           if ([string]::IsNullOrWhiteSpace($appVersion)) {
-            $appVersion = "5.0.6+21"
+            $appVersion = "5.0.7+30"
           }
           $appVersion = $appVersion.Trim()
           if ($appVersion -notmatch '^\d+\.\d+\.\d+\+\d+$') {
-            throw "app_version must look like 5.0.6+21."
+            throw "app_version must look like 5.0.7+30."
           }
           $versionName = ($appVersion -split '\+', 2)[0]
 
@@ -123,6 +123,66 @@ jobs:
           "manifest_tag=$manifestTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "manifest_asset=$manifestAsset" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "manifest_url=$manifestUrl" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Preflight Required Release Credentials
+        shell: pwsh
+        env:
+          FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
+          DROPBOX_CLIENT_ID: ${{ secrets.DROPBOX_CLIENT_ID }}
+          DROPBOX_CLIENT_SECRET: ${{ secrets.DROPBOX_CLIENT_SECRET }}
+          AUTOTELEPROMPTER_ADMIN_EMAIL: ${{ secrets.AUTOTELEPROMPTER_ADMIN_EMAIL }}
+          AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
+          UPDATE_MANIFEST_URL_SECRET: ${{ secrets.UPDATE_MANIFEST_URL }}
+          UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
+          PUBLIC_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
+          INTERNAL_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_INTERNAL_RELEASES_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          function Require-Value([string] $name, [string] $value) {
+            if ([string]::IsNullOrWhiteSpace(($value -replace "`r", "" -replace "`n", "").Trim())) {
+              throw "Required release credential '$name' is missing. Published Windows builds must include feedback, cloud, admin, update, and Git release support."
+            }
+          }
+
+          Require-Value "FEEDBACK_ENDPOINT" $env:FEEDBACK_ENDPOINT
+          Require-Value "GOOGLE_DRIVE_CLIENT_ID" $env:GOOGLE_DRIVE_CLIENT_ID
+          Require-Value "GOOGLE_DRIVE_CLIENT_SECRET" $env:GOOGLE_DRIVE_CLIENT_SECRET
+          Require-Value "DROPBOX_CLIENT_ID" $env:DROPBOX_CLIENT_ID
+          Require-Value "DROPBOX_CLIENT_SECRET" $env:DROPBOX_CLIENT_SECRET
+          Require-Value "AUTOTELEPROMPTER_ADMIN_EMAIL" $env:AUTOTELEPROMPTER_ADMIN_EMAIL
+          Require-Value "AUTOTELEPROMPTER_ADMIN_CODE_SHA256" $env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256
+
+          $manifestUrl = ($env:UPDATE_MANIFEST_URL_SECRET -replace "`r", "" -replace "`n", "").Trim()
+          if ([string]::IsNullOrWhiteSpace($manifestUrl)) {
+            $manifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
+          }
+          if ([string]::IsNullOrWhiteSpace($manifestUrl)) {
+            $manifestUrl = "${{ steps.release.outputs.manifest_url }}"
+          }
+          if ($manifestUrl -notmatch '^https://') {
+            throw "UPDATE_MANIFEST_URL must resolve to an HTTPS URL."
+          }
+
+          $googleDriveClientId = ($env:GOOGLE_DRIVE_CLIENT_ID -replace "\s", "").Trim()
+          if ($googleDriveClientId -notmatch '^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$') {
+            throw "GOOGLE_DRIVE_CLIENT_ID is malformed. Use the OAuth Desktop app Client ID ending in .apps.googleusercontent.com."
+          }
+
+          $adminCodeHash = ($env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256 -replace "\s", "").Trim().ToLowerInvariant()
+          if ($adminCodeHash -notmatch '^[a-f0-9]{64}$') {
+            throw "AUTOTELEPROMPTER_ADMIN_CODE_SHA256 must be a lowercase SHA-256 hash."
+          }
+
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            if ("${{ steps.release.outputs.release_channel }}" -eq "internal") {
+              Require-Value "AUTOTELEPROMPTER_INTERNAL_RELEASES_TOKEN" $env:INTERNAL_RELEASES_TOKEN
+            } else {
+              Require-Value "AUTOTELEPROMPTER_RELEASES_TOKEN" $env:PUBLIC_RELEASES_TOKEN
+            }
+          }
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2

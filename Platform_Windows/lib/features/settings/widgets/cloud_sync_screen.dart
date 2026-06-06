@@ -26,6 +26,7 @@ part 'cloud_sync_screen.folder_moves.dart';
 part 'cloud_sync_screen.local_backup_dialogs.dart';
 part 'cloud_sync_screen.managed_sync.dart';
 part 'cloud_sync_screen.payloads.dart';
+part 'cloud_sync_screen.sync_with_app.dart';
 part 'cloud_sync_screen.synced_scripts_dialog.dart';
 part 'cloud_sync_screen.widgets.dart';
 
@@ -171,6 +172,8 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
             onUpload:
                 localBackup.isConnected ? _uploadLocalBackupScripts : null,
             onList: localBackup.isConnected ? _showLocalBackupScripts : null,
+            onSyncWithApp:
+                localBackup.isConnected ? _syncLocalBackupWithApp : null,
           ),
           const SizedBox(height: 12),
           _DeletedScriptsFolderCard(
@@ -212,6 +215,10 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
                 onListAccount: premiumUnlocked &&
                         _accounts.containsKey(connection.provider.id)
                     ? () => _showSyncedScripts(connection.provider)
+                    : null,
+                onSyncWithApp: premiumUnlocked &&
+                        _accounts.containsKey(connection.provider.id)
+                    ? () => _syncProviderWithApp(connection.provider.id)
                     : null,
                 onDisconnectAccount: premiumUnlocked &&
                         _accounts.containsKey(connection.provider.id)

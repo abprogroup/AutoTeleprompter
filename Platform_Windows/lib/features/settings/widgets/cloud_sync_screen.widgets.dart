@@ -136,6 +136,7 @@ class _LocalBackupCard extends StatelessWidget {
   final VoidCallback? onForget;
   final VoidCallback? onUpload;
   final VoidCallback? onList;
+  final VoidCallback? onSyncWithApp;
 
   const _LocalBackupCard({
     required this.connection,
@@ -145,6 +146,7 @@ class _LocalBackupCard extends StatelessWidget {
     required this.onForget,
     required this.onUpload,
     required this.onList,
+    required this.onSyncWithApp,
   });
 
   @override
@@ -231,6 +233,11 @@ class _LocalBackupCard extends StatelessWidget {
                       onPressed: enabled ? onList : null,
                       icon: const Icon(Icons.cloud_sync_outlined, size: 18),
                       label: const Text('Synced scripts'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: enabled ? onSyncWithApp : null,
+                      icon: const Icon(Icons.sync_alt_rounded, size: 18),
+                      label: const Text('Sync with App'),
                     ),
                   ],
                 ),
@@ -380,6 +387,7 @@ class _CloudOption extends StatelessWidget {
   final VoidCallback? onConnectAccount;
   final VoidCallback? onUploadAccount;
   final VoidCallback? onListAccount;
+  final VoidCallback? onSyncWithApp;
   final VoidCallback? onDisconnectAccount;
 
   const _CloudOption({
@@ -388,6 +396,7 @@ class _CloudOption extends StatelessWidget {
     required this.onConnectAccount,
     required this.onUploadAccount,
     required this.onListAccount,
+    required this.onSyncWithApp,
     required this.onDisconnectAccount,
   });
 
@@ -466,6 +475,11 @@ class _CloudOption extends StatelessWidget {
                       onPressed: onListAccount,
                       icon: const Icon(Icons.cloud_sync_outlined, size: 18),
                       label: const Text('Synced scripts'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: onSyncWithApp,
+                      icon: const Icon(Icons.sync_alt_rounded, size: 18),
+                      label: const Text('Sync with App'),
                     ),
                     OutlinedButton.icon(
                       onPressed: onDisconnectAccount,

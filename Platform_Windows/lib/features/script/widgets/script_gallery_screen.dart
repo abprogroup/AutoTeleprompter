@@ -577,14 +577,17 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     _startupUpdateCheckRan = true;
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
-    final settings = ref.read(settingsProvider);
-    if (!settings.checkUpdatesOnStartup) return;
+    final startupUpdates = await _readStartupUpdatePreferences();
+    if (!mounted || !startupUpdates.checkUpdatesOnStartup) return;
     final auth = ref.read(authProvider);
+    final adminUpdateConfigured =
+        autoTeleprompterAdminEmail.trim().isNotEmpty &&
+            autoTeleprompterAdminCodeHash.trim().isNotEmpty;
     final channel =
-        settings.updateChannel == AppSettings.updateChannelInternal &&
-                !auth.isAdmin
+        startupUpdates.updateChannel == AppSettings.updateChannelInternal &&
+                (!auth.isAdmin || !adminUpdateConfigured)
             ? AppSettings.updateChannelStable
-            : settings.updateChannel;
+            : startupUpdates.updateChannel;
     final result = await UpdateCheckService().check(
       channel: channel,
     );
@@ -650,6 +653,33 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       );
     }
   }
+
+  Future<_StartupUpdatePreferences> _readStartupUpdatePreferences() async {
+    final providerSettings = ref.read(settingsProvider);
+    final prefs = await SharedPreferences.getInstance();
+    final savedChannel = prefs.getString('updateChannel');
+    final channel = switch (savedChannel) {
+      AppSettings.updateChannelStable => AppSettings.updateChannelStable,
+      AppSettings.updateChannelBeta => AppSettings.updateChannelBeta,
+      AppSettings.updateChannelInternal => AppSettings.updateChannelInternal,
+      _ => providerSettings.updateChannel,
+    };
+    return _StartupUpdatePreferences(
+      updateChannel: channel,
+      checkUpdatesOnStartup: prefs.getBool('checkUpdatesOnStartup') ??
+          providerSettings.checkUpdatesOnStartup,
+    );
+  }
+}
+
+class _StartupUpdatePreferences {
+  final String updateChannel;
+  final bool checkUpdatesOnStartup;
+
+  const _StartupUpdatePreferences({
+    required this.updateChannel,
+    required this.checkUpdatesOnStartup,
+  });
 }
 
 // Gallery remote status is now restored through RemoteStatusCard.

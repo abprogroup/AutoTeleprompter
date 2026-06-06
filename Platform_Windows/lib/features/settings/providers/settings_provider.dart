@@ -288,6 +288,7 @@ class SettingsNotifier extends Notifier<AppSettings>
       uiScale: _normalizeUiScale(prefs.getDouble(_uiScaleKey)),
       updateChannel: _normalizeUpdateChannel(
         prefs.getString(_updateChannelKey),
+        allowInternal: true,
       ),
       checkUpdatesOnStartup: prefs.getBool(_checkUpdatesOnStartupKey) ?? true,
       cloudAutoSyncOnSave: prefs.getBool(_cloudAutoSyncOnSaveKey) ?? true,

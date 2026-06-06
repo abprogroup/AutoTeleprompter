@@ -31,19 +31,34 @@ class UpdateInstallService {
       exeName: exeName,
     );
 
+    if (await handoff.startedFile.exists()) {
+      await handoff.startedFile.delete();
+    }
+    if (await handoff.logFile.exists()) {
+      await handoff.logFile.delete();
+    }
+
     await Process.start(
-      'powershell.exe',
+      _powershellExecutable(),
       [
         '-NoProfile',
+        '-NonInteractive',
         '-ExecutionPolicy',
         'Bypass',
         '-WindowStyle',
         'Hidden',
         '-File',
-        handoff.path,
+        handoff.scriptFile.path,
       ],
       mode: ProcessStartMode.detached,
+      workingDirectory: handoff.scriptFile.parent.path,
     );
+    if (!await _waitForInstallerStart(handoff.startedFile)) {
+      throw StateError(
+        'Update installer did not start. AutoTeleprompter stayed open so '
+        'the current build was not lost.',
+      );
+    }
     await Future<void>.delayed(const Duration(milliseconds: 250));
     exit(0);
   }
@@ -94,7 +109,7 @@ class UpdateInstallService {
     throw StateError('Update package does not contain $exeName.');
   }
 
-  Future<File> _writeHandoffScript({
+  Future<_UpdateHandoff> _writeHandoffScript({
     required Directory updateRoot,
     required Directory installDir,
     required String exeName,
@@ -105,6 +120,8 @@ class UpdateInstallService {
         File(_joinPath(root.path, 'install_autoteleprompter_update.ps1'));
     final log =
         File(_joinPath(root.path, 'install_autoteleprompter_update.log'));
+    final started =
+        File(_joinPath(root.path, 'install_autoteleprompter_update.started'));
     final content = '''
 \$ErrorActionPreference = 'Stop'
 \$source = ${_psString(updateRoot.path)}
@@ -112,7 +129,11 @@ class UpdateInstallService {
 \$exeName = ${_psString(exeName)}
 \$pidToWait = $pid
 \$log = ${_psString(log.path)}
+\$started = ${_psString(started.path)}
 \$scriptPath = \$PSCommandPath
+\$logDir = Split-Path -Parent \$log
+New-Item -ItemType Directory -Force -Path \$logDir | Out-Null
+Set-Content -LiteralPath \$started -Value (Get-Date).ToString("o") -Encoding UTF8
 
 function Write-UpdateLog([string]\$message) {
   \$line = "[{0}] {1}" -f (Get-Date).ToString("s"), \$message
@@ -155,7 +176,19 @@ try {
 }
 ''';
     await script.writeAsString(content, flush: true);
-    return script;
+    return _UpdateHandoff(
+      scriptFile: script,
+      logFile: log,
+      startedFile: started,
+    );
+  }
+
+  Future<bool> _waitForInstallerStart(File startedFile) async {
+    for (var i = 0; i < 25; i++) {
+      if (await startedFile.exists()) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    return false;
   }
 
   static Future<Directory> _updatesDirectory() async {
@@ -184,6 +217,17 @@ try {
 
   static String _psString(String value) => "'${value.replaceAll("'", "''")}'";
 
+  static String _powershellExecutable() {
+    final systemRoot = Platform.environment['SystemRoot']?.trim();
+    if (systemRoot != null && systemRoot.isNotEmpty) {
+      return _joinPath(
+        systemRoot,
+        'System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      );
+    }
+    return 'powershell.exe';
+  }
+
   static String _baseName(String path) {
     final normalized = path.replaceAll('\\', '/');
     final index = normalized.lastIndexOf('/');
@@ -194,4 +238,16 @@ try {
     if (left.endsWith(Platform.pathSeparator)) return '$left$right';
     return '$left${Platform.pathSeparator}$right';
   }
+}
+
+class _UpdateHandoff {
+  final File scriptFile;
+  final File logFile;
+  final File startedFile;
+
+  const _UpdateHandoff({
+    required this.scriptFile,
+    required this.logFile,
+    required this.startedFile,
+  });
 }

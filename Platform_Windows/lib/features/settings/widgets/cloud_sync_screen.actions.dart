@@ -101,6 +101,22 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
     );
   }
 
+  Future<void> _setSyncDeletedScriptsFolder(bool enabled) async {
+    if (enabled && _accounts.isEmpty) {
+      _showSnack(
+          'Connect Google Drive or Dropbox before syncing deleted-script cleanup.');
+      return;
+    }
+    await ref
+        .read(settingsProvider.notifier)
+        .setSyncDeletedScriptsFolder(enabled);
+    _showSnack(
+      enabled
+          ? 'Deleted Scripts cloud cleanup enabled.'
+          : 'Deleted Scripts cloud cleanup disabled.',
+    );
+  }
+
   Future<void> _setRecordingAutoBackup(bool enabled) async {
     if (enabled && _accounts.isEmpty) {
       _showSnack(

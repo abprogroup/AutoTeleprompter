@@ -303,6 +303,12 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setBool(_cloudAutoSyncOnSaveKey, enabled);
   }
 
+  Future<void> setSyncDeletedScriptsFolder(bool enabled) async {
+    state = state.copyWith(syncDeletedScriptsFolder: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_syncDeletedScriptsFolderKey, enabled);
+  }
+
   Future<void> setRecordingAutoBackup(bool enabled) async {
     state = state.copyWith(recordingAutoBackup: enabled);
     final prefs = await SharedPreferences.getInstance();

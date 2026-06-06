@@ -73,4 +73,5 @@ const _uiScaleKey = 'uiScale';
 const _updateChannelKey = 'updateChannel';
 const _checkUpdatesOnStartupKey = 'checkUpdatesOnStartup';
 const _cloudAutoSyncOnSaveKey = 'cloudAutoSyncOnSave';
+const _syncDeletedScriptsFolderKey = 'syncDeletedScriptsFolder';
 const _recordingAutoBackupKey = 'recordingAutoBackup';

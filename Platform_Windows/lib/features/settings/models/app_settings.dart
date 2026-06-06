@@ -147,6 +147,7 @@ class AppSettings {
   final String updateChannel;
   final bool checkUpdatesOnStartup;
   final bool cloudAutoSyncOnSave;
+  final bool syncDeletedScriptsFolder;
   final bool recordingAutoBackup;
 
   const AppSettings({
@@ -223,6 +224,7 @@ class AppSettings {
     this.updateChannel = updateChannelStable,
     this.checkUpdatesOnStartup = true,
     this.cloudAutoSyncOnSave = true,
+    this.syncDeletedScriptsFolder = false,
     this.recordingAutoBackup = false,
   });
 
@@ -300,6 +302,7 @@ class AppSettings {
     String? updateChannel,
     bool? checkUpdatesOnStartup,
     bool? cloudAutoSyncOnSave,
+    bool? syncDeletedScriptsFolder,
     bool? recordingAutoBackup,
   }) {
     return AppSettings(
@@ -412,6 +415,8 @@ class AppSettings {
       checkUpdatesOnStartup:
           checkUpdatesOnStartup ?? this.checkUpdatesOnStartup,
       cloudAutoSyncOnSave: cloudAutoSyncOnSave ?? this.cloudAutoSyncOnSave,
+      syncDeletedScriptsFolder:
+          syncDeletedScriptsFolder ?? this.syncDeletedScriptsFolder,
       recordingAutoBackup: recordingAutoBackup ?? this.recordingAutoBackup,
     );
   }

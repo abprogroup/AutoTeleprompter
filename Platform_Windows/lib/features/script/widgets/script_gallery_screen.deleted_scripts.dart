@@ -486,16 +486,23 @@ class _DeletedScriptsSectionState
   Future<void> _permanentlyDeleteBatch(
     List<DeletedScriptEntry> entries,
   ) async {
-    for (final entry in entries) {
-      await _service.permanentlyDeleteLocal(entry);
-    }
+    final cloudFailures = await ref
+        .read(settingsProvider.notifier)
+        .permanentlyDeleteDeletedScripts(entries);
     if (!mounted) return;
     setState(() {
       _selectedPaths.clear();
       _selectionMode = false;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Deleted ${entries.length} backups forever.')),
+      SnackBar(
+        content: Text(
+          cloudFailures > 0
+              ? 'Deleted ${entries.length} backups locally. '
+                  '$cloudFailures cloud cleanup actions need another sync.'
+              : 'Deleted ${entries.length} backups forever.',
+        ),
+      ),
     );
   }
 
@@ -573,13 +580,19 @@ class _DeletedScriptsSectionState
       ),
     );
     if (confirmed != true) return;
-    await _service.permanentlyDeleteLocal(entry);
+    final cloudFailures = await ref
+        .read(settingsProvider.notifier)
+        .permanentlyDeleteDeletedScript(entry);
     await _loadDeletedEntries(showLoading: false);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Deleted script backup removed permanently.'),
-        duration: Duration(seconds: 3),
+      SnackBar(
+        content: Text(
+          cloudFailures > 0
+              ? 'Deleted local backup. Cloud cleanup needs another sync.'
+              : 'Deleted script backup removed permanently.',
+        ),
+        duration: const Duration(seconds: 3),
       ),
     );
   }

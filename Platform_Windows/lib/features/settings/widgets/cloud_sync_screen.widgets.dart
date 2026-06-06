@@ -615,8 +615,10 @@ class _AutomationCard extends StatelessWidget {
   final bool premiumUnlocked;
   final bool cloudAccountsConnected;
   final bool autoSyncScripts;
+  final bool syncDeletedScriptsFolder;
   final bool recordingAutoBackup;
   final ValueChanged<bool> onAutoSyncScriptsChanged;
+  final ValueChanged<bool> onSyncDeletedScriptsFolderChanged;
   final ValueChanged<bool> onRecordingAutoBackupChanged;
 
   const _AutomationCard({
@@ -624,8 +626,10 @@ class _AutomationCard extends StatelessWidget {
     required this.premiumUnlocked,
     required this.cloudAccountsConnected,
     required this.autoSyncScripts,
+    required this.syncDeletedScriptsFolder,
     required this.recordingAutoBackup,
     required this.onAutoSyncScriptsChanged,
+    required this.onSyncDeletedScriptsFolderChanged,
     required this.onRecordingAutoBackupChanged,
   });
 
@@ -652,6 +656,18 @@ class _AutomationCard extends StatelessWidget {
             enabled: premiumUnlocked && anyConnected,
             value: autoSyncScripts,
             onChanged: onAutoSyncScriptsChanged,
+          ),
+          const Divider(color: Colors.white12),
+          _AutomationRow(
+            title: 'Sync deleted scripts folder',
+            subtitle: !premiumUnlocked
+                ? 'Connect a Pro account to sync deleted-script cleanup.'
+                : cloudAccountsConnected
+                    ? 'When deleted backups are removed from the app, remove matching cloud Deleted Scripts files and metadata.'
+                    : 'Connect Google Drive or Dropbox before syncing deleted-script cleanup.',
+            enabled: premiumUnlocked && cloudAccountsConnected,
+            value: syncDeletedScriptsFolder,
+            onChanged: onSyncDeletedScriptsFolderChanged,
           ),
           const Divider(color: Colors.white12),
           _AutomationRow(

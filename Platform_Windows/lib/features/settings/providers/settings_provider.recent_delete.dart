@@ -332,6 +332,79 @@ mixin SettingsNotifierRecentDelete on Notifier<AppSettings> {
     return restored;
   }
 
+  Future<int> permanentlyDeleteDeletedScript(
+    DeletedScriptEntry entry,
+  ) async {
+    return permanentlyDeleteDeletedScripts([entry]);
+  }
+
+  Future<int> permanentlyDeleteDeletedScripts(
+    List<DeletedScriptEntry> entries,
+  ) async {
+    if (entries.isEmpty) return 0;
+    final service = DeletedScriptsService();
+    for (final entry in entries) {
+      await service.permanentlyDeleteLocal(entry);
+    }
+    if (!state.syncDeletedScriptsFolder) return 0;
+    return _permanentlyDeleteConnectedCloudDeletedScripts(entries);
+  }
+
+  Future<int> _permanentlyDeleteConnectedCloudDeletedScripts(
+    List<DeletedScriptEntry> entries,
+  ) async {
+    var failures = 0;
+    try {
+      final accounts = await CloudOAuthService().loadAccounts();
+      if (accounts.isEmpty) return failures;
+      final sync = CloudAppFolderSyncService();
+      final providerIds = accounts.keys.where((providerId) =>
+          providerId == CloudConnectionStore.googleDrive ||
+          providerId == CloudConnectionStore.dropbox);
+      for (final providerId in providerIds) {
+        for (final entry in entries) {
+          try {
+            final result = await sync.deleteDeletedScriptPermanently(
+              providerId: providerId,
+              deletedFileName: entry.name,
+            );
+            if (!result.ok) {
+              failures++;
+              LightweightDiagnostics.instance.record(
+                'settings',
+                'cloud deleted script permanent delete skipped',
+                data: {
+                  'providerId': providerId,
+                  'deletedFileName': entry.name,
+                  'message': result.message,
+                },
+              );
+            }
+          } catch (error, stack) {
+            failures++;
+            LightweightDiagnostics.instance.recordError(
+              error,
+              stack,
+              source: 'settings.cloudDeletedScriptPermanentDelete',
+              data: {
+                'providerId': providerId,
+                'deletedFileName': entry.name,
+              },
+            );
+          }
+        }
+      }
+    } catch (error, stack) {
+      failures += entries.length;
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'settings.cloudDeletedScriptPermanentDeleteAccounts',
+      );
+    }
+    return failures;
+  }
+
   Future<void> _moveConnectedCloudScriptsToDeleted({
     required String title,
     required String text,

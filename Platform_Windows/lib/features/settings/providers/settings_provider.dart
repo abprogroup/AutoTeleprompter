@@ -292,6 +292,8 @@ class SettingsNotifier extends Notifier<AppSettings>
       ),
       checkUpdatesOnStartup: prefs.getBool(_checkUpdatesOnStartupKey) ?? true,
       cloudAutoSyncOnSave: prefs.getBool(_cloudAutoSyncOnSaveKey) ?? true,
+      syncDeletedScriptsFolder:
+          prefs.getBool(_syncDeletedScriptsFolderKey) ?? false,
       recordingAutoBackup: prefs.getBool(_recordingAutoBackupKey) ?? false,
     );
   }

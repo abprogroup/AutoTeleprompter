@@ -87,6 +87,12 @@ extension _CloudSyncWithAppActions on _CloudSyncScreenState {
         deletedNames: deletedNames,
         failures: failures,
       );
+      await _verifyProviderMatchesApp(
+        providerId: providerId,
+        activeNames: activeNames,
+        deletedNames: deletedNames,
+        failures: failures,
+      );
 
       _showSnack(
         failures.isEmpty
@@ -209,6 +215,39 @@ extension _CloudSyncWithAppActions on _CloudSyncScreenState {
     return removed;
   }
 
+  Future<void> _verifyProviderMatchesApp({
+    required String providerId,
+    required Set<String> activeNames,
+    required Set<String> deletedNames,
+    required List<String> failures,
+  }) async {
+    final active = await _sync.listScripts(providerId);
+    final deleted = await _sync.listDeletedScripts(providerId);
+    final activeExtras = [
+      for (final file in active)
+        if (!activeNames.contains(_fileKey(file.name)) &&
+            !deletedNames.contains(_fileKey(file.name)))
+          file.name,
+    ];
+    final deletedExtras = [
+      for (final file in deleted)
+        if (!deletedNames.contains(
+          _fileKey(_activeNameFromCloudDeleted(file.name)),
+        ))
+          file.name,
+    ];
+    if (activeExtras.isEmpty && deletedExtras.isEmpty) return;
+    final count = activeExtras.length + deletedExtras.length;
+    final sample = [
+      ...activeExtras,
+      ...deletedExtras,
+    ].take(2).join(', ');
+    failures.add(
+      '${_providerLabel(providerId)} still has $count file(s) not matching '
+      'the app after sync. Open Synced scripts to review: $sample',
+    );
+  }
+
   Future<_ProviderActiveCleanup> _reconcileProviderActiveFiles({
     required String providerId,
     required Set<String> activeNames,
@@ -269,17 +308,9 @@ extension _CloudSyncWithAppActions on _CloudSyncScreenState {
     CloudSyncedFile file,
     List<String> failures,
   ) async {
-    final move = await _sync.moveSyncedScriptToDeleted(
+    final delete = await _sync.deleteSyncedScriptPermanently(
       providerId: file.providerId,
       primaryFileName: file.name,
-    );
-    if (!move.ok) {
-      failures.add('${file.name}: ${move.message}');
-      return false;
-    }
-    final delete = await _sync.deleteDeletedScriptPermanently(
-      providerId: file.providerId,
-      deletedFileName: file.name,
     );
     if (!delete.ok) {
       failures.add('${file.name}: ${delete.message}');

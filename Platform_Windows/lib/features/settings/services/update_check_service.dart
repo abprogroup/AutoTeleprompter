@@ -105,7 +105,17 @@ class UpdateCheckService {
       throw const FormatException('Manifest root must be a JSON object.');
     }
 
-    final channelEntry = _channelEntry(decoded, channel);
+    var effectiveChannel = channel;
+    var fallbackMessage = '';
+    var channelEntry = _channelEntry(decoded, channel);
+    if (channelEntry == null && channel == AppSettings.updateChannelInternal) {
+      final betaEntry = _channelEntry(decoded, AppSettings.updateChannelBeta);
+      if (betaEntry != null) {
+        channelEntry = betaEntry;
+        effectiveChannel = AppSettings.updateChannelBeta;
+        fallbackMessage = 'No internal build is published yet. ';
+      }
+    }
     if (channelEntry == null) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.notConfigured,
@@ -119,7 +129,7 @@ class UpdateCheckService {
     final downloadUrl = _stringValue(channelEntry, 'url') ??
         _stringValue(channelEntry, 'downloadUrl');
     if (latestVersion == null || latestVersion.trim().isEmpty) {
-      throw FormatException('Manifest is missing $channel.version.');
+      throw FormatException('Manifest is missing $effectiveChannel.version.');
     }
 
     final notes = _stringValue(channelEntry, 'notes') ??
@@ -135,24 +145,25 @@ class UpdateCheckService {
     if (comparison <= 0) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.upToDate,
-        channel: channel,
+        channel: effectiveChannel,
         currentVersion: autoTeleprompterAppVersion,
         latestVersion: latestVersion.trim(),
         downloadUrl: downloadUrl,
         notes: notes,
         publishedAt: publishedAt,
-        message: 'You are already on the latest $channel build.',
+        message:
+            '${fallbackMessage}You are already on the latest $effectiveChannel build.',
       );
     }
     return UpdateCheckResult(
       status: UpdateCheckStatus.updateAvailable,
-      channel: channel,
+      channel: effectiveChannel,
       currentVersion: autoTeleprompterAppVersion,
       latestVersion: latestVersion.trim(),
       downloadUrl: downloadUrl,
       notes: notes,
       publishedAt: publishedAt,
-      message: 'A newer $channel build is available.',
+      message: '${fallbackMessage}A newer $effectiveChannel build is available.',
     );
   }
 

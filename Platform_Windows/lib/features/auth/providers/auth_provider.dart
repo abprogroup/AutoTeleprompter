@@ -1,8 +1,14 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../services/account_backend_service.dart';
+import '../services/account_backend_config.dart';
+import '../services/account_backend_models.dart';
+import '../services/account_session_store.dart';
 
 const autoTeleprompterAdminEmail = String.fromEnvironment(
   'AUTOTELEPROMPTER_ADMIN_EMAIL',
@@ -23,29 +29,69 @@ class AuthState {
   final bool isPro;
   final bool isAdmin;
   final String? licenseKey;
+  final bool accountBackendEnabled;
+  final String? backendAccountId;
+  final AccountBackendRole backendRole;
+  final String backendStatus;
+  final String? backendError;
+  final DateTime? backendTokenExpiry;
+  final DateTime? offlineGraceExpiry;
+  final String? deviceId;
+  final DateTime? lastServerTimestamp;
 
   AuthState({
     this.email,
     this.isPro = false,
     this.isAdmin = false,
     this.licenseKey,
+    this.accountBackendEnabled = false,
+    this.backendAccountId,
+    this.backendRole = AccountBackendRole.free,
+    this.backendStatus = 'disabled',
+    this.backendError,
+    this.backendTokenExpiry,
+    this.offlineGraceExpiry,
+    this.deviceId,
+    this.lastServerTimestamp,
   });
 
   bool get isSignedIn => email != null && email!.trim().isNotEmpty;
 
   bool get hasPremiumAccess => isSignedIn && isPro;
 
+  bool get isBackendActive =>
+      accountBackendEnabled && backendStatus == 'active';
+
   AuthState copyWith({
     String? email,
     bool? isPro,
     bool? isAdmin,
     String? licenseKey,
+    bool? accountBackendEnabled,
+    String? backendAccountId,
+    AccountBackendRole? backendRole,
+    String? backendStatus,
+    String? backendError,
+    DateTime? backendTokenExpiry,
+    DateTime? offlineGraceExpiry,
+    String? deviceId,
+    DateTime? lastServerTimestamp,
   }) {
     return AuthState(
       email: email ?? this.email,
       isPro: isPro ?? this.isPro,
       isAdmin: isAdmin ?? this.isAdmin,
       licenseKey: licenseKey ?? this.licenseKey,
+      accountBackendEnabled:
+          accountBackendEnabled ?? this.accountBackendEnabled,
+      backendAccountId: backendAccountId ?? this.backendAccountId,
+      backendRole: backendRole ?? this.backendRole,
+      backendStatus: backendStatus ?? this.backendStatus,
+      backendError: backendError ?? this.backendError,
+      backendTokenExpiry: backendTokenExpiry ?? this.backendTokenExpiry,
+      offlineGraceExpiry: offlineGraceExpiry ?? this.offlineGraceExpiry,
+      deviceId: deviceId ?? this.deviceId,
+      lastServerTimestamp: lastServerTimestamp ?? this.lastServerTimestamp,
     );
   }
 }
@@ -54,10 +100,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
   static const _emailKey = 'auth_email';
   static const _proKey = 'auth_is_pro';
   static const _licenseKey = 'auth_license_key';
+  static const _backendDeviceKey = 'auth_backend_device_id';
 
-  AuthNotifier() : super(AuthState()) {
+  AuthNotifier({
+    AccountBackendConfig accountBackendConfig = const AccountBackendConfig(),
+    AccountBackendService? accountBackendService,
+    AccountSessionStore? accountSessionStore,
+  })  : _accountBackendConfig = accountBackendConfig,
+        _accountBackendService = accountBackendService ??
+            AccountBackendService(config: accountBackendConfig),
+        _accountSessionStore = accountSessionStore ?? AccountSessionStore(),
+        super(AuthState()) {
     _loadState();
   }
+
+  final AccountBackendConfig _accountBackendConfig;
+  final AccountBackendService _accountBackendService;
+  final AccountSessionStore _accountSessionStore;
 
   Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
@@ -77,7 +136,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isPro: isPro,
       isAdmin: _isAdminEmail(email),
       licenseKey: licenseKey,
+      accountBackendEnabled: _accountBackendConfig.enabled,
+      backendStatus: _accountBackendConfig.isConfigured
+          ? 'available'
+          : _accountBackendConfig.enabled
+              ? 'notConfigured'
+              : 'disabled',
     );
+    await _loadStoredBackendSession();
   }
 
   Future<void> login(String email) async {
@@ -95,11 +161,112 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (autoTeleprompterAdminCodeHash.trim().isEmpty) return;
   }
 
+  Future<void> requestBackendLoginCode(String email) async {
+    if (!_accountBackendConfig.isConfigured) {
+      throw const AccountBackendError(
+        'backend_not_configured',
+        'Account backend is not configured for this build.',
+      );
+    }
+    final normalizedEmail = email.trim();
+    if (normalizedEmail.isEmpty) {
+      throw const AccountBackendError(
+        'missing_email',
+        'Enter an email address before requesting a login code.',
+      );
+    }
+    state = state.copyWith(
+      accountBackendEnabled: true,
+      backendStatus: 'requestingCode',
+      backendError: null,
+    );
+    try {
+      await _accountBackendService.requestLoginCode(normalizedEmail);
+      state = state.copyWith(
+        email: normalizedEmail,
+        accountBackendEnabled: true,
+        backendStatus: 'codeSent',
+        backendError: null,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        accountBackendEnabled: true,
+        backendStatus: 'codeRequestFailed',
+        backendError: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<bool> verifyBackendLoginCode({
+    required String email,
+    required String code,
+  }) async {
+    if (!_accountBackendConfig.isConfigured) {
+      throw const AccountBackendError(
+        'backend_not_configured',
+        'Account backend is not configured for this build.',
+      );
+    }
+    final normalizedEmail = email.trim();
+    final normalizedCode = code.trim();
+    if (normalizedEmail.isEmpty || normalizedCode.isEmpty) return false;
+    state = state.copyWith(
+      accountBackendEnabled: true,
+      backendStatus: 'verifyingCode',
+      backendError: null,
+    );
+    try {
+      final session = await _accountBackendService.verifyLoginCode(
+        email: normalizedEmail,
+        code: normalizedCode,
+      );
+      final deviceId = await _ensureBackendDeviceId();
+      final profile = await _accountBackendService.refreshSession(
+        accessToken: session.accessToken,
+        deviceId: deviceId,
+        friendlyName: 'Windows',
+      );
+      await _accountSessionStore.save(
+        AccountSessionSnapshot(
+          accessToken: session.accessToken,
+          refreshToken: session.refreshToken,
+          userId:
+              profile.accountId.isNotEmpty ? profile.accountId : session.userId,
+          email: profile.email.isNotEmpty ? profile.email : session.email,
+          deviceId: deviceId,
+          role: profile.role,
+          expiresAt: session.expiresAt,
+          lastServerTimestamp: profile.serverTime,
+        ),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _emailKey,
+        profile.email.isNotEmpty ? profile.email : normalizedEmail,
+      );
+      await applyBackendProfile(
+        profile,
+        deviceId: deviceId,
+        tokenExpiry: session.expiresAt,
+      );
+      return profile.hasPremiumAccess || profile.isAdmin;
+    } catch (error) {
+      state = state.copyWith(
+        accountBackendEnabled: true,
+        backendStatus: 'codeVerifyFailed',
+        backendError: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_emailKey);
     await prefs.remove(_proKey);
     await prefs.remove(_licenseKey);
+    await _accountSessionStore.clear();
     state = AuthState();
   }
 
@@ -124,6 +291,71 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await prefs.setBool(_proKey, true);
     await prefs.setString(_licenseKey, source);
     state = state.copyWith(isPro: true, licenseKey: source);
+  }
+
+  Future<void> applyBackendProfile(
+    AccountBackendProfile profile, {
+    String? deviceId,
+    DateTime? tokenExpiry,
+  }) async {
+    if (!_accountBackendConfig.isConfigured) return;
+    final role = profile.role;
+    state = state.copyWith(
+      email: profile.email.isNotEmpty ? profile.email : state.email,
+      isPro: profile.hasPremiumAccess,
+      isAdmin: profile.isAdmin,
+      accountBackendEnabled: true,
+      backendAccountId: profile.accountId,
+      backendRole: role,
+      backendStatus: profile.isDisabled ? 'disabledAccount' : 'active',
+      backendError: null,
+      backendTokenExpiry: tokenExpiry,
+      deviceId: deviceId,
+      lastServerTimestamp: profile.serverTime,
+    );
+  }
+
+  Future<void> _loadStoredBackendSession() async {
+    if (!_accountBackendConfig.isConfigured) return;
+    try {
+      final session = await _accountSessionStore.read();
+      if (session == null || session.accessToken.trim().isEmpty) return;
+      state = state.copyWith(
+        accountBackendEnabled: true,
+        backendAccountId: session.userId,
+        backendRole: session.role,
+        backendStatus: 'storedSession',
+        backendTokenExpiry: session.expiresAt,
+        deviceId: session.deviceId,
+        lastServerTimestamp: session.lastServerTimestamp,
+        email: session.email,
+        isPro: session.role == AccountBackendRole.pro ||
+            session.role == AccountBackendRole.admin,
+        isAdmin: session.role == AccountBackendRole.admin,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        accountBackendEnabled: true,
+        backendStatus: 'sessionReadFailed',
+        backendError: error.toString(),
+      );
+    }
+  }
+
+  Future<String> _ensureBackendDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(_backendDeviceKey);
+    if (existing != null && existing.trim().isNotEmpty) return existing;
+    final id = _newBackendDeviceId();
+    await prefs.setString(_backendDeviceKey, id);
+    return id;
+  }
+
+  String _newBackendDeviceId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    final encoded = base64Url.encode(bytes).replaceAll('=', '');
+    return 'windows-$encoded';
   }
 
   bool _isAdminEmail(String? email) {

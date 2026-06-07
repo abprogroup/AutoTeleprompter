@@ -138,6 +138,8 @@ jobs:
           DROPBOX_CLIENT_SECRET: ${{ secrets.DROPBOX_CLIENT_SECRET }}
           AUTOTELEPROMPTER_ADMIN_EMAIL: ${{ secrets.AUTOTELEPROMPTER_ADMIN_EMAIL }}
           AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           UPDATE_MANIFEST_URL_SECRET: ${{ secrets.UPDATE_MANIFEST_URL }}
           UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
           PUBLIC_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
@@ -158,6 +160,13 @@ jobs:
           Require-Value "DROPBOX_CLIENT_SECRET" $env:DROPBOX_CLIENT_SECRET
           Require-Value "AUTOTELEPROMPTER_ADMIN_EMAIL" $env:AUTOTELEPROMPTER_ADMIN_EMAIL
           Require-Value "AUTOTELEPROMPTER_ADMIN_CODE_SHA256" $env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256
+          Require-Value "SUPABASE_URL" $env:SUPABASE_URL
+          Require-Value "SUPABASE_ANON_KEY" $env:SUPABASE_ANON_KEY
+
+          $supabaseUrl = ($env:SUPABASE_URL -replace "`r", "" -replace "`n", "").Trim()
+          if ($supabaseUrl -notmatch '^https://[A-Za-z0-9.-]+\.supabase\.co/?$') {
+            throw "SUPABASE_URL must be the HTTPS Supabase project URL."
+          }
 
           $manifestUrl = ($env:UPDATE_MANIFEST_URL_SECRET -replace "`r", "" -replace "`n", "").Trim()
           if ([string]::IsNullOrWhiteSpace($manifestUrl)) {
@@ -222,6 +231,10 @@ jobs:
           }
           $adminEmail = ($env:AUTOTELEPROMPTER_ADMIN_EMAIL -replace "`r", "" -replace "`n", "").Trim()
           $adminCodeHash = ($env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256 -replace "\s", "").Trim().ToLowerInvariant()
+          $supabaseUrl = ($env:SUPABASE_URL -replace "`r", "" -replace "`n", "").Trim()
+          $supabaseAnonKey = ($env:SUPABASE_ANON_KEY -replace "`r", "" -replace "`n", "").Trim()
+          $accountBackendEnabled = if (-not [string]::IsNullOrWhiteSpace($supabaseUrl) -and
+              -not [string]::IsNullOrWhiteSpace($supabaseAnonKey)) { "true" } else { "false" }
           $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_SECRET -replace "`r", "" -replace "`n", "").Trim()
           if ([string]::IsNullOrWhiteSpace($updateManifestUrl)) {
             $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
@@ -249,6 +262,9 @@ jobs:
             --dart-define=DROPBOX_SYNC_ROOT_PATH="$dropboxSyncRootPath" `
             --dart-define=AUTOTELEPROMPTER_ADMIN_EMAIL="$adminEmail" `
             --dart-define=AUTOTELEPROMPTER_ADMIN_CODE_SHA256="$adminCodeHash" `
+            --dart-define=ACCOUNT_BACKEND_ENABLED="$accountBackendEnabled" `
+            --dart-define=SUPABASE_URL="$supabaseUrl" `
+            --dart-define=SUPABASE_ANON_KEY="$supabaseAnonKey" `
             --dart-define=UPDATE_MANIFEST_URL="$updateManifestUrl"
         working-directory: Platform_Windows
         env:
@@ -261,6 +277,8 @@ jobs:
           DROPBOX_SYNC_ROOT_PATH_VAR: ${{ vars.DROPBOX_SYNC_ROOT_PATH }}
           AUTOTELEPROMPTER_ADMIN_EMAIL: ${{ secrets.AUTOTELEPROMPTER_ADMIN_EMAIL }}
           AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           UPDATE_MANIFEST_URL_SECRET: ${{ secrets.UPDATE_MANIFEST_URL }}
           UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
 

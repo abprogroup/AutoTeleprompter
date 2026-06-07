@@ -1,0 +1,22 @@
+project_id = "vlzigrokyvptkxdztfkz"
+
+[functions.get-account-profile]
+verify_jwt = true
+
+[functions.refresh-session]
+verify_jwt = true
+
+[functions.logout-session]
+verify_jwt = true
+
+[functions.redeem-license-code]
+verify_jwt = true
+
+[functions.revoke-current-device]
+verify_jwt = true
+
+[functions.submit-feedback]
+verify_jwt = false
+
+[functions.admin-account-actions]
+verify_jwt = true

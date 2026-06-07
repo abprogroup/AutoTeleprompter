@@ -4,6 +4,8 @@ import 'dart:io';
 
 import '../../../core/services/runtime_file_storage.dart';
 import '../../../core/security/encrypted_file_store.dart';
+import '../../auth/services/account_backend_config.dart';
+import '../../auth/services/account_backend_service.dart';
 import 'lightweight_diagnostics.dart';
 
 const feedbackEndpoint = String.fromEnvironment('FEEDBACK_ENDPOINT');
@@ -50,15 +52,22 @@ class FeedbackReportService {
     HttpClient? client,
     Future<Directory> Function()? outboxDirectory,
     String endpoint = feedbackEndpoint,
+    AccountBackendConfig accountBackendConfig = const AccountBackendConfig(),
+    AccountBackendService? accountBackendService,
     this.requestTimeout = defaultRequestTimeout,
   })  : _client = client ?? HttpClient(),
         _outboxDirectory = outboxDirectory,
         _endpoint = _sanitizeEndpoint(endpoint),
+        _accountBackendConfig = accountBackendConfig,
+        _accountBackendService = accountBackendService ??
+            AccountBackendService(config: accountBackendConfig),
         _encryptedStore = EncryptedFileStore(baseDirectory: outboxDirectory);
 
   final HttpClient _client;
   final Future<Directory> Function()? _outboxDirectory;
   final String _endpoint;
+  final AccountBackendConfig _accountBackendConfig;
+  final AccountBackendService _accountBackendService;
   final Duration requestTimeout;
   final EncryptedFileStore _encryptedStore;
 
@@ -128,6 +137,36 @@ class FeedbackReportService {
     String payload, {
     required bool queueOnFailure,
   }) async {
+    if (_accountBackendConfig.isConfigured) {
+      try {
+        await _accountBackendService
+            .submitFeedbackPayload(payload)
+            .timeout(requestTimeout);
+        return FeedbackSendResult(
+          sent: true,
+          queued: false,
+          reportId: reportId,
+          message: 'Feedback sent. Report ID: $reportId',
+        );
+      } catch (error) {
+        if (queueOnFailure) await _queueReport(reportId, payload);
+        final failureClass = _transportFailureClass(error);
+        _recordFailure(failureClass, reportId, {
+          'errorType': error.runtimeType.toString(),
+          'error': error.toString(),
+          'transport': 'accountBackend',
+        });
+        return FeedbackSendResult(
+          sent: false,
+          queued: queueOnFailure,
+          reportId: reportId,
+          failureClass: failureClass,
+          message: 'Could not send feedback through the account backend.'
+              '${queueOnFailure ? " Report saved locally." : ""}',
+        );
+      }
+    }
+
     if (_endpoint.trim().isEmpty) {
       if (queueOnFailure) await _queueReport(reportId, payload);
       return FeedbackSendResult(

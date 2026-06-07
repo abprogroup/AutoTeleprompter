@@ -235,6 +235,7 @@ jobs:
           $supabaseAnonKey = ($env:SUPABASE_ANON_KEY -replace "`r", "" -replace "`n", "").Trim()
           $accountBackendEnabled = if (-not [string]::IsNullOrWhiteSpace($supabaseUrl) -and
               -not [string]::IsNullOrWhiteSpace($supabaseAnonKey)) { "true" } else { "false" }
+          $feedbackEndpointForBuild = if ($accountBackendEnabled -eq "true") { "" } else { $endpoint }
           $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_SECRET -replace "`r", "" -replace "`n", "").Trim()
           if ([string]::IsNullOrWhiteSpace($updateManifestUrl)) {
             $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
@@ -254,7 +255,7 @@ jobs:
 
           flutter build windows --release --obfuscate --split-debug-info="$symbols" `
             --dart-define=APP_VERSION="$appVersion" `
-            --dart-define=FEEDBACK_ENDPOINT="$endpoint" `
+            --dart-define=FEEDBACK_ENDPOINT="$feedbackEndpointForBuild" `
             --dart-define=GOOGLE_DRIVE_CLIENT_ID="$googleDriveClientId" `
             --dart-define=GOOGLE_DRIVE_CLIENT_SECRET="$googleDriveClientSecret" `
             --dart-define=DROPBOX_CLIENT_ID="$dropboxClientId" `

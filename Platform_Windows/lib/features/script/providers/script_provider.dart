@@ -321,6 +321,7 @@ class ScriptNotifier extends Notifier<Script?> {
     bool persist = true,
     bool tokenize = true,
   }) {
+    ref.read(scriptOpenedThisSessionProvider.notifier).state = true;
     state = _buildScript(
       text,
       title: title,
@@ -636,16 +637,20 @@ class ScriptNotifier extends Notifier<Script?> {
   }
 
   void clear() {
+    ref.read(scriptOpenedThisSessionProvider.notifier).state = false;
     state = null;
     LightweightDiagnostics.instance.record('script', 'script cleared');
     ref.read(settingsProvider.notifier).saveScript('', title: '');
   }
 
   void discardActive() {
+    ref.read(scriptOpenedThisSessionProvider.notifier).state = false;
     state = null;
     LightweightDiagnostics.instance.record('script', 'script discarded');
   }
 }
+
+final scriptOpenedThisSessionProvider = StateProvider<bool>((ref) => false);
 
 final scriptProvider =
     NotifierProvider<ScriptNotifier, Script?>(ScriptNotifier.new);

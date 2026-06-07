@@ -39,14 +39,24 @@ class AccountBackendProfile {
   bool get isDisabled => status == 'disabled';
 
   bool get hasPremiumAccess =>
+      hasPremiumAccessAt(DateTime.now().toUtc());
+
+  bool hasPremiumAccessAt(DateTime now) =>
       !isDisabled &&
       !entitlementRevoked &&
       (role == AccountBackendRole.pro || role == AccountBackendRole.admin) &&
       (entitlementExpiresAt == null ||
-          entitlementExpiresAt!.isAfter(DateTime.now().toUtc()));
+          entitlementExpiresAt!.isAfter(now.toUtc()));
 
   bool get isAdmin =>
       !isDisabled && !entitlementRevoked && role == AccountBackendRole.admin;
+
+  bool isAdminAt(DateTime now) =>
+      !isDisabled &&
+      !entitlementRevoked &&
+      role == AccountBackendRole.admin &&
+      (entitlementExpiresAt == null ||
+          entitlementExpiresAt!.isAfter(now.toUtc()));
 
   factory AccountBackendProfile.fromJson(Map<String, dynamic> json) {
     final profile = _asMap(json['profile']);

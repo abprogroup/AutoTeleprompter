@@ -57,6 +57,7 @@ class _AccountMenuButton extends ConsumerWidget {
           );
         } else if (value == 'logout') {
           await ref.read(authProvider.notifier).logout();
+          await ref.read(settingsProvider.notifier).resetDisplayNameToGuest();
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Signed out from this device.')),

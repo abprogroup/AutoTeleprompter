@@ -160,7 +160,8 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
                       ? 'I understand and agree to the speech-to-text disclosure '
                           'for this app.'
                       : 'I understand and agree that feedback reports include '
-                          'my full active script and diagnostic data.',
+                          'diagnostic data, and script text is attached only '
+                          'when I explicitly choose it for a report.',
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
@@ -326,9 +327,10 @@ class _PolicyBox extends StatelessWidget {
             const SizedBox(height: 14),
             _paragraph(
               'What we collect: when you send feedback or confirm a crash/error '
-              'report, the report includes your full active script, bug text, '
-              'current app/session state, speech-to-text/editor diagnostic '
-              'events, app version, platform, and this anonymous device key.',
+              'report, the report includes bug text, current app/session state, '
+              'speech-to-text/editor diagnostic events, app version, platform, '
+              'and this anonymous device key. Full script text is included only '
+              'when you explicitly attach it for that specific report.',
             ),
             _paragraph(
               'What we do not do: normal app use does not continuously upload '

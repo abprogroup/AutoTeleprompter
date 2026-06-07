@@ -19,10 +19,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _backendCodeRequested = false;
 
   @override
+  void initState() {
+    super.initState();
+    _licenseCtrl.addListener(_refreshBackendCodeState);
+  }
+
+  @override
   void dispose() {
+    _licenseCtrl.removeListener(_refreshBackendCodeState);
     _emailCtrl.dispose();
     _licenseCtrl.dispose();
     super.dispose();
+  }
+
+  void _refreshBackendCodeState() {
+    if (mounted && ref.read(authProvider).accountBackendEnabled) {
+      setState(() {});
+    }
   }
 
   Future<void> _handleActivation() async {
@@ -74,7 +87,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } else {
       if (mounted) {
         final message = isLocalProLicenseActivationConfigured
-            ? 'Invalid license or admin code. Please check and try again.'
+            ? 'Invalid license. Please check and try again.'
             : 'License verification is not configured in this installation.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -98,11 +111,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authNotifier = ref.read(authProvider.notifier);
     setState(() => _isLoading = true);
     try {
-      if (!_backendCodeRequested || code.isEmpty) {
+      if (code.isEmpty) {
         await authNotifier.requestBackendLoginCode(email);
-        await ref
-            .read(settingsProvider.notifier)
-            .seedDisplayNameFromEmail(email);
         setState(() {
           _backendCodeRequested = true;
           _isLoading = false;
@@ -155,6 +165,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (message.contains('backend_not_configured')) {
       return 'Account backend is not configured for this build.';
     }
+    if (message.startsWith('AccountBackendError(')) {
+      return 'Account verification failed: $message';
+    }
     return 'Account verification failed. Please try again.';
   }
 
@@ -162,7 +175,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final backendMode = auth.accountBackendEnabled;
-    final codeRequested = backendMode && _backendCodeRequested;
+    final hasBackendCode = backendMode && _licenseCtrl.text.trim().isNotEmpty;
+    final codeRequested =
+        backendMode && (_backendCodeRequested || hasBackendCode);
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
@@ -210,7 +225,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 controller: _licenseCtrl,
                 label: backendMode
                     ? 'Email Verification Code'
-                    : 'Professional License / Admin Code',
+                    : 'Professional License Key',
                 icon: Icons.vpn_key_outlined,
                 isObscure: true,
               ),

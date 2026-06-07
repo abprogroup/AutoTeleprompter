@@ -57,6 +57,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
 
   Future<void> _signOutAccount() async {
     await ref.read(authProvider.notifier).logout();
+    await ref.read(settingsProvider.notifier).resetDisplayNameToGuest();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Signed out on this device.')),

@@ -6,7 +6,8 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
     final adminUpdateConfigured =
         autoTeleprompterAdminEmail.trim().isNotEmpty &&
             autoTeleprompterAdminCodeHash.trim().isNotEmpty;
-    final showInternal = auth.isAdmin && adminUpdateConfigured;
+    final showInternal =
+        auth.isAdmin && (auth.accountBackendEnabled || adminUpdateConfigured);
     final effectiveChannel = _effectiveUpdateChannel(settings.updateChannel);
     final choices = <_SettingsChoice<String>>[
       const _SettingsChoice(
@@ -32,7 +33,9 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
         choices: choices,
         onChanged: ref.read(settingsProvider.notifier).setUpdateChannel,
       ),
-      if (auth.isAdmin && !adminUpdateConfigured) ...[
+      if (auth.isAdmin &&
+          !auth.accountBackendEnabled &&
+          !adminUpdateConfigured) ...[
         const SizedBox(height: 8),
         const _SettingsTile(
           icon: Icons.admin_panel_settings_outlined,
@@ -187,7 +190,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
     final adminUpdateConfigured =
         autoTeleprompterAdminEmail.trim().isNotEmpty &&
             autoTeleprompterAdminCodeHash.trim().isNotEmpty;
-    return auth.isAdmin && adminUpdateConfigured
+    return auth.isAdmin && (auth.accountBackendEnabled || adminUpdateConfigured)
         ? AppSettings.updateChannelInternal
         : AppSettings.updateChannelStable;
   }

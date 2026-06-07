@@ -1,5 +1,35 @@
 project_id = "vlzigrokyvptkxdztfkz"
 
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = []
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+secure_password_change = false
+max_frequency = "1m0s"
+otp_length = 8
+otp_expiry = 3600
+
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "onboarding@resend.dev"
+sender_name = "AutoTeleprompter"
+
+[auth.email.template.magic_link]
+subject = "Your AutoTeleprompter verification code"
+content_path = "./supabase/templates/email_verification_code.html"
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 [functions.get-account-profile]
 verify_jwt = true
 

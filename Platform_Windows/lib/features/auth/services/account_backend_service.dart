@@ -36,23 +36,46 @@ class AccountBackendService {
     required String code,
   }) async {
     _requireConfigured();
-    final json = await _postJson(
-      _config.authUri('verify'),
-      {
-        'email': email.trim(),
-        'token': code.trim(),
-        'type': 'email',
-      },
-      includeAuth: false,
-    );
-    final session = AccountBackendSession.fromJson(json);
-    if (session.accessToken.isEmpty) {
-      throw const AccountBackendError(
-        'missing_access_token',
-        'Login succeeded but no access token was returned.',
-      );
+    AccountBackendError? lastError;
+    for (final verificationType in const ['email', 'magiclink']) {
+      try {
+        final json = await _postJson(
+          _config.authUri('verify'),
+          {
+            'email': email.trim(),
+            'token': code.trim(),
+            'type': verificationType,
+          },
+          includeAuth: false,
+        );
+        final session = AccountBackendSession.fromJson(json);
+        if (session.accessToken.isEmpty) {
+          throw const AccountBackendError(
+            'missing_access_token',
+            'Login succeeded but no access token was returned.',
+          );
+        }
+        return session;
+      } on AccountBackendError catch (error) {
+        lastError = error;
+        if (!_canTryMagicLinkFallback(error)) rethrow;
+      }
     }
-    return session;
+    throw lastError ??
+        const AccountBackendError(
+          'verification_failed',
+          'Verification failed.',
+        );
+  }
+
+  bool _canTryMagicLinkFallback(AccountBackendError error) {
+    if (error.statusCode == null) return false;
+    if (error.statusCode! < 400 || error.statusCode! >= 500) return false;
+    final text = '${error.code} ${error.message}'.toLowerCase();
+    return text.contains('invalid') ||
+        text.contains('expired') ||
+        text.contains('otp') ||
+        text.contains('token');
   }
 
   Future<AccountBackendProfile> getAccountProfile(String accessToken) async {
@@ -170,6 +193,8 @@ class AccountBackendService {
     request.headers.set('apikey', _config.anonKey.trim());
     if (includeAuth && bearerToken != null && bearerToken.trim().isNotEmpty) {
       request.headers.set('Authorization', 'Bearer ${bearerToken.trim()}');
+    } else if (!includeAuth) {
+      request.headers.set('Authorization', 'Bearer ${_config.anonKey.trim()}');
     }
     request.write(jsonEncode(body));
     final response = await request.close().timeout(timeout);

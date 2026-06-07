@@ -181,7 +181,9 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final welcomeTitle = 'Welcome Back, ${settings.displayName}.';
+                  final displayName =
+                      auth.isSignedIn ? settings.displayName : 'Guest';
+                  final welcomeTitle = 'Welcome Back, $displayName.';
                   final welcome = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -583,9 +585,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     final adminUpdateConfigured =
         autoTeleprompterAdminEmail.trim().isNotEmpty &&
             autoTeleprompterAdminCodeHash.trim().isNotEmpty;
+    final canUseInternalUpdates =
+        auth.isAdmin && (auth.accountBackendEnabled || adminUpdateConfigured);
     final channel =
         startupUpdates.updateChannel == AppSettings.updateChannelInternal &&
-                (!auth.isAdmin || !adminUpdateConfigured)
+                !canUseInternalUpdates
             ? AppSettings.updateChannelStable
             : startupUpdates.updateChannel;
     final result = await UpdateCheckService().check(

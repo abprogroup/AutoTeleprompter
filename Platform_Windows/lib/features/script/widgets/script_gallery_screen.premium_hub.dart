@@ -52,12 +52,19 @@ class _PremiumHubSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = _hasProAccess ? 'Pro access active' : 'Free plan';
+    final isCheckingAccess = auth.isCheckingBackendAccess;
+    final title = _hasProAccess
+        ? 'Pro access active'
+        : isCheckingAccess
+            ? 'Checking account'
+            : 'Free plan';
     final subtitle = _hasProAccess
         ? 'Remote control, cloud and backup storage, creator tools, and recording '
             'features are unlocked for this account.'
-        : 'Local scripts and local app storage are available. Connect a Pro '
-            'account to unlock remote control and cloud backup tools.';
+        : isCheckingAccess
+            ? 'Verifying subscription and admin access with the account service.'
+            : 'Local scripts and local app storage are available. Connect a Pro '
+                'account to unlock remote control and cloud backup tools.';
 
     return SafeArea(
       child: Align(
@@ -97,6 +104,8 @@ class _PremiumHubSheet extends StatelessWidget {
                     child: Icon(
                       _hasProAccess
                           ? Icons.verified_rounded
+                          : isCheckingAccess
+                              ? Icons.sync_rounded
                           : Icons.workspace_premium_outlined,
                       color: const Color(0xFFFFBF00),
                     ),

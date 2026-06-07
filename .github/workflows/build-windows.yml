@@ -233,8 +233,13 @@ jobs:
           $adminCodeHash = ($env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256 -replace "\s", "").Trim().ToLowerInvariant()
           $supabaseUrl = ($env:SUPABASE_URL -replace "`r", "" -replace "`n", "").Trim()
           $supabaseAnonKey = ($env:SUPABASE_ANON_KEY -replace "`r", "" -replace "`n", "").Trim()
-          $accountBackendEnabled = if (-not [string]::IsNullOrWhiteSpace($supabaseUrl) -and
+          $accountBackendEnabled = if ("${{ steps.release.outputs.release_channel }}" -eq "internal" -and
+              -not [string]::IsNullOrWhiteSpace($supabaseUrl) -and
               -not [string]::IsNullOrWhiteSpace($supabaseAnonKey)) { "true" } else { "false" }
+          $supabaseUrlForBuild = if ($accountBackendEnabled -eq "true") { $supabaseUrl } else { "" }
+          $supabaseAnonKeyForBuild = if ($accountBackendEnabled -eq "true") { $supabaseAnonKey } else { "" }
+          $adminEmailForBuild = if ($accountBackendEnabled -eq "true") { "" } else { $adminEmail }
+          $adminCodeHashForBuild = if ($accountBackendEnabled -eq "true") { "" } else { $adminCodeHash }
           $feedbackEndpointForBuild = if ($accountBackendEnabled -eq "true") { "" } else { $endpoint }
           $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_SECRET -replace "`r", "" -replace "`n", "").Trim()
           if ([string]::IsNullOrWhiteSpace($updateManifestUrl)) {
@@ -261,11 +266,11 @@ jobs:
             --dart-define=DROPBOX_CLIENT_ID="$dropboxClientId" `
             --dart-define=DROPBOX_CLIENT_SECRET="$dropboxClientSecret" `
             --dart-define=DROPBOX_SYNC_ROOT_PATH="$dropboxSyncRootPath" `
-            --dart-define=AUTOTELEPROMPTER_ADMIN_EMAIL="$adminEmail" `
-            --dart-define=AUTOTELEPROMPTER_ADMIN_CODE_SHA256="$adminCodeHash" `
+            --dart-define=AUTOTELEPROMPTER_ADMIN_EMAIL="$adminEmailForBuild" `
+            --dart-define=AUTOTELEPROMPTER_ADMIN_CODE_SHA256="$adminCodeHashForBuild" `
             --dart-define=ACCOUNT_BACKEND_ENABLED="$accountBackendEnabled" `
-            --dart-define=SUPABASE_URL="$supabaseUrl" `
-            --dart-define=SUPABASE_ANON_KEY="$supabaseAnonKey" `
+            --dart-define=SUPABASE_URL="$supabaseUrlForBuild" `
+            --dart-define=SUPABASE_ANON_KEY="$supabaseAnonKeyForBuild" `
             --dart-define=UPDATE_MANIFEST_URL="$updateManifestUrl"
         working-directory: Platform_Windows
         env:

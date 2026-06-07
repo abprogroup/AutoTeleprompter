@@ -62,6 +62,15 @@ class AuthState {
   bool get isBackendActive =>
       accountBackendEnabled && backendStatus == 'active';
 
+  bool get isCheckingBackendAccess =>
+      accountBackendEnabled &&
+      const {
+        'storedSession',
+        'refreshingStoredSession',
+        'requestingCode',
+        'verifyingCode',
+      }.contains(backendStatus);
+
   AuthState copyWith({
     String? email,
     bool? isPro,
@@ -110,7 +119,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _accountBackendService = accountBackendService ??
             AccountBackendService(config: accountBackendConfig),
         _accountSessionStore = accountSessionStore ?? AccountSessionStore(),
-        super(AuthState()) {
+        super(
+          AuthState(
+            accountBackendEnabled: accountBackendConfig.enabled,
+            backendStatus: accountBackendConfig.isConfigured
+                ? 'available'
+                : accountBackendConfig.enabled
+                    ? 'notConfigured'
+                    : 'disabled',
+          ),
+        ) {
     _loadState();
   }
 
@@ -120,9 +138,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString(_emailKey);
+    if (_accountBackendConfig.enabled) {
+      await prefs.remove(_emailKey);
+      await prefs.remove(_proKey);
+      await prefs.remove(_licenseKey);
+    }
+    final email =
+        _accountBackendConfig.enabled ? null : prefs.getString(_emailKey);
     var isPro = prefs.getBool(_proKey) ?? false;
     var licenseKey = prefs.getString(_licenseKey);
+    if (_accountBackendConfig.enabled) {
+      isPro = false;
+      licenseKey = null;
+    }
     if (licenseKey == 'build-admin' &&
         autoTeleprompterAdminCodeHash.trim().isNotEmpty) {
       await prefs.remove(_proKey);
@@ -183,7 +211,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _accountBackendService.requestLoginCode(normalizedEmail);
       state = state.copyWith(
-        email: normalizedEmail,
         accountBackendEnabled: true,
         backendStatus: 'codeSent',
         backendError: null,
@@ -267,10 +294,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await prefs.remove(_proKey);
     await prefs.remove(_licenseKey);
     await _accountSessionStore.clear();
-    state = AuthState();
+    state = AuthState(
+      accountBackendEnabled: _accountBackendConfig.enabled,
+      backendStatus: _accountBackendConfig.isConfigured
+          ? 'signedOut'
+          : _accountBackendConfig.enabled
+              ? 'notConfigured'
+              : 'disabled',
+    );
   }
 
   Future<bool> activateLicense(String key) async {
+    if (_accountBackendConfig.enabled) return false;
     final normalizedKey = key.trim();
     if (normalizedKey.isEmpty) return false;
     final actualHash = sha256.convert(utf8.encode(normalizedKey)).toString();
@@ -300,10 +335,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }) async {
     if (!_accountBackendConfig.isConfigured) return;
     final role = profile.role;
+    final serverNow = profile.serverTime ?? DateTime.now().toUtc();
     state = state.copyWith(
       email: profile.email.isNotEmpty ? profile.email : state.email,
-      isPro: profile.hasPremiumAccess,
-      isAdmin: profile.isAdmin,
+      isPro: profile.hasPremiumAccessAt(serverNow),
+      isAdmin: profile.isAdminAt(serverNow),
       accountBackendEnabled: true,
       backendAccountId: profile.accountId,
       backendRole: role,
@@ -320,24 +356,76 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final session = await _accountSessionStore.read();
       if (session == null || session.accessToken.trim().isEmpty) return;
+      final now = DateTime.now().toUtc();
+      final lastServerTimestamp = session.lastServerTimestamp;
+      if (lastServerTimestamp != null &&
+          now.isBefore(lastServerTimestamp.subtract(const Duration(minutes: 5)))) {
+        await _accountSessionStore.clear();
+        state = state.copyWith(
+          accountBackendEnabled: true,
+          backendStatus: 'clockRollbackDetected',
+          backendError:
+              'Local clock is earlier than the last verified server time.',
+          isPro: false,
+          isAdmin: false,
+        );
+        return;
+      }
+      if (session.expiresAt != null && !session.expiresAt!.isAfter(now)) {
+        await _accountSessionStore.clear();
+        state = state.copyWith(
+          accountBackendEnabled: true,
+          backendStatus: 'sessionExpired',
+          backendError: 'Account session expired. Sign in again.',
+          isPro: false,
+          isAdmin: false,
+        );
+        return;
+      }
       state = state.copyWith(
         accountBackendEnabled: true,
         backendAccountId: session.userId,
         backendRole: session.role,
-        backendStatus: 'storedSession',
+        backendStatus: 'refreshingStoredSession',
         backendTokenExpiry: session.expiresAt,
         deviceId: session.deviceId,
         lastServerTimestamp: session.lastServerTimestamp,
         email: session.email,
-        isPro: session.role == AccountBackendRole.pro ||
-            session.role == AccountBackendRole.admin,
-        isAdmin: session.role == AccountBackendRole.admin,
+        isPro: false,
+        isAdmin: false,
+      );
+      final deviceId = session.deviceId ?? await _ensureBackendDeviceId();
+      final profile = await _accountBackendService.refreshSession(
+        accessToken: session.accessToken,
+        deviceId: deviceId,
+        friendlyName: 'Windows',
+      );
+      await _accountSessionStore.save(
+        AccountSessionSnapshot(
+          accessToken: session.accessToken,
+          refreshToken: session.refreshToken,
+          userId:
+              profile.accountId.isNotEmpty ? profile.accountId : session.userId,
+          email: profile.email.isNotEmpty ? profile.email : session.email,
+          deviceId: deviceId,
+          role: profile.role,
+          expiresAt: session.expiresAt,
+          lastServerTimestamp: profile.serverTime,
+        ),
+      );
+      await applyBackendProfile(
+        profile,
+        deviceId: deviceId,
+        tokenExpiry: session.expiresAt,
       );
     } catch (error) {
+      await _accountSessionStore.clear();
       state = state.copyWith(
         accountBackendEnabled: true,
-        backendStatus: 'sessionReadFailed',
+        backendStatus: 'sessionRefreshFailed',
         backendError: error.toString(),
+        isPro: false,
+        isAdmin: false,
       );
     }
   }

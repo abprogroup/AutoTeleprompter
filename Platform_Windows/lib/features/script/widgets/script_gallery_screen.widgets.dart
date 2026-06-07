@@ -86,10 +86,17 @@ class _ProDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = auth.hasPremiumAccess;
-    final title = isActive ? 'Pro access active' : 'Free plan';
+    final isCheckingAccess = auth.isCheckingBackendAccess;
+    final title = isActive
+        ? 'Pro access active'
+        : isCheckingAccess
+            ? 'Checking account'
+            : 'Free plan';
     final subtitle = isActive
         ? 'Premium tools: cloud, remote, content creation, audio recorder.'
-        : 'Pro tools locked: cloud, remote, content creation, audio recorder.';
+        : isCheckingAccess
+            ? 'Verifying subscription and admin access with the account service.'
+            : 'Pro tools locked: cloud, remote, content creation, audio recorder.';
 
     if (compact) {
       return LayoutBuilder(
@@ -136,6 +143,8 @@ class _ProDashboard extends StatelessWidget {
                     child: Icon(
                       isActive
                           ? Icons.verified_rounded
+                          : isCheckingAccess
+                              ? Icons.sync_rounded
                           : Icons.workspace_premium_outlined,
                       color: const Color(0xFFFFBF00),
                       size: 24,

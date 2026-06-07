@@ -342,6 +342,12 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setString(_displayNameKey, prefix);
   }
 
+  Future<void> resetDisplayNameToGuest() async {
+    state = state.copyWith(displayName: 'Guest');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_displayNameKey, 'Guest');
+  }
+
   Future<void> setLastChosenTextColor(int color) async {
     state = state.copyWith(lastTextColor: color);
     final prefs = await SharedPreferences.getInstance();

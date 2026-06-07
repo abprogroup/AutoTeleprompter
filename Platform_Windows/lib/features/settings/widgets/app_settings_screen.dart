@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../auth/services/account_backend_models.dart';
 import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/providers/beta_consent_provider.dart';

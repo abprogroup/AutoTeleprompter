@@ -35,6 +35,8 @@ class AuthState {
   final String backendStatus;
   final String? backendError;
   final DateTime? backendTokenExpiry;
+  final DateTime? entitlementExpiresAt;
+  final bool entitlementRevoked;
   final DateTime? offlineGraceExpiry;
   final String? deviceId;
   final DateTime? lastServerTimestamp;
@@ -50,6 +52,8 @@ class AuthState {
     this.backendStatus = 'disabled',
     this.backendError,
     this.backendTokenExpiry,
+    this.entitlementExpiresAt,
+    this.entitlementRevoked = false,
     this.offlineGraceExpiry,
     this.deviceId,
     this.lastServerTimestamp,
@@ -61,6 +65,31 @@ class AuthState {
 
   bool get isBackendActive =>
       accountBackendEnabled && backendStatus == 'active';
+
+  String get entitlementStatus {
+    if (backendStatus == 'disabledAccount') return 'disabled';
+    if (entitlementRevoked) return 'revoked';
+    final expiresAt = entitlementExpiresAt;
+    if (expiresAt != null && !expiresAt.isAfter(DateTime.now().toUtc())) {
+      return 'expired';
+    }
+    if (backendRole == AccountBackendRole.admin ||
+        backendRole == AccountBackendRole.pro) {
+      return 'active';
+    }
+    return 'free';
+  }
+
+  String get roleLabel {
+    switch (backendRole) {
+      case AccountBackendRole.admin:
+        return 'Admin';
+      case AccountBackendRole.pro:
+        return 'Pro';
+      case AccountBackendRole.free:
+        return 'Free';
+    }
+  }
 
   bool get isCheckingBackendAccess =>
       accountBackendEnabled &&
@@ -82,6 +111,9 @@ class AuthState {
     String? backendStatus,
     String? backendError,
     DateTime? backendTokenExpiry,
+    DateTime? entitlementExpiresAt,
+    bool clearEntitlementExpiresAt = false,
+    bool? entitlementRevoked,
     DateTime? offlineGraceExpiry,
     String? deviceId,
     DateTime? lastServerTimestamp,
@@ -98,6 +130,10 @@ class AuthState {
       backendStatus: backendStatus ?? this.backendStatus,
       backendError: backendError ?? this.backendError,
       backendTokenExpiry: backendTokenExpiry ?? this.backendTokenExpiry,
+      entitlementExpiresAt: clearEntitlementExpiresAt
+          ? null
+          : entitlementExpiresAt ?? this.entitlementExpiresAt,
+      entitlementRevoked: entitlementRevoked ?? this.entitlementRevoked,
       offlineGraceExpiry: offlineGraceExpiry ?? this.offlineGraceExpiry,
       deviceId: deviceId ?? this.deviceId,
       lastServerTimestamp: lastServerTimestamp ?? this.lastServerTimestamp,
@@ -346,6 +382,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       backendStatus: profile.isDisabled ? 'disabledAccount' : 'active',
       backendError: null,
       backendTokenExpiry: tokenExpiry,
+      entitlementExpiresAt: profile.entitlementExpiresAt,
+      clearEntitlementExpiresAt: profile.entitlementExpiresAt == null,
+      entitlementRevoked: profile.entitlementRevoked,
       deviceId: deviceId,
       lastServerTimestamp: profile.serverTime,
     );

@@ -3,9 +3,8 @@ part of 'app_settings_screen.dart';
 extension _AccountSettingsTab on _AppSettingsScreenState {
   List<Widget> _accountTab(AppSettings settings, AuthState auth) {
     final signedIn = auth.email != null && auth.email!.trim().isNotEmpty;
-    final accountStatus = signedIn
-        ? '${auth.email}${auth.hasPremiumAccess ? ' - Pro' : ' - Free'}'
-        : 'Not connected';
+    final accountStatus =
+        signedIn ? _accountConnectionSubtitle(auth) : 'Not connected';
 
     return [
       const _SectionHeader(title: 'PROFILE'),
@@ -62,5 +61,32 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Signed out on this device.')),
     );
+  }
+
+  String _accountConnectionSubtitle(AuthState auth) {
+    final email = auth.email?.trim();
+    final label = _accountRoleStatusLabel(auth);
+    return email == null || email.isEmpty ? label : '$email - $label';
+  }
+
+  String _accountRoleStatusLabel(AuthState auth) {
+    if (auth.isCheckingBackendAccess) return 'checking account';
+    if (auth.backendStatus == 'disabledAccount') return 'account disabled';
+    if (auth.entitlementStatus == 'revoked') return '${auth.roleLabel} revoked';
+    if (auth.entitlementStatus == 'expired') return '${auth.roleLabel} expired';
+    if (auth.backendRole == AccountBackendRole.admin) return 'Admin';
+    if (auth.backendRole == AccountBackendRole.pro) {
+      final expiry = auth.entitlementExpiresAt;
+      if (expiry != null) return 'Pro - renews ${_formatAccountDate(expiry)}';
+      return 'Pro';
+    }
+    return 'Free';
+  }
+
+  String _formatAccountDate(DateTime value) {
+    final local = value.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    return '$day/$month/${local.year}';
   }
 }

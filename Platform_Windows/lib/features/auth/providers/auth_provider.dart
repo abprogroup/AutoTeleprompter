@@ -347,6 +347,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _validatePasswordInput(newPassword);
     final session = await _requireStoredSession();
     final email = state.email?.trim();
+    AccountBackendSession? refreshedSession;
+    var accessTokenForUpdate = session.accessToken;
     if (currentPassword != null && currentPassword.trim().isNotEmpty) {
       if (email == null || email.isEmpty) {
         throw const AccountBackendError(
@@ -354,15 +356,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'Current account email is missing.',
         );
       }
-      await _accountBackendService.signInWithPassword(
+      refreshedSession = await _accountBackendService.signInWithPassword(
         email: email,
         password: currentPassword,
       );
+      accessTokenForUpdate = refreshedSession.accessToken;
+    } else if (session.refreshToken != null &&
+        session.refreshToken!.trim().isNotEmpty) {
+      refreshedSession = await _accountBackendService.refreshAccessToken(
+        refreshToken: session.refreshToken!,
+      );
+      accessTokenForUpdate = refreshedSession.accessToken;
     }
     await _accountBackendService.setPassword(
-      accessToken: session.accessToken,
+      accessToken: accessTokenForUpdate,
       password: newPassword,
     );
+    if (refreshedSession != null) {
+      await _activateBackendSession(
+        refreshedSession,
+        fallbackEmail: email ?? session.email ?? '',
+      );
+    }
   }
 
   Future<void> requestBackendPasswordResetCode(String email) async {
@@ -565,6 +580,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? deviceId;
     try {
       session = await _accountSessionStore.read();
+      if (!mounted) return;
       if (session == null || session.accessToken.trim().isEmpty) return;
       final now = DateTime.now().toUtc();
       final lastServerTimestamp = session.lastServerTimestamp;
@@ -608,11 +624,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isAdmin: false,
       );
       deviceId = session.deviceId ?? await _ensureBackendDeviceId();
+      if (!mounted) return;
       final profile = await _accountBackendService.refreshSession(
         accessToken: session.accessToken,
         deviceId: deviceId,
         friendlyName: 'Windows',
       );
+      if (!mounted) return;
       await _accountSessionStore.save(
         AccountSessionSnapshot(
           accessToken: session.accessToken,
@@ -634,6 +652,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         tokenExpiry: session.expiresAt,
       );
     } catch (error) {
+      if (!mounted) return;
       if (_applyOfflineGrace(session, deviceId ?? session?.deviceId)) return;
       await _accountSessionStore.clear();
       state = state.copyWith(

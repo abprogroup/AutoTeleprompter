@@ -540,16 +540,107 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   Future<void> handleInvertColors() async {
     _restoreSelectionIfNeeded();
     final settings = ref.read(settingsProvider);
+    if (_hasActiveTextSelection()) {
+      _setEditorState(() => _isCommandExecuting = true);
+      final inSuite = _activeSuite != EditorSuite.none;
+      if (inSuite) _trackSuiteSection('Invert Colors');
+      var changed = false;
+      final wasGlobalSelection = _isGlobalSelection;
+      final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+      final targets = <MarkupController>[];
+
+      if (wasGlobalSelection) {
+        _isGlobalSelection = false;
+        for (final c in _controllers) {
+          if (c.text.isEmpty) continue;
+          c.externalSelection =
+              TextSelection(baseOffset: 0, extentOffset: c.text.length);
+          c.externalVisibleSelection = TextSelection(
+            baseOffset: 0,
+            extentOffset: MarkupDecorationParser.visibleText(c.text).length,
+          );
+          targets.add(c);
+        }
+      } else {
+        targets.addAll(_styleTargets());
+      }
+
+      for (final c in targets) {
+        if (c.text.isEmpty) continue;
+        final selection = (c.externalSelection != null &&
+                c.externalSelection!.isValid &&
+                !c.externalSelection!.isCollapsed)
+            ? c.externalSelection!
+            : c.selection;
+        if (!selection.isValid || selection.isCollapsed) continue;
+        final nextValue = EditorInlineStyleOperation.applySelectionColorInvert(
+          text: c.text,
+          selection: selection,
+          defaultTextColor: _rgbHex(settings.futureWordColor),
+          scriptBackgroundColor: _rgbHex(settings.scriptBgColor),
+        );
+        if (nextValue.text == c.text) continue;
+        c.value = nextValue;
+        if (nextValue.selection.isValid && !nextValue.selection.isCollapsed) {
+          c.externalSelection = nextValue.selection;
+          c.externalVisibleSelection =
+              MarkupDecorationParser.rawToVisibleSelection(
+            c.text,
+            nextValue.selection,
+          );
+        }
+        c.refresh();
+        changed = true;
+      }
+
+      if (wasGlobalSelection) {
+        _isGlobalSelection = true;
+        _resyncGlobalSelection();
+      } else if (hasOverlay) {
+        _overlayKey.currentState
+            ?.syncOffsetsFromExternalSelection(_controllers);
+      }
+
+      if (changed) {
+        if (inSuite) {
+          _recordSuiteHistoryChange('Invert Colors');
+        } else {
+          _saveHistory(description: 'Invert Colors', debounce: true);
+        }
+      }
+      _onSelectionChanged();
+      _setEditorState(() => _isCommandExecuting = false);
+      return;
+    }
+
     final nextBackground =
         ScriptColorInversionService.nextBackgroundColor(settings);
     final nextFutureText =
         ScriptColorInversionService.futureTextColorForBackground(
       nextBackground,
     );
+    var changedMarkup = false;
+    _setEditorState(() => _isCommandExecuting = true);
+    for (final c in _controllers) {
+      if (c.text.isEmpty) continue;
+      final nextValue =
+          EditorInlineStyleOperation.applyWholeScriptHighlightColorInvert(
+        text: c.text,
+        defaultTextColor: _rgbHex(settings.futureWordColor),
+      );
+      if (nextValue.text == c.text) continue;
+      c.value = nextValue;
+      c.refresh();
+      changedMarkup = true;
+    }
     final notifier = ref.read(settingsProvider.notifier);
     await notifier.setScriptBgColor(nextBackground);
     await notifier.setFutureWordColor(nextFutureText);
-    await notifier.setShowUpcomingWordColor(true);
+    if (changedMarkup) {
+      await notifier.setShowUpcomingWordColor(false);
+    } else {
+      await notifier.setShowUpcomingWordColor(true);
+    }
     await ref.read(scriptProvider.notifier).updateStyleMetadata(
           scriptBgColor: nextBackground,
           futureWordColor: nextFutureText,
@@ -559,8 +650,13 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     } else {
       _recordSuiteHistoryChange('Invert Colors');
     }
+    _onSelectionChanged();
+    _setEditorState(() => _isCommandExecuting = false);
     if (mounted) _setEditorState(() {});
   }
+
+  String _rgbHex(int argb) =>
+      (argb & 0x00FFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
 
   /// Returns the list of controllers that should receive a style command,
   /// honoring an active overlay selection (refined or global) when present.

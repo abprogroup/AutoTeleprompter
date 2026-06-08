@@ -231,6 +231,196 @@ class EditorInlineStyleOperation {
     );
   }
 
+  static TextEditingValue applySelectionColorInvert({
+    required String text,
+    required TextSelection selection,
+    required String defaultTextColor,
+    required String scriptBackgroundColor,
+  }) {
+    final sel = safeSelection(text, selection);
+    if (sel.isCollapsed) {
+      return TextEditingValue(
+        text: text,
+        selection: selection,
+      );
+    }
+
+    final defaultText = _normalizeHex(defaultTextColor);
+    final scriptBackground = _normalizeHex(scriptBackgroundColor);
+    final buffer = StringBuffer();
+    String? sourceTextColor;
+    String? sourceBackgroundColor;
+    String? outputTextColor;
+    String? outputBackgroundColor;
+    var cursor = 0;
+    var changed = false;
+    int? newSelectionStart;
+    var newSelectionEnd = 0;
+
+    void setOutput({
+      required String? textColor,
+      required String? backgroundColor,
+    }) {
+      if (outputBackgroundColor != backgroundColor) {
+        if (outputBackgroundColor != null) buffer.write('[/bg]');
+        outputBackgroundColor = null;
+      }
+      if (outputTextColor != textColor) {
+        if (outputBackgroundColor != null) {
+          buffer.write('[/bg]');
+          outputBackgroundColor = null;
+        }
+        if (outputTextColor != null) buffer.write('[/color]');
+        if (textColor != null) buffer.write('[color=#$textColor]');
+        outputTextColor = textColor;
+      }
+      if (outputBackgroundColor != backgroundColor) {
+        if (backgroundColor != null) buffer.write('[bg=#$backgroundColor]');
+        outputBackgroundColor = backgroundColor;
+      }
+    }
+
+    void emitContent(int start, int end) {
+      if (end <= start) return;
+      for (var i = start; i < end; i++) {
+        final selected = i >= sel.start && i < sel.end;
+        String? nextTextColor = sourceTextColor;
+        String? nextBackgroundColor = sourceBackgroundColor;
+        if (selected) {
+          final oldText = sourceTextColor ?? defaultText;
+          final oldBackground = sourceBackgroundColor;
+          nextTextColor = oldBackground ?? scriptBackground;
+          nextBackgroundColor = oldText;
+          changed = true;
+          newSelectionStart ??= buffer.length;
+        }
+        setOutput(
+          textColor: nextTextColor,
+          backgroundColor: nextBackgroundColor,
+        );
+        buffer.write(text[i]);
+        if (selected) newSelectionEnd = buffer.length;
+      }
+    }
+
+    for (final match in MarkupDecorationParser.tagRegex.allMatches(text)) {
+      emitContent(cursor, match.start);
+      final tag = match.group(0)!;
+      final color = _targetParameterizedOpenValue(tag, 'color');
+      final background = _targetParameterizedOpenValue(tag, 'bg');
+      if (color != null) {
+        sourceTextColor = _normalizeHex(color);
+      } else if (tag == '[/color]') {
+        sourceTextColor = null;
+      } else if (background != null) {
+        sourceBackgroundColor = _normalizeHex(background);
+      } else if (tag == '[/bg]') {
+        sourceBackgroundColor = null;
+      } else {
+        buffer.write(tag);
+      }
+      cursor = match.end;
+    }
+    emitContent(cursor, text.length);
+    setOutput(textColor: null, backgroundColor: null);
+
+    if (!changed) {
+      return TextEditingValue(text: text, selection: selection);
+    }
+    final selectionStart = newSelectionStart ?? buffer.length;
+    return TextEditingValue(
+      text: buffer.toString(),
+      selection: TextSelection(
+        baseOffset: selectionStart,
+        extentOffset:
+            newSelectionEnd < selectionStart ? selectionStart : newSelectionEnd,
+      ),
+    );
+  }
+
+  static TextEditingValue applyWholeScriptHighlightColorInvert({
+    required String text,
+    required String defaultTextColor,
+  }) {
+    final defaultText = _normalizeHex(defaultTextColor);
+    final buffer = StringBuffer();
+    String? sourceTextColor;
+    String? sourceBackgroundColor;
+    String? outputTextColor;
+    String? outputBackgroundColor;
+    var cursor = 0;
+    var changed = false;
+
+    void setOutput({
+      required String? textColor,
+      required String? backgroundColor,
+    }) {
+      if (outputBackgroundColor != backgroundColor) {
+        if (outputBackgroundColor != null) buffer.write('[/bg]');
+        outputBackgroundColor = null;
+      }
+      if (outputTextColor != textColor) {
+        if (outputBackgroundColor != null) {
+          buffer.write('[/bg]');
+          outputBackgroundColor = null;
+        }
+        if (outputTextColor != null) buffer.write('[/color]');
+        if (textColor != null) buffer.write('[color=#$textColor]');
+        outputTextColor = textColor;
+      }
+      if (outputBackgroundColor != backgroundColor) {
+        if (backgroundColor != null) buffer.write('[bg=#$backgroundColor]');
+        outputBackgroundColor = backgroundColor;
+      }
+    }
+
+    void emitContent(int start, int end) {
+      if (end <= start) return;
+      final oldBackground = sourceBackgroundColor;
+      final nextTextColor = oldBackground ?? sourceTextColor;
+      final nextBackgroundColor =
+          oldBackground == null ? null : sourceTextColor ?? defaultText;
+      if (oldBackground != null) changed = true;
+      setOutput(
+        textColor: nextTextColor,
+        backgroundColor: nextBackgroundColor,
+      );
+      buffer.write(text.substring(start, end));
+    }
+
+    for (final match in MarkupDecorationParser.tagRegex.allMatches(text)) {
+      emitContent(cursor, match.start);
+      final tag = match.group(0)!;
+      final color = _targetParameterizedOpenValue(tag, 'color');
+      final background = _targetParameterizedOpenValue(tag, 'bg');
+      if (color != null) {
+        sourceTextColor = _normalizeHex(color);
+      } else if (tag == '[/color]') {
+        sourceTextColor = null;
+      } else if (background != null) {
+        sourceBackgroundColor = _normalizeHex(background);
+      } else if (tag == '[/bg]') {
+        sourceBackgroundColor = null;
+      } else {
+        buffer.write(tag);
+      }
+      cursor = match.end;
+    }
+    emitContent(cursor, text.length);
+    setOutput(textColor: null, backgroundColor: null);
+
+    if (!changed) {
+      return TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+    return TextEditingValue(
+      text: buffer.toString(),
+      selection: TextSelection.collapsed(offset: buffer.length),
+    );
+  }
+
   static bool _isTargetOpen(String tag, String open, String close) {
     if (_isToggleTag(tag, open, close)) return false;
     return tag == open;
@@ -248,6 +438,17 @@ class EditorInlineStyleOperation {
     final prefix = '[$family=';
     if (!tag.startsWith(prefix) || !tag.endsWith(']')) return null;
     return tag.substring(prefix.length, tag.length - 1);
+  }
+
+  static String _normalizeHex(String value) {
+    final cleaned = value
+        .trim()
+        .replaceFirst('#', '')
+        .replaceAll(RegExp(r'[^0-9A-Fa-f]'), '');
+    if (cleaned.length >= 6) {
+      return cleaned.substring(cleaned.length - 6).toUpperCase();
+    }
+    return cleaned.padLeft(6, '0').toUpperCase();
   }
 }
 

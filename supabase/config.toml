@@ -26,6 +26,10 @@ sender_name = "AutoTeleprompter"
 subject = "Your AutoTeleprompter verification code"
 content_path = "./supabase/templates/email_verification_code.html"
 
+[auth.email.template.recovery]
+subject = "Reset your AutoTeleprompter password"
+content_path = "./supabase/templates/password_reset_code.html"
+
 [auth.mfa.totp]
 enroll_enabled = true
 verify_enabled = true

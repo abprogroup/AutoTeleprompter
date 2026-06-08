@@ -264,6 +264,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 label: credentialLabel,
                 icon: Icons.vpn_key_outlined,
                 isObscure: true,
+                showVisibilityToggle: backendMode && _passwordMode,
               ),
               if (backendMode) ...[
                 const SizedBox(height: 12),
@@ -485,19 +486,52 @@ class _LoginTextField extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool isObscure;
+  final bool showVisibilityToggle;
 
   const _LoginTextField({
     required this.controller,
     required this.label,
     required this.icon,
     this.isObscure = false,
+    this.showVisibilityToggle = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!showVisibilityToggle) {
+      return _LoginTextInput(
+        controller: controller,
+        label: label,
+        icon: icon,
+        obscureText: isObscure,
+      );
+    }
+    return _TogglePasswordTextInput(
+      controller: controller,
+      label: label,
+      icon: icon,
+    );
+  }
+}
+
+class _LoginTextInput extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final bool obscureText;
+
+  const _LoginTextInput({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    required this.obscureText,
   });
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      obscureText: isObscure,
+      obscureText: obscureText,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
@@ -514,7 +548,54 @@ class _LoginTextField extends StatelessWidget {
   }
 }
 
-class _DialogTextField extends StatelessWidget {
+class _TogglePasswordTextInput extends StatefulWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+
+  const _TogglePasswordTextInput({
+    required this.controller,
+    required this.label,
+    required this.icon,
+  });
+
+  @override
+  State<_TogglePasswordTextInput> createState() =>
+      _TogglePasswordTextInputState();
+}
+
+class _TogglePasswordTextInputState extends State<_TogglePasswordTextInput> {
+  bool _visible = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      obscureText: !_visible,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: widget.label,
+        labelStyle: const TextStyle(color: Colors.white38),
+        prefixIcon: Icon(widget.icon, color: const Color(0xFFFFBF00), size: 18),
+        suffixIcon: IconButton(
+          icon: Icon(
+            _visible ? Icons.visibility_off : Icons.visibility,
+            color: Colors.white54,
+          ),
+          onPressed: () => setState(() => _visible = !_visible),
+        ),
+        filled: true,
+        fillColor: const Color(0xFF1A1A1A),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogTextField extends StatefulWidget {
   final TextEditingController controller;
   final String label;
   final bool obscure;
@@ -526,14 +607,30 @@ class _DialogTextField extends StatelessWidget {
   });
 
   @override
+  State<_DialogTextField> createState() => _DialogTextFieldState();
+}
+
+class _DialogTextFieldState extends State<_DialogTextField> {
+  bool _visible = false;
+
+  @override
   Widget build(BuildContext context) {
     return TextField(
-      controller: controller,
-      obscureText: obscure,
+      controller: widget.controller,
+      obscureText: widget.obscure && !_visible,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
-        labelText: label,
+        labelText: widget.label,
         labelStyle: const TextStyle(color: Colors.white54),
+        suffixIcon: widget.obscure
+            ? IconButton(
+                icon: Icon(
+                  _visible ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.white54,
+                ),
+                onPressed: () => setState(() => _visible = !_visible),
+              )
+            : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );

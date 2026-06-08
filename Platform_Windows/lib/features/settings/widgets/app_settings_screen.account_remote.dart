@@ -355,11 +355,20 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
     if (text.contains('signed_out')) {
       return 'Please sign in again first.';
     }
-    return 'Account security update failed. Please try again.';
+    return 'Account security update failed: ${_compactBackendError(error)}';
+  }
+
+  String _compactBackendError(Object error) {
+    final message = error.toString();
+    const prefix = 'AccountBackendError(';
+    if (!message.startsWith(prefix) || !message.endsWith(')')) return message;
+    return message
+        .substring(prefix.length, message.length - 1)
+        .replaceFirst(', ', ': ');
   }
 }
 
-class _AccountDialogTextField extends StatelessWidget {
+class _AccountDialogTextField extends StatefulWidget {
   final TextEditingController controller;
   final String label;
   final bool obscure;
@@ -371,14 +380,31 @@ class _AccountDialogTextField extends StatelessWidget {
   });
 
   @override
+  State<_AccountDialogTextField> createState() =>
+      _AccountDialogTextFieldState();
+}
+
+class _AccountDialogTextFieldState extends State<_AccountDialogTextField> {
+  bool _visible = false;
+
+  @override
   Widget build(BuildContext context) {
     return TextField(
-      controller: controller,
-      obscureText: obscure,
+      controller: widget.controller,
+      obscureText: widget.obscure && !_visible,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
-        labelText: label,
+        labelText: widget.label,
         labelStyle: const TextStyle(color: Colors.white54),
+        suffixIcon: widget.obscure
+            ? IconButton(
+                icon: Icon(
+                  _visible ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.white54,
+                ),
+                onPressed: () => setState(() => _visible = !_visible),
+              )
+            : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );

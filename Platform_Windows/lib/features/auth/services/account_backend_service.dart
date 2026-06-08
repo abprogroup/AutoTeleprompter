@@ -136,6 +136,25 @@ class AccountBackendService {
     return session;
   }
 
+  Future<AccountBackendSession> refreshAccessToken({
+    required String refreshToken,
+  }) async {
+    _requireConfigured();
+    final json = await _postJson(
+      _config.authUri('token').replace(query: 'grant_type=refresh_token'),
+      {'refresh_token': refreshToken},
+      includeAuth: false,
+    );
+    final session = AccountBackendSession.fromJson(json);
+    if (session.accessToken.isEmpty) {
+      throw const AccountBackendError(
+        'missing_access_token',
+        'Session refresh succeeded but no access token was returned.',
+      );
+    }
+    return session;
+  }
+
   Future<void> setPassword({
     required String accessToken,
     required String password,
@@ -279,16 +298,9 @@ class AccountBackendService {
     request.write(jsonEncode(body));
     final response = await request.close().timeout(timeout);
     final text = await utf8.decoder.bind(response).join().timeout(timeout);
-    final decoded = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(text) as Map<String, dynamic>;
+    final decoded = _decodeJsonObject(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final code = decoded['error']?.toString() ?? 'backend_error';
-      throw AccountBackendError(
-        code,
-        decoded['message']?.toString() ?? code,
-        statusCode: response.statusCode,
-      );
+      _throwBackendError(response.statusCode, decoded, text);
     }
     return decoded;
   }
@@ -305,18 +317,46 @@ class AccountBackendService {
     request.write(jsonEncode(body));
     final response = await request.close().timeout(timeout);
     final text = await utf8.decoder.bind(response).join().timeout(timeout);
-    final decoded = text.trim().isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(text) as Map<String, dynamic>;
+    final decoded = _decodeJsonObject(text);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final code = decoded['error']?.toString() ?? 'backend_error';
-      throw AccountBackendError(
-        code,
-        decoded['message']?.toString() ?? code,
-        statusCode: response.statusCode,
-      );
+      _throwBackendError(response.statusCode, decoded, text);
     }
     return decoded;
+  }
+
+  Map<String, dynamic> _decodeJsonObject(String text) {
+    if (text.trim().isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      return <String, dynamic>{'msg': text.trim()};
+    }
+    return <String, dynamic>{'msg': text.trim()};
+  }
+
+  Never _throwBackendError(
+    int statusCode,
+    Map<String, dynamic> decoded,
+    String rawText,
+  ) {
+    final code = (decoded['error_code'] ??
+            decoded['code'] ??
+            decoded['error'] ??
+            'backend_error')
+        .toString();
+    final rawMessage = rawText.trim();
+    final message = (decoded['msg'] ??
+            decoded['message'] ??
+            decoded['error_description'] ??
+            (rawMessage.isEmpty ? code : rawMessage))
+        .toString();
+    throw AccountBackendError(
+      code,
+      'HTTP $statusCode: $code - $message',
+      statusCode: statusCode,
+    );
   }
 
   void _requireConfigured() {

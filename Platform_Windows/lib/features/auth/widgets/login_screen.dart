@@ -17,6 +17,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _licenseCtrl = TextEditingController();
   bool _isLoading = false;
   bool _backendCodeRequested = false;
+  bool _passwordMode = false;
 
   @override
   void initState() {
@@ -101,7 +102,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _handleBackendActivation() async {
     final email = _emailCtrl.text.trim();
-    final code = _licenseCtrl.text.trim();
+    final credential = _licenseCtrl.text.trim();
 
     if (email.isEmpty) {
       _showSnack('Please enter your workspace email.');
@@ -111,7 +112,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authNotifier = ref.read(authProvider.notifier);
     setState(() => _isLoading = true);
     try {
-      if (code.isEmpty) {
+      if (_passwordMode) {
+        if (credential.isEmpty) {
+          _showSnack('Please enter your password.');
+          setState(() => _isLoading = false);
+          return;
+        }
+        final success = await authNotifier.signInWithBackendPassword(
+          email: email,
+          password: credential,
+        );
+        await ref
+            .read(settingsProvider.notifier)
+            .seedDisplayNameFromEmail(email);
+        setState(() => _isLoading = false);
+        if (!success) {
+          _showSnack('This account does not have active Pro access.');
+          return;
+        }
+        _finishSuccessfulBackendLogin();
+        return;
+      }
+
+      if (credential.isEmpty) {
         await authNotifier.requestBackendLoginCode(email);
         setState(() {
           _backendCodeRequested = true;
@@ -123,7 +146,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
       final success = await authNotifier.verifyBackendLoginCode(
         email: email,
-        code: code,
+        code: credential,
       );
       await ref.read(settingsProvider.notifier).seedDisplayNameFromEmail(email);
       setState(() => _isLoading = false);
@@ -131,20 +154,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _showSnack('This account does not have active Pro access.');
         return;
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Professional suite activated.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-        Navigator.pop(context);
-      }
+      _finishSuccessfulBackendLogin();
     } catch (error) {
       if (mounted) setState(() => _isLoading = false);
       _showSnack(_friendlyBackendError(error));
     }
+  }
+
+  void _finishSuccessfulBackendLogin() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Professional suite activated.'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+    Navigator.pop(context);
   }
 
   void _showSnack(String message) {
@@ -165,6 +191,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (message.contains('backend_not_configured')) {
       return 'Account backend is not configured for this build.';
     }
+    if (message.contains('weak_password')) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (message.contains('invalid_grant') ||
+        message.contains('invalid login')) {
+      return 'Email or password is incorrect.';
+    }
     if (message.startsWith('AccountBackendError(')) {
       return 'Account verification failed: $message';
     }
@@ -178,6 +211,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final hasBackendCode = backendMode && _licenseCtrl.text.trim().isNotEmpty;
     final codeRequested =
         backendMode && (_backendCodeRequested || hasBackendCode);
+    final credentialLabel = backendMode
+        ? _passwordMode
+            ? 'Password'
+            : 'Email Verification Code'
+        : 'Professional License Key';
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
@@ -223,12 +261,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 16),
               _LoginTextField(
                 controller: _licenseCtrl,
-                label: backendMode
-                    ? 'Email Verification Code'
-                    : 'Professional License Key',
+                label: credentialLabel,
                 icon: Icons.vpn_key_outlined,
                 isObscure: true,
               ),
+              if (backendMode) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _passwordMode = !_passwordMode;
+                                _licenseCtrl.clear();
+                                _backendCodeRequested = false;
+                              });
+                            },
+                      child: Text(
+                        _passwordMode
+                            ? 'Use email verification code'
+                            : 'Use password instead',
+                      ),
+                    ),
+                    if (_passwordMode)
+                      TextButton(
+                        onPressed: _isLoading ? null : _showPasswordResetDialog,
+                        child: const Text('Forgot password?'),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,
@@ -246,9 +311,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ? const CircularProgressIndicator(color: Colors.black)
                       : Text(
                           backendMode
-                              ? codeRequested
-                                  ? 'VERIFY ACCOUNT'
-                                  : 'SEND VERIFICATION CODE'
+                              ? _passwordMode
+                                  ? 'SIGN IN WITH PASSWORD'
+                                  : codeRequested
+                                      ? 'VERIFY ACCOUNT'
+                                      : 'SEND VERIFICATION CODE'
                               : 'ACTIVATE LICENSE',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
@@ -271,6 +338,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showPasswordResetDialog() {
+    final emailController = TextEditingController(text: _emailCtrl.text.trim());
+    final codeController = TextEditingController();
+    final passwordController = TextEditingController();
+    var codeRequested = false;
+    var busy = false;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text(
+            'Reset password',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DialogTextField(
+                controller: emailController,
+                label: 'Account email',
+              ),
+              if (codeRequested) ...[
+                const SizedBox(height: 12),
+                _DialogTextField(
+                  controller: codeController,
+                  label: 'Reset code',
+                  obscure: true,
+                ),
+                const SizedBox(height: 12),
+                _DialogTextField(
+                  controller: passwordController,
+                  label: 'New password',
+                  obscure: true,
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final dialogNavigator = Navigator.of(ctx);
+                      final screenNavigator = Navigator.of(context);
+                      setDialogState(() => busy = true);
+                      try {
+                        final auth = ref.read(authProvider.notifier);
+                        if (!codeRequested) {
+                          await auth.requestBackendPasswordResetCode(
+                            emailController.text,
+                          );
+                          setDialogState(() {
+                            codeRequested = true;
+                            busy = false;
+                          });
+                          _showSnack('Password reset code sent.');
+                          return;
+                        }
+                        await auth.resetBackendPasswordWithCode(
+                          email: emailController.text,
+                          code: codeController.text,
+                          newPassword: passwordController.text,
+                        );
+                        if (!mounted) return;
+                        dialogNavigator.pop();
+                        screenNavigator.pop();
+                        _showSnack('Password reset complete.');
+                      } catch (error) {
+                        setDialogState(() => busy = false);
+                        _showSnack(_friendlyBackendError(error));
+                      }
+                    },
+              child: Text(codeRequested ? 'Reset' : 'Send code'),
+            ),
+          ],
         ),
       ),
     );
@@ -357,6 +509,32 @@ class _LoginTextField extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
+      ),
+    );
+  }
+}
+
+class _DialogTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final bool obscure;
+
+  const _DialogTextField({
+    required this.controller,
+    required this.label,
+    this.obscure = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white54),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }

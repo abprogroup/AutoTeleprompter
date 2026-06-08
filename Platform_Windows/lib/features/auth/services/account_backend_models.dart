@@ -26,6 +26,8 @@ class AccountBackendProfile {
   final DateTime? entitlementExpiresAt;
   final bool entitlementRevoked;
   final DateTime? serverTime;
+  final String? graceToken;
+  final DateTime? graceExpiresAt;
 
   const AccountBackendProfile({
     required this.accountId,
@@ -36,6 +38,8 @@ class AccountBackendProfile {
     this.entitlementExpiresAt,
     this.entitlementRevoked = false,
     this.serverTime,
+    this.graceToken,
+    this.graceExpiresAt,
   });
 
   bool get isDisabled => status == 'disabled';
@@ -62,6 +66,7 @@ class AccountBackendProfile {
   factory AccountBackendProfile.fromJson(Map<String, dynamic> json) {
     final profile = _asMap(json['profile']);
     final entitlement = _asMap(json['entitlement']);
+    final grace = _asMap(json['graceToken']);
     return AccountBackendProfile(
       accountId: (profile['user_id'] ?? profile['id'] ?? '').toString(),
       email: (profile['email'] ?? '').toString(),
@@ -74,6 +79,8 @@ class AccountBackendProfile {
       entitlementRevoked: entitlement['status'] == 'revoked' ||
           entitlement['revoked_at'] != null,
       serverTime: _date(json['serverTime']),
+      graceToken: grace['token']?.toString(),
+      graceExpiresAt: _date(grace['expires_at']),
     );
   }
 }

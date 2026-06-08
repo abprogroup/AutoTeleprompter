@@ -28,7 +28,7 @@ serve(async (req) => {
     expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
   }, { onConflict: "user_id,device_id" });
 
-  const snapshot = await accountSnapshot(auth.client, auth.user.id);
+  const snapshot = await accountSnapshot(auth.client, auth.user.id, { deviceId });
   if (snapshot.profile?.status === "disabled") {
     await audit(auth.client, "profile_disabled_refresh", auth.user.id, "failed", { deviceId });
     return jsonResponse(403, { error: "account_disabled" });

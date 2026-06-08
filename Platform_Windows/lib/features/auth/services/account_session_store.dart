@@ -12,6 +12,8 @@ class AccountSessionSnapshot {
   final AccountBackendRole role;
   final DateTime? expiresAt;
   final DateTime? lastServerTimestamp;
+  final String? graceToken;
+  final DateTime? graceExpiresAt;
 
   const AccountSessionSnapshot({
     required this.accessToken,
@@ -22,6 +24,8 @@ class AccountSessionSnapshot {
     this.role = AccountBackendRole.free,
     this.expiresAt,
     this.lastServerTimestamp,
+    this.graceToken,
+    this.graceExpiresAt,
   });
 
   Map<String, Object?> toJson() => {
@@ -34,6 +38,9 @@ class AccountSessionSnapshot {
         if (expiresAt != null) 'expiresAt': expiresAt!.toIso8601String(),
         if (lastServerTimestamp != null)
           'lastServerTimestamp': lastServerTimestamp!.toIso8601String(),
+        if (graceToken != null) 'graceToken': graceToken,
+        if (graceExpiresAt != null)
+          'graceExpiresAt': graceExpiresAt!.toIso8601String(),
       };
 
   factory AccountSessionSnapshot.fromJson(Map<String, dynamic> json) {
@@ -47,6 +54,9 @@ class AccountSessionSnapshot {
       expiresAt: DateTime.tryParse(json['expiresAt']?.toString() ?? ''),
       lastServerTimestamp:
           DateTime.tryParse(json['lastServerTimestamp']?.toString() ?? ''),
+      graceToken: json['graceToken']?.toString(),
+      graceExpiresAt:
+          DateTime.tryParse(json['graceExpiresAt']?.toString() ?? ''),
     );
   }
 }

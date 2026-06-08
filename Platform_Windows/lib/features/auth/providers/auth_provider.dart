@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/account_backend_service.dart';
 import '../services/account_backend_config.dart';
+import '../services/account_grace_token.dart';
 import '../services/account_backend_models.dart';
 import '../services/account_session_store.dart';
 
@@ -158,10 +159,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     AccountBackendConfig accountBackendConfig = const AccountBackendConfig(),
     AccountBackendService? accountBackendService,
     AccountSessionStore? accountSessionStore,
+    AccountGraceTokenVerifier graceTokenVerifier =
+        const AccountGraceTokenVerifier(),
   })  : _accountBackendConfig = accountBackendConfig,
         _accountBackendService = accountBackendService ??
             AccountBackendService(config: accountBackendConfig),
         _accountSessionStore = accountSessionStore ?? AccountSessionStore(),
+        _graceTokenVerifier = graceTokenVerifier,
         super(
           AuthState(
             accountBackendEnabled: accountBackendConfig.enabled,
@@ -178,6 +182,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final AccountBackendConfig _accountBackendConfig;
   final AccountBackendService _accountBackendService;
   final AccountSessionStore _accountSessionStore;
+  final AccountGraceTokenVerifier _graceTokenVerifier;
 
   Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
@@ -291,36 +296,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         email: normalizedEmail,
         code: normalizedCode,
       );
-      final deviceId = await _ensureBackendDeviceId();
-      final profile = await _accountBackendService.refreshSession(
-        accessToken: session.accessToken,
-        deviceId: deviceId,
-        friendlyName: 'Windows',
+      return _activateBackendSession(
+        session,
+        fallbackEmail: normalizedEmail,
       );
-      await _accountSessionStore.save(
-        AccountSessionSnapshot(
-          accessToken: session.accessToken,
-          refreshToken: session.refreshToken,
-          userId:
-              profile.accountId.isNotEmpty ? profile.accountId : session.userId,
-          email: profile.email.isNotEmpty ? profile.email : session.email,
-          deviceId: deviceId,
-          role: profile.role,
-          expiresAt: session.expiresAt,
-          lastServerTimestamp: profile.serverTime,
-        ),
-      );
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _emailKey,
-        profile.email.isNotEmpty ? profile.email : normalizedEmail,
-      );
-      await applyBackendProfile(
-        profile,
-        deviceId: deviceId,
-        tokenExpiry: session.expiresAt,
-      );
-      return profile.hasPremiumAccess || profile.isAdmin;
     } catch (error) {
       state = state.copyWith(
         accountBackendEnabled: true,
@@ -329,6 +308,129 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       rethrow;
     }
+  }
+
+  Future<bool> signInWithBackendPassword({
+    required String email,
+    required String password,
+  }) async {
+    final normalizedEmail = email.trim();
+    _validatePasswordInput(password);
+    state = state.copyWith(
+      accountBackendEnabled: true,
+      backendStatus: 'passwordSignIn',
+      backendError: null,
+    );
+    try {
+      final session = await _accountBackendService.signInWithPassword(
+        email: normalizedEmail,
+        password: password,
+      );
+      return _activateBackendSession(
+        session,
+        fallbackEmail: normalizedEmail,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        accountBackendEnabled: true,
+        backendStatus: 'passwordSignInFailed',
+        backendError: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> setBackendPassword({
+    required String newPassword,
+    String? currentPassword,
+  }) async {
+    _validatePasswordInput(newPassword);
+    final session = await _requireStoredSession();
+    final email = state.email?.trim();
+    if (currentPassword != null && currentPassword.trim().isNotEmpty) {
+      if (email == null || email.isEmpty) {
+        throw const AccountBackendError(
+          'missing_email',
+          'Current account email is missing.',
+        );
+      }
+      await _accountBackendService.signInWithPassword(
+        email: email,
+        password: currentPassword,
+      );
+    }
+    await _accountBackendService.setPassword(
+      accessToken: session.accessToken,
+      password: newPassword,
+    );
+  }
+
+  Future<void> requestBackendPasswordResetCode(String email) async {
+    final normalizedEmail = email.trim();
+    if (normalizedEmail.isEmpty) {
+      throw const AccountBackendError(
+        'missing_email',
+        'Enter an email address before requesting a password reset.',
+      );
+    }
+    await _accountBackendService.requestPasswordResetCode(normalizedEmail);
+  }
+
+  Future<bool> resetBackendPasswordWithCode({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final normalizedEmail = email.trim();
+    final normalizedCode = code.trim();
+    if (normalizedEmail.isEmpty || normalizedCode.isEmpty) {
+      throw const AccountBackendError(
+        'missing_reset_code',
+        'Email and reset code are required.',
+      );
+    }
+    _validatePasswordInput(newPassword);
+    final session = await _accountBackendService.verifyPasswordResetCode(
+      email: normalizedEmail,
+      code: normalizedCode,
+    );
+    await _accountBackendService.setPassword(
+      accessToken: session.accessToken,
+      password: newPassword,
+    );
+    return _activateBackendSession(
+      session,
+      fallbackEmail: normalizedEmail,
+    );
+  }
+
+  Future<void> changeBackendEmailWithPassword({
+    required String newEmail,
+    required String currentPassword,
+  }) async {
+    final currentEmail = state.email?.trim();
+    final normalizedNewEmail = newEmail.trim();
+    _validatePasswordInput(currentPassword);
+    if (currentEmail == null || currentEmail.isEmpty) {
+      throw const AccountBackendError(
+        'missing_email',
+        'Current account email is missing.',
+      );
+    }
+    if (normalizedNewEmail.isEmpty) {
+      throw const AccountBackendError(
+        'missing_new_email',
+        'Enter the new email address.',
+      );
+    }
+    final verifiedSession = await _accountBackendService.signInWithPassword(
+      email: currentEmail,
+      password: currentPassword,
+    );
+    await _accountBackendService.updateEmail(
+      accessToken: verifiedSession.accessToken,
+      newEmail: normalizedNewEmail,
+    );
   }
 
   Future<void> logout() async {
@@ -393,15 +495,76 @@ class AuthNotifier extends StateNotifier<AuthState> {
       entitlementExpiresAt: profile.entitlementExpiresAt,
       clearEntitlementExpiresAt: profile.entitlementExpiresAt == null,
       entitlementRevoked: profile.entitlementRevoked,
+      offlineGraceExpiry: profile.graceExpiresAt,
       deviceId: deviceId,
       lastServerTimestamp: profile.serverTime,
     );
   }
 
+  Future<bool> _activateBackendSession(
+    AccountBackendSession session, {
+    required String fallbackEmail,
+  }) async {
+    final deviceId = await _ensureBackendDeviceId();
+    final profile = await _accountBackendService.refreshSession(
+      accessToken: session.accessToken,
+      deviceId: deviceId,
+      friendlyName: 'Windows',
+    );
+    await _accountSessionStore.save(
+      AccountSessionSnapshot(
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        userId:
+            profile.accountId.isNotEmpty ? profile.accountId : session.userId,
+        email: profile.email.isNotEmpty ? profile.email : session.email,
+        deviceId: deviceId,
+        role: profile.role,
+        expiresAt: session.expiresAt,
+        lastServerTimestamp: profile.serverTime,
+        graceToken: profile.graceToken,
+        graceExpiresAt: profile.graceExpiresAt,
+      ),
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _emailKey,
+      profile.email.isNotEmpty ? profile.email : fallbackEmail,
+    );
+    await applyBackendProfile(
+      profile,
+      deviceId: deviceId,
+      tokenExpiry: session.expiresAt,
+    );
+    return profile.hasPremiumAccess || profile.isAdmin;
+  }
+
+  Future<AccountSessionSnapshot> _requireStoredSession() async {
+    final session = await _accountSessionStore.read();
+    if (session == null || session.accessToken.trim().isEmpty) {
+      throw const AccountBackendError(
+        'signed_out',
+        'Sign in before changing account security settings.',
+      );
+    }
+    return session;
+  }
+
+  void _validatePasswordInput(String password) {
+    if (password.length < 8) {
+      throw const AccountBackendError(
+        'weak_password',
+        'Password must be at least 8 characters.',
+      );
+    }
+  }
+
   Future<void> _loadStoredBackendSession() async {
     if (!_accountBackendConfig.isConfigured) return;
+    AccountSessionSnapshot? session;
+    String? deviceId;
     try {
-      final session = await _accountSessionStore.read();
+      session = await _accountSessionStore.read();
       if (session == null || session.accessToken.trim().isEmpty) return;
       final now = DateTime.now().toUtc();
       final lastServerTimestamp = session.lastServerTimestamp;
@@ -420,6 +583,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
       if (session.expiresAt != null && !session.expiresAt!.isAfter(now)) {
+        deviceId = session.deviceId ?? await _ensureBackendDeviceId();
+        if (_applyOfflineGrace(session, deviceId)) return;
         await _accountSessionStore.clear();
         state = state.copyWith(
           accountBackendEnabled: true,
@@ -442,7 +607,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isPro: false,
         isAdmin: false,
       );
-      final deviceId = session.deviceId ?? await _ensureBackendDeviceId();
+      deviceId = session.deviceId ?? await _ensureBackendDeviceId();
       final profile = await _accountBackendService.refreshSession(
         accessToken: session.accessToken,
         deviceId: deviceId,
@@ -459,6 +624,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           role: profile.role,
           expiresAt: session.expiresAt,
           lastServerTimestamp: profile.serverTime,
+          graceToken: profile.graceToken,
+          graceExpiresAt: profile.graceExpiresAt,
         ),
       );
       await applyBackendProfile(
@@ -467,6 +634,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         tokenExpiry: session.expiresAt,
       );
     } catch (error) {
+      if (_applyOfflineGrace(session, deviceId ?? session?.deviceId)) return;
       await _accountSessionStore.clear();
       state = state.copyWith(
         accountBackendEnabled: true,
@@ -476,6 +644,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isAdmin: false,
       );
     }
+  }
+
+  bool _applyOfflineGrace(
+    AccountSessionSnapshot? session,
+    String? deviceId,
+  ) {
+    if (session == null || deviceId == null || deviceId.trim().isEmpty) {
+      return false;
+    }
+    final grace = _graceTokenVerifier.verify(
+      session.graceToken,
+      expectedDeviceId: deviceId,
+      lastServerTimestamp: session.lastServerTimestamp,
+    );
+    if (grace == null) return false;
+    final now = DateTime.now().toUtc();
+    state = state.copyWith(
+      email: grace.email.isNotEmpty ? grace.email : session.email,
+      isPro: grace.hasPremiumAccessAt(now),
+      isAdmin: grace.isAdminAt(now),
+      accountBackendEnabled: true,
+      backendAccountId:
+          grace.accountId.isNotEmpty ? grace.accountId : session.userId,
+      backendRole: grace.role,
+      backendStatus: 'offlineGraceActive',
+      backendError: null,
+      backendEntitlementStatus: grace.status,
+      entitlementExpiresAt: grace.entitlementExpiresAt,
+      clearEntitlementExpiresAt: grace.entitlementExpiresAt == null,
+      entitlementRevoked: false,
+      offlineGraceExpiry: grace.expiresAt,
+      deviceId: deviceId,
+      lastServerTimestamp: session.lastServerTimestamp,
+    );
+    return state.hasPremiumAccess || state.isAdmin;
   }
 
   Future<String> _ensureBackendDeviceId() async {

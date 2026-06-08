@@ -18,6 +18,10 @@ type EntitlementRow = {
   updated_at?: string | null;
 };
 
+type AccountSnapshotOptions = {
+  deviceId?: string;
+};
+
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, content-type",
@@ -82,16 +86,29 @@ export async function ensureActiveProfile(client: ReturnType<typeof serviceClien
   }, { onConflict: "user_id", ignoreDuplicates: true });
 }
 
-export async function accountSnapshot(client: ReturnType<typeof serviceClient>, userId: string) {
+export async function accountSnapshot(
+  client: ReturnType<typeof serviceClient>,
+  userId: string,
+  options: AccountSnapshotOptions = {},
+) {
   const serverTime = new Date();
   const [{ data: profile }, { data: entitlement }] = await Promise.all([
     client.from("profiles").select("user_id,email,display_name,status,updated_at").eq("user_id", userId).maybeSingle(),
     client.from("entitlements").select("role,status,source,current_period_end,expires_at,revoked_at,updated_at").eq("user_id", userId).maybeSingle(),
   ]);
   const normalizedEntitlement = normalizeEntitlement(entitlement, serverTime);
+  const graceToken = await createGraceToken({
+    accountId: userId,
+    deviceId: options.deviceId,
+    email: profile?.email ?? "",
+    entitlement: normalizedEntitlement,
+    profileStatus: profile?.status ?? "active",
+    serverTime,
+  });
   return {
     profile,
     entitlement: normalizedEntitlement,
+    graceToken,
     serverTime: serverTime.toISOString(),
   };
 }
@@ -143,6 +160,94 @@ function normalizeStatus(value: string | null | undefined) {
   const status = (value ?? "active").trim().toLowerCase();
   if (status === "revoked" || status === "expired") return status;
   return "active";
+}
+
+async function createGraceToken({
+  accountId,
+  deviceId,
+  email,
+  entitlement,
+  profileStatus,
+  serverTime,
+}: {
+  accountId: string;
+  deviceId?: string;
+  email: string;
+  entitlement: ReturnType<typeof normalizeEntitlement>;
+  profileStatus: string;
+  serverTime: Date;
+}) {
+  if (!deviceId || profileStatus === "disabled") return null;
+  if (!entitlement.has_premium_access && !entitlement.is_admin) return null;
+
+  const keyB64 = Deno.env.get("GRACE_TOKEN_PRIVATE_JWK_B64") ?? "";
+  const keyId = Deno.env.get("GRACE_TOKEN_KEY_ID") ?? "staging";
+  if (!keyB64.trim()) {
+    return { error: "missing_grace_signing_key" };
+  }
+
+  const issuedAt = serverTime;
+  const maxGraceExpiry = new Date(issuedAt.getTime() + 72 * 60 * 60 * 1000);
+  const entitlementExpiry = entitlement.current_period_end
+    ? new Date(entitlement.current_period_end)
+    : null;
+  const graceExpiry =
+    entitlement.role === "admin" || !entitlementExpiry
+      ? maxGraceExpiry
+      : new Date(Math.min(maxGraceExpiry.getTime(), entitlementExpiry.getTime()));
+
+  if (graceExpiry.getTime() <= issuedAt.getTime()) return null;
+
+  const payload = {
+    iss: "autoteleprompter-staging",
+    aud: "autoteleprompter-windows",
+    kid: keyId,
+    account_id: accountId,
+    email,
+    device_id: deviceId,
+    role: entitlement.role,
+    status: entitlement.status,
+    entitlement_expires_at: entitlement.current_period_end,
+    issued_at: issuedAt.toISOString(),
+    grace_expires_at: graceExpiry.toISOString(),
+  };
+  const payloadPart = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  const key = await importGracePrivateKey(keyB64);
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(payloadPart),
+  );
+  return {
+    token: `${payloadPart}.${base64UrlEncode(new Uint8Array(signature))}`,
+    key_id: keyId,
+    algorithm: "RS256",
+    issued_at: payload.issued_at,
+    expires_at: payload.grace_expires_at,
+  };
+}
+
+async function importGracePrivateKey(keyB64: string) {
+  const jwkJson = new TextDecoder().decode(base64Decode(keyB64));
+  const jwk = JSON.parse(jwkJson);
+  return await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
+
+function base64Decode(value: string) {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function base64UrlEncode(bytes: Uint8Array) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 export async function audit(

@@ -113,6 +113,86 @@ class AccountBackendService {
     );
   }
 
+  Future<AccountBackendSession> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    _requireConfigured();
+    final json = await _postJson(
+      _config.authUri('token').replace(query: 'grant_type=password'),
+      {
+        'email': email.trim(),
+        'password': password,
+      },
+      includeAuth: false,
+    );
+    final session = AccountBackendSession.fromJson(json);
+    if (session.accessToken.isEmpty) {
+      throw const AccountBackendError(
+        'missing_access_token',
+        'Password sign-in succeeded but no access token was returned.',
+      );
+    }
+    return session;
+  }
+
+  Future<void> setPassword({
+    required String accessToken,
+    required String password,
+  }) async {
+    _requireConfigured();
+    await _putJson(
+      _config.authUri('user'),
+      {'password': password},
+      bearerToken: accessToken,
+    );
+  }
+
+  Future<void> requestPasswordResetCode(String email) async {
+    _requireConfigured();
+    await _postJson(
+      _config.authUri('recover'),
+      {'email': email.trim()},
+      includeAuth: false,
+    );
+  }
+
+  Future<AccountBackendSession> verifyPasswordResetCode({
+    required String email,
+    required String code,
+  }) async {
+    _requireConfigured();
+    final json = await _postJson(
+      _config.authUri('verify'),
+      {
+        'email': email.trim(),
+        'token': code.trim(),
+        'type': 'recovery',
+      },
+      includeAuth: false,
+    );
+    final session = AccountBackendSession.fromJson(json);
+    if (session.accessToken.isEmpty) {
+      throw const AccountBackendError(
+        'missing_access_token',
+        'Password reset was verified but no access token was returned.',
+      );
+    }
+    return session;
+  }
+
+  Future<void> updateEmail({
+    required String accessToken,
+    required String newEmail,
+  }) async {
+    _requireConfigured();
+    await _putJson(
+      _config.authUri('user'),
+      {'email': newEmail.trim()},
+      bearerToken: accessToken,
+    );
+  }
+
   Future<AccountBackendRole> redeemLicenseCode({
     required String accessToken,
     required String code,
@@ -196,6 +276,32 @@ class AccountBackendService {
     } else if (!includeAuth) {
       request.headers.set('Authorization', 'Bearer ${_config.anonKey.trim()}');
     }
+    request.write(jsonEncode(body));
+    final response = await request.close().timeout(timeout);
+    final text = await utf8.decoder.bind(response).join().timeout(timeout);
+    final decoded = text.trim().isEmpty
+        ? <String, dynamic>{}
+        : jsonDecode(text) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final code = decoded['error']?.toString() ?? 'backend_error';
+      throw AccountBackendError(
+        code,
+        decoded['message']?.toString() ?? code,
+        statusCode: response.statusCode,
+      );
+    }
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> _putJson(
+    Uri uri,
+    Map<String, Object?> body, {
+    required String bearerToken,
+  }) async {
+    final request = await _client.putUrl(uri).timeout(timeout);
+    request.headers.contentType = ContentType.json;
+    request.headers.set('apikey', _config.anonKey.trim());
+    request.headers.set('Authorization', 'Bearer ${bearerToken.trim()}');
     request.write(jsonEncode(body));
     final response = await request.close().timeout(timeout);
     final text = await utf8.decoder.bind(response).join().timeout(timeout);

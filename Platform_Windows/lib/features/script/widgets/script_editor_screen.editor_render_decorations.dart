@@ -143,25 +143,34 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     }
 
     final editableOffset = editable.localToGlobal(Offset.zero, ancestor: this);
-    final canvas = context.canvas;
-    canvas.save();
-    canvas.translate(
-        offset.dx + editableOffset.dx, offset.dy + editableOffset.dy);
+
+    // Pre-child decorations. Only touch the canvas when there is actually
+    // something to paint — an empty save/translate/restore was wrapping a
+    // disabled body for no reason.
     if (_paintEditorLocalBackgrounds) {
+      final canvas = context.canvas;
+      canvas.save();
+      canvas.translate(
+          offset.dx + editableOffset.dx, offset.dy + editableOffset.dy);
       _paintStyleBackgrounds(canvas, editable);
       _paintActiveSelection(canvas, editable);
+      canvas.restore();
     }
-    canvas.restore();
 
     super.paint(context, offset);
 
-    canvas.save();
-    canvas.translate(
-        offset.dx + editableOffset.dx, offset.dy + editableOffset.dy);
+    // Post-child decorations. IMPORTANT: re-fetch context.canvas here.
+    // super.paint() can trigger compositing (e.g. the zoom page-transition
+    // snapshot) which ends the previous canvas's recording; reusing a cached
+    // canvas afterwards calls into a collected native peer and crashes.
     if (_paintEditorLocalUnderlines) {
+      final canvas = context.canvas;
+      canvas.save();
+      canvas.translate(
+          offset.dx + editableOffset.dx, offset.dy + editableOffset.dy);
       _paintUnderlines(canvas, editable);
+      canvas.restore();
     }
-    canvas.restore();
   }
 
   RenderEditable? _findRenderEditable(RenderObject? root) {

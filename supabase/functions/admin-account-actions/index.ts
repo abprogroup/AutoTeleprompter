@@ -9,7 +9,7 @@ serve(async (req) => {
   const auth = await requireUser(req);
   if ("error" in auth) return auth.error;
   const snapshot = await accountSnapshot(auth.client, auth.user.id);
-  if (snapshot.entitlement?.role !== "admin" || snapshot.entitlement?.revoked_at) {
+  if (!snapshot.entitlement?.is_admin) {
     await audit(auth.client, "admin_action", auth.user.id, "failed", { reason: "not_admin" });
     return jsonResponse(403, { error: "admin_required" });
   }

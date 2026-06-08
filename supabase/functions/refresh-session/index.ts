@@ -29,6 +29,10 @@ serve(async (req) => {
   }, { onConflict: "user_id,device_id" });
 
   const snapshot = await accountSnapshot(auth.client, auth.user.id);
+  if (snapshot.profile?.status === "disabled") {
+    await audit(auth.client, "profile_disabled_refresh", auth.user.id, "failed", { deviceId });
+    return jsonResponse(403, { error: "account_disabled" });
+  }
   await audit(auth.client, "session_refresh", auth.user.id, "ok", { deviceId });
   return jsonResponse(200, { ok: true, ...snapshot });
 });

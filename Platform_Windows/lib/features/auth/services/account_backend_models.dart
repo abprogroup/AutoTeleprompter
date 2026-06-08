@@ -22,6 +22,7 @@ class AccountBackendProfile {
   final String email;
   final String status;
   final AccountBackendRole role;
+  final String entitlementStatus;
   final DateTime? entitlementExpiresAt;
   final bool entitlementRevoked;
   final DateTime? serverTime;
@@ -31,6 +32,7 @@ class AccountBackendProfile {
     required this.email,
     required this.status,
     required this.role,
+    this.entitlementStatus = 'active',
     this.entitlementExpiresAt,
     this.entitlementRevoked = false,
     this.serverTime,
@@ -38,25 +40,24 @@ class AccountBackendProfile {
 
   bool get isDisabled => status == 'disabled';
 
-  bool get hasPremiumAccess =>
-      hasPremiumAccessAt(DateTime.now().toUtc());
+  bool get hasPremiumAccess => hasPremiumAccessAt(DateTime.now().toUtc());
 
-  bool hasPremiumAccessAt(DateTime now) =>
-      !isDisabled &&
-      !entitlementRevoked &&
-      (role == AccountBackendRole.pro || role == AccountBackendRole.admin) &&
-      (entitlementExpiresAt == null ||
-          entitlementExpiresAt!.isAfter(now.toUtc()));
+  bool get entitlementActive =>
+      entitlementStatus == 'active' && !entitlementRevoked;
+
+  bool hasPremiumAccessAt(DateTime now) {
+    if (isDisabled || !entitlementActive) return false;
+    if (role == AccountBackendRole.admin) return true;
+    if (role != AccountBackendRole.pro) return false;
+    final expiresAt = entitlementExpiresAt;
+    return expiresAt == null || expiresAt.isAfter(now.toUtc());
+  }
 
   bool get isAdmin =>
-      !isDisabled && !entitlementRevoked && role == AccountBackendRole.admin;
+      !isDisabled && entitlementActive && role == AccountBackendRole.admin;
 
   bool isAdminAt(DateTime now) =>
-      !isDisabled &&
-      !entitlementRevoked &&
-      role == AccountBackendRole.admin &&
-      (entitlementExpiresAt == null ||
-          entitlementExpiresAt!.isAfter(now.toUtc()));
+      !isDisabled && entitlementActive && role == AccountBackendRole.admin;
 
   factory AccountBackendProfile.fromJson(Map<String, dynamic> json) {
     final profile = _asMap(json['profile']);
@@ -66,8 +67,12 @@ class AccountBackendProfile {
       email: (profile['email'] ?? '').toString(),
       status: (profile['status'] ?? 'active').toString(),
       role: AccountBackendRole.fromWire(entitlement['role']),
-      entitlementExpiresAt: _date(entitlement['expires_at']),
-      entitlementRevoked: entitlement['revoked_at'] != null,
+      entitlementStatus: _entitlementStatus(
+          entitlement['status'] ?? entitlement['stored_status']),
+      entitlementExpiresAt:
+          _date(entitlement['current_period_end'] ?? entitlement['expires_at']),
+      entitlementRevoked: entitlement['status'] == 'revoked' ||
+          entitlement['revoked_at'] != null,
       serverTime: _date(json['serverTime']),
     );
   }
@@ -123,4 +128,10 @@ Map<String, dynamic> _asMap(Object? value) {
 DateTime? _date(Object? value) {
   if (value == null) return null;
   return DateTime.tryParse(value.toString())?.toUtc();
+}
+
+String _entitlementStatus(Object? value) {
+  final status = (value ?? 'active').toString().trim().toLowerCase();
+  if (status == 'expired' || status == 'revoked') return status;
+  return 'active';
 }

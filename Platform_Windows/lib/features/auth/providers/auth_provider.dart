@@ -35,6 +35,7 @@ class AuthState {
   final String backendStatus;
   final String? backendError;
   final DateTime? backendTokenExpiry;
+  final String backendEntitlementStatus;
   final DateTime? entitlementExpiresAt;
   final bool entitlementRevoked;
   final DateTime? offlineGraceExpiry;
@@ -52,6 +53,7 @@ class AuthState {
     this.backendStatus = 'disabled',
     this.backendError,
     this.backendTokenExpiry,
+    this.backendEntitlementStatus = 'active',
     this.entitlementExpiresAt,
     this.entitlementRevoked = false,
     this.offlineGraceExpiry,
@@ -68,6 +70,8 @@ class AuthState {
 
   String get entitlementStatus {
     if (backendStatus == 'disabledAccount') return 'disabled';
+    if (backendEntitlementStatus == 'revoked') return 'revoked';
+    if (backendEntitlementStatus == 'expired') return 'expired';
     if (entitlementRevoked) return 'revoked';
     final expiresAt = entitlementExpiresAt;
     if (expiresAt != null && !expiresAt.isAfter(DateTime.now().toUtc())) {
@@ -111,6 +115,7 @@ class AuthState {
     String? backendStatus,
     String? backendError,
     DateTime? backendTokenExpiry,
+    String? backendEntitlementStatus,
     DateTime? entitlementExpiresAt,
     bool clearEntitlementExpiresAt = false,
     bool? entitlementRevoked,
@@ -130,6 +135,8 @@ class AuthState {
       backendStatus: backendStatus ?? this.backendStatus,
       backendError: backendError ?? this.backendError,
       backendTokenExpiry: backendTokenExpiry ?? this.backendTokenExpiry,
+      backendEntitlementStatus:
+          backendEntitlementStatus ?? this.backendEntitlementStatus,
       entitlementExpiresAt: clearEntitlementExpiresAt
           ? null
           : entitlementExpiresAt ?? this.entitlementExpiresAt,
@@ -382,6 +389,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       backendStatus: profile.isDisabled ? 'disabledAccount' : 'active',
       backendError: null,
       backendTokenExpiry: tokenExpiry,
+      backendEntitlementStatus: profile.entitlementStatus,
       entitlementExpiresAt: profile.entitlementExpiresAt,
       clearEntitlementExpiresAt: profile.entitlementExpiresAt == null,
       entitlementRevoked: profile.entitlementRevoked,
@@ -398,7 +406,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final now = DateTime.now().toUtc();
       final lastServerTimestamp = session.lastServerTimestamp;
       if (lastServerTimestamp != null &&
-          now.isBefore(lastServerTimestamp.subtract(const Duration(minutes: 5)))) {
+          now.isBefore(
+              lastServerTimestamp.subtract(const Duration(minutes: 5)))) {
         await _accountSessionStore.clear();
         state = state.copyWith(
           accountBackendEnabled: true,

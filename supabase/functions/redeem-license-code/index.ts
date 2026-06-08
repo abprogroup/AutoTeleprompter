@@ -41,7 +41,10 @@ serve(async (req) => {
   await auth.client.from("entitlements").upsert({
     user_id: auth.user.id,
     role,
+    status: "active",
     source: "license_code",
+    current_period_end: null,
+    expires_at: null,
     revoked_at: null,
   }, { onConflict: "user_id" });
   await auth.client.from("license_codes").update({

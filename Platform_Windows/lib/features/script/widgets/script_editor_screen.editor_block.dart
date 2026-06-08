@@ -78,7 +78,7 @@ class _EditorBlock extends StatelessWidget {
     controller.backgroundHighlightsAsText =
         ScriptColorInversionService.highlightsMoveToText(settings);
     final editorTextStyle = TextStyle(
-      color: Colors.white,
+      color: Color(settings.futureWordColor),
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,

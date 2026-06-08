@@ -397,6 +397,10 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     notifier.setLineSpacing(s.lineSpacing);
     notifier.setLetterSpacing(s.letterSpacing);
     notifier.setWordSpacing(s.wordSpacing);
+    notifier.setScriptBgColor(s.scriptBgColor);
+    notifier.setCurrentWordColor(s.currentWordColor);
+    notifier.setFutureWordColor(s.futureWordColor);
+    notifier.setTextAlign(s.textAlign);
   }
 
   void _applySettingsFromScript(Script script) {
@@ -605,7 +609,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         if (inSuite) {
           _recordSuiteHistoryChange('Invert Colors');
         } else {
-          _saveHistory(description: 'Invert Colors', debounce: true);
+          _commitHistory('Invert Colors');
         }
       }
       _onSelectionChanged();
@@ -613,12 +617,10 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       return;
     }
 
-    final nextBackground =
-        ScriptColorInversionService.nextBackgroundColor(settings);
-    final nextFutureText =
-        ScriptColorInversionService.futureTextColorForBackground(
-      nextBackground,
-    );
+    final oldBackground = settings.scriptBgColor;
+    final oldFutureText = settings.futureWordColor;
+    final nextBackground = oldFutureText;
+    final nextFutureText = oldBackground;
     var changedMarkup = false;
     _setEditorState(() => _isCommandExecuting = true);
     for (final c in _controllers) {
@@ -627,6 +629,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
           EditorInlineStyleOperation.applyWholeScriptHighlightColorInvert(
         text: c.text,
         defaultTextColor: _rgbHex(settings.futureWordColor),
+        scriptBackgroundColor: _rgbHex(settings.scriptBgColor),
       );
       if (nextValue.text == c.text) continue;
       c.value = nextValue;
@@ -646,7 +649,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
           futureWordColor: nextFutureText,
         );
     if (_activeSuite == EditorSuite.none) {
-      _saveHistory(description: 'Invert Colors', debounce: true);
+      _commitHistory('Invert Colors');
     } else {
       _recordSuiteHistoryChange('Invert Colors');
     }

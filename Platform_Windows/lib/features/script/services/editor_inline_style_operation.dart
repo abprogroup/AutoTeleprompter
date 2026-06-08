@@ -341,8 +341,10 @@ class EditorInlineStyleOperation {
   static TextEditingValue applyWholeScriptHighlightColorInvert({
     required String text,
     required String defaultTextColor,
+    required String scriptBackgroundColor,
   }) {
     final defaultText = _normalizeHex(defaultTextColor);
+    final scriptBg = _normalizeHex(scriptBackgroundColor);
     final buffer = StringBuffer();
     String? sourceTextColor;
     String? sourceBackgroundColor;
@@ -377,10 +379,27 @@ class EditorInlineStyleOperation {
     void emitContent(int start, int end) {
       if (end <= start) return;
       final oldBackground = sourceBackgroundColor;
-      final nextTextColor = oldBackground ?? sourceTextColor;
-      final nextBackgroundColor =
-          oldBackground == null ? null : sourceTextColor ?? defaultText;
-      if (oldBackground != null) changed = true;
+      String? nextTextColor;
+      String? nextBackgroundColor;
+      if (oldBackground != null) {
+        // Highlighted run: swap text color <-> highlight color.
+        nextTextColor = oldBackground;
+        nextBackgroundColor = sourceTextColor ?? defaultText;
+        changed = true;
+      } else if (sourceTextColor != null) {
+        // Explicitly-colored text with no highlight: invert text <-> background
+        // by moving the text color to the (old) script background color. Without
+        // this, RTF-imported text keeps its baked-in color (e.g. white) and goes
+        // invisible once the script background swaps to that same color.
+        nextTextColor = scriptBg;
+        nextBackgroundColor = null;
+        changed = true;
+      } else {
+        // Truly plain text carries no color tag; it follows the swapped
+        // futureWordColor setting, so leave it untagged.
+        nextTextColor = null;
+        nextBackgroundColor = null;
+      }
       setOutput(
         textColor: nextTextColor,
         backgroundColor: nextBackgroundColor,

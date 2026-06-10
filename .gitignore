@@ -86,6 +86,8 @@ oauth_credentials*.json
 oauth_client_secret*.json
 google_drive_client*.json
 dropbox_client*.json
+supabase_admin/
+launch_admin.bat
 
 # General Code Ignores
 **/.flutter-plugins

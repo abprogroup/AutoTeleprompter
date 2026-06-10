@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
 import 'package:gal/gal.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import '../providers/teleprompter_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -13,7 +11,8 @@ import '../../script/models/script.dart';
 import 'teleprompter_screen.dart';
 
 class ContentCreatorScreen extends ConsumerStatefulWidget {
-  const ContentCreatorScreen({super.key});
+  final bool audioOnlyEntry;
+  const ContentCreatorScreen({super.key, this.audioOnlyEntry = false});
 
   @override
   ConsumerState<ContentCreatorScreen> createState() => _ContentCreatorScreenState();
@@ -47,8 +46,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     
     final settings = ref.read(settingsProvider);
     ResolutionPreset preset = ResolutionPreset.medium; // 720p
-    if (settings.videoResolution.contains('1080')) preset = ResolutionPreset.high;
-    else if (settings.videoResolution.contains('480')) preset = ResolutionPreset.low;
+    if (settings.videoResolution.contains('1080')) {
+      preset = ResolutionPreset.high;
+    } else if (settings.videoResolution.contains('480')) {
+      preset = ResolutionPreset.low;
+    }
 
     _cameraController = CameraController(front, preset, enableAudio: true);
     try {
@@ -111,7 +113,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     final h = totalSeconds ~/ 3600;
     final m = (totalSeconds % 3600) ~/ 60;
     final s = totalSeconds % 60;
-    if (h > 0) return "${h}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
+    if (h > 0) return "$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
     return "${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
   }
 
@@ -160,8 +162,8 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                                 radius: 0.85,
                                 colors: [
                                   Colors.transparent,
-                                  Colors.black.withOpacity(0.5),
-                                  Colors.black.withOpacity(0.9),
+                                  Colors.black.withValues(alpha: 0.5),
+                                  Colors.black.withValues(alpha: 0.9),
                                 ],
                                 stops: const [0.4, 0.7, 1.0],
                               ),
@@ -193,7 +195,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                             Center(
                               child: Container(
                                 padding: const EdgeInsets.all(40),
-                                decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle),
+                                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
                                 child: Text('$_countdown', style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 80, fontWeight: FontWeight.bold)),
                               ),
                             ),
@@ -247,7 +249,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                       width: 60, height: 60,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _isRecording ? Colors.red : Colors.red.withOpacity(0.5),
+                        color: _isRecording ? Colors.red : Colors.red.withValues(alpha: 0.5),
                       ),
                       child: Icon(
                         _isRecording ? Icons.stop : Icons.videocam,
@@ -350,7 +352,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                   if (isCurrent) {
                     wordColor = Color(settings.currentWordColor);
                   } else if (isPast) {
-                    wordColor = futureColor.withOpacity(settings.pastWordOpacity);
+                    wordColor = futureColor.withValues(alpha: settings.pastWordOpacity);
                   } else {
                     wordColor = futureColor;
                   }
@@ -404,7 +406,7 @@ class _LensHUDPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFFFBF00).withOpacity(0.3)
+      ..color = const Color(0xFFFFBF00).withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 

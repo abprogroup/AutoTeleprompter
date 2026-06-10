@@ -1,136 +1,128 @@
 part of 'teleprompter_screen.dart';
 
-Future<void> _openMacSoundInputSettings() async {
-  try {
-    final result = await Process.run('osascript', [
-      '-e',
-      'tell application "System Preferences"',
-      '-e',
-      'activate',
-      '-e',
-      'reveal anchor "input" of pane id "com.apple.preference.sound"',
-      '-e',
-      'end tell',
-    ]);
-    if (result.exitCode == 0) return;
-  } catch (_) {}
-
-  final targets = [
-    '/System/Library/PreferencePanes/Sound.prefPane',
-    'x-apple.systempreferences:com.apple.preference.sound?input',
-    'x-apple.systempreferences:com.apple.preference.sound?Input',
-    'x-apple.systempreferences:com.apple.Sound-Settings.extension?Input',
-    'x-apple.systempreferences:com.apple.Sound-Settings.extension',
-  ];
-
-  for (final target in targets) {
-    try {
-      final result = await Process.run('open', [target]);
-      if (result.exitCode == 0) return;
-    } catch (_) {}
-  }
-}
-
-class _MacMicSelector extends StatelessWidget {
+class _WindowsMicSelector extends StatelessWidget {
+  final String selectedDeviceId;
   final String selectedLabel;
   final List<SttAudioInputDevice> devices;
   final Color accentColor;
+  final Future<void> Function(String deviceId, String label) onSelected;
   final Future<void> Function() onRefresh;
   final Future<void> Function() onUseDefault;
 
-  const _MacMicSelector({
+  const _WindowsMicSelector({
+    required this.selectedDeviceId,
     required this.selectedLabel,
     required this.devices,
     required this.accentColor,
+    required this.onSelected,
     required this.onRefresh,
     required this.onUseDefault,
   });
 
   @override
   Widget build(BuildContext context) {
-    final label = selectedLabel.trim().isEmpty
-        ? 'System default microphone'
-        : selectedLabel.trim();
+    final knownIds = devices.map((device) => device.id).toSet();
+    final value = knownIds.contains(selectedDeviceId) ? selectedDeviceId : '';
+    final entries = <DropdownMenuItem<String>>[
+      const DropdownMenuItem(
+        value: '',
+        child: Text('System default microphone'),
+      ),
+      ...devices.map(
+        (device) => DropdownMenuItem(
+          value: device.id,
+          child: Text(
+            device.label,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    ];
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.mic_external_on, color: accentColor, size: 19),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          // Flutter 3.32 on GitHub Actions still requires value.
+          // ignore: deprecated_member_use
+          value: value,
+          dropdownColor: const Color(0xFF1A1A1A),
+          iconEnabledColor: accentColor,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.mic_external_on, color: accentColor),
+            helperText: devices.isEmpty
+                ? 'Start the mic once to discover connected inputs.'
+                : 'Switches the active WebView2 audio input when available.',
+            helperStyle: const TextStyle(color: Colors.white38, fontSize: 11),
+            filled: true,
+            fillColor: const Color(0xFF111111),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.white12),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: accentColor),
+            ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            devices.length <= 1
-                ? 'Apple Speech uses the macOS Sound Input device.'
-                : 'Apple Speech follows the input selected in macOS Sound settings.',
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-          if (devices.length > 1) ...[
-            const SizedBox(height: 8),
-            for (final device in devices)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  device.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: device.label == label ? accentColor : Colors.white54,
-                    fontSize: 11,
-                    fontWeight: device.label == label
-                        ? FontWeight.w700
-                        : FontWeight.w400,
-                  ),
-                ),
-              ),
+          items: entries,
+          selectedItemBuilder: (_) => entries
+              .map((entry) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      entry.value == ''
+                          ? 'System default microphone'
+                          : selectedLabel,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ))
+              .toList(),
+          onChanged: (deviceId) {
+            if (deviceId == null) return;
+            final label = deviceId.isEmpty
+                ? 'System default microphone'
+                : devices
+                    .firstWhere(
+                      (device) => device.id == deviceId,
+                      orElse: () => SttAudioInputDevice(
+                        id: deviceId,
+                        label: selectedLabel,
+                      ),
+                    )
+                    .label;
+            onSelected(deviceId, label);
+          },
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            TextButton.icon(
+              icon: const Icon(Icons.refresh, size: 17),
+              label: const Text('Refresh'),
+              style: TextButton.styleFrom(foregroundColor: accentColor),
+              onPressed: () => unawaited(onRefresh()),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.settings_input_component, size: 17),
+              label: const Text('Open Windows input settings'),
+              style: TextButton.styleFrom(foregroundColor: accentColor),
+              onPressed: () {
+                Process.run('cmd', ['/c', 'start', 'ms-settings:sound']);
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.restart_alt, size: 17),
+              label: const Text('Use Default'),
+              style: TextButton.styleFrom(foregroundColor: Colors.white70),
+              onPressed: () => unawaited(onUseDefault()),
+            ),
           ],
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              TextButton.icon(
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Refresh'),
-                style: TextButton.styleFrom(foregroundColor: accentColor),
-                onPressed: () => unawaited(onRefresh()),
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.settings_input_component, size: 16),
-                label: const Text('Open Input Settings'),
-                style: TextButton.styleFrom(foregroundColor: accentColor),
-                onPressed: () => unawaited(_openMacSoundInputSettings()),
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.restart_alt, size: 16),
-                label: const Text('Use Default'),
-                style: TextButton.styleFrom(foregroundColor: Colors.white70),
-                onPressed: () => unawaited(onUseDefault()),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -141,7 +133,8 @@ class _SwitchRow extends StatelessWidget {
   final String subtitle;
   final bool value;
   final Color accentColor;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
+  final bool enabled;
 
   const _SwitchRow({
     required this.icon,
@@ -150,41 +143,286 @@ class _SwitchRow extends StatelessWidget {
     required this.value,
     required this.accentColor,
     required this.onChanged,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: enabled ? 1.0 : 0.42,
+      duration: const Duration(milliseconds: 160),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: accentColor, size: 19),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 11)),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: value,
+              thumbColor: WidgetStatePropertyAll<Color>(accentColor),
+              onChanged: enabled ? onChanged : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SttThresholdPairSliders extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final int smallValue;
+  final int bigValue;
+  final int smallMin;
+  final int smallMax;
+  final int bigMin;
+  final int bigMax;
+  final bool allowOff;
+  final Color accentColor;
+  final ValueChanged<int> onSmallChanged;
+  final ValueChanged<int> onBigChanged;
+  final VoidCallback onReset;
+
+  const _SttThresholdPairSliders({
+    required this.title,
+    required this.subtitle,
+    required this.smallValue,
+    required this.bigValue,
+    required this.smallMin,
+    required this.smallMax,
+    required this.bigMin,
+    required this.bigMax,
+    required this.allowOff,
+    required this.accentColor,
+    required this.onSmallChanged,
+    required this.onBigChanged,
+    required this.onReset,
+  });
+
+  static String labelFor(int smallWords, int bigWords) {
+    if (smallWords <= 0 || bigWords <= 0) return 'Off';
+    return '$smallWords small words / $bigWords big words';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isOff = smallValue <= 0 || bigValue <= 0;
+    final displayLabel = labelFor(smallValue, bigValue);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
         color: const Color(0xFF111111),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white12),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: accentColor, size: 19),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style:
-                        const TextStyle(color: Colors.white38, fontSize: 11)),
-              ],
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                displayLabel,
+                style: TextStyle(
+                  color: isOff ? Colors.white38 : accentColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Reset to default',
+                child: IconButton(
+                  icon: const Icon(Icons.restart_alt, size: 17),
+                  color: Colors.white70,
+                  splashRadius: 17,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onReset,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 6),
+          _thresholdSliderRow(
+            label: 'Small words',
+            value: smallValue,
+            min: smallMin,
+            max: smallMax,
+            allowOff: allowOff,
+            accentColor: accentColor,
+            onChanged: onSmallChanged,
+          ),
+          _thresholdSliderRow(
+            label: 'Big words',
+            value: bigValue,
+            min: bigMin,
+            max: bigMax,
+            allowOff: allowOff,
+            accentColor: accentColor,
+            onChanged: onBigChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _thresholdSliderRow({
+    required String label,
+    required int value,
+    required int min,
+    required int max,
+    required bool allowOff,
+    required Color accentColor,
+    required ValueChanged<int> onChanged,
+  }) {
+    final sliderMin = allowOff ? 0.0 : min.toDouble();
+    final safeValue =
+        value <= 0 && allowOff ? 0.0 : value.clamp(min, max).toDouble();
+    final displayValue = value <= 0 && allowOff ? 'Off' : value.toString();
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 86,
+          child: Text(
+            '$label: $displayValue',
+            style: TextStyle(
+              color: value <= 0 && allowOff ? Colors.white38 : Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          Switch.adaptive(
-            value: value,
+        ),
+        Expanded(
+          child: Slider(
+            value: safeValue,
+            min: sliderMin,
+            max: max.toDouble(),
+            divisions: max - sliderMin.toInt(),
             activeColor: accentColor,
-            onChanged: onChanged,
+            inactiveColor: Colors.white24,
+            label: displayValue,
+            onChanged: (next) {
+              var rounded = next.round();
+              if (allowOff && rounded > 0 && rounded < min) rounded = min;
+              onChanged(rounded);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SttBigWordLengthSlider extends StatelessWidget {
+  final int value;
+  final Color accentColor;
+  final ValueChanged<int> onChanged;
+  final VoidCallback onReset;
+
+  const _SttBigWordLengthSlider({
+    required this.value,
+    required this.accentColor,
+    required this.onChanged,
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final safeValue = value.clamp(3, 10).toDouble();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Big word length',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '$value+ letters',
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Reset to default',
+                child: IconButton(
+                  icon: const Icon(Icons.restart_alt, size: 17),
+                  color: Colors.white70,
+                  splashRadius: 17,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onReset,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Words with this many letters count as big words in all manual thresholds.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          Slider(
+            value: safeValue,
+            min: 3,
+            max: 10,
+            divisions: 7,
+            activeColor: accentColor,
+            inactiveColor: Colors.white24,
+            label: '$value+ letters',
+            onChanged: (next) => onChanged(next.round()),
           ),
         ],
       ),
@@ -227,7 +465,7 @@ class _PresetBtn extends StatelessWidget {
   }
 }
 
-// ── Full color palette grid ────────────────────────────────────────────────────
+// Full color palette grid.
 
 class _ColorGrid extends StatelessWidget {
   final int selected;

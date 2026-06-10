@@ -15,18 +15,58 @@ class EditorTextGeometryService {
   static bool hasVisibleContent(String rawText) =>
       visibleText(rawText).trim().isNotEmpty;
 
-  static bool resolveTextRtl(String rawText) => visibleText(rawText).isHebrew;
+  static bool? visibleTextDirectionRtl(String rawText) {
+    final visible = visibleText(rawText).trim();
+    if (visible.isEmpty) return null;
+
+    var hasHebrew = false;
+    var hasLatin = false;
+    for (final rune in visible.runes) {
+      if (rune >= 0x0590 && rune <= 0x05FF) {
+        hasHebrew = true;
+      } else if ((rune >= 0x0041 && rune <= 0x005A) ||
+          (rune >= 0x0061 && rune <= 0x007A)) {
+        hasLatin = true;
+      }
+    }
+
+    if (!hasHebrew && !hasLatin) return null;
+    if (hasHebrew && (!hasLatin || visible.isHebrew)) return true;
+    return false;
+  }
+
+  static String? explicitTextDirection(String rawText) {
+    String? direction;
+    for (final match in RegExp(r'\[(rtl|ltr)\]').allMatches(rawText)) {
+      final value = match.group(1);
+      if (value == null) continue;
+      final close = rawText.indexOf('[/$value]', match.end);
+      if (close == -1 || close >= match.end) direction = value;
+    }
+    return direction;
+  }
+
+  static bool resolveTextRtl(String rawText) {
+    final explicit = explicitTextDirection(rawText);
+    if (explicit != null) return explicit == 'rtl';
+    return visibleTextDirectionRtl(rawText) ?? false;
+  }
 
   static bool resolveBlockRtl(List<String> rawBlocks, int index) {
     if (index < 0 || index >= rawBlocks.length) return false;
     final current = rawBlocks[index];
-    if (hasVisibleContent(current)) return resolveTextRtl(current);
+    final explicit = explicitTextDirection(current);
+    if (explicit != null) return explicit == 'rtl';
+    final currentDirection = visibleTextDirectionRtl(current);
+    if (currentDirection != null) return currentDirection;
 
     for (var i = index - 1; i >= 0; i--) {
-      if (hasVisibleContent(rawBlocks[i])) return resolveTextRtl(rawBlocks[i]);
+      final direction = visibleTextDirectionRtl(rawBlocks[i]);
+      if (direction != null) return direction;
     }
     for (var i = index + 1; i < rawBlocks.length; i++) {
-      if (hasVisibleContent(rawBlocks[i])) return resolveTextRtl(rawBlocks[i]);
+      final direction = visibleTextDirectionRtl(rawBlocks[i]);
+      if (direction != null) return direction;
     }
     return false;
   }
@@ -142,14 +182,12 @@ class EditorTextGeometryService {
           .toInt(),
       currentStop.raw,
     };
-    for (var i = 1; i < visible.length; i++) {
-      final beforeWord = _isVisualWordChar(visible[i - 1]);
-      final afterWord = _isVisualWordChar(visible[i]);
-      if (beforeWord != afterWord) {
-        rawStops.add(
-          visibleToRawOffset(rawText, i).clamp(0, plainText.length).toInt(),
-        );
-      }
+    for (final boundary in _visualWordBoundaries(visible)) {
+      rawStops.add(
+        visibleToRawOffset(rawText, boundary)
+            .clamp(0, plainText.length)
+            .toInt(),
+      );
     }
     return _targetFromVisualStops(
       painter: painter,
@@ -336,7 +374,9 @@ class EditorTextGeometryService {
     ).clamp(0, visible.length).toInt();
     final ltrRun = _ltrRunContainingBoundary(visible, currentVisible);
     if (ltrRun != null) {
-      final targetVisible = !moveLeft ? ltrRun.end : ltrRun.start;
+      final targetVisible = !moveLeft
+          ? _nextVisualWordBoundary(visible, ltrRun.start) ?? ltrRun.end
+          : ltrRun.start;
       if (targetVisible != currentVisible) {
         return visibleToRawOffset(rawText, targetVisible)
             .clamp(0, plainTextLength)

@@ -1,21 +1,39 @@
 part of 'teleprompter_screen.dart';
 
+const _presenterSectionStyle = TextStyle(
+  color: Colors.white,
+  fontSize: 16,
+  fontWeight: FontWeight.w600,
+);
+
 class TeleprompterSettingsPanel extends ConsumerWidget {
-  const TeleprompterSettingsPanel({super.key});
+  final ValueChanged<double>? onFontSizeChanged;
+  final VoidCallback? onLayoutChanged;
+  final Future<void> Function()? onInvertColors;
+
+  const TeleprompterSettingsPanel({
+    super.key,
+    this.onFontSizeChanged,
+    this.onLayoutChanged,
+    this.onInvertColors,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
-    final tState = ref.watch(teleprompterProvider);
+    ref.watch(scriptProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    final effectiveFontSize =
+        ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
-      unawaited(notifier.setFontSize(clamped));
-      unawaited(
-        ref.read(scriptProvider.notifier).updateStyleMetadata(
-              fontSize: clamped,
-            ),
-      );
+      ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
+      unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(clamped));
+      if (onFontSizeChanged != null) {
+        onFontSizeChanged!(clamped);
+      } else {
+        onLayoutChanged?.call();
+      }
     }
 
     void applyPresenterLineSpacing(double spacing) {
@@ -26,6 +44,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               lineSpacing: clamped,
             ),
       );
+      onLayoutChanged?.call();
     }
 
     void applyPresenterWordSpacing(double spacing) {
@@ -36,6 +55,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               wordSpacing: clamped,
             ),
       );
+      onLayoutChanged?.call();
     }
 
     void applyPresenterLetterSpacing(double spacing) {
@@ -46,6 +66,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               letterSpacing: clamped,
             ),
       );
+      onLayoutChanged?.call();
     }
 
     String formatDefaultOffset(double value, double defaultValue) {
@@ -55,10 +76,28 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
       return '$sign${delta.toStringAsFixed(1)}';
     }
 
-    const labelStyle = TextStyle(color: Colors.white70, fontSize: 14);
-    const sectionStyle = TextStyle(
-        color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600);
+    Widget sliderWithReset({
+      required Widget slider,
+      required String tooltip,
+      required VoidCallback onReset,
+    }) {
+      return Row(
+        children: [
+          Expanded(child: slider),
+          Tooltip(
+            message: tooltip,
+            child: IconButton(
+              icon: const Icon(Icons.restart_alt, size: 18),
+              color: Colors.white70,
+              splashRadius: 18,
+              onPressed: onReset,
+            ),
+          ),
+        ],
+      );
+    }
 
+    const labelStyle = TextStyle(color: Colors.white70, fontSize: 14);
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.80,
@@ -78,8 +117,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             ),
           ),
 
-          // ── Scroll mode ─────────────────────────────────────────────────────
-          const Text('Scroll Mode', style: sectionStyle),
+          // -- Scroll mode -----------------------------------------------------
+          const Text('Scroll Mode', style: _presenterSectionStyle),
           const SizedBox(height: 8),
           SegmentedButton<String>(
             segments: const [
@@ -98,49 +137,61 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          const Text('Speech Input', style: sectionStyle),
-          const SizedBox(height: 8),
-          _MacMicSelector(
-            selectedLabel: settings.sttInputDeviceLabel,
-            devices: tState.audioInputDevices,
-            accentColor: Color(settings.currentWordColor),
-            onRefresh: () async {
-              await ref
-                  .read(teleprompterProvider.notifier)
-                  .refreshAudioInputDevices();
-            },
-            onUseDefault: () async {
-              await notifier.setSttInputDevice(
-                '',
-                'System default microphone',
-              );
-              ref
-                  .read(teleprompterProvider.notifier)
-                  .setSttInputDevice('', 'System default microphone');
-            },
-          ),
-          const SizedBox(height: 16),
-
-          _SwitchRow(
-            icon: Icons.visibility_outlined,
-            title: 'Allow visible text skip',
-            subtitle:
-                'Off by default. When on, STT may jump only to text currently visible on screen.',
-            value: settings.sttVisibleSkipEnabled,
-            accentColor: Color(settings.currentWordColor),
-            onChanged: notifier.setSttVisibleSkipEnabled,
-          ),
-          const SizedBox(height: 12),
-          _SwitchRow(
-            icon: Icons.subject_outlined,
-            title: 'Strict bullet/header STT',
-            subtitle:
-                'Use for bullet prompts. Disables guessed auto-skip and requires deliberate next-word or phrase matches.',
-            value: settings.sttStrictBulletMode,
-            accentColor: Color(settings.currentWordColor),
-            onChanged: notifier.setSttStrictBulletMode,
-          ),
-          const SizedBox(height: 16),
+          if (Platform.isWindows) ...[
+            const _WindowsSpeechSettingsSection(),
+            const SizedBox(height: 12),
+            Opacity(
+              opacity: settings.scrollMode == 'manual' ? 0.45 : 1.0,
+              child: AbsorbPointer(
+                absorbing: settings.scrollMode == 'manual',
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.pan_tool_alt_outlined,
+                          color: Color(settings.currentWordColor), size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Allow manual scrolling while listening',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              settings.scrollMode == 'manual'
+                                  ? 'Manual Speed mode is not listening, so this option is not used.'
+                                  : 'A technician can wheel or drag the script during speech recognition; release scrolling to resume from the reading line.',
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch.adaptive(
+                        value: settings.allowScrollDuringActiveSession &&
+                            settings.scrollMode != 'manual',
+                        thumbColor: WidgetStatePropertyAll<Color>(
+                            Color(settings.currentWordColor)),
+                        onChanged: notifier.setAllowScrollDuringActiveSession,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
 
           if (settings.scrollMode == 'manual') ...[
             Row(children: [
@@ -150,28 +201,66 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                   '${settings.scrollSpeed.round() > 0 ? "+" : ""}${settings.scrollSpeed.round()} wpm',
                   style: const TextStyle(color: Colors.white, fontSize: 14)),
             ]),
-            Slider(
-              value: settings.scrollSpeed,
-              min: -300,
-              max: 300,
-              divisions: 120,
-              activeColor: Color(settings.currentWordColor),
-              inactiveColor: Colors.white24,
-              onChanged: (v) => notifier.setScrollSpeed(v),
+            Row(
+              children: [
+                Expanded(
+                  child: Slider(
+                    value: settings.scrollSpeed,
+                    min: -300,
+                    max: 300,
+                    divisions: 120,
+                    activeColor: Color(settings.currentWordColor),
+                    inactiveColor: Colors.white24,
+                    onChanged: (v) => notifier.setScrollSpeed(v),
+                  ),
+                ),
+                Tooltip(
+                  message: 'Reset manual speed to 0',
+                  child: IconButton(
+                    icon: const Icon(Icons.pause_circle_outline, size: 20),
+                    color: Colors.white70,
+                    onPressed: () => notifier.setScrollSpeed(0),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
+            const Text('Manual scrollbar placement', style: labelStyle),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                    value: AppSettings.manualScrollBarBottom,
+                    label: Text('Bottom')),
+                ButtonSegment(
+                    value: AppSettings.manualScrollBarTop, label: Text('Top')),
+                ButtonSegment(
+                    value: AppSettings.manualScrollBarLeft,
+                    label: Text('Left')),
+                ButtonSegment(
+                    value: AppSettings.manualScrollBarRight,
+                    label: Text('Right')),
+              ],
+              selected: {settings.manualScrollBarPlacement},
+              onSelectionChanged: (val) =>
+                  notifier.setManualScrollBarPlacement(val.first),
+              style: _segmentStyle(settings),
+            ),
+            const SizedBox(height: 12),
           ],
 
           const Divider(color: Colors.white12),
           const SizedBox(height: 8),
 
-          // ── Text ───────────────────────────────────────────────────────────
+          // -- Text -----------------------------------------------------------
           Row(children: [
-            const Text('Override Text Alignment', style: sectionStyle),
+            const Text('Override Text Alignment',
+                style: _presenterSectionStyle),
             const Spacer(),
             Switch.adaptive(
               value: settings.showAlignmentOverride,
-              activeColor: Color(settings.currentWordColor),
+              thumbColor: WidgetStatePropertyAll<Color>(
+                  Color(settings.currentWordColor)),
               onChanged: (v) => notifier.setShowAlignmentOverride(v),
             ),
           ]),
@@ -198,10 +287,10 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          const Text('Layout & Typography', style: sectionStyle),
+          const Text('Layout & Typography', style: _presenterSectionStyle),
           const SizedBox(height: 14),
 
-          // Professional: Broadcast Profiles
+          // Professional broadcast profiles
           const Text('Broadcast Profile', style: labelStyle),
           const SizedBox(height: 8),
           SingleChildScrollView(
@@ -230,16 +319,20 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           Row(children: [
             const Text('Font Size', style: labelStyle),
             const Spacer(),
-            Text('${settings.fontSize.round()}px',
+            Text('${effectiveFontSize.round()}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.fontSize.clamp(14.0, 120.0).toDouble(),
-            min: 14,
-            max: 120,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: applyPresenterFontSize,
+          sliderWithReset(
+            tooltip: 'Reset Font Size',
+            onReset: () => applyPresenterFontSize(20.0),
+            slider: Slider(
+              value: effectiveFontSize.clamp(14.0, 120.0).toDouble(),
+              min: 14,
+              max: 120,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: applyPresenterFontSize,
+            ),
           ),
 
           Row(children: [
@@ -248,13 +341,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text(formatDefaultOffset(settings.lineSpacing, 1.2),
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.lineSpacing.clamp(0.5, 3.0).toDouble(),
-            min: 0.5,
-            max: 3.0,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: applyPresenterLineSpacing,
+          sliderWithReset(
+            tooltip: 'Reset Line Spacing',
+            onReset: () => applyPresenterLineSpacing(1.2),
+            slider: Slider(
+              value: settings.lineSpacing.clamp(0.5, 3.0).toDouble(),
+              min: 0.5,
+              max: 3.0,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: applyPresenterLineSpacing,
+            ),
           ),
 
           Row(children: [
@@ -263,13 +360,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text('${settings.wordSpacing.toStringAsFixed(1)}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.wordSpacing.clamp(-5.0, 20.0).toDouble(),
-            min: -5.0,
-            max: 20.0,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: applyPresenterWordSpacing,
+          sliderWithReset(
+            tooltip: 'Reset Word Spacing',
+            onReset: () => applyPresenterWordSpacing(0.0),
+            slider: Slider(
+              value: settings.wordSpacing.clamp(-5.0, 20.0).toDouble(),
+              min: -5.0,
+              max: 20.0,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: applyPresenterWordSpacing,
+            ),
           ),
 
           Row(children: [
@@ -278,13 +379,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text('${settings.letterSpacing.toStringAsFixed(1)}px',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.letterSpacing.clamp(-2.0, 5.0).toDouble(),
-            min: -2.0,
-            max: 5.0,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: applyPresenterLetterSpacing,
+          sliderWithReset(
+            tooltip: 'Reset Letter Spacing',
+            onReset: () => applyPresenterLetterSpacing(0.0),
+            slider: Slider(
+              value: settings.letterSpacing.clamp(-2.0, 5.0).toDouble(),
+              min: -2.0,
+              max: 5.0,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: applyPresenterLetterSpacing,
+            ),
           ),
 
           Row(children: [
@@ -293,21 +398,49 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             Text('${(settings.scrollLead * 100).round()}%',
                 style: const TextStyle(color: Colors.white, fontSize: 14)),
           ]),
-          Slider(
-            value: settings.scrollLead,
-            min: 0.15,
-            max: 0.60,
-            divisions: 18,
-            activeColor: Color(settings.currentWordColor),
-            inactiveColor: Colors.white24,
-            onChanged: (v) => notifier.setScrollLead(v),
+          sliderWithReset(
+            tooltip: 'Reset Reading Line Position',
+            onReset: () => notifier.setScrollLead(0.32),
+            slider: Slider(
+              value: settings.scrollLead,
+              min: 0.15,
+              max: 0.60,
+              divisions: 18,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: (v) {
+                notifier.setScrollLead(v);
+                onLayoutChanged?.call();
+              },
+            ),
           ),
 
           const Divider(color: Colors.white12),
           const SizedBox(height: 8),
 
-          // ── Colors ─────────────────────────────────────────────────────────
-          const Text('Colors', style: sectionStyle),
+          // -- Colors ---------------------------------------------------------
+          const Text('Colors', style: _presenterSectionStyle),
+          if (onInvertColors != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => unawaited(onInvertColors!()),
+                icon: const Icon(Icons.invert_colors_outlined),
+                label: const Text('Invert colors'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Color(settings.currentWordColor),
+                  side: BorderSide(
+                    color: Color(settings.currentWordColor)
+                        .withValues(alpha: 0.65),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
 
           const Text('Script Background', style: labelStyle),
@@ -323,7 +456,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             const Spacer(),
             Switch.adaptive(
               value: settings.showCurrentWordHighlight,
-              activeColor: Color(settings.currentWordColor),
+              thumbColor: WidgetStatePropertyAll<Color>(
+                  Color(settings.currentWordColor)),
               onChanged: (v) => notifier.setShowCurrentWordHighlight(v),
             ),
           ]),
@@ -339,7 +473,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             const Spacer(),
             Switch.adaptive(
               value: settings.showUpcomingWordColor,
-              activeColor: Color(settings.currentWordColor),
+              thumbColor: WidgetStatePropertyAll<Color>(
+                  Color(settings.currentWordColor)),
               onChanged: (v) => notifier.setShowUpcomingWordColor(v),
             ),
           ]),
@@ -388,41 +523,53 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const Divider(color: Colors.white12),
           const SizedBox(height: 8),
 
-          // ── Display ────────────────────────────────────────────────────────
+          // -- Display --------------------------------------------------------
           Row(
             children: [
-              const Text('Mirror Horizontal', style: sectionStyle),
+              const Text('Mirror Horizontal', style: _presenterSectionStyle),
               const Spacer(),
               Switch(
                 value: settings.mirrorHorizontal,
-                activeColor: Color(settings.currentWordColor),
-                onChanged: (v) => notifier.setMirrorHorizontal(v),
+                thumbColor: WidgetStatePropertyAll<Color>(
+                    Color(settings.currentWordColor)),
+                onChanged: (v) {
+                  notifier.setMirrorHorizontal(v);
+                  onLayoutChanged?.call();
+                },
               ),
             ],
           ),
           Row(
             children: [
-              const Text('Mirror Vertical (Flip)', style: sectionStyle),
+              const Text('Mirror Vertical (Flip)',
+                  style: _presenterSectionStyle),
               const Spacer(),
               Switch(
                 value: settings.mirrorVertical,
-                activeColor: Color(settings.currentWordColor),
-                onChanged: (v) => notifier.setMirrorVertical(v),
+                thumbColor: WidgetStatePropertyAll<Color>(
+                    Color(settings.currentWordColor)),
+                onChanged: (v) {
+                  notifier.setMirrorVertical(v);
+                  onLayoutChanged?.call();
+                },
               ),
             ],
           ),
           const SizedBox(height: 12),
-          const Text('Screen Rotation', style: sectionStyle),
+          const Text('Screen Rotation', style: _presenterSectionStyle),
           const SizedBox(height: 8),
           SegmentedButton<int>(
             segments: const [
-              ButtonSegment(value: 0, label: Text('0°')),
-              ButtonSegment(value: 90, label: Text('90°')),
-              ButtonSegment(value: 180, label: Text('180°')),
-              ButtonSegment(value: 270, label: Text('270°')),
+              ButtonSegment(value: 0, label: Text('0 deg')),
+              ButtonSegment(value: 90, label: Text('90 deg')),
+              ButtonSegment(value: 180, label: Text('180 deg')),
+              ButtonSegment(value: 270, label: Text('270 deg')),
             ],
             selected: {settings.flipRotation},
-            onSelectionChanged: (val) => notifier.setFlipRotation(val.first),
+            onSelectionChanged: (val) {
+              notifier.setFlipRotation(val.first);
+              onLayoutChanged?.call();
+            },
             style: _segmentStyle(settings),
           ),
           const SizedBox(height: 16),
@@ -434,8 +581,9 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   ButtonStyle _segmentStyle(AppSettings settings) {
     return ButtonStyle(
       backgroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected))
+        if (states.contains(WidgetState.selected)) {
           return Color(settings.currentWordColor);
+        }
         return const Color(0xFF2A2A2A);
       }),
       foregroundColor: WidgetStateProperty.resolveWith((states) {

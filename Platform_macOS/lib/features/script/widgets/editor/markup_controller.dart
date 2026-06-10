@@ -16,14 +16,19 @@ class MarkupController extends TextEditingController {
   /// The selection range mapped to this block from the global overlay.
   TextSelection? externalSelection;
 
-  /// Visible-text version of [externalSelection] for search/debug bookkeeping.
+  /// Visible-text version of [externalSelection] for search/debug traces.
   ///
-  /// Live paint stays raw-offset based against the rendered editor span; this
-  /// field only preserves the visible selection contract shared with Windows.
+  /// Painting stays raw-offset based so it matches the real TextField layout,
+  /// but visible offsets are still useful for search result bookkeeping and
+  /// highlight trace diagnostics.
   TextSelection? externalVisibleSelection;
 
   /// Whether the entire block is selected (e.g. during Select All).
   bool isGlobalSelected = false;
+
+  /// When script colors are inverted, background highlights become the text
+  /// color target and the overlay suppresses the painted background bands.
+  bool backgroundHighlightsAsText = false;
 
   /// Force a repaint after mutating [externalSelection] or [isGlobalSelected].
   /// These fields live outside [value], so listeners otherwise won't fire.
@@ -37,7 +42,6 @@ class MarkupController extends TextEditingController {
     height: 0,
   );
 
-  static const Color _selectionBg = Color(0x66FFBF00);
   static const int _hiddenTagPlaceholderCodeUnit = 0x2060; // WORD JOINER
 
   static final RegExp _tagRegex = RegExp(
@@ -170,7 +174,7 @@ class MarkupController extends TextEditingController {
     super.value = newValue.copyWith(text: newText, selection: newSelection);
   }
 
-  // ── Visual-offset conversion helpers ─────────────────────────────────────
+  // -- Visual-offset conversion helpers -------------------------------------
   // Tags occupy raw character positions but render at zero visible width.
   // These helpers let callers track selections by VISIBLE character count so
   // that inserting or removing tags (B/I/U/size/color/font) never shifts the
@@ -184,7 +188,7 @@ class MarkupController extends TextEditingController {
   /// placing the cursor at [text.length] can trap it between the end of the
   /// raw string and the end of a trailing invisible tag. Flutter's default
   /// cursor-left then increments the position INTO the tag; MarkupController's
-  /// value-setter snaps it back to the end of the tag — forever stuck.
+  /// value-setter snaps it back to the end of the tag - forever stuck.
   ///
   /// Placing the cursor at safeEndOffset instead lands just before those
   /// trailing tags, so the very next arrowLeft moves past a real character.
@@ -265,41 +269,46 @@ class MarkupController extends TextEditingController {
     return sb.toString();
   }
 
-  static int rawToVisualOffset(String text, int rawOffset) {
-    int visual = 0;
-    int cursor = 0;
-    for (final m in _tagRegex.allMatches(text)) {
-      if (m.start >= rawOffset) break;
-      final segEnd = m.start < rawOffset ? m.start : rawOffset;
-      visual += segEnd - cursor;
-      cursor = m.end;
+  /// Returns the suffix at [rawOffset] as a standalone block while preserving
+  /// any styles that were active at the split point.
+  ///
+  /// Splitting a styled paragraph moves the suffix into a new independent
+  /// TextField block. The raw suffix may only contain closing tags, because
+  /// the matching opening tags lived earlier in the original block. Prefixing
+  /// the active opening tags keeps the surviving suffix visually styled.
+  static String suffixWithOpenTagContext(String text, int rawOffset) {
+    final offset = rawOffset.clamp(0, text.length).toInt();
+    if (offset <= 0) return text;
+    if (offset >= text.length) return '';
+    return openTagsAt(text, offset) + text.substring(offset);
+  }
+
+  /// Removes duplicated leading style-context tags before joining a split block
+  /// back onto the previous block.
+  ///
+  /// `suffixWithOpenTagContext` makes a split suffix visually correct as a
+  /// standalone TextField block. When Backspace removes that block boundary,
+  /// the previous block may already have the same tags active at its end. In
+  /// that case the copied prefix must be removed or tags such as `**` toggle
+  /// off at the join point.
+  static String stripRedundantLeadingOpenTagContext(
+    String text,
+    String activePrefix,
+  ) {
+    if (activePrefix.isEmpty || !text.startsWith(activePrefix)) {
+      return text;
     }
-    if (cursor < rawOffset) visual += rawOffset - cursor;
-    return visual;
+    return text.substring(activePrefix.length);
+  }
+
+  static int rawToVisualOffset(String text, int rawOffset) {
+    return MarkupDecorationParser.rawToVisibleOffset(text, rawOffset);
   }
 
   /// Raw offset of the [visualOffset]-th visible character in [text].
   /// Returns [text.length] when [visualOffset] exceeds the visible char count.
   static int visualToRawOffset(String text, int visualOffset) {
-    int visual = 0;
-    int cursor = 0;
-    for (final m in _tagRegex.allMatches(text)) {
-      if (m.start > cursor) {
-        final segLen = m.start - cursor;
-        if (visual + segLen >= visualOffset) {
-          return cursor + (visualOffset - visual);
-        }
-        visual += segLen;
-      }
-      cursor = m.end;
-    }
-    if (cursor < text.length) {
-      final segLen = text.length - cursor;
-      if (visual + segLen >= visualOffset) {
-        return cursor + (visualOffset - visual);
-      }
-    }
-    return text.length;
+    return MarkupDecorationParser.visibleToRawOffset(text, visualOffset);
   }
 
   static Color? _parseHex(String raw) {
@@ -316,25 +325,6 @@ class MarkupController extends TextEditingController {
     required bool withComposing,
   }) {
     final src = text;
-    TextSelection renderSelection;
-    if (isGlobalSelected) {
-      renderSelection = TextSelection(baseOffset: 0, extentOffset: src.length);
-    } else if (externalSelection != null) {
-      // externalSelection is authoritative whenever it is set:
-      //   - range  → show amber highlight for that range
-      //   - collapsed (offset: 0) → suppress all highlight (block is outside
-      //     the global selection range). Do NOT fall through to the native
-      //     controller.selection, which may hold a stale range from a prior
-      //     user gesture and would leak an amber highlight.
-      final s = externalSelection!.start;
-      final e = externalSelection!.end;
-      renderSelection = TextSelection(baseOffset: s, extentOffset: e);
-    } else {
-      // null → not in global-selection mode; show native cursor/selection.
-      final s = selection.start.clamp(0, src.length);
-      final e = selection.end.clamp(0, src.length);
-      renderSelection = TextSelection(baseOffset: s, extentOffset: e);
-    }
 
     // Style stack state
     bool bold = false;
@@ -353,6 +343,9 @@ class MarkupController extends TextEditingController {
         s = s.copyWith(decoration: TextDecoration.underline);
       }
       if (textColors.isNotEmpty) s = s.copyWith(color: textColors.last);
+      if (backgroundHighlightsAsText && bgColors.isNotEmpty) {
+        s = s.copyWith(color: bgColors.last);
+      }
       if (bgColors.isNotEmpty && !kUseCustomDocxDecorationPainting) {
         s = s.copyWith(backgroundColor: bgColors.last);
       }
@@ -365,30 +358,7 @@ class MarkupController extends TextEditingController {
 
     void emitContent(int start, int end) {
       if (start >= end) return;
-      final baseStyle = current();
-      final hasSelection = !kUseCustomEditorSelectionPainting &&
-          !renderSelection.isCollapsed &&
-          renderSelection.end > start &&
-          renderSelection.start < end;
-      if (!hasSelection) {
-        children
-            .add(TextSpan(text: src.substring(start, end), style: baseStyle));
-        return;
-      }
-      final selStart = renderSelection.start.clamp(start, end);
-      final selEnd = renderSelection.end.clamp(start, end);
-      if (selStart > start) {
-        children.add(
-            TextSpan(text: src.substring(start, selStart), style: baseStyle));
-      }
-      children.add(TextSpan(
-        text: src.substring(selStart, selEnd),
-        style: baseStyle.copyWith(backgroundColor: _selectionBg),
-      ));
-      if (selEnd < end) {
-        children
-            .add(TextSpan(text: src.substring(selEnd, end), style: baseStyle));
-      }
+      children.add(TextSpan(text: src.substring(start, end), style: current()));
     }
 
     void emitTag(int start, int end) {

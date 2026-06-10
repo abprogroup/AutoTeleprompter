@@ -4,7 +4,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   void _startManualScroll({bool backward = false}) {
     if (!_scrollController.hasClients) return;
     _scrollingBackward = backward;
-    setState(() => _manualScrolling = true);
+    _setTeleprompterState(() => _manualScrolling = true);
     _manualScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
 
@@ -14,11 +14,19 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       final settings = ref.read(settingsProvider);
 
       // Speed can be negative for backward scrolling
-      final speed =
-          settings.scrollMode == 'manual' ? settings.scrollSpeed : 100.0;
+      final sttState = ref.read(teleprompterProvider);
+      final activeManualOverride =
+          PresenterInputLockService.allowActiveManualScroll(
+        settingEnabled: settings.allowScrollDuringActiveSession,
+        isListening: sttState.isListening,
+        isStarting: sttState.isStarting,
+      );
+      final speed = settings.scrollMode == 'manual' || activeManualOverride
+          ? settings.scrollSpeed
+          : 100.0;
       if (speed == 0) return;
 
-      // pixels per tick: speed(wpm) × 3px × 16ms/1000ms
+      // pixels per tick: speed(wpm) x 3px x 16ms/1000ms
       final pxPerTick = speed.abs() * 3.0 * 16.0 / 1000.0;
       final isBackward = speed < 0;
       final delta = isBackward ? -pxPerTick : pxPerTick;
@@ -47,39 +55,88 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _updateManualWordIndex() {
     if (!mounted || !_scrollController.hasClients) return;
+    if (_scrollController.offset <= 1.0) {
+      final script = ref.read(scriptProvider);
+      if (_manualWordIndex != 0) {
+        _setTeleprompterState(() => _manualWordIndex = 0);
+      }
+      if (script != null &&
+          ref.read(teleprompterProvider).confirmedWordIndex != 0) {
+        ref
+            .read(teleprompterProvider.notifier)
+            .jumpToPosition(0, script: script);
+      }
+      return;
+    }
+    var bestIndex = _wordIndexNearestReadingLine() ?? _manualWordIndex;
     final settings = ref.read(settingsProvider);
-    final targetScreenY =
-        MediaQuery.of(context).size.height * settings.scrollLead;
 
-    int bestIndex = _manualWordIndex;
-    double bestDist = double.infinity;
-
-    final start = (_manualWordIndex - 3).clamp(0, _wordKeys.length - 1);
-    final end = (_manualWordIndex + 15).clamp(0, _wordKeys.length - 1);
-
-    for (int i = start; i <= end; i++) {
-      final ctx = _wordKeys[i].currentContext;
-      if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null) continue;
-      final posY = box.localToGlobal(Offset.zero).dy;
-      final dist = (posY - targetScreenY).abs();
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIndex = i;
+    if (_manualScrolling && settings.scrollMode == 'manual') {
+      final speed = settings.scrollSpeed;
+      if (speed > 0 && bestIndex < _manualWordIndex) {
+        bestIndex = _manualWordIndex;
+      } else if (speed < 0 && bestIndex > _manualWordIndex) {
+        bestIndex = _manualWordIndex;
       }
     }
 
     if (bestIndex != _manualWordIndex) {
-      setState(() => _manualWordIndex = bestIndex);
+      _setTeleprompterState(() => _manualWordIndex = bestIndex);
+      final script = ref.read(scriptProvider);
+      if (script != null && script.words.isNotEmpty) {
+        ref
+            .read(teleprompterProvider.notifier)
+            .jumpToPosition(bestIndex, script: script);
+      }
     }
+  }
+
+  int? _wordIndexNearestReadingLine() {
+    final script = ref.read(scriptProvider);
+    if (script == null ||
+        script.words.isEmpty ||
+        !_scrollController.hasClients ||
+        _wordKeys.isEmpty) {
+      return null;
+    }
+    final axis = _presenterScrollAxis();
+    final targetAxis = _presenterReadingTargetAxis(axis);
+
+    final candidates = <PresenterReadingWordBounds>[];
+    final maxIndex = _wordKeys.length < script.words.length
+        ? _wordKeys.length
+        : script.words.length;
+
+    for (var i = 0; i < maxIndex; i++) {
+      final word = script.words[i];
+      if (word.isNewline) continue;
+      final ctx = _wordKeys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final bounds = _presenterGlobalRect(box);
+      final minAxis = axis.horizontal ? bounds.left : bounds.top;
+      final maxAxis = axis.horizontal ? bounds.right : bounds.bottom;
+      candidates.add(
+        PresenterReadingWordBounds(
+          index: i,
+          leading: axis.direction >= 0 ? minAxis : -maxAxis,
+          trailing: axis.direction >= 0 ? maxAxis : -minAxis,
+        ),
+      );
+    }
+
+    return PresenterReadingPositionService.wordIndexAtReadingLine(
+      words: candidates,
+      readingLine: axis.direction >= 0 ? targetAxis : -targetAxis,
+    );
   }
 
   void _stopManualScroll() {
     _manualScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
     _scrollingBackward = false;
-    if (mounted) setState(() => _manualScrolling = false);
+    if (mounted) _setTeleprompterState(() => _manualScrolling = false);
   }
 
   void _cancelSmoothScroll() {
@@ -87,12 +144,38 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _smoothScrollActive = false;
   }
 
-  void _scheduleVisibleWordWindowSync() {
+  void _notePresenterUserScrollSignal() {
+    _lastPresenterUserScrollSignalAt = DateTime.now();
+  }
+
+  bool _recentPresenterUserScrollSignal() {
+    final signalAt = _lastPresenterUserScrollSignalAt;
+    return signalAt != null &&
+        DateTime.now().difference(signalAt) < const Duration(milliseconds: 420);
+  }
+
+  void _suppressPresenterProgrammaticPositionCommit({
+    required bool immediate,
+  }) {
+    _presenterProgrammaticCommitBlockedUntil = DateTime.now().add(
+      Duration(milliseconds: immediate ? 380 : 220),
+    );
+  }
+
+  bool _presenterProgrammaticPositionCommitActive() {
+    final until = _presenterProgrammaticCommitBlockedUntil;
+    if (until == null) return false;
+    if (DateTime.now().isBefore(until)) return true;
+    _presenterProgrammaticCommitBlockedUntil = null;
+    return false;
+  }
+
+  void _scheduleVisibleWordWindowSync({bool force = false}) {
     if (_visibleWindowSyncScheduled) return;
     _visibleWindowSyncScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _visibleWindowSyncScheduled = false;
-      if (mounted) _syncVisibleWordWindow(force: true);
+      if (mounted) _syncVisibleWordWindow(force: force);
     });
   }
 
@@ -107,9 +190,12 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _lastVisibleWindowSync = now;
 
     final script = ref.read(scriptProvider);
-    if (script == null || script.words.isEmpty || !_scrollController.hasClients)
+    if (script == null ||
+        script.words.isEmpty ||
+        !_scrollController.hasClients) {
       return;
-    final viewportH = MediaQuery.of(context).size.height;
+    }
+    final viewport = Offset.zero & MediaQuery.sizeOf(context);
     int? firstVisible;
     int? lastVisible;
 
@@ -120,9 +206,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       if (ctx == null) continue;
       final box = ctx.findRenderObject() as RenderBox?;
       if (box == null || !box.attached) continue;
-      final top = box.localToGlobal(Offset.zero).dy;
-      final bottom = top + box.size.height;
-      if (bottom < 0 || top > viewportH) continue;
+      final bounds = _presenterGlobalRect(box);
+      if (!bounds.overlaps(viewport)) continue;
       firstVisible ??= i;
       lastVisible = i;
     }
@@ -157,7 +242,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
-  // ── Speech-mode scroll ──────────────────────────────────────────────────────
+  // -- Speech-mode scroll ------------------------------------------------------
 
   void _scrollToWordIndex(int index,
       {bool anticipate = false, bool immediate = false}) {
@@ -172,19 +257,18 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
     final settings = ref.read(settingsProvider);
     final screenH = MediaQuery.of(context).size.height;
-    final targetY = screenH * settings.scrollLead;
-
-    final wordPos =
-        box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
+    final axis = _presenterScrollAxis();
+    final wordAxis = _presenterBoxAxisLeading(box, axis);
+    final targetAxis = _presenterReadingTargetAxis(axis);
     final rowProgress = anticipate ? _visualRowProgress(targetIndex, box) : 0.0;
     final lineAdvance =
         (box.size.height * settings.lineSpacing).clamp(0.0, screenH * 0.22);
     final rawTarget = _scrollController.offset +
-        wordPos.dy -
-        targetY +
+        (wordAxis - targetAxis) * axis.direction +
         rowProgress * lineAdvance;
     _scrollTarget =
         rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
+    _suppressPresenterProgrammaticPositionCommit(immediate: immediate);
 
     if (immediate) {
       _cancelSmoothScroll();
@@ -206,7 +290,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final script = ref.read(scriptProvider);
     if (script == null) return;
     _stopManualScroll();
-    setState(() => _manualWordIndex = index);
+    _setTeleprompterState(() => _manualWordIndex = index);
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(index, script: script);
@@ -216,15 +300,16 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   double _visualRowProgress(int index, RenderBox currentBox) {
     if (index < 0 || index >= _wordKeys.length) return 0.0;
-    final currentDy = currentBox.localToGlobal(Offset.zero).dy;
+    final axis = _presenterScrollAxis();
+    final currentAxis = _presenterBoxAxisCenter(currentBox, axis);
     final tolerance = (currentBox.size.height * 0.7).clamp(10.0, 90.0);
 
     var rowStart = index;
     for (var i = index - 1; i >= 0; i--) {
       final box = _boxForWordIndex(i);
       if (box == null) break;
-      final dy = box.localToGlobal(Offset.zero).dy;
-      if ((dy - currentDy).abs() > tolerance) break;
+      final boxAxis = _presenterBoxAxisCenter(box, axis);
+      if ((boxAxis - currentAxis).abs() > tolerance) break;
       rowStart = i;
     }
 
@@ -232,8 +317,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     for (var i = index + 1; i < _wordKeys.length; i++) {
       final box = _boxForWordIndex(i);
       if (box == null) break;
-      final dy = box.localToGlobal(Offset.zero).dy;
-      if ((dy - currentDy).abs() > tolerance) break;
+      final boxAxis = _presenterBoxAxisCenter(box, axis);
+      if ((boxAxis - currentAxis).abs() > tolerance) break;
       rowEnd = i;
     }
 
@@ -251,7 +336,16 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
     final sttState = ref.read(teleprompterProvider);
-    if (sttState.isListening || sttState.isStarting) {
+    final settings = ref.read(settingsProvider);
+    final speechActive = sttState.isListening || sttState.isStarting;
+    final activeManualOverride =
+        PresenterInputLockService.allowActiveManualScroll(
+      settingEnabled: settings.allowScrollDuringActiveSession,
+      isListening: sttState.isListening,
+      isStarting: sttState.isStarting,
+    );
+    if (sttState.isStarting ||
+        (sttState.isListening && !activeManualOverride)) {
       _userBrowsingWhileStopped = false;
       return false;
     }
@@ -260,49 +354,115 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         notification.dragDetails != null;
     final isUserScrollUpdate = notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle;
-    if (isUserScrollStart || isUserScrollUpdate) {
+    final isPointerWheelScrollUpdate =
+        notification is ScrollUpdateNotification &&
+            notification.dragDetails == null &&
+            _recentPresenterUserScrollSignal();
+    final userScrollIntent = isUserScrollStart ||
+        isUserScrollUpdate ||
+        isPointerWheelScrollUpdate ||
+        _recentPresenterUserScrollSignal();
+    if (speechActive &&
+        _presenterProgrammaticPositionCommitActive() &&
+        !userScrollIntent) {
+      _syncVisibleWordWindow();
+      return false;
+    }
+    final isScrollPositionUpdate =
+        notification is ScrollUpdateNotification && _userBrowsingWhileStopped;
+    final userScrollActive =
+        isUserScrollStart || isUserScrollUpdate || isPointerWheelScrollUpdate;
+    if (userScrollActive) {
       _userBrowsingWhileStopped = true;
       _cancelSmoothScroll();
       _stopManualScroll();
+      if (speechActive && activeManualOverride) {
+        _activeManualCorrection = true;
+      }
+    }
+
+    if (_userBrowsingWhileStopped &&
+        (userScrollActive || isScrollPositionUpdate)) {
+      _syncVisibleWordWindow(force: true);
+      if (speechActive && activeManualOverride) {
+        _scheduleActiveManualCorrectionCommit();
+      } else {
+        _syncResumePointToReadingLine(
+          throttled: true,
+          commitProvider: false,
+        );
+      }
     }
 
     if (notification is ScrollEndNotification && _userBrowsingWhileStopped) {
       _userBrowsingWhileStopped = false;
+      _lastBrowsingWordSync = null;
       _syncVisibleWordWindow(force: true);
-      _syncResumePointToReadingLine();
+      if (speechActive && activeManualOverride) {
+        _finishActiveManualCorrection();
+      } else {
+        _syncResumePointToReadingLine(commitProvider: false);
+      }
     }
     return false;
   }
 
-  void _syncResumePointToReadingLine() {
-    final script = ref.read(scriptProvider);
-    if (script == null || script.words.isEmpty || !_scrollController.hasClients)
-      return;
-    final settings = ref.read(settingsProvider);
-    final targetScreenY =
-        MediaQuery.of(context).size.height * settings.scrollLead;
+  void _scheduleActiveManualCorrectionCommit() {
+    _activeManualCorrectionTimer?.cancel();
+    _activeManualCorrectionTimer =
+        Timer(const Duration(milliseconds: 420), _finishActiveManualCorrection);
+  }
 
-    int? bestIndex;
-    double bestDist = double.infinity;
-    for (var i = 0; i < _wordKeys.length && i < script.words.length; i++) {
-      if (script.words[i].isNewline) continue;
-      final ctx = _wordKeys[i].currentContext;
-      if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached) continue;
-      final posY = box.localToGlobal(Offset.zero).dy;
-      final dist = (posY - targetScreenY).abs();
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIndex = i;
+  void _finishActiveManualCorrection() {
+    _activeManualCorrectionTimer?.cancel();
+    _activeManualCorrectionTimer = null;
+    if (!_activeManualCorrection) return;
+    _activeManualCorrection = false;
+    _userBrowsingWhileStopped = false;
+    _lastBrowsingWordSync = null;
+    _syncVisibleWordWindow(force: true);
+    _syncResumePointToReadingLine();
+  }
+
+  void _syncResumePointToReadingLine({
+    bool throttled = false,
+    bool commitProvider = true,
+  }) {
+    if (throttled) {
+      final now = DateTime.now();
+      final previous = _lastBrowsingWordSync;
+      if (previous != null && now.difference(previous).inMilliseconds < 80) {
+        return;
       }
+      _lastBrowsingWordSync = now;
     }
 
-    final targetIndex = bestIndex;
+    final script = ref.read(scriptProvider);
+    if (script == null) return;
+    if (_scrollController.hasClients && _scrollController.offset <= 1.0) {
+      _setTeleprompterState(() => _manualWordIndex = 0);
+      if (commitProvider) {
+        ref
+            .read(teleprompterProvider.notifier)
+            .jumpToPosition(0, script: script);
+      }
+      return;
+    }
+    final targetIndex = _wordIndexNearestReadingLine();
     if (targetIndex == null) return;
-    setState(() => _manualWordIndex = targetIndex);
-    ref
-        .read(teleprompterProvider.notifier)
-        .jumpToPosition(targetIndex, script: script);
+    _setTeleprompterState(() => _manualWordIndex = targetIndex);
+    if (commitProvider) {
+      ref
+          .read(teleprompterProvider.notifier)
+          .jumpToPosition(targetIndex, script: script);
+    }
+  }
+
+  double _presenterReadingTargetAxis(_PresenterScrollAxis axis) {
+    final settings = ref.read(settingsProvider);
+    final lineAxis = _presenterReadingLineAxis(axis);
+    final fontSize = settings.fontSize * 2.0;
+    final gap = (fontSize * 0.10).clamp(4.0, 14.0);
+    return lineAxis + axis.direction * gap;
   }
 }

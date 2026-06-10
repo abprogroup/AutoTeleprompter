@@ -1,6 +1,6 @@
 part of 'global_selection_overlay.dart';
 
-extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
+extension GlobalSelectionOverlayGeometry on GlobalSelectionOverlayState {
   void _updateControllers() {
     final range = _normalizedRange();
     if (range == null) return;
@@ -10,10 +10,15 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
       if (i < range.startBlock || i > range.endBlock) {
         c.isGlobalSelected = false;
         c.externalSelection = const TextSelection.collapsed(offset: 0);
+        c.externalVisibleSelection = null;
       } else if (i > range.startBlock && i < range.endBlock) {
         c.isGlobalSelected = true;
         c.externalSelection =
             TextSelection(baseOffset: 0, extentOffset: c.text.length);
+        c.externalVisibleSelection = TextSelection(
+          baseOffset: 0,
+          extentOffset: MarkupDecorationParser.visibleText(c.text).length,
+        );
       } else if (i == range.startBlock && i == range.endBlock) {
         c.isGlobalSelected = false;
         final start = range.startOffset < range.endOffset
@@ -24,14 +29,30 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
             : range.endOffset;
         c.externalSelection =
             TextSelection(baseOffset: start, extentOffset: end);
+        c.externalVisibleSelection =
+            MarkupDecorationParser.rawToVisibleSelection(
+          c.text,
+          TextSelection(baseOffset: start, extentOffset: end),
+        );
       } else if (i == range.startBlock) {
         c.isGlobalSelected = c.text.isEmpty;
         c.externalSelection = TextSelection(
             baseOffset: range.startOffset, extentOffset: c.text.length);
+        c.externalVisibleSelection =
+            MarkupDecorationParser.rawToVisibleSelection(
+          c.text,
+          TextSelection(
+              baseOffset: range.startOffset, extentOffset: c.text.length),
+        );
       } else if (i == range.endBlock) {
         c.isGlobalSelected = c.text.isEmpty;
         c.externalSelection =
             TextSelection(baseOffset: 0, extentOffset: range.endOffset);
+        c.externalVisibleSelection =
+            MarkupDecorationParser.rawToVisibleSelection(
+          c.text,
+          TextSelection(baseOffset: 0, extentOffset: range.endOffset),
+        );
       }
       c.refresh();
     }
@@ -42,7 +63,7 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
   /// RenderEditable has been laid out with the new textAlign/textDirection.
   void refreshPositions() {
     if (!hasSelection) {
-      setState(() {
+      _setOverlayState(() {
         _handleStartPos = null;
         _handleEndPos = null;
       });
@@ -60,10 +81,24 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
       endpointA: false,
     );
 
-    setState(() {
+    final previousStart = _handleStartPos;
+    final previousEnd = _handleEndPos;
+    _setOverlayState(() {
       _handleStartPos = startPos;
       _handleEndPos = endPos;
     });
+    if (_handlePositionsChanged(previousStart, startPos) ||
+        _handlePositionsChanged(previousEnd, endPos)) {
+      _debugSelectionEvent(
+        'handleRefresh start=${_formatDebugOffset(startPos)} '
+        'end=${_formatDebugOffset(endPos)}',
+      );
+    }
+  }
+
+  bool _handlePositionsChanged(Offset? a, Offset? b) {
+    if (a == null || b == null) return a != b;
+    return (a - b).distance > 0.5;
   }
 
   Offset? _getPositionInStack(
@@ -89,7 +124,14 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
       var endpointX = caretOffset.left;
       var endpointY = caretOffset.top + caretOffset.height / 2;
       final range = _normalizedRange();
-      if (range != null) {
+      final visibleText = MarkupDecorationParser.visibleText(controller.text);
+      if (visibleText.isEmpty) {
+        final blockRtl = EditorTextGeometryService.resolveBlockRtl(
+          widget.controllers.map((controller) => controller.text).toList(),
+          blockIdx,
+        );
+        endpointX = blockRtl ? editable.size.width : 0.0;
+      } else if (range != null) {
         final blockRtl = EditorTextGeometryService.resolveBlockRtl(
           widget.controllers.map((controller) => controller.text).toList(),
           blockIdx,
@@ -136,7 +178,10 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
           }
         }
       }
-      final anchor = Offset(endpointX, endpointY);
+      final anchor = Offset(
+        endpointX,
+        endpointY,
+      );
       return editable.localToGlobal(anchor, ancestor: ourStack);
     }
 
@@ -218,7 +263,9 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
     if (_startBlock == null ||
         _endBlock == null ||
         _startOffset == null ||
-        _endOffset == null) return;
+        _endOffset == null) {
+      return;
+    }
 
     // Ensure start is before end
     int sB = _startBlock!, eB = _endBlock!;
@@ -286,141 +333,5 @@ extension _GlobalSelectionOverlayRenderingParts on GlobalSelectionOverlayState {
     // never paints its own amber regardless of native selection state.
     // Collapsing native selection was causing _getPositionForPoint() to misreport
     // positions on the second visual line of wrapped text blocks (multi-line drag bug).
-  }
-
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        _stackSize = Size(constraints.maxWidth, constraints.maxHeight);
-        // Only show a handle when its block is currently rendered (position
-        // known). If the block has scrolled offscreen, _handleStartPos /
-        // _handleEndPos is null. We hide the handle instead of clamping it
-        // to a viewport edge â€” a handle floating at an unrelated edge is
-        // confusing and doesn't correspond to any real text position.
-        final start = hasSelection ? _handleStartPos : null;
-        final end = hasSelection ? _handleEndPos : null;
-        return Stack(
-          key: _stackKey,
-          children: [
-            // Recalculate handle positions whenever the scroll view moves so
-            // handles follow the text even when the user scrolls while a
-            // selection is active. Using NotificationListener instead of a
-            // scroll-controller addListener keeps the overlay self-contained.
-            NotificationListener<ScrollNotification>(
-              onNotification: (_) {
-                if (_isSelecting) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) refreshPositions();
-                  });
-                }
-                return false; // let notification bubble
-              },
-              child: widget.child,
-            ),
-            if (_handleDrag?.activeEndpointIsStart == false) ...[
-              if (start != null) _buildHandle(start, true),
-              if (end != null) _buildHandle(end, false),
-            ] else ...[
-              if (end != null) _buildHandle(end, false),
-              if (start != null) _buildHandle(start, true),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildHandle(Offset pos, bool isStart) {
-    final visualCenter = _handleVisualCenter(pos, isStart);
-    if (visualCenter.dy < -56 ||
-        visualCenter.dy > _stackSize.height + 56 ||
-        visualCenter.dx < -40 ||
-        visualCenter.dx > _stackSize.width + 40) {
-      return const SizedBox.shrink();
-    }
-    return Positioned(
-      left: (visualCenter.dx - GlobalSelectionOverlayState._handleHitWidth / 2)
-          .clamp(
-        0.0,
-        _stackSize.width > GlobalSelectionOverlayState._handleHitWidth
-            ? _stackSize.width - GlobalSelectionOverlayState._handleHitWidth
-            : 0.0,
-      ),
-      top: (visualCenter.dy - GlobalSelectionOverlayState._handleHitHeight / 2)
-          .clamp(
-        0.0,
-        _stackSize.height > GlobalSelectionOverlayState._handleHitHeight
-            ? _stackSize.height - GlobalSelectionOverlayState._handleHitHeight
-            : 0.0,
-      ),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanStart: (details) {
-          _enterRefineMode();
-          final activeSide = _nearestHandleForPointer(
-                details.globalPosition,
-                fallback: isStart,
-              ) ??
-              isStart;
-          final stackBox =
-              _stackKey.currentContext?.findRenderObject() as RenderBox?;
-          final logicalStackLocal =
-              activeSide ? _handleStartPos : _handleEndPos;
-          final caretGlobal = (stackBox != null && logicalStackLocal != null)
-              ? stackBox.localToGlobal(logicalStackLocal)
-              : null;
-          _handleDrag?.cancelTimers();
-          final session = _HandleDragSession(
-            activeEndpointIsStart: activeSide,
-            panStartPointerGlobal: details.globalPosition,
-            panStartHandleGlobal: caretGlobal,
-            latestPointerGlobal: details.globalPosition,
-            latestHandleGlobal: caretGlobal ?? details.globalPosition,
-          );
-          setState(() {
-            _handleDrag = session;
-            _sessionMode = SelectionSessionMode.handleDrag;
-            _pointerState = SelectionPointerState.inside;
-            _focusEndpointIsStart = activeSide;
-            _ignoreBodyDragUntilPointerUp = false;
-            _candidatePos = null;
-            _candidateBlock = null;
-            _candidateOffset = null;
-            _bodyDragActive = false;
-          });
-        },
-        onPanUpdate: (details) {
-          _updateHandleDragPointer(
-            details.globalPosition,
-            updateEndpoint: true,
-          );
-        },
-        onPanEnd: (_) => endHandleGesturePreserveSelection(reason: 'pan-end'),
-        onPanCancel: () =>
-            endHandleGesturePreserveSelection(reason: 'pan-cancel'),
-        child: Container(
-          width: GlobalSelectionOverlayState._handleHitWidth,
-          height: GlobalSelectionOverlayState._handleHitHeight,
-          color: Colors.transparent,
-          child: Center(
-            child: Container(
-              width: GlobalSelectionOverlayState._handleBarWidth,
-              height: GlobalSelectionOverlayState._handleBarHeight,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFBF00),
-                borderRadius: BorderRadius.circular(3),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

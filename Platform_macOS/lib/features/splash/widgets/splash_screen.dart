@@ -49,7 +49,7 @@ class _V3SplashScreenState extends ConsumerState<V3SplashScreen> {
                 border: Border.all(color: const Color(0xFFFFBF00), width: 2),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFFBF00).withOpacity(0.2),
+                    color: const Color(0xFFFFBF00).withValues(alpha: 0.2),
                     blurRadius: 40,
                     spreadRadius: 2,
                   ),

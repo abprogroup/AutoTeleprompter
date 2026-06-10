@@ -1,0 +1,439 @@
+part of 'script_editor_screen.dart';
+
+bool get _paintEditorLocalBackgrounds => false;
+bool get _paintEditorLocalUnderlines => false;
+
+class _EditorRenderEditableDecorations extends SingleChildRenderObjectWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final TextSelection? selection;
+  final TextDirection textDirection;
+
+  const _EditorRenderEditableDecorations({
+    required this.controller,
+    required this.focusNode,
+    required this.selection,
+    required this.textDirection,
+    required super.child,
+  });
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderEditorRenderEditableDecorations(
+      controller: controller,
+      focusNode: focusNode,
+      selection: selection,
+      textDirection: textDirection,
+    );
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderEditorRenderEditableDecorations renderObject,
+  ) {
+    renderObject
+      ..controller = controller
+      ..focusNode = focusNode
+      ..selection = selection
+      ..textDirection = textDirection;
+  }
+}
+
+class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
+  TextEditingController _controller;
+  FocusNode _focusNode;
+  TextSelection? _selection;
+  TextDirection _textDirection;
+  bool _listeningToController = false;
+  bool _listeningToFocus = false;
+
+  _RenderEditorRenderEditableDecorations({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required TextSelection? selection,
+    required TextDirection textDirection,
+  })  : _controller = controller,
+        _focusNode = focusNode,
+        _selection = selection,
+        _textDirection = textDirection;
+
+  String get _rawText => _controller.text;
+
+  set controller(TextEditingController value) {
+    if (identical(value, _controller)) return;
+    _stopControllerListener();
+    _controller = value;
+    _startControllerListener();
+    markNeedsPaint();
+  }
+
+  set focusNode(FocusNode value) {
+    if (identical(value, _focusNode)) return;
+    _stopFocusListener();
+    _focusNode = value;
+    _startFocusListener();
+    markNeedsPaint();
+  }
+
+  set selection(TextSelection? value) {
+    if (value == _selection) return;
+    _selection = value;
+    markNeedsPaint();
+  }
+
+  set textDirection(TextDirection value) {
+    if (value == _textDirection) return;
+    _textDirection = value;
+    markNeedsPaint();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _startControllerListener();
+    _startFocusListener();
+  }
+
+  @override
+  void detach() {
+    _stopFocusListener();
+    _stopControllerListener();
+    super.detach();
+  }
+
+  void _startControllerListener() {
+    if (_listeningToController) return;
+    _controller.addListener(_handleControllerChanged);
+    _listeningToController = true;
+  }
+
+  void _stopControllerListener() {
+    if (!_listeningToController) return;
+    _controller.removeListener(_handleControllerChanged);
+    _listeningToController = false;
+  }
+
+  void _handleControllerChanged() {
+    markNeedsPaint();
+  }
+
+  void _startFocusListener() {
+    if (_listeningToFocus) return;
+    _focusNode.addListener(_handleFocusChanged);
+    _listeningToFocus = true;
+  }
+
+  void _stopFocusListener() {
+    if (!_listeningToFocus) return;
+    _focusNode.removeListener(_handleFocusChanged);
+    _listeningToFocus = false;
+  }
+
+  void _handleFocusChanged() {
+    markNeedsPaint();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final editable = _findRenderEditable(child);
+    if (editable == null) {
+      super.paint(context, offset);
+      return;
+    }
+
+    final editableOffset = editable.localToGlobal(Offset.zero, ancestor: this);
+
+    // Pre-child decorations. Only touch the canvas when there is actually
+    // something to paint — an empty save/translate/restore was wrapping a
+    // disabled body for no reason.
+    if (_paintEditorLocalBackgrounds) {
+      final canvas = context.canvas;
+      canvas.save();
+      canvas.translate(
+          offset.dx + editableOffset.dx, offset.dy + editableOffset.dy);
+      _paintStyleBackgrounds(canvas, editable);
+      _paintActiveSelection(canvas, editable);
+      canvas.restore();
+    }
+
+    super.paint(context, offset);
+
+    // Post-child decorations. IMPORTANT: re-fetch context.canvas here.
+    // super.paint() can trigger compositing (e.g. the zoom page-transition
+    // snapshot) which ends the previous canvas's recording; reusing a cached
+    // canvas afterwards calls into a collected native peer and crashes.
+    if (_paintEditorLocalUnderlines) {
+      final canvas = context.canvas;
+      canvas.save();
+      canvas.translate(
+          offset.dx + editableOffset.dx, offset.dy + editableOffset.dy);
+      _paintUnderlines(canvas, editable);
+      canvas.restore();
+    }
+  }
+
+  RenderEditable? _findRenderEditable(RenderObject? root) {
+    if (root == null) return null;
+    if (root is RenderEditable) return root;
+    RenderEditable? result;
+    root.visitChildren((child) {
+      result ??= _findRenderEditable(child);
+    });
+    return result;
+  }
+
+  void _paintStyleBackgrounds(Canvas canvas, RenderEditable editable) {
+    if (!kUseCustomDocxDecorationPainting || _rawText.isEmpty) return;
+    final bandsByColor = <Color, List<Rect>>{};
+    for (final run in _backgroundPaintRuns()) {
+      final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
+        editable,
+        TextSelection(
+          baseOffset: run.range.start,
+          extentOffset: run.range.end,
+        ),
+        rawText: _rawText,
+        gapTolerance: _styleBackgroundGapTolerance(editable),
+      );
+      bandsByColor.putIfAbsent(run.color, () => <Rect>[]).addAll(bands);
+    }
+    for (final entry in bandsByColor.entries) {
+      _paintBands(
+        canvas,
+        editable,
+        entry.value,
+        entry.key,
+        applyBackgroundTail: true,
+      );
+    }
+  }
+
+  List<_BackgroundPaintRun> _backgroundPaintRuns() {
+    final runs = <_BackgroundPaintRun>[];
+    Color? pendingColor;
+    TextRange? pendingRange;
+
+    void flush() {
+      final range = pendingRange;
+      final color = pendingColor;
+      if (range != null && color != null && range.end > range.start) {
+        runs.add(_BackgroundPaintRun(range: range, color: color));
+      }
+      pendingColor = null;
+      pendingRange = null;
+    }
+
+    for (final range in MarkupDecorationParser.decorationRanges(_rawText)) {
+      if (range.type != MarkupDecorationType.background) continue;
+      final paintable = MarkupDecorationParser.paintableContentRange(
+        _rawText,
+        range,
+      );
+      final color = range.color;
+      if (paintable == null || color == null) continue;
+      final canJoin = pendingColor == color &&
+          pendingRange != null &&
+          _visibleGapIsWhitespace(pendingRange!.end, paintable.start);
+      if (canJoin) {
+        pendingRange = TextRange(
+          start: pendingRange!.start,
+          end: paintable.end,
+        );
+      } else {
+        flush();
+        pendingColor = color;
+        pendingRange = paintable;
+      }
+    }
+    flush();
+    return runs;
+  }
+
+  bool _visibleGapIsWhitespace(int start, int end) {
+    if (end <= start) return true;
+    final safeStart = start.clamp(0, _rawText.length).toInt();
+    final safeEnd = end.clamp(safeStart, _rawText.length).toInt();
+    final visibleGap = MarkupDecorationParser.visibleText(
+      _rawText.substring(safeStart, safeEnd),
+    );
+    return visibleGap.trim().isEmpty;
+  }
+
+  double _styleBackgroundGapTolerance(RenderEditable editable) {
+    final dynamicGap = editable.preferredLineHeight * 0.75;
+    return dynamicGap > MarkupDecorationBoxMerger.styleBackgroundGapTolerance
+        ? dynamicGap
+        : MarkupDecorationBoxMerger.styleBackgroundGapTolerance;
+  }
+
+  void _paintActiveSelection(Canvas canvas, RenderEditable editable) {
+    if (!kUseCustomEditorSelectionPainting) return;
+    final activeSelection = _activePaintSelection();
+    if (activeSelection == null ||
+        !activeSelection.isValid ||
+        activeSelection.isCollapsed) {
+      return;
+    }
+    final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
+      editable,
+      activeSelection,
+      rawText: _rawText,
+      gapTolerance: MarkupDecorationBoxMerger.activeSelectionGapTolerance,
+    );
+    _paintBands(
+      canvas,
+      editable,
+      bands,
+      const Color(0x66FFBF00),
+      applyBackgroundTail: false,
+    );
+  }
+
+  TextSelection? _activePaintSelection() {
+    final appSelection = _selection;
+    if (appSelection != null &&
+        appSelection.isValid &&
+        !appSelection.isCollapsed) {
+      return appSelection;
+    }
+    if (!_focusNode.hasFocus) return null;
+    final native = _controller.selection;
+    return native.isValid && !native.isCollapsed ? native : null;
+  }
+
+  void _paintUnderlines(Canvas canvas, RenderEditable editable) {
+    if (!kUseCustomDocxDecorationPainting || _rawText.isEmpty) return;
+    final paint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.square
+      ..style = PaintingStyle.stroke;
+    for (final range in MarkupDecorationParser.decorationRanges(_rawText)) {
+      if (range.type != MarkupDecorationType.underline) continue;
+      final paintable = MarkupDecorationParser.paintableContentRange(
+        _rawText,
+        range,
+      );
+      if (paintable == null) continue;
+      final bands = MarkupRenderEditableGeometry.mergedBandsForSelection(
+        editable,
+        TextSelection(
+          baseOffset: paintable.start,
+          extentOffset: paintable.end,
+        ),
+        rawText: _rawText,
+        gapTolerance: MarkupDecorationBoxMerger.styleUnderlineGapTolerance,
+      );
+      for (final rect in bands) {
+        final leftTail = _textDirection == TextDirection.rtl
+            ? MarkupDecorationBoxMerger.styleUnderlineVisualEndTail
+            : 0.0;
+        final rightTail = _textDirection == TextDirection.rtl
+            ? 0.0
+            : MarkupDecorationBoxMerger.styleUnderlineVisualEndTail;
+        final left = (rect.left - leftTail).clamp(0.0, editable.size.width);
+        final right = (rect.right + rightTail).clamp(0.0, editable.size.width);
+        if (right <= left) continue;
+        final y = rect.bottom - paint.strokeWidth * 0.5;
+        canvas.drawLine(Offset(left, y), Offset(right, y), paint);
+      }
+    }
+  }
+
+  void _paintBands(
+    Canvas canvas,
+    RenderEditable editable,
+    List<Rect> bands,
+    Color color, {
+    required bool applyBackgroundTail,
+  }) {
+    if (color.a <= 0 || bands.isEmpty) return;
+    final paintBands = <Rect>[];
+    for (final rect in _verticalPaintBands(
+      editable,
+      bands,
+      applyBackgroundTail: applyBackgroundTail,
+    )) {
+      final leftTail = !applyBackgroundTail
+          ? 0.0
+          : _textDirection == TextDirection.rtl
+              ? MarkupDecorationBoxMerger.styleBackgroundVisualEndTail
+              : MarkupDecorationBoxMerger.styleBackgroundInnerTail;
+      final rightTail = !applyBackgroundTail
+          ? 0.0
+          : _textDirection == TextDirection.rtl
+              ? MarkupDecorationBoxMerger.styleBackgroundInnerTail
+              : MarkupDecorationBoxMerger.styleBackgroundVisualEndTail;
+      final band = Rect.fromLTRB(
+        (rect.left - leftTail)
+            .clamp(0.0, editable.size.width)
+            .toDouble()
+            .floorToDouble(),
+        _roundBandTop(rect, editable.size.height, applyBackgroundTail),
+        (rect.right + rightTail)
+            .clamp(0.0, editable.size.width)
+            .toDouble()
+            .ceilToDouble(),
+        _roundBandBottom(rect, editable.size.height, applyBackgroundTail),
+      );
+      if (band.width <= 0 || band.height <= 0) continue;
+      paintBands.add(band);
+    }
+    HighlightBandPainter.paintConnectedRegion(
+      canvas,
+      paintBands,
+      color,
+      editable.size,
+      radius: HighlightBandPainter.suggestedRadius(paintBands),
+      connectRows: true,
+    );
+  }
+
+  List<Rect> _verticalPaintBands(
+    RenderEditable editable,
+    List<Rect> bands, {
+    required bool applyBackgroundTail,
+  }) {
+    final sorted =
+        bands.where((band) => band.width > 0 && band.height > 0).toList()
+          ..sort((a, b) {
+            final top = a.top.compareTo(b.top);
+            return top != 0 ? top : a.left.compareTo(b.left);
+          });
+    if (sorted.isEmpty) return const [];
+
+    return HighlightBandPainter.textLaneBands(
+      sorted,
+      editable.size,
+      topPaddingRatio: applyBackgroundTail ? 0.02 : 0.02,
+      bottomPaddingRatio: applyBackgroundTail ? 0.24 : 0.14,
+      minHeight: applyBackgroundTail ? 8.0 : 6.0,
+      maxHeight: applyBackgroundTail ? 200.0 : 160.0,
+    );
+  }
+
+  double _roundBandTop(Rect rect, double maxHeight, bool applyBackgroundTail) {
+    final value = rect.top.clamp(0.0, maxHeight).toDouble();
+    return applyBackgroundTail ? value.floorToDouble() : value.roundToDouble();
+  }
+
+  double _roundBandBottom(
+    Rect rect,
+    double maxHeight,
+    bool applyBackgroundTail,
+  ) {
+    final value = rect.bottom.clamp(0.0, maxHeight).toDouble();
+    return applyBackgroundTail ? value.ceilToDouble() : value.roundToDouble();
+  }
+}
+
+class _BackgroundPaintRun {
+  final TextRange range;
+  final Color color;
+
+  const _BackgroundPaintRun({
+    required this.range,
+    required this.color,
+  });
+}

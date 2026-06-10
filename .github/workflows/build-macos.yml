@@ -1,5 +1,5 @@
-name: Build macOS App (v5.0.0)
-run-name: macOS v5.0.0 App run ${{ github.run_number }} - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+name: Build macOS App (v5.0.1)
+run-name: macOS v5.0.1 App run ${{ github.run_number }} - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
   workflow_dispatch:
@@ -27,9 +27,9 @@ jobs:
         run: flutter pub get
         working-directory: Platform_macOS
 
-      - name: Verify macOS v5.0.0 metadata
+      - name: Verify macOS v5.0.1 metadata
         run: |
-          grep -Fxq 'version: 5.0.0+11' pubspec.yaml
+          grep -Fxq 'version: 5.0.1+12' pubspec.yaml
         working-directory: Platform_macOS
 
       - name: Patch Podfile Deployment Target
@@ -42,7 +42,7 @@ jobs:
       - name: Build macOS App
         run: |
           endpoint="$(python3 ../.github/scripts/sanitize_feedback_endpoint.py "$FEEDBACK_ENDPOINT")"
-          flutter build macos --release "--dart-define=APP_VERSION=5.0.0+11" "--dart-define=FEEDBACK_ENDPOINT=$endpoint"
+          flutter build macos --release "--dart-define=APP_VERSION=5.0.1+12" "--dart-define=FEEDBACK_ENDPOINT=$endpoint"
         working-directory: Platform_macOS
         env:
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
@@ -56,12 +56,12 @@ jobs:
           du -sh autoteleprompter.app/Contents/* || true
           echo "Frameworks breakdown:"
           du -sh autoteleprompter.app/Contents/Frameworks/* || true
-          ditto -c -k --sequesterRsrc --keepParent autoteleprompter.app AutoTeleprompter-macOS-v5.0.0.zip
+          ditto -c -k --sequesterRsrc --keepParent autoteleprompter.app AutoTeleprompter-macOS-v5.0.1.zip
           echo "Zip size:"
-          du -sh AutoTeleprompter-macOS-v5.0.0.zip
+          du -sh AutoTeleprompter-macOS-v5.0.1.zip
 
       - name: Upload App
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-macOS-v5.0.0
-          path: Platform_macOS/build/macos/Build/Products/Release/AutoTeleprompter-macOS-v5.0.0.zip
+          name: AutoTeleprompter-macOS-v5.0.1
+          path: Platform_macOS/build/macos/Build/Products/Release/AutoTeleprompter-macOS-v5.0.1.zip

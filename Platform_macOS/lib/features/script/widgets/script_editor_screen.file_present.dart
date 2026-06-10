@@ -3,61 +3,20 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   Future<void> _importFile() async {
     final supportedExts = PlatformFileImport.supportedExtensions;
-    if (widget.shouldAutoLoad && _isPendingLoad) {
-      await Future<void>.delayed(const Duration(milliseconds: 180));
-      if (!mounted) return;
-    }
-
-    FilePickerResult? result;
-    try {
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: false,
-        dialogTitle: 'Load Script',
-      );
-    } catch (error, stack) {
-      debugPrint('macOS file picker failed: $error');
-      debugPrintStack(stackTrace: stack);
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(children: [
-            Icon(Icons.folder_off_rounded, color: Color(0xFFFFBF00), size: 22),
-            SizedBox(width: 10),
-            Text('Could Not Open Files',
-                style: TextStyle(color: Colors.white, fontSize: 17)),
-          ]),
-          content: Text(
-            'macOS did not allow the file picker to open. Please try again.',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK',
-                  style: TextStyle(
-                      color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      );
-      if (widget.shouldAutoLoad && mounted) Navigator.pop(context);
-      if (mounted) setState(() => _isPendingLoad = false);
-      return;
-    }
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Open script',
+      type: FileType.custom,
+      allowedExtensions: supportedExts,
+    );
     if (!mounted) return;
-    if (result == null || result.files.single.path == null) {
+    final selectedPath = result?.files.single.path;
+    if (selectedPath == null || selectedPath.isEmpty) {
       // v3.9.5.59: Fluid navigation fallback
       if (widget.shouldAutoLoad) Navigator.pop(context);
-      setState(() => _isPendingLoad = false);
+      _setEditorState(() => _isPendingLoad = false);
       return;
     }
-    final selectedFile = File(result.files.single.path!);
+    final selectedFile = File(selectedPath);
     final ext = selectedFile.path.split('.').last.toLowerCase();
 
     if (!supportedExts.contains(ext)) {
@@ -109,6 +68,14 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     // Persist the current script's session before swapping editors so its
     // history index / recent entry are not lost.
+    LightweightDiagnostics.instance.record(
+      'editor',
+      'file import selected',
+      data: {'extension': ext},
+    );
+    await ref
+        .read(settingsProvider.notifier)
+        .setLastImportPath(selectedFile.parent.path);
     await _forceRecentUpdate();
     if (!mounted) return;
 
@@ -125,32 +92,88 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     final format = await EditorDialogs.showSaveFormatDialog(context);
     if (format == null || !mounted) return;
 
-    final text = _getRefinedFullTextWithoutBookmarkSigns();
+    await _loadBookmarksForCurrentScript();
+    if (!mounted) return;
+    final text = _getRefinedFullTextWithExportBookmarkSigns();
 
-    // Generate bytes in the correct format for the chosen file type
-    final List<int> bytes;
-    if (format == 'docx') {
-      bytes = DocxService.generate(text);
-    } else if (format == 'rtf') {
-      bytes = RtfService.generate(text);
-    } else if (format == 'pages') {
-      bytes = PagesService.generate(text);
-    } else {
-      // txt, md — plain UTF-8
-      bytes = utf8.encode(MarkupExportService.toPlainText(text));
+    final safeName =
+        _currentTitle.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_').replaceAll(
+              RegExp(
+                r'\.(docx?|rtf|txt|text|log|md|pdf|odt|pages|atp)$',
+                caseSensitive: false,
+              ),
+              '',
+            );
+    final nameCtrl = TextEditingController(text: safeName);
+    final nameChoice = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => SaveNameDialog(
+        nameCtrl: nameCtrl,
+        usedNames: const [],
+        format: format,
+      ),
+    );
+    nameCtrl.dispose();
+    if (!mounted) return;
+    if (nameChoice == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Save cancelled.'),
+          backgroundColor: Colors.black54,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    final chosenName = (nameChoice['name'] as String? ?? '').trim();
+    if (chosenName.isEmpty) return;
+    final baseName = chosenName.replaceAll(
+      RegExp(
+        r'\.(docx?|rtf|txt|text|log|md|pdf|odt|pages|atp)$',
+        caseSensitive: false,
+      ),
+      '',
+    );
+    final settings = ref.read(settingsProvider);
+    final ScriptBackupExport export;
+    try {
+      export = await LocalBackupService.buildScriptExportAsync(
+        title: '$baseName.$format',
+        text: text,
+        sourceType: format,
+        sourcePath: null,
+        preferredExtension: format,
+        fontSize: settings.fontSize,
+        fontFamily: settings.fontFamily,
+        textAlign: settings.textAlign,
+        futureWordColor: settings.futureWordColor,
+        isRtl: _inferEditorTextDirection(text),
+        bookmarks: _bookmarks,
+      );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'editor.saveExportBuild',
+        data: {'format': format, 'title': _currentTitle},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not export ${format.toUpperCase()}: $error'),
+          backgroundColor: Colors.red[800],
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
     }
 
-    // Build filename with guaranteed extension — strip any prior extension first
-    final safeName = _currentTitle
-        .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
-        .replaceAll(
-            RegExp(r'\.(txt|pdf|docx|rtf|pages|md)$', caseSensitive: false),
-            '');
-    final fileName = '$safeName.$format';
+    // txt, md — plain UTF-8
 
+    // Build filename with guaranteed extension — strip any prior extension first
     final savedPath = await FilePicker.platform.saveFile(
       dialogTitle: 'Save as ${format.toUpperCase()}',
-      fileName: fileName,
+      fileName: export.fileName,
     );
 
     if (!mounted) return;
@@ -169,14 +192,49 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     // On Windows, FilePicker.saveFile only returns the path — it does NOT write
     // the file. We must write it explicitly.
+    final extension = '.${export.extension.toLowerCase()}';
+    final lowerSavedPath = savedPath.toLowerCase();
     final finalPath =
-        savedPath.endsWith('.$format') ? savedPath : '$savedPath.$format';
-    await File(finalPath).writeAsBytes(Uint8List.fromList(bytes));
+        lowerSavedPath.endsWith(extension) ? savedPath : '$savedPath$extension';
+    try {
+      await LocalBackupService.writeExportAtomically(File(finalPath), export);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'editor.saveExportWrite',
+        data: {'format': format, 'path': finalPath},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not save ${format.toUpperCase()}: $error'),
+          backgroundColor: Colors.red[800],
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+    LightweightDiagnostics.instance.record(
+      'editor',
+      'script exported',
+      data: {
+        'format': format,
+        'fileName': finalPath.split(RegExp(r'[\\/]')).last
+      },
+    );
 
     if (!mounted) return;
 
     final name = finalPath.split(RegExp(r'[\\/]')).last;
-    if (!savedPath.endsWith('.$format')) {
+    await _adoptSavedExportAsActiveScript(
+      fileName: name,
+      format: format,
+      text: text,
+      sourcePath: finalPath,
+    );
+    if (!mounted) return;
+    if (!lowerSavedPath.endsWith(extension)) {
       // OS stripped the extension — we added it back, but warn the user
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -202,21 +260,194 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     }
   }
 
-  void _clearScript() {
-    setState(() {
-      _loadText('');
-      _saveHistory(description: 'Clear');
-    });
+  bool _inferEditorTextDirection(String text) {
+    final directionText = _plainTextForDirection(text);
+    var rtl = 0;
+    var ltr = 0;
+    for (final rune in directionText.runes) {
+      if ((rune >= 0x0590 && rune <= 0x05FF) ||
+          (rune >= 0x0600 && rune <= 0x06FF) ||
+          (rune >= 0x0750 && rune <= 0x077F)) {
+        rtl++;
+      } else if ((rune >= 0x0041 && rune <= 0x005A) ||
+          (rune >= 0x0061 && rune <= 0x007A)) {
+        ltr++;
+      }
+    }
+    return rtl > 0 && rtl >= ltr;
+  }
+
+  String _plainTextForDirection(String text) {
+    try {
+      return MarkupExportService.toPlainText(text);
+    } catch (_) {
+      return text;
+    }
+  }
+
+  Future<void> _adoptSavedExportAsActiveScript({
+    required String fileName,
+    required String format,
+    required String text,
+    required String sourcePath,
+  }) async {
+    final exportType = format.toUpperCase();
+    final previousSessionId = _currentSessionId;
+    final previousSourceType = _sourceType.toUpperCase();
+    final identityChanged =
+        _currentTitle != fileName || _sourceType.toUpperCase() != exportType;
+
+    if (identityChanged) {
+      await _forceRecentUpdate();
+      if (!mounted) return;
+      _setEditorState(() {
+        _currentTitle = fileName;
+        _sourceType = exportType;
+        _currentSourcePath = sourcePath;
+        _currentSessionId =
+            'save_${DateTime.now().microsecondsSinceEpoch.toString()}';
+      });
+    } else {
+      _sourceType = exportType;
+      _currentSourcePath = sourcePath;
+    }
+
+    final settings = ref.read(settingsProvider);
+    final historyJson = jsonEncode(_history.map((e) => e.toJson()).toList());
+    await ref.read(settingsProvider.notifier).saveScript(
+          text,
+          title: _currentTitle,
+          type: _sourceType,
+          sourcePath: _currentSourcePath,
+          sessionId: _currentSessionId,
+          historyIndex: _historyIndex,
+          fontSize: settings.fontSize,
+          fontFamily: settings.fontFamily,
+          lineSpacing: settings.lineSpacing,
+          letterSpacing: settings.letterSpacing,
+          wordSpacing: settings.wordSpacing,
+          textAlign: settings.textAlign,
+          scriptBgColor: settings.scriptBgColor,
+          currentWordColor: settings.currentWordColor,
+          futureWordColor: settings.futureWordColor,
+          isRtl: _inferEditorTextDirection(text),
+          historyJson: historyJson,
+        );
+
+    ref.read(scriptProvider.notifier).loadText(
+          text,
+          title: _currentTitle,
+          sourceType: _sourceType,
+          sourcePath: _currentSourcePath,
+          sessionId: _currentSessionId,
+          historyIndex: _historyIndex,
+          historyJson: historyJson,
+          fontSize: settings.fontSize,
+          fontFamily: settings.fontFamily,
+          lineSpacing: settings.lineSpacing,
+          letterSpacing: settings.letterSpacing,
+          wordSpacing: settings.wordSpacing,
+          textAlign: settings.textAlign,
+          scriptBgColor: settings.scriptBgColor,
+          currentWordColor: settings.currentWordColor,
+          futureWordColor: settings.futureWordColor,
+        );
+
+    if (identityChanged &&
+        previousSourceType == 'TEMP' &&
+        previousSessionId != _currentSessionId) {
+      await ref.read(settingsProvider.notifier).deleteRecentScript(
+            sessionId: previousSessionId,
+          );
+    }
+  }
+
+  Future<void> _confirmDeleteCurrentScript() async {
+    final sourcePath = _currentSourcePath?.trim();
+    final sourceFile =
+        sourcePath == null || sourcePath.isEmpty ? null : File(sourcePath);
+
+    if (!mounted) return;
+    final choice = await showScriptDeleteDialog(
+      context,
+      title: _currentTitle,
+      sourcePath: sourcePath,
+    );
+
+    if (choice == null || !mounted) return;
+    final shouldDeleteOriginal = choice.deleteSourceFile && sourceFile != null;
+    _autoSaveTimer?.cancel();
+    _recentTimer?.cancel();
+    _recentPersistQueued = false;
+
+    try {
+      await ref.read(settingsProvider.notifier).deleteRecentScript(
+            sessionId: _currentSessionId,
+            title: _currentTitle,
+          );
+      if (shouldDeleteOriginal) {
+        await sourceFile.delete();
+      }
+      ref.read(scriptProvider.notifier).discardActive();
+      LightweightDiagnostics.instance.record(
+        'editor',
+        'script deleted',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+          'deletedSourceFile': shouldDeleteOriginal,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            shouldDeleteOriginal
+                ? 'Deleted script and source file.'
+                : 'Deleted script from the app.',
+          ),
+        ),
+      );
+      if (Navigator.canPop(context)) Navigator.pop(context);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'scriptEditor.deleteScript',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+          'sourcePath': sourcePath ?? '',
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete this script.')),
+      );
+    }
   }
 
   void _startPresenting() async {
+    final editorSnapshot = _captureEditorModeReturnSnapshot();
+    _suspendEditorFocusForReaderMode();
+    LightweightDiagnostics.instance.record(
+      'editor',
+      'presenter opened',
+      data: {
+        'title': _currentTitle,
+        'sessionId': _currentSessionId,
+        'blockCount': _controllers.length,
+      },
+    );
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
+    await _forceRecentUpdate();
     try {
       final settings = ref.read(settingsProvider);
       ref.read(scriptProvider.notifier).loadText(
             _getRefinedFullTextWithoutBookmarkSigns(),
             title: _currentTitle,
             sourceType: _sourceType,
+            sourcePath: _currentSourcePath,
             sessionId: _currentSessionId,
             historyIndex: _historyIndex,
             historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
@@ -230,15 +461,124 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             currentWordColor: settings.currentWordColor,
             futureWordColor: settings.futureWordColor,
           );
-    } catch (_) {}
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'scriptEditor.startPresentLoad',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+        },
+      );
+    }
     if (mounted) {
-      await Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
+      final returnWordIndex = await Navigator.of(context).push<int>(
+        MaterialPageRoute(builder: (_) => const TeleprompterScreen()),
+      );
       if (mounted) {
         await _loadBookmarksForCurrentScript(force: true);
         await _reconcileEditorBookmarkSignsFromMetadata(recordHistory: false);
+        if (returnWordIndex != null) {
+          _focusEditorWordIndex(returnWordIndex);
+        } else {
+          _restoreEditorModeReturnSnapshot(editorSnapshot);
+        }
         _onSelectionChanged();
       }
     }
+  }
+
+  void _startContentCreator() {
+    unawaited(_openContentCreator());
+  }
+
+  void _startAudioOnlyContentCreator() {
+    unawaited(_openContentCreator(audioOnly: true));
+  }
+
+  Future<void> _openContentCreator({bool audioOnly = false}) async {
+    final featureName = audioOnly ? 'Audio-only recording' : 'Content Creator';
+    if (!await _ensureEditorPremiumAccess(featureName)) return;
+    final editorSnapshot = _captureEditorModeReturnSnapshot();
+    _suspendEditorFocusForReaderMode();
+    LightweightDiagnostics.instance.record(
+      'editor',
+      audioOnly ? 'audio-only creator opened' : 'content creator opened',
+      data: {
+        'title': _currentTitle,
+        'sessionId': _currentSessionId,
+        'blockCount': _controllers.length,
+        'audioOnly': audioOnly,
+      },
+    );
+    await _forceRecentUpdate();
+    try {
+      final settings = ref.read(settingsProvider);
+      if (audioOnly) {
+        await ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingFormat(
+              AppSettings.contentCreatorRecordingFormatWav,
+            );
+        await ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingAudioMode(
+              AppSettings.contentCreatorRecordingAudioCamera,
+            );
+      } else {
+        await ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingFormat(
+              AppSettings.contentCreatorRecordingFormatMp4,
+            );
+        await ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingAudioMode(
+              AppSettings.contentCreatorRecordingAudioCamera,
+            );
+      }
+      ref.read(scriptProvider.notifier).loadText(
+            _getRefinedFullTextWithoutBookmarkSigns(),
+            title: _currentTitle,
+            sourceType: _sourceType,
+            sourcePath: _currentSourcePath,
+            sessionId: _currentSessionId,
+            historyIndex: _historyIndex,
+            historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+            fontSize: settings.fontSize,
+            fontFamily: settings.fontFamily,
+            lineSpacing: settings.lineSpacing,
+            letterSpacing: settings.letterSpacing,
+            wordSpacing: settings.wordSpacing,
+            textAlign: settings.textAlign,
+            scriptBgColor: settings.scriptBgColor,
+            currentWordColor: settings.currentWordColor,
+            futureWordColor: settings.futureWordColor,
+          );
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'scriptEditor.startContentCreatorLoad',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+        },
+      );
+    }
+    if (!mounted) return;
+    final returnWordIndex = await Navigator.of(context).push<int>(
+      MaterialPageRoute(
+        builder: (_) => ContentCreatorScreen(audioOnlyEntry: audioOnly),
+      ),
+    );
+    if (!mounted) return;
+    if (returnWordIndex != null) {
+      _focusEditorWordIndex(returnWordIndex);
+    } else {
+      _restoreEditorModeReturnSnapshot(editorSnapshot);
+    }
+    _onSelectionChanged();
   }
 }

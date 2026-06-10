@@ -119,7 +119,7 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
           color: isSupported ? Colors.white : Colors.white24,
           fontWeight: isDir ? FontWeight.bold : FontWeight.normal,
         )),
-        subtitle: !isDir ? Text(isSupported ? "Selectable Script" : "Unsupported ($name)", style: TextStyle(color: Colors.white38, fontSize: 11)) : null,
+        subtitle: !isDir ? Text(isSupported ? "Selectable Script" : "Unsupported ($name)", style: const TextStyle(color: Colors.white38, fontSize: 11)) : null,
         trailing: isDir ? const Icon(Icons.chevron_right, color: Colors.white24) : null,
         onTap: () async {
           if (isDir) {
@@ -199,13 +199,13 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.folder_open_rounded, size: 64, color: Colors.white10),
-          const SizedBox(height: 16),
-          const Text("This folder is empty", style: TextStyle(color: Colors.white24)),
+          SizedBox(height: 16),
+          Text("This folder is empty", style: TextStyle(color: Colors.white24)),
         ],
       ),
     );

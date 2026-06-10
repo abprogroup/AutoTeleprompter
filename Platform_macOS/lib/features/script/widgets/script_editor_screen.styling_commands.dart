@@ -3,12 +3,20 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
   List<MarkupController> _styleTargets() {
     final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
-    if (_isGlobalSelection || hasOverlay) {
+    final hasStructuredSelection = _isGlobalSelection ||
+        hasOverlay ||
+        _controllers.any((c) {
+          final external = c.externalSelection;
+          return c.isGlobalSelected ||
+              (external != null && external.isValid && !external.isCollapsed);
+        });
+    if (hasStructuredSelection) {
       final refined = _controllers
           .where((c) =>
-              c.externalSelection != null &&
-              c.externalSelection!.isValid &&
-              !c.externalSelection!.isCollapsed)
+              c.isGlobalSelected ||
+              (c.externalSelection != null &&
+                  c.externalSelection!.isValid &&
+                  !c.externalSelection!.isCollapsed))
           .toList();
       if (refined.isNotEmpty) return refined;
       return List.of(_controllers);
@@ -17,53 +25,84 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     return active == null ? <MarkupController>[] : [active];
   }
 
+  bool _hasWholeScriptSelection() {
+    if (_isGlobalSelection) return true;
+    if (_controllers.isEmpty) return false;
+    return _controllers.every((c) {
+      if (c.text.isEmpty) return true;
+      if (c.isGlobalSelected) return true;
+      final external = c.externalSelection;
+      return external != null &&
+          external.isValid &&
+          external.start <= 0 &&
+          external.end >= c.text.length;
+    });
+  }
+
   void _applyStyleCmd(String open, String close, String label) {
-    setState(() => _isCommandExecuting = true);
+    _restoreSelectionIfNeeded();
+    _setEditorState(() => _isCommandExecuting = true);
     final skipH = _activeSuite != EditorSuite.none;
     if (skipH) _trackSuiteSection('Style');
+
+    bool applyForcedToTargets(List<MarkupController> targets) {
+      final states = targets
+          .map((c) => selectionStyleState(open, close, controllerOverride: c))
+          .where((state) => state.visibleCount > 0)
+          .toList();
+      if (states.isEmpty) return false;
+      final enable = !states.every((state) => state.fullyStyled);
+
+      for (final c in targets) {
+        if (c.text.isEmpty) continue;
+        final hadSelection = c.externalSelection != null &&
+            c.externalSelection!.isValid &&
+            !c.externalSelection!.isCollapsed;
+        forceSelectionStyle(
+          open,
+          close,
+          enable: enable,
+          controllerOverride: c,
+          skipHistory: true,
+        );
+        if (hadSelection) {
+          final postSel = c.selection;
+          if (postSel.isValid && !postSel.isCollapsed) {
+            c.externalSelection = postSel;
+            c.refresh();
+          }
+        }
+      }
+      return true;
+    }
 
     if (_isGlobalSelection) {
       // Per-controller toggle: set full-block externalSelection on each,
       // temporarily disable global flag so the mixin uses single-controller path.
       _isGlobalSelection = false;
+      final targets = <MarkupController>[];
       for (final c in _controllers) {
         if (c.text.isEmpty) continue;
         c.externalSelection =
             TextSelection(baseOffset: 0, extentOffset: c.text.length);
-        wrapSelection(open, close, controllerOverride: c, skipHistory: true);
+        targets.add(c);
       }
+      applyForcedToTargets(targets);
       if (!skipH) _saveHistory(description: 'Global $label');
       _isGlobalSelection = true;
       _resyncGlobalSelection();
     } else {
       final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
       final targets = _styleTargets();
-      if (hasOverlay && targets.length > 1) {
+      if (hasOverlay && targets.length > 1 && applyForcedToTargets(targets)) {
         // v4.1.3: Apply style, then read c.selection synchronously.
         // wrapSelection sets controller.value (and thus c.selection) in the same
         // Dart call — iOS async platform resets only arrive at event-loop
         // boundaries, so the read is guaranteed correct before we return.
-        for (final c in targets) {
-          if (c.text.isEmpty) continue;
-          final hadSelection = c.externalSelection != null &&
-              c.externalSelection!.isValid &&
-              !c.externalSelection!.isCollapsed;
-          wrapSelection(open, close, controllerOverride: c, skipHistory: true);
-          if (hadSelection) {
-            final postSel = c.selection;
-            if (postSel.isValid && !postSel.isCollapsed) {
-              c.externalSelection = postSel;
-              c.refresh();
-            }
-          }
-        }
         _overlayKey.currentState
             ?.syncOffsetsFromExternalSelection(_controllers);
         if (!skipH) _saveHistory(description: 'Selection $label');
-      } else if (targets.length > 1) {
-        for (final c in targets) {
-          wrapSelection(open, close, controllerOverride: c, skipHistory: true);
-        }
+      } else if (targets.length > 1 && applyForcedToTargets(targets)) {
         if (!skipH) _saveHistory(description: 'Selection $label');
       } else if (targets.length == 1) {
         final c = targets.first;
@@ -74,7 +113,11 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
                 c.externalSelection!.isValid &&
                 !c.externalSelection!.isCollapsed) ||
             !c.selection.isCollapsed;
-        wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
+        if (!hadSel || !applyForcedToTargets([c])) {
+          wrapSelection(open, close, controllerOverride: c, skipHistory: skipH);
+        } else if (!skipH) {
+          _saveHistory(description: label);
+        }
         if (hadSel) {
           final postSel = c.selection;
           if (postSel.isValid && !postSel.isCollapsed) {
@@ -89,11 +132,11 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       }
     }
 
-    if (skipH) _isSuiteDirty = true;
+    if (skipH) _recordSuiteHistoryChange('Style');
     // Update cursor style BEFORE clearing _isCommandExecuting,
     // so _onSelectionChanged won't clear global selection prematurely.
     _onSelectionChanged();
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 
   void _onBold() => _applyStyleCmd('**', '**', 'Bold');
@@ -101,7 +144,14 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
   void _onItalic() => _applyStyleCmd('[i]', '[/i]', 'Italic');
 
   void _applyInlineCmd(String family, String open, String close, String label) {
-    setState(() => _isCommandExecuting = true);
+    final parameterValue = _inlineParameterValue(open, family);
+    if ((family == 'size' || family == 'font') && parameterValue != null) {
+      _applyParameterizedInlineCmd(family, parameterValue, label);
+      return;
+    }
+
+    _restoreSelectionIfNeeded();
+    _setEditorState(() => _isCommandExecuting = true);
     final skipH = _activeSuite != EditorSuite.none;
     // Section mapping: size → Font Size, font → Font Family, color → Text Color, bg → Highlight
     if (skipH) {
@@ -179,25 +229,123 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       }
     }
 
-    if (skipH) _isSuiteDirty = true;
+    if (skipH) {
+      final sectionMap = {
+        'size': 'Font Size',
+        'font': 'Font Family',
+        'color': 'Text Color',
+        'bg': 'Highlight'
+      };
+      _recordSuiteHistoryChange(sectionMap[family] ?? label);
+    }
     _onSelectionChanged();
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
+  }
+
+  String? _inlineParameterValue(String open, String family) {
+    final prefix = '[$family=';
+    if (!open.startsWith(prefix) || !open.endsWith(']')) return null;
+    return open.substring(prefix.length, open.length - 1);
+  }
+
+  void _applyParameterizedInlineCmd(
+    String family,
+    String value,
+    String label,
+  ) {
+    _restoreSelectionIfNeeded();
+    _setEditorState(() => _isCommandExecuting = true);
+
+    final inSuite = _activeSuite != EditorSuite.none;
+    if (inSuite) {
+      _trackSuiteSection(label);
+    }
+
+    var changed = false;
+    final wasGlobalSelection = _isGlobalSelection;
+    final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+
+    List<MarkupController> targets;
+    if (wasGlobalSelection) {
+      _isGlobalSelection = false;
+      targets = <MarkupController>[];
+      for (final c in _controllers) {
+        if (c.text.isEmpty) continue;
+        c.externalSelection =
+            TextSelection(baseOffset: 0, extentOffset: c.text.length);
+        c.externalVisibleSelection = TextSelection(
+          baseOffset: 0,
+          extentOffset: MarkupDecorationParser.visibleText(c.text).length,
+        );
+        targets.add(c);
+      }
+    } else {
+      targets = _styleTargets();
+    }
+
+    for (final c in targets) {
+      if (c.text.isEmpty) continue;
+      final external = c.externalSelection;
+      final selection =
+          external != null && external.isValid && !external.isCollapsed
+              ? external
+              : c.selection;
+      if (!selection.isValid || selection.isCollapsed) continue;
+
+      final nextValue = EditorInlineStyleOperation.applyParameterized(
+        text: c.text,
+        selection: selection,
+        family: family,
+        value: value,
+      );
+      if (nextValue.text == c.text && nextValue.selection == c.selection) {
+        continue;
+      }
+      c.value = nextValue;
+      if (nextValue.selection.isValid && !nextValue.selection.isCollapsed) {
+        c.externalSelection = nextValue.selection;
+        c.externalVisibleSelection =
+            MarkupDecorationParser.rawToVisibleSelection(
+          c.text,
+          nextValue.selection,
+        );
+      }
+      c.refresh();
+      changed = true;
+    }
+
+    if (wasGlobalSelection) {
+      _isGlobalSelection = true;
+      _resyncGlobalSelection();
+    } else if (hasOverlay) {
+      _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
+    }
+
+    if (changed && inSuite) {
+      _recordSuiteHistoryChange(label);
+    } else if (changed) {
+      _commitHistory(targets.length > 1 ? 'Selection $label' : label);
+    }
+    _onSelectionChanged();
+    _setEditorState(() => _isCommandExecuting = false);
   }
 
   void onDirection(String dir) {
-    setState(() => _isCommandExecuting = true);
+    _restoreSelectionIfNeeded();
+    _setEditorState(() => _isCommandExecuting = true);
     final inSuite = _activeSuite != EditorSuite.none;
     if (inSuite) _trackSuiteSection('Alignment');
 
-    if (_isGlobalSelection) {
-      broadcastAlign(dir, open: '[$dir]', close: '[/$dir]');
+    if (_hasWholeScriptSelection()) {
+      _isGlobalSelection = true;
+      broadcastDirection(dir, open: '[$dir]', close: '[/$dir]');
       _resyncGlobalSelection();
     } else {
       final targets = _styleTargets();
       for (final controller in targets) {
-        // v4.1.3: Alignment strips/replaces the outer tag, shifting all raw
-        // offsets by the tag-length delta. Capture visual offsets (invariant
-        // to tag changes) before applying, then re-pin externalSelection after.
+        // Direction strips/replaces only RTL/LTR tags, shifting raw offsets by
+        // the tag-length delta. Capture visual offsets before applying, then
+        // re-pin externalSelection after.
         final hadSel = controller.externalSelection != null &&
             controller.externalSelection!.isValid &&
             !controller.externalSelection!.isCollapsed;
@@ -209,10 +357,11 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
             ? MarkupController.rawToVisualOffset(
                 controller.text, controller.externalSelection!.end)
             : 0;
+        final selection =
+            hadSel ? controller.externalSelection! : controller.selection;
         controller.value = TextEditingValue(
-          text: StylingService.applyLayout(
-              controller.text, controller.selection, dir),
-          selection: TextSelection.collapsed(offset: 0),
+          text: StylingService.applyDirection(controller.text, selection, dir),
+          selection: const TextSelection.collapsed(offset: 0),
         );
         if (hadSel) {
           final newStart =
@@ -233,24 +382,28 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     }
 
     if (inSuite) {
-      _isSuiteDirty = true;
+      _recordSuiteHistoryChange('Direction: $dir');
     } else {
       _commitHistory('Direction: $dir');
     }
     _onSelectionChanged();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(cursorStyleProvider.notifier).state =
+          ref.read(cursorStyleProvider).copyWith(textDirection: dir);
       _overlayKey.currentState?.refreshPositions();
     });
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 
   void onAlign(String align) {
-    setState(() => _isCommandExecuting = true);
+    _restoreSelectionIfNeeded();
+    _setEditorState(() => _isCommandExecuting = true);
     final inSuite = _activeSuite != EditorSuite.none;
     if (inSuite) _trackSuiteSection('Alignment');
 
-    if (_isGlobalSelection) {
+    if (_hasWholeScriptSelection()) {
+      _isGlobalSelection = true;
       broadcastAlign(align, open: '[align=$align]', close: '[/align=$align]');
       _resyncGlobalSelection();
     } else {
@@ -268,10 +421,11 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
             ? MarkupController.rawToVisualOffset(
                 controller.text, controller.externalSelection!.end)
             : 0;
+        final selection =
+            hadSel ? controller.externalSelection! : controller.selection;
         controller.value = TextEditingValue(
-          text: StylingService.applyLayout(
-              controller.text, controller.selection, align),
-          selection: TextSelection.collapsed(offset: 0),
+          text: StylingService.applyLayout(controller.text, selection, align),
+          selection: const TextSelection.collapsed(offset: 0),
         );
         if (hadSel) {
           final newStart =
@@ -292,7 +446,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     }
 
     if (inSuite) {
-      _isSuiteDirty = true;
+      _recordSuiteHistoryChange('Align: $align');
     } else {
       _commitHistory('Align: $align');
     }
@@ -308,11 +462,43 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
           ref.read(cursorStyleProvider).copyWith(textAlign: align);
       _overlayKey.currentState?.refreshPositions();
     });
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 
-  void onFontSize(int size) {
-    _applyGlobalFontSize(size.toDouble());
+  bool _hasActiveTextSelection() {
+    if (_isGlobalSelection) return true;
+    if (_overlayKey.currentState?.hasSelection ?? false) return true;
+    for (final c in _controllers) {
+      final external = c.externalSelection;
+      if (external != null && external.isValid && !external.isCollapsed) {
+        return true;
+      }
+    }
+    final active = _activeController;
+    return active != null &&
+        active.selection.isValid &&
+        !active.selection.isCollapsed;
+  }
+
+  String _formatInlineSize(double size) {
+    final clamped = size.clamp(1.0, 300.0).toDouble();
+    if ((clamped - clamped.roundToDouble()).abs() < 0.001) {
+      return clamped.round().toString();
+    }
+    return clamped.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  void onFontSize(double size) {
+    if (_hasActiveTextSelection()) {
+      final formatted = _formatInlineSize(size);
+      _applyInlineCmd('size', '[size=$formatted]', '[/size]', 'Font Size');
+      if (mounted) {
+        ref.read(cursorStyleProvider.notifier).state =
+            ref.read(cursorStyleProvider).copyWith(fontSize: size.round());
+      }
+      return;
+    }
+    _applyGlobalFontSize(size);
   }
 
   Future<void> _applyGlobalFontSize(double size) async {
@@ -320,7 +506,6 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     final inSuite = _activeSuite != EditorSuite.none;
     if (inSuite) {
       _trackSuiteSection('Font Size');
-      _isSuiteDirty = true;
     }
     await ref.read(settingsProvider.notifier).setFontSize(clamped);
     await ref.read(scriptProvider.notifier).updateStyleMetadata(
@@ -330,15 +515,47 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     ref.read(cursorStyleProvider.notifier).state =
         ref.read(cursorStyleProvider).copyWith(fontSize: clamped.round());
     if (inSuite) {
-      _scheduleRecentUpdate();
+      _recordSuiteHistoryChange('Font Size');
     } else {
       _commitHistory('Font Size');
     }
     _onSelectionChanged();
   }
 
-  void onFontFamily(String family) =>
-      _applyInlineCmd('font', '[font=$family]', '[/font]', 'Font Family');
+  Future<void> _applyGlobalFontFamily(String family) async {
+    final clean = family.trim().isEmpty ? 'Inter' : family.trim();
+    final inSuite = _activeSuite != EditorSuite.none;
+    if (inSuite) {
+      _trackSuiteSection('Font Family');
+    }
+    await ref.read(settingsProvider.notifier).setFontFamily(clean);
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          fontFamily: clean,
+        );
+    if (!mounted) return;
+    ref.read(cursorStyleProvider.notifier).state =
+        ref.read(cursorStyleProvider).copyWith(fontFamily: clean);
+    if (inSuite) {
+      _recordSuiteHistoryChange('Font Family');
+    } else {
+      _commitHistory('Font Family');
+    }
+    _onSelectionChanged();
+  }
+
+  void onFontFamily(String family) {
+    final escaped = family.trim().replaceAll(']', '');
+    if (escaped.isEmpty) return;
+    if (_hasActiveTextSelection()) {
+      _applyInlineCmd('font', '[font=$escaped]', '[/font]', 'Font Family');
+      if (mounted) {
+        ref.read(cursorStyleProvider.notifier).state =
+            ref.read(cursorStyleProvider).copyWith(fontFamily: escaped);
+      }
+      return;
+    }
+    _applyGlobalFontFamily(escaped);
+  }
 
   /// Restore the selection that was active before a dialog stole focus.
   /// Color picker dialogs cause the TextField to lose focus, collapsing the
@@ -346,12 +563,30 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
   void _restoreSelectionIfNeeded() {
     final c = _activeController;
     if (c == null) return;
+    if (c.externalSelection != null &&
+        c.externalSelection!.isValid &&
+        !c.externalSelection!.isCollapsed) {
+      return;
+    }
     if (c.selection.isCollapsed &&
+        identical(c, _lastFocusedController) &&
         _preservedSelection != null &&
         !_preservedSelection!.isCollapsed) {
       final sel = _preservedSelection!;
       if (sel.end <= c.text.length) {
         c.selection = sel;
+        final blockIndex = _controllers.indexOf(c);
+        if (blockIndex >= 0) {
+          _overlayKey.currentState?.extendNativeBlockSelection(
+            blockIndex,
+            sel,
+            allowFullBlock: true,
+          );
+        } else {
+          c.externalSelection = sel;
+          c.externalVisibleSelection = null;
+          c.refresh();
+        }
       }
     }
   }
@@ -366,8 +601,10 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       return;
     }
     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0xFFFFBF00);
-    setState(() => _lastChosenTextColor = color);
-    ref.read(settingsProvider.notifier).setLastChosenTextColor(color.value);
+    _setEditorState(() => _lastChosenTextColor = color);
+    ref
+        .read(settingsProvider.notifier)
+        .setLastChosenTextColor(color.toARGB32());
     _restoreSelectionIfNeeded();
     _applyInlineCmd('color', '[color=#$cleanHex]', '[/color]', 'Text Color');
   }
@@ -382,17 +619,20 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       return;
     }
     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0x00FFFFFF);
-    setState(() => _lastChosenHighlightColor = color);
+    _setEditorState(() => _lastChosenHighlightColor = color);
     ref
         .read(settingsProvider.notifier)
-        .setLastChosenHighlightColor(color.value);
+        .setLastChosenHighlightColor(color.toARGB32());
     _restoreSelectionIfNeeded();
     _applyInlineCmd('bg', '[bg=#$cleanHex]', '[/bg]', 'Highlight Color');
   }
 
   /// Remove all tags of a given family from the selection (used when "none" color is chosen).
   void _removeInlineTags(String family, String close) {
-    setState(() => _isCommandExecuting = true);
+    _restoreSelectionIfNeeded();
+    _setEditorState(() => _isCommandExecuting = true);
+    final inSuite = _activeSuite != EditorSuite.none;
+    if (inSuite) _trackSuiteSection('Remove $family');
     final openPattern = RegExp(r'\[' + family + r'=[^\]]*\]');
 
     if (_isGlobalSelection) {
@@ -401,7 +641,11 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
         if (c.text.isEmpty) continue;
         c.text = c.text.replaceAll(openPattern, '').replaceAll(close, '');
       }
-      _saveHistory(description: 'Remove $family');
+      if (inSuite) {
+        _recordSuiteHistoryChange('Remove $family');
+      } else {
+        _saveHistory(description: 'Remove $family');
+      }
       _isGlobalSelection = true;
       _resyncGlobalSelection();
     } else {
@@ -449,9 +693,15 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
           );
         }
       }
-      if (targets.isNotEmpty) _saveHistory(description: 'Remove $family');
+      if (targets.isNotEmpty) {
+        if (inSuite) {
+          _recordSuiteHistoryChange('Remove $family');
+        } else {
+          _saveHistory(description: 'Remove $family');
+        }
+      }
     }
     _onSelectionChanged();
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 }

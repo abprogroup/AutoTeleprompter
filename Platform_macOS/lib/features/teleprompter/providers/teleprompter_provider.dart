@@ -2,8 +2,12 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
+import '../services/stt_recognition_policy_service.dart';
+import '../services/stt_visible_relock_service.dart';
+import '../services/teleprompter_locale_resolver.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
 import '../../script/models/script_word.dart';
@@ -14,6 +18,7 @@ import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../platform/stt/stt_service_factory.dart';
 
 part 'teleprompter_provider.session_parts.dart';
+part 'teleprompter_provider.stt_callbacks.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final AbstractSttService _sttService;
@@ -42,13 +47,24 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   DateTime? _visibleLocaleAssistPinnedUntil;
   String? _visibleLocaleAssistPinnedLocale;
   String? _pendingVisibleLocaleAssistLocale;
+  bool _sttReadingStandby = false;
+  String _lastRelockScope = 'none';
+  int? _sequentialSttBaseIndex;
+  int? _sequentialSttEndIndex;
+  double _sequentialSttEvidence = 0.0;
+  bool _sequentialSttUnlocked = false;
+  String? _sequentialSttLastToken;
+  DateTime? _sequentialSttLastTokenAt;
+  bool _stateFailureDiagnosticRecorded = false;
 
-  // â”€â”€ Tuning: how patient we are before force-skipping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  static const int _googleSkipAfterStuck = 45;
-  static const int _whisperSkipAfterStuck = 10;
-  static const int _strictBulletWaitLogThreshold = 9999;
+  // STT tuning
   static const int _maxAdvancePerUpdate = 30;
   static const int _visibleLocaleAssistAfterWaits = 2;
+  static const int _sttLiveAlignmentWindowWords = 10;
+  static const int _sttAlignmentWindowWords = 18;
+  static const int _sttRelockTranscriptMaxWords = 96;
+  static const int _stuckRelockAfterWaits = 10;
+  static const int _relaxedVisibleRelockAfterWaits = 24;
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
@@ -57,6 +73,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   @override
   TeleprompterState build() {
     _disposed = false;
+    _stateFailureDiagnosticRecorded = false;
     _sttService = SttServiceFactory.create();
     _whisperService = WhisperSpeechService();
     _remoteControlService = ref.read(remoteControlProvider);
@@ -87,17 +104,54 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     try {
       final current = state;
       state = updater(current);
-    } catch (_) {
+    } catch (e, stack) {
+      _recordStateFailureDiagnostic('safeSetState', e, stack);
       _disposed = true;
     }
   }
+
+  /// Writes state guarded only by disposal — used by session-control methods
+  /// (start/stop/reset/jump/device refresh) that must apply even after the
+  /// session is stopped (e.g. clearing isListening on stop, or moving the
+  /// resume point while browsing stopped). Lives in the class so extension
+  /// parts never touch the protected `state` member directly.
+  void _writeState(TeleprompterState Function(TeleprompterState) updater) {
+    if (_disposed) return;
+    try {
+      state = updater(state);
+    } catch (e, stack) {
+      _recordStateFailureDiagnostic('writeState', e, stack);
+      _disposed = true;
+    }
+  }
+
+  void _recordStateFailureDiagnostic(
+    String source,
+    Object error,
+    StackTrace stack,
+  ) {
+    if (_stateFailureDiagnosticRecorded) return;
+    _stateFailureDiagnosticRecorded = true;
+    LightweightDiagnostics.instance.recordError(
+      error,
+      stack,
+      source: 'teleprompterProvider.$source',
+    );
+  }
+
+  TeleprompterState get _currentState => state;
 
   void _addDebugLog(String log) {
     if (_disposed) return;
     try {
       final settings = ref.read(settingsProvider);
       if (!settings.debugMode) return;
-    } catch (_) {
+    } catch (e, stack) {
+      LightweightDiagnostics.instance.recordError(
+        e,
+        stack,
+        source: 'teleprompterProvider.debugModeRead',
+      );
       return;
     }
     final now = DateTime.now();
@@ -109,290 +163,102 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _safeSetState((s) => s.copyWith(debugLogs: logs));
   }
 
-  /// Common handler for STT results â€” shared between Google and Whisper
-  void _handleSttResult(SpeechResult result) {
-    if (_currentScript == null || _disposed) return;
-    _safeSetState((s) => s.copyWith(isStarting: false));
+  static bool _isEnglishLocale(String locale) =>
+      SttRecognitionPolicyService.isEnglishLocale(locale);
 
-    final words = result.words.toLowerCase();
-    try {
-      final settings = ref.read(settingsProvider);
-
-      // Voice Commands
-      if (words.contains('stop prompt') ||
-          words.contains('×¢×¦×•×¨') ||
-          words.contains('×¢×¦×™×¨×”')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: STOP');
-        ref.read(settingsProvider.notifier).setScrollSpeed(0);
-        return;
-      } else if (words.contains('start prompt') || words.contains('×‘×•×')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: START');
-        if (settings.scrollSpeed == 0) {
-          ref.read(settingsProvider.notifier).setScrollSpeed(100);
-        }
-        return;
-      } else if (words.contains('speed up') || words.contains('×ž×”×¨')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: FASTER');
-        ref
-            .read(settingsProvider.notifier)
-            .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
-        return;
-      } else if (words.contains('slow down') || words.contains('×œ××˜')) {
-        _addDebugLog('ðŸ—£ï¸ VOICE COMMAND: SLOWER');
-        ref
-            .read(settingsProvider.notifier)
-            .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
-        return;
-      }
-    } catch (_) {}
-
-    _accumulatedTranscript = result.words;
-    final script = _currentScript!;
-    final settings = ref.read(settingsProvider);
-    final strictBulletMode = settings.sttStrictBulletMode;
-    final maxSkipTargetIndex = resolveVisibleSkipTarget(
-      visibleSkipEnabled: settings.sttVisibleSkipEnabled,
-      strictBulletMode: strictBulletMode,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: _visibleWordEnd,
-    );
-
-    final aligned = WordAligner.align(
-      script: script.words,
-      transcript: _accumulatedTranscript,
-      lastConfirmedIndex: state.confirmedWordIndex,
-      visibleSkipStartIndex:
-          maxSkipTargetIndex == null ? null : _visibleWordStart,
-      maxSkipTargetIndex: maxSkipTargetIndex,
-      strictBulletMode: strictBulletMode,
-    );
-
-    final currentIdx = state.confirmedWordIndex;
-    final nextExpected = (currentIdx + 1 < script.words.length)
-        ? script.words
-            .skip(currentIdx + 1)
-            .where((w) => !w.isNewline)
-            .take(3)
-            .map((w) => w.raw)
-            .join(' ')
-        : '<END>';
-
-    final engineTag = _useWhisper ? 'ðŸ¤–' : 'ðŸŽ¤';
-    final forceSkipEnabled = !strictBulletMode;
-    final skipThreshold = forceSkipEnabled
-        ? (_useWhisper ? _whisperSkipAfterStuck : _effectiveSkipThreshold())
-        : _strictBulletWaitLogThreshold;
-    if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
-      _noProgressCount = 0;
-      _resetVisibleLocaleAssist();
-      final visibleSkipTargetTrusted = isTrustedVisibleSkipTarget(
-        alignedIndex: aligned.confirmedWordIndex,
-        visibleWordStart: _visibleWordStart,
-        visibleWordEnd: _visibleWordEnd,
-      );
-      final target = resolveAdvanceTarget(
-        currentIndex: state.confirmedWordIndex,
-        alignedIndex: aligned.confirmedWordIndex,
-        visibleMaxSkipTargetIndex:
-            visibleSkipTargetTrusted ? maxSkipTargetIndex : null,
-      );
-      final advancedWord =
-          target < script.words.length ? script.words[target].raw : '?';
-      _addDebugLog(
-          '$engineTag âœ… ADVANCE â†’ #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
-
-      // Fluid advancement: if jumping more than 3 words, animate
-      // through intermediate words so the user's eye can follow.
-      final jump = target - state.confirmedWordIndex;
-      if (visibleSkipTargetTrusted || jump <= 3) {
-        // Small jumps and trusted visible-skip targets are instant.
-        _fluidAdvanceTimer?.cancel();
-        _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
-      } else {
-        // Large jump â€” advance word by word with short delays
-        _startFluidAdvance(target, script);
-      }
-      _syncLocaleForPosition(script, target + 1, reason: 'advance');
-    } else {
-      final improvising = shouldUseImprovisationNoMatch(
-        strictBulletMode: strictBulletMode,
-        alignedIndex: aligned.confirmedWordIndex,
-        currentIndex: state.confirmedWordIndex,
-      );
-      _noProgressCount++;
-      if (improvising) {
-        _addDebugLog(
-            '$engineTag IMPROVISING | heard: "${result.words}" | visible relock waiting');
-      } else {
-        _addDebugLog(
-            '$engineTag â¸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
-        _checkAndSwitchLocale();
-      }
-
-      if (_maybeAssistVisibleLocale(script, settings, result.words)) {
-        return;
-      }
-
-      if (shouldForceSkipAfterNoProgress(
-        strictBulletMode: strictBulletMode,
-        noProgressCount: _noProgressCount,
-        skipThreshold: skipThreshold,
-      )) {
-        _noProgressCount = 0;
-        final next = _nextRealWord(state.confirmedWordIndex, script);
-        if (next != null) {
-          final skippedWord = script.words[next].raw;
-          _addDebugLog(
-              'ðŸ¤– â­ FORCE SKIP â†’ #$next "$skippedWord" (stuck too long)');
-          _resetVisibleLocaleAssist();
-          _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
-          _syncLocaleForPosition(script, next + 1, reason: 'force skip');
-        }
-      }
-    }
+  static bool shouldUseWindowsOfflineSpeech({
+    required AppSettings settings,
+    required String initialLocale,
+    required List<String> sectionLocales,
+  }) {
+    final engine = AppSettings.normalizeSttEngine(settings.sttEngine);
+    if (engine == AppSettings.sttEngineWindowsOffline) return true;
+    if (engine != AppSettings.sttEngineAuto) return false;
+    return _isEnglishLocale(initialLocale) &&
+        sectionLocales.isNotEmpty &&
+        sectionLocales.every(_isEnglishLocale);
   }
 
-  void _setupSttCallbacks() {
-    final platform = _sttService.platformName;
-
-    _sttService.onResult = (result) {
-      if (_disposed || _sessionStopped) return;
-      _lastVolLog = DateTime.now();
-      _handleSttResult(result);
-    };
-
-    _sttService.onSoundLevelChange = (level) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      // Push live level to UI state.
-      _safeSetState(
-        (s) => s.copyWith(soundLevel: _normalizeSoundLevel(level)),
+  static List<String> rollingTranscriptWindowsForAlignment(
+    String transcript, {
+    int windowWords = _sttAlignmentWindowWords,
+    int maxWindows = 6,
+  }) =>
+      SttRecognitionPolicyService.rollingTranscriptWindowsForAlignment(
+        transcript,
+        windowWords: windowWords,
+        maxWindows: maxWindows,
       );
-      _lastVolLog = DateTime.now();
-    };
 
-    _sttService.onDiagnostic = (msg) {
-      if (_disposed) return;
-      _addDebugLog(msg);
-    };
-
-    _sttService.onAudioInputDevicesChanged = (devices) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      _safeSetState((s) => s.copyWith(audioInputDevices: devices));
-
-      final selectedId = ref.read(settingsProvider).sttInputDeviceId;
-      if (selectedId.isEmpty) return;
-      for (final device in devices) {
-        if (device.id == selectedId) {
-          final currentLabel = ref.read(settingsProvider).sttInputDeviceLabel;
-          if (device.label.isNotEmpty && device.label != currentLabel) {
-            ref
-                .read(settingsProvider.notifier)
-                .setSttInputDevice(device.id, device.label);
-          }
-          return;
-        }
-      }
-      _addDebugLog(
-          'ðŸŽ™ï¸ Selected microphone was not found; using system default input.');
-    };
-
-    _sttService.onStatusChange = (status) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      // Ignore non-listening statuses during the start-up guard window.
-      // This prevents stale async 'notListening' from the previous stop()
-      // from resetting isListening=false right after the new session starts.
-      if (_startingSession && status != SpeechStatus.listening) return;
-      _startingSession = false;
-      _addDebugLog('ðŸŽ¤ [${_sttService.platformName}] STATUS: $status');
-      _safeSetState((s) => s.copyWith(
-            isListening: status == SpeechStatus.listening,
-            isStarting: false,
-            statusMessage: '',
-            hasError: false,
-          ));
-    };
-
-    _sttService.onError = (error) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('ðŸŽ¤ [${_sttService.platformName}] STT ERROR: $error');
-      if (error.contains('error_language')) return;
-      final isFatal = error.contains('error_audio') ||
-          error.contains('error_permission') ||
-          error.contains('not available') ||
-          error.contains('error_unknown');
-      _safeSetState((s) => s.copyWith(
-            statusMessage: isFatal ? error : '',
-            hasError: isFatal,
-            isListening: isFatal ? false : s.isListening,
-            isStarting: isFatal ? false : s.isStarting,
-          ));
-    };
-
-    _sttService.onLanguageUnavailable = (requestedLocale) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      final langName = SpeechStartResult.languageNameFromLocale(
-        _scriptLanguageLocale ?? requestedLocale,
+  static List<String> liveTranscriptWindowsForAlignment(
+    String transcript, {
+    int shortWindowWords = _sttLiveAlignmentWindowWords,
+    int longWindowWords = _sttAlignmentWindowWords,
+    int maxWindows = 8,
+  }) =>
+      SttRecognitionPolicyService.liveTranscriptWindowsForAlignment(
+        transcript,
+        shortWindowWords: shortWindowWords,
+        longWindowWords: longWindowWords,
+        maxWindows: maxWindows,
       );
-      _addDebugLog('ðŸŽ¤ [$platform] LANGUAGE UNAVAILABLE: $langName');
-      _safeSetState((s) => s.copyWith(
-            missingLanguage: langName,
-            hasError: true,
-            isListening: false,
-            isStarting: false,
-            statusMessage:
-                'Speech recognition language not installed on this device',
-          ));
-    };
 
-    // Android-only: fires when offline + cloud STT both fail for a language.
-    // On Apple/Windows this callback is never invoked.
-    _sttService.onNeedLanguagePack = (locale) {
-      if (_useWhisper || _disposed || _sessionStopped) return;
-      final langName = SpeechStartResult.languageNameFromLocale(locale);
-      _addDebugLog(
-          'ðŸŽ¤ [$platform] ALL STT FAILED for $langName â€” internet required');
-      _safeSetState((s) => s.copyWith(
-            hasError: true,
-            isListening: false,
-            isStarting: false,
-            statusMessage:
-                '$langName speech recognition requires an internet connection. '
-                'This language is not available offline on your device. '
-                'Please connect to WiFi or mobile data and try again.',
-          ));
-    };
-  }
+  static String capTranscriptForRelock(
+    String transcript, {
+    int maxWords = _sttRelockTranscriptMaxWords,
+  }) =>
+      SttRecognitionPolicyService.capTranscriptWords(
+        transcript,
+        maxWords: maxWords,
+      );
 
   static int resolveAdvanceTarget({
     required int currentIndex,
     required int alignedIndex,
     required int? visibleMaxSkipTargetIndex,
-  }) {
-    if (visibleMaxSkipTargetIndex != null &&
-        alignedIndex <= visibleMaxSkipTargetIndex) {
-      return alignedIndex;
-    }
-    return alignedIndex
-        .clamp(currentIndex, currentIndex + _maxAdvancePerUpdate)
-        .toInt();
-  }
+  }) =>
+      SttRecognitionPolicyService.resolveAdvanceTarget(
+        currentIndex: currentIndex,
+        alignedIndex: alignedIndex,
+        visibleMaxSkipTargetIndex: visibleMaxSkipTargetIndex,
+        maxAdvancePerUpdate: _maxAdvancePerUpdate,
+      );
 
   static bool shouldForceSkipAfterNoProgress({
     required bool strictBulletMode,
     required int noProgressCount,
     required int skipThreshold,
-  }) {
-    if (strictBulletMode) return false;
-    if (skipThreshold <= 0) return false;
-    return noProgressCount >= skipThreshold;
-  }
+  }) =>
+      SttRecognitionPolicyService.shouldForceSkipAfterNoProgress(
+        strictBulletMode: strictBulletMode,
+        noProgressCount: noProgressCount,
+        skipThreshold: skipThreshold,
+      );
 
   static bool shouldUseImprovisationNoMatch({
     required bool strictBulletMode,
     required int alignedIndex,
     required int currentIndex,
+  }) =>
+      SttRecognitionPolicyService.shouldUseImprovisationNoMatch(
+        strictBulletMode: strictBulletMode,
+        alignedIndex: alignedIndex,
+        currentIndex: currentIndex,
+      );
+
+  static SttRecognitionPolicy recognitionPolicyForSettings(
+    AppSettings settings,
+  ) =>
+      SttRecognitionPolicyService.recognitionPolicyForSettings(settings);
+
+  static int nextNoProgressCount({
+    required int currentCount,
+    required bool improvising,
+    required int visibleAssistThreshold,
   }) {
-    return strictBulletMode && alignedIndex <= currentIndex;
+    final next = currentCount + 1;
+    if (!improvising) return next;
+    return next.clamp(0, visibleAssistThreshold).toInt();
   }
 
   static int? resolveVisibleSkipTarget({
@@ -401,7 +267,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     required int? visibleWordStart,
     required int? visibleWordEnd,
   }) {
-    if (!(visibleSkipEnabled || strictBulletMode)) return null;
+    if (!visibleSkipEnabled) return null;
     if (visibleWordStart == null) return null;
     return visibleWordEnd;
   }
@@ -428,45 +294,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     required int visibleEnd,
     required int currentIndex,
   }) {
-    if (words.isEmpty || sectionLocales.length != words.length) return false;
-    final start = visibleStart.clamp(0, words.length - 1).toInt();
-    final end = visibleEnd.clamp(start, words.length - 1).toInt();
-    final minIndex = (currentIndex + 1).clamp(0, end).toInt();
-    final scanStart = start < minIndex ? minIndex : start;
-    if (scanStart > end) return false;
-
-    final visible = <String>[];
-    for (var i = scanStart; i <= end; i++) {
-      final word = words[i];
-      if (word.isNewline || word.normalized.isEmpty) continue;
-      if (sectionLocales[i] != locale) continue;
-      visible.add(word.normalized.normalizeForMatching());
-    }
-    if (visible.isEmpty) return false;
-
-    final spoken = transcript
-        .split(RegExp(r'\s+'))
-        .map((w) => w.trim().normalizeForMatching())
-        .where((w) => w.isNotEmpty)
-        .toList();
-    if (spoken.isEmpty) return false;
-
-    var usefulMatches = 0;
-    for (final spokenWord in spoken) {
-      if (_visibleAssistStopWords.contains(spokenWord)) continue;
-      var best = 0.0;
-      for (final visibleWord in visible) {
-        final sim = spokenWord.similarity(visibleWord);
-        if (sim > best) best = sim;
-      }
-      if (best >= 0.92 && spokenWord.length >= 4) {
-        usefulMatches++;
-      }
-      if (best >= 0.96 && spokenWord.length >= 6) {
-        return true;
-      }
-    }
-    return usefulMatches >= 2;
+    return TeleprompterLocaleResolver.visibleTranscriptPlausiblyMatchesLocale(
+      words: words,
+      sectionLocales: sectionLocales,
+      locale: locale,
+      transcript: transcript,
+      visibleStart: visibleStart,
+      visibleEnd: visibleEnd,
+      currentIndex: currentIndex,
+    );
   }
 
   static bool shouldBlockLocaleSyncDuringAssistPin({
@@ -476,130 +312,387 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     required DateTime? pinnedUntil,
     required DateTime now,
   }) {
-    if (pinnedLocale == null || pinnedUntil == null) return false;
-    if (!now.isBefore(pinnedUntil)) return false;
-    return pinnedLocale == activeLocale || pinnedLocale == scriptLocale;
+    return TeleprompterLocaleResolver.shouldBlockLocaleSyncDuringAssistPin(
+      pinnedLocale: pinnedLocale,
+      activeLocale: activeLocale,
+      scriptLocale: scriptLocale,
+      pinnedUntil: pinnedUntil,
+      now: now,
+    );
   }
 
-  static const Set<String> _visibleAssistStopWords = {
-    'a',
-    'an',
-    'and',
-    'at',
-    'for',
-    'in',
-    'is',
-    'of',
-    'or',
-    'the',
-    'to',
-    'we',
-    'you',
-  };
+  static String? _explicitLocaleForWord(ScriptWord word) =>
+      TeleprompterLocaleResolver.explicitLocaleForWord(word);
 
-  /// Current v4 metadata safely resolves Hebrew/RTL and English/LTR only.
-  /// Universal same-script language support belongs to the v5 language MVP.
-  static String? _strongLocaleForWord(ScriptWord word) {
-    if (word.isNewline) return null;
-    final visible = word.raw.replaceAll(RegExp(r'\[[^\]]+\]|\*\*'), '');
-    if (RegExp(r'[\u0590-\u05FF]').hasMatch(visible)) return 'he_IL';
-    if (RegExp(r'[A-Za-z]').hasMatch(visible)) return 'en_US';
-    return null;
+  static String? _strongLocaleForWord(ScriptWord word) =>
+      _explicitLocaleForWord(word);
+
+  static bool _wordCarriesLanguage(ScriptWord word) =>
+      TeleprompterLocaleResolver.wordCarriesLanguage(word);
+
+  static List<String> resolveSectionLocalesForWords(List<ScriptWord> words) =>
+      TeleprompterLocaleResolver.resolveSectionLocalesForWords(words);
+
+  static List<String> resolveSttSectionLocalesForWords(List<ScriptWord> words) =>
+      resolveSectionLocalesForWords(words);
+
+  static String resolveInitialSttLocale(
+    List<ScriptWord> words, {
+    int startIndex = 0,
+    List<String>? sectionLocales,
+  }) {
+    return TeleprompterLocaleResolver.resolveInitialSttLocale(
+      words,
+      startIndex: startIndex,
+      sectionLocales: sectionLocales,
+    );
   }
 
-  static String _fallbackLocaleForWords(List<ScriptWord> words) {
-    var hebrew = 0;
-    var english = 0;
-    for (final word in words) {
-      final locale = _strongLocaleForWord(word);
-      if (locale == 'he_IL') hebrew++;
-      if (locale == 'en_US') english++;
-    }
-    return hebrew > english ? 'he_IL' : 'en_US';
-  }
-
-  static List<String> resolveSttSectionLocalesForWords(
+  static String resolveInitialSttLocaleForSettings(
     List<ScriptWord> words,
-  ) {
-    const minSectionWords = 3;
-    if (words.isEmpty) return [];
-
-    final fallback = _fallbackLocaleForWords(words);
-    final realWords =
-        words.where((w) => !w.isNewline && w.normalized.isNotEmpty).toList();
-    if (realWords.isEmpty) return [];
-
-    final raw = realWords.map(_strongLocaleForWord).toList();
-    for (var i = 0; i < raw.length; i++) {
-      if (raw[i] != null) continue;
-
-      String? previous;
-      for (var p = i - 1; p >= 0; p--) {
-        if (raw[p] != null) {
-          previous = raw[p];
-          break;
-        }
-      }
-
-      String? next;
-      for (var n = i + 1; n < raw.length; n++) {
-        if (raw[n] != null) {
-          next = raw[n];
-          break;
-        }
-      }
-
-      raw[i] = previous ?? next ?? fallback;
-    }
-
-    final smoothed = raw.map((locale) => locale ?? fallback).toList();
-    var changed = true;
-    while (changed) {
-      changed = false;
-      var i = 0;
-      while (i < smoothed.length) {
-        final locale = smoothed[i];
-        final runStart = i;
-        while (i < smoothed.length && smoothed[i] == locale) {
-          i++;
-        }
-        final runLen = i - runStart;
-        if (runLen < minSectionWords) {
-          final inherit = runStart > 0
-              ? smoothed[runStart - 1]
-              : (i < smoothed.length ? smoothed[i] : locale);
-          if (inherit != locale) {
-            for (var j = runStart; j < i; j++) {
-              smoothed[j] = inherit;
-            }
-            changed = true;
-          }
-        }
-      }
-    }
-
-    final resolved = <String>[];
-    var realIndex = 0;
-    for (final word in words) {
-      if (word.isNewline || word.normalized.isEmpty) {
-        resolved.add(resolved.isNotEmpty ? resolved.last : fallback);
-      } else {
-        resolved.add(
-          realIndex < smoothed.length ? smoothed[realIndex] : fallback,
+    AppSettings settings, {
+    int startIndex = 0,
+    List<String>? sectionLocales,
+  }) {
+    switch (AppSettings.normalizeLanguageMode(settings.languageMode)) {
+      case AppSettings.languageModeHebrew:
+        return 'he_IL';
+      case AppSettings.languageModeEnglish:
+        return 'en_US';
+      default:
+        return resolveInitialSttLocale(
+          words,
+          startIndex: startIndex,
+          sectionLocales: sectionLocales,
         );
-        realIndex++;
-      }
     }
-    return resolved;
   }
 
-  static double _normalizeSoundLevel(double level) {
-    if (level >= 0.0 && level <= 1.0) return level;
-    if (level > 1.0) return (level / 10.0).clamp(0.0, 1.0).toDouble();
-    return ((level + 60.0) / 60.0).clamp(0.0, 1.0).toDouble();
+  void _handleSttResult(SpeechResult result) {
+    if (_currentScript == null || _disposed) return;
+    _safeSetState((s) => s.copyWith(isStarting: false));
+
+    final words = result.words.toLowerCase();
+    try {
+      final settings = ref.read(settingsProvider);
+
+      // Voice Commands
+      if (words.contains('stop prompt') ||
+          words.contains('\u05E2\u05E6\u05D5\u05E8') ||
+          words.contains('\u05E2\u05E6\u05D9\u05E8\u05D4')) {
+        _addDebugLog('VOICE COMMAND: STOP');
+        ref.read(settingsProvider.notifier).setScrollSpeed(0);
+        return;
+      } else if (words.contains('start prompt') ||
+          words.contains('\u05D1\u05D5\u05D0')) {
+        _addDebugLog('VOICE COMMAND: START');
+        if (settings.scrollSpeed == 0) {
+          ref.read(settingsProvider.notifier).setScrollSpeed(100);
+        }
+        return;
+      } else if (words.contains('speed up') ||
+          words.contains('\u05DE\u05D4\u05E8')) {
+        _addDebugLog('VOICE COMMAND: FASTER');
+        ref
+            .read(settingsProvider.notifier)
+            .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
+        return;
+      } else if (words.contains('slow down') ||
+          words.contains('\u05DC\u05D0\u05D8')) {
+        _addDebugLog('VOICE COMMAND: SLOWER');
+        ref
+            .read(settingsProvider.notifier)
+            .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
+        return;
+      }
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'teleprompterProvider.voiceCommandSettings',
+      );
+    }
+
+    _accumulatedTranscript =
+        TeleprompterNotifier.capTranscriptForRelock(result.words);
+    final alignmentWindows = _recentTranscriptWindows(_accumulatedTranscript);
+    var alignmentTranscript =
+        alignmentWindows.isEmpty ? '' : alignmentWindows.first;
+    final script = _currentScript!;
+    final settings = ref.read(settingsProvider);
+    final policy = TeleprompterNotifier.recognitionPolicyForSettings(settings);
+    final strictBulletMode = policy.bulletMode;
+    final maxSkipTargetIndex = TeleprompterNotifier.resolveVisibleSkipTarget(
+      visibleSkipEnabled: policy.visibleSkipEnabled,
+      strictBulletMode: false,
+      visibleWordStart: _visibleWordStart,
+      visibleWordEnd: _visibleWordEnd,
+    );
+
+    AlignmentResult alignWindow(String transcriptWindow) => WordAligner.align(
+          script: script.words,
+          transcript: transcriptWindow,
+          lastConfirmedIndex: _currentState.confirmedWordIndex,
+          visibleSkipStartIndex:
+              maxSkipTargetIndex == null ? null : _visibleWordStart,
+          maxSkipTargetIndex: maxSkipTargetIndex,
+          strictBulletMode: strictBulletMode,
+          policy: policy,
+          readingStandby: _sttReadingStandby,
+        );
+
+    var aligned = alignWindow(alignmentTranscript);
+    if (!aligned.shouldAdvance &&
+        !aligned.shouldEnterStandby &&
+        alignmentWindows.length > 1) {
+      for (var i = 1; i < alignmentWindows.length; i++) {
+        final candidateTranscript = alignmentWindows[i];
+        final candidate = alignWindow(candidateTranscript);
+        if (candidate.shouldAdvance &&
+            candidate.confirmedWordIndex > _currentState.confirmedWordIndex) {
+          alignmentTranscript = candidateTranscript;
+          aligned = AlignmentResult(
+            candidate.confirmedWordIndex,
+            candidate.confidence,
+            '${candidate.debugInfo} | rollingWindow=${i + 1}/${alignmentWindows.length}',
+            candidate.decision,
+          );
+          break;
+        }
+      }
+    }
+
+    final currentIdx = _currentState.confirmedWordIndex;
+    final nextExpected = (currentIdx + 1 < script.words.length)
+        ? script.words
+            .skip(currentIdx + 1)
+            .where((w) => !w.isNewline && w.normalized.isNotEmpty)
+            .take(3)
+            .map((w) => w.raw)
+            .join(' ')
+        : '<END>';
+
+    final engineTag = _useWhisper ? '[Whisper]' : '[Speech]';
+    if (aligned.shouldEnterStandby) {
+      _sttReadingStandby = true;
+      _noProgressCount = 0;
+      _addDebugLog(
+          '$engineTag STANDBY LOCK | ${aligned.debugInfo} | heard: "$alignmentTranscript"');
+      LightweightDiagnostics.instance.record(
+        'stt',
+        'standby lock',
+        data: {
+          'heard': alignmentTranscript,
+          'position': _currentState.confirmedWordIndex,
+          'confidence': aligned.confidence,
+        },
+      );
+      return;
+    }
+
+    if (aligned.shouldAdvance &&
+        aligned.confirmedWordIndex > _currentState.confirmedWordIndex) {
+      final advanceFrom = _currentState.confirmedWordIndex;
+      final visibleSkipTargetTrusted =
+          TeleprompterNotifier.isTrustedVisibleSkipTarget(
+        alignedIndex: aligned.confirmedWordIndex,
+        visibleWordStart: _visibleWordStart,
+        visibleWordEnd: _visibleWordEnd,
+      );
+      final rawJump = aligned.confirmedWordIndex - advanceFrom;
+      if (!visibleSkipTargetTrusted && rawJump > 5) {
+        _fluidAdvanceTimer?.cancel();
+        if (!strictBulletMode) {
+          _sttReadingStandby = false;
+        }
+        _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
+          currentCount: _noProgressCount,
+          improvising: false,
+          visibleAssistThreshold:
+              TeleprompterNotifier._visibleLocaleAssistAfterWaits,
+        );
+        _addDebugLog(
+          '$engineTag WAIT #$_noProgressCount | blocked off-screen advance '
+          '->${aligned.confirmedWordIndex} | heard: "$alignmentTranscript"',
+        );
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'blocked off-screen advance',
+          data: {
+            'from': advanceFrom,
+            'aligned': aligned.confirmedWordIndex,
+            'visibleStart': _visibleWordStart,
+            'visibleEnd': _visibleWordEnd,
+            'heard': alignmentTranscript,
+          },
+        );
+        return;
+      }
+
+      _sttReadingStandby = true;
+      _noProgressCount = 0;
+      _resetVisibleLocaleAssist();
+      final target = TeleprompterNotifier.resolveAdvanceTarget(
+        currentIndex: advanceFrom,
+        alignedIndex: aligned.confirmedWordIndex,
+        visibleMaxSkipTargetIndex:
+            visibleSkipTargetTrusted ? maxSkipTargetIndex : null,
+      );
+      final advancedWord =
+          target < script.words.length ? script.words[target].raw : '?';
+      _addDebugLog(
+          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "$alignmentTranscript"');
+      LightweightDiagnostics.instance.record(
+        'stt',
+        'advanced',
+        data: {
+          'from': _currentState.confirmedWordIndex,
+          'to': target,
+          'word': advancedWord,
+          'confidence': aligned.confidence,
+          'heard': alignmentTranscript,
+        },
+      );
+
+      // Fluid advancement: if jumping more than 3 words, animate
+      // through intermediate words so the user's eye can follow.
+      final jump = target - advanceFrom;
+      if (visibleSkipTargetTrusted || jump <= 5) {
+        // Small jumps and trusted visible-skip targets are instant.
+        _fluidAdvanceTimer?.cancel();
+        _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
+      } else {
+        // Large jump - advance word by word with short delays.
+        _startFluidAdvance(target, script);
+      }
+      _syncLocaleForPosition(script, target + 1, reason: 'advance');
+    } else {
+      final improvising = TeleprompterNotifier.shouldUseImprovisationNoMatch(
+        strictBulletMode: strictBulletMode,
+        alignedIndex: aligned.confirmedWordIndex,
+        currentIndex: _currentState.confirmedWordIndex,
+      );
+      if (!strictBulletMode) {
+        _sttReadingStandby = false;
+      }
+
+      final sequential = _consumeSequentialSttStreak(
+        script: script,
+        transcript: alignmentTranscript,
+        policy: policy,
+        strictBulletMode: strictBulletMode,
+      );
+      if (sequential != null) {
+        if (sequential.targetIndex != null &&
+            sequential.targetIndex! > _currentState.confirmedWordIndex) {
+          final target = sequential.targetIndex!;
+          final advancedWord =
+              target < script.words.length ? script.words[target].raw : '?';
+          _fluidAdvanceTimer?.cancel();
+          _noProgressCount = 0;
+          _sttReadingStandby = true;
+          _resetVisibleLocaleAssist();
+          _addDebugLog(
+            '$engineTag SEQUENTIAL ADVANCE -> #$target "$advancedWord" | ${sequential.debugInfo}',
+          );
+          LightweightDiagnostics.instance.record(
+            'stt',
+            'sequential advanced',
+            data: {
+              'to': target,
+              'word': advancedWord,
+              'heard': alignmentTranscript,
+              'debug': sequential.debugInfo,
+            },
+          );
+          _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
+          _syncLocaleForPosition(script, target + 1, reason: 'sequential');
+          return;
+        }
+
+        _noProgressCount = 0;
+        _sttReadingStandby = true;
+        _addDebugLog('$engineTag SEQUENTIAL HOLD | ${sequential.debugInfo}');
+        return;
+      }
+
+      _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
+        currentCount: _noProgressCount,
+        improvising: improvising,
+        visibleAssistThreshold:
+            TeleprompterNotifier._visibleLocaleAssistAfterWaits,
+      );
+      if (improvising) {
+        _addDebugLog(
+            '$engineTag IMPROVISING | heard: "$alignmentTranscript" | visible relock waiting');
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'improvising',
+          data: {'heard': alignmentTranscript, 'position': currentIdx},
+        );
+      } else {
+        _addDebugLog(
+            '$engineTag WAIT #$_noProgressCount | heard: "$alignmentTranscript" | next: "$nextExpected"');
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'waiting',
+          data: {
+            'heard': alignmentTranscript,
+            'next': nextExpected,
+            'position': currentIdx,
+            'stuckCount': _noProgressCount,
+          },
+        );
+        _checkAndSwitchLocale();
+      }
+
+      final relockTranscript = _accumulatedTranscript.trim().isEmpty
+          ? alignmentTranscript
+          : _accumulatedTranscript;
+      final relockTarget = _relockTargetFromTranscript(
+        script,
+        relockTranscript,
+      );
+      if (relockTarget != null &&
+          relockTarget > _currentState.confirmedWordIndex) {
+        final relockedWord = script.words[relockTarget].raw;
+        _addDebugLog(
+          '$engineTag RELOCK ${_lastRelockScope.toUpperCase()} -> #$relockTarget "$relockedWord" | heard: "$relockTranscript"',
+        );
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'relocked',
+          data: {
+            'from': _currentState.confirmedWordIndex,
+            'to': relockTarget,
+            'word': relockedWord,
+            'scope': _lastRelockScope,
+            'heard': relockTranscript,
+          },
+        );
+        _noProgressCount = 0;
+        _sttReadingStandby = true;
+        _fluidAdvanceTimer?.cancel();
+        _safeSetState((s) => s.copyWith(confirmedWordIndex: relockTarget));
+        _syncLocaleForPosition(script, relockTarget + 1, reason: 'relock');
+        return;
+      }
+
+      if (_maybeAssistVisibleLocale(script, policy, alignmentTranscript)) {
+        return;
+      }
+    }
   }
+}
+
+class _SequentialSttProgress {
+  final int? targetIndex;
+  final String debugInfo;
+
+  const _SequentialSttProgress(this.targetIndex, this.debugInfo);
 }
 
 final teleprompterProvider =
     NotifierProvider<TeleprompterNotifier, TeleprompterState>(
         TeleprompterNotifier.new);
+

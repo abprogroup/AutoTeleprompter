@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -355,7 +354,7 @@ class WhisperSpeechService {
   }
 
   void _writeWav(String path, Uint8List pcmData, int sampleRate, int channels) {
-    final bitsPerSample = 16;
+    const bitsPerSample = 16;
     final byteRate = sampleRate * channels * (bitsPerSample ~/ 8);
     final blockAlign = channels * (bitsPerSample ~/ 8);
     final dataSize = pcmData.length;

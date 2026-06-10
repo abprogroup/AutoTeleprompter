@@ -8,8 +8,9 @@ class CursorStyle {
   final bool isBold, isItalic, isUnderline;
   final int fontSize;
   final String fontFamily, textAlign;
+  final String? textDirection;
   final Color? textColor, highlightColor;
-  
+
   CursorStyle({
     this.isBold = false,
     this.isItalic = false,
@@ -17,15 +18,21 @@ class CursorStyle {
     this.fontSize = 40,
     this.fontFamily = 'Inter',
     this.textAlign = 'left',
+    this.textDirection,
     this.textColor,
     this.highlightColor,
   });
 
-  CursorStyle copyWith({
-    bool? isBold, bool? isItalic, bool? isUnderline,
-    int? fontSize, String? fontFamily, String? textAlign,
-    Color? textColor, Color? highlightColor
-  }) {
+  CursorStyle copyWith(
+      {bool? isBold,
+      bool? isItalic,
+      bool? isUnderline,
+      int? fontSize,
+      String? fontFamily,
+      String? textAlign,
+      String? textDirection,
+      Color? textColor,
+      Color? highlightColor}) {
     return CursorStyle(
       isBold: isBold ?? this.isBold,
       isItalic: isItalic ?? this.isItalic,
@@ -33,6 +40,7 @@ class CursorStyle {
       fontSize: fontSize ?? this.fontSize,
       fontFamily: fontFamily ?? this.fontFamily,
       textAlign: textAlign ?? this.textAlign,
+      textDirection: textDirection ?? this.textDirection,
       textColor: textColor ?? this.textColor,
       highlightColor: highlightColor ?? this.highlightColor,
     );
@@ -49,12 +57,19 @@ class CursorStyle {
           fontSize == other.fontSize &&
           fontFamily == other.fontFamily &&
           textAlign == other.textAlign &&
+          textDirection == other.textDirection &&
           textColor == other.textColor &&
           highlightColor == other.highlightColor;
 
   @override
   int get hashCode =>
-      isBold.hashCode ^ isItalic.hashCode ^ isUnderline.hashCode ^
-      fontSize.hashCode ^ fontFamily.hashCode ^ textAlign.hashCode ^
-      textColor.hashCode ^ highlightColor.hashCode;
+      isBold.hashCode ^
+      isItalic.hashCode ^
+      isUnderline.hashCode ^
+      fontSize.hashCode ^
+      fontFamily.hashCode ^
+      textAlign.hashCode ^
+      textDirection.hashCode ^
+      textColor.hashCode ^
+      highlightColor.hashCode;
 }

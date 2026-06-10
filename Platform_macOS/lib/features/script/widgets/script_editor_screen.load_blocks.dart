@@ -3,12 +3,32 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   Future<void> _runPendingFileLoad(File file) async {
     try {
-      final settings = ref.read(settingsProvider);
-      _lastChosenTextColor = Color(settings.lastTextColor);
-      _lastChosenHighlightColor = Color(settings.lastHighlightColor);
+      final settingsBeforeImport = ref.read(settingsProvider);
+      _lastChosenTextColor = Color(settingsBeforeImport.lastTextColor);
+      _lastChosenHighlightColor =
+          Color(settingsBeforeImport.lastHighlightColor);
 
-      await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
       final result = await ref.read(scriptProvider.notifier).parseFile(file);
+      if (result.isError) {
+        if (!mounted) return;
+        await _showImportErrorDialog(
+          title: file.path.split(RegExp(r'[\\/]')).last,
+          message: result.errorMessage ?? result.text,
+        );
+        return;
+      }
+      final parsedSettings = ref.read(settingsProvider);
+      final settingsNotifier = ref.read(settingsProvider.notifier);
+      if (settingsBeforeImport.importColorMode ==
+          AppSettings.importColorModeDocument) {
+        final parsedBgChanged =
+            parsedSettings.scriptBgColor != settingsBeforeImport.scriptBgColor;
+        await settingsNotifier.setDocumentImportAppearance(
+          scriptBgColor: parsedBgChanged ? parsedSettings.scriptBgColor : null,
+        );
+      } else {
+        await settingsNotifier.resetToDefaultAppearance();
+      }
       final String content = result.text;
       final String title = file.path.split(RegExp(r'[\\/]')).last;
 
@@ -26,25 +46,43 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             existingMeta = meta;
             break;
           }
-        } catch (_) {}
+        } catch (error) {
+          LightweightDiagnostics.instance.record(
+            'script',
+            'ignored malformed recent metadata during file conflict check',
+            data: {
+              'source': 'fileLoadConflictCheck',
+              'title': title,
+              'error': error.toString(),
+            },
+          );
+        }
       }
 
       String finalContent = content;
       String finalType = title.split('.').last.toUpperCase();
+      String finalSourcePath = file.path;
       String? finalSessionId;
       String? finalHistoryJson;
 
       if (existingMeta != null) {
         final decoded = jsonDecode(existingMeta);
-        final String existingContent = decoded['fullText'] ?? '';
+        final secureData = await SecureScriptStore().readFromMetadata(
+          Map<String, dynamic>.from(decoded),
+        );
+        final String existingContent = secureData?.text ?? '';
         final String sessionId = decoded['sessionId'];
         final String type = decoded['type'] ?? 'TXT';
+        final metaSourcePath = decoded['sourcePath'];
+        if (metaSourcePath is String && metaSourcePath.trim().isNotEmpty) {
+          finalSourcePath = metaSourcePath;
+        }
 
         if (normalize(existingContent) == normalizedNew) {
           finalContent = existingContent;
           finalType = type;
           finalSessionId = sessionId;
-          finalHistoryJson = decoded['historyJson'];
+          finalHistoryJson = secureData?.historyJson;
         } else {
           if (!mounted) return;
           final choice = await showDialog<String>(
@@ -99,7 +137,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             finalContent = existingContent;
             finalType = type;
             finalSessionId = sessionId;
-            finalHistoryJson = decoded['historyJson'];
+            finalHistoryJson = secureData?.historyJson;
           } else {
             if (mounted) Navigator.pop(context);
             return;
@@ -110,6 +148,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       if (!mounted) return;
       _currentTitle = title;
       _sourceType = finalType;
+      _currentSourcePath = finalSourcePath;
       _currentSessionId = finalSessionId ?? _currentSessionId;
       _loadText(finalContent);
       unawaited(_loadBookmarksForCurrentScript());
@@ -121,81 +160,140 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           _history.addAll(historyData.map((d) => EditorState.fromJson(d)));
           _historyIndex = _history.length - 1;
           if (_history.isNotEmpty) _applyState(_history.last);
-        } catch (_) {}
+        } catch (error, stack) {
+          LightweightDiagnostics.instance.recordError(
+            error,
+            stack,
+            source: 'scriptEditor.fileHistoryRestore',
+          );
+        }
       } else {
         _saveHistory(description: 'Import');
       }
       _forceRecentUpdate();
     } finally {
-      if (mounted) setState(() => _isPendingLoad = false);
+      if (mounted) _setEditorState(() => _isPendingLoad = false);
     }
   }
 
-  void _startAutoSave() {
-    _autoSaveTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      final text = _getRefinedFullTextWithoutBookmarkSigns();
-      if (text.isEmpty && _currentTitle == 'New Project') return;
-      try {
-        _forceRecentUpdate();
-      } catch (_) {}
-    });
+  Future<void> _showImportErrorDialog({
+    required String title,
+    required String message,
+  }) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [
+          Icon(Icons.block_rounded, color: Colors.redAccent, size: 22),
+          SizedBox(width: 10),
+          Text(
+            'Import Blocked',
+            style: TextStyle(color: Colors.white, fontSize: 17),
+          ),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(message, style: const TextStyle(color: Colors.white70)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'OK',
+              style: TextStyle(
+                color: Color(0xFFFFBF00),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _clearControllers() {
-    for (final c in _controllers) c.dispose();
-    for (final f in _focusNodes) f.dispose();
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    for (final f in _focusNodes) {
+      f.dispose();
+    }
     _controllers.clear();
     _focusNodes.clear();
     _blockKeys.clear();
   }
 
   void _addBlock(int index, {String text = ''}) {
-    setState(() {
+    void insertBlock() {
       final controller = MarkupController(text: text);
       final blockKey = GlobalKey(); // v3.9.5.66
 
       final node = FocusNode(onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent)
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
           return KeyEventResult.ignored;
+        }
 
-        // Arrow-key cross-block navigation is owned entirely by the screen-level
-        // Focus (_handleEditorArrowKey). Handling arrows here via requestFocus()
-        // caused a race condition: requestFocus() is async, so multiple KeyRepeat
-        // events arrived at the old block before focus transferred, each trying to
-        // jump one more block. The screen-level handler avoids this by updating
-        // _lastFocusedController synchronously before requestFocus(), so
-        // subsequent events use the new controller even during the async transition.
-        if (event.logicalKey == LogicalKeyboardKey.enter &&
+        final key = event.logicalKey;
+        if (_isArrowKey(key) || _isHomeEndKey(key)) {
+          return _handleEditorArrowKey(node, event);
+        }
+
+        if (key == LogicalKeyboardKey.enter &&
             !HardwareKeyboard.instance.isShiftPressed) {
           final idx = _controllers.indexOf(controller);
+          if (idx == -1) return KeyEventResult.handled;
+          if (_replaceAppSelectionWithParagraphBreak()) {
+            _saveHistory(description: 'Split Paragraph');
+            return KeyEventResult.handled;
+          }
           final text = controller.text;
-          final sel = controller.selection;
-          if (sel.isValid) {
-            final before = text.substring(0, sel.start);
-            final after = text.substring(sel.start);
-            controller.text = before;
-            _addBlock(idx + 1, text: after);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && idx + 1 < _focusNodes.length) {
-                _focusNodes[idx + 1].requestFocus();
-                _controllers[idx + 1].selection =
-                    const TextSelection.collapsed(offset: 0);
-              }
-            });
+          final replacementSelection =
+              _selectionForEnterReplacement(controller);
+          if (replacementSelection != null) {
+            final start =
+                replacementSelection.start.clamp(0, text.length).toInt();
+            final end =
+                replacementSelection.end.clamp(start, text.length).toInt();
+            _splitBlockAtSelection(
+              controller: controller,
+              blockIndex: idx,
+              start: start,
+              end: end,
+            );
+          } else {
+            final sel = controller.selection;
+            if (sel.isValid) {
+              final offset = sel.extentOffset.clamp(0, text.length).toInt();
+              _splitBlockAtSelection(
+                controller: controller,
+                blockIndex: idx,
+                start: offset,
+                end: offset,
+              );
+            }
           }
           _saveHistory(description: 'Split Paragraph');
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.backspace &&
-            controller.text.isEmpty) {
+        if (key == LogicalKeyboardKey.backspace && controller.text.isEmpty) {
           final idx = _controllers.indexOf(controller);
           if (_controllers.length > 1 && idx != -1) {
-            setState(() {
+            _setEditorState(() {
               _controllers.removeAt(idx).dispose();
               _focusNodes.removeAt(idx).dispose();
               _blockKeys.removeAt(idx);
@@ -205,6 +303,21 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           }
           return KeyEventResult.handled;
         }
+        if (key == LogicalKeyboardKey.backspace &&
+            controller.selection.isCollapsed &&
+            _isCaretAtVisibleBlockStart(controller)) {
+          final idx = _controllers.indexOf(controller);
+          if (idx > 0) {
+            if (_isVisuallyEmptyBlock(_controllers[idx - 1].text)) {
+              _deletePreviousEmptyBlockFromCaret(idx);
+              _saveHistory(description: 'Delete Empty Line');
+            } else {
+              _joinCurrentBlockIntoPrevious(idx);
+              _saveHistory(description: 'Join Paragraph');
+            }
+            return KeyEventResult.handled;
+          }
+        }
         return KeyEventResult.ignored;
       });
 
@@ -212,11 +325,16 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (node.hasFocus) {
           _lastFocusedController = controller;
           // Restore native-selection rendering on focus regain by clearing
-          // any externalSelection sentinel set during focus loss.
+          // only the collapsed externalSelection sentinel set during focus
+          // loss. A non-collapsed externalSelection is an app-owned selection
+          // that must survive toolbar focus changes so typing/replacing still
+          // edits the selected text instead of appending at its end.
           if (controller.externalSelection != null &&
+              controller.externalSelection!.isCollapsed &&
               !_isGlobalSelection &&
               !(_overlayKey.currentState?.hasSelection ?? false)) {
             controller.externalSelection = null;
+            controller.externalVisibleSelection = null;
             controller.refresh();
           }
           _onSelectionChanged();
@@ -231,16 +349,19 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           // On focus loss, suppress any lingering native selection highlight
           // (set via TextField drag-select). MarkupController otherwise falls
           // through to controller.selection and renders amber on the now-
-          // unfocused block — which is the "two highlights at once" bug.
+          // unfocused block - which is the "two highlights at once" bug.
           // Skip while a global multi-block selection or overlay drag is active
           // (their externalSelection values must not be overwritten here).
           final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
           if (!_isGlobalSelection &&
+              !_editorToolbarFocusGuard &&
               !overlayActive &&
               !controller.isGlobalSelected &&
+              controller.externalVisibleSelection == null &&
               !controller.selection.isCollapsed) {
             controller.externalSelection =
                 const TextSelection.collapsed(offset: 0);
+            controller.externalVisibleSelection = null;
             controller.refresh();
           }
         }
@@ -251,7 +372,6 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (_isLoading) return;
         if (controller.text == lastText) {
           if (node.hasFocus) {
-            _lastSelection = controller.selection;
             if (!controller.selection.isCollapsed) {
               _preservedSelection = controller.selection;
             }
@@ -259,7 +379,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             // Escalate native full-block select to global Select All.
             // Catches all paths: context menu, keyboard, platform menu.
             // Skip when overlay has active handles (refine mode) to avoid
-            // infinite loop: refine clears isGlobal → escalation re-selects → loop.
+            // infinite loop: refine clears isGlobal -> escalation re-selects -> loop.
             final overlayActive =
                 _overlayKey.currentState?.hasSelection ?? false;
             if (!_isGlobalSelection &&
@@ -274,12 +394,37 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           }
           return;
         }
+        final previousText = lastText;
+        final hadAppSelectionBeforeEdit = !_isCommandExecuting &&
+            (controller.isGlobalSelected ||
+                _isGlobalSelection ||
+                (_overlayKey.currentState?.hasSelection ?? false) ||
+                (controller.externalSelection != null &&
+                    controller.externalSelection!.isValid &&
+                    !controller.externalSelection!.isCollapsed));
+        if (hadAppSelectionBeforeEdit &&
+            _replaceAppSelectionWithText(
+              editedController: controller,
+              previousText: previousText,
+              currentText: controller.text,
+            )) {
+          lastText = controller.text;
+          _isDirty = true;
+          _verticalArrowPreferredX = null;
+          _onBlockChanged();
+          return;
+        }
         lastText = controller.text;
         _isDirty = true;
+        _verticalArrowPreferredX = null;
         // v4.1.2: When the user edits text (not inside a style command), clear
         // any pinned externalSelection so stale amber doesn't linger after typing.
-        if (!_isCommandExecuting && controller.externalSelection != null) {
+        if (hadAppSelectionBeforeEdit) {
+          _clearAppSelectionAfterTextInput(controller);
+        } else if (!_isCommandExecuting &&
+            controller.externalSelection != null) {
           controller.externalSelection = null;
+          controller.externalVisibleSelection = null;
           controller.refresh();
         }
         _onBlockChanged();
@@ -288,16 +433,236 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       _controllers.insert(index, controller);
       _focusNodes.insert(index, node);
       _blockKeys.insert(index, blockKey);
-    });
+    }
 
-    if (text.isEmpty) {
+    if (_isBulkLoadingBlocks) {
+      insertBlock();
+    } else {
+      _setEditorState(insertBlock);
+    }
+
+    if (!_isBulkLoadingBlocks && text.isEmpty) {
       Future.delayed(Duration.zero, () => _focusNodes[index].requestFocus());
     }
   }
 
+  TextSelection? _selectionForEnterReplacement(MarkupController controller) {
+    final external = controller.externalSelection;
+    if (external != null && external.isValid && !external.isCollapsed) {
+      return TextSelection(
+        baseOffset: external.start,
+        extentOffset: external.end,
+      );
+    }
+    final native = controller.selection;
+    if (native.isValid && !native.isCollapsed) {
+      return TextSelection(baseOffset: native.start, extentOffset: native.end);
+    }
+    if (controller.isGlobalSelected && controller.text.isNotEmpty) {
+      return TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+    }
+    return null;
+  }
+
+  bool _replaceAppSelectionWithParagraphBreak() {
+    final ranges = _activeAppSelectionRangesForEnter();
+    if (ranges.length <= 1) return false;
+
+    final first = ranges.first;
+    final last = ranges.last;
+    final firstController = _controllers[first.blockIndex];
+    final lastController = _controllers[last.blockIndex];
+    final firstStart =
+        first.selection.start.clamp(0, firstController.text.length).toInt();
+    final lastEnd =
+        last.selection.end.clamp(0, lastController.text.length).toInt();
+    final before = firstController.text.substring(0, firstStart);
+    final after = MarkupController.suffixWithOpenTagContext(
+      lastController.text,
+      lastEnd,
+    );
+    final newCaretOffset =
+        MarkupController.openTagsAt(lastController.text, lastEnd).length;
+
+    _isCommandExecuting = true;
+    final previousBulkState = _isBulkLoadingBlocks;
+    try {
+      _setEditorState(() {
+        firstController.value = TextEditingValue(
+          text: before,
+          selection: TextSelection.collapsed(offset: before.length),
+        );
+        for (var i = last.blockIndex; i > first.blockIndex; i--) {
+          _controllers.removeAt(i).dispose();
+          _focusNodes.removeAt(i).dispose();
+          _blockKeys.removeAt(i);
+        }
+        _isBulkLoadingBlocks = true;
+        _addBlock(first.blockIndex + 1, text: after);
+        _isBulkLoadingBlocks = previousBulkState;
+      });
+      _clearAppSelectionAfterTextInput(firstController);
+      if (first.blockIndex + 1 < _controllers.length) {
+        _lastFocusedController = _controllers[first.blockIndex + 1];
+        _controllers[first.blockIndex + 1].selection =
+            TextSelection.collapsed(offset: newCaretOffset);
+      }
+    } finally {
+      _isBulkLoadingBlocks = previousBulkState;
+      _isCommandExecuting = false;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || first.blockIndex + 1 >= _focusNodes.length) return;
+      _lastFocusedController = _controllers[first.blockIndex + 1];
+      _focusNodes[first.blockIndex + 1].requestFocus();
+      _controllers[first.blockIndex + 1].selection =
+          TextSelection.collapsed(offset: newCaretOffset);
+    });
+    return true;
+  }
+
+  List<_EnterSelectionRange> _activeAppSelectionRangesForEnter() {
+    final ranges = <_EnterSelectionRange>[];
+    for (var i = 0; i < _controllers.length; i++) {
+      final controller = _controllers[i];
+      final selection = _appSelectionForEnter(controller);
+      if (selection == null) continue;
+      ranges.add(_EnterSelectionRange(i, selection));
+    }
+    return ranges;
+  }
+
+  TextSelection? _appSelectionForEnter(MarkupController controller) {
+    final length = controller.text.length;
+    if (controller.isGlobalSelected) {
+      return TextSelection(baseOffset: 0, extentOffset: length);
+    }
+    final external = controller.externalSelection;
+    if (external == null || !external.isValid || external.isCollapsed) {
+      return null;
+    }
+    final start = external.start.clamp(0, length).toInt();
+    final end = external.end.clamp(start, length).toInt();
+    if (end <= start) return null;
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
+  void _splitBlockAtSelection({
+    required MarkupController controller,
+    required int blockIndex,
+    required int start,
+    required int end,
+  }) {
+    final text = controller.text;
+    final safeStart = start.clamp(0, text.length).toInt();
+    final safeEnd = end.clamp(safeStart, text.length).toInt();
+    final before = text.substring(0, safeStart);
+    final after = MarkupController.suffixWithOpenTagContext(text, safeEnd);
+    final newCaretOffset = MarkupController.openTagsAt(text, safeEnd).length;
+
+    _isCommandExecuting = true;
+    try {
+      controller.value = TextEditingValue(
+        text: before,
+        selection: TextSelection.collapsed(offset: before.length),
+      );
+      _addBlock(blockIndex + 1, text: after);
+      _clearAppSelectionAfterTextInput(controller);
+      if (blockIndex + 1 < _controllers.length) {
+        _lastFocusedController = _controllers[blockIndex + 1];
+        _controllers[blockIndex + 1].selection =
+            TextSelection.collapsed(offset: newCaretOffset);
+      }
+    } finally {
+      _isCommandExecuting = false;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && blockIndex + 1 < _focusNodes.length) {
+        _lastFocusedController = _controllers[blockIndex + 1];
+        _focusNodes[blockIndex + 1].requestFocus();
+        _controllers[blockIndex + 1].selection =
+            TextSelection.collapsed(offset: newCaretOffset);
+      }
+    });
+  }
+
+  bool _isVisuallyEmptyBlock(String text) {
+    return MarkupDecorationParser.visibleText(text).trim().isEmpty;
+  }
+
+  bool _isCaretAtVisibleBlockStart(MarkupController controller) {
+    final selection = controller.selection;
+    if (!selection.isValid || !selection.isCollapsed) return false;
+    final rawOffset = selection.extentOffset.clamp(0, controller.text.length);
+    return MarkupDecorationParser.rawToVisibleOffset(
+          controller.text,
+          rawOffset,
+        ) ==
+        0;
+  }
+
+  void _deletePreviousEmptyBlockFromCaret(int currentIndex) {
+    if (currentIndex <= 0 || currentIndex >= _controllers.length) return;
+    final controller = _controllers[currentIndex];
+    _setEditorState(() {
+      _controllers.removeAt(currentIndex - 1).dispose();
+      _focusNodes.removeAt(currentIndex - 1).dispose();
+      _blockKeys.removeAt(currentIndex - 1);
+    });
+    final newIndex = (currentIndex - 1).clamp(0, _controllers.length - 1);
+    _lastFocusedController = controller;
+    controller.selection = const TextSelection.collapsed(offset: 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || newIndex >= _focusNodes.length) return;
+      _focusNodes[newIndex].requestFocus();
+      controller.selection = const TextSelection.collapsed(offset: 0);
+    });
+  }
+
+  void _joinCurrentBlockIntoPrevious(int currentIndex) {
+    if (currentIndex <= 0 || currentIndex >= _controllers.length) return;
+    final previous = _controllers[currentIndex - 1];
+    final current = _controllers[currentIndex];
+    final previousText = previous.text;
+    final activePrefix =
+        MarkupController.openTagsAt(previousText, previousText.length);
+    final currentText = MarkupController.stripRedundantLeadingOpenTagContext(
+      current.text,
+      activePrefix,
+    );
+    final caretOffset = previousText.length;
+
+    _isCommandExecuting = true;
+    try {
+      _setEditorState(() {
+        previous.value = TextEditingValue(
+          text: previousText + currentText,
+          selection: TextSelection.collapsed(offset: caretOffset),
+        );
+        _controllers.removeAt(currentIndex).dispose();
+        _focusNodes.removeAt(currentIndex).dispose();
+        _blockKeys.removeAt(currentIndex);
+      });
+      _clearAppSelectionAfterTextInput(previous);
+      _lastFocusedController = previous;
+      previous.selection = TextSelection.collapsed(offset: caretOffset);
+    } finally {
+      _isCommandExecuting = false;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || currentIndex - 1 >= _focusNodes.length) return;
+      _lastFocusedController = previous;
+      _focusNodes[currentIndex - 1].requestFocus();
+      previous.selection = TextSelection.collapsed(offset: caretOffset);
+    });
+  }
+
   void _removeBlock(int index) {
     if (_controllers.length <= 1) return;
-    setState(() {
+    _setEditorState(() {
       _controllers[index].dispose();
       _focusNodes[index].dispose();
       _controllers.removeAt(index);
@@ -309,18 +674,29 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   void _loadText(String text) {
     _isLoading = true;
     try {
-      _clearControllers();
-      final paragraphs = text.split('\n');
-      for (int i = 0; i < paragraphs.length; i++)
-        _addBlock(i, text: paragraphs[i]);
-      if (_controllers.isEmpty) _addBlock(0);
+      _setEditorState(() {
+        _clearControllers();
+        _isBulkLoadingBlocks = true;
+        try {
+          final paragraphs = text.split('\n');
+          for (int i = 0; i < paragraphs.length; i++) {
+            _addBlock(i, text: paragraphs[i]);
+          }
+          if (_controllers.isEmpty) _addBlock(0);
+        } finally {
+          _isBulkLoadingBlocks = false;
+        }
+      });
+      if (text.isEmpty && _focusNodes.isNotEmpty) {
+        Future.delayed(Duration.zero, () => _focusNodes.first.requestFocus());
+      }
     } finally {
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) _isLoading = false;
       });
     }
     // Sync toolbar state after load. Non-empty blocks don't auto-request focus,
-    // so _onSelectionChanged never fires — cursorStyleProvider stays at its
+    // so _onSelectionChanged never fires - cursorStyleProvider stays at its
     // default 'left'. Point lastFocusedController at the first block so
     // _detectAlignAtCursor reads the right text, then run detection.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -334,6 +710,9 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     if (!mounted) return;
     final controller = _activeController;
     if (controller != null) {
+      if (_editorToolbarFocusGuard && !_isCommandExecuting) {
+        return;
+      }
       // v3.9.5.1: Synchronize selection with status broadcast logic
       // Only reset Global Selection if a manual PARTIAL selection occurs.
       // If the selection is collapsed (cursor) or spans the whole block, keep the flag.
@@ -342,9 +721,20 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         // (i.e. the notification came from our own _selectAllBlocks).
         // Any other selection state (collapsed tap, partial drag) clears it.
         // Guard: if the overlay has active handles (e.g. alignment was just applied
-        // or drag is in progress), do NOT clear — focus events fire before
+        // or drag is in progress), do NOT clear - focus events fire before
         // _isCommandExecuting is set and would prematurely destroy the selection.
         if (_overlayKey.currentState?.hasSelection ?? false) return;
+        final globalMarkersStillFull = _controllers.isNotEmpty &&
+            _controllers.every((c) {
+              if (c.text.isEmpty) return true;
+              if (c.isGlobalSelected) return true;
+              final external = c.externalSelection;
+              return external != null &&
+                  external.isValid &&
+                  external.start <= 0 &&
+                  external.end >= c.text.length;
+            });
+        if (globalMarkersStillFull) return;
         final textLen = controller.text.length;
         final isFullBlock = !controller.selection.isCollapsed &&
             controller.selection.start == 0 &&
@@ -367,51 +757,15 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           fontSize: _detectIntAtCursor('size=', settings.fontSize.toInt()),
           fontFamily: _detectStringAtCursor('font=', 'Inter'),
           textAlign: _detectAlignAtCursor(),
+          textDirection: _detectDirectionAtCursor(),
           textColor: _detectColorAtCursor(textColor: true),
           highlightColor: _detectColorAtCursor(textColor: false),
         );
         ref.read(cursorStyleProvider.notifier).state = styles;
       });
-    }
-  }
-
-  void _scheduleRecentUpdate() {
-    _recentTimer?.cancel();
-    _recentTimer = Timer(const Duration(milliseconds: 500), () {
-      if (mounted) _forceRecentUpdate();
-    });
-  }
-
-  Future<void> _forceRecentUpdate() async {
-    _recentTimer?.cancel();
-    final text = _getRefinedFullTextWithoutBookmarkSigns();
-    if (text.trim().isEmpty) return;
-    final settings = ref.read(settingsProvider);
-    await ref.read(settingsProvider.notifier).saveScript(
-          text,
-          title: _currentTitle,
-          type: _sourceType,
-          historyIndex: _historyIndex,
-          sessionId: _currentSessionId,
-          fontSize: settings.fontSize,
-          fontFamily: settings.fontFamily,
-          lineSpacing: settings.lineSpacing,
-          letterSpacing: settings.letterSpacing,
-          wordSpacing: settings.wordSpacing,
-          textAlign: settings.textAlign,
-          scriptBgColor: settings.scriptBgColor,
-          currentWordColor: settings.currentWordColor,
-          futureWordColor: settings.futureWordColor,
-          historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
-        );
-    // Keep scriptProvider.state in sync so that a new ScriptEditorScreen
-    // (created on re-entry after navigating away) reads the correct
-    // historyIndex and historyJson rather than stale startup values.
-    if (mounted) {
-      ref.read(scriptProvider.notifier).updateHistory(
-            _historyIndex,
-            jsonEncode(_history.map((e) => e.toJson()).toList()),
-          );
+      if (controller.selection.isValid && !controller.selection.isCollapsed) {
+        _scheduleHighlightTrace('native-selection');
+      }
     }
   }
 
@@ -421,267 +775,25 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     _scheduleRecentUpdate();
   }
 
-  Color? _detectColorAtCursor({required bool textColor, int? offset}) {
-    final controller = _activeController;
-    if (controller == null) return null;
-    final text = controller.text;
-    final off = offset ?? controller.selection.start;
-    final tag = textColor ? '[color=' : '[bg=';
-    final closeTag = textColor ? '[/color]' : '[/bg]';
-    final matches = RegExp(RegExp.escape(tag) + r'([^\]]+)\]').allMatches(text);
-    Color? found;
-    for (final m in matches) {
-      if (m.start <= off) {
-        final nextClose = text.indexOf(closeTag, m.end);
-        if (nextClose == -1 || nextClose >= off) {
-          final hex = m.group(1)!.trim().replaceFirst('#', '');
-          found = Color(int.tryParse('FF$hex', radix: 16) ??
-              (textColor ? 0xFFFFFFFF : 0x00000000));
-        }
+  void _clearAppSelectionAfterTextInput(MarkupController editedController) {
+    _overlayKey.currentState?.clearSelection();
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
+    _isGlobalSelection = false;
+    for (final c in _controllers) {
+      c.isGlobalSelected = false;
+      c.externalSelection = null;
+      c.externalVisibleSelection = null;
+      if (!identical(c, editedController) &&
+          c.selection.isValid &&
+          !c.selection.isCollapsed) {
+        final collapseAt = c.selection.extentOffset.clamp(0, c.text.length);
+        c.selection = TextSelection.collapsed(offset: collapseAt);
       }
+      c.refresh();
     }
-    return found ?? const Color(0x00000000);
-  }
-
-  String _detectAlignAtCursor({int? offset}) {
-    final controller = _activeController;
-    if (controller == null) return 'left';
-    final text = controller.text;
-    // Clamp to 0 when selection is invalid (e.g. focus moved to layout suite).
-    // Alignment tags always wrap from position 0 so scanning at 0 is correct.
-    final rawOff = offset ?? controller.selection.baseOffset;
-    final off = rawOff.clamp(0, text.isEmpty ? 0 : text.length);
-    final alignMatches =
-        RegExp(r'\[(?:align=)?(center|left|right)\]').allMatches(text);
-    final dirMatches = RegExp(r'\[(rtl|ltr)\]').allMatches(text);
-    String found = 'left';
-    for (final m in alignMatches) {
-      if (m.start <= off) {
-        final val = m.group(1)!;
-        // Use the correct close tag depending on whether the opening was
-        // old-format [right] or new-format [align=right].
-        final isNewFormat = m.group(0)!.startsWith('[align=');
-        final closeTag = isNewFormat ? '[/align=$val]' : '[/$val]';
-        final nextClose = text.indexOf(closeTag, m.end);
-        if (nextClose == -1 || nextClose >= off) found = val;
-      }
-    }
-    if (found == 'left') {
-      for (final m in dirMatches) {
-        if (m.start <= off) {
-          final nextClose = text.indexOf('[/${m.group(1)}]', m.end);
-          if (nextClose == -1 || nextClose >= off) if (m.group(1) == 'rtl')
-            found = 'right';
-        }
-      }
-    }
-    // Mirror the editor's own auto-RTL rule: if no explicit tag was found but
-    // the text is predominantly Hebrew, treat it as right-aligned.
-    if (found == 'left' && text.isHebrew) found = 'right';
-    return found;
-  }
-
-  bool _detectStyleAtCursor(String open, String close, {int? offset}) {
-    final controller = _activeController;
-    if (controller == null) return false;
-    final text = controller.text;
-    final selection = controller.selection;
-    final start = selection.start.clamp(0, text.length);
-    final end = selection.end.clamp(0, text.length);
-    final mid = (start + (end - start) / 2).floor().clamp(0, text.length);
-    bool isPointActive(int off) =>
-        _detectStyleAtPoint(text, selection, off, open, close);
-    if (selection.isCollapsed) return isPointActive(selection.baseOffset);
-    return isPointActive(start) || isPointActive(end) || isPointActive(mid);
-  }
-
-  int _detectIntAtCursor(String prefix, int defaultValue) {
-    final controller = _activeController;
-    if (controller == null) return defaultValue;
-    final text = controller.text;
-    final selection = controller.selection;
-    int valAtPoint(int off) =>
-        _detectIntAtPoint(text, selection, off, prefix, defaultValue);
-    if (selection.isCollapsed) return valAtPoint(selection.baseOffset);
-    final mid = (selection.start + (selection.end - selection.start) / 2)
-        .floor()
-        .clamp(0, text.length);
-    final vMid = valAtPoint(mid);
-    if (vMid != defaultValue) return vMid;
-    return valAtPoint(selection.start);
-  }
-
-  String _detectStringAtCursor(String prefix, String defaultValue) {
-    final controller = _activeController;
-    if (controller == null) return defaultValue;
-    final text = controller.text;
-    final selection = controller.selection;
-    String valAtPoint(int off) =>
-        _detectStringAtPoint(text, selection, off, prefix, defaultValue);
-    if (selection.isCollapsed) return valAtPoint(selection.baseOffset);
-    final mid = (selection.start + (selection.end - selection.start) / 2)
-        .floor()
-        .clamp(0, text.length);
-    final vMid = valAtPoint(mid);
-    if (vMid != defaultValue) return vMid;
-    return valAtPoint(selection.start);
-  }
-
-  bool _detectStyleAtPoint(String text, TextSelection selection, int off,
-      String open, String close) {
-    if (off < 0 || off > text.length) return false;
-    bool check(int p) {
-      if (p < 0 || p > text.length) return false;
-      if (open == '**' && close == '**') {
-        final subText = text.substring(0, p);
-        final count = RegExp(r'\*\*').allMatches(subText).length;
-        return count % 2 != 0;
-      }
-      final tagIdx = text.lastIndexOf(open, p);
-      if (tagIdx == -1) return false;
-      final exitIdx = text.indexOf(close, tagIdx + open.length);
-      return exitIdx != -1 && exitIdx >= p;
-    }
-
-    // Check at cursor, one back, and several nearby positions to handle
-    // landing on invisible tag characters (fontSize: 0.1 in MarkupController)
-    if (check(off)) return true;
-    for (int delta = 1; delta <= open.length + 2; delta++) {
-      if (off - delta >= 0 && check(off - delta)) return true;
-      if (off + delta <= text.length && check(off + delta)) return true;
-    }
-    return false;
-  }
-
-  int _detectIntAtPoint(String text, TextSelection selection, int off,
-      String prefix, int defaultValue) {
-    final openTag = '[' + prefix;
-    int check(int p) {
-      if (p < 0 || p > text.length) return defaultValue;
-      final tagIdx = text.lastIndexOf(openTag, p);
-      if (tagIdx == -1) return defaultValue;
-      final closeBracket = text.indexOf(']', tagIdx);
-      if (closeBracket == -1 || closeBracket > p) return defaultValue;
-      final tagName = prefix.split('=').first;
-      final closeTag = '[/' + tagName + ']';
-      final exitIdx = text.indexOf(closeTag, tagIdx);
-      if (exitIdx != -1 && exitIdx < p) return defaultValue;
-      if (exitIdx == -1) return defaultValue;
-      return int.tryParse(
-              text.substring(tagIdx + openTag.length, closeBracket)) ??
-          defaultValue;
-    }
-
-    final atBoundary = check(off);
-    if (atBoundary != defaultValue) return atBoundary;
-    // Search nearby positions to handle cursor landing on tag characters
-    for (int delta = 1; delta <= openTag.length + 2; delta++) {
-      if (off - delta >= 0) {
-        final v = check(off - delta);
-        if (v != defaultValue) return v;
-      }
-      if (off + delta <= text.length) {
-        final v = check(off + delta);
-        if (v != defaultValue) return v;
-      }
-    }
-    return defaultValue;
-  }
-
-  String _detectStringAtPoint(String text, TextSelection selection, int off,
-      String prefix, String defaultValue) {
-    final openTag = '[' + prefix;
-    String check(int p) {
-      if (p < 0 || p > text.length) return defaultValue;
-      final tagIdx = text.lastIndexOf(openTag, p);
-      if (tagIdx == -1) return defaultValue;
-      final closeBracket = text.indexOf(']', tagIdx);
-      if (closeBracket == -1 || closeBracket > p) return defaultValue;
-      final tagName = prefix.split('=').first;
-      final closeTag = '[/' + tagName + ']';
-      final exitIdx = text.indexOf(closeTag, tagIdx);
-      if (exitIdx != -1 && exitIdx < p) return defaultValue;
-      if (exitIdx == -1) return defaultValue;
-      return text.substring(tagIdx + openTag.length, closeBracket);
-    }
-
-    final atBoundary = check(off);
-    if (atBoundary != defaultValue) return atBoundary;
-    // Search nearby positions to handle cursor landing on tag characters
-    for (int delta = 1; delta <= openTag.length + 2; delta++) {
-      if (off - delta >= 0) {
-        final v = check(off - delta);
-        if (v != defaultValue) return v;
-      }
-      if (off + delta <= text.length) {
-        final v = check(off + delta);
-        if (v != defaultValue) return v;
-      }
-    }
-    return defaultValue;
-  }
-
-  _VerticalLayoutInfo _getVerticalLayout(
-    int index, {
-    TextSelection? selection,
-  }) {
-    final controller = _controllers[index];
-    final settings = ref.read(settingsProvider);
-    final isRtl = _editorBlockResolvedRtl(index);
-    final textAlign = EditorTextGeometryService.resolveTextAlign(
-      controller.text,
-      isRtl: isRtl,
-    );
-
-    // 2. Build style
-    final style = TextStyle(
-      color: Colors.white,
-      fontSize: settings.fontSize,
-      height: settings.lineSpacing,
-      letterSpacing: settings.letterSpacing,
-      wordSpacing: settings.wordSpacing,
-    );
-    final maxFontSize = EditorTextGeometryService.maxFontSize(
-      controller.text,
-      settings.fontSize,
-    );
-    final strutStyle = StrutStyle(
-      fontSize: maxFontSize,
-      height: settings.lineSpacing,
-      forceStrutHeight: true,
-    );
-
-    // 3. Get width
-    double width = 800; // fallback
-    final context = _blockKeys[index].currentContext;
-    if (context != null) {
-      final box = context.findRenderObject() as RenderBox?;
-      if (box != null)
-        width = box.size.width -
-            30; // Accounting for Padding(left: 30) in _EditorBlock
-    }
-
-    // 4. Paint
-    final span = controller.text.isEmpty
-        ? TextSpan(text: ' ', style: style)
-        : controller.buildTextSpan(
-            context: context ?? this.context,
-            style: style,
-            withComposing: false,
-          );
-    final painter = TextPainter(
-      text: span,
-      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-      textAlign: textAlign,
-      strutStyle: strutStyle,
-    );
-    painter.layout(maxWidth: width > 0 ? width : 800);
-
-    return _VerticalLayoutInfo(
-      painter,
-      selection ?? controller.selection,
-      isRtl: isRtl,
-      layoutWidth: width > 0 ? width : 800,
-    );
+    _lastFocusedController = editedController;
   }
 }
+
+class _EnterSelectionRange { final int blockIndex; final TextSelection selection; const _EnterSelectionRange(this.blockIndex, this.selection); }

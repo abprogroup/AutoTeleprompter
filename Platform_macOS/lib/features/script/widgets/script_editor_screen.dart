@@ -1,68 +1,91 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/widgets/global_color_picker.dart';
 import '../models/script.dart';
 import '../models/cursor_style.dart';
 import '../models/editor_state.dart';
 import './editor/editor_dialogs.dart';
-import './editor/lobby_settings_panel.dart';
 import './editor/suites/project_actions_mvp.dart';
 import './editor/suites/formatting_toolbar_mvp.dart';
 import './editor/components/editor_primitives.dart';
+import 'script_delete_dialog.dart';
 import './editor/styling_logic_mixin.dart';
 import './editor/markup_controller.dart';
 import './editor/components/global_selection_overlay.dart';
 import './editor/components/ghost_selection_controls.dart';
 import '../providers/script_provider.dart';
-import '../../../core/extensions/string_extensions.dart';
+import '../../../core/services/runtime_file_storage.dart';
+import '../../../core/security/encrypted_file_store.dart';
+import '../../../core/security/secure_script_store.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../settings/widgets/app_settings_screen.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/widgets/login_screen.dart';
+import '../../teleprompter/widgets/content_creator_screen.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
-import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../services/styling_service.dart';
 import '../services/script_bookmark_service.dart';
 import '../../../core/services/rich_clipboard.dart';
-import '../services/docx_service.dart';
-import '../services/rtf_service.dart';
-import '../services/pages_service.dart';
-import '../services/markup_export_service.dart';
 import '../services/markup_decoration_service.dart';
+import '../services/highlight_band_painter.dart';
+import '../services/markup_export_service.dart';
 import '../services/editor_text_geometry_service.dart';
+import '../services/editor_inline_style_operation.dart';
+import '../services/script_color_inversion_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../models/script_word.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
+import '../../settings/services/local_backup_service.dart';
 
 part 'script_editor_screen.load_blocks.dart';
+part 'script_editor_screen.text_replacement.dart';
+part 'script_editor_screen.toolbar_selection_guard.dart';
+part 'script_editor_screen.recent_persistence.dart';
+part 'script_editor_screen.cursor_detection.dart';
 part 'script_editor_screen.vertical_layout.dart';
+part 'script_editor_screen.vertical_layout_builder.dart';
 part 'script_editor_screen.dialogs_history.dart';
+part 'script_editor_screen.clear_style.dart';
 part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';
+part 'script_editor_screen.debug_sentry.dart';
 part 'script_editor_screen.debug_bookmarks_search.dart';
+part 'script_editor_screen.selection_clipboard.dart';
+part 'script_editor_screen.premium_gate.dart';
+part 'script_editor_screen.mode_return.dart';
 part 'script_editor_screen.bookmarks.dart';
+part 'script_editor_screen.bookmark_navigation.dart';
 part 'script_editor_screen.search.dart';
 part 'script_editor_screen.editor_block.dart';
-part 'script_editor_screen.render_decorations.dart';
+part 'script_editor_screen.editor_render_decorations.dart';
+part 'script_editor_screen.chrome.dart';
 part 'script_editor_screen.build.dart';
+part 'script_editor_screen.debug_artifacts.dart';
+part 'script_editor_screen.arrow_trace.dart';
+part 'script_editor_screen.highlight_trace.dart';
+part 'script_editor_screen.selection_trace.dart';
 part 'script_editor_screen.keyboard_navigation.dart';
 part 'script_editor_screen.keyboard_selection.dart';
+part 'script_editor_screen.keyboard_selection_seed.dart';
+part 'script_editor_screen.keyboard_render_caret.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
 part 'script_editor_screen.keyboard_horizontal.dart';
+part 'script_editor_screen.keyboard_horizontal_route.dart';
+part 'script_editor_screen.keyboard_bookmark_helpers.dart';
 part 'script_editor_screen.keyboard_focus.dart';
-part 'script_editor_screen.selection_trace_stub.dart';
-part 'script_editor_screen.arrow_trace_stub.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
-// â”€â”€ Switchboard Orchestrator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Switchboard Orchestrator --------------------------------------------------
 
 class _SelectAllIntent extends Intent {
   const _SelectAllIntent();
@@ -84,14 +107,6 @@ class _SearchIntent extends Intent {
   const _SearchIntent();
 }
 
-class _MoveLeftIntent extends Intent {
-  const _MoveLeftIntent();
-}
-
-class _MoveRightIntent extends Intent {
-  const _MoveRightIntent();
-}
-
 class _UndoIntent extends Intent {
   const _UndoIntent();
 }
@@ -103,8 +118,11 @@ class _RedoIntent extends Intent {
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
-  const ScriptEditorScreen(
-      {super.key, this.shouldAutoLoad = false, this.pendingFile});
+  const ScriptEditorScreen({
+    super.key,
+    this.shouldAutoLoad = false,
+    this.pendingFile,
+  });
 
   @override
   ConsumerState<ScriptEditorScreen> createState() => _ScriptEditorScreenState();
@@ -113,12 +131,11 @@ class ScriptEditorScreen extends ConsumerStatefulWidget {
 const String _keyboardBookmarkSign = '\u00BB';
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
-    with StylingLogicMixin<ScriptEditorScreen>, WidgetsBindingObserver {
-  // Dummy node for HardwareKeyboard â†’ _handleEditorArrowKey bridge
+    with WidgetsBindingObserver, StylingLogicMixin<ScriptEditorScreen> {
+  // Dummy node for HardwareKeyboard -> _handleEditorArrowKey bridge
   // (_handleEditorArrowKey never uses the node parameter).
   static final _arrowKeyDummyNode = FocusNode();
-  static const String _keyboardBookmarkSign = '\u00BB';
-  // â”€â”€ Mixin Implementation for StylingLogicMixin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Mixin Implementation for StylingLogicMixin ----------------------------
   @override
   List<MarkupController> get controllers => _controllers;
   @override
@@ -138,23 +155,24 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   void saveHistory({required String description, bool debounce = true}) =>
       _saveHistory(description: description, debounce: debounce);
 
-  // â”€â”€ State Members â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- State Members ----------------------------------------------------------
   final List<MarkupController> _controllers = [];
   final List<FocusNode> _focusNodes = [];
   final List<GlobalKey> _blockKeys = [];
   final ScrollController _editorScrollController = ScrollController();
+  final GlobalKey _editorArrowTraceBoundaryKey = GlobalKey();
   double? _editorScrollOffsetBeforeWindowHide;
+  int _editorModeReturnRestoreToken = 0;
   String _currentTitle = 'New Project';
 
-  TextSelection? _lastSelection;
-
-  /// Preserved non-collapsed selection â€” survives focus loss from dialogs.
+  /// Preserved non-collapsed selection - survives focus loss from dialogs.
   /// Updated only when the selection is non-collapsed, so opening a dialog
   /// (which collapses the selection) doesn't overwrite this.
   TextSelection? _preservedSelection;
   MarkupController? _lastFocusedController;
 
   String _sourceType = 'TEMP';
+  String? _currentSourcePath;
   String? _currentSessionId;
   final List<EditorState> _history = [];
   int _historyIndex = -1;
@@ -169,6 +187,23 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   List<_EditorSearchMatch> _editorSearchMatches = const [];
   int _editorSearchMatchIndex = -1;
   String _lastArrowDecision = 'idle';
+  String _lastArrowTrace = 'No arrow trace captured yet.';
+  String? _lastArrowTraceScreenshotPath;
+  String? _lastArrowTraceLogPath;
+  String _lastHighlightTrace = 'No highlight trace captured yet.';
+  String? _lastHighlightTraceScreenshotPath;
+  String? _lastHighlightTraceLogPath;
+  int _highlightTraceSequence = 0;
+  String _highlightTraceSessionId = _newEditorDebugSessionId();
+  Timer? _highlightTraceTimer;
+  String _lastSelectionTrace = 'No selection trace captured yet.';
+  String? _lastSelectionTraceScreenshotPath;
+  String? _lastSelectionTraceLogPath;
+  int _selectionTraceSequence = 0;
+  String _selectionTraceSessionId = _newEditorDebugSessionId();
+  int _arrowTraceSequence = 0;
+  String _arrowTraceSessionId = _newEditorDebugSessionId();
+  bool _debugSentryCollapsed = false;
   String? _activeArrowEventSignature;
   String? _suppressDuplicateArrowEventSignature;
   String? _handledShiftSelectionEventSignature;
@@ -176,6 +211,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   double? _verticalArrowPreferredX;
   SelectionEndpoint? _shiftSelectionAnchor;
   SelectionEndpoint? _shiftSelectionFocus;
+  int _editorPrimaryClickCount = 0;
+  Offset? _lastEditorPrimaryClickPosition;
+  Duration? _lastEditorPrimaryClickTime;
+  String? _pendingNativeSelectionGestureKind;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
@@ -189,24 +228,36 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isDirty = false;
   bool _isLoading = false;
   bool _isPendingLoad = false;
+  bool _isBulkLoadingBlocks = false;
+  bool _editorToolbarFocusGuard = false;
+  bool _recentPersistRunning = false;
+  bool _recentPersistQueued = false;
+  String? _lastRecentPersistFingerprint;
   EditorSuite _activeSuite = EditorSuite.none;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer, _clipboardGuardTimer;
+  Timer? _editorToolbarFocusGuardTimer;
   Timer?
       _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
 
   // v3.9.6: Professional History Bulking
   int _typingCharCount = 0; // chars typed since last history commit
   Timer? _typingBulkTimer; // 10-second typing bulk window
-  Timer? _suiteAutoSaveTimer; // 3-second auto-checkpoint while suite is open
+  Timer? _suiteAutoSaveTimer; // legacy timer; canceled by live suite history
   String?
       _suiteSection; // current function section within a suite (e.g. 'Bold', 'Font Size')
+  EditorState? _suiteBaselineState;
+  int? _suiteLiveHistoryIndex;
+  EditorSuite? _suiteTransactionSuite;
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
-
-  void _setEditorState(VoidCallback fn) => setState(fn);
+  final GlobalKey _appSelectionToolbarKey = GlobalKey();
+  final GlobalKey _formattingToolbarKey = GlobalKey();
 
   void _clearGlobalSelection() {
     if (!mounted) return;
+    _preservedSelection = null;
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
     setState(() {
       _isGlobalSelection = false;
       _overlayKey.currentState?.clearSelection();
@@ -236,7 +287,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         }
       }
       if (needsRefresh) {
-        for (final c in _controllers) c.refresh();
+        for (final c in _controllers) {
+          c.refresh();
+        }
         setState(() {});
       }
     });
@@ -258,6 +311,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     if (widget.pendingFile != null) {
       _isInit = true;
       _isPendingLoad = true;
+      _currentSourcePath = widget.pendingFile!.path;
       _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _runPendingFileLoad(widget.pendingFile!);
@@ -272,7 +326,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void reassemble() {
     super.reassemble();
-    _resetArrowTraceSession('hot reload');
+    _resetDebugArtifactSessions('hot reload');
   }
 
   @override
@@ -313,6 +367,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
         initialText = script.rawText;
         initialTitle = script.title;
         _sourceType = script.sourceType;
+        _currentSourcePath = script.sourcePath;
         _currentSessionId = script.sessionId;
         Future.microtask(() {
           if (!mounted) return;
@@ -328,7 +383,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _loadText(initialText);
       _currentTitle = initialTitle;
 
-      // Read historyJson and historyIndex DIRECTLY from the persisted recent
+      // Read historyIndex directly from persisted recent metadata.
       // scripts entry (matched by sessionId).  scriptProvider.state.rawText is
       // only updated by _startPresenting, so it can be stale when the user
       // navigates away and back without going through the presenter.
@@ -340,13 +395,25 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           try {
             final meta = jsonDecode(json) as Map<String, dynamic>;
             if (meta['sessionId'] == _currentSessionId) {
-              final mj = meta['historyJson'];
               final mi = meta['historyIndex'];
-              if (mj is String) freshHistoryJson = mj;
               if (mi is int) freshHistoryIndex = mi;
+              final sourcePath = meta['sourcePath'];
+              if (sourcePath is String && sourcePath.trim().isNotEmpty) {
+                _currentSourcePath = sourcePath;
+              }
               break;
             }
-          } catch (_) {}
+          } catch (error) {
+            LightweightDiagnostics.instance.record(
+              'script',
+              'ignored malformed recent metadata during editor init',
+              data: {
+                'source': 'editorInitHistoryIndex',
+                'sessionId': _currentSessionId,
+                'error': error.toString(),
+              },
+            );
+          }
         }
       }
 
@@ -356,7 +423,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
           _history.clear();
           _history.addAll(historyData.map((d) => EditorState.fromJson(d)));
           _historyIndex = _history.length - 1;
-        } catch (_) {}
+        } catch (error, stack) {
+          LightweightDiagnostics.instance.recordError(
+            error,
+            stack,
+            source: 'scriptEditor.initialHistoryRestore',
+          );
+        }
       }
 
       final resolvedHistoryIndex = freshHistoryIndex ?? script?.historyIndex;
@@ -381,9 +454,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       } else {
         _saveHistory(description: 'Initial Load');
       }
-      _forceRecentUpdate();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _rememberCurrentRecentFingerprint();
+      });
       unawaited(_loadBookmarksForCurrentScript());
-      // Migrate old metadata-only bookmarks â†’ insert Â» signs into text.
+      // Migrate old metadata-only bookmarks -> insert >> signs into text.
       // Safe to re-run: strips existing signs first, then re-inserts in order.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_reconcileEditorBookmarkSignsFromMetadata());
@@ -405,6 +480,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
 
   @override
   void dispose() {
+    _persistRecentSafely('dispose');
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
     _clipboardGuardTimer?.cancel();
@@ -413,11 +489,15 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     _autoSaveTimer?.cancel();
     _typingBulkTimer?.cancel();
     _suiteAutoSaveTimer?.cancel();
+    _editorToolbarFocusGuardTimer?.cancel();
+    _highlightTraceTimer?.cancel();
     _editorScrollController.dispose();
     _clearControllers();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => _buildScriptEditorScreen(context);
+  Widget build(BuildContext context) => _buildEditorScreen(context);
+
+  void _setEditorState(VoidCallback fn) => setState(fn);
 }

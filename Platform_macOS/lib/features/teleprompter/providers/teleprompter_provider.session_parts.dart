@@ -1,75 +1,195 @@
 part of 'teleprompter_provider.dart';
 
 extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
-  void _setupWhisperCallbacks() {
-    _whisperService.onResult = (result) {
-      if (_disposed || _sessionStopped) return;
-      _handleSttResult(result);
-    };
+  List<String> _recentTranscriptWindows(String transcript) =>
+      TeleprompterNotifier.liveTranscriptWindowsForAlignment(transcript);
 
-    _whisperService.onStatusChange = (status) {
-      if (!_useWhisper || _disposed || _sessionStopped) return;
-      _addDebugLog('ðŸ¤– WHISPER STATUS: $status');
-      _safeSetState((s) => s.copyWith(
-            isListening: status == SpeechStatus.listening,
-            isStarting: false,
-            statusMessage: '',
-            hasError: false,
-          ));
-    };
 
-    _whisperService.onError = (error) {
-      if (_disposed || _sessionStopped) return;
-      _addDebugLog('ðŸ¤– WHISPER ERROR: $error');
-      final isFatal =
-          error.contains('not available') || error.contains('init failed');
-      if (isFatal) {
-        _safeSetState((s) => s.copyWith(
-              statusMessage: error,
-              hasError: true,
-              isListening: false,
-              isStarting: false,
-            ));
-      }
-    };
+  int? _relockTargetFromTranscript(Script script, String transcript) {
+    _lastRelockScope = 'none';
+    if (_noProgressCount < TeleprompterNotifier._stuckRelockAfterWaits) {
+      return null;
+    }
+    if (transcript.trim().isEmpty) return null;
+
+    final windows = _recentTranscriptWindows(transcript);
+    final candidates = windows.isEmpty ? <String>[transcript] : windows;
+    for (var i = 0; i < candidates.length; i++) {
+      final target = _relockTargetFromTranscriptWindow(
+        script,
+        candidates[i],
+      );
+      if (target == null) continue;
+      if (i > 0) _lastRelockScope = '$_lastRelockScope-window${i + 1}';
+      return target;
+    }
+    return null;
   }
 
-  /// Auto-fallback to Whisper when Google STT is completely blocked
-  /// (e.g., ColorOS devices where mic permission is restricted)
-  Future<void> _autoFallbackToWhisper(String langName) async {
-    if (_disposed || _sessionStopped) return;
-
-    // Try Whisper models in order: tiny (fastest), base, small
-    const fallbackModels = ['whisper_tiny', 'whisper_base', 'whisper_small'];
-
-    for (final engineKey in fallbackModels) {
-      final model = whisperModelFromEngine(engineKey);
-      final downloaded = await _whisperService.isModelDownloaded(model);
-      if (downloaded) {
-        _addDebugLog('ðŸ¤– WHISPER FALLBACK: Found $engineKey, switching...');
-        _useWhisper = true;
-        await _whisperService.start(
-          localeId: _scriptLanguageLocale,
-          model: model,
-        );
-        return;
-      }
+  int? _relockTargetFromTranscriptWindow(Script script, String transcript) {
+    if (_visibleWordStart == null || _visibleWordEnd == null) {
+      _lastRelockScope = 'no-visible-window';
+      return null;
     }
 
-    // No Whisper model available â€” show error with guidance
-    _addDebugLog('âŒ NO WHISPER MODEL â€” cannot fallback, showing error');
-    _safeSetState((s) => s.copyWith(
-          missingLanguage: langName,
-          hasError: true,
-          isListening: false,
-          isStarting: false,
-          statusMessage: 'Google speech blocked on this device. '
-              'Go to Settings and download a Whisper model for offline recognition.',
-        ));
+    const relockService = SttVisibleRelockService();
+    final fuzzyTarget = relockService.fuzzyTarget(
+      words: script.words,
+      transcript: transcript,
+      visibleWordStart: _visibleWordStart,
+      visibleWordEnd: _visibleWordEnd,
+    );
+    if (fuzzyTarget != null) {
+      _lastRelockScope = 'visible-fuzzy';
+      return fuzzyTarget;
+    }
+
+    final visibleApproximateTarget = relockService.approximateTarget(
+      words: script.words,
+      transcript: transcript,
+      currentIndex: _currentState.confirmedWordIndex,
+      visibleWordStart: _visibleWordStart,
+      visibleWordEnd: _visibleWordEnd,
+      minimumScore: _noProgressCount >=
+              TeleprompterNotifier._relaxedVisibleRelockAfterWaits
+          ? 0.76
+          : 0.88,
+    );
+    if (visibleApproximateTarget != null) {
+      _lastRelockScope = 'visible-approximate';
+      return visibleApproximateTarget;
+    }
+
+    _lastRelockScope = 'visible-only-no-match';
+    return null;
   }
 
-  /// Animate word advancement from current position to [target],
-  /// advancing one word every ~80ms so the eye can follow.
+  _SequentialSttProgress? _consumeSequentialSttStreak({
+    required Script script,
+    required String transcript,
+    required SttRecognitionPolicy policy,
+    required bool strictBulletMode,
+  }) {
+    final rawTokens = transcript
+        .split(RegExp(r'\s+'))
+        .map((word) => word.trim().normalizeForMatching())
+        .where((word) => word.isNotEmpty)
+        .toList(growable: false);
+    final tokens = rawTokens.length > 12
+        ? rawTokens.sublist(rawTokens.length - 12)
+        : rawTokens;
+    if (tokens.isEmpty || script.words.isEmpty) {
+      _resetSequentialSttStreak();
+      return null;
+    }
+
+    final currentIndex = _currentState.confirmedWordIndex;
+    if (_sequentialSttBaseIndex != currentIndex &&
+        _sequentialSttEndIndex != currentIndex) {
+      _resetSequentialSttStreak();
+    }
+
+    _sequentialSttBaseIndex ??= currentIndex;
+    _sequentialSttEndIndex ??= currentIndex;
+    var probeIndex = _sequentialSttEndIndex!;
+    var evidence = _sequentialSttEvidence;
+    var matched = 0;
+    var duplicateIgnored = 0;
+    var consumedPrefixIgnored = 0;
+    final now = DateTime.now();
+
+    for (final token in tokens) {
+      final nextIndex = WordAligner.nextSpeakableIndex(
+        script.words,
+        probeIndex + 1,
+      );
+      if (nextIndex >= script.words.length) break;
+      final nextWord = script.words[nextIndex];
+      if (WordAligner.spokenWordMatchesNext(
+        token,
+        nextWord,
+        strictBulletMode: strictBulletMode,
+      )) {
+        probeIndex = nextIndex;
+        evidence += policy.startAdvance.evidenceCost(nextWord.normalized);
+        matched++;
+        _sequentialSttLastToken = token;
+        _sequentialSttLastTokenAt = now;
+        continue;
+      }
+
+      final baseIndex = _sequentialSttBaseIndex!;
+      final endIndex = _sequentialSttEndIndex!;
+      var matchedConsumedPrefix = false;
+      for (var i = baseIndex + 1; i <= endIndex; i++) {
+        if (i < 0 || i >= script.words.length) continue;
+        if (WordAligner.spokenWordMatchesNext(
+          token,
+          script.words[i],
+          strictBulletMode: strictBulletMode,
+        )) {
+          matchedConsumedPrefix = true;
+          break;
+        }
+      }
+      if (matchedConsumedPrefix) {
+        consumedPrefixIgnored++;
+        continue;
+      }
+
+      final lastTokenAt = _sequentialSttLastTokenAt;
+      final repeatedRecentToken = _sequentialSttLastToken == token &&
+          lastTokenAt != null &&
+          now.difference(lastTokenAt) < const Duration(milliseconds: 1400);
+      if (repeatedRecentToken) {
+        duplicateIgnored++;
+        continue;
+      }
+
+      _resetSequentialSttStreak();
+      return null;
+    }
+
+    if (matched == 0) {
+      return duplicateIgnored > 0 || consumedPrefixIgnored > 0
+          ? const _SequentialSttProgress(
+              null,
+              'repeated token ignored; streak waiting',
+            )
+          : null;
+    }
+
+    _sequentialSttEndIndex = probeIndex;
+    _sequentialSttEvidence = evidence;
+    final threshold = policy.startAdvance;
+    final needed = threshold.smallWords.toDouble();
+    final reachedThreshold = evidence >= needed;
+    if (!_sequentialSttUnlocked && !reachedThreshold) {
+      return _SequentialSttProgress(
+        null,
+        'matched=$matched ignored=${duplicateIgnored + consumedPrefixIgnored} evidence=${evidence.toStringAsFixed(1)}/${needed.toStringAsFixed(1)} end=$probeIndex',
+      );
+    }
+
+    _sequentialSttUnlocked = true;
+    _sequentialSttBaseIndex = probeIndex;
+    _sequentialSttEndIndex = probeIndex;
+    _sequentialSttEvidence = 0.0;
+    return _SequentialSttProgress(
+      probeIndex,
+      'matched=$matched ignored=${duplicateIgnored + consumedPrefixIgnored} evidence=${evidence.toStringAsFixed(1)}/${needed.toStringAsFixed(1)}',
+    );
+  }
+
+  void _resetSequentialSttStreak() {
+    _sequentialSttBaseIndex = null;
+    _sequentialSttEndIndex = null;
+    _sequentialSttEvidence = 0.0;
+    _sequentialSttUnlocked = false;
+    _sequentialSttLastToken = null;
+    _sequentialSttLastTokenAt = null;
+  }
+
   void _startFluidAdvance(int target, Script script) {
     _fluidAdvanceTimer?.cancel();
     _fluidTarget = target;
@@ -80,7 +200,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
         timer.cancel();
         return;
       }
-      final current = state.confirmedWordIndex;
+      final current = _currentState.confirmedWordIndex;
 
       // If a newer result pushed the target further, follow it
       final effectiveTarget = _fluidTarget;
@@ -101,22 +221,6 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     });
   }
 
-  String _startLocaleForIndex(Script script, int startIndex) {
-    if (script.words.isEmpty) return 'en_US';
-    final clamped = startIndex.clamp(0, script.words.length - 1).toInt();
-
-    for (var i = clamped; i < script.words.length && i <= clamped + 24; i++) {
-      final locale = TeleprompterNotifier._strongLocaleForWord(script.words[i]);
-      if (locale != null) return locale;
-    }
-    for (var i = clamped - 1; i >= 0 && i >= clamped - 8; i--) {
-      final locale = TeleprompterNotifier._strongLocaleForWord(script.words[i]);
-      if (locale != null) return locale;
-    }
-    if (clamped < _sectionLocales.length) return _sectionLocales[clamped];
-    return _sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US';
-  }
-
   String? _visibleWindowStartLocale(Script script, int? start, int? end) {
     if (start == null || end == null || script.words.isEmpty) return null;
     final windowStart = start.clamp(0, script.words.length - 1).toInt();
@@ -128,34 +232,17 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     return null;
   }
 
-  /// Precompute the STT locale section for every script token. Short foreign
-  /// runs inherit surrounding context so names or isolated words do not restart
-  /// the recognizer unnecessarily.
   void _precomputeSectionLocales(Script script) {
-    _sectionLocales =
-        TeleprompterNotifier.resolveSttSectionLocalesForWords(script.words);
-  }
-
-  int _effectiveSkipThreshold() {
-    if (_useWhisper || _sectionLocales.isEmpty) {
-      return TeleprompterNotifier._googleSkipAfterStuck;
-    }
-    final currentIdx = state.confirmedWordIndex;
-    for (var lookahead = 1; lookahead <= 2; lookahead++) {
-      final checkIdx = currentIdx + lookahead;
-      if (checkIdx < _sectionLocales.length &&
-          _sectionLocales[checkIdx] != _activeLocale) {
-        return 5;
-      }
-    }
-    return TeleprompterNotifier._googleSkipAfterStuck;
+    _sectionLocales = TeleprompterNotifier.resolveSectionLocalesForWords(
+      script.words,
+    );
   }
 
   void _checkAndSwitchLocale() {
     if (_useWhisper || _disposed || _sessionStopped) return;
     if (_visibleLocaleAssistPinActive()) return;
     if (_sectionLocales.isEmpty) return;
-    final currentIdx = state.confirmedWordIndex;
+    final currentIdx = _currentState.confirmedWordIndex;
     if (currentIdx < 0 || currentIdx >= _sectionLocales.length) return;
 
     final lookIdx =
@@ -186,6 +273,8 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _activeLocale = locale;
     _scriptLanguageLocale = locale;
     _accumulatedTranscript = '';
+    _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     final engineName = _sttService.platformName.toUpperCase();
     _addDebugLog('STT LOCALE [$engineName]: $previous -> $locale ($reason)');
     _safeSetState((s) => s.copyWith(isStarting: true, soundLevel: 0.0));
@@ -195,12 +284,11 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
 
   bool _maybeAssistVisibleLocale(
     Script script,
-    AppSettings settings,
+    SttRecognitionPolicy policy,
     String heard,
   ) {
     if (_useWhisper || _disposed || _sessionStopped) return false;
-    if (!(settings.sttVisibleSkipEnabled || settings.sttStrictBulletMode) ||
-        heard.trim().isEmpty) {
+    if (!policy.visibleSkipEnabled || heard.trim().isEmpty) {
       return false;
     }
     if (_visibleWordStart == null || _visibleWordEnd == null) return false;
@@ -219,7 +307,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
           transcript: heard,
           visibleStart: _visibleWordStart!,
           visibleEnd: _visibleWordEnd!,
-          currentIndex: state.confirmedWordIndex,
+          currentIndex: _currentState.confirmedWordIndex,
         )) {
       _pendingVisibleLocaleAssistLocale = null;
       return false;
@@ -234,14 +322,18 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     if (_pendingVisibleLocaleAssistLocale != candidate) {
       _pendingVisibleLocaleAssistLocale = candidate;
       _addDebugLog(
-        'VISIBLE LOCALE ASSIST ARMED -> $candidate | wait=$_noProgressCount/$TeleprompterNotifier._visibleLocaleAssistAfterWaits',
+        'VISIBLE LOCALE ASSIST ARMED -> $candidate | wait=$_noProgressCount/${TeleprompterNotifier._visibleLocaleAssistAfterWaits}',
       );
       if (_noProgressCount <
-          TeleprompterNotifier._visibleLocaleAssistAfterWaits) return false;
+          TeleprompterNotifier._visibleLocaleAssistAfterWaits) {
+        return false;
+      }
     }
 
-    if (_noProgressCount < TeleprompterNotifier._visibleLocaleAssistAfterWaits)
+    if (_noProgressCount <
+        TeleprompterNotifier._visibleLocaleAssistAfterWaits) {
       return false;
+    }
 
     final now = DateTime.now();
     final lastAssistAt = _lastVisibleLocaleAssistAt;
@@ -276,11 +368,12 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     }
     if (_sectionLocales.isEmpty || script.words.isEmpty) return null;
 
-    final rawStart = _visibleWordStart ?? state.confirmedWordIndex + 1;
+    final rawStart = _visibleWordStart ?? _currentState.confirmedWordIndex + 1;
     final rawEnd = _visibleWordEnd ?? rawStart;
     final start = rawStart.clamp(0, script.words.length - 1).toInt();
     final end = rawEnd.clamp(start, script.words.length - 1).toInt();
-    final minIndex = (state.confirmedWordIndex + 1).clamp(0, end).toInt();
+    final minIndex =
+        (_currentState.confirmedWordIndex + 1).clamp(0, end).toInt();
     final scanStart = start < minIndex ? minIndex : start;
     if (scanStart > end) return null;
 
@@ -288,7 +381,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     String? lastSectionLocale;
     for (var i = scanStart; i <= end; i++) {
       final word = script.words[i];
-      if (word.isNewline || word.normalized.isEmpty) continue;
+      if (!TeleprompterNotifier._wordCarriesLanguage(word)) continue;
       final locale = _sectionLocales[i];
       if (locale == lastSectionLocale) continue;
       lastSectionLocale = locale;
@@ -328,33 +421,20 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     return active;
   }
 
-  /// Find the next non-newline word index after [from]
-  int? _nextRealWord(int from, Script script) {
-    for (int i = from + 1; i < script.words.length; i++) {
-      if (!script.words[i].isNewline && script.words[i].normalized.isNotEmpty) {
-        return i;
-      }
-    }
-    return null;
-  }
-
   Future<void> startSession(Script script) async {
     final pendingStop = _stopInFlight;
     if (pendingStop != null) await pendingStop;
     if (_disposed) return;
 
     final token = ++_sessionToken;
-    // Compare by sessionId rather than object identity. _startPresenting()
-    // always rebuilds the Script object, so identical() always returns false
-    // â€” causing the resume position to reset to 0 on every re-entry. Using
-    // sessionId (stable across editor edits of the same session) lets us
-    // distinguish "re-entered same session" from "loaded a different script".
     final sameScript = _currentScript != null &&
         _currentScript!.sessionId.isNotEmpty &&
         _currentScript!.sessionId == script.sessionId;
     _currentScript = script;
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
     _silentWarningFired = false;
@@ -363,27 +443,34 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     final startupVisibleEnd = _visibleWordEnd;
     _resetVisibleLocaleAssist();
     _precomputeSectionLocales(script);
-    final sttEngine = ref.read(settingsProvider).sttEngine;
+    final settings = ref.read(settingsProvider);
+    final sttEngine = settings.sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
-    final resumeIndex = sameScript ? state.confirmedWordIndex : 0;
+    final resumeIndex = sameScript ? _currentState.confirmedWordIndex : 0;
     final startIndex = resumeIndex.clamp(
       0,
       script.words.isEmpty ? 0 : script.words.length - 1,
     );
-    state = state.copyWith(
+    _writeState((s) => s.copyWith(
         confirmedWordIndex: startIndex,
         isListening: false,
         isStarting: true,
         hasError: false,
         statusMessage: '',
         debugLogs: [],
-        missingLanguage: null);
+        missingLanguage: null));
 
     _addDebugLog(
-        'ðŸš€ SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
+        'SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
     final visibleLocale = _visibleWindowStartLocale(
         script, startupVisibleStart, startupVisibleEnd);
-    final localeId = visibleLocale ?? _startLocaleForIndex(script, startIndex);
+    final localeId = visibleLocale ??
+        TeleprompterNotifier.resolveInitialSttLocaleForSettings(
+          script.words,
+          settings,
+          startIndex: startIndex,
+          sectionLocales: _sectionLocales,
+        );
     _scriptLanguageLocale = localeId;
     _activeLocale = localeId;
     if (visibleLocale != null) {
@@ -394,23 +481,22 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
           'STT START VISIBLE LOCALE: $localeId | window=$startupVisibleStart-$startupVisibleEnd');
     }
 
-    // v4.2: Detect starting locale focusing ONLY on the immediate first words.
-    // This prevents a long Hebrew document from forcing English start-text into Hebrew STT.
     if (script.words.isNotEmpty) {
       final initialLocale = localeId;
-
-      final realWords = script.words.where((w) => !w.isNewline).toList();
-      final hebrewCount = realWords.where((w) => w.isRtl).length;
-      final ratio = hebrewCount / realWords.length;
+      final realWords =
+          script.words.where(TeleprompterNotifier._wordCarriesLanguage).toList();
+      final hebrewCount = realWords
+          .where((w) => TeleprompterNotifier._explicitLocaleForWord(w) == 'he_IL')
+          .length;
+      final ratio = realWords.isEmpty ? 0.0 : hebrewCount / realWords.length;
       _addDebugLog(
-          'ðŸŒ LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew overall)');
+          'LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew language words)');
       _addDebugLog(
           'STT START LOCALE: $localeId | sections=${_sectionLocales.toSet().length}');
     }
 
     // Start heartbeat timer in debug mode
     _heartbeatTimer?.cancel();
-    final settings = ref.read(settingsProvider);
     if (settings.debugMode) {
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (_disposed) return;
@@ -418,10 +504,10 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
             _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
         final listening =
             _useWhisper ? _whisperService.isListening : _sttService.isListening;
-        final pos = state.confirmedWordIndex;
+        final pos = _currentState.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
         _addDebugLog(
-            'ðŸ’“ HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
+            'HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
 
         // Silent-listening detector: STT says listening but no audio level or results received.
         if (!_useWhisper &&
@@ -434,9 +520,9 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
           if (elapsed.inSeconds >= 10) {
             _silentWarningFired = true;
             _addDebugLog(
-                'ðŸš¨ SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
+                'SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
             _addDebugLog(
-                'ðŸ‘‰ FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
+                'FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
             _safeSetState((s) => s.copyWith(
                   statusMessage:
                       'Microphone signal weak or blocked.\n1. Check Privacy Settings -> Microphone.\n2. Ensure "Online Speech Recognition" is enabled.',
@@ -446,11 +532,9 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
         }
 
         // Dynamic language switching for mixed Hebrew/English scripts.
-        // Every heartbeat, check the next expected word. If its language
-        // changed, hot-switch the STT locale via WebSocket.
         if (!_useWhisper && listening && _currentScript != null) {
-          if (settings.sttStrictBulletMode && _noProgressCount > 0) return;
-          _syncLocaleForPosition(_currentScript!, state.confirmedWordIndex + 1,
+          _syncLocaleForPosition(
+              _currentScript!, _currentState.confirmedWordIndex + 1,
               reason: 'heartbeat');
         }
       });
@@ -458,7 +542,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
 
     if (_useWhisper) {
       final model = whisperModelFromEngine(sttEngine);
-      _addDebugLog('ðŸ¤– Starting Whisper STT ($sttEngine) offline...');
+      _addDebugLog('Starting Whisper STT ($sttEngine) offline...');
       await _whisperService.start(localeId: localeId, model: model);
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _whisperService.stop();
@@ -474,10 +558,10 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
             ? 'System default microphone'
             : selectedMicLabel,
       );
-      _addDebugLog('ðŸŽ¤ [$platform] Starting STT locale=$localeId...');
+      _addDebugLog('[$platform] Starting STT locale=$localeId...');
       _addDebugLog(selectedMicId.isEmpty
-          ? 'ðŸŽ™ï¸ [$platform] Microphone: system default input'
-          : 'ðŸŽ™ï¸ [$platform] Microphone: $selectedMicLabel');
+          ? '[$platform] Microphone: system default input'
+          : '[$platform] Microphone: $selectedMicLabel');
       final SpeechStartResult result;
       try {
         result = await _sttService.start(localeId: localeId).timeout(
@@ -489,7 +573,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
               ),
             );
       } catch (error) {
-        _addDebugLog('ðŸŽ¤ [$platform] STT START EXCEPTION: $error');
+        _addDebugLog('[$platform] STT START EXCEPTION: $error');
         _safeSetState((s) => s.copyWith(
               statusMessage:
                   'Speech recognition could not start. Please check macOS Microphone and Speech Recognition permissions, then try again.',
@@ -505,7 +589,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
       }
 
       if (!result.success) {
-        _addDebugLog('ðŸŽ¤ [$platform] STT FAILED: ${result.message}');
+        _addDebugLog('[$platform] STT FAILED: ${result.message}');
         _safeSetState((s) => s.copyWith(
               statusMessage: result.message ?? 'Speech recognition failed',
               hasError: true,
@@ -521,27 +605,18 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
       if (_sttService.requiresImmediateListeningFlag) {
         _startingSession = true;
         _safeSetState((s) => s.copyWith(isListening: true, isStarting: false));
-        // Auto-clear the guard after 1.5 s in case listening status never fires
         Future.delayed(const Duration(milliseconds: 1500), () {
           if (token == _sessionToken) _startingSession = false;
         });
       }
 
-      // Apple-native STT normally has no embedded browser URL, but keep the
-      // optional field wired for adapters that expose diagnostics.
-      final browserUrl = _sttService.sttBrowserUrl;
-      if (browserUrl != null) {
-        _safeSetState((s) => s.copyWith(sttBrowserUrl: browserUrl));
-      }
-
       if (result.languageMissing && result.missingLanguageName != null) {
         _addDebugLog(
-            'âš ï¸ [$platform] LANG MISSING: ${result.missingLanguageName} â€” using ${result.actualLocale}');
+            '[$platform] LANG MISSING: ${result.missingLanguageName} - using ${result.actualLocale}');
         _safeSetState(
             (s) => s.copyWith(missingLanguage: result.missingLanguageName));
       } else {
-        _addDebugLog(
-            'ðŸŽ¤ [$platform] STT using locale: ${result.actualLocale}');
+        _addDebugLog('[$platform] STT using locale: ${result.actualLocale}');
       }
     }
   }
@@ -558,6 +633,8 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _fluidAdvanceTimer?.cancel();
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     _lastVolLog = null;
     _scriptLanguageLocale = null;
     _activeLocale = null;
@@ -566,29 +643,10 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _visibleWordEnd = null;
     _resetVisibleLocaleAssist();
 
-    // Stop all engines â€” Whisper may have been auto-started via fallback
-    if (!_disposed) {
-      try {
-        state = state.copyWith(
-          isListening: false,
-          isStarting: false,
-          hasError: false,
-          statusMessage: '',
-          soundLevel: 0.0,
-          sttBrowserUrl: null,
-        );
-      } catch (_) {}
-    }
-
-    Future<void> safeStopWhisper(Future<void> stop) async {
-      try {
-        await stop.timeout(const Duration(milliseconds: 900));
-      } catch (_) {}
-    }
-
+    // Stop all engines - Whisper may have been auto-started via fallback.
     final stopFuture = Future.wait([
       _sttService.stop(),
-      safeStopWhisper(_whisperService.stop()),
+      _whisperService.stop(),
     ]);
     _stopInFlight = stopFuture.then((_) {});
     try {
@@ -596,16 +654,30 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     } finally {
       _stopInFlight = null;
     }
+
+    if (!_disposed) {
+      _writeState((s) => s.copyWith(
+            isListening: false,
+            isStarting: false,
+            hasError: false,
+            statusMessage: '',
+            soundLevel: 0.0,
+          ));
+    }
   }
 
   void resetPosition() {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
-    _addDebugLog('ðŸ”„ POSITION RESET â†’ 0');
-    state = state.copyWith(confirmedWordIndex: 0);
-    if (!_sessionStopped && _currentScript != null && state.isListening) {
+    _addDebugLog('POSITION RESET -> 0');
+    _writeState((s) => s.copyWith(confirmedWordIndex: 0));
+    if (!_sessionStopped &&
+        _currentScript != null &&
+        _currentState.isListening) {
       _syncLocaleForPosition(_currentScript!, 0, reason: 'reset');
     }
   }
@@ -617,17 +689,14 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     final target = index.clamp(0, activeScript.words.length - 1);
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sttReadingStandby = false;
+    _resetSequentialSttStreak();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(
-        'ðŸ“ POSITION JUMP â†’ #$target "${activeScript.words[target].raw}"');
-    try {
-      state = state.copyWith(confirmedWordIndex: target);
-    } catch (_) {
-      _disposed = true;
-      return;
-    }
-    if (!_sessionStopped && state.isListening) {
+        'POSITION JUMP -> #$target "${activeScript.words[target].raw}"');
+    _writeState((s) => s.copyWith(confirmedWordIndex: target));
+    if (!_sessionStopped && _currentState.isListening) {
       _syncLocaleForPosition(activeScript, target, reason: 'manual jump');
     }
   }
@@ -635,7 +704,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
   Future<void> refreshAudioInputDevices() async {
     final devices = await _sttService.refreshAudioInputDevices();
     if (!_disposed) {
-      state = state.copyWith(audioInputDevices: devices);
+      _writeState((s) => s.copyWith(audioInputDevices: devices));
     }
   }
 
@@ -649,8 +718,8 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     );
     unawaited(refreshAudioInputDevices());
     _addDebugLog(normalizedId.isEmpty
-        ? 'ðŸŽ™ï¸ Microphone input set to system default'
-        : 'ðŸŽ™ï¸ Microphone input set to $normalizedLabel');
+        ? 'Microphone input set to system default'
+        : 'Microphone input set to $normalizedLabel');
   }
 
   void setVisibleWordWindow(int? startIndex, int? endIndex) {

@@ -11,7 +11,7 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
     final current = _scrollController.offset;
     final diff = _scrollTarget - current;
 
-    // Close enough — snap and stop
+    // Close enough - snap and stop
     if (diff.abs() < 0.2) {
       _scrollController.jumpTo(_scrollTarget);
       timer.cancel();
@@ -19,6 +19,7 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
       return;
     }
 
+    _suppressPresenterProgrammaticPositionCommit(immediate: false);
     var step = diff * 0.035;
     step = step.clamp(-7.0, 7.0).toDouble();
     if (step.abs() < 0.25) step = diff.isNegative ? -0.25 : 0.25;
@@ -36,7 +37,11 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       isScrollControlled: true,
-      builder: (_) => const TeleprompterSettingsPanel(),
+      builder: (_) => TeleprompterSettingsPanel(
+        onFontSizeChanged: _preserveReadingPositionAfterLayoutChange,
+        onLayoutChanged: () => _preserveReadingPositionAfterLayoutChange(0),
+        onInvertColors: _togglePresenterColorInversion,
+      ),
     );
   }
 }

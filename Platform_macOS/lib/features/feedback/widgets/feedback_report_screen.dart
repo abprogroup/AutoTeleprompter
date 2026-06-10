@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../script/models/script.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
@@ -27,6 +26,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
   String _severity = 'Normal';
   bool _sending = false;
   bool _outboxBusy = false;
+  bool _attachScript = false;
   int _pendingReports = 0;
 
   @override
@@ -50,8 +50,10 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
   @override
   Widget build(BuildContext context) {
     final script = ref.watch(scriptProvider);
+    final scriptOpenedThisSession = ref.watch(scriptOpenedThisSessionProvider);
     final consent = ref.watch(betaConsentProvider);
-    final scriptSummary = script == null
+    final canAttachScript = script != null && scriptOpenedThisSession;
+    final scriptSummary = !canAttachScript
         ? 'No active script'
         : '${script.title} - ${script.rawText.length} characters';
 
@@ -61,7 +63,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          'Send Beta Feedback',
+          'Send Feedback',
           style: GoogleFonts.bebasNeue(
             color: const Color(0xFFFFBF00),
             fontSize: 24,
@@ -73,6 +75,10 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         padding: const EdgeInsets.all(22),
         children: [
           _notice(scriptSummary, consent.deviceKey),
+          if (canAttachScript) ...[
+            const SizedBox(height: 12),
+            _scriptAttachmentToggle(script),
+          ],
           const SizedBox(height: 18),
           if (_pendingReports > 0) ...[
             _outboxCard(),
@@ -143,7 +149,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'This beta feedback report includes your full active script and diagnostic data.',
+            'This feedback report includes diagnostic data. Script text is attached only when you choose it for this report.',
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w800,
@@ -157,6 +163,36 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
           Text('Device key: $deviceKey',
               style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ],
+      ),
+    );
+  }
+
+  Widget _scriptAttachmentToggle(Script script) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151515),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: CheckboxListTile(
+        value: _attachScript,
+        onChanged: (value) => setState(() => _attachScript = value ?? false),
+        activeColor: const Color(0xFFFFBF00),
+        checkColor: Colors.black,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(
+          'Attach my current script: ${script.title} (${script.rawText.length} chars)',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: const Text(
+          'Leave this off unless the script text is needed to reproduce the issue.',
+          style: TextStyle(color: Colors.white54),
+        ),
       ),
     );
   }
@@ -320,6 +356,10 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
 
   Map<String, Object?> _buildReport() {
     final script = _safeRead(() => ref.read(scriptProvider));
+    final scriptOpenedThisSession =
+        _safeRead(() => ref.read(scriptOpenedThisSessionProvider)) ?? false;
+    final includeScript =
+        _attachScript && script != null && scriptOpenedThisSession;
     final settings = ref.read(settingsProvider);
     final consent = ref.read(betaConsentProvider);
     final reportId = 'rpt_${DateTime.now().toUtc().millisecondsSinceEpoch}';
@@ -328,8 +368,10 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
       'reportId': reportId,
       'deviceKey': consent.deviceKey,
       'consentVersion': consent.acceptedPolicyVersion,
+      'speechDisclosureVersion': consent.acceptedSpeechDisclosureVersion,
+      'cloudDisclosureVersion': consent.acceptedCloudDisclosureVersion,
       'appVersion': betaAppVersion,
-      'platform': Platform.operatingSystem,
+      'platform': 'windows',
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'userText': {
         'category': _category,
@@ -338,7 +380,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         'description': _descriptionCtrl.text.trim(),
         'steps': _stepsCtrl.text.trim(),
       },
-      'activeScript': script == null
+      'activeScript': !includeScript
           ? null
           : {
               'title': script.title,
@@ -357,6 +399,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
           'sttInputDeviceLabel': settings.sttInputDeviceLabel,
           'sttStrictBulletMode': settings.sttStrictBulletMode,
           'sttVisibleSkipEnabled': settings.sttVisibleSkipEnabled,
+          'sttManualProfileEnabled': settings.sttManualProfileEnabled,
         },
         'ringBuffer': LightweightDiagnostics.instance.snapshot(
           budgetBytes: 96 * 1024,

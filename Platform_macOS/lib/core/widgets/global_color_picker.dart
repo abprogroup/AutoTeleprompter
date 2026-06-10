@@ -19,7 +19,7 @@ void showGlobalColorPicker({
           children: [
             ColorPicker(
               pickerColor: Color(tempColor),
-              onColorChanged: (c) => tempColor = c.value,
+              onColorChanged: (c) => tempColor = c.toARGB32(),
               colorPickerWidth: 260,
               pickerAreaHeightPercent: 0.7,
               enableAlpha: false,
@@ -69,7 +69,7 @@ void showGlobalColorPicker({
                         color: isSelected ? Colors.amber : Colors.white38,
                         width: isSelected ? 3 : 1,
                       ),
-                      boxShadow: isSelected ? [BoxShadow(color: Colors.amber.withOpacity(0.5), blurRadius: 8)] : null,
+                      boxShadow: isSelected ? [BoxShadow(color: Colors.amber.withValues(alpha: 0.5), blurRadius: 8)] : null,
                     ),
                     child: c == 0 ? const Center(child: Icon(Icons.block, size: 18, color: Colors.red)) : (isSelected ? const Icon(Icons.check, size: 16, color: Colors.white) : null),
                   ),

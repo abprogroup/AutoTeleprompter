@@ -1,33 +1,7 @@
-﻿part of 'global_selection_overlay.dart';
+part of 'global_selection_overlay.dart';
 
-extension _GlobalSelectionOverlayBodyDragParts on GlobalSelectionOverlayState {
-  /// Returns the block index whose render box contains [globalPos], or null.
-  int? _blockAtPosition(Offset globalPos) {
-    for (int i = 0; i < widget.blockKeys.length; i++) {
-      final box =
-          widget.blockKeys[i].currentContext?.findRenderObject() as RenderBox?;
-      if (box == null) continue;
-      final local = box.globalToLocal(globalPos);
-      if (local.dx >= 0 &&
-          local.dx <= box.size.width &&
-          local.dy >= 0 &&
-          local.dy <= box.size.height) {
-        return i;
-      }
-    }
-    return null;
-  }
-
-  /// Body pointer-down: record the candidate AND eagerly cache the raw char
-  /// offset at the pointer-down position. Do NOT activate global selection â€”
-  /// that only happens when the pointer leaves the starting block.
-  ///
-  /// Caching the offset HERE (not at cross-block time) is what prevents the
-  /// "anchor jump" the user reported: by the time the pointer crosses out of
-  /// the starting block, the TextField may have abandoned its drag and the
-  /// scroll view may have moved, so neither `controller.selection.baseOffset`
-  /// nor a fresh `getPositionForPoint(_candidatePos)` is reliable anymore.
-  void startDragging(Offset globalPos) {
+extension GlobalSelectionOverlayBodyDrag on GlobalSelectionOverlayState {
+  bool startDragging(Offset globalPos) {
     if (_handleDrag != null &&
         (_pointerState == SelectionPointerState.outside ||
             _pointerState == SelectionPointerState.stale)) {
@@ -37,81 +11,89 @@ extension _GlobalSelectionOverlayBodyDragParts on GlobalSelectionOverlayState {
         suppressBodyDragUntilPointerUp: false,
       );
     }
-    if (_ignoreBodyDragUntilPointerUp) return;
+    if (_ignoreBodyDragUntilPointerUp) return false;
+
+    final endpoint = _endpointAtGlobalPosition(globalPos, allowNearest: false);
     _candidatePos = globalPos;
     _latestBodyDragGlobal = globalPos;
-    _candidateBlock = _blockAtPosition(globalPos);
-    _candidateOffset = null;
+    _candidateBlock = endpoint?.block;
+    _candidateOffset = endpoint?.offset;
     _bodyDragActive = false;
-    if (_candidateBlock != null) {
-      final renderObj =
-          widget.blockKeys[_candidateBlock!].currentContext?.findRenderObject();
-      if (renderObj != null) {
-        final editable = _findRenderEditable(renderObj);
-        if (editable != null) {
-          _candidateOffset = editable.getPositionForPoint(globalPos).offset;
-        }
-      }
-    }
+    _lastBodyDragFocusTrace = null;
+    _debugSelectionEvent(
+      'dragStart block=${_candidateBlock ?? "-"} '
+      'offset=${_candidateOffset ?? "-"}',
+    );
+    return endpoint != null;
   }
 
-  /// Body pointer-move: activate global selection iff the pointer has crossed
-  /// into a different block than where the gesture started. Once active,
-  /// extend the selection from the original origin to the current position.
+  /// Body pointer-move: same-block drags stay native-owned until pointer-up.
+  /// Overlay ownership begins only once the gesture clearly crosses blocks,
+  /// enters a block from outside editable text, or reaches a real scroll edge.
   void updateDragging(Offset globalPos) {
-    if (_ignoreBodyDragUntilPointerUp) return;
-    if (_candidatePos == null) return;
+    if (_ignoreBodyDragUntilPointerUp || _candidatePos == null) return;
     _latestBodyDragGlobal = globalPos;
+
     if (!_bodyDragActive) {
-      final currentBlock = _blockAtPosition(globalPos);
-      final crossed = currentBlock != null &&
+      final currentEndpoint =
+          _endpointAtGlobalPosition(globalPos, allowNearest: false);
+      final currentBlock = currentEndpoint?.block;
+      final crossed = currentEndpoint != null &&
           _candidateBlock != null &&
           currentBlock != _candidateBlock;
-      final emptyToBlock = _candidateBlock == null && currentBlock != null;
-      final edgeDrag = _shouldStartBodyEdgeDrag(globalPos);
-      if (!crossed && !emptyToBlock && !edgeDrag) return;
+      final outsideToBlock = _candidateBlock == null && currentEndpoint != null;
+      final edgeDrag = _shouldStartBodyEdgeDrag(
+        globalPos,
+        currentBlock: currentBlock,
+      );
+      if (!crossed && !outsideToBlock && !edgeDrag) return;
 
-      _bodyDragActive = true;
+      final anchor = _frozenBodyDragAnchor() ??
+          currentEndpoint ??
+          _endpointAtGlobalPosition(_candidatePos!, allowNearest: true);
+      final focus = currentEndpoint ??
+          _endpointAtGlobalPosition(globalPos, allowNearest: true);
+      if (anchor == null || focus == null) return;
+
       _enterRefineMode();
-
-      // Anchor priority for the start of the global selection:
-      //  1. Cached char offset captured at pointer-down (most robust â€” frozen
-      //     at the visual position the user actually clicked).
-      //  2. The TextField's native selection.baseOffset (only valid if the
-      //     TextField is still tracking the drag).
-      //  3. Re-deriving the offset from the pointer-down GLOBAL position.
-      if (_candidateBlock != null && _candidateOffset != null) {
-        _anchorBlock = _candidateBlock;
-        _anchorOffset = _candidateOffset;
-      } else if (_candidateBlock != null) {
-        final controller = widget.controllers[_candidateBlock!];
-        if (controller.selection.isValid) {
-          _anchorBlock = _candidateBlock;
-          _anchorOffset = controller.selection.baseOffset;
-        }
-      }
-
-      setState(() {
+      _setOverlayState(() {
+        _bodyDragActive = true;
         _isSelecting = true;
         _sessionMode = SelectionSessionMode.overlaySelection;
         _pointerState = SelectionPointerState.inside;
         _focusEndpointIsStart = false;
-        if (_anchorBlock != null) {
-          _startBlock = _anchorBlock;
-          _startOffset = _anchorOffset;
-        } else {
-          _handleUpdate(_candidatePos!, true);
-        }
-        _handleUpdate(globalPos, false);
+        _startBlock = anchor.block;
+        _startOffset = anchor.offset;
+        _endBlock = focus.block;
+        _endOffset = focus.offset;
+        _updateControllers();
       });
+      _lastBodyDragFocusTrace = focus;
+      _afterEndpointUpdate(
+        debugReason: 'dragActivate anchor=$anchor focus=$focus '
+            'crossed=$crossed outsideToBlock=$outsideToBlock edge=$edgeDrag',
+      );
       _updateBodyAutoScroll(globalPos);
       return;
     }
-    _handleUpdate(globalPos, false);
+
+    final focusChanged = _handleUpdate(
+      globalPos,
+      false,
+      allowNearest: false,
+    );
+    if (focusChanged) {
+      final focus = SelectionEndpoint(block: _endBlock!, offset: _endOffset!);
+      if (_lastBodyDragFocusTrace?.block != focus.block) {
+        _lastBodyDragFocusTrace = focus;
+        _debugSelectionEvent('dragUpdate focus=$focus');
+      }
+    }
     _updateBodyAutoScroll(globalPos);
   }
 
-  void endDragging() {
+  bool endDragging() {
+    final overlayOwnedGesture = _bodyDragActive || _handleDrag != null;
     if (_handleDrag != null) {
       _endHandleDrag(
         reason: 'pointer-up',
@@ -125,17 +107,23 @@ extension _GlobalSelectionOverlayBodyDragParts on GlobalSelectionOverlayState {
         ? SelectionSessionMode.overlaySelection
         : SelectionSessionMode.none;
     _pointerState = SelectionPointerState.inside;
-    // Selection persists after drag
+    _debugSelectionEvent('dragEnd overlayOwned=$overlayOwnedGesture');
+    return overlayOwnedGesture;
   }
 
-  bool _shouldStartBodyEdgeDrag(Offset globalPos) {
+  bool _shouldStartBodyEdgeDrag(
+    Offset globalPos, {
+    required int? currentBlock,
+  }) {
     if (_handleDrag != null ||
         _candidateBlock == null ||
         _candidateOffset == null ||
         _candidatePos == null) {
       return false;
     }
-    if ((globalPos - _candidatePos!).distance <= 4.0) return false;
+    final delta = globalPos - _candidatePos!;
+    if (delta.distance <= 4.0 || delta.dy.abs() <= 18.0) return false;
+    if (currentBlock == _candidateBlock) return false;
     if (_pointerStateFor(globalPos) != SelectionPointerState.edgeZone) {
       return false;
     }
@@ -202,78 +190,113 @@ extension _GlobalSelectionOverlayBodyDragParts on GlobalSelectionOverlayState {
             .clamp(sc.position.minScrollExtent, sc.position.maxScrollExtent)
             .toDouble();
         sc.jumpTo(next);
-        _handleUpdate(pointer, false);
+        _handleUpdate(pointer, false, allowNearest: true);
         refreshPositions();
       },
     );
   }
 
-  void _handleUpdate(Offset globalPos, bool isStart) {
-    final RenderBox? overlayBox = context.findRenderObject() as RenderBox?;
-    if (overlayBox == null) return;
+  bool _handleUpdate(
+    Offset globalPos,
+    bool isStart, {
+    bool allowNearest = true,
+  }) {
+    final changed = _applyEndpointUpdate(
+      globalPos,
+      isStart: isStart,
+      allowNearest: allowNearest,
+    );
+    if (changed) _afterEndpointUpdate();
+    return changed;
+  }
+
+  bool _applyEndpointUpdate(
+    Offset globalPos, {
+    required bool isStart,
+    required bool allowNearest,
+  }) {
+    final endpoint = _endpointAtGlobalPosition(
+      globalPos,
+      allowNearest: allowNearest,
+    );
+    if (endpoint == null) return false;
+    final same = isStart
+        ? _startBlock == endpoint.block && _startOffset == endpoint.offset
+        : _endBlock == endpoint.block && _endOffset == endpoint.offset;
+    if (same) return false;
+
+    _setOverlayState(() {
+      if (isStart) {
+        _focusEndpointIsStart = true;
+        _startBlock = endpoint.block;
+        _startOffset = endpoint.offset;
+      } else {
+        _focusEndpointIsStart = false;
+        _endBlock = endpoint.block;
+        _endOffset = endpoint.offset;
+      }
+      _updateControllers();
+    });
+    return true;
+  }
+
+  SelectionEndpoint? _frozenBodyDragAnchor() {
+    if (_candidateBlock == null || _candidateOffset == null) return null;
+    return SelectionEndpoint(
+      block: _candidateBlock!,
+      offset: _clampEndpointOffset(_candidateBlock!, _candidateOffset!),
+    );
+  }
+
+  SelectionEndpoint? _endpointAtGlobalPosition(
+    Offset globalPos, {
+    required bool allowNearest,
+  }) {
+    final overlayBox = context.findRenderObject() as RenderBox?;
+    if (overlayBox == null) return null;
     final localPos = overlayBox.globalToLocal(globalPos);
 
     int? bestBlock;
     double minDistance = double.infinity;
-
-    for (int i = 0; i < widget.blockKeys.length; i++) {
-      final key = widget.blockKeys[i];
-      final RenderBox? box =
-          key.currentContext?.findRenderObject() as RenderBox?;
+    for (var i = 0; i < widget.blockKeys.length; i++) {
+      final box =
+          widget.blockKeys[i].currentContext?.findRenderObject() as RenderBox?;
       if (box == null) continue;
-
       final blockOffset = box.localToGlobal(Offset.zero);
       final localInOverlay = overlayBox.globalToLocal(blockOffset);
       final rect = localInOverlay & box.size;
-
       if (rect.contains(localPos)) {
         bestBlock = i;
         break;
       }
-
-      // Fallback to nearest block if outside
-      final dist = (rect.center - localPos).distance;
-      if (dist < minDistance) {
-        minDistance = dist;
-        bestBlock = i;
-      }
-    }
-
-    if (bestBlock != null) {
-      final key = widget.blockKeys[bestBlock];
-      final context = key.currentContext;
-      if (context != null) {
-        final RenderObject? renderObj = context.findRenderObject();
-        if (renderObj != null) {
-          final RenderEditable? editable = _findRenderEditable(renderObj);
-          if (editable != null) {
-            // getPositionForPoint expects a GLOBAL coordinate and converts
-            // internally. The old code subtracted blockGlobalPos first which
-            // caused a double-conversion and always returned line-1 positions.
-            final pos = editable.getPositionForPoint(globalPos);
-
-            setState(() {
-              if (isStart) {
-                _focusEndpointIsStart = true;
-                _startBlock = bestBlock;
-                _startOffset = pos.offset;
-              } else {
-                _focusEndpointIsStart = false;
-                _endBlock = bestBlock;
-                _endOffset = pos.offset;
-              }
-              _updateControllers();
-            });
-            // v4.1.13: Explicitly refresh handle positions after the frame
-            // so they follow the drag in real-time.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) refreshPositions();
-            });
-            widget.onSelectionChanged();
-          }
+      if (allowNearest) {
+        final dist = (rect.center - localPos).distance;
+        if (dist < minDistance) {
+          minDistance = dist;
+          bestBlock = i;
         }
       }
     }
+    if (bestBlock == null) return null;
+
+    final blockContext = widget.blockKeys[bestBlock].currentContext;
+    final renderObj = blockContext?.findRenderObject();
+    if (renderObj == null) return null;
+    final editable = _findRenderEditable(renderObj);
+    if (editable == null) return null;
+    final pos = editable.getPositionForPoint(globalPos);
+    final offset =
+        pos.offset.clamp(0, widget.controllers[bestBlock].text.length).toInt();
+    return SelectionEndpoint(block: bestBlock, offset: offset);
   }
 
+  void _afterEndpointUpdate({String? debugReason}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) refreshPositions();
+    });
+    widget.onSelectionChanged();
+    if (debugReason != null) {
+      _debugSelectionEvent(debugReason);
+    }
+  }
 }

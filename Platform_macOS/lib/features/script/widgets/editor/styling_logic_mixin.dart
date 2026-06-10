@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import './markup_controller.dart';
+import '../../services/editor_inline_style_operation.dart';
 
 // v3.9.5.60: Hardened Geometric Styling Logic
 // — Proper nested-style toggle: uses regex search instead of boundary-only matching
@@ -13,7 +14,10 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
   set isCleaning(bool value);
   void saveHistory({required String description, bool debounce = true});
 
-  void wrapSelection(String open, String close, {String? prefix, MarkupController? controllerOverride, bool skipHistory = false}) {
+  void wrapSelection(String open, String close,
+      {String? prefix,
+      MarkupController? controllerOverride,
+      bool skipHistory = false}) {
     // v3.9.5.1: Global Broadcast Mode (Wholesale Replace)
     if (isGlobalSelection) {
       isCleaning = true;
@@ -21,7 +25,8 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
         for (final c in controllers) {
           if (c.text.isEmpty) continue;
           // Exact 3.9.5.1 logic: Strip all tags and wrap the whole block
-          c.text = '$open${c.text.replaceAll(RegExp(r"\[.*?\]|\*\*"), "")}$close';
+          c.text =
+              '$open${c.text.replaceAll(RegExp(r"\[.*?\]|\*\*"), "")}$close';
         }
         // v3.9.5.1: Save history AFTER operation so snapshot captures the update
         saveHistory(description: 'Global Format: $open', debounce: false);
@@ -43,13 +48,20 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
             !controller.externalSelection!.isCollapsed)
         ? controller.externalSelection!
         : controller.selection;
-    if (selection == null || !selection.isValid) return;
+    if (!selection.isValid) return;
 
     final start = selection.start;
     final end = selection.end;
 
     // Check if cursor/selection is INSIDE this style (detect mode)
-    final isActive = _isStyleActiveAt(text, start, end, open, close);
+    final isActive = selection.isCollapsed
+        ? _isStyleActiveAt(text, start, end, open, close)
+        : EditorInlineStyleOperation.selectionState(
+            text,
+            selection,
+            open: open,
+            close: close,
+          ).fullyStyled;
 
     if (isActive) {
       // ── TOGGLE OFF: Find the enclosing open/close pair and remove them ──
@@ -66,31 +78,76 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
     } else {
       // ── TOGGLE ON: Wrap selection with tags ────────────────────────────
       if (selection.isCollapsed) {
-        final left = text.substring(0, start);
-        final right = text.substring(start);
-        controller.value = TextEditingValue(
-          text: left + open + close + right,
-          selection: TextSelection.collapsed(offset: start + open.length),
+        controller.value = EditorInlineStyleOperation.applyForced(
+          text: text,
+          selection: selection,
+          open: open,
+          close: close,
+          enable: true,
         );
       } else {
-        final before = text.substring(0, start);
-        final selected = text.substring(start, end);
-        final after = text.substring(end);
-        controller.value = TextEditingValue(
-          text: before + open + selected + close + after,
-          selection: TextSelection(
-            baseOffset: start + open.length,
-            extentOffset: end + open.length,
-          ),
+        controller.value = EditorInlineStyleOperation.applyForced(
+          text: text,
+          selection: selection,
+          open: open,
+          close: close,
+          enable: true,
         );
       }
     }
     if (!skipHistory) saveHistory(description: 'Toggle Style: $open');
   }
 
+  SelectionStyleState selectionStyleState(
+    String open,
+    String close, {
+    MarkupController? controllerOverride,
+  }) {
+    final controller = controllerOverride ?? activeController;
+    if (controller == null) return const SelectionStyleState(0, false);
+    final selection = (controller.externalSelection != null &&
+            controller.externalSelection!.isValid &&
+            !controller.externalSelection!.isCollapsed)
+        ? controller.externalSelection!
+        : controller.selection;
+    if (!selection.isValid) return const SelectionStyleState(0, false);
+    return EditorInlineStyleOperation.selectionState(
+      controller.text,
+      selection,
+      open: open,
+      close: close,
+    );
+  }
+
+  void forceSelectionStyle(
+    String open,
+    String close, {
+    required bool enable,
+    MarkupController? controllerOverride,
+    bool skipHistory = false,
+  }) {
+    final controller = controllerOverride ?? activeController;
+    if (controller == null) return;
+    final selection = (controller.externalSelection != null &&
+            controller.externalSelection!.isValid &&
+            !controller.externalSelection!.isCollapsed)
+        ? controller.externalSelection!
+        : controller.selection;
+    if (!selection.isValid) return;
+    controller.value = EditorInlineStyleOperation.applyForced(
+      text: controller.text,
+      selection: selection,
+      open: open,
+      close: close,
+      enable: enable,
+    );
+    if (!skipHistory) saveHistory(description: 'Set Style: $open');
+  }
+
   /// Specialized logic for parameterized inline styles (like `[size=40]`, `[font=Inter]`).
   /// Replaces existing enclosing tags of the same family instead of nesting them.
-  void applyInlineProperty(String family, String open, String close, {MarkupController? controllerOverride, bool skipHistory = false}) {
+  void applyInlineProperty(String family, String open, String close,
+      {MarkupController? controllerOverride, bool skipHistory = false}) {
     // v3.9.5.1: Global Broadcast Mode (Wholesale Replace)
     if (isGlobalSelection) {
       isCleaning = true;
@@ -98,7 +155,8 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
         for (final c in controllers) {
           if (c.text.isEmpty) continue;
           // Exact 3.9.5.1 logic: Strip all tags and wrap the whole block
-          c.text = '$open${c.text.replaceAll(RegExp(r"\[.*?\]|\*\*"), "")}$close';
+          c.text =
+              '$open${c.text.replaceAll(RegExp(r"\[.*?\]|\*\*"), "")}$close';
         }
         // v3.9.5.1: Save history AFTER operation
         saveHistory(description: 'Global Property: $family', debounce: false);
@@ -118,7 +176,7 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
             !controller.externalSelection!.isCollapsed)
         ? controller.externalSelection!
         : controller.selection;
-    if (selection == null || !selection.isValid) return;
+    if (!selection.isValid) return;
 
     final start = selection.start;
     final end = selection.end;
@@ -149,7 +207,7 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
       final content = text.substring(openIdx + foundOpen.length, closeIdx);
       final before = text.substring(0, openIdx);
       final after = text.substring(closeIdx + close.length);
-      
+
       controller.value = TextEditingValue(
         text: before + open + content + close + after,
         selection: TextSelection.collapsed(
@@ -176,7 +234,8 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
 
     // Strip internal matching tags inside the selection
     final selected = newText.substring(newStart, newEnd);
-    final cleanSelected = selected.replaceAll(RegExp(r'\[' + family + r'=[^\]]+\]|\[\/' + family + r'\]'), '');
+    final cleanSelected = selected.replaceAll(
+        RegExp(r'\[' + family + r'=[^\]]+\]|\[\/' + family + r'\]'), '');
     newEnd -= (selected.length - cleanSelected.length);
 
     final finalBefore = newText.substring(0, newStart);
@@ -200,14 +259,18 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
   }
 
   /// v3.9.5.1: Specialized Broadcast for Alignment to preserve other styles
-  void broadcastAlign(String align, {required String open, required String close}) {
+  void broadcastAlign(String align,
+      {required String open, required String close}) {
     if (isGlobalSelection) {
       isCleaning = true;
       try {
         for (final c in controllers) {
           if (c.text.isEmpty) continue;
           // Exact 3.9.5.1 logic: Strip only alignment tags
-          final clean = c.text.replaceAll(RegExp(r"\[(?:align=)?(?:center|left|right)\]|\[\/(?:align=)?(?:center|left|right)\]"), '');
+          final clean = c.text.replaceAll(
+              RegExp(
+                  r"\[(?:align=)?(?:center|left|right)\]|\[\/(?:align=)?(?:center|left|right)\]"),
+              '');
           c.text = '$open$clean$close';
         }
         // v3.9.5.1: Save history AFTER operation
@@ -217,14 +280,39 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
       }
       return;
     }
-    
+
     // Fallback to standard wrap for single block
     wrapSelection(open, close);
   }
 
+  /// Broadcast paragraph direction while preserving alignment and inline styles.
+  void broadcastDirection(String direction,
+      {required String open, required String close}) {
+    if (isGlobalSelection) {
+      isCleaning = true;
+      try {
+        for (final c in controllers) {
+          if (c.text.isEmpty) continue;
+          final clean = c.text.replaceAll(
+            RegExp(r'\[(?:rtl|ltr)\]|\[\/(?:rtl|ltr)\]'),
+            '',
+          );
+          c.text = '$open$clean$close';
+        }
+        saveHistory(
+            description: 'Global Direction: $direction', debounce: false);
+      } finally {
+        isCleaning = false;
+      }
+      return;
+    }
+
+    wrapSelection(open, close);
+  }
 
   /// Detect if cursor position is inside an open/close tag pair.
-  bool _isStyleActiveAt(String text, int start, int end, String open, String close) {
+  bool _isStyleActiveAt(
+      String text, int start, int end, String open, String close) {
     final mid = (start + (end - start) / 2).floor().clamp(0, text.length);
 
     bool checkAt(int p) {
@@ -277,7 +365,8 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
   /// If the selection covers the entire styled content, removes both tags.
   /// If the selection is a subset, splits: keeps style on the unselected
   /// portions and removes it only from the selected portion.
-  _StripResult? _removeEnclosingStyle(String text, int selStart, int selEnd, String open, String close) {
+  _StripResult? _removeEnclosingStyle(
+      String text, int selStart, int selEnd, String open, String close) {
     int openIdx = -1;
     int closeIdx = -1;
 
@@ -286,7 +375,8 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
       for (int i = selStart; i >= 0; i--) {
         final idx = text.lastIndexOf('**', i);
         if (idx == -1) break;
-        final countBefore = RegExp(r'\*\*').allMatches(text.substring(0, idx)).length;
+        final countBefore =
+            RegExp(r'\*\*').allMatches(text.substring(0, idx)).length;
         if (countBefore % 2 == 0) {
           openIdx = idx;
           break;
@@ -297,7 +387,8 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
       // Fallback: forward search (for nested tags where ** is after selStart)
       if (openIdx == -1) {
         for (final m in RegExp(r'\*\*').allMatches(text)) {
-          final countBefore = RegExp(r'\*\*').allMatches(text.substring(0, m.start)).length;
+          final countBefore =
+              RegExp(r'\*\*').allMatches(text.substring(0, m.start)).length;
           if (countBefore % 2 == 0) {
             openIdx = m.start;
             break;
@@ -375,7 +466,7 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
     final oLen = open.length;
     final cLen = close.length;
     final contentStart = openIdx + oLen; // first char of styled content
-    final contentEnd = closeIdx;         // last char + 1 of styled content
+    final contentEnd = closeIdx; // last char + 1 of styled content
 
     // Clamp selection to content boundaries (selection may overlap tag chars)
     final effStart = selStart.clamp(contentStart, contentEnd);

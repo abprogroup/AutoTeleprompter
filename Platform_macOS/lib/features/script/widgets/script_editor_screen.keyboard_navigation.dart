@@ -118,11 +118,16 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
     final hasShortcutModifier =
         keyboard.isControlPressed || keyboard.isMetaPressed;
     if (!hasShortcutModifier || keyboard.isAltPressed) return false;
+    final key = event.logicalKey;
+
+    if (_handleGlobalHistoryShortcut(key, keyboard)) {
+      return true;
+    }
+
     final hasAppSelection = (_overlayKey.currentState?.hasSelection ?? false) ||
         _hasVisibleAppSelectionRange();
     if (!hasAppSelection) return false;
 
-    final key = event.logicalKey;
     if (key == LogicalKeyboardKey.keyC) {
       _overlayKey.currentState?.endDragging();
       _onCopyClean();
@@ -142,6 +147,28 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
       return true;
     }
     return false;
+  }
+
+  bool _handleGlobalHistoryShortcut(
+    LogicalKeyboardKey key,
+    HardwareKeyboard keyboard,
+  ) {
+    final isUndo = key == LogicalKeyboardKey.keyZ && !keyboard.isShiftPressed;
+    final isRedo = key == LogicalKeyboardKey.keyY ||
+        (key == LogicalKeyboardKey.keyZ && keyboard.isShiftPressed);
+    if (!isUndo && !isRedo) return false;
+
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
+
+    if (isRedo) {
+      _redo();
+      _lastArrowDecision = 'shortcut redo: editor history';
+    } else {
+      _undo();
+      _lastArrowDecision = 'shortcut undo: editor history';
+    }
+    return true;
   }
 
   bool _clearAppSelectionForArrow(LogicalKeyboardKey key) {

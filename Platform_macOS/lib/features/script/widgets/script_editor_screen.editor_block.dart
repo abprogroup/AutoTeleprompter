@@ -6,7 +6,6 @@ class _EditorBlock extends StatelessWidget {
   final AppSettings settings;
   final bool isGlobalSelected;
   final bool? inheritedRtl;
-  final VoidCallback onSubmitted;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
@@ -25,7 +24,6 @@ class _EditorBlock extends StatelessWidget {
     required this.settings,
     required this.isGlobalSelected,
     this.inheritedRtl,
-    required this.onSubmitted,
     required this.onTap,
     required this.onSelectAll,
     required this.onCopy,
@@ -39,8 +37,9 @@ class _EditorBlock extends StatelessWidget {
   });
 
   TextAlign? _markupAlign(String text) {
-    if (RegExp(r'\[(?:align=)?center\]').hasMatch(text))
+    if (RegExp(r'\[(?:align=)?center\]').hasMatch(text)) {
       return TextAlign.center;
+    }
     if (RegExp(r'\[(?:align=)?right\]').hasMatch(text)) return TextAlign.right;
     if (RegExp(r'\[(?:align=)?left\]').hasMatch(text)) return TextAlign.left;
     return null;
@@ -58,27 +57,13 @@ class _EditorBlock extends StatelessWidget {
       if (!external.isValid || external.isCollapsed) return null;
       selection = external;
     } else {
-      final native = controller.selection;
-      if (!native.isValid || native.isCollapsed) return null;
-      selection = native;
+      return null;
     }
 
     final start = selection.start.clamp(0, length).toInt();
     final end = selection.end.clamp(start, length).toInt();
     if (end <= start) return null;
     return TextSelection(baseOffset: start, extentOffset: end);
-  }
-
-  double _getMaxFontSize(String text, double defaultSize) {
-    if (text.isEmpty) return defaultSize;
-    final matches = RegExp(r'\[size=(\d+)\]').allMatches(text);
-    if (matches.isEmpty) return defaultSize;
-    double maxMatch = defaultSize;
-    for (final m in matches) {
-      final size = double.tryParse(m.group(1)!) ?? defaultSize;
-      if (size > maxMatch) maxMatch = size;
-    }
-    return maxMatch;
   }
 
   @override
@@ -88,9 +73,12 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
-    final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
+    final maxFontSize = EditorTextGeometryService.maxFontSize(
+        controller.text, settings.fontSize);
+    controller.backgroundHighlightsAsText =
+        ScriptColorInversionService.highlightsMoveToText(settings);
     final editorTextStyle = TextStyle(
-      color: Colors.white,
+      color: Color(settings.futureWordColor),
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,
@@ -246,25 +234,29 @@ class _EditorBlock extends StatelessWidget {
                 },
                 child: Theme(
                   data: Theme.of(context).copyWith(
-                    textSelectionTheme: TextSelectionThemeData(
+                    textSelectionTheme: const TextSelectionThemeData(
                       selectionColor: Colors.transparent,
                     ),
                   ),
                   child: _EditorRenderEditableDecorations(
                     controller: controller,
+                    focusNode: focusNode,
                     selection: paintSelection,
                     textDirection: textDirection,
                     child: TextField(
                       selectionControls: GhostSelectionControls(),
                       controller: controller,
                       focusNode: focusNode,
+                      inputFormatters: [
+                        _AppSelectionReplacementFormatter(controller),
+                      ],
                       maxLines: null,
-                      onSubmitted: (_) => onSubmitted(),
                       onTap: onTap,
                       textDirection: textDirection,
                       textAlign: textAlign,
+                      selectionHeightStyle: ui.BoxHeightStyle.strut,
+                      selectionWidthStyle: ui.BoxWidthStyle.tight,
                       cursorColor: Colors.amber,
-                      cursorHeight: maxFontSize,
                       strutStyle: editorStrutStyle,
                       style: editorTextStyle,
                       decoration: const InputDecoration(
@@ -338,5 +330,103 @@ class _EditorBlock extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _AppSelectionReplacementFormatter extends TextInputFormatter {
+  final MarkupController controller;
+
+  const _AppSelectionReplacementFormatter(this.controller);
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return EditorSelectionReplacement.format(
+      oldValue: oldValue,
+      newValue: newValue,
+      externalSelection: controller.externalSelection,
+      isGlobalSelected: controller.isGlobalSelected,
+    );
+  }
+}
+
+@visibleForTesting
+class EditorSelectionReplacement {
+  static TextEditingValue format({
+    required TextEditingValue oldValue,
+    required TextEditingValue newValue,
+    required TextSelection? externalSelection,
+    required bool isGlobalSelected,
+  }) {
+    if (oldValue.text == newValue.text) return newValue;
+    final replacement = replacementDelta(oldValue.text, newValue.text);
+    if (replacement == null) return newValue;
+    if (replacement.contains('\n')) return oldValue;
+
+    final selection = _activeReplacementSelection(
+      oldValue: oldValue,
+      externalSelection: externalSelection,
+      isGlobalSelected: isGlobalSelected,
+    );
+    if (selection == null) return newValue;
+
+    final start = selection.start.clamp(0, oldValue.text.length).toInt();
+    final end = selection.end.clamp(start, oldValue.text.length).toInt();
+    if (end <= start) return newValue;
+    final suffixPrefix =
+        start == 0 ? MarkupController.openTagsAt(oldValue.text, end) : '';
+    final text = oldValue.text.substring(0, start) +
+        replacement +
+        suffixPrefix +
+        oldValue.text.substring(end);
+    final caret = start + replacement.length;
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: caret),
+      composing: TextRange.empty,
+    );
+  }
+
+  static TextSelection? _activeReplacementSelection({
+    required TextEditingValue oldValue,
+    required TextSelection? externalSelection,
+    required bool isGlobalSelected,
+  }) {
+    final external = externalSelection;
+    if (external != null && external.isValid && !external.isCollapsed) {
+      return TextSelection(
+        baseOffset: external.start,
+        extentOffset: external.end,
+      );
+    }
+    final native = oldValue.selection;
+    if (native.isValid && !native.isCollapsed) {
+      return TextSelection(baseOffset: native.start, extentOffset: native.end);
+    }
+    if (isGlobalSelected && oldValue.text.isNotEmpty) {
+      return TextSelection(baseOffset: 0, extentOffset: oldValue.text.length);
+    }
+    return null;
+  }
+
+  static String? replacementDelta(String oldText, String newText) {
+    var prefix = 0;
+    while (prefix < oldText.length &&
+        prefix < newText.length &&
+        oldText.codeUnitAt(prefix) == newText.codeUnitAt(prefix)) {
+      prefix++;
+    }
+    var oldSuffix = oldText.length;
+    var newSuffix = newText.length;
+    while (oldSuffix > prefix &&
+        newSuffix > prefix &&
+        oldText.codeUnitAt(oldSuffix - 1) ==
+            newText.codeUnitAt(newSuffix - 1)) {
+      oldSuffix--;
+      newSuffix--;
+    }
+    return newText.substring(prefix, newSuffix);
   }
 }

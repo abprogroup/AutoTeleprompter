@@ -13,12 +13,12 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       color: Colors.transparent,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.9),
+          color: Colors.black.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: const Color(0x66FFBF00), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.45),
+              color: Colors.black.withValues(alpha: 0.45),
               blurRadius: 18,
               offset: const Offset(0, 6),
             ),
@@ -114,75 +114,15 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
   Future<void> _showEditorSearchDialog() async {
     if (_searchDialogOpen) return;
     _searchDialogOpen = true;
-    final controller = TextEditingController(text: _lastSearchQuery);
-    bool wholeWord = _searchWholeWord;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text('Search script',
-              style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Word or phrase to find',
-                  hintStyle: TextStyle(color: Colors.white38),
-                  enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24)),
-                  focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFFFFBF00))),
-                ),
-                textInputAction: TextInputAction.search,
-                onSubmitted: (value) => Navigator.pop(ctx, {
-                  'query': value,
-                  'wholeWord': wholeWord,
-                }),
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: wholeWord,
-                onChanged: (value) =>
-                    setDialogState(() => wholeWord = value ?? false),
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                activeColor: const Color(0xFFFFBF00),
-                checkColor: Colors.black,
-                contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'Match whole word',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, {
-                'query': controller.text,
-                'wholeWord': wholeWord,
-              }),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFBF00),
-                foregroundColor: Colors.black,
-              ),
-              child: const Text('Find'),
-            ),
-          ],
-        ),
+      builder: (ctx) => _EditorSearchDialog(
+        initialQuery: _lastSearchQuery,
+        initialWholeWord: _searchWholeWord,
       ),
     );
-    controller.dispose();
     _searchDialogOpen = false;
+    if (!mounted) return;
     if (result == null) return;
     final trimmed = (result['query'] as String? ?? '').trim();
     if (trimmed.isEmpty) return;
@@ -197,7 +137,8 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     final needle = query.toLowerCase();
     for (var block = 0; block < _controllers.length; block++) {
       final visible =
-          StylingService.stripTags(_controllers[block].text).toLowerCase();
+          MarkupDecorationParser.visibleText(_controllers[block].text)
+              .toLowerCase();
       matches.addAll(_visibleSearchMatches(
         block: block,
         visible: visible,
@@ -206,7 +147,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     }
 
     if (matches.isEmpty) {
-      setState(() {
+      _setEditorState(() {
         _editorSearchToolbarVisible = false;
         _editorSearchMatches = const [];
         _editorSearchMatchIndex = -1;
@@ -214,7 +155,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No match for "$query"'),
-          backgroundColor: Colors.black.withOpacity(0.9),
+          backgroundColor: Colors.black.withValues(alpha: 0.9),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -236,7 +177,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     final initialIndex = matches.indexWhere((match) =>
         match.blockIndex > startBlock ||
         (match.blockIndex == startBlock && match.visibleStart >= startVisible));
-    setState(() {
+    _setEditorState(() {
       _editorSearchToolbarVisible = true;
       _editorSearchMatches = matches;
       _editorSearchMatchIndex = initialIndex >= 0 ? initialIndex : 0;
@@ -246,7 +187,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
 
   void _toggleEditorWholeWordSearch() {
     if (_lastSearchQuery.isEmpty) return;
-    setState(() {
+    _setEditorState(() {
       _searchWholeWord = !_searchWholeWord;
     });
     _setEditorSearchQuery(_lastSearchQuery);
@@ -284,7 +225,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
 
   bool _isSearchWordChar(String value) {
     if (value.isEmpty) return false;
-    return RegExp(r'[A-Za-z0-9֐-׿]').hasMatch(value);
+    return RegExp(r'[A-Za-z0-9\u0590-\u05FF]').hasMatch(value);
   }
 
   void _jumpEditorSearchResult(int delta) {
@@ -292,7 +233,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     final count = _editorSearchMatches.length;
     final next = (_editorSearchMatchIndex + delta) % count;
     final normalized = next < 0 ? next + count : next;
-    setState(() {
+    _setEditorState(() {
       _editorSearchMatchIndex = normalized;
       _editorSearchToolbarVisible = true;
     });
@@ -314,6 +255,7 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
     for (final controller in _controllers) {
       controller.isGlobalSelected = false;
       controller.externalSelection = null;
+      controller.externalVisibleSelection = null;
       controller.refresh();
     }
 
@@ -325,9 +267,14 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       match.visibleEnd,
     ).clamp(rawStart, controller.text.length);
     final selection = TextSelection(baseOffset: rawStart, extentOffset: rawEnd);
+    final visibleSelection = TextSelection(
+      baseOffset: match.visibleStart,
+      extentOffset: match.visibleEnd,
+    );
 
     controller.selection = selection;
     controller.externalSelection = selection;
+    controller.externalVisibleSelection = visibleSelection;
     _lastFocusedController = controller;
     if (requestKeyboard) {
       _focusNodes[match.blockIndex].requestFocus();
@@ -335,12 +282,14 @@ extension _ScriptEditorSearchParts on _ScriptEditorScreenState {
       _focusNodes[match.blockIndex].unfocus();
     }
     controller.refresh();
-    setState(() {});
+    _setEditorState(() {});
     _scrollEditorBlockIntoView(match.blockIndex, alignment: 0.25);
+    _scheduleHighlightTrace('search-result');
+    _recordSelectionTrace('search-result');
   }
 
   void _closeEditorSearchToolbar() {
-    setState(() {
+    _setEditorState(() {
       _editorSearchToolbarVisible = false;
       _editorSearchMatches = const [];
       _editorSearchMatchIndex = -1;
@@ -358,6 +307,107 @@ class _EditorSearchMatch {
     required this.visibleStart,
     required this.visibleEnd,
   });
+}
+
+class _EditorSearchDialog extends StatefulWidget {
+  final String initialQuery;
+  final bool initialWholeWord;
+
+  const _EditorSearchDialog({
+    required this.initialQuery,
+    required this.initialWholeWord,
+  });
+
+  @override
+  State<_EditorSearchDialog> createState() => _EditorSearchDialogState();
+}
+
+class _EditorSearchDialogState extends State<_EditorSearchDialog> {
+  late final TextEditingController _controller;
+  late bool _wholeWord;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialQuery);
+    _wholeWord = widget.initialWholeWord;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    Navigator.pop(context, {
+      'query': _controller.text,
+      'wholeWord': _wholeWord,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      title: const Text(
+        'Search script',
+        style: TextStyle(color: Colors.white),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'Word or phrase to find',
+              hintStyle: TextStyle(color: Colors.white38),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.white24),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFFFFBF00)),
+              ),
+            ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 12),
+          CheckboxListTile(
+            value: _wholeWord,
+            onChanged: (value) {
+              setState(() => _wholeWord = value ?? false);
+            },
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            activeColor: const Color(0xFFFFBF00),
+            checkColor: Colors.black,
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Match whole word',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFFFBF00),
+            foregroundColor: Colors.black,
+          ),
+          child: const Text('Find'),
+        ),
+      ],
+    );
+  }
 }
 
 class _EditorSearchToolbarButton extends StatelessWidget {

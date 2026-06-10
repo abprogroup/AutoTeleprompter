@@ -55,8 +55,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     if (!mounted) return;
 
     if (choice == true) {
-      // Continue: script is already scrolled to savedIndex (done before showing
-      // the dialog). Nothing more to do; just stay.
+      _jumpToWordIndex(savedIndex, immediate: true);
     } else {
       // Restart: reset provider word-index and jump to the beginning.
       ref.read(teleprompterProvider.notifier).resetPosition();
@@ -77,14 +76,20 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     _bookmarksLoaded = false;
     final loaded = await ScriptBookmarkService.load(key);
     var normalized = <ScriptBookmark>[];
-    var changed = false;
     for (final bookmark in loaded) {
-      final target = ScriptBookmarkService.nearestBookmarkableWordIndex(
-        script.words,
-        bookmark.wordIndex,
+      final anchoredTarget =
+          ScriptBookmarkService.anchoredWordIndexFromEditorPosition(
+        rawText: script.rawText,
+        words: script.words,
+        blockIndex: bookmark.blockIndex,
+        offset: bookmark.offset,
       );
+      final target = anchoredTarget ??
+          ScriptBookmarkService.nearestBookmarkableWordIndex(
+            script.words,
+            bookmark.wordIndex,
+          );
       if (target == null) {
-        changed = true;
         continue;
       }
       final normalizedBookmark = target == bookmark.wordIndex
@@ -97,11 +102,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
               offset: bookmark.offset,
               createdAt: bookmark.createdAt,
             );
-      if (target != bookmark.wordIndex) changed = true;
       normalized = ScriptBookmarkService.upsert(normalized, normalizedBookmark);
-    }
-    if (changed) {
-      await ScriptBookmarkService.save(key, normalized);
     }
     if (!mounted || _bookmarkScopeKey != key) return;
     _setTeleprompterState(() {

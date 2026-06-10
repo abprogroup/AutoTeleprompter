@@ -74,9 +74,38 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     _bookmarkLoadingKey = key;
     _bookmarksLoaded = false;
     final loaded = await ScriptBookmarkService.load(key);
+    var normalized = <ScriptBookmark>[];
+    for (final bookmark in loaded) {
+      final anchoredTarget =
+          ScriptBookmarkService.anchoredWordIndexFromEditorPosition(
+        rawText: script.rawText,
+        words: script.words,
+        blockIndex: bookmark.blockIndex,
+        offset: bookmark.offset,
+      );
+      final target = anchoredTarget ??
+          ScriptBookmarkService.nearestBookmarkableWordIndex(
+            script.words,
+            bookmark.wordIndex,
+          );
+      if (target == null) {
+        continue;
+      }
+      final normalizedBookmark = target == bookmark.wordIndex
+          ? bookmark
+          : ScriptBookmark(
+              id: bookmark.id,
+              label: _bookmarkLabelForWord(script, target),
+              wordIndex: target,
+              blockIndex: bookmark.blockIndex,
+              offset: bookmark.offset,
+              createdAt: bookmark.createdAt,
+            );
+      normalized = ScriptBookmarkService.upsert(normalized, normalizedBookmark);
+    }
     if (!mounted || _bookmarkScopeKey != key) return;
     _updateContentCreatorState(() {
-      _bookmarks = loaded;
+      _bookmarks = normalized;
       _bookmarksLoaded = true;
       _bookmarkLoadingKey = null;
     });

@@ -4,6 +4,7 @@ extension _ContentCreatorCameraWebView on _ContentCreatorScreenState {
   Future<void> _initContentWebViewController() async {
     if (_contentWebviewController != null) return;
     try {
+      WebView2RuntimeConfig.configureForLocalSttDefaults();
       final controller = WebviewController();
       await controller.initialize();
       if (!mounted) {

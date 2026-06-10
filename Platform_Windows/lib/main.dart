@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,10 +8,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'features/feedback/services/lightweight_diagnostics.dart';
 import 'features/settings/services/update_install_service.dart';
 import 'platform/permissions/platform_permissions.dart';
+import 'platform/webview2/webview2_runtime_config.dart';
 import 'app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows) {
+    WebView2RuntimeConfig.configureForLocalSttDefaults();
+  }
   GoogleFonts.config.allowRuntimeFetching = false;
   await PlatformPermissions.requestAll();
   unawaited(

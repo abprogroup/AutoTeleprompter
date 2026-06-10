@@ -212,6 +212,41 @@ class AccountBackendService {
     );
   }
 
+  Future<AccountBackendSession> verifyEmailChangeCode({
+    required String email,
+    required String code,
+  }) async {
+    _requireConfigured();
+    final json = await _postJson(
+      _config.authUri('verify'),
+      {
+        'email': email.trim(),
+        'token': code.trim(),
+        'type': 'email_change',
+      },
+      includeAuth: false,
+    );
+    final session = AccountBackendSession.fromJson(json);
+    if (session.accessToken.isEmpty) {
+      throw const AccountBackendError(
+        'missing_access_token',
+        'Email change was verified but no access token was returned.',
+      );
+    }
+    return session;
+  }
+
+  Future<void> deleteAccount({
+    required String accessToken,
+    required String confirmation,
+  }) async {
+    await _callFunction(
+      'delete-account',
+      accessToken: accessToken,
+      body: {'confirmation': confirmation.trim()},
+    );
+  }
+
   Future<AccountBackendRole> redeemLicenseCode({
     required String accessToken,
     required String code,

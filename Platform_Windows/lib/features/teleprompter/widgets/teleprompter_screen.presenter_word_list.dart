@@ -74,7 +74,6 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                     tState: tState,
                     settings: settings,
                     paragraphDirection: paraDir,
-                    bookmarkWordIndexes: bookmarkWordIndexes,
                     presentationFontSize: presentationFontSize,
                   );
                 }).toList(),
@@ -107,10 +106,6 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   isManualMode: false,
                   type: MarkupDecorationType.background,
                   gapTolerance: _decorationGapTolerance(presenterWordGap),
-                  moveHighlightsToText:
-                      ScriptColorInversionService.highlightsMoveToText(
-                    settings,
-                  ),
                 ),
               ),
             ),
@@ -136,6 +131,26 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
       );
     }
 
+    if (bookmarkWordIndexes.isNotEmpty) {
+      final speechActive = tState.isListening || tState.isStarting;
+      wordList = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          wordList,
+          PresenterBookmarkMarkerLayer(
+            contentKey: _presenterContentKey,
+            wordKeys: _wordKeys,
+            words: script.words,
+            bookmarkWordIndexes: bookmarkWordIndexes,
+            color: Color(settings.currentWordColor),
+            fontSize: presentationFontSize,
+            lineSpacing: settings.lineSpacing,
+            onTap: speechActive ? null : _tapPresenterBookmarkMarker,
+          ),
+        ],
+      );
+    }
+
     return wordList;
   }
 
@@ -146,11 +161,9 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     required TeleprompterState tState,
     required AppSettings settings,
     required TextDirection paragraphDirection,
-    required Set<int> bookmarkWordIndexes,
     required double presentationFontSize,
   }) {
     final i = word.index;
-    final hasBookmark = bookmarkWordIndexes.contains(i);
     final readingActive = tState.isListening ||
         tState.isStarting ||
         _manualScrolling ||
@@ -175,10 +188,8 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     final trackingBgColor = isCurrent && settings.showCurrentWordHighlight
         ? Color(settings.currentWordColor).withValues(alpha: 0.3)
         : null;
-    final effectiveBg = kUseCustomDocxDecorationPainting
-        ? trackingBgColor
-        : trackingBgColor ??
-            (isPast ? userBgColor?.withValues(alpha: 0.15) : userBgColor);
+    final effectiveBg = trackingBgColor ??
+        (isPast ? userBgColor?.withValues(alpha: 0.15) : userBgColor);
     final textColor = _presenterWordTextColor(
       word: word,
       isCurrent: isCurrent,
@@ -195,9 +206,8 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
           ? para[localWordIndex + 1].highlight
           : null,
     );
-    final useSmoothHighlightBand = !kUseCustomDocxDecorationPainting &&
-        userBgColor != null &&
-        trackingBgColor == null;
+    final useSmoothHighlightBand =
+        userBgColor != null && trackingBgColor == null;
     final highlightRadius = Radius.circular(
       (effectiveFontSize * 0.08).clamp(2.0, 8.0),
     );
@@ -245,37 +255,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
         ),
       ),
     );
-    if (!hasBookmark) return wordWidget;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Tooltip(
-          message: 'Bookmark',
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: speechActive ? null : () => _tapPresenterBookmarkMarker(i),
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: effectiveFontSize * 0.06,
-                vertical: effectiveFontSize * 0.04,
-              ),
-              child: Text(
-                '\u00BB',
-                style: TextStyle(
-                  color: Color(settings.currentWordColor),
-                  fontSize: effectiveFontSize * 0.62,
-                  fontWeight: FontWeight.bold,
-                  height: settings.lineSpacing,
-                ),
-              ),
-            ),
-          ),
-        ),
-        SizedBox(width: effectiveFontSize * 0.08),
-        wordWidget,
-      ],
-    );
+    return wordWidget;
   }
 
   Color _presenterWordTextColor({

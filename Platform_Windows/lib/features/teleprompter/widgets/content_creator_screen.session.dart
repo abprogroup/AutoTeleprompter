@@ -221,12 +221,12 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
 
       if (!mounted) return;
       _updateContentCreatorState(() => _contentResumeDecisionPending = false);
-      if (restart == true) {
-        _logContentDebug('resume prompt choice restart');
-        _resetContentPosition();
-      } else {
+      if (restart == false) {
         _logContentDebug('resume prompt choice continue word=$target');
         _jumpToContentWordIndex(target, immediate: true);
+      } else {
+        _logContentDebug('resume prompt choice restart');
+        _resetContentPosition();
       }
     });
   }

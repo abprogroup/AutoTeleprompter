@@ -177,6 +177,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   Future<void> _initWebViewController() async {
     try {
+      WebView2RuntimeConfig.configureForLocalSttDefaults();
       final controller = WebviewController();
       await controller.initialize();
 
@@ -410,6 +411,23 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       return 'Speech recognition not available. Check Windows Settings > Time & Language > Speech, and Privacy & security > Microphone.';
     }
     return error;
+  }
+
+  bool _isBrowserMicrophoneSettingsError(String message) {
+    final normalized = message.toLowerCase();
+    return normalized.contains('webview2') ||
+        normalized.contains('microphone blocked');
+  }
+
+  Future<void> _openMicrophonePrivacySettings() async {
+    if (Platform.isWindows) {
+      await Process.run(
+        'cmd',
+        ['/c', 'start', 'ms-settings:privacy-microphone'],
+      );
+      return;
+    }
+    await openAppSettings();
   }
 
   void _showControls() {

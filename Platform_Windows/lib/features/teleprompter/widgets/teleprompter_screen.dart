@@ -13,6 +13,7 @@ import 'package:webview_windows/webview_windows.dart';
 import '../models/alignment_result.dart';
 import '../providers/teleprompter_provider.dart';
 import '../services/approximate_spoken_search_service.dart';
+import '../services/presenter_reading_position_service.dart';
 import '../services/presenter_input_lock_service.dart';
 import '../../script/services/script_color_inversion_service.dart';
 import '../../script/providers/script_provider.dart';
@@ -30,6 +31,7 @@ import '../../../core/window/presenter_fullscreen_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../platform/webview2/webview2_runtime_config.dart';
+import 'presenter_bookmark_marker_layer.dart';
 
 part 'teleprompter_screen.session_stt.dart';
 part 'teleprompter_screen.manual_scroll.dart';
@@ -153,10 +155,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           _resumeDialogShown = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            // Jump to the saved position FIRST so the user can see it in the
-            // faded background before deciding whether to continue or restart.
-            _jumpToWordIndex(currentIndex, immediate: true);
-            // Show the dialog after layout settles.
+            _scrollToWordIndex(currentIndex, immediate: true);
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _showResumeDialog(currentIndex);
             });

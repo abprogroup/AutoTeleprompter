@@ -27,6 +27,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
         onTap: signedIn ? null : _openAccountActivation,
       ),
       if (signedIn) ...[
+        ..._accountSubscriptionSection(auth),
         const SizedBox(height: 22),
         const _SectionHeader(title: 'SECURITY'),
         const SizedBox(height: 8),
@@ -60,6 +61,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
           subtitle: 'Keeps local scripts, clears the account shell',
           onTap: _signOutAccount,
         ),
+        ..._accountDangerSection(auth),
       ],
       const SizedBox(height: 22),
       const _SectionHeader(title: 'PRIVACY'),
@@ -123,6 +125,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
     var busy = false;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
@@ -198,6 +201,7 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
     var busy = false;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
@@ -276,9 +280,12 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
   void _showChangeEmailDialog(AuthState auth) {
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
+    final codeController = TextEditingController();
     var busy = false;
+    var codeRequested = false;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
@@ -294,11 +301,17 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
                 label: 'New email',
               ),
               const SizedBox(height: 12),
-              _AccountDialogTextField(
-                controller: passwordController,
-                label: 'Current password',
-                obscure: true,
-              ),
+              if (!codeRequested)
+                _AccountDialogTextField(
+                  controller: passwordController,
+                  label: 'Current password',
+                  obscure: true,
+                )
+              else
+                _AccountDialogTextField(
+                  controller: codeController,
+                  label: 'Email confirmation code',
+                ),
             ],
           ),
           actions: [
@@ -313,23 +326,35 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
                       final dialogNavigator = Navigator.of(ctx);
                       setDialogState(() => busy = true);
                       try {
-                        await ref
-                            .read(authProvider.notifier)
-                            .changeBackendEmailWithPassword(
-                              newEmail: emailController.text,
-                              currentPassword: passwordController.text,
-                            );
+                        final notifier = ref.read(authProvider.notifier);
+                        if (!codeRequested) {
+                          await notifier.changeBackendEmailWithPassword(
+                            newEmail: emailController.text,
+                            currentPassword: passwordController.text,
+                          );
+                          if (!mounted) return;
+                          setDialogState(() {
+                            codeRequested = true;
+                            busy = false;
+                          });
+                          _showAccountSnack(
+                            'Email change code sent to the new inbox.',
+                          );
+                          return;
+                        }
+                        await notifier.verifyBackendEmailChangeCode(
+                          newEmail: emailController.text,
+                          code: codeController.text,
+                        );
                         if (!mounted) return;
                         dialogNavigator.pop();
-                        _showAccountSnack(
-                          'Email change requested. Check the new inbox.',
-                        );
+                        _showAccountSnack('Account email updated.');
                       } catch (error) {
                         setDialogState(() => busy = false);
                         _showAccountSnack(_accountBackendMessage(error));
                       }
                     },
-              child: const Text('Send confirmation'),
+              child: Text(codeRequested ? 'Confirm email' : 'Send code'),
             ),
           ],
         ),

@@ -207,8 +207,13 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         right: 20,
                         child: GestureDetector(
                           onTap: () {
-                            // Tapping the error banner opens app settings for permission issues
-                            if (tState.statusMessage.contains('permission') ||
+                            // Tapping permission errors opens the exact settings page.
+                            if (_isBrowserMicrophoneSettingsError(
+                              tState.statusMessage,
+                            )) {
+                              unawaited(_openMicrophonePrivacySettings());
+                            } else if (tState.statusMessage
+                                    .contains('permission') ||
                                 tState.statusMessage.contains('Permission')) {
                               openAppSettings();
                             }
@@ -228,15 +233,23 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                   style: const TextStyle(
                                       color: Colors.white, fontSize: 13),
                                 ),
-                                if (tState.statusMessage.contains('permission'))
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 6),
-                                    child: Text('Tap here to open Settings',
-                                        style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 11,
-                                            decoration:
-                                                TextDecoration.underline)),
+                                if (_isBrowserMicrophoneSettingsError(
+                                      tState.statusMessage,
+                                    ) ||
+                                    tState.statusMessage.contains('permission'))
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      _isBrowserMicrophoneSettingsError(
+                                        tState.statusMessage,
+                                      )
+                                          ? 'Tap here to open microphone settings'
+                                          : 'Tap here to open Settings',
+                                      style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 11,
+                                          decoration: TextDecoration.underline),
+                                    ),
                                   ),
                               ],
                             ),

@@ -407,6 +407,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       }
       final recordCameraAudio = settings.contentCreatorRecordingAudioMode ==
           AppSettings.contentCreatorRecordingAudioCamera;
+      _commitContentVisibleReadingLine(reason: 'video recording start');
       _updateContentCreatorState(() {
         _recordStartInFlight = true;
         _countdown = 3;
@@ -540,6 +541,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       _countdown = 3;
       _contentControlsVisible = true;
     });
+    _commitContentVisibleReadingLine(reason: 'audio recording start');
     _hideContentControlsTimer?.cancel();
     final settings = ref.read(settingsProvider);
     await _startContentSpeechSessionForRecording(settings);

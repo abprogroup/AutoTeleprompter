@@ -75,7 +75,14 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
       _syncContentVisibleWordWindow();
       return;
     }
-    _updateActiveWordFromScroll(commitProvider: true);
+    final mayCommitReadingPosition = _contentManualScrolling ||
+        ((sttState.isListening || sttState.isStarting) &&
+            allowActiveManualScroll);
+    if (!mayCommitReadingPosition) {
+      _syncContentVisibleWordWindow();
+      return;
+    }
+    _updateActiveWordFromScroll(commitProvider: mayCommitReadingPosition);
   }
 
   void _updateActiveWordFromScroll({bool commitProvider = false}) {
@@ -88,9 +95,6 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
       return;
     }
     final settings = ref.read(settingsProvider);
-    final screenSize = MediaQuery.sizeOf(context);
-    final targetLine = _contentReadingLineCoordinate(settings, screenSize);
-    final wordLimit = script.words.length.clamp(0, _wordKeys.length).toInt();
     if (_scrollController.offset <= 1.0) {
       if (_activeWordIndex != 0) {
         _updateContentCreatorState(() => _activeWordIndex = 0);
@@ -99,22 +103,8 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
       return;
     }
 
-    var bestIndex = _activeWordIndex;
-    var bestDistance = double.infinity;
-    for (var i = 0; i < wordLimit; i++) {
-      final ctx = _wordKeys[i].currentContext;
-      if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null || !box.hasSize) continue;
-      final center = box.localToGlobal(box.size.center(Offset.zero));
-      final distance = _contentUsesVerticalReadingLine(settings)
-          ? (center.dx - targetLine).abs()
-          : (center.dy - targetLine).abs();
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
-      }
-    }
+    final bestIndex =
+        _contentWordIndexNearestReadingLine(settings) ?? _activeWordIndex;
     if (bestIndex != _activeWordIndex) {
       _updateContentCreatorState(() => _activeWordIndex = bestIndex);
       if (commitProvider) _scheduleContentPositionCommit(bestIndex);
@@ -122,6 +112,66 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
       _scheduleContentPositionCommit(bestIndex);
     }
     _syncContentVisibleWordWindow();
+  }
+
+  int? _contentWordIndexNearestReadingLine([AppSettings? settingsOverride]) {
+    final script = ref.read(scriptProvider);
+    if (!mounted ||
+        script == null ||
+        script.words.isEmpty ||
+        !_scrollController.hasClients ||
+        _wordKeys.isEmpty) {
+      return null;
+    }
+    if (_scrollController.offset <= 1.0) return 0;
+    final AppSettings settings = settingsOverride ?? ref.read(settingsProvider);
+    final screenSize = MediaQuery.sizeOf(context);
+    final targetLine = _contentReadingLineCoordinate(settings, screenSize);
+    final wordLimit = script.words.length.clamp(0, _wordKeys.length).toInt();
+
+    final verticalLine = _contentUsesVerticalReadingLine(settings);
+    final candidates = <PresenterReadingWordBounds>[];
+    for (var i = 0; i < wordLimit; i++) {
+      final word = script.words[i];
+      if (word.isNewline) continue;
+      final ctx = _wordKeys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) continue;
+      final topLeft = box.localToGlobal(Offset.zero);
+      final bottomRight = box.localToGlobal(box.size.bottomRight(Offset.zero));
+      final first = verticalLine ? topLeft.dx : topLeft.dy;
+      final second = verticalLine ? bottomRight.dx : bottomRight.dy;
+      candidates.add(
+        PresenterReadingWordBounds(
+          index: i,
+          leading: first < second ? first : second,
+          trailing: first > second ? first : second,
+        ),
+      );
+    }
+    return PresenterReadingPositionService.wordIndexAtReadingLine(
+          words: candidates,
+          readingLine: targetLine,
+        ) ??
+        _activeWordIndex.clamp(0, script.words.length - 1).toInt();
+  }
+
+  void _commitContentVisibleReadingLine({required String reason}) {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+    final target =
+        (_contentWordIndexNearestReadingLine() ?? _activeContentIndex())
+            .clamp(0, script.words.length - 1)
+            .toInt();
+    _pendingPositionCommit = null;
+    _positionCommitTimer?.cancel();
+    _updateContentCreatorState(() => _activeWordIndex = target);
+    ref.read(teleprompterProvider.notifier).jumpToPosition(
+          target,
+          script: script,
+        );
+    _logContentDebug('$reason committed visible word=$target');
   }
 
   bool _contentRotationRecenterActive() {

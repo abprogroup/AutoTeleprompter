@@ -26,6 +26,8 @@ import 'cloud_sync_screen.dart';
 
 part 'app_settings_screen.tiles.dart';
 part 'app_settings_screen.account_remote.dart';
+part 'app_settings_screen.account_subscription.dart';
+part 'app_settings_screen.account_danger.dart';
 part 'app_settings_screen.remote_profiles.dart';
 part 'app_settings_screen.media_defaults.dart';
 part 'app_settings_screen.updates.dart';

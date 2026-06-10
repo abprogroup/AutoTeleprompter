@@ -55,12 +55,14 @@ extension _TeleprompterAlignmentHelperParts on _TeleprompterScreenState {
       text.replaceAll(RegExp('[\u200E\u200F\u2066\u2067\u2068\u2069]'), '');
 
   bool _paragraphIsRtl(List<ScriptWord> words) {
+    var hasLatin = false;
     for (final word in words) {
       final clean = word.raw.replaceAll(_tagStripRe, '').trim();
       if (clean.isEmpty) continue;
       if (RegExp(r'[\u0590-\u08FF]').hasMatch(clean)) return true;
-      if (RegExp(r'[A-Za-z]').hasMatch(clean)) return false;
+      if (RegExp(r'[A-Za-z]').hasMatch(clean)) hasLatin = true;
     }
+    if (hasLatin) return false;
     return words.isNotEmpty && words.first.effectiveRtl;
   }
 

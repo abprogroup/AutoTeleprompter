@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:autoteleprompter/features/script/models/script_word.dart';
+import 'package:autoteleprompter/features/teleprompter/services/word_aligner.dart';
 import 'package:autoteleprompter/features/feedback/services/lightweight_diagnostics.dart';
 import 'package:autoteleprompter/core/security/encrypted_file_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -46,6 +47,7 @@ class ScriptBookmark {
 
 class ScriptBookmarkService {
   static const _prefix = 'scriptBookmarks.v1';
+  static const _bookmarkSign = '\u00BB';
   static final _tagStripRe = RegExp(r'\[[^\]]+\]');
   static final _alignTagStripRe = RegExp(r'\[\/?align=[^\]]+\]');
 
@@ -168,6 +170,27 @@ class ScriptBookmarkService {
     return best;
   }
 
+  static int? anchoredWordIndexFromEditorPosition({
+    required String rawText,
+    required List<ScriptWord> words,
+    required int blockIndex,
+    required int offset,
+  }) {
+    if (blockIndex < 0 || words.isEmpty) return null;
+    final blocks = rawText.split('\n');
+    if (blockIndex >= blocks.length) return null;
+    var cursor = 0;
+    final lastBlock = blocks.length - 1;
+    for (var i = 0; i < blockIndex; i++) {
+      cursor += _tokenLengthForRawBlock(
+        blocks[i],
+        includeSoftBreak: i < lastBlock,
+      );
+    }
+    cursor += _localWordIndexForRawOffset(blocks[blockIndex], offset);
+    return nearestBookmarkableWordIndex(words, cursor);
+  }
+
   static bool isBookmarkableWord(ScriptWord word) {
     if (word.isNewline) return false;
     final visible = word.raw
@@ -175,5 +198,63 @@ class ScriptBookmarkService {
         .replaceAll(_alignTagStripRe, '')
         .trim();
     return visible.isNotEmpty;
+  }
+
+  static int _tokenLengthForRawBlock(
+    String text, {
+    required bool includeSoftBreak,
+  }) {
+    final clean = _stripBookmarkSigns(text);
+    if (clean.trim().isEmpty) return 1;
+    final wordCount =
+        WordAligner.tokenize(clean).where((word) => !word.isNewline).length;
+    return wordCount + (includeSoftBreak ? 1 : 0);
+  }
+
+  static int _localWordIndexForRawOffset(String text, int offset) {
+    final safeOffset = offset.clamp(0, text.length).toInt();
+    final signsBefore = RegExp(RegExp.escape(_bookmarkSign))
+        .allMatches(text.substring(0, safeOffset))
+        .length;
+    final cleanText = _stripBookmarkSigns(text);
+    final cleanOffset =
+        (safeOffset - signsBefore).clamp(0, cleanText.length).toInt();
+    final visibleText = _stripTags(cleanText);
+    final visibleOffset = _rawToVisibleOffset(cleanText, cleanOffset)
+        .clamp(0, visibleText.length)
+        .toInt();
+    final matches = RegExp(r'\S+').allMatches(visibleText).toList();
+    if (matches.isEmpty) return 0;
+    for (var i = 0; i < matches.length; i++) {
+      if (visibleOffset <= matches[i].start) return i;
+      if (visibleOffset > matches[i].start && visibleOffset < matches[i].end) {
+        return i;
+      }
+    }
+    return matches.length;
+  }
+
+  static String _stripBookmarkSigns(String text) =>
+      text.replaceAll(_bookmarkSign, '');
+
+  static String _stripTags(String text) =>
+      text.replaceAll(_tagStripRe, '').replaceAll(_alignTagStripRe, '');
+
+  static int _rawToVisibleOffset(String raw, int rawOffset) {
+    var visible = 0;
+    var i = 0;
+    final safeOffset = rawOffset.clamp(0, raw.length).toInt();
+    while (i < safeOffset) {
+      if (raw.codeUnitAt(i) == 0x5B) {
+        final close = raw.indexOf(']', i + 1);
+        if (close >= 0 && close < safeOffset) {
+          i = close + 1;
+          continue;
+        }
+      }
+      visible++;
+      i++;
+    }
+    return visible;
   }
 }

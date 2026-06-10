@@ -9,7 +9,6 @@ class _PresenterDecorationPainter extends CustomPainter {
   final MarkupDecorationType type;
   final double gapTolerance;
   final Color underlineColor;
-  final bool moveHighlightsToText;
 
   const _PresenterDecorationPainter({
     required this.contentKey,
@@ -20,7 +19,6 @@ class _PresenterDecorationPainter extends CustomPainter {
     required this.type,
     required this.gapTolerance,
     this.underlineColor = const Color(0xFFFFFFFF),
-    this.moveHighlightsToText = false,
   });
 
   @override
@@ -153,9 +151,6 @@ class _PresenterDecorationPainter extends CustomPainter {
   }
 
   Color _effectiveHighlightColor(ScriptWord word, Color highlight) {
-    if (moveHighlightsToText) {
-      return highlight.withValues(alpha: 0);
-    }
     if (!isManualMode && word.index < confirmedWordIndex) {
       return highlight.withValues(alpha: highlight.a * 0.15);
     }

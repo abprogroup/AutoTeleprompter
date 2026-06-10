@@ -11,6 +11,8 @@ import '../services/account_grace_token.dart';
 import '../services/account_backend_models.dart';
 import '../services/account_session_store.dart';
 
+part 'auth_provider.state.dart';
+
 const autoTeleprompterAdminEmail = String.fromEnvironment(
   'AUTOTELEPROMPTER_ADMIN_EMAIL',
 );
@@ -25,135 +27,13 @@ bool get isLocalProLicenseActivationConfigured =>
     autoTeleprompterProLicenseHash.trim().isNotEmpty ||
     autoTeleprompterAdminCodeHash.trim().isNotEmpty;
 
-class AuthState {
-  final String? email;
-  final bool isPro;
-  final bool isAdmin;
-  final String? licenseKey;
-  final bool accountBackendEnabled;
-  final String? backendAccountId;
-  final AccountBackendRole backendRole;
-  final String backendStatus;
-  final String? backendError;
-  final DateTime? backendTokenExpiry;
-  final String backendEntitlementStatus;
-  final DateTime? entitlementExpiresAt;
-  final bool entitlementRevoked;
-  final DateTime? offlineGraceExpiry;
-  final String? deviceId;
-  final DateTime? lastServerTimestamp;
-
-  AuthState({
-    this.email,
-    this.isPro = false,
-    this.isAdmin = false,
-    this.licenseKey,
-    this.accountBackendEnabled = false,
-    this.backendAccountId,
-    this.backendRole = AccountBackendRole.free,
-    this.backendStatus = 'disabled',
-    this.backendError,
-    this.backendTokenExpiry,
-    this.backendEntitlementStatus = 'active',
-    this.entitlementExpiresAt,
-    this.entitlementRevoked = false,
-    this.offlineGraceExpiry,
-    this.deviceId,
-    this.lastServerTimestamp,
-  });
-
-  bool get isSignedIn => email != null && email!.trim().isNotEmpty;
-
-  bool get hasPremiumAccess => isSignedIn && isPro;
-
-  bool get isBackendActive =>
-      accountBackendEnabled && backendStatus == 'active';
-
-  String get entitlementStatus {
-    if (backendStatus == 'disabledAccount') return 'disabled';
-    if (backendEntitlementStatus == 'revoked') return 'revoked';
-    if (backendEntitlementStatus == 'expired') return 'expired';
-    if (entitlementRevoked) return 'revoked';
-    final expiresAt = entitlementExpiresAt;
-    if (expiresAt != null && !expiresAt.isAfter(DateTime.now().toUtc())) {
-      return 'expired';
-    }
-    if (backendRole == AccountBackendRole.admin ||
-        backendRole == AccountBackendRole.pro) {
-      return 'active';
-    }
-    return 'free';
-  }
-
-  String get roleLabel {
-    switch (backendRole) {
-      case AccountBackendRole.admin:
-        return 'Admin';
-      case AccountBackendRole.pro:
-        return 'Pro';
-      case AccountBackendRole.free:
-        return 'Free';
-    }
-  }
-
-  bool get isCheckingBackendAccess =>
-      accountBackendEnabled &&
-      const {
-        'storedSession',
-        'refreshingStoredSession',
-        'requestingCode',
-        'verifyingCode',
-      }.contains(backendStatus);
-
-  AuthState copyWith({
-    String? email,
-    bool? isPro,
-    bool? isAdmin,
-    String? licenseKey,
-    bool? accountBackendEnabled,
-    String? backendAccountId,
-    AccountBackendRole? backendRole,
-    String? backendStatus,
-    String? backendError,
-    DateTime? backendTokenExpiry,
-    String? backendEntitlementStatus,
-    DateTime? entitlementExpiresAt,
-    bool clearEntitlementExpiresAt = false,
-    bool? entitlementRevoked,
-    DateTime? offlineGraceExpiry,
-    String? deviceId,
-    DateTime? lastServerTimestamp,
-  }) {
-    return AuthState(
-      email: email ?? this.email,
-      isPro: isPro ?? this.isPro,
-      isAdmin: isAdmin ?? this.isAdmin,
-      licenseKey: licenseKey ?? this.licenseKey,
-      accountBackendEnabled:
-          accountBackendEnabled ?? this.accountBackendEnabled,
-      backendAccountId: backendAccountId ?? this.backendAccountId,
-      backendRole: backendRole ?? this.backendRole,
-      backendStatus: backendStatus ?? this.backendStatus,
-      backendError: backendError ?? this.backendError,
-      backendTokenExpiry: backendTokenExpiry ?? this.backendTokenExpiry,
-      backendEntitlementStatus:
-          backendEntitlementStatus ?? this.backendEntitlementStatus,
-      entitlementExpiresAt: clearEntitlementExpiresAt
-          ? null
-          : entitlementExpiresAt ?? this.entitlementExpiresAt,
-      entitlementRevoked: entitlementRevoked ?? this.entitlementRevoked,
-      offlineGraceExpiry: offlineGraceExpiry ?? this.offlineGraceExpiry,
-      deviceId: deviceId ?? this.deviceId,
-      lastServerTimestamp: lastServerTimestamp ?? this.lastServerTimestamp,
-    );
-  }
-}
-
 class AuthNotifier extends StateNotifier<AuthState> {
   static const _emailKey = 'auth_email';
   static const _proKey = 'auth_is_pro';
   static const _licenseKey = 'auth_license_key';
   static const _backendDeviceKey = 'auth_backend_device_id';
+  static const _backendRememberMeKey = 'auth_backend_remember_me';
+  static const _backendLastEmailKey = 'auth_backend_last_email';
 
   AuthNotifier({
     AccountBackendConfig accountBackendConfig = const AccountBackendConfig(),
@@ -186,10 +66,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool(_backendRememberMeKey) ?? true;
+    final lastEmailUsed = prefs.getString(_backendLastEmailKey);
     if (_accountBackendConfig.enabled) {
       await prefs.remove(_emailKey);
       await prefs.remove(_proKey);
       await prefs.remove(_licenseKey);
+      if (!rememberMe) await _clearStoredBackendSession();
     }
     final email =
         _accountBackendConfig.enabled ? null : prefs.getString(_emailKey);
@@ -218,6 +101,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           : _accountBackendConfig.enabled
               ? 'notConfigured'
               : 'disabled',
+      rememberMe: rememberMe,
+      lastEmailUsed: lastEmailUsed,
     );
     await _loadStoredBackendSession();
   }
@@ -271,6 +156,64 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       rethrow;
     }
+  }
+
+  Future<void> setBackendRememberMe(bool remember) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_backendRememberMeKey, remember);
+    state = state.copyWith(rememberMe: remember);
+  }
+
+  Future<bool> refreshBackendAccount() async {
+    if (!_accountBackendConfig.isConfigured) {
+      throw const AccountBackendError(
+        'backend_not_configured',
+        'Account backend is not configured for this build.',
+      );
+    }
+    final session = await _requireStoredSession();
+    final deviceId = session.deviceId ?? await _ensureBackendDeviceId();
+    final profile = await _accountBackendService.refreshSession(
+      accessToken: session.accessToken,
+      deviceId: deviceId,
+      friendlyName: 'Windows',
+    );
+    await _saveBackendSessionSnapshot(session, profile, deviceId);
+    await applyBackendProfile(
+      profile,
+      deviceId: deviceId,
+      tokenExpiry: session.expiresAt,
+    );
+    return state.hasPremiumAccess || state.isAdmin;
+  }
+
+  Future<void> deleteBackendAccount({required String confirmation}) async {
+    if (!_accountBackendConfig.isConfigured) {
+      throw const AccountBackendError(
+        'backend_not_configured',
+        'Account backend is not configured for this build.',
+      );
+    }
+    final session = await _requireStoredSession();
+    await _accountBackendService.deleteAccount(
+      accessToken: session.accessToken,
+      confirmation: confirmation,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_emailKey);
+    await prefs.remove(_proKey);
+    await prefs.remove(_licenseKey);
+    await prefs.remove(_backendLastEmailKey);
+    await _clearStoredBackendSession();
+    state = AuthState(
+      accountBackendEnabled: _accountBackendConfig.enabled,
+      backendStatus: _accountBackendConfig.isConfigured
+          ? 'signedOut'
+          : _accountBackendConfig.enabled
+              ? 'notConfigured'
+              : 'disabled',
+      rememberMe: prefs.getBool(_backendRememberMeKey) ?? state.rememberMe,
+    );
   }
 
   Future<bool> verifyBackendLoginCode({
@@ -448,12 +391,38 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
+  Future<bool> verifyBackendEmailChangeCode({
+    required String newEmail,
+    required String code,
+  }) async {
+    final normalizedNewEmail = newEmail.trim();
+    final normalizedCode = code.trim();
+    if (normalizedNewEmail.isEmpty || normalizedCode.isEmpty) {
+      throw const AccountBackendError(
+        'missing_email_change_code',
+        'New email and confirmation code are required.',
+      );
+    }
+    final session = await _accountBackendService.verifyEmailChangeCode(
+      email: normalizedNewEmail,
+      code: normalizedCode,
+    );
+    return _activateBackendSession(
+      session,
+      fallbackEmail: normalizedNewEmail,
+    );
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
+    final lastEmail = state.email?.trim();
+    if (lastEmail != null && lastEmail.isNotEmpty) {
+      await prefs.setString(_backendLastEmailKey, lastEmail);
+    }
     await prefs.remove(_emailKey);
     await prefs.remove(_proKey);
     await prefs.remove(_licenseKey);
-    await _accountSessionStore.clear();
+    await _clearStoredBackendSession();
     state = AuthState(
       accountBackendEnabled: _accountBackendConfig.enabled,
       backendStatus: _accountBackendConfig.isConfigured
@@ -461,6 +430,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           : _accountBackendConfig.enabled
               ? 'notConfigured'
               : 'disabled',
+      rememberMe: prefs.getBool(_backendRememberMeKey) ?? state.rememberMe,
+      lastEmailUsed: lastEmail ?? state.lastEmailUsed,
     );
   }
 
@@ -513,6 +484,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       offlineGraceExpiry: profile.graceExpiresAt,
       deviceId: deviceId,
       lastServerTimestamp: profile.serverTime,
+      lastEmailUsed: profile.email.isNotEmpty ? profile.email : state.email,
     );
   }
 
@@ -542,16 +514,43 @@ class AuthNotifier extends StateNotifier<AuthState> {
       ),
     );
     final prefs = await SharedPreferences.getInstance();
+    final resolvedEmail =
+        profile.email.isNotEmpty ? profile.email : fallbackEmail;
     await prefs.setString(
       _emailKey,
-      profile.email.isNotEmpty ? profile.email : fallbackEmail,
+      resolvedEmail,
     );
+    if (resolvedEmail.trim().isNotEmpty) {
+      await prefs.setString(_backendLastEmailKey, resolvedEmail.trim());
+    }
     await applyBackendProfile(
       profile,
       deviceId: deviceId,
       tokenExpiry: session.expiresAt,
     );
     return profile.hasPremiumAccess || profile.isAdmin;
+  }
+
+  Future<void> _saveBackendSessionSnapshot(
+    AccountSessionSnapshot session,
+    AccountBackendProfile profile,
+    String deviceId,
+  ) async {
+    await _accountSessionStore.save(
+      AccountSessionSnapshot(
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        userId:
+            profile.accountId.isNotEmpty ? profile.accountId : session.userId,
+        email: profile.email.isNotEmpty ? profile.email : session.email,
+        deviceId: deviceId,
+        role: profile.role,
+        expiresAt: session.expiresAt,
+        lastServerTimestamp: profile.serverTime,
+        graceToken: profile.graceToken,
+        graceExpiresAt: profile.graceExpiresAt,
+      ),
+    );
   }
 
   Future<AccountSessionSnapshot> _requireStoredSession() async {
@@ -563,6 +562,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     }
     return session;
+  }
+
+  Future<void> _clearStoredBackendSession() async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        await _accountSessionStore.clear();
+        return;
+      } catch (error) {
+        lastError = error;
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+      }
+    }
+    if (lastError != null) throw lastError;
   }
 
   void _validatePasswordInput(String password) {
@@ -587,7 +600,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (lastServerTimestamp != null &&
           now.isBefore(
               lastServerTimestamp.subtract(const Duration(minutes: 5)))) {
-        await _accountSessionStore.clear();
+        await _clearStoredBackendSession();
         state = state.copyWith(
           accountBackendEnabled: true,
           backendStatus: 'clockRollbackDetected',
@@ -601,7 +614,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (session.expiresAt != null && !session.expiresAt!.isAfter(now)) {
         deviceId = session.deviceId ?? await _ensureBackendDeviceId();
         if (_applyOfflineGrace(session, deviceId)) return;
-        await _accountSessionStore.clear();
+        await _clearStoredBackendSession();
         state = state.copyWith(
           accountBackendEnabled: true,
           backendStatus: 'sessionExpired',
@@ -654,7 +667,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (error) {
       if (!mounted) return;
       if (_applyOfflineGrace(session, deviceId ?? session?.deviceId)) return;
-      await _accountSessionStore.clear();
+      await _clearStoredBackendSession();
       state = state.copyWith(
         accountBackendEnabled: true,
         backendStatus: 'sessionRefreshFailed',
@@ -696,6 +709,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       offlineGraceExpiry: grace.expiresAt,
       deviceId: deviceId,
       lastServerTimestamp: session.lastServerTimestamp,
+      lastEmailUsed: grace.email.isNotEmpty ? grace.email : session.email,
     );
     return state.hasPremiumAccess || state.isAdmin;
   }

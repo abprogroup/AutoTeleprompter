@@ -26,10 +26,6 @@ class ScriptColorInversionService {
     required AppSettings settings,
     required Color fallback,
   }) {
-    final highlight = word.highlight;
-    if (highlight != null && highlightsMoveToText(settings)) {
-      return highlight.withValues(alpha: fallback.a);
-    }
     return fallback;
   }
 }

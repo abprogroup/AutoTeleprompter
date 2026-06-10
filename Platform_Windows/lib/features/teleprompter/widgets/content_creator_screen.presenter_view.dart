@@ -53,10 +53,6 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
                   type: MarkupDecorationType.background,
                   gapTolerance:
                       _contentDecorationGapTolerance(presenterWordGap),
-                  moveHighlightsToText:
-                      ScriptColorInversionService.highlightsMoveToText(
-                    settings,
-                  ),
                 ),
               ),
             ),
@@ -76,6 +72,27 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
                 ),
               ),
             ),
+          ),
+        ],
+      );
+    }
+
+    if (bookmarkWordIndexes.isNotEmpty) {
+      wordList = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          wordList,
+          PresenterBookmarkMarkerLayer(
+            contentKey: _creatorContentKey,
+            wordKeys: _wordKeys,
+            words: script.words,
+            bookmarkWordIndexes: bookmarkWordIndexes,
+            color: Color(settings.currentWordColor),
+            fontSize: presentationFontSize,
+            lineSpacing: settings.lineSpacing,
+            onTap: allowWordJump
+                ? (index) => _jumpToContentWordIndex(index, immediate: true)
+                : null,
           ),
         ],
       );
@@ -147,7 +164,6 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
                 activeWordIndex: activeWordIndex,
                 settings: settings,
                 paragraphDirection: paraDir,
-                bookmarkWordIndexes: bookmarkWordIndexes,
                 presentationFontSize: presentationFontSize,
                 allowWordJump: allowWordJump,
               ),
@@ -164,12 +180,10 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     required int activeWordIndex,
     required AppSettings settings,
     required TextDirection paragraphDirection,
-    required Set<int> bookmarkWordIndexes,
     required double presentationFontSize,
     required bool allowWordJump,
   }) {
     final i = word.index;
-    final hasBookmark = bookmarkWordIndexes.contains(i);
     final isCurrent = i == activeWordIndex;
     final isPast = i < activeWordIndex;
     final visibleWordText = word.raw
@@ -189,10 +203,8 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     final trackingBgColor = isCurrent && settings.showCurrentWordHighlight
         ? Color(settings.currentWordColor).withValues(alpha: 0.3)
         : null;
-    final effectiveBg = kUseCustomDocxDecorationPainting
-        ? trackingBgColor
-        : trackingBgColor ??
-            (isPast ? userBgColor?.withValues(alpha: 0.15) : userBgColor);
+    final effectiveBg = trackingBgColor ??
+        (isPast ? userBgColor?.withValues(alpha: 0.15) : userBgColor);
     final joinsPreviousHighlight = _contentSameHighlightColor(
       userBgColor,
       localWordIndex > 0 ? para[localWordIndex - 1].highlight : null,
@@ -203,9 +215,8 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
           ? para[localWordIndex + 1].highlight
           : null,
     );
-    final useSmoothHighlightBand = !kUseCustomDocxDecorationPainting &&
-        userBgColor != null &&
-        trackingBgColor == null;
+    final useSmoothHighlightBand =
+        userBgColor != null && trackingBgColor == null;
     final highlightRadius = Radius.circular(
       (effectiveFontSize * 0.08).clamp(2.0, 8.0),
     );
@@ -258,39 +269,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
         ),
       ),
     );
-    if (!hasBookmark) return wordWidget;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Tooltip(
-          message: 'Bookmark',
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: allowWordJump
-                ? () => _jumpToContentWordIndex(i, immediate: true)
-                : null,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: effectiveFontSize * 0.06,
-                vertical: effectiveFontSize * 0.04,
-              ),
-              child: Text(
-                '\u00BB',
-                style: TextStyle(
-                  color: Color(settings.currentWordColor),
-                  fontSize: effectiveFontSize * 0.62,
-                  fontWeight: FontWeight.bold,
-                  height: settings.lineSpacing,
-                ),
-              ),
-            ),
-          ),
-        ),
-        SizedBox(width: effectiveFontSize * 0.08),
-        wordWidget,
-      ],
-    );
+    return wordWidget;
   }
 
   Color _contentWordTextColor({
@@ -346,12 +325,14 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
   }
 
   bool _contentParagraphIsRtl(List<ScriptWord> words) {
+    var hasLatin = false;
     for (final word in words) {
       final clean = word.raw.replaceAll(_contentCreatorTagStripRe, '').trim();
       if (clean.isEmpty) continue;
       if (RegExp(r'[\u0590-\u08FF]').hasMatch(clean)) return true;
-      if (RegExp(r'[A-Za-z]').hasMatch(clean)) return false;
+      if (RegExp(r'[A-Za-z]').hasMatch(clean)) hasLatin = true;
     }
+    if (hasLatin) return false;
     return words.isNotEmpty && words.first.effectiveRtl;
   }
 
@@ -395,7 +376,6 @@ class _ContentDecorationPainter extends CustomPainter {
   final int activeWordIndex;
   final MarkupDecorationType type;
   final double gapTolerance;
-  final bool moveHighlightsToText;
 
   const _ContentDecorationPainter({
     required this.contentKey,
@@ -404,7 +384,6 @@ class _ContentDecorationPainter extends CustomPainter {
     required this.activeWordIndex,
     required this.type,
     required this.gapTolerance,
-    this.moveHighlightsToText = false,
   });
 
   @override
@@ -537,9 +516,6 @@ class _ContentDecorationPainter extends CustomPainter {
   }
 
   Color _effectiveHighlightColor(ScriptWord word, Color highlight) {
-    if (moveHighlightsToText) {
-      return highlight.withValues(alpha: 0);
-    }
     if (word.index < activeWordIndex) {
       return highlight.withValues(alpha: highlight.a * 0.15);
     }

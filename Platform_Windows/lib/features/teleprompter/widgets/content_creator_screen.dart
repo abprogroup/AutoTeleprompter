@@ -16,6 +16,7 @@ import '../../../platform/webview2/webview2_runtime_config.dart';
 import '../models/alignment_result.dart';
 import '../services/content_camera_device_classifier.dart';
 import '../services/presenter_input_lock_service.dart';
+import '../services/presenter_reading_position_service.dart';
 import '../services/recording_media_probe_service.dart';
 import '../services/recording_export_service.dart';
 import '../../script/services/script_color_inversion_service.dart';
@@ -34,6 +35,7 @@ import '../../script/models/script.dart';
 import '../../script/services/script_bookmark_service.dart';
 import '../../script/services/markup_decoration_service.dart';
 import '../../script/services/highlight_band_painter.dart';
+import 'presenter_bookmark_marker_layer.dart';
 import 'teleprompter_screen.dart';
 
 part 'content_creator_screen.widgets.dart';
@@ -129,7 +131,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     );
     _contentEntryResumeIndex =
         ref.read(teleprompterProvider).confirmedWordIndex;
-    _activeWordIndex = _contentEntryResumeIndex;
+    _activeWordIndex = 0;
     _resumeDialogShown = _contentEntryResumeIndex <= 0;
     _scrollController.addListener(_handleContentScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -156,6 +158,10 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         _scrollToContentWordIndex(next);
       });
       _initContentWebViewController();
+      final script = ref.read(scriptProvider);
+      if (_contentFrameConfirmed && script != null) {
+        _maybeShowContentResumePrompt(script);
+      }
     });
     final settings = ref.read(settingsProvider);
     if (widget.audioOnlyEntry &&
@@ -302,9 +308,15 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
           '${script.sessionId}|${script.title}|${script.words.length}';
       if (_activeScriptSeedKey != seedKey) {
         _activeScriptSeedKey = seedKey;
-        _activeWordIndex = tState.confirmedWordIndex
-            .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
-            .toInt();
+        final pendingResume = _contentEntryResumeIndex > 0 &&
+            !_resumeDialogShown &&
+            !tState.isListening &&
+            !tState.isStarting;
+        _activeWordIndex = pendingResume
+            ? 0
+            : tState.confirmedWordIndex
+                .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
+                .toInt();
         _pendingPositionCommit = null;
         _positionCommitTimer?.cancel();
       }

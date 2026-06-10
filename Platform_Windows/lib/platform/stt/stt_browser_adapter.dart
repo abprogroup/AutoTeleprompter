@@ -188,8 +188,8 @@ class SttBrowserAdapter extends AbstractSttService {
                         '[Browser STT] Could not open selected microphone; using system default.');
                   } else if (err == 'not-allowed') {
                     onError?.call('Microphone blocked in WebView2.\n'
-                        'Grant mic access once: open http://localhost:$_port/ in Edge, '
-                        'allow microphone, then restart the session.');
+                        'Open Windows microphone settings and allow microphone '
+                        'access for desktop apps.');
                   } else if (err != 'aborted' && err != 'no-speech') {
                     onDiagnostic?.call('[Browser STT] error: $err');
                   }

@@ -110,6 +110,9 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
         controller.text[safeOffset] == _bookmarkSign;
     final alreadyBeforeOffset =
         safeOffset > 0 && controller.text[safeOffset - 1] == _bookmarkSign;
+    // Cursor must end up after the sign we just inserted; when a sign already
+    // exists we leave the caret where it was.
+    var cursorOffset = safeOffset;
     if (!alreadyAtOffset && !alreadyBeforeOffset) {
       _isCommandExecuting = true;
       controller.value = TextEditingValue(
@@ -121,11 +124,15 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
       _isCommandExecuting = false;
       _isDirty = false;
       _lastFocusedController = controller;
+      cursorOffset = safeOffset + 1;
       _saveHistory(description: 'Add Bookmark');
     }
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
     final label = _bookmarkLabelForEditorPosition(block, safeOffset);
     if (!mounted) return;
+    // Restore focus + caret to the editable so keyboard navigation continues
+    // from the bookmark instead of jumping to the start of the script.
+    _focusEditorPosition((block: block, offset: cursorOffset));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Bookmark saved: $label'),

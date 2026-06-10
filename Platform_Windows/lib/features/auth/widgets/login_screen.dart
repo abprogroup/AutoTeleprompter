@@ -18,19 +18,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   bool _backendCodeRequested = false;
   bool _passwordMode = false;
+  bool _prefillingEmail = false;
+  bool _emailEditedByUser = false;
 
   @override
   void initState() {
     super.initState();
+    _emailCtrl.addListener(_trackEmailEdits);
     _licenseCtrl.addListener(_refreshBackendCodeState);
   }
 
   @override
   void dispose() {
+    _emailCtrl.removeListener(_trackEmailEdits);
     _licenseCtrl.removeListener(_refreshBackendCodeState);
     _emailCtrl.dispose();
     _licenseCtrl.dispose();
     super.dispose();
+  }
+
+  void _trackEmailEdits() {
+    if (_prefillingEmail) return;
+    _emailEditedByUser = true;
   }
 
   void _refreshBackendCodeState() {
@@ -185,18 +194,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (message.contains('over_email_send_rate_limit')) {
       return 'Please wait a moment before requesting another code.';
     }
-    if (message.contains('invalid') || message.contains('expired')) {
-      return 'Invalid or expired verification code.';
-    }
-    if (message.contains('backend_not_configured')) {
-      return 'Account backend is not configured for this build.';
-    }
     if (message.contains('weak_password')) {
       return 'Password must be at least 8 characters.';
     }
     if (message.contains('invalid_grant') ||
-        message.contains('invalid login')) {
+        message.contains('invalid login') ||
+        message.contains('invalid_credentials')) {
       return 'Email or password is incorrect.';
+    }
+    if (message.contains('backend_not_configured')) {
+      return 'Account backend is not configured for this build.';
+    }
+    if (message.contains('invalid') || message.contains('expired')) {
+      return _passwordMode
+          ? 'Email or password is incorrect.'
+          : 'Invalid or expired verification code.';
     }
     if (message.startsWith('AccountBackendError(')) {
       return 'Account verification failed: $message';
@@ -208,6 +220,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final backendMode = auth.accountBackendEnabled;
+    _prefillBackendEmail(auth, backendMode);
     final hasBackendCode = backendMode && _licenseCtrl.text.trim().isNotEmpty;
     final codeRequested =
         backendMode && (_backendCodeRequested || hasBackendCode);
@@ -294,6 +307,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                   ],
                 ),
+                CheckboxListTile(
+                  value: auth.rememberMe,
+                  onChanged: _isLoading
+                      ? null
+                      : (value) {
+                          ref
+                              .read(authProvider.notifier)
+                              .setBackendRememberMe(value ?? true);
+                        },
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: const Color(0xFFFFBF00),
+                  checkColor: Colors.black,
+                  title: const Text(
+                    'Remember me',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  subtitle: const Text(
+                    'Keep this account connected after closing the app.',
+                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                ),
               ],
               const SizedBox(height: 40),
               SizedBox(
@@ -344,6 +380,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  void _prefillBackendEmail(AuthState auth, bool backendMode) {
+    if (!backendMode || _emailEditedByUser || _emailCtrl.text.isNotEmpty) {
+      return;
+    }
+    final email = (auth.email ?? auth.lastEmailUsed ?? '').trim();
+    if (email.isEmpty) return;
+    _prefillingEmail = true;
+    _emailCtrl.text = email;
+    _prefillingEmail = false;
+  }
+
   void _showPasswordResetDialog() {
     final emailController = TextEditingController(text: _emailCtrl.text.trim());
     final codeController = TextEditingController();
@@ -352,6 +399,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     var busy = false;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),

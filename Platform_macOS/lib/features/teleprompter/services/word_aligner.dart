@@ -3,14 +3,9 @@ import '../../script/models/script_word.dart';
 import '../../../core/extensions/string_extensions.dart';
 
 part 'word_aligner.markup_parser.dart';
+part 'word_aligner_similarity.dart';
+part 'word_aligner_policy.dart';
 
-class AlignmentResult {
-  final int confirmedWordIndex;
-  final double confidence;
-  final String debugInfo; // detailed debug info about match decision
-  AlignmentResult(this.confirmedWordIndex, this.confidence,
-      [this.debugInfo = '']);
-}
 
 class WordAligner {
   // â”€â”€ Tuning constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -37,13 +32,45 @@ class WordAligner {
   static const double _strictPhraseThreshold = 0.78;
   static const int _normalModeMinTranscriptWords = 3;
 
+  static bool isBigRecognitionWord(String normalizedWord,
+          {int minLetters = 5}) =>
+      normalizedWord.trim().length >= minLetters.clamp(1, 99);
+
+  static int nextSpeakableIndex(List<ScriptWord> script, int startIndex) {
+    var i = startIndex.clamp(0, script.length).toInt();
+    while (i < script.length &&
+        (script[i].isNewline || _isUnspeakable(script[i]))) {
+      i++;
+    }
+    return i;
+  }
+
+  static double spokenWordSimilarity(String spoken, ScriptWord word) {
+    if (word.normalized.isEmpty) return 0.0;
+    return _wordSimilarity(spoken, word.normalized, word.isRtl);
+  }
+
+  static bool spokenWordMatchesNext(
+    String spoken,
+    ScriptWord word, {
+    bool strictBulletMode = false,
+  }) {
+    if (spoken.isEmpty || word.normalized.isEmpty) return false;
+    final threshold =
+        strictBulletMode ? _strictMatchThreshold : (word.isRtl ? 0.45 : 0.55);
+    return spokenWordSimilarity(spoken, word) >= threshold;
+  }
+
   /// Parse raw script text into a list of ScriptWords.
   /// Preserves paragraph breaks as isNewline=true entries.
   static List<ScriptWord> tokenize(String text) {
     final words = <ScriptWord>[];
     int index = 0;
 
-    final lines = text.split('\n');
+    // Heal markup tags that span a line break before the per-line parse, so a
+    // [bg=]/[color=] left open across a paragraph split still applies (the
+    // per-line parser needs a self-contained tag run). Ported from Windows.
+    final lines = _balanceLineSpanningTags(text).split('\n');
 
     for (int li = 0; li < lines.length; li++) {
       final line = lines[li];

@@ -1,170 +1,268 @@
 part of 'word_aligner.dart';
 
+/// Stack-based markup parser. Mirrors the editor's decoration parser:
+/// open/close tags push/pop independent style stacks, so OVERLAPPING (not
+/// strictly nested) tags — e.g. `[bg=..]x[/size][/font][font=..][size=..][/bg]`
+/// produced by the editor when a highlight crosses size/font runs — still
+/// apply correctly. The previous recursive pair-matching parser dropped the
+/// highlight in those cases (it matched [size]..[/size] first, splitting the
+/// [bg] open away from its [/bg]); that was the legacy/imported-file highlight
+/// bug fixed on Windows (BUG-012) and ported here.
 List<_Span> _parseMarkup(String line) {
-  return _parseMarkupRecursive(line, const _Span(''));
-}
-
-// Recursive markup parser â€” supports nested tags (e.g. **[rc]word[/rc]**)
-List<_Span> _parseMarkupRecursive(String text, _Span base) {
   final spans = <_Span>[];
-  final pattern = RegExp(
-    r'\*\*(.*?)\*\*'
-    r'|\[y\](.*?)\[\/y\]'
-    r'|\[r\](.*?)\[\/r\]'
-    r'|\[g\](.*?)\[\/g\]'
-    r'|\[b\](.*?)\[\/b\]'
-    r'|\[o\](.*?)\[\/o\]'
-    r'|\[p\](.*?)\[\/p\]'
-    r'|\[c\](.*?)\[\/c\]'
-    r'|\[pk\](.*?)\[\/pk\]'
-    r'|\[yc\](.*?)\[\/yc\]'
-    r'|\[rc\](.*?)\[\/rc\]'
-    r'|\[gc\](.*?)\[\/gc\]'
-    r'|\[bc\](.*?)\[\/bc\]'
-    r'|\[oc\](.*?)\[\/oc\]'
-    r'|\[pc\](.*?)\[\/pc\]'
-    r'|\[cc\](.*?)\[\/cc\]'
-    r'|\[pkc\](.*?)\[\/pkc\]'
-    r'|\[u\](.*?)\[\/u\]'
-    r'|\[size=(\d+)\](.*?)\[\/size\]'
-    r'|\[(center|left|right)\](.*?)\[\/\21\]'
-    r'|\[align=(center|left|right)\](.*?)\[\/align=\23\]'
-    r'|\[i\](.*?)\[\/i\]'
-    r'|\[(rtl|ltr)\](.*?)\[\/\26\]'
-    r'|\[color=([^\]]+)\](.*?)\[\/color\]'
-    r'|\[bg=([^\]]+)\](.*?)\[\/bg\]',
-    dotAll: true,
-  );
-  int last = 0;
-  for (final m in pattern.allMatches(text)) {
-    if (m.start > last) {
-      spans.add(_Span(text.substring(last, m.start),
-          isBold: base.isBold,
-          isUnderline: base.isUnderline,
-          fontSize: base.fontSize,
-          alignment: base.alignment,
-          isItalic: base.isItalic,
-          isParagraphRtl: base.isParagraphRtl,
-          highlight: base.highlight,
-          textColor: base.textColor));
-    }
-    if (m.group(1) != null) {
-      spans.addAll(_parseMarkupRecursive(
-          m.group(1)!, base.copyWith(text: '', isBold: true)));
-    } else if (m.group(2) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(2)!,
-          base.copyWith(text: '', highlight: Colors.yellow.withOpacity(0.6))));
-    } else if (m.group(3) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(3)!,
-          base.copyWith(text: '', highlight: Colors.red.withOpacity(0.55))));
-    } else if (m.group(4) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(4)!,
-          base.copyWith(text: '', highlight: Colors.green.withOpacity(0.55))));
-    } else if (m.group(5) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(5)!,
-          base.copyWith(text: '', highlight: Colors.blue.withOpacity(0.45))));
-    } else if (m.group(6) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(6)!,
-          base.copyWith(text: '', highlight: Colors.orange.withOpacity(0.50))));
-    } else if (m.group(7) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(7)!,
-          base.copyWith(text: '', highlight: Colors.purple.withOpacity(0.45))));
-    } else if (m.group(8) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(8)!,
-          base.copyWith(text: '', highlight: Colors.cyan.withOpacity(0.45))));
-    } else if (m.group(9) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(9)!,
-          base.copyWith(text: '', highlight: Colors.pink.withOpacity(0.45))));
-    } else if (m.group(10) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(10)!,
-          base.copyWith(text: '', textColor: Colors.yellow.shade300)));
-    } else if (m.group(11) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(11)!,
-          base.copyWith(text: '', textColor: Colors.red.shade300)));
-    } else if (m.group(12) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(12)!,
-          base.copyWith(text: '', textColor: Colors.greenAccent.shade200)));
-    } else if (m.group(13) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(13)!,
-          base.copyWith(text: '', textColor: Colors.blue.shade300)));
-    } else if (m.group(14) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(14)!,
-          base.copyWith(text: '', textColor: Colors.orange.shade300)));
-    } else if (m.group(15) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(15)!,
-          base.copyWith(text: '', textColor: Colors.purple.shade200)));
-    } else if (m.group(16) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(16)!,
-          base.copyWith(text: '', textColor: Colors.cyan.shade300)));
-    } else if (m.group(17) != null) {
-      spans.addAll(_parseMarkupRecursive(m.group(17)!,
-          base.copyWith(text: '', textColor: Colors.pink.shade300)));
-    } else if (m.group(18) != null) {
-      spans.addAll(_parseMarkupRecursive(
-          m.group(18)!, base.copyWith(text: '', isUnderline: true)));
-    } else if (m.group(19) != null && m.group(20) != null) {
-      final sz = double.tryParse(m.group(19)!);
-      spans.addAll(_parseMarkupRecursive(
-          m.group(20)!, base.copyWith(text: '', fontSize: sz)));
-    } else if (m.group(21) != null && m.group(22) != null) {
-      // [center|left|right] legacy format
-      final alignStr = m.group(21)!;
-      TextAlign align = TextAlign.center;
-      if (alignStr == 'left') align = TextAlign.left;
-      if (alignStr == 'right') align = TextAlign.right;
-      spans.addAll(_parseMarkupRecursive(
-          m.group(22)!, base.copyWith(text: '', alignment: align)));
-    } else if (m.group(23) != null && m.group(24) != null) {
-      // [align=center|left|right] current editor format
-      final alignStr = m.group(23)!;
-      TextAlign align = TextAlign.center;
-      if (alignStr == 'left') align = TextAlign.left;
-      if (alignStr == 'right') align = TextAlign.right;
-      spans.addAll(_parseMarkupRecursive(
-          m.group(24)!, base.copyWith(text: '', alignment: align)));
-    } else if (m.group(25) != null) {
-      // [i] italics
-      spans.addAll(_parseMarkupRecursive(
-          m.group(25)!, base.copyWith(text: '', isItalic: true)));
-    } else if (m.group(26) != null && m.group(27) != null) {
-      // [rtl|ltr]
-      final dir = m.group(26)!;
-      spans.addAll(_parseMarkupRecursive(
-          m.group(27)!, base.copyWith(text: '', isParagraphRtl: dir == 'rtl')));
-    } else if (m.group(28) != null && m.group(29) != null) {
-      // [color=#HEX] custom text color
-      final c = _parseHexColor(m.group(28)!);
-      if (c != null) {
-        spans.addAll(_parseMarkupRecursive(
-            m.group(29)!, base.copyWith(text: '', textColor: c)));
-      } else {
-        spans.addAll(_parseMarkupRecursive(m.group(29)!, base));
+  var bold = false;
+  var underline = false;
+  var italic = false;
+  final sizes = <double>[];
+  final aligns = <TextAlign>[];
+  final rtls = <bool>[];
+  final highlights = <Color>[];
+  final textColors = <Color>[];
+
+  void emit(String text) {
+    if (text.isEmpty) return;
+    spans.add(_Span(
+      text,
+      isBold: bold,
+      isUnderline: underline,
+      isItalic: italic,
+      fontSize: sizes.isEmpty ? null : sizes.last,
+      alignment: aligns.isEmpty ? null : aligns.last,
+      isParagraphRtl: rtls.isEmpty ? null : rtls.last,
+      highlight: highlights.isEmpty ? null : highlights.last,
+      textColor: textColors.isEmpty ? null : textColors.last,
+    ));
+  }
+
+  void popStack(List<dynamic> stack) {
+    if (stack.isNotEmpty) stack.removeLast();
+  }
+
+  var cursor = 0;
+  for (final m in _spanTagRegex.allMatches(line)) {
+    emit(line.substring(cursor, m.start));
+    cursor = m.end;
+    final tag = m.group(0)!;
+    if (tag == '**') {
+      bold = !bold;
+    } else if (tag == '[u]') {
+      underline = true;
+    } else if (tag == '[/u]') {
+      underline = false;
+    } else if (tag == '[i]') {
+      italic = true;
+    } else if (tag == '[/i]') {
+      italic = false;
+    } else if (tag.startsWith('[size=')) {
+      final v = double.tryParse(tag.substring(6, tag.length - 1));
+      if (v != null) sizes.add(v);
+    } else if (tag == '[/size]') {
+      popStack(sizes);
+    } else if (tag.startsWith('[align=')) {
+      aligns.add(_alignFromName(tag.substring(7, tag.length - 1)));
+    } else if (tag == '[center]') {
+      aligns.add(TextAlign.center);
+    } else if (tag == '[left]') {
+      aligns.add(TextAlign.left);
+    } else if (tag == '[right]') {
+      aligns.add(TextAlign.right);
+    } else if (tag.startsWith('[/align') ||
+        tag == '[/center]' ||
+        tag == '[/left]' ||
+        tag == '[/right]') {
+      popStack(aligns);
+    } else if (tag == '[rtl]') {
+      rtls.add(true);
+    } else if (tag == '[ltr]') {
+      rtls.add(false);
+    } else if (tag == '[/rtl]' || tag == '[/ltr]') {
+      popStack(rtls);
+    } else if (tag.startsWith('[color=')) {
+      final c = _parseHexColor(tag.substring(7, tag.length - 1));
+      if (c != null) textColors.add(c);
+    } else if (tag == '[/color]') {
+      popStack(textColors);
+    } else if (tag.startsWith('[bg=')) {
+      final c = _parseHexColor(tag.substring(4, tag.length - 1));
+      if (c != null) highlights.add(c);
+    } else if (tag == '[/bg]') {
+      popStack(highlights);
+    } else if (tag.startsWith('[font=') || tag == '[/font]') {
+      // Font family is visual-only metadata; consume but do not style words.
+    } else if (tag.startsWith('[/')) {
+      // Shorthand close: [/y].. (highlight) or [/yc].. (text color).
+      final name = tag.substring(2, tag.length - 1);
+      if (_shorthandHighlight(name) != null) {
+        popStack(highlights);
+      } else if (_shorthandTextColor(name) != null) {
+        popStack(textColors);
       }
-    } else if (m.group(30) != null && m.group(31) != null) {
-      // [bg=#HEX] custom highlight/background color
-      final c = _parseHexColor(m.group(30)!);
-      if (c != null) {
-        spans.addAll(_parseMarkupRecursive(
-            m.group(31)!, base.copyWith(text: '', highlight: c)));
-      } else {
-        spans.addAll(_parseMarkupRecursive(m.group(31)!, base));
+    } else {
+      // Shorthand open: [y].. (highlight) or [yc].. (text color).
+      final name = tag.substring(1, tag.length - 1);
+      final hl = _shorthandHighlight(name);
+      final tc = _shorthandTextColor(name);
+      if (hl != null) {
+        highlights.add(hl);
+      } else if (tc != null) {
+        textColors.add(tc);
       }
     }
-    last = m.end;
   }
-  if (last < text.length) {
-    spans.add(_Span(text.substring(last),
-        isBold: base.isBold,
-        isUnderline: base.isUnderline,
-        fontSize: base.fontSize,
-        alignment: base.alignment,
-        isParagraphRtl: base.isParagraphRtl,
-        isItalic: base.isItalic,
-        highlight: base.highlight,
-        textColor: base.textColor));
-  }
+  emit(line.substring(cursor));
   return spans;
 }
+
+TextAlign _alignFromName(String name) {
+  switch (name) {
+    case 'left':
+      return TextAlign.left;
+    case 'right':
+      return TextAlign.right;
+    default:
+      return TextAlign.center;
+  }
+}
+
+Color? _shorthandHighlight(String name) {
+  switch (name) {
+    case 'y':
+      return Colors.yellow.withValues(alpha: 0.6);
+    case 'r':
+      return Colors.red.withValues(alpha: 0.55);
+    case 'g':
+      return Colors.green.withValues(alpha: 0.55);
+    case 'b':
+      return Colors.blue.withValues(alpha: 0.45);
+    case 'o':
+      return Colors.orange.withValues(alpha: 0.50);
+    case 'p':
+      return Colors.purple.withValues(alpha: 0.45);
+    case 'c':
+      return Colors.cyan.withValues(alpha: 0.45);
+    case 'pk':
+      return Colors.pink.withValues(alpha: 0.45);
+  }
+  return null;
+}
+
+Color? _shorthandTextColor(String name) {
+  switch (name) {
+    case 'yc':
+      return Colors.yellow.shade300;
+    case 'rc':
+      return Colors.red.shade300;
+    case 'gc':
+      return Colors.greenAccent.shade200;
+    case 'bc':
+      return Colors.blue.shade300;
+    case 'oc':
+      return Colors.orange.shade300;
+    case 'pc':
+      return Colors.purple.shade200;
+    case 'cc':
+      return Colors.cyan.shade300;
+    case 'pkc':
+      return Colors.pink.shade300;
+  }
+  return null;
+}
+
+// Matches every open/close markup tag, longest alternatives first so e.g.
+// `[center]` is not mis-read as shorthand `[c]`.
+final RegExp _spanTagRegex = RegExp(
+  r'\*\*'
+  r'|\[\/?(?:center|left|right|rtl|ltr|pkc|pk|yc|rc|gc|bc|oc|pc|cc|y|r|g|b|o|p|c|u|i)\]'
+  r'|\[size=\d+(?:\.\d+)?\]|\[\/size\]'
+  r'|\[align=(?:center|left|right)\]|\[\/align(?:=(?:center|left|right))?\]'
+  r'|\[color=[^\]]+\]|\[\/color\]'
+  r'|\[bg=[^\]]+\]|\[\/bg\]'
+  r'|\[font=[^\]]+\]|\[\/font\]',
+);
+
+/// Rewrites [text] so every markup tag opens and closes on the same line.
+/// Tags still open at a line end are closed there and re-opened at the start
+/// of the next non-blank line, so a highlight/color/style spanning a line
+/// break survives the per-line parser. Well-formed single-line content is
+/// returned unchanged; blank lines stay blank (preserving hard breaks).
+String _balanceLineSpanningTags(String text) {
+  final hasTags = text.contains('[') || text.contains('**');
+  if (!text.contains('\n') || !hasTags) return text;
+  final lines = text.split('\n');
+  final open = <String>[]; // active openers, outermost first
+  final out = <String>[];
+  for (final line in lines) {
+    if (line.trim().isEmpty) {
+      // Keep blank paragraphs blank; the open-tag stack carries through.
+      out.add(line);
+      continue;
+    }
+    final sb = StringBuffer();
+    for (final opener in open) {
+      sb.write(opener);
+    }
+    var cursor = 0;
+    for (final m in _balanceTagRegex.allMatches(line)) {
+      sb.write(line.substring(cursor, m.start));
+      final tag = m.group(0)!;
+      sb.write(tag);
+      if (tag == '**') {
+        final idx = open.lastIndexOf('**');
+        if (idx >= 0) {
+          open.removeAt(idx);
+        } else {
+          open.add('**');
+        }
+      } else if (tag.startsWith('[/')) {
+        final name = _tagName(tag);
+        final idx = open.lastIndexWhere((o) => _tagName(o) == name);
+        if (idx >= 0) open.removeAt(idx);
+      } else {
+        open.add(tag);
+      }
+      cursor = m.end;
+    }
+    sb.write(line.substring(cursor));
+    for (var i = open.length - 1; i >= 0; i--) {
+      sb.write(_closerFor(open[i]));
+    }
+    out.add(sb.toString());
+  }
+  return out.join('\n');
+}
+
+/// The identifying name of an open/close tag (e.g. `bg`, `align`, `y`).
+String _tagName(String tag) {
+  if (tag == '**') return '**';
+  var inner = tag;
+  if (inner.startsWith('[/')) {
+    inner = inner.substring(2, inner.length - 1);
+  } else if (inner.startsWith('[')) {
+    inner = inner.substring(1, inner.length - 1);
+  }
+  final eq = inner.indexOf('=');
+  return eq >= 0 ? inner.substring(0, eq) : inner;
+}
+
+/// The closing tag for a given opener (align keeps its value).
+String _closerFor(String opener) {
+  if (opener == '**') return '**';
+  final inner = opener.substring(1, opener.length - 1);
+  final eq = inner.indexOf('=');
+  if (eq < 0) return '[/$inner]';
+  final name = inner.substring(0, eq);
+  return name == 'align' ? '[/$inner]' : '[/$name]';
+}
+
+final RegExp _balanceTagRegex = RegExp(
+  r'\*\*'
+  r'|\[\/?(?:center|left|right|rtl|ltr|pkc|pk|yc|rc|gc|bc|oc|pc|cc|y|r|g|b|o|p|c|u|i)\]'
+  r'|\[size=\d+(?:\.\d+)?\]|\[\/size\]'
+  r'|\[align=(?:center|left|right)\]|\[\/align(?:=(?:center|left|right))?\]'
+  r'|\[color=[^\]]+\]|\[\/color\]'
+  r'|\[bg=[^\]]+\]|\[\/bg\]'
+  r'|\[font=[^\]]+\]|\[\/font\]',
+);
 
 /// Parse a hex color string like "#FF0000" or "FF0000" into a Color.
 Color? _parseHexColor(String raw) {
@@ -174,15 +272,15 @@ Color? _parseHexColor(String raw) {
   return v == null ? null : Color(v);
 }
 
-// â”€â”€ Aligner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Aligner ──────────────────────────────────────────────────────────────────
 
 /// Core alignment: given a script word list and a speech transcript,
 /// determine which word the user has reached.
 ///
 /// Strategy:
-/// 1. FAST PATH: Check the very next expected word(s) first â€” if the last
+/// 1. FAST PATH: Check the very next expected word(s) first — if the last
 ///    spoken word matches the next script word, advance by exactly 1.
-/// 2. NEARBY SCAN: Check a small window (Â±8 words) for a strong single-word
+/// 2. NEARBY SCAN: Check a small window (±8 words) for a strong single-word
 ///    match. This handles minor improvisation where the user skips 1-2 words.
 /// 3. MULTI-WORD CONFIRMATION: Use the last 3 spoken words to confirm a
 ///    position via sequence alignment. This prevents false matches on common
@@ -211,28 +309,4 @@ class _Span {
     this.highlight,
     this.textColor,
   });
-
-  _Span copyWith({
-    String? text,
-    bool? isBold,
-    bool? isUnderline,
-    double? fontSize,
-    TextAlign? alignment,
-    bool? isItalic,
-    bool? isParagraphRtl,
-    Color? highlight,
-    Color? textColor,
-  }) {
-    return _Span(
-      text ?? this.text,
-      isBold: isBold ?? this.isBold,
-      isUnderline: isUnderline ?? this.isUnderline,
-      fontSize: fontSize ?? this.fontSize,
-      alignment: alignment ?? this.alignment,
-      isItalic: isItalic ?? this.isItalic,
-      isParagraphRtl: isParagraphRtl ?? this.isParagraphRtl,
-      highlight: highlight ?? this.highlight,
-      textColor: textColor ?? this.textColor,
-    );
-  }
 }

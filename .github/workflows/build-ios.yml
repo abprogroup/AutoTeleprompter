@@ -2,14 +2,6 @@ name: Build iOS IPA (v5.0.0)
 run-name: iOS v5.0.0 IPA run ${{ github.run_number }} - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
-  push:
-    branches: [ main, master ]
-    # Only trigger when iOS platform files or this workflow change.
-    # paths alone is sufficient; paths-ignore cannot coexist with paths on
-    # the same event (GitHub Actions validation error).
-    paths:
-      - 'Platform_iOS/**'
-      - '.github/workflows/build-ios.yml'
   workflow_dispatch:
 
 jobs:

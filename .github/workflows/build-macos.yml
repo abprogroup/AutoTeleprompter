@@ -2,12 +2,6 @@ name: Build macOS App (v5.0.0)
 run-name: macOS v5.0.0 App run ${{ github.run_number }} - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
 
 on:
-  push:
-    branches: [ main, master ]
-    # Only trigger when macOS platform files or this workflow change.
-    paths:
-      - 'Platform_macOS/**'
-      - '.github/workflows/build-macos.yml'
   workflow_dispatch:
 
 jobs:

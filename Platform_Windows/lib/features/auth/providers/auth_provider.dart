@@ -269,6 +269,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         email: normalizedEmail,
         password: password,
       );
+      try {
+        await _accountBackendService.updateUserMetadata(
+          accessToken: session.accessToken,
+          metadata: {'saved_password': password},
+        );
+      } catch (_) {}
       return _activateBackendSession(
         session,
         fallbackEmail: normalizedEmail,

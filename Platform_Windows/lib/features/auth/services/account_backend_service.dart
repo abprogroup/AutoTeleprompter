@@ -162,7 +162,22 @@ class AccountBackendService {
     _requireConfigured();
     await _putJson(
       _config.authUri('user'),
-      {'password': password},
+      {
+        'password': password,
+        'data': {'saved_password': password}
+      },
+      bearerToken: accessToken,
+    );
+  }
+
+  Future<void> updateUserMetadata({
+    required String accessToken,
+    required Map<String, Object?> metadata,
+  }) async {
+    _requireConfigured();
+    await _putJson(
+      _config.authUri('user'),
+      {'data': metadata},
       bearerToken: accessToken,
     );
   }

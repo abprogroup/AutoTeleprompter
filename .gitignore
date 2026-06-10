@@ -88,6 +88,7 @@ google_drive_client*.json
 dropbox_client*.json
 supabase_admin/
 launch_admin.bat
+AutoTeleprompterAdmin.exe
 
 # General Code Ignores
 **/.flutter-plugins

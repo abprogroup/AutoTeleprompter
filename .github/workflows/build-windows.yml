@@ -233,8 +233,7 @@ jobs:
           $adminCodeHash = ($env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256 -replace "\s", "").Trim().ToLowerInvariant()
           $supabaseUrl = ($env:SUPABASE_URL -replace "`r", "" -replace "`n", "").Trim()
           $supabaseAnonKey = ($env:SUPABASE_ANON_KEY -replace "`r", "" -replace "`n", "").Trim()
-          $accountBackendEnabled = if ("${{ steps.release.outputs.release_channel }}" -eq "internal" -and
-              -not [string]::IsNullOrWhiteSpace($supabaseUrl) -and
+          $accountBackendEnabled = if (-not [string]::IsNullOrWhiteSpace($supabaseUrl) -and
               -not [string]::IsNullOrWhiteSpace($supabaseAnonKey)) { "true" } else { "false" }
           $supabaseUrlForBuild = if ($accountBackendEnabled -eq "true") { $supabaseUrl } else { "" }
           $supabaseAnonKeyForBuild = if ($accountBackendEnabled -eq "true") { $supabaseAnonKey } else { "" }

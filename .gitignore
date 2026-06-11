@@ -112,3 +112,7 @@ CHANGELOG.md
 PROTOCOL.md
 README.md
 *.code-workspace
+
+# stray analyzer dumps
+Platform_macOS/analysis*.log
+Platform_macOS/analysis_output.txt

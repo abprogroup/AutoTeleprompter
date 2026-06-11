@@ -75,7 +75,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isMacOS) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _refreshRemoteUrl());
     }
   }
@@ -84,7 +84,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final auth = ref.watch(authProvider);
-    final remote = Platform.isWindows ? ref.watch(remoteControlProvider) : null;
+    final remote = (Platform.isWindows || Platform.isMacOS)
+        ? ref.watch(remoteControlProvider)
+        : null;
 
     final media = MediaQuery.maybeOf(context);
     final screen = DefaultTabController(
@@ -357,7 +359,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   }
 
   List<Widget> _remoteTab(RemoteControlService? remote) {
-    if (!Platform.isWindows || remote == null) {
+    if ((!Platform.isWindows && !Platform.isMacOS) || remote == null) {
       return const [
         _SectionHeader(title: 'REMOTE CONTROL'),
         SizedBox(height: 8),
@@ -449,7 +451,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   }
 
   Future<void> _refreshRemoteUrl([String? profileId]) async {
-    if (!mounted || !Platform.isWindows) return;
+    if (!mounted || (!Platform.isWindows && !Platform.isMacOS)) return;
     final remote = ref.read(remoteControlProvider);
     final selectedId = profileId ??
         _selectedRemoteProfileId ??

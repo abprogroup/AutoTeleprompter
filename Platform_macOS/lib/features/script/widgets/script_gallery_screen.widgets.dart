@@ -211,7 +211,7 @@ class _ProDashboard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    if (Platform.isWindows)
+                    if (Platform.isWindows || Platform.isMacOS)
                       Expanded(
                         child: _ProFeaturePill(
                           icon: Icons.settings_remote_outlined,
@@ -222,7 +222,7 @@ class _ProDashboard extends StatelessWidget {
                               : onLockedFeature,
                         ),
                       ),
-                    if (Platform.isWindows) const SizedBox(width: 8),
+                    if (Platform.isWindows || Platform.isMacOS) const SizedBox(width: 8),
                     Expanded(
                       child: _ProFeaturePill(
                         icon: Icons.cloud_outlined,
@@ -314,7 +314,7 @@ class _ProDashboard extends StatelessWidget {
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (Platform.isWindows)
+                  if (Platform.isWindows || Platform.isMacOS)
                     SizedBox(
                       width: 94,
                       child: _ProFeaturePill(
@@ -327,7 +327,7 @@ class _ProDashboard extends StatelessWidget {
                             : onLockedFeature,
                       ),
                     ),
-                  if (Platform.isWindows) const SizedBox(height: 4),
+                  if (Platform.isWindows || Platform.isMacOS) const SizedBox(height: 4),
                   SizedBox(
                     width: 94,
                     child: _ProFeaturePill(

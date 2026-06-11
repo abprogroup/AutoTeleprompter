@@ -94,7 +94,8 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           context,
           MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
         );
-    final remoteSettingsAction = Platform.isWindows ? openRemoteSettings : null;
+    final remoteSettingsAction =
+        (Platform.isWindows || Platform.isMacOS) ? openRemoteSettings : null;
     final visibleRecents = _dedupedRecentMetadata(settings.recentScripts);
 
     return AbsorbPointer(
@@ -132,7 +133,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           actions: [
-            if (Platform.isWindows)
+            if (Platform.isWindows || Platform.isMacOS)
               _PremiumShortcutIcon(
                 enabled: hasProAccess,
                 tooltip: 'Local Remote Control',
@@ -532,7 +533,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => _PremiumHubSheet(
         auth: auth,
-        onOpenRemote: Platform.isWindows
+        onOpenRemote: (Platform.isWindows || Platform.isMacOS)
             ? () {
                 Navigator.pop(context);
                 Navigator.push(

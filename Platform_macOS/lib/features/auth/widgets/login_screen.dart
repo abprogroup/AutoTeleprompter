@@ -276,7 +276,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 controller: _licenseCtrl,
                 label: credentialLabel,
                 icon: Icons.vpn_key_outlined,
-                isObscure: true,
+                // OTP/verification codes are not secret — show them in clear
+                // text (no mask, no eye toggle). Only mask real passwords and
+                // the offline license key.
+                isObscure: _passwordMode || !backendMode,
                 showVisibilityToggle: backendMode && _passwordMode,
               ),
               if (backendMode) ...[

@@ -146,10 +146,39 @@ class EncryptedFileStore {
   }
 
   Future<List<int>> _readOrCreateKey() async {
-    final existing = await _secureStorage.read(key: _keyName);
-    if (existing != null && existing.isNotEmpty) return base64Decode(existing);
+    // Prefer the Keychain (used on signed / dev builds).
+    try {
+      final existing = await _secureStorage.read(key: _keyName);
+      if (existing != null && existing.isNotEmpty) {
+        return base64Decode(existing);
+      }
+      final key = _randomBytes(32);
+      await _secureStorage.write(key: _keyName, value: base64Encode(key));
+      return key;
+    } catch (_) {
+      // The Keychain is unavailable on unsigned, sandboxed macOS builds (no
+      // keychain-access-groups entitlement → errSecMissingEntitlement, which
+      // would otherwise surface as a failed login). Fall back to a key file
+      // kept inside the sandbox-protected app container so account login and
+      // secure storage keep working.
+      return _readOrCreateKeyFile();
+    }
+  }
+
+  Future<List<int>> _readOrCreateKeyFile() async {
+    final base = _baseDirectory == null
+        ? await getApplicationSupportDirectory()
+        : await _baseDirectory();
+    final dir =
+        Directory('${base.path}${Platform.pathSeparator}secure_storage');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    final file = File('${dir.path}${Platform.pathSeparator}.master_key.v1');
+    if (await file.exists()) {
+      final contents = (await file.readAsString()).trim();
+      if (contents.isNotEmpty) return base64Decode(contents);
+    }
     final key = _randomBytes(32);
-    await _secureStorage.write(key: _keyName, value: base64Encode(key));
+    await file.writeAsString(base64Encode(key), flush: true);
     return key;
   }
 

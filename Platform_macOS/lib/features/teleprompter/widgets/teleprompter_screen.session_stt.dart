@@ -138,8 +138,15 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     } else {
       _closingPresentation = true;
     }
-    await _setPresenterFullscreen(false);
-    await _stopPresentationSession();
+    // Best-effort cleanup, but never let a hung native fullscreen toggle or a
+    // stalled speech-session stop trap the user in present mode — always pop
+    // back to the editor.
+    try {
+      await _setPresenterFullscreen(false).timeout(const Duration(seconds: 2));
+    } catch (_) {}
+    try {
+      await _stopPresentationSession().timeout(const Duration(seconds: 2));
+    } catch (_) {}
     if (mounted) navigator.pop(returnWordIndex);
   }
 

@@ -206,8 +206,10 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
     _logContentDebug('recording output selected $key');
     if (key == 'audio_only_wav') {
       final previousController = _cameraController;
+      final previousMacController = _macCameraController;
       _updateContentCreatorState(() {
         _cameraController = null;
+        _macCameraController = null;
         _isInit = false;
         _cameraAudioEnabled = false;
         _isCameraInitializing = false;
@@ -215,6 +217,7 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
         _contentFrameConfirmed = true;
       });
       await previousController?.dispose();
+      await previousMacController?.dispose();
     } else {
       await _initializeCamera();
     }

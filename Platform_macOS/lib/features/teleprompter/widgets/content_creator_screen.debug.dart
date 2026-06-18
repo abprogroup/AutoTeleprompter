@@ -80,8 +80,7 @@ extension _ContentCreatorDebug on _ContentCreatorScreenState {
     AppSettings settings,
     int wordCount,
   ) {
-    final controller = _cameraController;
-    final preview = controller?.value.previewSize;
+    final preview = _activeCameraPreviewSize();
     final cameraName = _selectedCameraName ?? 'none';
     final offset =
         _scrollController.hasClients ? _scrollController.offset : 0.0;

@@ -237,7 +237,13 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _resetManual() {
     _stopManualScroll();
-    _manualWordIndex = 0;
+    _setTeleprompterState(() => _manualWordIndex = 0);
+    final script = ref.read(scriptProvider);
+    if (script != null && script.words.isNotEmpty) {
+      ref.read(teleprompterProvider.notifier).jumpToPosition(0, script: script);
+    } else {
+      ref.read(teleprompterProvider.notifier).resetPosition();
+    }
     _scrollController.animateTo(0,
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }

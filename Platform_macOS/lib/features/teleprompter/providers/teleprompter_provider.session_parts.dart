@@ -4,7 +4,6 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
   List<String> _recentTranscriptWindows(String transcript) =>
       TeleprompterNotifier.liveTranscriptWindowsForAlignment(transcript);
 
-
   int? _relockTargetFromTranscript(Script script, String transcript) {
     _lastRelockScope = 'none';
     if (_noProgressCount < TeleprompterNotifier._stuckRelockAfterWaits) {
@@ -437,6 +436,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _resetSequentialSttStreak();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
+    _lastSttWatchdogRestartAt = null;
     _silentWarningFired = false;
     _lastVolLog = null;
     final startupVisibleStart = _visibleWordStart;
@@ -483,10 +483,12 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
 
     if (script.words.isNotEmpty) {
       final initialLocale = localeId;
-      final realWords =
-          script.words.where(TeleprompterNotifier._wordCarriesLanguage).toList();
+      final realWords = script.words
+          .where(TeleprompterNotifier._wordCarriesLanguage)
+          .toList();
       final hebrewCount = realWords
-          .where((w) => TeleprompterNotifier._explicitLocaleForWord(w) == 'he_IL')
+          .where(
+              (w) => TeleprompterNotifier._explicitLocaleForWord(w) == 'he_IL')
           .length;
       final ratio = realWords.isEmpty ? 0.0 : hebrewCount / realWords.length;
       _addDebugLog(
@@ -495,50 +497,87 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
           'STT START LOCALE: $localeId | sections=${_sectionLocales.toSet().length}');
     }
 
-    // Start heartbeat timer in debug mode
+    // Keep a quiet session heartbeat in release too. Apple speech recognition
+    // can naturally drop a listening task after a while; the watchdog restarts
+    // it when the provider still expects speech-driven scrolling.
     _heartbeatTimer?.cancel();
-    if (settings.debugMode) {
-      _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-        if (_disposed) return;
-        final engineName =
-            _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
-        final listening =
-            _useWhisper ? _whisperService.isListening : _sttService.isListening;
-        final pos = _currentState.confirmedWordIndex;
-        final total = script.words.where((w) => !w.isNewline).length;
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_disposed || _sessionStopped || token != _sessionToken) return;
+      final engineName =
+          _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
+      final listening =
+          _useWhisper ? _whisperService.isListening : _sttService.isListening;
+      final pos = _currentState.confirmedWordIndex;
+      final total = script.words.where((w) => !w.isNewline).length;
+      if (settings.debugMode) {
         _addDebugLog(
             'HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
+      }
 
-        // Silent-listening detector: STT says listening but no audio level or results received.
-        if (!_useWhisper &&
-            _sttService.platformName != 'Apple' &&
-            listening &&
-            !_silentWarningFired &&
-            _lastVolLog == null &&
-            _sessionStartTime != null) {
-          final elapsed = DateTime.now().difference(_sessionStartTime!);
-          if (elapsed.inSeconds >= 10) {
-            _silentWarningFired = true;
-            _addDebugLog(
-                'SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
-            _addDebugLog(
-                'FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
-            _safeSetState((s) => s.copyWith(
-                  statusMessage:
-                      'Microphone signal weak or blocked.\n1. Check Privacy Settings -> Microphone.\n2. Ensure "Online Speech Recognition" is enabled.',
-                  hasError: true,
-                ));
+      final shouldBeListening = !_useWhisper &&
+          (_currentState.isListening || _currentState.isStarting);
+      final canRestart = _lastSttWatchdogRestartAt == null ||
+          DateTime.now().difference(_lastSttWatchdogRestartAt!) >
+              const Duration(seconds: 8);
+      if (shouldBeListening && !listening && !_startingSession && canRestart) {
+        _lastSttWatchdogRestartAt = DateTime.now();
+        _addDebugLog('[$engineName] WATCHDOG: listener dropped; restarting.');
+        unawaited(() async {
+          try {
+            final result = await _sttService.start(localeId: _activeLocale);
+            if (_disposed || _sessionStopped || token != _sessionToken) return;
+            if (result.success && _sttService.requiresImmediateListeningFlag) {
+              _startingSession = true;
+              _safeSetState(
+                  (s) => s.copyWith(isListening: true, isStarting: false));
+              Future.delayed(const Duration(milliseconds: 1500), () {
+                if (token == _sessionToken) _startingSession = false;
+              });
+            } else if (!result.success) {
+              _safeSetState((s) => s.copyWith(
+                    statusMessage:
+                        result.message ?? 'Speech recognition stopped',
+                    hasError: true,
+                    isListening: false,
+                    isStarting: false,
+                  ));
+            }
+          } catch (error) {
+            _addDebugLog('[$engineName] WATCHDOG RESTART FAILED: $error');
           }
-        }
+        }());
+      }
 
-        // Dynamic language switching for mixed Hebrew/English scripts.
-        if (!_useWhisper && listening && _currentScript != null) {
-          _syncLocaleForPosition(
-              _currentScript!, _currentState.confirmedWordIndex + 1,
-              reason: 'heartbeat');
+      // Silent-listening detector: STT says listening but no audio level or results received.
+      if (settings.debugMode &&
+          !_useWhisper &&
+          _sttService.platformName != 'Apple' &&
+          listening &&
+          !_silentWarningFired &&
+          _lastVolLog == null &&
+          _sessionStartTime != null) {
+        final elapsed = DateTime.now().difference(_sessionStartTime!);
+        if (elapsed.inSeconds >= 10) {
+          _silentWarningFired = true;
+          _addDebugLog(
+              'SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
+          _addDebugLog(
+              'FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
+          _safeSetState((s) => s.copyWith(
+                statusMessage:
+                    'Microphone signal weak or blocked.\n1. Check Privacy Settings -> Microphone.\n2. Ensure "Online Speech Recognition" is enabled.',
+                hasError: true,
+              ));
         }
-      });
-    }
+      }
+
+      // Dynamic language switching for mixed Hebrew/English scripts.
+      if (!_useWhisper && listening && _currentScript != null) {
+        _syncLocaleForPosition(
+            _currentScript!, _currentState.confirmedWordIndex + 1,
+            reason: 'heartbeat');
+      }
+    });
 
     if (_useWhisper) {
       final model = whisperModelFromEngine(sttEngine);

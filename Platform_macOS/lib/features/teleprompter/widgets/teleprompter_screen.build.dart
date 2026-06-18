@@ -182,8 +182,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             script.words.where((w) => !w.isNewline).length,
                       ),
 
-
-
                     // Error banner with actionable guidance
                     if (tState.hasError && tState.statusMessage.isNotEmpty)
                       Positioned(
@@ -200,7 +198,12 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             } else if (tState.statusMessage
                                     .contains('permission') ||
                                 tState.statusMessage.contains('Permission')) {
-                              openAppSettings();
+                              if (Platform.isMacOS) {
+                                unawaited(
+                                    MacOSPermissions.openMicrophoneSettings());
+                              } else {
+                                openAppSettings();
+                              }
                             }
                           },
                           child: Container(

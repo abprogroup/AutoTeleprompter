@@ -8,7 +8,9 @@ import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../platform/camera/macos_camera_controller.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
+import '../../../platform/system/external_url_launcher.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/services/account_backend_models.dart';
 import '../../auth/widgets/login_screen.dart';
@@ -306,6 +308,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   }
 
   Future<String> _defaultRecordingFolderPath() async {
+    if (Platform.isMacOS) {
+      final home = Platform.environment['HOME'];
+      if (home != null && home.trim().isNotEmpty) {
+        return '$home/Movies/AutoTeleprompter';
+      }
+      final documents = await getApplicationDocumentsDirectory();
+      return '${documents.path}/AutoTeleprompter';
+    }
     final userProfile = Platform.environment['USERPROFILE'];
     if (userProfile != null && userProfile.trim().isNotEmpty) {
       return '$userProfile\\Videos\\AutoTeleprompter';
@@ -344,7 +354,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
   Future<void> _openFolder(String path, {required String source}) async {
     try {
-      await Process.run('cmd', ['/c', 'start', '', path]);
+      final opened = await ExternalUrlLauncher.openPath(path);
+      if (opened) return;
+      throw StateError('External launcher reported failure for $path');
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,

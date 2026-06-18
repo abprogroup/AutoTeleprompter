@@ -139,7 +139,8 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
             child: const Text('Close'),
           ),
           if (result.status == UpdateCheckStatus.updateAvailable &&
-              result.hasDownload)
+              result.hasDownload &&
+              Platform.isWindows)
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);

@@ -31,7 +31,7 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
   ) {
     final audioOnly = settings.contentCreatorRecordingFormat ==
         AppSettings.contentCreatorRecordingFormatWav;
-    final isReady = audioOnly || _cameraController?.value.isInitialized == true;
+    final isReady = audioOnly || _isActiveCameraInitialized();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
@@ -82,17 +82,19 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
   }
 
   Widget _contentSpeechButton(AppSettings settings, TeleprompterState tState) {
-    final manual = settings.scrollMode == 'manual';
-    final active = manual ? _contentManualScrolling : tState.isListening;
-    final booting = !manual && tState.isStarting;
-    final icon = manual
-        ? (active ? Icons.pause : Icons.play_arrow)
-        : (booting ? Icons.hourglass_top : (active ? Icons.stop : Icons.mic));
-    final tooltip = manual
-        ? (active ? 'Pause manual scroll' : 'Start manual scroll')
-        : (active || booting ? 'Stop speech-to-text' : 'Start speech-to-text');
+    final speechActive = tState.isListening || tState.isStarting;
+    final manual = settings.scrollMode == 'manual' && !speechActive;
+    final active = speechActive ? tState.isListening : _contentManualScrolling;
+    final booting = tState.isStarting;
+    final icon = speechActive || !manual
+        ? (booting ? Icons.hourglass_top : (active ? Icons.stop : Icons.mic))
+        : (active ? Icons.pause : Icons.play_arrow);
+    final tooltip = speechActive || !manual
+        ? (active || booting ? 'Stop speech-to-text' : 'Start speech-to-text')
+        : (active ? 'Pause manual scroll' : 'Start manual scroll');
     return GestureDetector(
-      onTap: booting ? null : _toggleContentSpeechSession,
+      behavior: HitTestBehavior.opaque,
+      onTap: _toggleContentSpeechSession,
       child: Tooltip(
         message: tooltip,
         child: Container(

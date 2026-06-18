@@ -9,7 +9,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 /// │ iOS             │ Requests microphone + speech recognition at launch  │
 /// │                 │ Also calls SpeechToText().initialize() to trigger   │
 /// │                 │ the native SFSpeechRecognizer.requestAuthorization()│
-/// │ macOS           │ Same as iOS — macOS also uses SFSpeechRecognizer    │
+/// │ macOS           │ No startup prompt; request native permissions at use│
 /// │ Android         │ No-op — Android permission dialogs are shown at the │
 /// │                 │ point of use (when STT is first started)             │
 /// │ Windows         │ No-op — Windows uses Privacy Settings, not prompts  │
@@ -27,16 +27,16 @@ class PlatformPermissions {
   /// Request all permissions required by the app on the current platform.
   /// Call this once in main() before runApp().
   static Future<void> requestAll() async {
-    if (Platform.isIOS || Platform.isMacOS) {
+    if (Platform.isIOS) {
       await Permission.microphone.request();
       await Permission.speech.request();
       // speech_to_text's initialize() triggers the native
-      // SFSpeechRecognizer.requestAuthorization() API directly,
-      // which is required for the permission to appear in iOS/macOS Settings.
+      // SFSpeechRecognizer.requestAuthorization() API directly.
       try {
         await SpeechToText().initialize();
       } catch (_) {}
     }
+    // macOS: request permissions at point of use through the native bridge.
     // Android: STT service requests mic permission when it first starts.
     // Windows: uses system Privacy Settings, no programmatic request needed.
   }

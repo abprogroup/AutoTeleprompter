@@ -105,12 +105,19 @@ extension _RemoteProfileSettingsActions on _AppSettingsScreenState {
         .read(remoteControlProvider)
         .preferredUrlForProfile(profile.id);
     try {
-      await Process.run('cmd', ['/c', 'start', url]);
+      final opened = await ExternalUrlLauncher.openUrl(url);
+      if (!opened) {
+        throw StateError('External launcher reported failure for $url');
+      }
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,
         stack,
         source: 'settings.remoteProfileOpenUrl',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Remote link could not be opened.')),
       );
     }
   }

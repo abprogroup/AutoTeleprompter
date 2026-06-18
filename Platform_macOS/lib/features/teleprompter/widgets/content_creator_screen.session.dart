@@ -7,20 +7,24 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
       return;
     }
     final navigator = Navigator.of(context);
+    final teleprompterNotifier = _teleprompterNotifier;
     final returnWordIndex =
         returnCurrentPosition ? _activeContentIndex() : null;
     _stopAutoScroll();
-    try {
-      await ref.read(teleprompterProvider.notifier).stopSession();
-    } catch (error, stack) {
+    // Return to the editor IMMEDIATELY (pop before any await) so a stalled
+    // speech-session stop or native fullscreen exit can never trap the user in
+    // Content Creator / record mode. Cleanup runs afterwards, best-effort.
+    navigator.pop(returnWordIndex);
+    unawaited(teleprompterNotifier.stopSession().catchError((error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,
         stack,
         source: 'contentCreator.exitStopSession',
       );
-    }
-    await _setContentFullscreen(false);
-    if (mounted) navigator.pop(returnWordIndex);
+    }));
+    try {
+      await _setContentFullscreen(false);
+    } catch (_) {}
   }
 
   Future<void> _exitContentCreatorAtCurrentPosition() async {
@@ -52,6 +56,16 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
   }
 
   Future<void> _toggleContentSpeechSession() async {
+    final tState = ref.read(teleprompterProvider);
+    if (tState.isListening || tState.isStarting) {
+      _stopAutoScroll();
+      await _teleprompterNotifier.stopSession();
+      _syncContentControlsForActiveSession(
+          _isRecording || _recordStartInFlight);
+      _logContentDebug('reader speech session stopped');
+      return;
+    }
+
     final settings = ref.read(settingsProvider);
     if (settings.scrollMode == 'manual') {
       if (_contentManualScrolling) {
@@ -66,45 +80,52 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
       _showContentControlsFromHotZone();
       return;
     }
-
-    final tState = ref.read(teleprompterProvider);
-    if (tState.isListening || tState.isStarting) {
-      _stopAutoScroll();
-      await ref.read(teleprompterProvider.notifier).stopSession();
-      _syncContentControlsForActiveSession(
-          _isRecording || _recordStartInFlight);
-      _logContentDebug('reader speech session stopped');
-      return;
-    }
     await _requestAndStartContentSpeech();
   }
 
   Future<void> _requestAndStartContentSpeech() async {
-    var micStatus = await Permission.microphone.status;
-    if (micStatus.isPermanentlyDenied) {
-      _showSnack('Microphone permission is blocked. Open System Settings.');
-      await openAppSettings();
-      return;
-    }
-    if (!micStatus.isGranted) {
-      micStatus = await Permission.microphone.request();
-    }
-    if (PlatformPermissions.requiresSpeechPermissionCheck) {
-      final speechStatus = await Permission.speech.request();
-      if (!speechStatus.isGranted) {
-        _showSnack('Speech recognition permission is required.');
+    if (Platform.isMacOS) {
+      final micStatus = await MacOSPermissions.requestMicrophone();
+      if (!micStatus.isGranted) {
+        _showSnack('Microphone permission is required for speech-to-text.');
+        if (micStatus.isBlocked) {
+          await MacOSPermissions.openMicrophoneSettings();
+        }
         return;
       }
-    }
-    if (!micStatus.isGranted) {
-      _showSnack('Microphone permission is required for speech-to-text.');
-      return;
+      final speechStatus = await MacOSPermissions.requestSpeech();
+      if (!speechStatus.isGranted) {
+        _showSnack('Speech recognition permission is required.');
+        if (speechStatus.isBlocked) await MacOSPermissions.openSpeechSettings();
+        return;
+      }
+    } else {
+      var micStatus = await Permission.microphone.status;
+      if (micStatus.isPermanentlyDenied) {
+        _showSnack('Microphone permission is blocked. Open System Settings.');
+        await openAppSettings();
+        return;
+      }
+      if (!micStatus.isGranted) {
+        micStatus = await Permission.microphone.request();
+      }
+      if (PlatformPermissions.requiresSpeechPermissionCheck) {
+        final speechStatus = await Permission.speech.request();
+        if (!speechStatus.isGranted) {
+          _showSnack('Speech recognition permission is required.');
+          return;
+        }
+      }
+      if (!micStatus.isGranted) {
+        _showSnack('Microphone permission is required for speech-to-text.');
+        return;
+      }
     }
 
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     _stopAutoScroll();
-    await ref.read(teleprompterProvider.notifier).startSession(script);
+    await _teleprompterNotifier.startSession(script);
     if (!mounted) return;
     final currentIndex = ref
         .read(teleprompterProvider)
@@ -149,7 +170,7 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
     if (!_recordingStartedSpeechSession) return;
     _recordingStartedSpeechSession = false;
     try {
-      await ref.read(teleprompterProvider.notifier).stopSession();
+      await _teleprompterNotifier.stopSession();
       _logContentDebug('recording speech session stopped');
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(

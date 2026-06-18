@@ -3,7 +3,7 @@ part of 'teleprompter_screen.dart';
 extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   void _initRemoteListener() {
     _remoteCmdSub?.cancel();
-    _remoteCmdSub = ref.read(remoteControlProvider).onCommand.listen((cmd) {
+    _remoteCmdSub = _remoteControlService.onCommand.listen((cmd) {
       if (!mounted) return;
       final settings = ref.read(settingsProvider);
       if (cmd.startsWith('SET_SPEED:')) {
@@ -20,13 +20,13 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
       switch (cmd) {
         case 'TOGGLE':
-          if (settings.scrollMode == 'manual') {
+          final tState = ref.read(teleprompterProvider);
+          if (tState.isListening || tState.isStarting) {
+            ref.read(teleprompterProvider.notifier).stopSession();
+          } else if (settings.scrollMode == 'manual') {
             _manualScrolling ? _stopManualScroll() : _startManualScroll();
           } else {
-            final tState = ref.read(teleprompterProvider);
-            tState.isListening
-                ? ref.read(teleprompterProvider.notifier).stopSession()
-                : _requestAndStart();
+            _requestAndStart();
           }
           break;
         case 'FASTER':
@@ -122,32 +122,25 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     return true;
   }
 
-  Future<void> _stopPresentationSession() async {
-    _stopManualScroll();
-    await ref.read(teleprompterProvider.notifier).stopSession();
-  }
-
   Future<void> _exitPresentation({bool returnCurrentPosition = false}) async {
     if (_closingPresentation) return;
+    _closingPresentation = true;
     final navigator = Navigator.of(context);
+    final teleprompterNotifier = _teleprompterNotifier;
     final returnWordIndex = returnCurrentPosition
         ? ref.read(teleprompterProvider).confirmedWordIndex
         : null;
-    if (mounted) {
-      _setTeleprompterState(() => _closingPresentation = true);
-    } else {
-      _closingPresentation = true;
-    }
-    // Best-effort cleanup, but never let a hung native fullscreen toggle or a
-    // stalled speech-session stop trap the user in present mode — always pop
-    // back to the editor.
+    // Return to the editor IMMEDIATELY. Navigator.pop bypasses PopScope, and
+    // popping before any await means a hung native fullscreen exit or a stalled
+    // speech-session stop can never trap the user in present mode (the earlier
+    // version awaited those first, and if the widget unmounted meanwhile the
+    // `if (mounted) pop` was skipped). Cleanup now runs afterwards, best-effort.
+    navigator.pop(returnWordIndex);
+    _stopManualScroll();
+    unawaited(teleprompterNotifier.stopSession().catchError((_) {}));
     try {
-      await _setPresenterFullscreen(false).timeout(const Duration(seconds: 2));
+      await _setPresenterFullscreen(false);
     } catch (_) {}
-    try {
-      await _stopPresentationSession().timeout(const Duration(seconds: 2));
-    } catch (_) {}
-    if (mounted) navigator.pop(returnWordIndex);
   }
 
   Future<void> _editCurrentPresenterPosition() async {
@@ -181,8 +174,6 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       }
     }
   }
-
-
 
   void _scheduleHideControls() {
     if (Platform.isWindows) {
@@ -268,19 +259,29 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                Process.run('cmd', ['/c', 'start', 'ms-settings:speech']);
+                if (Platform.isWindows) {
+                  Process.run('cmd', ['/c', 'start', 'ms-settings:speech']);
+                } else if (Platform.isMacOS) {
+                  MacOSPermissions.openSpeechSettings();
+                }
               },
-              child: const Text('Download Packs',
-                  style: TextStyle(color: Color(0xFF4DA8DA))),
+              child: Text(
+                  Platform.isMacOS ? 'Open Speech Settings' : 'Download Packs',
+                  style: const TextStyle(color: Color(0xFF4DA8DA))),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                Process.run(
-                    'cmd', ['/c', 'start', 'ms-settings:privacy-speech']);
+                if (Platform.isWindows) {
+                  Process.run(
+                      'cmd', ['/c', 'start', 'ms-settings:privacy-speech']);
+                } else if (Platform.isMacOS) {
+                  MacOSPermissions.openSpeechSettings();
+                }
               },
-              child: const Text('Online Fallback',
-                  style: TextStyle(color: Color(0xFF4DA8DA))),
+              child: Text(
+                  Platform.isMacOS ? 'Speech Privacy' : 'Online Fallback',
+                  style: const TextStyle(color: Color(0xFF4DA8DA))),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -405,6 +406,10 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       );
       return;
     }
+    if (Platform.isMacOS) {
+      await MacOSPermissions.openMicrophoneSettings();
+      return;
+    }
     await openAppSettings();
   }
 
@@ -434,6 +439,73 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   Future<void> _requestAndStart() async {
+    if (Platform.isMacOS) {
+      final micStatus = await MacOSPermissions.requestMicrophone();
+      if (!micStatus.isGranted) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              title: const Text('Microphone Permission Required',
+                  style: TextStyle(color: Colors.white)),
+              content: const Text(
+                'AutoTeleprompter needs microphone access to follow your speech.\n\nOpen macOS System Settings and allow microphone access for this app.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      MacOSPermissions.openMicrophoneSettings();
+                    },
+                    child: const Text('Open Settings',
+                        style: TextStyle(color: Color(0xFFFFBF00)))),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      final speechStatus = await MacOSPermissions.requestSpeech();
+      if (!speechStatus.isGranted) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              title: const Text('Speech Permission Required',
+                  style: TextStyle(color: Colors.white)),
+              content: const Text(
+                'Speech recognition permission is needed.\n\nOpen macOS System Settings and allow Speech Recognition for this app.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      MacOSPermissions.openSpeechSettings();
+                    },
+                    child: const Text('Open Settings',
+                        style: TextStyle(color: Color(0xFFFFBF00)))),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      await _startCurrentScriptSession();
+      return;
+    }
+
     // Check current status first
     var micStatus = await Permission.microphone.status;
 
@@ -532,16 +604,22 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
     final script = ref.read(scriptProvider);
     if (script != null) {
-      await ref.read(teleprompterProvider.notifier).startSession(script);
-      final currentIndex = ref
-          .read(teleprompterProvider)
-          .confirmedWordIndex
-          .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
-          .toInt();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToWordIndex(currentIndex, anticipate: true);
-      });
+      await _startCurrentScriptSession();
     }
+  }
+
+  Future<void> _startCurrentScriptSession() async {
+    final script = ref.read(scriptProvider);
+    if (script == null) return;
+    await _teleprompterNotifier.startSession(script);
+    final currentIndex = ref
+        .read(teleprompterProvider)
+        .confirmedWordIndex
+        .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
+        .toInt();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToWordIndex(currentIndex, anticipate: true);
+    });
   }
 
   // Smooth pixel-based manual scroll.

@@ -26,8 +26,10 @@ import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../core/window/presenter_fullscreen_service.dart';
+import '../../../platform/permissions/macos_permissions.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
+import '../../../platform/system/external_url_launcher.dart';
 import 'presenter_bookmark_marker_layer.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 
@@ -113,10 +115,14 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   DateTime? _lastPresenterUserScrollSignalAt;
   bool _windowsControlsHovering = false;
   bool _presenterFullscreen = false;
+  late final TeleprompterNotifier _teleprompterNotifier;
+  late final RemoteControlService _remoteControlService;
 
   @override
   void initState() {
     super.initState();
+    _teleprompterNotifier = ref.read(teleprompterProvider.notifier);
+    _remoteControlService = ref.read(remoteControlProvider);
     HardwareKeyboard.instance.addHandler(_handlePresentationKey);
     WakelockPlus.enable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -148,7 +154,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handlePresentationKey);
-    ref.read(teleprompterProvider.notifier).stopSession();
+    unawaited(_teleprompterNotifier.stopSession());
     WakelockPlus.disable();
     if (_presenterFullscreen) {
       unawaited(PresenterFullscreenService.setEnabled(false));
@@ -160,13 +166,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
     _activeManualCorrectionTimer?.cancel();
-    ref.read(remoteControlProvider).publishPresenterState(
-          scriptActive: false,
-          sessionActive: false,
-          isStarting: false,
-          scrollMode: 'auto',
-          scrollSpeed: 0,
-        );
+    _remoteControlService.publishPresenterState(
+      scriptActive: false,
+      sessionActive: false,
+      isStarting: false,
+      scrollMode: 'auto',
+      scrollSpeed: 0,
+    );
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
     super.dispose();

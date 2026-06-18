@@ -486,8 +486,8 @@ class SpeechService {
           partialResults: true,
           listenMode: ListenMode.dictation,
           cancelOnError: false,
+          localeId: useLocale,
         ),
-        localeId: useLocale,
       );
     } catch (e) {
       onError?.call('Listen failed: $e');

@@ -56,7 +56,7 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
     final settings = ref.watch(settingsProvider);
     if (_contentAudioOnlyMode(settings) ||
         settings.contentCreatorFeedMode ==
-        AppSettings.contentCreatorFeedBubble) {
+            AppSettings.contentCreatorFeedBubble) {
       return Positioned.fill(
         child: DecoratedBox(
           decoration: BoxDecoration(color: Color(settings.scriptBgColor)),
@@ -365,7 +365,7 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
         : (size.width * settings.contentCreatorBubbleSize)
             .clamp(64.0, size.width * 0.56)
             .toDouble();
-    final preview = _cameraController?.value.previewSize;
+    final preview = _activeCameraPreviewSize();
     final aspect = preview == null || preview.height == 0
         ? 16 / 9
         : preview.width / preview.height;
@@ -461,11 +461,8 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
   }
 
   Widget _buildCameraPreviewFit(BoxFit fit) {
-    final controller = _cameraController;
-    final preview = controller?.value.previewSize;
-    if (controller == null ||
-        preview == null ||
-        !controller.value.isInitialized) {
+    final preview = _activeCameraPreviewSize();
+    if (!_isActiveCameraInitialized() || preview == null) {
       return _buildCameraFallback(compact: true);
     }
     return ClipRect(
@@ -474,7 +471,9 @@ extension _ContentCreatorScreenWidgets on _ContentCreatorScreenState {
         child: SizedBox(
           width: preview.width,
           height: preview.height,
-          child: CameraPreview(controller),
+          child: Platform.isMacOS
+              ? _macCameraController!.preview()
+              : CameraPreview(_cameraController!),
         ),
       ),
     );

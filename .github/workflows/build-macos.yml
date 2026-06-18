@@ -1,5 +1,5 @@
-name: Build macOS App (v5.0.1)
-run-name: macOS v5.0.1 App run ${{ github.run_number }} - manual dispatch
+name: Build macOS App (v5.0.2)
+run-name: macOS v5.0.2 App run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -28,9 +28,9 @@ jobs:
         run: flutter pub get
         working-directory: Platform_macOS
 
-      - name: Verify macOS v5.0.1 metadata
+      - name: Verify macOS v5.0.2 metadata
         run: |
-          grep -Fxq 'version: 5.0.1+12' pubspec.yaml
+          grep -Fxq 'version: 5.0.2+13' pubspec.yaml
         working-directory: Platform_macOS
 
       - name: Patch Podfile Deployment Target
@@ -39,6 +39,29 @@ jobs:
         run: |
           sed -i '' "s/platform :osx, '[0-9.]*'/platform :osx, '11.0'/" Platform_macOS/macos/Podfile
           head -3 Platform_macOS/macos/Podfile
+
+      - name: Prepare macOS Release Metadata
+        id: release
+        run: |
+          set -euo pipefail
+          versionName="5.0.2"
+          appVersion="5.0.2+13"
+          releaseRepo="abprogroup/AutoTeleprompter-Releases"
+          tag="macos-v$versionName"
+          assetName="AutoTeleprompter-macOS-macos-v$versionName.zip"
+          manifestTag="macos-update-manifest"
+          manifestAsset="macos-update-manifest.json"
+          manifestUrl="https://github.com/$releaseRepo/releases/download/$manifestTag/$manifestAsset"
+          {
+            echo "version_name=$versionName"
+            echo "app_version=$appVersion"
+            echo "release_repo=$releaseRepo"
+            echo "tag=$tag"
+            echo "asset_name=$assetName"
+            echo "manifest_tag=$manifestTag"
+            echo "manifest_asset=$manifestAsset"
+            echo "manifest_url=$manifestUrl"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build macOS App
         run: |
@@ -52,7 +75,13 @@ jobs:
           dropboxSecret="$(printf '%s' "${DROPBOX_CLIENT_SECRET:-}" | tr -d ' \r\n')"
           adminEmail="$(printf '%s' "${AUTOTELEPROMPTER_ADMIN_EMAIL:-}" | tr -d '\r\n' | xargs)"
           adminCodeHash="$(printf '%s' "${AUTOTELEPROMPTER_ADMIN_CODE_SHA256:-}" | tr -d ' \r\n' | tr 'A-F' 'a-f')"
-          updateManifestUrl="$(printf '%s' "${UPDATE_MANIFEST_URL:-}" | tr -d '\r\n' | xargs)"
+          updateManifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_SECRET:-}" | tr -d '\r\n' | xargs)"
+          if [ -z "$updateManifestUrl" ]; then
+            updateManifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_VAR:-}" | tr -d '\r\n' | xargs)"
+          fi
+          if [ -z "$updateManifestUrl" ]; then
+            updateManifestUrl="${{ steps.release.outputs.manifest_url }}"
+          fi
           # --- Channel logic mirrors Windows: backend on when Supabase present ---
           accountBackendEnabled="false"
           if [ -n "$supabaseUrl" ] && [ -n "$supabaseAnon" ]; then
@@ -77,7 +106,8 @@ jobs:
           fi
           echo "Account backend enabled: $accountBackendEnabled"
           flutter build macos --release \
-            "--dart-define=APP_VERSION=5.0.1+12" \
+            "--dart-define=APP_VERSION=${{ steps.release.outputs.app_version }}" \
+            "--dart-define=UPDATE_PLATFORM=macos" \
             "--dart-define=ACCOUNT_BACKEND_ENABLED=$accountBackendEnabled" \
             "--dart-define=SUPABASE_URL=$supabaseUrl" \
             "--dart-define=SUPABASE_ANON_KEY=$supabaseAnon" \
@@ -101,7 +131,8 @@ jobs:
           DROPBOX_CLIENT_SECRET: ${{ secrets.DROPBOX_CLIENT_SECRET }}
           AUTOTELEPROMPTER_ADMIN_EMAIL: ${{ secrets.AUTOTELEPROMPTER_ADMIN_EMAIL }}
           AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
-          UPDATE_MANIFEST_URL: ${{ secrets.UPDATE_MANIFEST_URL }}
+          MACOS_UPDATE_MANIFEST_URL_SECRET: ${{ secrets.MACOS_UPDATE_MANIFEST_URL }}
+          MACOS_UPDATE_MANIFEST_URL_VAR: ${{ vars.MACOS_UPDATE_MANIFEST_URL }}
 
       - name: Zip App Bundle
         run: |
@@ -112,12 +143,97 @@ jobs:
           du -sh autoteleprompter.app/Contents/* || true
           echo "Frameworks breakdown:"
           du -sh autoteleprompter.app/Contents/Frameworks/* || true
-          ditto -c -k --sequesterRsrc --keepParent autoteleprompter.app AutoTeleprompter-macOS-v5.0.1.zip
+          ditto -c -k --sequesterRsrc --keepParent autoteleprompter.app "${{ steps.release.outputs.asset_name }}"
           echo "Zip size:"
-          du -sh AutoTeleprompter-macOS-v5.0.1.zip
+          du -sh "${{ steps.release.outputs.asset_name }}"
 
       - name: Upload App
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-macOS-v5.0.1
-          path: Platform_macOS/build/macos/Build/Products/Release/AutoTeleprompter-macOS-v5.0.1.zip
+          name: ${{ steps.release.outputs.asset_name }}
+          path: Platform_macOS/build/macos/Build/Products/Release/${{ steps.release.outputs.asset_name }}
+
+      - name: Publish macOS Release
+        env:
+          GH_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "AUTOTELEPROMPTER_RELEASES_TOKEN is missing; skipping release publish."
+            exit 0
+          fi
+          repo="${{ steps.release.outputs.release_repo }}"
+          tag="${{ steps.release.outputs.tag }}"
+          asset="Platform_macOS/build/macos/Build/Products/Release/${{ steps.release.outputs.asset_name }}"
+          notesFile="$RUNNER_TEMP/macos-release-notes.md"
+          cat > "$notesFile" <<'EOF'
+          AutoTeleprompter macOS v5.0.2.
+
+          Includes macOS STT session-control fixes and platform-filtered update checks.
+          EOF
+          if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --repo "$repo" --clobber
+          else
+            gh release create "$tag" "$asset" \
+              --repo "$repo" \
+              --title "AutoTeleprompter macOS v${{ steps.release.outputs.version_name }}" \
+              --notes-file "$notesFile"
+          fi
+
+      - name: Update macOS Manifest
+        env:
+          GH_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "AUTOTELEPROMPTER_RELEASES_TOKEN is missing; skipping manifest publish."
+            exit 0
+          fi
+          repo="${{ steps.release.outputs.release_repo }}"
+          manifestTag="${{ steps.release.outputs.manifest_tag }}"
+          manifestAsset="${{ steps.release.outputs.manifest_asset }}"
+          manifestDir="$RUNNER_TEMP/macos-manifest"
+          manifestPath="$manifestDir/$manifestAsset"
+          mkdir -p "$manifestDir"
+          if ! gh release download "$manifestTag" --repo "$repo" \
+            --pattern "$manifestAsset" --dir "$manifestDir" --clobber >/dev/null 2>&1; then
+            printf '{"channels":{}}\n' > "$manifestPath"
+          fi
+          python3 - "$manifestPath" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          try:
+              manifest = json.loads(path.read_text())
+          except Exception:
+              manifest = {}
+          channels = manifest.get("channels")
+          if not isinstance(channels, dict):
+              channels = {}
+          channels["stable"] = {
+              "version": "${{ steps.release.outputs.app_version }}",
+              "platform": "macos",
+              "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
+              "notes": "macOS STT session-control fixes and update platform filtering.",
+              "publishedAt": "${{ github.run_started_at }}",
+              "tag": "${{ steps.release.outputs.tag }}",
+              "asset": "${{ steps.release.outputs.asset_name }}",
+          }
+          manifest = {
+              "kind": "autoteleprompter.macos.update_manifest",
+              "channels": channels,
+          }
+          path.write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
+          notesFile="$RUNNER_TEMP/macos-manifest-notes.md"
+          echo "Machine-readable macOS update manifest for AutoTeleprompter." > "$notesFile"
+          if gh release view "$manifestTag" --repo "$repo" >/dev/null 2>&1; then
+            gh release upload "$manifestTag" "$manifestPath" --repo "$repo" --clobber
+          else
+            gh release create "$manifestTag" "$manifestPath" \
+              --repo "$repo" \
+              --title "AutoTeleprompter macOS Update Manifest" \
+              --notes-file "$notesFile"
+          fi

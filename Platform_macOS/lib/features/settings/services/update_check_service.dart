@@ -13,6 +13,11 @@ const autoTeleprompterUpdateManifestUrl = String.fromEnvironment(
   'UPDATE_MANIFEST_URL',
 );
 
+const autoTeleprompterUpdatePlatform = String.fromEnvironment(
+  'UPDATE_PLATFORM',
+  defaultValue: 'macos',
+);
+
 enum UpdateCheckStatus {
   notConfigured,
   upToDate,
@@ -158,19 +163,22 @@ class UpdateCheckService {
     );
   }
 
-  _UpdateManifestCandidate _manifestCandidate({
+  _UpdateManifestCandidate? _manifestCandidate({
     required Map<String, dynamic> channelEntry,
     required String channel,
   }) {
-    final latestVersion = _stringValue(channelEntry, 'version');
-    final downloadUrl = _stringValue(channelEntry, 'url') ??
-        _stringValue(channelEntry, 'downloadUrl');
+    final platformEntry = _platformEntry(channelEntry);
+    if (platformEntry == null) return null;
+    final latestVersion = _stringValue(platformEntry, 'version');
+    final downloadUrl = _stringValue(platformEntry, 'url') ??
+        _stringValue(platformEntry, 'downloadUrl') ??
+        _stringValue(platformEntry, 'packageUrl');
     if (latestVersion == null || latestVersion.trim().isEmpty) {
       throw FormatException('Manifest is missing $channel.version.');
     }
-    final notes = _stringValue(channelEntry, 'notes') ??
-        _stringValue(channelEntry, 'releaseNotes');
-    final publishedAtText = _stringValue(channelEntry, 'publishedAt');
+    final notes = _stringValue(platformEntry, 'notes') ??
+        _stringValue(platformEntry, 'releaseNotes');
+    final publishedAtText = _stringValue(platformEntry, 'publishedAt');
     final publishedAt = publishedAtText == null
         ? null
         : DateTime.tryParse(publishedAtText)?.toLocal();
@@ -202,15 +210,17 @@ class UpdateCheckService {
   }
 
   static String _missingChannelMessage(String selectedChannel) {
+    final platform = _displayPlatform();
     switch (selectedChannel) {
       case AppSettings.updateChannelInternal:
-        return 'No internal, beta, or stable update channel is published in '
-            'this manifest yet.';
+        return 'No internal, beta, or stable $platform update channel is '
+            'published in this manifest yet.';
       case AppSettings.updateChannelBeta:
-        return 'No beta or stable update channel is published in this manifest '
-            'yet.';
+        return 'No beta or stable $platform update channel is published in '
+            'this manifest yet.';
       default:
-        return 'No stable update channel is published in this manifest yet.';
+        return 'No stable $platform update channel is published in this '
+            'manifest yet.';
     }
   }
 
@@ -242,6 +252,129 @@ class UpdateCheckService {
         channels is Map<String, dynamic> ? channels[channel] : root[channel];
     if (raw is Map<String, dynamic>) return raw;
     return null;
+  }
+
+  Map<String, dynamic>? _platformEntry(Map<String, dynamic> channelEntry) {
+    final nested = _nestedPlatformEntry(channelEntry);
+    if (nested != null) {
+      return <String, dynamic>{
+        ...channelEntry,
+        ...nested,
+      };
+    }
+    return _entryTargetsCurrentPlatform(channelEntry) ? channelEntry : null;
+  }
+
+  Map<String, dynamic>? _nestedPlatformEntry(
+    Map<String, dynamic> channelEntry,
+  ) {
+    final platforms = channelEntry['platforms'];
+    if (platforms is Map<String, dynamic>) {
+      final match = _mapValueForCurrentPlatform(platforms);
+      if (match != null) return match;
+    }
+    final assets = channelEntry['assets'];
+    if (assets is Map<String, dynamic>) {
+      final match = _mapValueForCurrentPlatform(assets);
+      if (match != null) return match;
+    }
+    if (assets is List) {
+      for (final asset in assets.whereType<Map<String, dynamic>>()) {
+        if (_entryTargetsCurrentPlatform(asset)) return asset;
+      }
+    }
+    for (final alias in _currentPlatformAliases()) {
+      final value = channelEntry[alias];
+      if (value is Map<String, dynamic>) return value;
+    }
+    return null;
+  }
+
+  static Map<String, dynamic>? _mapValueForCurrentPlatform(
+    Map<String, dynamic> values,
+  ) {
+    for (final entry in values.entries) {
+      if (!_isCurrentPlatformAlias(entry.key)) continue;
+      final value = entry.value;
+      if (value is Map<String, dynamic>) return value;
+    }
+    return null;
+  }
+
+  static bool _entryTargetsCurrentPlatform(Map<String, dynamic> entry) {
+    final declared = _declaredPlatforms(entry).toList(growable: false);
+    if (declared.isNotEmpty) {
+      return declared.any(_isCurrentPlatformAlias);
+    }
+    return _containsCurrentPlatformMarker(_platformMarkerText(entry));
+  }
+
+  static Iterable<String> _declaredPlatforms(Map<String, dynamic> entry) sync* {
+    for (final key in const [
+      'platform',
+      'os',
+      'targetPlatform',
+      'platformName',
+    ]) {
+      final value = entry[key];
+      if (value is String && value.trim().isNotEmpty) {
+        yield* value
+            .split(RegExp(r'[^A-Za-z0-9_-]+'))
+            .where((part) => part.trim().isNotEmpty);
+      }
+    }
+    final platforms = entry['platforms'];
+    if (platforms is List) {
+      for (final value in platforms.whereType<String>()) {
+        yield* value
+            .split(RegExp(r'[^A-Za-z0-9_-]+'))
+            .where((part) => part.trim().isNotEmpty);
+      }
+    }
+  }
+
+  static String _platformMarkerText(Map<String, dynamic> entry) {
+    return [
+      _stringValue(entry, 'asset'),
+      _stringValue(entry, 'tag'),
+      _stringValue(entry, 'url'),
+      _stringValue(entry, 'downloadUrl'),
+      _stringValue(entry, 'packageUrl'),
+    ].whereType<String>().join(' ').toLowerCase();
+  }
+
+  static bool _containsCurrentPlatformMarker(String text) {
+    for (final alias in _currentPlatformAliases()) {
+      final pattern = RegExp('(^|[^a-z0-9])$alias([^a-z0-9]|\$)');
+      if (pattern.hasMatch(text)) return true;
+    }
+    return false;
+  }
+
+  static bool _isCurrentPlatformAlias(String value) {
+    final normalized = value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    return _currentPlatformAliases().contains(normalized);
+  }
+
+  static List<String> _currentPlatformAliases() {
+    final normalized = autoTeleprompterUpdatePlatform
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), '');
+    switch (normalized) {
+      case 'macos':
+      case 'darwin':
+      case 'osx':
+        return const ['macos', 'darwin', 'osx', 'mac'];
+      default:
+        return [normalized];
+    }
+  }
+
+  static String _displayPlatform() {
+    final normalized = autoTeleprompterUpdatePlatform
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), '');
+    return normalized == 'macos' ? 'macOS' : autoTeleprompterUpdatePlatform;
   }
 
   static String _normalizeChannel(String channel) {

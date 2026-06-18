@@ -37,6 +37,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   List<String> _sectionLocales = [];
   DateTime? _lastVolLog;
   DateTime? _sessionStartTime;
+  DateTime? _lastSttWatchdogRestartAt;
   bool _silentWarningFired = false;
   Future<void>? _stopInFlight;
   int _sessionToken = 0;
@@ -333,7 +334,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static List<String> resolveSectionLocalesForWords(List<ScriptWord> words) =>
       TeleprompterLocaleResolver.resolveSectionLocalesForWords(words);
 
-  static List<String> resolveSttSectionLocalesForWords(List<ScriptWord> words) =>
+  static List<String> resolveSttSectionLocalesForWords(
+          List<ScriptWord> words) =>
       resolveSectionLocalesForWords(words);
 
   static String resolveInitialSttLocale(
@@ -695,4 +697,3 @@ class _SequentialSttProgress {
 final teleprompterProvider =
     NotifierProvider<TeleprompterNotifier, TeleprompterState>(
         TeleprompterNotifier.new);
-

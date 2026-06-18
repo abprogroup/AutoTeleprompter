@@ -64,14 +64,30 @@ extension _AppSettingsMediaDefaults on _AppSettingsScreenState {
   Future<void> _chooseDefaultCamera() async {
     List<CameraDescription> cameras;
     try {
-      cameras = await availableCameras();
+      if (Platform.isMacOS) {
+        final devices = await MacOSCameraController.availableCameras();
+        cameras = [
+          for (final device in devices)
+            CameraDescription(
+              name: device.name,
+              lensDirection: switch (device.position) {
+                'front' => CameraLensDirection.front,
+                'back' => CameraLensDirection.back,
+                _ => CameraLensDirection.external,
+              },
+              sensorOrientation: 0,
+            ),
+        ];
+      } else {
+        cameras = await availableCameras();
+      }
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,
         stack,
         source: 'settings.defaultCamera.list',
       );
-      _showSettingsSnack('Could not list Windows cameras.');
+      _showSettingsSnack('Could not list cameras.');
       return;
     }
     if (!mounted) return;
@@ -87,7 +103,7 @@ extension _AppSettingsMediaDefaults on _AppSettingsScreenState {
           width: 520,
           child: cameras.isEmpty
               ? const Text(
-                  'No Windows cameras were found.',
+                  'No cameras were found.',
                   style: TextStyle(color: Colors.white70),
                 )
               : ConstrainedBox(

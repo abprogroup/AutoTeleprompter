@@ -10,7 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../../platform/camera/macos_camera_controller.dart';
 import '../../../platform/permissions/platform_permissions.dart';
+import '../../../platform/permissions/macos_permissions.dart';
 import '../models/alignment_result.dart';
 import '../services/content_camera_device_classifier.dart';
 import '../services/presenter_input_lock_service.dart';
@@ -43,6 +45,7 @@ part 'content_creator_screen.presenter_view.dart';
 part 'content_creator_screen.session.dart';
 part 'content_creator_screen.debug.dart';
 part 'content_creator_screen.camera.dart';
+part 'content_creator_screen.camera_helpers.dart';
 part 'content_creator_screen.scroll_state.dart';
 part 'content_creator_screen.camera_settings.dart';
 part 'content_creator_screen.camera_settings_controls.dart';
@@ -65,8 +68,10 @@ class ContentCreatorScreen extends ConsumerStatefulWidget {
 
 class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   CameraController? _cameraController;
+  MacOSCameraController? _macCameraController;
   final GlobalKey _creatorContentKey = GlobalKey();
   List<CameraDescription> _availableCameras = const [];
+  Map<String, String> _macCameraDeviceIdsByName = const {};
   String? _selectedCameraName;
   final ScrollController _scrollController = ScrollController();
   final WavAudioRecorderService _wavAudioRecorder = WavAudioRecorderService();
@@ -117,10 +122,12 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   final List<String> _contentDebugLogs = [];
   DateTime? _contentRotationRecenterUntil;
   DateTime? _contentProgrammaticScrollCommitBlockedUntil;
+  late final TeleprompterNotifier _teleprompterNotifier;
 
   @override
   void initState() {
     super.initState();
+    _teleprompterNotifier = ref.read(teleprompterProvider.notifier);
     _cameraSourceMode = _cameraSourceModeFromSettings(
       ref.read(settingsProvider).contentCreatorCameraSourceMode,
     );
@@ -182,10 +189,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     _hideContentControlsTimer?.cancel();
     unawaited(_setContentFullscreen(false));
     _cameraController?.dispose();
+    unawaited(_macCameraController?.dispose());
     unawaited(_wavAudioRecorder.cancel());
     unawaited(_stopContentSpeechSessionIfOwnedByRecording());
     try {
-      ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
+      _teleprompterNotifier.setVisibleWordWindow(null, null);
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,

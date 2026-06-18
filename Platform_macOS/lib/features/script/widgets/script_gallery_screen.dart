@@ -618,7 +618,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Later'),
           ),
-          if (result.hasDownload)
+          if (result.hasDownload && Platform.isWindows)
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);

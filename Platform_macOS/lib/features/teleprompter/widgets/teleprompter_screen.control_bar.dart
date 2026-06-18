@@ -51,10 +51,11 @@ class _ControlBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     // Forward scroll is active when scrolling but NOT backward
-    final isActive = isManualMode
-        ? (isManualScrolling && settings.scrollSpeed != 0)
-        : isListening;
-    final isBooting = !isManualMode && isStarting;
+    final speechActive = isListening || isStarting;
+    final isActive = speechActive
+        ? isListening
+        : (isManualMode && isManualScrolling && settings.scrollSpeed != 0);
+    final isBooting = isStarting;
     final effectiveFontSize =
         ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
     void applyPresenterFontSize(double size) {
@@ -102,7 +103,10 @@ class _ControlBar extends ConsumerWidget {
             ),
             // Backward button removed in favor of bidirectional slider
             GestureDetector(
-              onTap: isBooting ? null : (isActive ? onStop : onStart),
+              behavior: HitTestBehavior.opaque,
+              onTap: isBooting
+                  ? onStop
+                  : (speechActive || isActive ? onStop : onStart),
               child: Container(
                 width: 64,
                 height: 64,
@@ -111,13 +115,13 @@ class _ControlBar extends ConsumerWidget {
                   color: isActive ? Colors.red : accentColor,
                 ),
                 child: Icon(
-                  isManualMode
-                      ? (isManualScrolling && settings.scrollSpeed != 0
-                          ? Icons.pause
-                          : Icons.play_arrow)
-                      : (isStarting
+                  speechActive || !isManualMode
+                      ? (isStarting
                           ? Icons.hourglass_top
-                          : (isListening ? Icons.stop : Icons.mic)),
+                          : (isListening ? Icons.stop : Icons.mic))
+                      : (isManualScrolling && settings.scrollSpeed != 0
+                          ? Icons.pause
+                          : Icons.play_arrow),
                   color: isActive ? Colors.white : Colors.black,
                   size: 30,
                 ),

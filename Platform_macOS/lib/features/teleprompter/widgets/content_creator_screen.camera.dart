@@ -5,6 +5,14 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     CameraDescription? preferredCamera,
     bool enableAudio = false,
   }) async {
+    if (Platform.isMacOS) {
+      await _initializeMacCamera(
+        preferredCamera: preferredCamera,
+        enableAudio: enableAudio,
+      );
+      return;
+    }
+
     final generation = ++_cameraInitGeneration;
     _logContentDebug('camera init start gen=$generation mode='
         '${_cameraSourceModeLabel(_cameraSourceMode)} preferred='
@@ -14,6 +22,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       final previousController = _cameraController;
       _updateContentCreatorState(() {
         _cameraController = null;
+        _macCameraController = null;
         _isInit = false;
         _cameraAudioEnabled = false;
         _isCameraInitializing = true;
@@ -219,7 +228,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
   String _cameraSourceModeHelp(_ContentCameraSourceMode mode) {
     return switch (mode) {
       _ContentCameraSourceMode.native => 'Built-in laptop/webcam first.',
-      _ContentCameraSourceMode.usb => 'USB cameras exposed by Windows.',
+      _ContentCameraSourceMode.usb => 'USB cameras exposed by macOS.',
       _ContentCameraSourceMode.virtual =>
         'NDI, OBS, phone bridges, Lightform, or virtual cameras.',
       _ContentCameraSourceMode.all => 'Every camera device on this Mac.',
@@ -297,10 +306,10 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       if (_cameraAudioEnabled) {
         await _releaseCameraAudioAfterRecording();
       }
-      return _cameraController?.value.isInitialized == true;
+      return _isActiveCameraInitialized();
     }
 
-    if (_cameraAudioEnabled && _cameraController?.value.isInitialized == true) {
+    if (_cameraAudioEnabled && _isActiveCameraInitialized()) {
       return true;
     }
 
@@ -310,7 +319,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     );
     return mounted &&
         _recordStartInFlight &&
-        _cameraController?.value.isInitialized == true &&
+        _isActiveCameraInitialized() &&
         _cameraAudioEnabled;
   }
 
@@ -341,7 +350,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       return;
     }
 
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    if (!_isActiveCameraInitialized()) {
       _showSnack(
         _cameraError ?? 'Camera is still preparing. Try again in a moment.',
       );
@@ -349,7 +358,9 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     }
 
     if (_isRecording) {
-      final file = await _cameraController!.stopVideoRecording();
+      final filePath = Platform.isMacOS
+          ? await _macCameraController!.stopVideoRecording()
+          : (await _cameraController!.stopVideoRecording()).path;
       final recordedSeconds = _recordSeconds;
       _recordTimer?.cancel();
       _updateContentCreatorState(() {
@@ -362,7 +373,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       _syncContentControlsForActiveSession(false);
       try {
         _updateContentCreatorState(() => _recordExportProgress = 0.0);
-        final savedPath = await _saveRecordingToChosenFolder(file.path);
+        final savedPath = await _saveRecordingToChosenFolder(filePath);
         final settings = ref.read(settingsProvider);
         await _backupRecordingIfEnabled(savedPath);
         final saveMessage = await _recordingSaveMessage(
@@ -462,7 +473,14 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
 
       if (!mounted || !_recordStartInFlight) return;
       try {
-        await _cameraController!.startVideoRecording();
+        if (Platform.isMacOS) {
+          final tempDir = await getTemporaryDirectory();
+          await _macCameraController!.startVideoRecording(
+            '${tempDir.path}/${_recordingBaseName()}.mp4',
+          );
+        } else {
+          await _cameraController!.startVideoRecording();
+        }
       } catch (e, stack) {
         _updateContentCreatorState(() => _recordStartInFlight = false);
         await _stopContentSpeechSessionIfOwnedByRecording();
@@ -522,18 +540,29 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       return;
     }
 
-    var micStatus = await Permission.microphone.status;
-    if (micStatus.isPermanentlyDenied) {
-      _showSnack('Microphone permission is blocked. Open System Settings.');
-      await openAppSettings();
-      return;
-    }
-    if (!micStatus.isGranted) {
-      micStatus = await Permission.microphone.request();
-    }
-    if (!micStatus.isGranted) {
-      _showSnack('Microphone permission is required for WAV recording.');
-      return;
+    if (Platform.isMacOS) {
+      final micStatus = await MacOSPermissions.requestMicrophone();
+      if (!micStatus.isGranted) {
+        _showSnack('Microphone permission is required for WAV recording.');
+        if (micStatus.isBlocked) {
+          await MacOSPermissions.openMicrophoneSettings();
+        }
+        return;
+      }
+    } else {
+      var micStatus = await Permission.microphone.status;
+      if (micStatus.isPermanentlyDenied) {
+        _showSnack('Microphone permission is blocked. Open System Settings.');
+        await openAppSettings();
+        return;
+      }
+      if (!micStatus.isGranted) {
+        micStatus = await Permission.microphone.request();
+      }
+      if (!micStatus.isGranted) {
+        _showSnack('Microphone permission is required for WAV recording.');
+        return;
+      }
     }
 
     _updateContentCreatorState(() {
@@ -719,65 +748,5 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       );
       _logContentDebug('recording cloud backup failed $error');
     }
-  }
-
-  Future<String> _defaultRecordingFolderPath() async {
-    final home = Platform.environment['HOME'];
-    if (home != null && home.trim().isNotEmpty) {
-      return '$home${Platform.pathSeparator}Movies'
-          '${Platform.pathSeparator}AutoTeleprompter';
-    }
-    final docs = await getApplicationDocumentsDirectory();
-    return '${docs.path}${Platform.pathSeparator}AutoTeleprompter Recordings';
-  }
-
-  Future<void> _chooseRecordingFolder() async {
-    try {
-      final path = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Choose AutoTeleprompter recording folder',
-      );
-      if (path == null || path.trim().isEmpty) return;
-      await ref
-          .read(settingsProvider.notifier)
-          .setContentCreatorRecordingFolder(
-            path,
-          );
-      _logContentDebug('recording folder selected $path');
-    } catch (e, stack) {
-      _showSnack('Recording folder could not be selected.');
-      _logContentDebug('recording folder select failed $e');
-      LightweightDiagnostics.instance.recordError(
-        e,
-        stack,
-        source: 'contentCreator.recordingFolderSelect',
-      );
-    }
-  }
-
-  Future<void> _openRecordingFolder() async {
-    try {
-      final path = await _effectiveRecordingFolderPath();
-      final directory = Directory(path);
-      if (!await directory.exists()) await directory.create(recursive: true);
-      await Process.start('open', [directory.path]);
-    } catch (e, stack) {
-      _showSnack('Recording folder could not be opened.');
-      _logContentDebug('recording folder open failed $e');
-      LightweightDiagnostics.instance.recordError(
-        e,
-        stack,
-        source: 'contentCreator.recordingFolderOpen',
-      );
-    }
-  }
-
-  Future<void> _setVideoResolution(String resolution) async {
-    if (_isRecording || _recordStartInFlight) {
-      _showSnack('Stop recording before changing video resolution.');
-      return;
-    }
-    await ref.read(settingsProvider.notifier).setVideoResolution(resolution);
-    _logContentDebug('video resolution selected $resolution');
-    await _initializeCamera();
   }
 }

@@ -108,10 +108,18 @@ class _WindowsMicSelector extends StatelessWidget {
             ),
             TextButton.icon(
               icon: const Icon(Icons.settings_input_component, size: 17),
-              label: const Text('Open Windows input settings'),
+              label: Text(Platform.isMacOS
+                  ? 'Open Sound settings'
+                  : 'Open Windows input settings'),
               style: TextButton.styleFrom(foregroundColor: accentColor),
               onPressed: () {
-                Process.run('cmd', ['/c', 'start', 'ms-settings:sound']);
+                if (Platform.isMacOS) {
+                  ExternalUrlLauncher.openUrl(
+                    'x-apple.systempreferences:com.apple.Sound-Settings.extension',
+                  );
+                } else {
+                  Process.run('cmd', ['/c', 'start', 'ms-settings:sound']);
+                }
               },
             ),
             TextButton.icon(

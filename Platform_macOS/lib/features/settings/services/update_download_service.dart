@@ -5,7 +5,7 @@ import 'update_check_service.dart';
 
 class UpdateDownloadService {
   UpdateDownloadService({HttpClient? httpClient})
-    : _httpClient = httpClient ?? HttpClient();
+      : _httpClient = httpClient ?? HttpClient();
 
   final HttpClient _httpClient;
 
@@ -63,9 +63,15 @@ class UpdateDownloadService {
     final decoded = Uri.decodeComponent(raw).trim();
     final fallbackVersion = (latestVersion ?? 'update').replaceAll('+', '-');
     final name = decoded.isEmpty || !decoded.contains('.')
-        ? 'AutoTeleprompter-Windows-$fallbackVersion.zip'
+        ? 'AutoTeleprompter-${_platformPackageName()}-$fallbackVersion.zip'
         : decoded;
     return name.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+  }
+
+  static String _platformPackageName() {
+    if (Platform.isMacOS) return 'macOS';
+    if (Platform.isWindows) return 'Windows';
+    return 'Update';
   }
 
   static String _joinPath(String left, String right) {

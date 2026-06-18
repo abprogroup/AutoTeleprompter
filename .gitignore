@@ -11,6 +11,8 @@ AutoTeleprompter_BACKUP_*
 /windows-baseline/
 
 # Tests and QA artifacts stay private in this workspace.
+.tmp/
+**/.tmp/
 test/
 Platform_*/test/
 schemes/

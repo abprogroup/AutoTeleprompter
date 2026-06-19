@@ -140,7 +140,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
           ),
           if (result.status == UpdateCheckStatus.updateAvailable &&
               result.hasDownload &&
-              Platform.isWindows)
+              (Platform.isWindows || Platform.isMacOS))
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);

@@ -1,5 +1,5 @@
-name: Build macOS App (v5.0.2)
-run-name: macOS v5.0.2 App run ${{ github.run_number }} - manual dispatch
+name: Build macOS App (v5.0.3)
+run-name: macOS v5.0.3 App run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -28,9 +28,9 @@ jobs:
         run: flutter pub get
         working-directory: Platform_macOS
 
-      - name: Verify macOS v5.0.2 metadata
+      - name: Verify macOS v5.0.3 metadata
         run: |
-          grep -Fxq 'version: 5.0.2+13' pubspec.yaml
+          grep -Fxq 'version: 5.0.3+14' pubspec.yaml
         working-directory: Platform_macOS
 
       - name: Patch Podfile Deployment Target
@@ -44,8 +44,8 @@ jobs:
         id: release
         run: |
           set -euo pipefail
-          versionName="5.0.2"
-          appVersion="5.0.2+13"
+          versionName="5.0.3"
+          appVersion="5.0.3+14"
           releaseRepo="abprogroup/AutoTeleprompter-Releases"
           tag="macos-v$versionName"
           assetName="AutoTeleprompter-macOS-macos-v$versionName.zip"
@@ -167,9 +167,9 @@ jobs:
           asset="Platform_macOS/build/macos/Build/Products/Release/${{ steps.release.outputs.asset_name }}"
           notesFile="$RUNNER_TEMP/macos-release-notes.md"
           cat > "$notesFile" <<'EOF'
-          AutoTeleprompter macOS v5.0.2.
+          AutoTeleprompter macOS v5.0.3.
 
-          Includes macOS STT session-control fixes and platform-filtered update checks.
+          Includes macOS updater install support and STT control fixes.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -216,7 +216,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "macOS STT session-control fixes and update platform filtering.",
+              "notes": "macOS updater install support and STT control fixes.",
               "publishedAt": "${{ github.run_started_at }}",
               "tag": "${{ steps.release.outputs.tag }}",
               "asset": "${{ steps.release.outputs.asset_name }}",

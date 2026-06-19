@@ -52,6 +52,13 @@ class UpdateDownloadService {
   }
 
   static Future<Directory> _updatesDirectory() async {
+    if (Platform.isMacOS) {
+      final tmp = Platform.environment['TMPDIR']?.trim();
+      final root = Directory(
+        tmp == null || tmp.isEmpty ? Directory.systemTemp.path : tmp,
+      );
+      return Directory(_joinPath(root.path, 'AutoTeleprompter Updates'));
+    }
     final installDir = File(Platform.resolvedExecutable).parent;
     return Directory(
       _joinPath(_joinPath(installDir.path, 'TMP'), 'AutoTeleprompter Updates'),

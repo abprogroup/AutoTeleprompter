@@ -602,6 +602,10 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
           ? '[$platform] Microphone: system default input'
           : '[$platform] Microphone: $selectedMicLabel');
       final SpeechStartResult result;
+      if (_sttService.requiresImmediateListeningFlag) {
+        _startingSession = true;
+        _safeSetState((s) => s.copyWith(isListening: true, isStarting: false));
+      }
       try {
         result = await _sttService.start(localeId: localeId).timeout(
               const Duration(seconds: 8),
@@ -613,6 +617,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
             );
       } catch (error) {
         _addDebugLog('[$platform] STT START EXCEPTION: $error');
+        _startingSession = false;
         _safeSetState((s) => s.copyWith(
               statusMessage:
                   'Speech recognition could not start. Please check macOS Microphone and Speech Recognition permissions, then try again.',
@@ -629,6 +634,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
 
       if (!result.success) {
         _addDebugLog('[$platform] STT FAILED: ${result.message}');
+        _startingSession = false;
         _safeSetState((s) => s.copyWith(
               statusMessage: result.message ?? 'Speech recognition failed',
               hasError: true,

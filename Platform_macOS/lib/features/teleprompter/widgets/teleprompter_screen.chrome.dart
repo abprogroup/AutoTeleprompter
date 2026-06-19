@@ -43,15 +43,21 @@ extension _TeleprompterChromeParts on _TeleprompterScreenState {
                     isManualScrolling: _manualScrolling,
                     isScrollingBackward: _scrollingBackward,
                     accentColor: Color(settings.currentWordColor),
-                    onStart: settings.scrollMode == 'manual'
+                    onStart: settings.scrollMode == 'manual' &&
+                            !tState.isListening &&
+                            !tState.isStarting
                         ? _startManualScroll
                         : _requestAndStart,
                     onStartBackward: () => _startManualScroll(backward: true),
-                    onStop: settings.scrollMode == 'manual'
-                        ? _stopManualScroll
-                        : () => ref
+                    onStop: tState.isListening || tState.isStarting
+                        ? () => ref
                             .read(teleprompterProvider.notifier)
-                            .stopSession(),
+                            .stopSession()
+                        : settings.scrollMode == 'manual'
+                            ? _stopManualScroll
+                            : () => ref
+                                .read(teleprompterProvider.notifier)
+                                .stopSession(),
                     onReset: () {
                       if (settings.scrollMode == 'manual') {
                         _resetManual();

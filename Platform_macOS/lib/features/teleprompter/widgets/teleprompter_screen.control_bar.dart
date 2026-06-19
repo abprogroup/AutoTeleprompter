@@ -53,7 +53,7 @@ class _ControlBar extends ConsumerWidget {
     // Forward scroll is active when scrolling but NOT backward
     final speechActive = isListening || isStarting;
     final isActive = speechActive
-        ? isListening
+        ? true
         : (isManualMode && isManualScrolling && settings.scrollSpeed != 0);
     final isBooting = isStarting;
     final effectiveFontSize =

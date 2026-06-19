@@ -237,6 +237,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _resetManual() {
     _stopManualScroll();
+    _clearPresenterPositionResetState();
     _setTeleprompterState(() => _manualWordIndex = 0);
     final script = ref.read(scriptProvider);
     if (script != null && script.words.isNotEmpty) {
@@ -246,6 +247,16 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
     _scrollController.animateTo(0,
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+  }
+
+  void _clearPresenterPositionResetState() {
+    _cancelSmoothScroll();
+    _activeManualCorrectionTimer?.cancel();
+    _activeManualCorrectionTimer = null;
+    _activeManualCorrection = false;
+    _userBrowsingWhileStopped = false;
+    _lastBrowsingWordSync = null;
+    _presenterProgrammaticCommitBlockedUntil = null;
   }
 
   // -- Speech-mode scroll ------------------------------------------------------

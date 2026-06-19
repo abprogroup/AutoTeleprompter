@@ -84,7 +84,7 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
   Widget _contentSpeechButton(AppSettings settings, TeleprompterState tState) {
     final speechActive = tState.isListening || tState.isStarting;
     final manual = settings.scrollMode == 'manual' && !speechActive;
-    final active = speechActive ? tState.isListening : _contentManualScrolling;
+    final active = speechActive || _contentManualScrolling;
     final booting = tState.isStarting;
     final icon = speechActive || !manual
         ? (booting ? Icons.hourglass_top : (active ? Icons.stop : Icons.mic))

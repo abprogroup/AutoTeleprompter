@@ -43,8 +43,10 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
           if (settings.scrollMode == 'manual') {
             _resetManual();
           } else {
+            _clearPresenterPositionResetState();
+            _setTeleprompterState(() => _manualWordIndex = 0);
             ref.read(teleprompterProvider.notifier).resetPosition();
-            _scrollController.jumpTo(0);
+            if (_scrollController.hasClients) _scrollController.jumpTo(0);
           }
           break;
         case 'MODE_AUTO':

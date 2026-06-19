@@ -106,7 +106,7 @@ class _PremiumHubSheet extends StatelessWidget {
                           ? Icons.verified_rounded
                           : isCheckingAccess
                               ? Icons.sync_rounded
-                          : Icons.workspace_premium_outlined,
+                              : Icons.workspace_premium_outlined,
                       color: const Color(0xFFFFBF00),
                     ),
                   ),
@@ -211,11 +211,12 @@ class _PremiumHubSheet extends StatelessWidget {
       );
       return;
     }
-    if (Platform.isWindows) {
-      await Process.run('cmd', ['/c', 'start', '', url]);
-      return;
+    final opened = await ExternalUrlLauncher.openUrl(url);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open upgrade website.')),
+      );
     }
-    await Process.run('open', [url]);
   }
 }
 

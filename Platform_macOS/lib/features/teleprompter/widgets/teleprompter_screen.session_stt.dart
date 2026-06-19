@@ -43,10 +43,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
           if (settings.scrollMode == 'manual') {
             _resetManual();
           } else {
-            _clearPresenterPositionResetState();
-            _setTeleprompterState(() => _manualWordIndex = 0);
-            ref.read(teleprompterProvider.notifier).resetPosition();
-            if (_scrollController.hasClients) _scrollController.jumpTo(0);
+            _resetPresenterPositionToStart(animated: false);
           }
           break;
         case 'MODE_AUTO':
@@ -201,101 +198,8 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     });
   }
 
-  /// Show a dialog when speech recognition needs a language pack.
+  /// Show a dialog when speech recognition needs macOS language support.
   void _showMissingLanguageDialog(String languageName) {
-    if (Platform.isWindows) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.settings_voice, color: Color(0xFFFFBF00), size: 24),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text('Windows built-in speech-to-text',
-                    style: TextStyle(color: Colors.white, fontSize: 18)),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Windows requires the "$languageName" Speech Pack for offline recognition. If no offline pack exists for this language, please enable Online Speech Recognition.',
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 14, height: 1.4),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Action 1: Download Offline Pack',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Open Windows Settings -> Time & Language -> Speech, and add the speech pack if available.',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Action 2: Enable Online Fallback',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'If offline is unavailable, open Privacy -> Speech, and toggle "Online speech recognition" to ON.',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                if (Platform.isWindows) {
-                  Process.run('cmd', ['/c', 'start', 'ms-settings:speech']);
-                } else if (Platform.isMacOS) {
-                  MacOSPermissions.openSpeechSettings();
-                }
-              },
-              child: Text(
-                  Platform.isMacOS ? 'Open Speech Settings' : 'Download Packs',
-                  style: const TextStyle(color: Color(0xFF4DA8DA))),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                if (Platform.isWindows) {
-                  Process.run(
-                      'cmd', ['/c', 'start', 'ms-settings:privacy-speech']);
-                } else if (Platform.isMacOS) {
-                  MacOSPermissions.openSpeechSettings();
-                }
-              },
-              child: Text(
-                  Platform.isMacOS ? 'Speech Privacy' : 'Online Fallback',
-                  style: const TextStyle(color: Color(0xFF4DA8DA))),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child:
-                  const Text('Cancel', style: TextStyle(color: Colors.white54)),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -346,16 +250,16 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
             ),
             const SizedBox(height: 8),
             const Text(
-              '1. Connect this Windows device to the internet\n\n'
-              '2. Enable online speech recognition if this language has no offline pack\n\n'
+              '1. Check macOS Speech Recognition permission\n\n'
+              '2. Check Dictation and language support in macOS Keyboard settings\n\n'
               '3. Restart the teleprompter session',
               style:
                   TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 12),
             const Text(
-              'Note: English may work offline if the speech pack is already downloaded. '
-              'Other languages (Hebrew, Arabic, etc.) typically require an internet connection.',
+              'Note: some languages may require network-backed Apple speech '
+              'recognition even when microphone permission is already granted.',
               style: TextStyle(
                   color: Colors.white38,
                   fontSize: 11,
@@ -364,6 +268,14 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
           ],
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              MacOSPermissions.openSpeechSettings();
+            },
+            child: const Text('Open Speech Settings',
+                style: TextStyle(color: Color(0xFF4DA8DA))),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('OK', style: TextStyle(color: Colors.white54)),
@@ -380,16 +292,16 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     }
     if (error.contains('error_permission') ||
         error.contains('insufficient_permissions')) {
-      return 'Microphone permission denied. Open Windows Settings > Privacy & security > Microphone, then allow microphone access and desktop apps.';
+      return 'Microphone permission denied. Open macOS System Settings > Privacy & Security > Microphone, then allow AutoTeleprompter.';
     }
     if (error.contains('error_language')) {
-      return 'Language not available for speech recognition. Some languages need online speech recognition or an installed Windows speech pack.';
+      return 'Language not available for speech recognition. Check macOS Speech Recognition permission and language availability.';
     }
     if (error.contains('error_audio')) {
       return 'Microphone not available. Check that no other app is using the microphone.';
     }
     if (error.contains('not available') || error.contains('init failed')) {
-      return 'Speech recognition not available. Check Windows Settings > Time & Language > Speech, and Privacy & security > Microphone.';
+      return 'Speech recognition not available. Check macOS System Settings > Privacy & Security > Microphone and Speech Recognition.';
     }
     return error;
   }
@@ -401,18 +313,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   Future<void> _openMicrophonePrivacySettings() async {
-    if (Platform.isWindows) {
-      await Process.run(
-        'cmd',
-        ['/c', 'start', 'ms-settings:privacy-microphone'],
-      );
-      return;
-    }
-    if (Platform.isMacOS) {
-      await MacOSPermissions.openMicrophoneSettings();
-      return;
-    }
-    await openAppSettings();
+    await MacOSPermissions.openMicrophoneSettings();
   }
 
   void _showControls() {
@@ -521,7 +422,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
             title: const Text('Microphone Permission Required',
                 style: TextStyle(color: Colors.white)),
             content: const Text(
-              'Microphone permission was denied.\n\nOpen Windows Settings > Privacy & security > Microphone, then allow microphone access and allow desktop apps.',
+              'Microphone permission was denied.\n\nOpen macOS System Settings > Privacy & Security > Microphone, then allow AutoTeleprompter.',
               style: TextStyle(color: Colors.white70),
             ),
             actions: [

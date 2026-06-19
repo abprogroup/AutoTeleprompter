@@ -34,11 +34,9 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
 
   Future<void> _openFolder(String path) async {
     try {
-      if (Platform.isWindows) {
-        await Process.run('explorer', [path]);
-      } else {
-        await Process.run('open', [path]);
-      }
+      final opened = await ExternalUrlLauncher.openPath(path);
+      if (opened) return;
+      throw StateError('External launcher reported failure for $path');
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,

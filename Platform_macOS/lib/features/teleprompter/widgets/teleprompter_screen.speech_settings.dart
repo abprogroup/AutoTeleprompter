@@ -18,7 +18,7 @@ class _WindowsSpeechSettingsSection extends ConsumerWidget {
       children: [
         const Text('Speech Input', style: _presenterSectionStyle),
         const SizedBox(height: 8),
-        _WindowsMicSelector(
+        _DesktopMicSelector(
           selectedDeviceId: settings.sttInputDeviceId,
           selectedLabel: settings.sttInputDeviceLabel,
           devices: tState.audioInputDevices,

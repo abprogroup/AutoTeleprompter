@@ -216,13 +216,20 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     _stopAutoScroll();
     _pendingPositionCommit = null;
     _positionCommitTimer?.cancel();
-    ref.read(teleprompterProvider.notifier).resetPosition();
+    final script = ref.read(scriptProvider);
+    if (script != null && script.words.isNotEmpty) {
+      ref.read(teleprompterProvider.notifier).jumpToPosition(0, script: script);
+    } else {
+      ref.read(teleprompterProvider.notifier).resetPosition();
+    }
     _updateContentCreatorState(() => _activeWordIndex = 0);
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
+      unawaited(
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        ),
       );
     }
   }

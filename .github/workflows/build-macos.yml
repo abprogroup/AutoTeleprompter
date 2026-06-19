@@ -1,9 +1,26 @@
-name: Build macOS App (v5.0.4)
-run-name: macOS v5.0.4 App run ${{ github.run_number }} - manual dispatch
+name: Build macOS App
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.5+16' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
   workflow_dispatch:
+    inputs:
+      release_channel:
+        description: 'Release channel for this macOS package'
+        required: true
+        type: choice
+        default: stable
+        options:
+          - stable
+          - beta
+      app_version:
+        description: 'Flutter app version, for example 5.0.5+16'
+        required: true
+        default: '5.0.5+16'
+      release_number:
+        description: 'Beta sequence number; leave blank for stable'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -28,9 +45,9 @@ jobs:
         run: flutter pub get
         working-directory: Platform_macOS
 
-      - name: Verify macOS v5.0.4 metadata
+      - name: Verify macOS source metadata
         run: |
-          grep -Fxq 'version: 5.0.4+15' pubspec.yaml
+          grep -Fxq 'version: 5.0.5+16' pubspec.yaml
         working-directory: Platform_macOS
 
       - name: Patch Podfile Deployment Target
@@ -44,20 +61,50 @@ jobs:
         id: release
         run: |
           set -euo pipefail
-          versionName="5.0.4"
-          appVersion="5.0.4+15"
+          releaseChannel="${{ github.event.inputs.release_channel }}"
+          if [ -z "$releaseChannel" ]; then
+            releaseChannel="stable"
+          fi
+          case "$releaseChannel" in
+            stable|beta) ;;
+            *) echo "Unsupported release_channel '$releaseChannel'." >&2; exit 1 ;;
+          esac
+          appVersion="${{ github.event.inputs.app_version }}"
+          if [ -z "$appVersion" ]; then
+            appVersion="5.0.5+16"
+          fi
+          if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
+            echo "app_version must look like 5.0.5+16." >&2
+            exit 1
+          fi
+          versionName="${appVersion%%+*}"
+          buildNumber="${appVersion##*+}"
+          releaseNumber="${{ github.event.inputs.release_number }}"
           releaseRepo="abprogroup/AutoTeleprompter-Releases"
-          tag="macos-v$versionName"
-          assetName="AutoTeleprompter-macOS-macos-v$versionName.zip"
+          if [ "$releaseChannel" = "beta" ]; then
+            if [ -z "$releaseNumber" ]; then
+              releaseNumber="$buildNumber"
+            fi
+            tag="macos-v$versionName-beta.$releaseNumber"
+            assetName="AutoTeleprompter-macOS-macos-v$versionName-beta.$releaseNumber.zip"
+            releaseTitle="AutoTeleprompter macOS v$versionName Beta $releaseNumber"
+          else
+            tag="macos-v$versionName"
+            assetName="AutoTeleprompter-macOS-macos-v$versionName.zip"
+            releaseTitle="AutoTeleprompter macOS v$versionName"
+          fi
           manifestTag="macos-update-manifest"
           manifestAsset="macos-update-manifest.json"
           manifestUrl="https://github.com/$releaseRepo/releases/download/$manifestTag/$manifestAsset"
           {
+            echo "release_channel=$releaseChannel"
             echo "version_name=$versionName"
+            echo "build_number=$buildNumber"
             echo "app_version=$appVersion"
             echo "release_repo=$releaseRepo"
             echo "tag=$tag"
             echo "asset_name=$assetName"
+            echo "release_title=$releaseTitle"
             echo "manifest_tag=$manifestTag"
             echo "manifest_asset=$manifestAsset"
             echo "manifest_url=$manifestUrl"
@@ -106,6 +153,8 @@ jobs:
           fi
           echo "Account backend enabled: $accountBackendEnabled"
           flutter build macos --release \
+            "--build-name=${{ steps.release.outputs.version_name }}" \
+            "--build-number=${{ steps.release.outputs.build_number }}" \
             "--dart-define=APP_VERSION=${{ steps.release.outputs.app_version }}" \
             "--dart-define=UPDATE_PLATFORM=macos" \
             "--dart-define=ACCOUNT_BACKEND_ENABLED=$accountBackendEnabled" \
@@ -167,17 +216,18 @@ jobs:
           asset="Platform_macOS/build/macos/Build/Products/Release/${{ steps.release.outputs.asset_name }}"
           notesFile="$RUNNER_TEMP/macos-release-notes.md"
           cat > "$notesFile" <<'EOF'
-          AutoTeleprompter macOS v5.0.4.
+          AutoTeleprompter macOS ${{ steps.release.outputs.app_version }}.
 
-          Includes Content Creator STT stop-state, remote reset cleanup, and
-          macOS camera-permission guidance fixes.
+          Includes macOS Content Creator camera recording/export fixes, STT
+          liveness and stop-state fixes, update-install cleanup, remote Open
+          hardening, and reset-position read-state cleanup.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
           else
             gh release create "$tag" "$asset" \
               --repo "$repo" \
-              --title "AutoTeleprompter macOS v${{ steps.release.outputs.version_name }}" \
+              --title "${{ steps.release.outputs.release_title }}" \
               --notes-file "$notesFile"
           fi
 
@@ -214,11 +264,11 @@ jobs:
           channels = manifest.get("channels")
           if not isinstance(channels, dict):
               channels = {}
-          channels["stable"] = {
+          channels["${{ steps.release.outputs.release_channel }}"] = {
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Content Creator STT stop-state, remote reset cleanup, and macOS camera-permission guidance fixes.",
+              "notes": "macOS Content Creator camera recording/export fixes, STT liveness and stop-state fixes, update-install cleanup, remote Open hardening, and reset-position read-state cleanup.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

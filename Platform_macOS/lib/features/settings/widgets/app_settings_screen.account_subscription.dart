@@ -77,16 +77,9 @@ extension _AccountSubscriptionSettings on _AppSettingsScreenState {
       return;
     }
     try {
-      if (Platform.isWindows) {
-        await Process.start(
-          'rundll32',
-          ['url.dll,FileProtocolHandler', uri.toString()],
-        );
-      } else if (Platform.isMacOS) {
-        await Process.start('open', [uri.toString()]);
-      } else {
-        await Process.start('xdg-open', [uri.toString()]);
-      }
+      final opened = await ExternalUrlLauncher.openUrl(uri.toString());
+      if (opened) return;
+      throw StateError('External launcher reported failure for $uri');
     } catch (error) {
       _showAccountSnack('Could not open subscription portal: $error');
     }

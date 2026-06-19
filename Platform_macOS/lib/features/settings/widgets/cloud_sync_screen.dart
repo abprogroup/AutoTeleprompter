@@ -19,6 +19,7 @@ import '../services/cloud_connection_store.dart';
 import '../services/cloud_oauth_service.dart';
 import '../services/deleted_scripts_service.dart';
 import '../services/local_backup_service.dart';
+import '../../../platform/system/external_url_launcher.dart';
 
 part 'cloud_sync_screen.actions.dart';
 part 'cloud_sync_screen.deleted_actions.dart';

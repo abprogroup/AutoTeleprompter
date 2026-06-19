@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../../feedback/services/lightweight_diagnostics.dart';
+import '../../../platform/camera/macos_camera_controller.dart';
 
 class RecordingExportUnsupportedException implements Exception {
   final String message;
@@ -83,10 +84,9 @@ class RecordingExportService {
       format: 'mp4',
       createdAt: createdAt,
     );
-    final bytesWritten = await _copyToTargetOrCleanup(
+    final bytesWritten = await _writeMp4ToTargetOrCleanup(
       sourceFile: sourceFile,
       target: target,
-      format: 'mp4',
       onProgress: onProgress,
     );
 
@@ -193,6 +193,61 @@ class RecordingExportService {
         data: {'path': target.path, 'format': format},
       );
       rethrow;
+    }
+  }
+
+  Future<int> _writeMp4ToTargetOrCleanup({
+    required File sourceFile,
+    required File target,
+    void Function(double progress)? onProgress,
+  }) async {
+    if (Platform.isMacOS && sourceFile.path.toLowerCase().endsWith('.mov')) {
+      try {
+        onProgress?.call(0.05);
+        await MacOSCameraController.exportMovieToMp4(
+          sourcePath: sourceFile.path,
+          outputPath: target.path,
+        );
+        if (!await target.exists()) {
+          throw const FileSystemException('MP4 export did not create a file.');
+        }
+        final bytesWritten = await target.length();
+        if (bytesWritten <= 0) {
+          throw const FileSystemException('MP4 export created an empty file.');
+        }
+        onProgress?.call(1.0);
+        return bytesWritten;
+      } catch (e, stack) {
+        await _deletePartialTarget(target, 'mp4');
+        LightweightDiagnostics.instance.recordError(
+          e,
+          stack,
+          source: 'recordingExport.nativeMp4Failed',
+          data: {'path': target.path, 'sourcePath': sourceFile.path},
+        );
+        rethrow;
+      }
+    }
+
+    return _copyToTargetOrCleanup(
+      sourceFile: sourceFile,
+      target: target,
+      format: 'mp4',
+      onProgress: onProgress,
+    );
+  }
+
+  Future<void> _deletePartialTarget(File target, String format) async {
+    if (!await target.exists()) return;
+    try {
+      await target.delete();
+    } catch (deleteError, deleteStack) {
+      LightweightDiagnostics.instance.recordError(
+        deleteError,
+        deleteStack,
+        source: 'recordingExport.partialTargetDelete',
+        data: {'path': target.path, 'format': format},
+      );
     }
   }
 

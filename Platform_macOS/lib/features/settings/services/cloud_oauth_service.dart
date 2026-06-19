@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 
 import '../../../core/security/encrypted_file_store.dart';
+import '../../../platform/system/external_url_launcher.dart';
 import 'cloud_connection_store.dart';
 
 const googleDriveOAuthClientId =
@@ -471,13 +472,9 @@ class CloudOAuthService {
   }
 
   Future<void> _openBrowser(Uri uri) async {
-    if (Platform.isWindows) {
-      await Process.run(
-        'rundll32',
-        ['url.dll,FileProtocolHandler', uri.toString()],
-      );
-    } else {
-      await Process.run('open', [uri.toString()]);
+    final opened = await ExternalUrlLauncher.openUrl(uri.toString());
+    if (!opened) {
+      throw StateError('Could not open OAuth browser URL.');
     }
   }
 

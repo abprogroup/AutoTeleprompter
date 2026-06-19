@@ -62,14 +62,7 @@ extension _TeleprompterChromeParts on _TeleprompterScreenState {
                       if (settings.scrollMode == 'manual') {
                         _resetManual();
                       } else {
-                        _clearPresenterPositionResetState();
-                        _setTeleprompterState(() => _manualWordIndex = 0);
-                        ref.read(teleprompterProvider.notifier).resetPosition();
-                        _scrollController.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 400),
-                          curve: Curves.easeOutCubic,
-                        );
+                        _resetPresenterPositionToStart();
                       }
                     },
                     onBack: () {

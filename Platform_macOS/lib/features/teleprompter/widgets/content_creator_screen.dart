@@ -13,6 +13,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../platform/camera/macos_camera_controller.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/permissions/macos_permissions.dart';
+import '../../../platform/system/external_url_launcher.dart';
 import '../models/alignment_result.dart';
 import '../services/content_camera_device_classifier.dart';
 import '../services/presenter_input_lock_service.dart';

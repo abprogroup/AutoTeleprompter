@@ -462,9 +462,8 @@ class SpeechService {
       if (_stt.isListening) {
         await _cancelNativeRecognition();
       }
-      // Use the simplest possible listen call — no locale override,
-      // no special modes. Let the device's speech recognizer decide everything.
-      // Only specify locale if explicitly set (non-empty).
+      // Use dictation mode with a teleprompter-friendly listen window. The
+      // platform may still impose shorter limits; status callbacks restart it.
       final useLocale = _localeId.isEmpty ? null : _localeId;
       await _stt.listen(
         onResult: (SpeechRecognitionResult result) {
@@ -487,6 +486,8 @@ class SpeechService {
           listenMode: ListenMode.dictation,
           cancelOnError: false,
           localeId: useLocale,
+          listenFor: const Duration(minutes: 10),
+          pauseFor: const Duration(seconds: 30),
         ),
       );
     } catch (e) {

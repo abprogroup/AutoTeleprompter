@@ -197,6 +197,8 @@ private final class MacCameraBridge: NSObject,
       startRecording(call.arguments, result: result)
     case "stopRecording":
       stopRecording(result: result)
+    case "exportMp4":
+      exportMp4(call.arguments, result: result)
     case "dispose":
       dispose(result: result)
     default:
@@ -403,6 +405,87 @@ private final class MacCameraBridge: NSObject,
       self.stopRecordingResult = result
       movieOutput.stopRecording()
     }
+  }
+
+  private func exportMp4(_ arguments: Any?, result: @escaping FlutterResult) {
+    guard let args = arguments as? [String: Any],
+      let sourcePath = args["sourcePath"] as? String,
+      let outputPath = args["outputPath"] as? String else {
+      result(FlutterError(
+        code: "bad_args",
+        message: "Recording export sourcePath and outputPath are required.",
+        details: nil))
+      return
+    }
+
+    let sourceURL = URL(fileURLWithPath: sourcePath)
+    let outputURL = URL(fileURLWithPath: outputPath)
+    guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+      result(FlutterError(
+        code: "missing_source",
+        message: "Recording source file is missing.",
+        details: nil))
+      return
+    }
+    guard !FileManager.default.fileExists(atPath: outputURL.path) else {
+      result(FlutterError(
+        code: "target_exists",
+        message: "Recording export target already exists.",
+        details: nil))
+      return
+    }
+
+    let asset = AVURLAsset(url: sourceURL)
+    guard let exportSession = Self.mp4ExportSession(for: asset) else {
+      result(FlutterError(
+        code: "mp4_export_unavailable",
+        message: "macOS could not create an MP4 export session for this recording.",
+        details: nil))
+      return
+    }
+
+    exportSession.outputURL = outputURL
+    exportSession.outputFileType = .mp4
+    exportSession.shouldOptimizeForNetworkUse = true
+    exportSession.exportAsynchronously {
+      DispatchQueue.main.async {
+        switch exportSession.status {
+        case .completed:
+          result(outputURL.path)
+        case .failed:
+          result(FlutterError(
+            code: "mp4_export_failed",
+            message: exportSession.error?.localizedDescription ?? "MP4 export failed.",
+            details: nil))
+        case .cancelled:
+          result(FlutterError(
+            code: "mp4_export_cancelled",
+            message: "MP4 export was cancelled.",
+            details: nil))
+        default:
+          result(FlutterError(
+            code: "mp4_export_incomplete",
+            message: "MP4 export did not complete.",
+            details: nil))
+        }
+      }
+    }
+  }
+
+  private static func mp4ExportSession(for asset: AVAsset) -> AVAssetExportSession? {
+    let compatiblePresets = AVAssetExportSession.exportPresets(compatibleWith: asset)
+    let preferredPresets = [
+      AVAssetExportPresetPassthrough,
+      AVAssetExportPresetHighestQuality,
+      AVAssetExportPresetMediumQuality,
+    ]
+    for preset in preferredPresets where compatiblePresets.contains(preset) {
+      if let session = AVAssetExportSession(asset: asset, presetName: preset),
+        session.supportedFileTypes.contains(.mp4) {
+        return session
+      }
+    }
+    return nil
   }
 
   private func dispose(result: @escaping FlutterResult) {

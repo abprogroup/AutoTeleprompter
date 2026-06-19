@@ -104,9 +104,8 @@ class AppSettings {
   final double
       readFadeIntensity; // v4.1: gradient fade for read text (0.0=off, 1.0=full)
   final String
-      sttInputDeviceId; // Windows: WebView2 audioinput deviceId, empty = system default
-  final String
-      sttInputDeviceLabel; // Windows: display label for the selected mic
+      sttInputDeviceId; // Desktop STT input id when the platform exposes one
+  final String sttInputDeviceLabel; // Display label for the selected/system mic
   final bool
       sttVisibleSkipEnabled; // Windows: allow STT to skip only to visible words
   final bool

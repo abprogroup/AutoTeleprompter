@@ -207,7 +207,10 @@ extension _ContentCreatorCameraHelpers on _ContentCreatorScreenState {
       final path = await _effectiveRecordingFolderPath();
       final directory = Directory(path);
       if (!await directory.exists()) await directory.create(recursive: true);
-      await Process.start('open', [directory.path]);
+      final opened = await ExternalUrlLauncher.openPath(directory.path);
+      if (!opened) {
+        throw StateError('External launcher reported failure for $directory');
+      }
     } catch (e, stack) {
       _showSnack('Recording folder could not be opened.');
       _logContentDebug('recording folder open failed $e');

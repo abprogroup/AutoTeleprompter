@@ -54,17 +54,11 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
                         const SizedBox(height: 10),
                         _buildCameraSelector(onChanged: refreshSheet),
                         const SizedBox(height: 10),
-                        Text(
-                          Platform.isMacOS
-                              ? 'If a camera or microphone is blocked, open '
-                                  'macOS System Settings > Privacy & Security '
-                                  'and allow camera and microphone access for '
-                                  'AutoTeleprompter.'
-                              : 'If a camera or microphone is blocked, open '
-                                  'Windows Settings > Privacy & security and '
-                                  'allow camera and microphone access for '
-                                  'desktop apps.',
-                          style: const TextStyle(
+                        const Text(
+                          'If a camera or microphone is blocked, open macOS '
+                          'System Settings > Privacy & Security and allow '
+                          'camera and microphone access for AutoTeleprompter.',
+                          style: TextStyle(
                             color: Colors.white38,
                             fontSize: 12,
                             height: 1.3,

@@ -45,6 +45,7 @@ import '../../teleprompter/services/word_aligner.dart';
 import '../models/script_word.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
+import '../../../platform/system/external_url_launcher.dart';
 import '../../settings/services/local_backup_service.dart';
 
 part 'script_editor_screen.load_blocks.dart';

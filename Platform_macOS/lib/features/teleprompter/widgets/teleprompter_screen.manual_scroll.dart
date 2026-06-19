@@ -249,6 +249,32 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
+  void _resetPresenterPositionToStart({bool animated = true}) {
+    _clearPresenterPositionResetState();
+    _setTeleprompterState(() => _manualWordIndex = 0);
+    final script = ref.read(scriptProvider);
+    if (script != null && script.words.isNotEmpty) {
+      ref.read(teleprompterProvider.notifier).jumpToPosition(0, script: script);
+    } else {
+      ref.read(teleprompterProvider.notifier).resetPosition();
+    }
+
+    if (!_scrollController.hasClients) return;
+    if (!animated) {
+      _scrollController.jumpTo(0);
+      _syncVisibleWordWindow(force: true);
+      return;
+    }
+    final resetScroll = _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+    );
+    unawaited(resetScroll.whenComplete(() {
+      if (mounted) _syncVisibleWordWindow(force: true);
+    }));
+  }
+
   void _clearPresenterPositionResetState() {
     _cancelSmoothScroll();
     _activeManualCorrectionTimer?.cancel();

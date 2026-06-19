@@ -80,6 +80,20 @@ class MacOSCameraController {
     await _channel.invokeMethod<bool>('startRecording', {'path': path});
   }
 
+  static Future<String> exportMovieToMp4({
+    required String sourcePath,
+    required String outputPath,
+  }) async {
+    final path = await _channel.invokeMethod<String>('exportMp4', {
+      'sourcePath': sourcePath,
+      'outputPath': outputPath,
+    });
+    if (path == null || path.isEmpty) {
+      throw StateError('macOS camera export returned no file path.');
+    }
+    return path;
+  }
+
   Future<String> stopVideoRecording() async {
     final path = await _channel.invokeMethod<String>('stopRecording');
     if (path == null || path.isEmpty) {

@@ -476,7 +476,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         if (Platform.isMacOS) {
           final tempDir = await getTemporaryDirectory();
           await _macCameraController!.startVideoRecording(
-            '${tempDir.path}/${_recordingBaseName()}.mp4',
+            '${tempDir.path}/${_recordingBaseName()}.mov',
           );
         } else {
           await _cameraController!.startVideoRecording();

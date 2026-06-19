@@ -148,11 +148,10 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
         );
       }
     }
-    if (Platform.isWindows) {
-      await Process.start('explorer.exe', [exportDir.path]);
-      return;
+    final opened = await ExternalUrlLauncher.openPath(exportDir.path);
+    if (!opened) {
+      throw StateError('External launcher reported failure for $exportDir');
     }
-    await Process.start('open', [exportDir.path]);
   }
 
   Future<void> _openDebugArtifactFolder(
@@ -169,11 +168,10 @@ extension _ScriptEditorDebugArtifactParts on _ScriptEditorScreenState {
       await _exportDebugArtifactSession(type, sessionId);
       return;
     }
-    if (Platform.isWindows) {
-      await Process.start('explorer.exe', [directory.path]);
-      return;
+    final opened = await ExternalUrlLauncher.openPath(directory.path);
+    if (!opened) {
+      throw StateError('External launcher reported failure for $directory');
     }
-    await Process.start('open', [directory.path]);
   }
 
   void _resetDebugArtifactSessions(String reason) {

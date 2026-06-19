@@ -17,26 +17,17 @@ class ExternalUrlLauncher {
   }
 
   static Future<bool> _open(String target, {required bool filePath}) async {
-    if (Platform.isMacOS) {
-      return await _channel.invokeMethod<bool>('openExternalUrl', {
+    try {
+      final opened = await _channel.invokeMethod<bool>('openExternalUrl', {
             'target': target,
             'filePath': filePath,
           }) ??
           false;
+      if (opened) return true;
+    } catch (_) {
+      // Fall through to /usr/bin/open if the native channel is unavailable.
     }
-    if (Platform.isWindows) {
-      final result = await Process.run('cmd', [
-        '/c',
-        'start',
-        '',
-        target,
-      ]);
-      return result.exitCode == 0;
-    }
-    if (Platform.isLinux) {
-      final result = await Process.run('xdg-open', [target]);
-      return result.exitCode == 0;
-    }
-    return false;
+    final result = await Process.run('/usr/bin/open', [target]);
+    return result.exitCode == 0;
   }
 }

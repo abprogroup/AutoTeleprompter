@@ -23,6 +23,7 @@ import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
 import '../services/styling_service.dart';
 import 'script_delete_dialog.dart';
+import '../../../platform/system/external_url_launcher.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 
 part 'script_gallery_screen.account_menu.dart';

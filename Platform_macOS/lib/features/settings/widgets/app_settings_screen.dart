@@ -268,16 +268,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       const SizedBox(height: 22),
       const _SectionHeader(title: 'ADVANCED DIAGNOSTICS'),
       const SizedBox(height: 8),
-      if (Platform.isWindows) ...[
-        _SettingsTile(
-          icon: Icons.cleaning_services_outlined,
-          title: 'Repair old microphone permission setting',
-          subtitle: 'Removes an older Windows speech permission workaround if '
-              'this app saved it before the local-process fix.',
-          onTap: _clearLegacyWebView2EnvVar,
-        ),
-        const SizedBox(height: 8),
-      ],
       _SettingsSwitchTile(
         icon: Icons.bug_report_outlined,
         title: 'Debug Mode',
@@ -534,44 +524,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       _remoteUrl = remote.remoteUrlForProfile(selectedId);
       _remoteUrlProfileId = selectedId;
     });
-  }
-
-  Future<void> _clearLegacyWebView2EnvVar() async {
-    ProcessResult result;
-    try {
-      result = await Process.run('reg', [
-        'delete',
-        r'HKCU\Environment',
-        '/v',
-        'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS',
-        '/f',
-      ]);
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'settings.webview2EnvCleanup',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Old microphone permission setting could not be checked.'),
-        ),
-      );
-      return;
-    }
-    if (!mounted) return;
-    final deleted = result.exitCode == 0;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          deleted
-              ? 'Old microphone permission setting cleared.'
-              : 'No old microphone permission setting was found.',
-        ),
-      ),
-    );
   }
 
   void _showBetaConsentDetails(BuildContext context) {

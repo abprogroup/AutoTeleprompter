@@ -1,6 +1,6 @@
 part of 'teleprompter_screen.dart';
 
-class _WindowsMicSelector extends StatelessWidget {
+class _DesktopMicSelector extends StatelessWidget {
   final String selectedDeviceId;
   final String selectedLabel;
   final List<SttAudioInputDevice> devices;
@@ -9,7 +9,7 @@ class _WindowsMicSelector extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final Future<void> Function() onUseDefault;
 
-  const _WindowsMicSelector({
+  const _DesktopMicSelector({
     required this.selectedDeviceId,
     required this.selectedLabel,
     required this.devices,
@@ -53,7 +53,7 @@ class _WindowsMicSelector extends StatelessWidget {
             prefixIcon: Icon(Icons.mic_external_on, color: accentColor),
             helperText: devices.isEmpty
                 ? 'Start the mic once to discover connected inputs.'
-                : 'Switches the active WebView2 audio input when available.',
+                : 'macOS speech follows the system-selected input route.',
             helperStyle: const TextStyle(color: Colors.white38, fontSize: 11),
             filled: true,
             fillColor: const Color(0xFF111111),
@@ -108,18 +108,12 @@ class _WindowsMicSelector extends StatelessWidget {
             ),
             TextButton.icon(
               icon: const Icon(Icons.settings_input_component, size: 17),
-              label: Text(Platform.isMacOS
-                  ? 'Open Sound settings'
-                  : 'Open Windows input settings'),
+              label: const Text('Open Sound settings'),
               style: TextButton.styleFrom(foregroundColor: accentColor),
               onPressed: () {
-                if (Platform.isMacOS) {
-                  ExternalUrlLauncher.openUrl(
-                    'x-apple.systempreferences:com.apple.Sound-Settings.extension',
-                  );
-                } else {
-                  Process.run('cmd', ['/c', 'start', 'ms-settings:sound']);
-                }
+                ExternalUrlLauncher.openUrl(
+                  'x-apple.systempreferences:com.apple.Sound-Settings.extension',
+                );
               },
             ),
             TextButton.icon(

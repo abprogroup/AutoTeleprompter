@@ -562,10 +562,10 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
           _addDebugLog(
               'SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
           _addDebugLog(
-              'FIX: Ensure "Online Speech Recognition" is ON in Privacy Settings or install the Hebrew Offline Pack.');
+              'FIX: Check macOS Privacy & Security -> Microphone and Speech Recognition permissions for AutoTeleprompter.');
           _safeSetState((s) => s.copyWith(
                 statusMessage:
-                    'Microphone signal weak or blocked.\n1. Check Privacy Settings -> Microphone.\n2. Ensure "Online Speech Recognition" is enabled.',
+                    'Microphone signal weak or blocked.\n1. Check macOS Privacy & Security -> Microphone.\n2. Check Speech Recognition permission for AutoTeleprompter.',
                 hasError: true,
               ));
         }
@@ -688,6 +688,16 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _visibleWordEnd = null;
     _resetVisibleLocaleAssist();
 
+    if (!_disposed) {
+      _writeState((s) => s.copyWith(
+            isListening: false,
+            isStarting: false,
+            hasError: false,
+            statusMessage: '',
+            soundLevel: 0.0,
+          ));
+    }
+
     // Stop all engines - Whisper may have been auto-started via fallback.
     final stopFuture = Future.wait([
       _sttService.stop(),
@@ -698,16 +708,6 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
       await _stopInFlight;
     } finally {
       _stopInFlight = null;
-    }
-
-    if (!_disposed) {
-      _writeState((s) => s.copyWith(
-            isListening: false,
-            isStarting: false,
-            hasError: false,
-            statusMessage: '',
-            soundLevel: 0.0,
-          ));
     }
   }
 

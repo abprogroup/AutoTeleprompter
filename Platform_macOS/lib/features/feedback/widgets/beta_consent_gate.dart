@@ -426,10 +426,9 @@ class _SpeechDisclosureBox extends StatelessWidget {
             ),
             _paragraph(
               'Processing location depends on the selected engine, language, '
-              'operating system, and installed speech packs. Some recognition '
-              'may happen on this device. Some recognition may be processed by '
-              'the platform speech provider, such as Microsoft, Google, Apple, '
-              'or the browser speech service.',
+              'operating system, and Apple speech-recognition availability. '
+              'Some recognition may happen on this device. Some recognition '
+              'may be processed by the platform speech provider.',
             ),
             _paragraph(
               'This app uses speech results to control the prompter. It does '

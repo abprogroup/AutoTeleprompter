@@ -203,6 +203,7 @@ jobs:
           python3 - "$manifestPath" <<'PY'
           import json
           import sys
+          from datetime import datetime, timezone
           from pathlib import Path
 
           path = Path(sys.argv[1])
@@ -218,7 +219,10 @@ jobs:
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
               "notes": "Content Creator STT stop-state, remote reset cleanup, and macOS camera-permission guidance fixes.",
-              "publishedAt": "${{ github.run_started_at }}",
+              "publishedAt": datetime.now(timezone.utc)
+                  .replace(microsecond=0)
+                  .isoformat()
+                  .replace("+00:00", "Z"),
               "tag": "${{ steps.release.outputs.tag }}",
               "asset": "${{ steps.release.outputs.asset_name }}",
           }

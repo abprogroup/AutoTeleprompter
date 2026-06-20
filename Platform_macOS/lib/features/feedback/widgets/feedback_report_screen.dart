@@ -11,12 +11,19 @@ import '../services/feedback_report_service.dart';
 import '../services/lightweight_diagnostics.dart';
 
 class FeedbackReportScreen extends ConsumerStatefulWidget {
-  const FeedbackReportScreen({super.key});
+  final FeedbackReportService Function() createFeedbackService;
+
+  const FeedbackReportScreen({
+    super.key,
+    this.createFeedbackService = _createFeedbackReportService,
+  });
 
   @override
   ConsumerState<FeedbackReportScreen> createState() =>
       _FeedbackReportScreenState();
 }
+
+FeedbackReportService _createFeedbackReportService() => FeedbackReportService();
 
 class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
   final _titleCtrl = TextEditingController();
@@ -301,11 +308,38 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
     }
 
     setState(() => _sending = true);
-    final report = _buildReport();
-    final result = await FeedbackReportService().submit(report);
+    late final FeedbackSendResult result;
+    try {
+      final report = _buildReport();
+      result = await widget.createFeedbackService().submit(report);
+    } catch (error, stack) {
+      final safeError = _sanitizeDiagnosticText(error.toString());
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'feedback.submitUnexpected',
+      );
+      if (!mounted) return;
+      setState(() => _sending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Feedback could not be sent: $safeError'),
+          backgroundColor: Colors.red[800],
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() => _sending = false);
-    await _refreshPendingReports();
+    try {
+      await _refreshPendingReports();
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'feedback.refreshPendingAfterSubmit',
+      );
+    }
     if (!mounted) return;
     LightweightDiagnostics.instance.record(
       'feedback',
@@ -315,22 +349,36 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.message),
-        backgroundColor: result.sent ? Colors.green[800] : Colors.orange[800],
+        backgroundColor: result.sent
+            ? Colors.green[800]
+            : (result.queued ? Colors.orange[800] : Colors.red[800]),
       ),
     );
-    if (!mounted) return;
-    if (result.sent) Navigator.pop(context);
+    if (result.sent || result.queued) {
+      _resetFeedbackForm();
+    }
+  }
+
+  void _resetFeedbackForm() {
+    setState(() {
+      _category = 'Bug';
+      _severity = 'Normal';
+      _attachScript = false;
+      _titleCtrl.clear();
+      _descriptionCtrl.clear();
+      _stepsCtrl.clear();
+    });
   }
 
   Future<void> _refreshPendingReports() async {
-    final count = await FeedbackReportService().pendingReportCount();
+    final count = await widget.createFeedbackService().pendingReportCount();
     if (!mounted) return;
     setState(() => _pendingReports = count);
   }
 
   Future<void> _retryPendingReports() async {
     setState(() => _outboxBusy = true);
-    final result = await FeedbackReportService().retryPendingReports();
+    final result = await widget.createFeedbackService().retryPendingReports();
     if (!mounted) return;
     setState(() {
       _outboxBusy = false;
@@ -343,7 +391,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
 
   Future<void> _deletePendingReports() async {
     setState(() => _outboxBusy = true);
-    final deleted = await FeedbackReportService().deletePendingReports();
+    final deleted = await widget.createFeedbackService().deletePendingReports();
     if (!mounted) return;
     setState(() {
       _outboxBusy = false;
@@ -363,6 +411,10 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
     final settings = ref.read(settingsProvider);
     final consent = ref.read(betaConsentProvider);
     final reportId = 'rpt_${DateTime.now().toUtc().millisecondsSinceEpoch}';
+    final ringBuffer = LightweightDiagnostics.instance.snapshot(
+      budgetBytes: 96 * 1024,
+      stackTraceLimit: 2000,
+    );
     return {
       'schemaVersion': 1,
       'reportId': reportId,
@@ -371,7 +423,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
       'speechDisclosureVersion': consent.acceptedSpeechDisclosureVersion,
       'cloudDisclosureVersion': consent.acceptedCloudDisclosureVersion,
       'appVersion': betaAppVersion,
-      'platform': 'windows',
+      'platform': 'macos',
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'userText': {
         'category': _category,
@@ -391,7 +443,8 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
               'wordCount': script.words.where((w) => !w.isNewline).length,
             },
       'diagnostics': {
-        'teleprompter': _readTeleprompterDiagnostics(),
+        'teleprompter':
+            _readTeleprompterDiagnostics(includeScript: includeScript),
         'settings': {
           'languageMode': settings.languageMode,
           'scrollMode': settings.scrollMode,
@@ -401,47 +454,133 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
           'sttVisibleSkipEnabled': settings.sttVisibleSkipEnabled,
           'sttManualProfileEnabled': settings.sttManualProfileEnabled,
         },
-        'ringBuffer': LightweightDiagnostics.instance.snapshot(
-          budgetBytes: 96 * 1024,
-          stackTraceLimit: 2000,
-        ),
+        'ringBuffer': includeScript
+            ? ringBuffer
+            : _redactScriptLikeDiagnostics(ringBuffer),
       },
     };
   }
 
-  Map<String, Object?> _readTeleprompterDiagnostics() {
+  Map<String, Object?> _readTeleprompterDiagnostics({
+    required bool includeScript,
+  }) {
     try {
       final teleprompter = ref.read(teleprompterProvider);
+      final debugLogsTail = _tail(teleprompter.debugLogs, 20);
       return {
         'available': true,
         'confirmedWordIndex': teleprompter.confirmedWordIndex,
         'isListening': teleprompter.isListening,
         'isStarting': teleprompter.isStarting,
         'hasError': teleprompter.hasError,
-        'statusMessage': teleprompter.statusMessage,
-        'debugLogsTail': _tail(teleprompter.debugLogs, 20),
+        'statusMessage': _sanitizeDiagnosticText(teleprompter.statusMessage),
+        'debugLogsTail': debugLogsTail
+            .map((log) => _sanitizeTeleprompterDebugLog(
+                  log,
+                  includeScript: includeScript,
+                ))
+            .toList(growable: false),
       };
     } catch (error) {
+      final safeError = _sanitizeDiagnosticText(error.toString());
       LightweightDiagnostics.instance.record(
         'feedback',
         'teleprompter snapshot unavailable',
-        data: {'error': error.toString()},
+        data: {'error': safeError},
       );
       return {
         'available': false,
-        'snapshotError': error.toString(),
+        'snapshotError': safeError,
       };
     }
+  }
+
+  Object? _redactScriptLikeDiagnostics(Object? value) {
+    if (value is Map) {
+      return value.map((key, nestedValue) {
+        final keyText = key.toString();
+        if (_isScriptLikeDiagnosticKey(keyText)) {
+          return MapEntry(keyText, '<redacted>');
+        }
+        return MapEntry(keyText, _redactScriptLikeDiagnostics(nestedValue));
+      });
+    }
+    if (value is Iterable) {
+      return value
+          .map((item) => _redactScriptLikeDiagnostics(item))
+          .toList(growable: false);
+    }
+    if (value is String) return _redactScriptLikeText(value);
+    return value;
+  }
+
+  static bool _isScriptLikeDiagnosticKey(String key) {
+    final lower = key.toLowerCase();
+    return lower == 'heard' || lower == 'next' || lower == 'word';
+  }
+
+  static String _redactScriptLikeText(String value) {
+    var redacted = value;
+    redacted = redacted.replaceAllMapped(
+      RegExp(r'\b(heard|next)\s*[:=]\s*"[^"]*"', caseSensitive: false),
+      (match) => '${match.group(1)}: "<redacted>"',
+    );
+    redacted = redacted.replaceAllMapped(
+      RegExp(r'->\s*#(\d+)\s*"[^"]*"'),
+      (match) => '-> #${match.group(1)} "<redacted>"',
+    );
+    return redacted;
+  }
+
+  static String _sanitizeTeleprompterDebugLog(
+    String value, {
+    required bool includeScript,
+  }) {
+    final scriptSafe = includeScript ? value : _redactScriptLikeText(value);
+    return _sanitizeDiagnosticText(scriptSafe);
+  }
+
+  static String _sanitizeDiagnosticText(String value) {
+    var sanitized = _redactScriptLikeText(value);
+    sanitized = sanitized.replaceAll(
+      RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+      'Bearer <redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'([?&](?:pin|token|access_token|refresh_token|client_secret|password)=)'
+        r'[^&\s]+',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'''(["']?(?:access_token|refresh_token|client_secret|password|apikey|api_key|authorization|pin|token)["']?\s*[:=]\s*)["']?[^"',}&\s]+''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'(/Users/|/private/var/|/var/folders/)[^\s,;)\]}]+'),
+      '<local-path>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'[A-Z]:\\Users\\[^ \t\r\n,;)\]}]+', caseSensitive: false),
+      '<local-path>',
+    );
+    return sanitized;
   }
 
   T? _safeRead<T>(T Function() read) {
     try {
       return read();
     } catch (error) {
+      final safeError = _sanitizeDiagnosticText(error.toString());
       LightweightDiagnostics.instance.record(
         'feedback',
         'provider snapshot unavailable',
-        data: {'error': error.toString()},
+        data: {'error': safeError},
       );
       return null;
     }

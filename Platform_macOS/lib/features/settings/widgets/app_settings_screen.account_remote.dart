@@ -386,10 +386,12 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
   String _compactBackendError(Object error) {
     final message = error.toString();
     const prefix = 'AccountBackendError(';
-    if (!message.startsWith(prefix) || !message.endsWith(')')) return message;
-    return message
-        .substring(prefix.length, message.length - 1)
-        .replaceFirst(', ', ': ');
+    final compact = !message.startsWith(prefix) || !message.endsWith(')')
+        ? message
+        : message
+            .substring(prefix.length, message.length - 1)
+            .replaceFirst(', ', ': ');
+    return sanitizeSettingsErrorForUser(compact);
   }
 }
 

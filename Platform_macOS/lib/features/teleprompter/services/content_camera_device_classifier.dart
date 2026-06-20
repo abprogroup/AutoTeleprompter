@@ -7,6 +7,13 @@ class ContentCameraDeviceClassifier {
         name.contains('built-in') ||
         name.contains('builtin') ||
         name.contains('internal') ||
+        name.contains('facetime') ||
+        name.contains('isight') ||
+        name.contains('macbook') ||
+        name.contains('imac') ||
+        name.contains('studio display') ||
+        name.contains('apple camera') ||
+        name.contains('continuity camera') ||
         name.contains('asus fhd') ||
         name.contains('asus hd');
   }
@@ -50,6 +57,16 @@ class ContentCameraDeviceClassifier {
     return !isVirtualName(rawName) &&
         !isIrOrDepthName(rawName) &&
         isIntegratedName(rawName);
+  }
+
+  static bool isNativeCandidate(
+    String rawName, {
+    required bool isFrontFacing,
+    required bool isMacOS,
+  }) {
+    if (isVirtualName(rawName) || isIrOrDepthName(rawName)) return false;
+    if (isIntegratedName(rawName)) return true;
+    return isMacOS && isFrontFacing && !isUsbName(rawName);
   }
 
   static bool isExternalUsbName(String rawName) {

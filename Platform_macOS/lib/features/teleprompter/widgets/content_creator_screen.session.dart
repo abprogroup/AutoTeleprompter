@@ -24,7 +24,13 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
     }));
     try {
       await _setContentFullscreen(false);
-    } catch (_) {}
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'contentCreator.exitFullscreenCleanup',
+      );
+    }
   }
 
   Future<void> _exitContentCreatorAtCurrentPosition() async {
@@ -58,8 +64,10 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
   Future<void> _toggleContentSpeechSession() async {
     final tState = ref.read(teleprompterProvider);
     if (tState.isListening || tState.isStarting) {
+      _hideContentSttStartAffordance();
       _stopAutoScroll();
       await _teleprompterNotifier.stopSession();
+      if (!mounted) return;
       _syncContentControlsForActiveSession(
           _isRecording || _recordStartInFlight);
       _logContentDebug('reader speech session stopped');
@@ -86,6 +94,7 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
   Future<void> _requestAndStartContentSpeech() async {
     if (Platform.isMacOS) {
       final micStatus = await MacOSPermissions.requestMicrophone();
+      if (!mounted) return;
       if (!micStatus.isGranted) {
         _showSnack('Microphone permission is required for speech-to-text.');
         if (micStatus.isBlocked) {
@@ -94,6 +103,7 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
         return;
       }
       final speechStatus = await MacOSPermissions.requestSpeech();
+      if (!mounted) return;
       if (!speechStatus.isGranted) {
         _showSnack('Speech recognition permission is required.');
         if (speechStatus.isBlocked) await MacOSPermissions.openSpeechSettings();
@@ -101,6 +111,7 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
       }
     } else {
       var micStatus = await Permission.microphone.status;
+      if (!mounted) return;
       if (micStatus.isPermanentlyDenied) {
         _showSnack('Microphone permission is blocked. Open System Settings.');
         await openAppSettings();
@@ -108,9 +119,11 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
       }
       if (!micStatus.isGranted) {
         micStatus = await Permission.microphone.request();
+        if (!mounted) return;
       }
       if (PlatformPermissions.requiresSpeechPermissionCheck) {
         final speechStatus = await Permission.speech.request();
+        if (!mounted) return;
         if (!speechStatus.isGranted) {
           _showSnack('Speech recognition permission is required.');
           return;
@@ -121,10 +134,12 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
         return;
       }
     }
+    if (!mounted) return;
 
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     _stopAutoScroll();
+    _showContentSttStartAffordance();
     await _teleprompterNotifier.startSession(script);
     if (!mounted) return;
     final currentIndex = ref
@@ -151,12 +166,13 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
     }
     final live = ref.read(teleprompterProvider);
     if (live.isListening || live.isStarting) {
-      _recordingStartedSpeechSession = false;
-      _logContentDebug('recording uses existing speech session');
+      _recordingStartedSpeechSession = true;
+      _logContentDebug('recording linked to existing speech session');
       return;
     }
     _recordingStartedSpeechSession = true;
     await _requestAndStartContentSpeech();
+    if (!mounted) return;
     final afterStart = ref.read(teleprompterProvider);
     if (!afterStart.isListening && !afterStart.isStarting) {
       _recordingStartedSpeechSession = false;
@@ -169,6 +185,7 @@ extension _ContentCreatorSession on _ContentCreatorScreenState {
   Future<void> _stopContentSpeechSessionIfOwnedByRecording() async {
     if (!_recordingStartedSpeechSession) return;
     _recordingStartedSpeechSession = false;
+    _hideContentSttStartAffordance();
     try {
       await _teleprompterNotifier.stopSession();
       _logContentDebug('recording speech session stopped');

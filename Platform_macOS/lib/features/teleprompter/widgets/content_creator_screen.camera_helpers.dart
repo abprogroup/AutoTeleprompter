@@ -21,8 +21,10 @@ extension _ContentCreatorCameraHelpers on _ContentCreatorScreenState {
         _cameraError = null;
       });
       await previousController?.dispose();
+      if (!mounted || generation != _cameraInitGeneration) return;
 
       final permission = await MacOSPermissions.requestCamera();
+      if (!mounted || generation != _cameraInitGeneration) return;
       if (!permission.isGranted) {
         if (mounted && generation == _cameraInitGeneration) {
           _updateContentCreatorState(() {
@@ -138,7 +140,9 @@ extension _ContentCreatorCameraHelpers on _ContentCreatorScreenState {
           lensDirection: switch (device.position) {
             'front' => CameraLensDirection.front,
             'back' => CameraLensDirection.back,
-            _ => CameraLensDirection.external,
+            _ => device.isBuiltIn
+                ? CameraLensDirection.front
+                : CameraLensDirection.external,
           },
           sensorOrientation: 0,
         ),

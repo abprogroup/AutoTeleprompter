@@ -496,7 +496,7 @@ class FeedbackReportService {
   }
 
   String _compactFailureMessage(String value) {
-    final compact = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final compact = _sanitizeFeedbackFailureMessage(value);
     if (compact.length <= 180) return compact;
     return '${compact.substring(0, 177)}...';
   }
@@ -532,7 +532,7 @@ class _FeedbackHttpResponse {
     final decoded = _decodedBodyMap(trimmed);
     final error =
         decoded == null ? null : decoded['error'] ?? decoded['message'];
-    if (error != null) return error.toString();
+    if (error != null) return _sanitizeFeedbackFailureMessage(error.toString());
     if (isOk) return 'unexpected response from feedback inbox';
     return null;
   }
@@ -545,4 +545,36 @@ class _FeedbackHttpResponse {
       return null;
     }
   }
+}
+
+String _sanitizeFeedbackFailureMessage(String value) {
+  var text = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  text = text.replaceAll(
+    RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+    'Bearer <redacted>',
+  );
+  text = text.replaceAllMapped(
+    RegExp(
+      r'([?&](?:pin|token|access_token|refresh_token|client_secret|password)=)'
+      r'([^&#\s]+)',
+      caseSensitive: false,
+    ),
+    (match) => '${match[1]}<redacted>',
+  );
+  text = text.replaceAllMapped(
+    RegExp(
+      r'''(["']?(?:access_token|refresh_token|client_secret|password|apikey|api_key|authorization|pin|token)["']?\s*[:=]\s*)["']?[^"',}&\s]+''',
+      caseSensitive: false,
+    ),
+    (match) => '${match[1]}<redacted>',
+  );
+  text = text.replaceAll(
+    RegExp(r'/Users/[^,\s"}]+'),
+    '/Users/<redacted>',
+  );
+  text = text.replaceAll(
+    RegExp(r'(/private/var/|/var/folders/)[^,\s"}]+'),
+    '<local-path>',
+  );
+  return text;
 }

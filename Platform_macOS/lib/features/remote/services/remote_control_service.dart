@@ -78,6 +78,10 @@ class RemoteControlService extends ChangeNotifier {
     'x-content-type-options': 'nosniff',
   };
 
+  @visibleForTesting
+  static String debugPortsUnavailableMessageForTests() =>
+      _portsUnavailableMessage();
+
   HttpServer? _server;
   final _onCommand = StreamController<String>.broadcast();
   final Set<WebSocketChannel> _clients = <WebSocketChannel>{};
@@ -192,7 +196,9 @@ class RemoteControlService extends ChangeNotifier {
       _notifyChanged();
     } catch (error, stack) {
       if (kDebugMode) {
-        debugPrint('Remote profiles could not load: $error\n$stack');
+        final safeError = debugSanitizeTextForTests(error.toString());
+        final safeStack = debugSanitizeTextForTests(stack.toString());
+        debugPrint('Remote profiles could not load: $safeError\n$safeStack');
       }
     }
   }
@@ -293,7 +299,7 @@ class RemoteControlService extends ChangeNotifier {
     });
 
     final pipeline = kDebugMode
-        ? const Pipeline().addMiddleware(logRequests())
+        ? const Pipeline().addMiddleware(_sanitizedLogRequests())
         : const Pipeline();
     final handler = pipeline.addHandler(router.call);
 
@@ -307,14 +313,12 @@ class RemoteControlService extends ChangeNotifier {
   }
 
   Future<HttpServer> _bindAvailablePort(Handler handler) async {
-    Object? lastError;
     for (var candidate = defaultPort;
         candidate <= maxFallbackPort;
         candidate++) {
       try {
         return await io.serve(handler, InternetAddress.anyIPv4, candidate);
-      } on SocketException catch (error) {
-        lastError = error;
+      } on SocketException {
         if (kDebugMode) {
           debugPrint(
             'Remote port $candidate unavailable, trying ${candidate + 1}...',
@@ -322,11 +326,13 @@ class RemoteControlService extends ChangeNotifier {
         }
       }
     }
-    throw StateError(
-      'Unable to start remote control. Ports '
-      '$defaultPort-$maxFallbackPort are unavailable. Last error: $lastError',
-    );
+    throw StateError(_portsUnavailableMessage());
   }
+
+  static String _portsUnavailableMessage() =>
+      'Unable to start remote control. Ports '
+      '$defaultPort-$maxFallbackPort are unavailable. Close another app using '
+      'those ports and try again.';
 
   Future<String> preferredUrl() async {
     return preferredUrlForProfile(_defaultProfileId);
@@ -535,6 +541,79 @@ class RemoteControlService extends ChangeNotifier {
   bool _isSessionExpired(_RemoteControllerProfileState profile) {
     final expiresAt = profile.sessionTokenExpiresAt;
     return expiresAt == null || !_clock().isBefore(expiresAt);
+  }
+
+  static Middleware _sanitizedLogRequests() {
+    return (Handler innerHandler) {
+      return (Request request) async {
+        final started = DateTime.now();
+        try {
+          final response = await Future<Response>.sync(
+            () => innerHandler(request),
+          );
+          _debugLogRequest(request, response.statusCode, started);
+          return response;
+        } catch (_) {
+          _debugLogRequest(request, 500, started);
+          rethrow;
+        }
+      };
+    };
+  }
+
+  @visibleForTesting
+  static String debugSanitizeRequestTargetForTests(String target) {
+    return debugSanitizeTextForTests(target);
+  }
+
+  @visibleForTesting
+  static String debugSanitizeTextForTests(String text) {
+    var sanitized = text.replaceAllMapped(
+      RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+      (_) => 'Bearer <redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'([?&](?:pin|token|access_token|refresh_token|client_secret|password)=)'
+        r'[^&\s]+',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'''\b(access_token|refresh_token|client_secret|password|apikey|api_key|authorization|pin|token)\s*[:=]\s*["']?[^"',}&\s]+''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}=<redacted>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(
+        r'(/Users/|/private/var/|/var/folders/)[^\s,;)\]}]+',
+        caseSensitive: false,
+      ),
+      '<local-path>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'[A-Z]:\\Users\\[^ \t\r\n,;)\]}]+', caseSensitive: false),
+      '<local-path>',
+    );
+    return sanitized;
+  }
+
+  static void _debugLogRequest(
+    Request request,
+    int statusCode,
+    DateTime started,
+  ) {
+    final elapsed = DateTime.now().difference(started);
+    final target = request.url.toString();
+    final path = target.isEmpty ? '/' : '/$target';
+    final safePath = debugSanitizeRequestTargetForTests(path);
+    debugPrint(
+      '${DateTime.now().toIso8601String()}  $elapsed ${request.method}'
+      '     [$statusCode] $safePath',
+    );
   }
 
   _RemoteControllerProfileState? _profileForPin(String pin) {

@@ -5,6 +5,8 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
     required AppSettings settings,
     required TeleprompterState tState,
   }) {
+    final controlsAutoHideActive = _contentControlsAutoHideActive(tState);
+    final showControls = _contentControlsVisible || !controlsAutoHideActive;
     return MouseRegion(
       onEnter: (_) {
         _contentControlsHovering = true;
@@ -15,10 +17,10 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
         _scheduleHideContentControls();
       },
       child: AnimatedOpacity(
-        opacity: _contentControlsVisible ? 1.0 : 0.0,
+        opacity: showControls ? 1.0 : 0.0,
         duration: const Duration(milliseconds: 400),
         child: IgnorePointer(
-          ignoring: !_contentControlsVisible,
+          ignoring: !showControls,
           child: _buildContentControlBar(settings, tState),
         ),
       ),
@@ -55,8 +57,13 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
             _barIcon(Icons.skip_previous, 'Previous bookmark',
                 () => _jumpContentBookmark(-1)),
             _barText('A', 'Smaller font', () => _applyContentFontDelta(-4)),
-            _contentSpeechButton(settings, tState),
-            _recordButton(isReady, audioOnly: audioOnly),
+            if (!settings.contentCreatorRecordingControlsSpeech)
+              _contentSpeechButton(settings, tState),
+            _recordButton(
+              isReady,
+              audioOnly: audioOnly,
+              speechLinked: settings.contentCreatorRecordingControlsSpeech,
+            ),
             _barText('A', 'Larger font', () => _applyContentFontDelta(4),
                 large: true),
             _barIcon(Icons.bookmark_add_outlined, 'Add bookmark',
@@ -84,50 +91,73 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
   Widget _contentSpeechButton(AppSettings settings, TeleprompterState tState) {
     final speechActive = tState.isListening || tState.isStarting;
     final manual = settings.scrollMode == 'manual' && !speechActive;
-    final active = speechActive || _contentManualScrolling;
-    final booting = tState.isStarting;
-    final icon = speechActive || !manual
+    final booting = !manual && tState.isStarting;
+    final active = manual ? _contentManualScrolling : tState.isListening;
+    final icon = !manual
         ? (booting ? Icons.hourglass_top : (active ? Icons.stop : Icons.mic))
         : (active ? Icons.pause : Icons.play_arrow);
-    final tooltip = speechActive || !manual
-        ? (active || booting ? 'Stop speech-to-text' : 'Start speech-to-text')
+    final tooltip = !manual
+        ? (booting
+            ? 'Starting speech-to-text'
+            : (active ? 'Stop speech-to-text' : 'Start speech-to-text'))
         : (active ? 'Pause manual scroll' : 'Start manual scroll');
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _toggleContentSpeechSession,
-      child: Tooltip(
-        message: tooltip,
-        child: Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: active
-                ? Colors.red
-                : (booting
-                    ? const Color(0xFFFFBF00).withValues(alpha: 0.72)
-                    : const Color(0xFFFFBF00)),
-          ),
-          child: Icon(
-            icon,
-            color: active ? Colors.white : Colors.black,
-            size: 28,
+    final onTap = booting ? null : _toggleContentSpeechSession;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: active
+            ? Colors.red
+            : (booting
+                ? const Color(0xFFFFBF00).withValues(alpha: 0.72)
+                : const Color(0xFFFFBF00)),
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkResponse(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          containedInkWell: true,
+          hoverColor: Colors.white.withValues(alpha: 0.18),
+          highlightColor: Colors.white.withValues(alpha: 0.24),
+          splashColor: Colors.white.withValues(alpha: 0.22),
+          mouseCursor: onTap == null
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
+          child: SizedBox(
+            width: 52,
+            height: 52,
+            child: Icon(
+              icon,
+              color: active ? Colors.white : Colors.black,
+              size: 28,
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _recordButton(bool isReady, {required bool audioOnly}) {
+  Widget _recordButton(
+    bool isReady, {
+    required bool audioOnly,
+    required bool speechLinked,
+  }) {
     final canStopOrCancel = _isRecording || _recordStartInFlight;
     final icon = canStopOrCancel
         ? Icons.stop
-        : (audioOnly ? Icons.mic_none_outlined : Icons.videocam);
+        : (speechLinked
+            ? (audioOnly ? Icons.record_voice_over : Icons.video_camera_front)
+            : (audioOnly ? Icons.mic_none_outlined : Icons.videocam));
     final tooltip = _recordStartInFlight
         ? 'Cancel recording countdown'
         : (_isRecording
             ? 'Stop recording'
-            : (audioOnly ? 'Start audio recording' : 'Start recording'));
+            : (audioOnly
+                ? (speechLinked
+                    ? 'Start audio recording + speech'
+                    : 'Start audio recording')
+                : (speechLinked
+                    ? 'Start recording + speech'
+                    : 'Start recording')));
     return GestureDetector(
       onTap: isReady || canStopOrCancel ? _toggleRecording : null,
       child: Tooltip(
@@ -136,7 +166,12 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
+            border: Border.all(
+              color: speechLinked && !canStopOrCancel
+                  ? const Color(0xFFFFBF00)
+                  : Colors.white,
+              width: speechLinked && !canStopOrCancel ? 3 : 2,
+            ),
           ),
           child: Container(
             width: 52,

@@ -81,7 +81,8 @@ extension _AccountSubscriptionSettings on _AppSettingsScreenState {
       if (opened) return;
       throw StateError('External launcher reported failure for $uri');
     } catch (error) {
-      _showAccountSnack('Could not open subscription portal: $error');
+      final message = sanitizeSettingsErrorForUser(error);
+      _showAccountSnack('Could not open subscription portal: $message');
     }
   }
 }

@@ -26,6 +26,24 @@ bool _looksLikeGoogleOAuthClientId(String value) {
       .hasMatch(value);
 }
 
+String sanitizedCloudOAuthTokenFailureMessage({
+  required int statusCode,
+  required String responseBody,
+}) {
+  final detail = responseBody.trim().isEmpty
+      ? 'No provider error details were returned.'
+      : 'Provider returned an error response.';
+  return 'Token exchange failed ($statusCode). $detail Check provider '
+      'credentials and OAuth consent settings, then try connecting again.';
+}
+
+String sanitizedCloudOAuthSignInFailureMessage({
+  required String providerLabel,
+}) {
+  return '$providerLabel sign-in failed. Check your connection and provider '
+      'authorization, then try connecting again.';
+}
+
 class CloudAccountInfo {
   final String providerId;
   final String providerLabel;
@@ -204,7 +222,7 @@ class CloudOAuthService {
         unsupported: true,
         message:
             '${provider.label} direct account sign-in is not available in this '
-            'Windows app yet. Use the local synced folder for now.',
+            'desktop app yet. Use the local synced folder for now.',
       );
     }
     if (config.clientId.trim().isEmpty) {
@@ -311,7 +329,9 @@ class CloudOAuthService {
     } catch (error) {
       return CloudAccountConnectResult(
         connected: false,
-        message: '${provider.label} sign-in failed: $error',
+        message: sanitizedCloudOAuthSignInFailureMessage(
+          providerLabel: provider.label,
+        ),
       );
     } finally {
       unawaited(callbackServer?.close(force: true));
@@ -570,7 +590,10 @@ class _CloudOAuthTokenException implements Exception {
       );
     }
     return _CloudOAuthTokenException(
-      'Token exchange failed ($statusCode): $body',
+      sanitizedCloudOAuthTokenFailureMessage(
+        statusCode: statusCode,
+        responseBody: body,
+      ),
     );
   }
 

@@ -8,19 +8,16 @@ extension _TeleprompterChromeParts on _TeleprompterScreenState {
     final showSpeedSlider = _shouldShowManualSpeedSlider(settings, tState);
     final showBottomSpeedSlider = showSpeedSlider &&
         settings.manualScrollBarPlacement == AppSettings.manualScrollBarBottom;
-    final showControlBar = _controlsVisible;
+    final controlsAutoHideActive = _presenterControlsAutoHideActive();
+    final showControlBar = _controlsVisible || !controlsAutoHideActive;
     return MouseRegion(
       onEnter: (_) {
-        if (Platform.isWindows) {
-          _windowsControlsHovering = true;
-          _showWindowsControlsFromHotZone();
-        }
+        _windowsControlsHovering = true;
+        _showWindowsControlsFromHotZone();
       },
       onExit: (_) {
-        if (Platform.isWindows) {
-          _windowsControlsHovering = false;
-          _scheduleHideControls();
-        }
+        _windowsControlsHovering = false;
+        _scheduleHideControls();
       },
       child: AnimatedOpacity(
         opacity: showBottomSpeedSlider || showControlBar ? 1.0 : 0.0,
@@ -50,14 +47,14 @@ extension _TeleprompterChromeParts on _TeleprompterScreenState {
                         : _requestAndStart,
                     onStartBackward: () => _startManualScroll(backward: true),
                     onStop: tState.isListening || tState.isStarting
-                        ? () => ref
-                            .read(teleprompterProvider.notifier)
-                            .stopSession()
+                        ? () => _stopSpeechSessionFromUi(
+                              'presenter.controlBar.stop',
+                            )
                         : settings.scrollMode == 'manual'
                             ? _stopManualScroll
-                            : () => ref
-                                .read(teleprompterProvider.notifier)
-                                .stopSession(),
+                            : () => _stopSpeechSessionFromUi(
+                                  'presenter.controlBar.stopIdle',
+                                ),
                     onReset: () {
                       if (settings.scrollMode == 'manual') {
                         _resetManual();

@@ -6,6 +6,7 @@ import Speech
 
 class MainFlutterWindow: NSWindow {
   private var macCameraBridge: MacCameraBridge?
+  private var macAudioRecorderBridge: MacAudioRecorderBridge?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -117,6 +118,8 @@ class MainFlutterWindow: NSWindow {
     macCameraBridge = MacCameraBridge(
       registry: flutterViewController.engine,
       binaryMessenger: flutterViewController.engine.binaryMessenger)
+    macAudioRecorderBridge = MacAudioRecorderBridge(
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }
@@ -149,6 +152,119 @@ class MainFlutterWindow: NSWindow {
     @unknown default:
       return "unknown"
     }
+  }
+}
+
+private final class MacAudioRecorderBridge: NSObject {
+  private let channel: FlutterMethodChannel
+  private var recorder: AVAudioRecorder?
+  private var recordingURL: URL?
+
+  init(binaryMessenger: FlutterBinaryMessenger) {
+    self.channel = FlutterMethodChannel(
+      name: "autoteleprompter/audio_recorder",
+      binaryMessenger: binaryMessenger)
+    super.init()
+    channel.setMethodCallHandler(handle)
+  }
+
+  private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "start":
+      start(call.arguments, result: result)
+    case "stop":
+      stop(result: result)
+    case "cancel":
+      cancel(result: result)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func start(_ arguments: Any?, result: @escaping FlutterResult) {
+    guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+      result(FlutterError(
+        code: "microphone_permission",
+        message: "Microphone permission is required for audio recording.",
+        details: nil))
+      return
+    }
+    if recorder?.isRecording == true {
+      result(FlutterError(
+        code: "already_recording",
+        message: "Audio recording is already active.",
+        details: nil))
+      return
+    }
+    guard
+      let arguments = arguments as? [String: Any],
+      let path = arguments["path"] as? String,
+      !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      result(FlutterError(
+        code: "bad_arguments",
+        message: "Audio recording path is missing.",
+        details: nil))
+      return
+    }
+
+    let url = URL(fileURLWithPath: path)
+    do {
+      try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true)
+      let settings: [String: Any] = [
+        AVFormatIDKey: kAudioFormatLinearPCM,
+        AVSampleRateKey: 44100.0,
+        AVNumberOfChannelsKey: 1,
+        AVLinearPCMBitDepthKey: 16,
+        AVLinearPCMIsFloatKey: false,
+        AVLinearPCMIsBigEndianKey: false,
+      ]
+      let nextRecorder = try AVAudioRecorder(url: url, settings: settings)
+      nextRecorder.prepareToRecord()
+      guard nextRecorder.record() else {
+        throw NSError(
+          domain: "AutoTeleprompterAudioRecorder",
+          code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "Audio recorder did not start."])
+      }
+      recorder = nextRecorder
+      recordingURL = url
+      result(url.path)
+    } catch {
+      recorder = nil
+      recordingURL = nil
+      result(FlutterError(
+        code: "start_failed",
+        message: error.localizedDescription,
+        details: nil))
+    }
+  }
+
+  private func stop(result: @escaping FlutterResult) {
+    guard let activeRecorder = recorder, let url = recordingURL else {
+      result(FlutterError(
+        code: "not_recording",
+        message: "Audio recording is not active.",
+        details: nil))
+      return
+    }
+    activeRecorder.stop()
+    recorder = nil
+    recordingURL = nil
+    result(url.path)
+  }
+
+  private func cancel(result: @escaping FlutterResult) {
+    let url = recordingURL
+    recorder?.stop()
+    recorder = nil
+    recordingURL = nil
+    if let url = url {
+      try? FileManager.default.removeItem(at: url)
+    }
+    result(true)
   }
 }
 
@@ -219,6 +335,7 @@ private final class MacCameraBridge: NSObject,
       "id": device.uniqueID,
       "name": device.localizedName,
       "position": positionName(device.position),
+      "isBuiltIn": device.deviceType == .builtInWideAngleCamera,
     ]
   }
 

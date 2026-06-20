@@ -637,6 +637,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       changedMarkup = true;
     }
     final notifier = ref.read(settingsProvider.notifier);
+    final scriptNotifier = ref.read(scriptProvider.notifier);
     await notifier.setScriptBgColor(nextBackground);
     await notifier.setFutureWordColor(nextFutureText);
     if (changedMarkup) {
@@ -644,10 +645,11 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     } else {
       await notifier.setShowUpcomingWordColor(true);
     }
-    await ref.read(scriptProvider.notifier).updateStyleMetadata(
-          scriptBgColor: nextBackground,
-          futureWordColor: nextFutureText,
-        );
+    await scriptNotifier.updateStyleMetadata(
+      scriptBgColor: nextBackground,
+      futureWordColor: nextFutureText,
+    );
+    if (!mounted) return;
     if (_activeSuite == EditorSuite.none) {
       _commitHistory('Invert Colors');
     } else {

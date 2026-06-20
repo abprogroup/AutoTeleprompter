@@ -28,6 +28,10 @@ class SttAppleAdapter extends AbstractSttService {
       _inner.start(localeId: localeId);
 
   @override
+  Future<SpeechStartResult> restart({String? localeId}) =>
+      _inner.restart(localeId: localeId);
+
+  @override
   Future<void> stop() => _inner.stop();
 
   @override

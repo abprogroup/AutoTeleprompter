@@ -18,6 +18,7 @@ import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../platform/stt/stt_service_factory.dart';
 
 part 'teleprompter_provider.session_parts.dart';
+part 'teleprompter_provider.session_watchdog.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
@@ -36,6 +37,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _activeLocale;
   List<String> _sectionLocales = [];
   DateTime? _lastVolLog;
+  DateTime? _lastSttResultAt;
   DateTime? _sessionStartTime;
   DateTime? _lastSttWatchdogRestartAt;
   bool _silentWarningFired = false;
@@ -56,6 +58,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   bool _sequentialSttUnlocked = false;
   String? _sequentialSttLastToken;
   DateTime? _sequentialSttLastTokenAt;
+  Timer? _speechActivityMeterTimer;
+  int _speechActivityMeterToken = 0;
   bool _stateFailureDiagnosticRecorded = false;
 
   // STT tuning
@@ -64,8 +68,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const int _sttLiveAlignmentWindowWords = 10;
   static const int _sttAlignmentWindowWords = 18;
   static const int _sttRelockTranscriptMaxWords = 96;
-  static const int _stuckRelockAfterWaits = 10;
-  static const int _relaxedVisibleRelockAfterWaits = 24;
+  static const int _stuckRelockAfterWaits = 3;
+  static const int _relaxedVisibleRelockAfterWaits = 12;
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
@@ -85,9 +89,19 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
-      _sttService.stop();
-      _whisperService.stop();
-      _remoteControlService.stop();
+      _speechActivityMeterTimer?.cancel();
+      _recordDisposeStopFailure(
+        _sttService.stop(),
+        source: 'teleprompterProvider.disposeSttStop',
+      );
+      _recordDisposeStopFailure(
+        _whisperService.stop(),
+        source: 'teleprompterProvider.disposeWhisperStop',
+      );
+      _recordDisposeStopFailure(
+        _remoteControlService.stop(),
+        source: 'teleprompterProvider.disposeRemoteStop',
+      );
     });
     return const TeleprompterState();
   }
@@ -99,6 +113,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   // Guard against the race where iOS fires an async 'notListening' status
   // from the previous stop() call after the new session has already started.
   bool _startingSession = false;
+
+  void _recordDisposeStopFailure(
+    Future<void> stopFuture, {
+    required String source,
+  }) {
+    unawaited(stopFuture.catchError((Object error, StackTrace stack) {
+      LightweightDiagnostics.instance.recordError(error, stack, source: source);
+    }));
+  }
 
   void _safeSetState(TeleprompterState Function(TeleprompterState) updater) {
     if (_disposed || _sessionStopped) return;
@@ -556,17 +579,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         },
       );
 
-      // Fluid advancement: if jumping more than 3 words, animate
-      // through intermediate words so the user's eye can follow.
-      final jump = target - advanceFrom;
-      if (visibleSkipTargetTrusted || jump <= 5) {
-        // Small jumps and trusted visible-skip targets are instant.
-        _fluidAdvanceTimer?.cancel();
-        _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
-      } else {
-        // Large jump - advance word by word with short delays.
-        _startFluidAdvance(target, script);
-      }
+      _applySttAdvanceTarget(target, script);
       _syncLocaleForPosition(script, target + 1, reason: 'advance');
     } else {
       final improvising = TeleprompterNotifier.shouldUseImprovisationNoMatch(
@@ -607,7 +620,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
               'debug': sequential.debugInfo,
             },
           );
-          _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
+          _applySttAdvanceTarget(target, script);
           _syncLocaleForPosition(script, target + 1, reason: 'sequential');
           return;
         }
@@ -674,8 +687,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         );
         _noProgressCount = 0;
         _sttReadingStandby = true;
-        _fluidAdvanceTimer?.cancel();
-        _safeSetState((s) => s.copyWith(confirmedWordIndex: relockTarget));
+        _applySttAdvanceTarget(relockTarget, script);
         _syncLocaleForPosition(script, relockTarget + 1, reason: 'relock');
         return;
       }

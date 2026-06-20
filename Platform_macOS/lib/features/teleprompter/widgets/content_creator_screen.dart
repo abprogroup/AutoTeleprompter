@@ -55,6 +55,9 @@ part 'content_creator_screen.camera_widgets.dart';
 final _contentCreatorTagStripRe = RegExp(
     r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
 
+const double _contentControlsHotZoneHeight = 104.0;
+const Duration _contentSttStartAffordanceDuration = Duration(milliseconds: 900);
+
 enum _ContentCameraSourceMode { native, usb, virtual, all }
 
 class ContentCreatorScreen extends ConsumerStatefulWidget {
@@ -112,6 +115,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   bool _contentControlsVisible = true;
   bool _contentControlsHovering = false;
   bool _contentManualScrolling = false;
+  bool _contentSttStartAffordanceVisible = false;
   bool _contentDebugConsoleMinimized = false;
   bool _contentDebugConsolePinned = false;
   bool _contentFrameConfirmed = false;
@@ -120,9 +124,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   int _lastContentRotation = 0;
   int _contentEntryResumeIndex = 0;
   Timer? _hideContentControlsTimer;
+  Timer? _contentSttStartAffordanceTimer;
   final List<String> _contentDebugLogs = [];
   DateTime? _contentRotationRecenterUntil;
   DateTime? _contentProgrammaticScrollCommitBlockedUntil;
+  Offset? _lastContentPointerGlobalPosition;
   late final TeleprompterNotifier _teleprompterNotifier;
 
   @override
@@ -188,11 +194,28 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     _wordTrackTimer?.cancel();
     _positionCommitTimer?.cancel();
     _hideContentControlsTimer?.cancel();
-    unawaited(_setContentFullscreen(false));
-    _cameraController?.dispose();
-    unawaited(_macCameraController?.dispose());
-    unawaited(_wavAudioRecorder.cancel());
-    unawaited(_stopContentSpeechSessionIfOwnedByRecording());
+    _contentSttStartAffordanceTimer?.cancel();
+    _recordContentDisposeFailure(
+      _setContentFullscreen(false),
+      source: 'contentCreator.disposeFullscreenCleanup',
+    );
+    _recordContentDisposeFailure(
+      _cameraController?.dispose(),
+      source: 'contentCreator.disposeCamera',
+    );
+    _recordContentDisposeFailure(
+      _macCameraController?.dispose(),
+      source: 'contentCreator.disposeMacCamera',
+    );
+    _recordContentDisposeFailure(
+      _wavAudioRecorder.cancel(),
+      source: 'contentCreator.disposeAudioCancel',
+    );
+    _recordingStartedSpeechSession = false;
+    _recordContentDisposeFailure(
+      _teleprompterNotifier.stopSession(),
+      source: 'contentCreator.disposeStopSession',
+    );
     try {
       _teleprompterNotifier.setVisibleWordWindow(null, null);
     } catch (error, stack) {
@@ -207,6 +230,16 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     super.dispose();
   }
 
+  void _recordContentDisposeFailure(
+    Future<void>? future, {
+    required String source,
+  }) {
+    if (future == null) return;
+    unawaited(future.catchError((Object error, StackTrace stack) {
+      LightweightDiagnostics.instance.recordError(error, stack, source: source);
+    }));
+  }
+
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -219,12 +252,13 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     setState(update);
   }
 
-  bool _contentSessionActive(TeleprompterState tState) {
-    return _isRecording ||
-        _recordStartInFlight ||
-        _contentManualScrolling ||
-        tState.isListening ||
-        tState.isStarting;
+  bool _contentControlsAutoHideActive(TeleprompterState tState) {
+    return PresenterInputLockService.recordingControlsAutoHideActive(
+      isRecording: _isRecording,
+      recordStartInFlight: _recordStartInFlight,
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+    );
   }
 
   bool _contentAudioOnlyMode(AppSettings settings) {
@@ -234,21 +268,28 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
 
   void _scheduleHideContentControls() {
     _hideContentControlsTimer?.cancel();
-    if (!_contentSessionActive(ref.read(teleprompterProvider))) {
+    if (!_contentControlsAutoHideActive(ref.read(teleprompterProvider))) {
       if (mounted && !_contentControlsVisible) {
         _updateContentCreatorState(() => _contentControlsVisible = true);
       }
       return;
     }
     _hideContentControlsTimer = Timer(const Duration(milliseconds: 1400), () {
-      if (!mounted || _contentControlsHovering) return;
+      if (!mounted) return;
+      if (_shouldKeepContentControlsVisible()) {
+        if (!_contentControlsVisible) {
+          _updateContentCreatorState(() => _contentControlsVisible = true);
+        }
+        _scheduleHideContentControls();
+        return;
+      }
       _updateContentCreatorState(() => _contentControlsVisible = false);
     });
   }
 
   void _showContentControls() {
-    final active = _contentSessionActive(ref.read(teleprompterProvider));
-    if (active && !_contentControlsHovering) return;
+    final active =
+        _contentControlsAutoHideActive(ref.read(teleprompterProvider));
     _updateContentCreatorState(() => _contentControlsVisible = true);
     if (active) _scheduleHideContentControls();
   }
@@ -263,10 +304,59 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   void _syncContentControlsForActiveSession(bool active) {
     if (!mounted) return;
     _hideContentControlsTimer?.cancel();
-    _contentControlsHovering = false;
+    final keepVisible =
+        _recordStartInFlight || !active || _shouldKeepContentControlsVisible();
     _updateContentCreatorState(
-      () => _contentControlsVisible = _recordStartInFlight || !active,
+      () => _contentControlsVisible = keepVisible,
     );
+    if (active && keepVisible) _scheduleHideContentControls();
+  }
+
+  void _rememberContentPointer(PointerEvent event) {
+    _lastContentPointerGlobalPosition = event.position;
+  }
+
+  bool _shouldKeepContentControlsVisible() {
+    return PresenterInputLockService.shouldDeferControlsAutoHide(
+      hoveringControls: _contentControlsHovering,
+      pointerInHotZone: _contentPointerInControlsHotZone(),
+    );
+  }
+
+  bool _contentPointerInControlsHotZone() {
+    final pointer = _lastContentPointerGlobalPosition;
+    if (pointer == null) return false;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return false;
+    final local = renderObject.globalToLocal(pointer);
+    return PresenterInputLockService.bottomControlsHotZoneContains(
+      localX: local.dx,
+      localY: local.dy,
+      surfaceWidth: renderObject.size.width,
+      surfaceHeight: renderObject.size.height,
+      hotZoneHeight: _contentControlsHotZoneHeight,
+    );
+  }
+
+  void _showContentSttStartAffordance() {
+    _contentSttStartAffordanceTimer?.cancel();
+    _updateContentCreatorState(() => _contentSttStartAffordanceVisible = true);
+    _contentSttStartAffordanceTimer =
+        Timer(_contentSttStartAffordanceDuration, () {
+      if (!mounted) return;
+      _updateContentCreatorState(
+        () => _contentSttStartAffordanceVisible = false,
+      );
+    });
+  }
+
+  void _hideContentSttStartAffordance() {
+    _contentSttStartAffordanceTimer?.cancel();
+    if (_contentSttStartAffordanceVisible) {
+      _updateContentCreatorState(
+        () => _contentSttStartAffordanceVisible = false,
+      );
+    }
   }
 
   @override
@@ -364,7 +454,14 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
             allowWordJump: !activeStt && !_contentResumeDecisionPending,
           );
 
-    final contentSessionActive = _contentSessionActive(tState);
+    final contentControlsAutoHideActive =
+        _contentControlsAutoHideActive(tState);
+    final contentSttStartingVisualActive =
+        (tState.isStarting || _contentSttStartAffordanceVisible) &&
+            !tState.hasError;
+    final controlsState = contentSttStartingVisualActive
+        ? tState.copyWith(isStarting: true)
+        : tState;
     const controlsReservedHeight = 104.0;
     final debugConsoleExpanded = settings.debugMode &&
         !_contentDebugConsoleMinimized &&
@@ -394,90 +491,107 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTap: inputLocked ? null : _showContentControls,
-        child: Stack(
-          children: [
-            _buildCameraBackgroundLayer(),
-            _buildReadingSurfaceLayer(),
-            if (settings.readFadeIntensity > 0)
-              _buildContentReadFadeOverlay(settings),
-            _buildContentReadingLine(settings),
-            _buildContentPresenterStage(
-              settings: settings,
-              child: SafeArea(
-                child: Listener(
-                  onPointerSignal: (event) {
-                    if (inputLocked && event is PointerScrollEvent) {
-                      GestureBinding.instance.pointerSignalResolver
-                          .register(event, (_) {});
-                    }
-                  },
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    physics: inputLocked
-                        ? const NeverScrollableScrollPhysics()
-                        : const ClampingScrollPhysics(),
-                    child: wordList,
+      body: MouseRegion(
+        onEnter: _rememberContentPointer,
+        onHover: _rememberContentPointer,
+        onExit: (_) => _lastContentPointerGlobalPosition = null,
+        child: GestureDetector(
+          onTap: inputLocked ? null : _showContentControls,
+          child: Stack(
+            children: [
+              _buildCameraBackgroundLayer(),
+              _buildReadingSurfaceLayer(),
+              if (settings.readFadeIntensity > 0)
+                _buildContentReadFadeOverlay(settings),
+              _buildContentReadingLine(settings),
+              _buildContentPresenterStage(
+                settings: settings,
+                child: SafeArea(
+                  child: Listener(
+                    onPointerSignal: (event) {
+                      if (inputLocked && event is PointerScrollEvent) {
+                        GestureBinding.instance.pointerSignalResolver
+                            .register(event, (_) {});
+                      }
+                    },
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      physics: inputLocked
+                          ? const NeverScrollableScrollPhysics()
+                          : const ClampingScrollPhysics(),
+                      child: wordList,
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (!audioOnlyMode &&
-                _isInit &&
-                settings.contentCreatorFeedMode ==
-                    AppSettings.contentCreatorFeedBubble)
-              _buildCameraBubble(settings),
-            if (_isRecording) _buildRecordingTimerHud(),
-            if (_recordExportProgress != null) _buildRecordingExportHud(),
-            if (_countdown > 0) _buildCountdownOverlay(),
-            if (_contentResumeDecisionPending) _buildContentResumeBlocker(),
-            Positioned(
-              top: 8,
-              left: 0,
-              right: 0,
-              child: Center(child: _buildContentSearchToolbar()),
-            ),
-            if (contentSessionActive)
+              if (!audioOnlyMode &&
+                  _isInit &&
+                  settings.contentCreatorFeedMode ==
+                      AppSettings.contentCreatorFeedBubble)
+                _buildCameraBubble(settings),
+              if (_isRecording) _buildRecordingTimerHud(),
+              if (_recordExportProgress != null) _buildRecordingExportHud(),
+              if (_countdown > 0) _buildCountdownOverlay(),
+              if (_contentResumeDecisionPending) _buildContentResumeBlocker(),
               Positioned(
+                top: 8,
                 left: 0,
                 right: 0,
+                child: Center(child: _buildContentSearchToolbar()),
+              ),
+              if (contentSttStartingVisualActive)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: _ContentSttStartingIndicator(
+                        accentColor: Color(settings.currentWordColor),
+                      ),
+                    ),
+                  ),
+                ),
+              if (contentControlsAutoHideActive)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: _contentControlsHotZoneHeight,
+                  child: MouseRegion(
+                    opaque: false,
+                    onEnter: (event) {
+                      _rememberContentPointer(event);
+                      _contentControlsHovering = true;
+                      _showContentControlsFromHotZone();
+                    },
+                    onHover: _rememberContentPointer,
+                    onExit: (_) {
+                      _contentControlsHovering = false;
+                      _scheduleHideContentControls();
+                    },
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              Positioned(
                 bottom: 0,
-                height: 92,
-                child: MouseRegion(
-                  opaque: false,
-                  onEnter: (_) {
-                    _contentControlsHovering = true;
-                    _showContentControlsFromHotZone();
-                  },
-                  onExit: (_) {
-                    _contentControlsHovering = false;
-                    _scheduleHideContentControls();
-                  },
-                  child: const SizedBox.expand(),
+                left: 0,
+                right: 0,
+                child: _buildContentControlsOverlay(
+                  settings: settings,
+                  tState: controlsState,
                 ),
               ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: _buildContentControlsOverlay(
-                settings: settings,
-                tState: tState,
-              ),
-            ),
-            if (settings.debugMode)
-              _buildContentCreatorDebugConsole(
-                context,
-                tState,
-                bottom: debugConsoleBottom,
-                height: debugConsoleHeight,
-                expanded: debugConsoleExpanded,
-                accentColor: Color(settings.currentWordColor),
-                settings: settings,
-                wordCount: script?.words.length ?? 0,
-              ),
-          ],
+              if (settings.debugMode)
+                _buildContentCreatorDebugConsole(
+                  context,
+                  tState,
+                  bottom: debugConsoleBottom,
+                  height: debugConsoleHeight,
+                  expanded: debugConsoleExpanded,
+                  accentColor: Color(settings.currentWordColor),
+                  settings: settings,
+                  wordCount: script?.words.length ?? 0,
+                ),
+            ],
+          ),
         ),
       ),
     );

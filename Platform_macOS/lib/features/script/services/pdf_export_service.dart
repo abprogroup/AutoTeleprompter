@@ -17,6 +17,8 @@ class PdfExportService {
     final regular = await _loadFont(
       cached: _regularFont,
       systemCandidates: const [
+        '/System/Library/Fonts/Supplemental/Arial.ttf',
+        '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
         r'C:\Windows\Fonts\arial.ttf',
         r'C:\Windows\Fonts\segoeui.ttf',
       ],
@@ -26,6 +28,7 @@ class PdfExportService {
     final bold = await _loadFont(
       cached: _boldFont,
       systemCandidates: const [
+        '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
         r'C:\Windows\Fonts\arialbd.ttf',
         r'C:\Windows\Fonts\seguisb.ttf',
       ],
@@ -35,6 +38,7 @@ class PdfExportService {
     final italic = await _loadFont(
       cached: _italicFont,
       systemCandidates: const [
+        '/System/Library/Fonts/Supplemental/Arial Italic.ttf',
         r'C:\Windows\Fonts\ariali.ttf',
         r'C:\Windows\Fonts\segoeuii.ttf',
       ],

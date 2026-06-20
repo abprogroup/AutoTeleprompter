@@ -26,7 +26,9 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
     _autoScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
     _updateContentCreatorState(() => _contentManualScrolling = true);
-    _syncContentControlsForActiveSession(true);
+    _syncContentControlsForActiveSession(
+      _contentControlsAutoHideActive(ref.read(teleprompterProvider)),
+    );
     _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (!mounted || !_scrollController.hasClients) return;
       final liveSettings = ref.read(settingsProvider);

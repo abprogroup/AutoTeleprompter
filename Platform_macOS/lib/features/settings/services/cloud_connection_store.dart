@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CloudProviderDefinition {
@@ -165,5 +167,21 @@ class CloudConnectionStore {
       return '$normalizedLeft$right';
     }
     return '$normalizedLeft$separator$right';
+  }
+
+  static bool isPathInside(String parent, String child) {
+    final parentPath = _comparablePath(parent);
+    final childPath = _comparablePath(child);
+    if (parentPath.isEmpty || childPath.isEmpty) return false;
+    return childPath.startsWith('$parentPath\\');
+  }
+
+  static String _comparablePath(String value) {
+    return Directory(normalizePath(value))
+        .absolute
+        .path
+        .replaceAll('/', '\\')
+        .replaceAll(RegExp(r'\\+$'), '')
+        .toLowerCase();
   }
 }

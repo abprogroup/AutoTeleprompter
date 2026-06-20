@@ -60,8 +60,14 @@ class MacOSPermissions {
 
   static Future<MacOSPermissionStatus> _status(String method) async {
     if (!Platform.isMacOS) return const MacOSPermissionStatus('unsupported');
-    final value = await _channel.invokeMethod<String>(method);
-    return MacOSPermissionStatus(value ?? 'unknown');
+    try {
+      final value = await _channel.invokeMethod<String>(method);
+      return MacOSPermissionStatus(value ?? 'unknown');
+    } on MissingPluginException {
+      return const MacOSPermissionStatus('unsupported');
+    } on PlatformException {
+      return const MacOSPermissionStatus('unknown');
+    }
   }
 
   static Future<bool> _openPrivacyPane(String anchor) {

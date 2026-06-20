@@ -7,6 +7,8 @@ class ExternalUrlLauncher {
 
   static const MethodChannel _channel =
       MethodChannel('autoteleprompter/system');
+  static Future<ProcessResult> Function(String, List<String>)
+      _fallbackProcessRunner = Process.run;
 
   static Future<bool> openUrl(String url) {
     return _open(url, filePath: false);
@@ -27,7 +29,18 @@ class ExternalUrlLauncher {
     } catch (_) {
       // Fall through to /usr/bin/open if the native channel is unavailable.
     }
-    final result = await Process.run('/usr/bin/open', [target]);
-    return result.exitCode == 0;
+    try {
+      final result = await _fallbackProcessRunner('/usr/bin/open', [target])
+          .timeout(const Duration(seconds: 5));
+      return result.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static void debugSetFallbackProcessRunnerForTests(
+    Future<ProcessResult> Function(String, List<String>)? runner,
+  ) {
+    _fallbackProcessRunner = runner ?? Process.run;
   }
 }

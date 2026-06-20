@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:xml/xml.dart';
+
 import '../models/app_settings.dart';
+import 'settings_error_sanitizer.dart';
 
 const autoTeleprompterAppVersion = String.fromEnvironment(
   'APP_VERSION',
-  defaultValue: '5.0.5+16',
 );
 
 const autoTeleprompterUpdateManifestUrl = String.fromEnvironment(
@@ -47,25 +49,54 @@ class UpdateCheckResult {
   });
 
   bool get hasDownload => downloadUrl != null && downloadUrl!.trim().isNotEmpty;
+
+  bool get canInstallOnCurrentPlatform =>
+      hasDownload && (Platform.isWindows || Platform.isMacOS);
+
+  String? get installUnavailableMessage {
+    if (status != UpdateCheckStatus.updateAvailable) return null;
+    if (canInstallOnCurrentPlatform) return null;
+    if (!hasDownload) {
+      if (Platform.isMacOS) {
+        return 'Install package: no macOS package URL is published for this '
+            'build yet.';
+      }
+      if (Platform.isWindows) {
+        return 'Install package: no Windows package URL is published for this '
+            'build yet.';
+      }
+    }
+    return 'Install package: in-app installation is not supported on this '
+        'platform.';
+  }
 }
 
 class UpdateCheckService {
-  UpdateCheckService({HttpClient? httpClient})
-      : _httpClient = httpClient ?? HttpClient();
+  UpdateCheckService({
+    HttpClient? httpClient,
+    FutureOr<String> Function()? versionProvider,
+    String? manifestUrl,
+  })  : _httpClient = httpClient ?? HttpClient(),
+        _versionProvider = versionProvider,
+        _manifestUrl = manifestUrl;
 
   final HttpClient _httpClient;
+  final FutureOr<String> Function()? _versionProvider;
+  final String? _manifestUrl;
 
   Future<UpdateCheckResult> check({
     required String channel,
     Duration timeout = const Duration(seconds: 8),
   }) async {
     final normalizedChannel = _normalizeChannel(channel);
-    final manifestUrl = autoTeleprompterUpdateManifestUrl.trim();
+    final currentVersion = await currentAppVersion();
+    final manifestUrl =
+        (_manifestUrl ?? autoTeleprompterUpdateManifestUrl).trim();
     if (manifestUrl.isEmpty) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.notConfigured,
         channel: normalizedChannel,
-        currentVersion: autoTeleprompterAppVersion,
+        currentVersion: currentVersion,
         message: 'Update checking is not connected in this build yet.',
       );
     }
@@ -75,7 +106,7 @@ class UpdateCheckService {
       return UpdateCheckResult(
         status: UpdateCheckStatus.failed,
         channel: normalizedChannel,
-        currentVersion: autoTeleprompterAppVersion,
+        currentVersion: currentVersion,
         message: 'Update manifest URL is invalid or not HTTPS.',
       );
     }
@@ -89,22 +120,41 @@ class UpdateCheckService {
         return UpdateCheckResult(
           status: UpdateCheckStatus.failed,
           channel: normalizedChannel,
-          currentVersion: autoTeleprompterAppVersion,
+          currentVersion: currentVersion,
           message: 'Update server returned HTTP ${response.statusCode}.',
         );
       }
-      return _parseManifest(body, normalizedChannel);
+      return _parseManifest(body, normalizedChannel, currentVersion);
     } catch (error) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.failed,
         channel: normalizedChannel,
-        currentVersion: autoTeleprompterAppVersion,
-        message: 'Update check failed: $error',
+        currentVersion: currentVersion,
+        message: 'Update check failed: ${sanitizeSettingsErrorForUser(error)}',
       );
     }
   }
 
-  UpdateCheckResult _parseManifest(String body, String channel) {
+  Future<String> currentAppVersion() async {
+    final defineVersion = autoTeleprompterAppVersion.trim();
+    if (defineVersion.isNotEmpty) return defineVersion;
+    final provider = _versionProvider;
+    if (provider != null) {
+      final provided = (await provider()).trim();
+      if (provided.isNotEmpty) return provided;
+    }
+    if (Platform.isMacOS) {
+      final bundleVersion = await _readMacOSBundleVersion();
+      if (bundleVersion != null) return bundleVersion;
+    }
+    return '0.0.0+0';
+  }
+
+  UpdateCheckResult _parseManifest(
+    String body,
+    String channel,
+    String currentVersion,
+  ) {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Manifest root must be a JSON object.');
@@ -125,7 +175,7 @@ class UpdateCheckService {
       return UpdateCheckResult(
         status: UpdateCheckStatus.notConfigured,
         channel: channel,
-        currentVersion: autoTeleprompterAppVersion,
+        currentVersion: currentVersion,
         message: _missingChannelMessage(channel),
       );
     }
@@ -137,13 +187,13 @@ class UpdateCheckService {
     });
     final comparison = _compareVersions(
       newest.latestVersion,
-      autoTeleprompterAppVersion,
+      currentVersion,
     );
     if (comparison <= 0) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.upToDate,
         channel: newest.channel,
-        currentVersion: autoTeleprompterAppVersion,
+        currentVersion: currentVersion,
         latestVersion: newest.latestVersion,
         downloadUrl: newest.downloadUrl,
         notes: newest.notes,
@@ -154,7 +204,7 @@ class UpdateCheckService {
     return UpdateCheckResult(
       status: UpdateCheckStatus.updateAvailable,
       channel: newest.channel,
-      currentVersion: autoTeleprompterAppVersion,
+      currentVersion: currentVersion,
       latestVersion: newest.latestVersion,
       downloadUrl: newest.downloadUrl,
       notes: newest.notes,
@@ -416,6 +466,45 @@ class UpdateCheckService {
         .split('.')
         .map((part) => int.tryParse(part.replaceAll(RegExp(r'\D'), '')) ?? 0)
         .toList(growable: false);
+  }
+
+  static Future<String?> _readMacOSBundleVersion() async {
+    final infoPlist = _macOSInfoPlistFile();
+    if (infoPlist == null || !await infoPlist.exists()) return null;
+    try {
+      final plist = XmlDocument.parse(await infoPlist.readAsString());
+      final version = _plistStringValue(plist, 'CFBundleShortVersionString');
+      final build = _plistStringValue(plist, 'CFBundleVersion');
+      if (version == null || version.isEmpty) return null;
+      if (build == null || build.isEmpty) return version;
+      return '$version+$build';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static File? _macOSInfoPlistFile() {
+    final executable = File(Platform.resolvedExecutable);
+    final executableDir = executable.parent;
+    if (!executableDir.path.endsWith('/MacOS')) return null;
+    final contentsDir = executableDir.parent;
+    if (!contentsDir.path.endsWith('/Contents')) return null;
+    return File('${contentsDir.path}/Info.plist');
+  }
+
+  static String? _plistStringValue(XmlDocument plist, String key) {
+    for (final dict in plist.findAllElements('dict')) {
+      final elements = dict.children.whereType<XmlElement>().toList();
+      for (var i = 0; i < elements.length - 1; i++) {
+        final item = elements[i];
+        if (item.name.local != 'key' || item.innerText.trim() != key) {
+          continue;
+        }
+        final value = elements[i + 1];
+        if (value.name.local == 'string') return value.innerText.trim();
+      }
+    }
+    return null;
   }
 }
 

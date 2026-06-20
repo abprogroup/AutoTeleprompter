@@ -245,8 +245,14 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     } else {
       ref.read(teleprompterProvider.notifier).resetPosition();
     }
-    _scrollController.animateTo(0,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    if (!_scrollController.hasClients) return;
+    unawaited(
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      ),
+    );
   }
 
   void _resetPresenterPositionToStart({bool animated = true}) {

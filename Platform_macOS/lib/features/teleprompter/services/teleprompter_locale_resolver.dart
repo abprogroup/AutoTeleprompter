@@ -68,6 +68,7 @@ class TeleprompterLocaleResolver {
 
   static String? explicitLocaleForWord(ScriptWord word) {
     if (word.isNewline) return null;
+    if (word.isOptionalCue) return null;
     if (word.normalized.isEmpty) return null;
     final text = word.normalized;
     if (RegExp(r'[\u0590-\u05FF]').hasMatch(text)) return 'he_IL';

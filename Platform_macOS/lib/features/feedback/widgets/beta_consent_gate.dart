@@ -339,7 +339,7 @@ class _PolicyBox extends StatelessWidget {
             ),
             _paragraph(
               'Local protection: saved scripts, queued feedback reports, and '
-              'debug artifacts are encrypted on this Windows account. This helps '
+              'debug artifacts are encrypted on this Mac account. This helps '
               'protect copied app-data files, but it cannot protect against '
               'screen recording, malware running as you, or reports you choose '
               'to send.',

@@ -140,13 +140,8 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     return cameras.where((camera) {
       final name = camera.name.toLowerCase();
       return switch (mode) {
-        _ContentCameraSourceMode.native => !_isVirtualCameraName(name) &&
-            !_isIrOrDepthCameraName(name) &&
-            _isIntegratedCameraName(name),
-        _ContentCameraSourceMode.usb => !_isVirtualCameraName(name) &&
-            !_isIrOrDepthCameraName(name) &&
-            !_isIntegratedCameraName(name) &&
-            _isUsbCameraName(name),
+        _ContentCameraSourceMode.native => _isNativeCamera(camera),
+        _ContentCameraSourceMode.usb => _isExternalUsbCamera(camera),
         _ContentCameraSourceMode.virtual => _isVirtualCameraName(name),
         _ContentCameraSourceMode.all => true,
       };
@@ -168,16 +163,12 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     var score = 0;
     if (_isVirtualCameraName(name)) score += 1000;
     if (_isIrOrDepthCameraName(name)) score += 320;
-    if (_isIntegratedCameraName(name)) score -= 320;
+    if (_isNativeCamera(camera)) score -= 320;
     if (name.contains('webcam') || name.contains('web camera')) score -= 220;
     if (_isUsbCameraName(name)) score -= 120;
     if (camera.lensDirection == CameraLensDirection.front) score -= 40;
     if (camera.lensDirection == CameraLensDirection.back) score += 40;
     return score;
-  }
-
-  bool _isIntegratedCameraName(String name) {
-    return ContentCameraDeviceClassifier.isIntegratedName(name);
   }
 
   bool _isIrOrDepthCameraName(String name) {
@@ -192,7 +183,26 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     return ContentCameraDeviceClassifier.isVirtualName(name);
   }
 
+  bool _isNativeCamera(CameraDescription camera) {
+    final name = camera.name.toLowerCase();
+    return ContentCameraDeviceClassifier.isNativeCandidate(
+      name,
+      isFrontFacing: camera.lensDirection == CameraLensDirection.front,
+      isMacOS: Platform.isMacOS,
+    );
+  }
+
+  bool _isExternalUsbCamera(CameraDescription camera) {
+    final name = camera.name.toLowerCase();
+    return !_isNativeCamera(camera) &&
+        !_isVirtualCameraName(name) &&
+        !_isIrOrDepthCameraName(name) &&
+        _isUsbCameraName(name);
+  }
+
   String _cameraSourceType(CameraDescription camera) {
+    if (_isNativeCamera(camera)) return 'Native camera';
+    if (_isExternalUsbCamera(camera)) return 'USB camera';
     return ContentCameraDeviceClassifier.sourceTypeLabel(camera.name);
   }
 
@@ -336,6 +346,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       });
       await _stopContentSpeechSessionIfOwnedByRecording();
       await _releaseCameraAudioAfterRecording();
+      if (!mounted) return;
       _syncContentControlsForActiveSession(false);
       _showSnack('Recording countdown canceled.');
       _logContentDebug('recording countdown canceled');
@@ -361,6 +372,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       final filePath = Platform.isMacOS
           ? await _macCameraController!.stopVideoRecording()
           : (await _cameraController!.stopVideoRecording()).path;
+      if (!mounted) return;
       final recordedSeconds = _recordSeconds;
       _recordTimer?.cancel();
       _updateContentCreatorState(() {
@@ -370,11 +382,12 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       });
       await _stopContentSpeechSessionIfOwnedByRecording();
       await _releaseCameraAudioAfterRecording();
+      if (!mounted) return;
       _syncContentControlsForActiveSession(false);
       try {
         _updateContentCreatorState(() => _recordExportProgress = 0.0);
         final savedPath = await _saveRecordingToChosenFolder(filePath);
-        final settings = ref.read(settingsProvider);
+        if (!mounted) return;
         await _backupRecordingIfEnabled(savedPath);
         final saveMessage = await _recordingSaveMessage(
           savedPath,
@@ -525,6 +538,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         );
       }
       final recordedSeconds = _recordSeconds;
+      if (!mounted) return;
       _recordTimer?.cancel();
       _updateContentCreatorState(() {
         _isRecording = false;
@@ -542,6 +556,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
 
     if (Platform.isMacOS) {
       final micStatus = await MacOSPermissions.requestMicrophone();
+      if (!mounted) return;
       if (!micStatus.isGranted) {
         _showSnack('Microphone permission is required for WAV recording.');
         if (micStatus.isBlocked) {
@@ -551,6 +566,7 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       }
     } else {
       var micStatus = await Permission.microphone.status;
+      if (!mounted) return;
       if (micStatus.isPermanentlyDenied) {
         _showSnack('Microphone permission is blocked. Open System Settings.');
         await openAppSettings();
@@ -558,12 +574,14 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
       }
       if (!micStatus.isGranted) {
         micStatus = await Permission.microphone.request();
+        if (!mounted) return;
       }
       if (!micStatus.isGranted) {
         _showSnack('Microphone permission is required for WAV recording.');
         return;
       }
     }
+    if (!mounted) return;
 
     _updateContentCreatorState(() {
       _recordStartInFlight = true;
@@ -595,6 +613,11 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         destinationDirectory: directory,
         createdAt: DateTime.now(),
       );
+      if (!mounted) {
+        await _wavAudioRecorder.cancel();
+        await _stopContentSpeechSessionIfOwnedByRecording();
+        return;
+      }
       _recordSeconds = 0;
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (t) {
         if (mounted) _updateContentCreatorState(() => _recordSeconds = t.tick);
@@ -677,11 +700,11 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
   }
 
   Future<String> _saveRecordingToChosenFolder(String sourcePath) async {
+    final settings = ref.read(settingsProvider);
+    final format = settings.contentCreatorRecordingFormat;
     final folder = await _effectiveRecordingFolderPath();
     final directory = Directory(folder);
     var lastLoggedProgress = -10;
-    final settings = ref.read(settingsProvider);
-    final format = settings.contentCreatorRecordingFormat;
     final result = await const RecordingExportService().export(
       sourceFile: File(sourcePath),
       destinationDirectory: directory,

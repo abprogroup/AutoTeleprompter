@@ -83,36 +83,53 @@ class _SttStartingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accentColor.withValues(alpha: 0.35)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-              ),
-            ),
-            const SizedBox(width: 9),
-            const Text(
-              'STARTING SPEECH',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-              ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 340),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.86),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: accentColor.withValues(alpha: 0.45)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.32),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.8,
+                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                    ),
+                  ),
+                  Icon(Icons.hourglass_top, color: accentColor, size: 18),
+                ],
+              ),
+              const SizedBox(width: 14),
+              const Flexible(
+                child: Text(
+                  'Starting speech-to-text...',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

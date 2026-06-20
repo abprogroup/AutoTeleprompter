@@ -1,7 +1,7 @@
 part of 'teleprompter_screen.dart';
 
-class _WindowsSpeechSettingsSection extends ConsumerWidget {
-  const _WindowsSpeechSettingsSection();
+class _SpeechProfileSettingsSection extends ConsumerWidget {
+  const _SpeechProfileSettingsSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

@@ -55,6 +55,9 @@ part 'teleprompter_screen.settings_widgets.dart';
 final _tagStripRe = RegExp(
     r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
 
+const double _presenterControlsHotZoneHeight = 104.0;
+const Duration _sttStartAffordanceDuration = Duration(milliseconds: 900);
+
 class _PresentationSearchIntent extends Intent {
   const _PresentationSearchIntent();
 }
@@ -79,11 +82,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   Timer? _hideControlsTimer;
   Timer? _smoothScrollTimer;
   Timer? _activeManualCorrectionTimer;
+  Timer? _sttStartAffordanceTimer;
   double _scrollTarget = 0.0;
   bool _smoothScrollActive = false;
   int _manualWordIndex = 0;
   bool _manualScrolling = false;
   bool _scrollingBackward = false;
+  bool _sttStartAffordanceVisible = false;
   bool _closingPresentation = false;
   bool _userBrowsingWhileStopped = false;
   bool _activeManualCorrection = false;
@@ -113,6 +118,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   DateTime? _lastBrowsingWordSync;
   DateTime? _presenterProgrammaticCommitBlockedUntil;
   DateTime? _lastPresenterUserScrollSignalAt;
+  Offset? _lastPresenterPointerGlobalPosition;
   bool _windowsControlsHovering = false;
   bool _presenterFullscreen = false;
   late final TeleprompterNotifier _teleprompterNotifier;
@@ -154,10 +160,19 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handlePresentationKey);
-    unawaited(_teleprompterNotifier.stopSession());
-    WakelockPlus.disable();
+    _recordPresenterDisposeFailure(
+      _teleprompterNotifier.stopSession(),
+      source: 'presenter.disposeStopSession',
+    );
+    _recordPresenterDisposeFailure(
+      WakelockPlus.disable(),
+      source: 'presenter.disposeWakelock',
+    );
     if (_presenterFullscreen) {
-      unawaited(PresenterFullscreenService.setEnabled(false));
+      _recordPresenterDisposeFailure(
+        PresenterFullscreenService.setEnabled(false),
+        source: 'presenter.disposeFullscreenCleanup',
+      );
     }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -166,6 +181,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
     _activeManualCorrectionTimer?.cancel();
+    _sttStartAffordanceTimer?.cancel();
     _remoteControlService.publishPresenterState(
       scriptActive: false,
       sessionActive: false,
@@ -178,8 +194,18 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     super.dispose();
   }
 
+  void _recordPresenterDisposeFailure(
+    Future<void>? future, {
+    required String source,
+  }) {
+    if (future == null) return;
+    unawaited(future.catchError((Object error, StackTrace stack) {
+      LightweightDiagnostics.instance.recordError(error, stack, source: source);
+    }));
+  }
+
   void _setPresenterDebugPinned(bool value) {
-    setState(() {
+    _setTeleprompterState(() {
       _debugConsolePinned = value;
       if (_debugConsolePinned) {
         _debugConsoleMinimized = false;
@@ -188,7 +214,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   }
 
   void _setPresenterDebugExpanded(bool expanded) {
-    setState(() {
+    _setTeleprompterState(() {
       if (expanded) {
         _debugConsoleMinimized = false;
         if (!_controlsVisible) {
@@ -200,7 +226,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     });
   }
 
-  void _setTeleprompterState(VoidCallback fn) => setState(fn);
+  void _setTeleprompterState(VoidCallback fn) {
+    if (!mounted) return;
+    setState(fn);
+  }
 
   @override
   Widget build(BuildContext context) => _buildTeleprompterScreen(context);

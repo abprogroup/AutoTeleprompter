@@ -52,10 +52,30 @@ class _ControlBar extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     // Forward scroll is active when scrolling but NOT backward
     final speechActive = isListening || isStarting;
-    final isActive = speechActive
-        ? true
-        : (isManualMode && isManualScrolling && settings.scrollSpeed != 0);
-    final isBooting = isStarting;
+    final showSpeechControl = speechActive || !isManualMode;
+    final isBooting = showSpeechControl && isStarting;
+    final isActive = showSpeechControl
+        ? isListening && !isBooting
+        : (isManualScrolling && settings.scrollSpeed != 0);
+    final VoidCallback? primaryAction =
+        isBooting ? null : (isActive ? onStop : onStart);
+    final IconData primaryIcon = showSpeechControl
+        ? (isBooting
+            ? Icons.hourglass_top
+            : (isListening ? Icons.stop : Icons.mic))
+        : (isManualScrolling && settings.scrollSpeed != 0
+            ? Icons.pause
+            : Icons.play_arrow);
+    final Color primaryColor = isActive
+        ? Colors.red
+        : (isBooting ? accentColor.withValues(alpha: 0.74) : accentColor);
+    final String primaryTooltip = showSpeechControl
+        ? (isBooting
+            ? 'Starting speech-to-text'
+            : (isListening ? 'Stop speech-to-text' : 'Start speech-to-text'))
+        : (isManualScrolling && settings.scrollSpeed != 0
+            ? 'Pause manual scroll'
+            : 'Start manual scroll');
     final effectiveFontSize =
         ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
     void applyPresenterFontSize(double size) {
@@ -102,28 +122,31 @@ class _ControlBar extends ConsumerWidget {
               tooltip: 'Smaller font',
             ),
             // Backward button removed in favor of bidirectional slider
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: isBooting
-                  ? onStop
-                  : (speechActive || isActive ? onStop : onStart),
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive ? Colors.red : accentColor,
-                ),
-                child: Icon(
-                  speechActive || !isManualMode
-                      ? (isStarting
-                          ? Icons.hourglass_top
-                          : (isListening ? Icons.stop : Icons.mic))
-                      : (isManualScrolling && settings.scrollSpeed != 0
-                          ? Icons.pause
-                          : Icons.play_arrow),
-                  color: isActive ? Colors.white : Colors.black,
-                  size: 30,
+            Tooltip(
+              message: primaryTooltip,
+              child: Material(
+                color: primaryColor,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkResponse(
+                  onTap: primaryAction,
+                  customBorder: const CircleBorder(),
+                  containedInkWell: true,
+                  hoverColor: Colors.white.withValues(alpha: 0.18),
+                  highlightColor: Colors.white.withValues(alpha: 0.24),
+                  splashColor: Colors.white.withValues(alpha: 0.22),
+                  mouseCursor: primaryAction == null
+                      ? SystemMouseCursors.basic
+                      : SystemMouseCursors.click,
+                  child: SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: Icon(
+                      primaryIcon,
+                      color: isActive ? Colors.white : Colors.black,
+                      size: 30,
+                    ),
+                  ),
                 ),
               ),
             ),

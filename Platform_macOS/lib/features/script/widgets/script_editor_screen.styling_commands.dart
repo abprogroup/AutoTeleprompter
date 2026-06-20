@@ -282,6 +282,11 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     } else {
       targets = _styleTargets();
     }
+    final hasStructuredTargetSelection = targets.any((c) {
+      final external = c.externalSelection;
+      return c.isGlobalSelected ||
+          (external != null && external.isValid && !external.isCollapsed);
+    });
 
     for (final c in targets) {
       if (c.text.isEmpty) continue;
@@ -302,12 +307,15 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
         continue;
       }
       c.value = nextValue;
-      if (nextValue.selection.isValid && !nextValue.selection.isCollapsed) {
-        c.externalSelection = nextValue.selection;
+      final postSelection = c.selection.isValid && !c.selection.isCollapsed
+          ? c.selection
+          : nextValue.selection;
+      if (postSelection.isValid && !postSelection.isCollapsed) {
+        c.externalSelection = postSelection;
         c.externalVisibleSelection =
             MarkupDecorationParser.rawToVisibleSelection(
           c.text,
-          nextValue.selection,
+          postSelection,
         );
       }
       c.refresh();
@@ -317,7 +325,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     if (wasGlobalSelection) {
       _isGlobalSelection = true;
       _resyncGlobalSelection();
-    } else if (hasOverlay) {
+    } else if (hasOverlay || hasStructuredTargetSelection) {
       _overlayKey.currentState?.syncOffsetsFromExternalSelection(_controllers);
     }
 
@@ -346,19 +354,24 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
         // Direction strips/replaces only RTL/LTR tags, shifting raw offsets by
         // the tag-length delta. Capture visual offsets before applying, then
         // re-pin externalSelection after.
-        final hadSel = controller.externalSelection != null &&
-            controller.externalSelection!.isValid &&
-            !controller.externalSelection!.isCollapsed;
+        final external = controller.externalSelection;
+        final selection =
+            external != null && external.isValid && !external.isCollapsed
+                ? external
+                : controller.selection;
+        final hadSel = selection.isValid && !selection.isCollapsed;
         final visStart = hadSel
             ? MarkupController.rawToVisualOffset(
-                controller.text, controller.externalSelection!.start)
+                controller.text,
+                selection.start,
+              )
             : 0;
         final visEnd = hadSel
             ? MarkupController.rawToVisualOffset(
-                controller.text, controller.externalSelection!.end)
+                controller.text,
+                selection.end,
+              )
             : 0;
-        final selection =
-            hadSel ? controller.externalSelection! : controller.selection;
         controller.value = TextEditingValue(
           text: StylingService.applyDirection(controller.text, selection, dir),
           selection: const TextSelection.collapsed(offset: 0),
@@ -410,19 +423,24 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       final targets = _styleTargets();
       for (final controller in targets) {
         // v4.1.3: Same visual-offset preservation as onDirection.
-        final hadSel = controller.externalSelection != null &&
-            controller.externalSelection!.isValid &&
-            !controller.externalSelection!.isCollapsed;
+        final external = controller.externalSelection;
+        final selection =
+            external != null && external.isValid && !external.isCollapsed
+                ? external
+                : controller.selection;
+        final hadSel = selection.isValid && !selection.isCollapsed;
         final visStart = hadSel
             ? MarkupController.rawToVisualOffset(
-                controller.text, controller.externalSelection!.start)
+                controller.text,
+                selection.start,
+              )
             : 0;
         final visEnd = hadSel
             ? MarkupController.rawToVisualOffset(
-                controller.text, controller.externalSelection!.end)
+                controller.text,
+                selection.end,
+              )
             : 0;
-        final selection =
-            hadSel ? controller.externalSelection! : controller.selection;
         controller.value = TextEditingValue(
           text: StylingService.applyLayout(controller.text, selection, align),
           selection: const TextSelection.collapsed(offset: 0),
@@ -507,10 +525,10 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     if (inSuite) {
       _trackSuiteSection('Font Size');
     }
-    await ref.read(settingsProvider.notifier).setFontSize(clamped);
-    await ref.read(scriptProvider.notifier).updateStyleMetadata(
-          fontSize: clamped,
-        );
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    final scriptNotifier = ref.read(scriptProvider.notifier);
+    await settingsNotifier.setFontSize(clamped);
+    await scriptNotifier.updateStyleMetadata(fontSize: clamped);
     if (!mounted) return;
     ref.read(cursorStyleProvider.notifier).state =
         ref.read(cursorStyleProvider).copyWith(fontSize: clamped.round());
@@ -528,10 +546,10 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     if (inSuite) {
       _trackSuiteSection('Font Family');
     }
-    await ref.read(settingsProvider.notifier).setFontFamily(clean);
-    await ref.read(scriptProvider.notifier).updateStyleMetadata(
-          fontFamily: clean,
-        );
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    final scriptNotifier = ref.read(scriptProvider.notifier);
+    await settingsNotifier.setFontFamily(clean);
+    await scriptNotifier.updateStyleMetadata(fontFamily: clean);
     if (!mounted) return;
     ref.read(cursorStyleProvider.notifier).state =
         ref.read(cursorStyleProvider).copyWith(fontFamily: clean);

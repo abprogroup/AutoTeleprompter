@@ -89,6 +89,9 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
 
   String _updateCheckDescription(String channel) {
     const current = autoTeleprompterAppVersion;
+    if (current.trim().isEmpty) {
+      return 'Checks this installed build against the selected $channel channel.';
+    }
     return 'Current build $current. Checks the selected $channel channel.';
   }
 
@@ -121,6 +124,8 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
       result.message,
       'Current: ${result.currentVersion}',
       if (result.latestVersion != null) 'Latest: ${result.latestVersion}',
+      if (result.installUnavailableMessage case final packageMessage?)
+        packageMessage,
       if (result.publishedAt != null) 'Published: ${result.publishedAt}',
       if (result.notes != null && result.notes!.isNotEmpty) result.notes!,
     ].join('\n\n');
@@ -139,8 +144,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
             child: const Text('Close'),
           ),
           if (result.status == UpdateCheckStatus.updateAvailable &&
-              result.hasDownload &&
-              (Platform.isWindows || Platform.isMacOS))
+              result.canInstallOnCurrentPlatform)
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
@@ -178,7 +182,11 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update install failed: $error')),
+        SnackBar(
+          content: Text(
+            'Update install failed: ${sanitizeSettingsErrorForUser(error)}',
+          ),
+        ),
       );
     } finally {
       _setDownloadingUpdate(false);

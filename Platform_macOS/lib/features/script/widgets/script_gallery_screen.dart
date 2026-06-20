@@ -15,6 +15,7 @@ import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/services/deleted_scripts_service.dart';
+import '../../settings/services/settings_error_sanitizer.dart';
 import '../../settings/services/update_check_service.dart';
 import '../../settings/services/update_download_service.dart';
 import '../../settings/services/update_install_service.dart';
@@ -110,11 +111,12 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               setState(() => _logoTaps++);
               if (_logoTaps >= 5) {
                 setState(() => _logoTaps = 0);
-                await ref.read(settingsProvider.notifier).toggleDebugMode();
-                final isNowDebug = ref.read(settingsProvider).debugMode;
+                final settingsNotifier = ref.read(settingsProvider.notifier);
+                await settingsNotifier.toggleDebugMode();
                 if (!context.mounted) {
                   return;
                 }
+                final isNowDebug = ref.read(settingsProvider).debugMode;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('DEBUG MODE: ${isNowDebug ? 'ON' : 'OFF'}'),
@@ -600,6 +602,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     if (!mounted || result.status != UpdateCheckStatus.updateAvailable) {
       return;
     }
+    final installUnavailableMessage = result.installUnavailableMessage;
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -611,7 +614,8 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
         content: Text(
           '${result.message}\n\n'
           'Current: ${result.currentVersion}\n'
-          'Latest: ${result.latestVersion ?? 'Unknown'}',
+          'Latest: ${result.latestVersion ?? 'Unknown'}'
+          '${installUnavailableMessage == null ? '' : '\n\n$installUnavailableMessage'}',
           style: const TextStyle(color: Colors.white70, height: 1.35),
         ),
         actions: [
@@ -619,7 +623,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Later'),
           ),
-          if (result.hasDownload && (Platform.isWindows || Platform.isMacOS))
+          if (result.canInstallOnCurrentPlatform)
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
@@ -655,7 +659,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update install failed: $error')),
+        SnackBar(
+          content: Text(
+            'Update install failed: ${sanitizeSettingsErrorForUser(error)}',
+          ),
+        ),
       );
     }
   }

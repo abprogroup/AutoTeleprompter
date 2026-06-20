@@ -18,14 +18,25 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
     }
     final keyboard = HardwareKeyboard.instance;
     if (hasEditorFocus && !hasAppSelectionForKeyboard) {
+      final focusedVerticalRoute =
+          EditorFocusedArrowRoutingPolicy.verticalBlockRoute(
+        key: key,
+        controlPressed: keyboard.isControlPressed,
+        shiftPressed: keyboard.isShiftPressed,
+        metaPressed: keyboard.isMetaPressed,
+      );
       final shouldRouteFocusedControlVertical =
-          _isControlArrowModifierState(keyboard) &&
-              (key == LogicalKeyboardKey.arrowUp ||
-                  key == LogicalKeyboardKey.arrowDown);
+          focusedVerticalRoute == EditorFocusedArrowRoute.controlVertical;
+      final shouldRouteFocusedMetaShiftVertical =
+          focusedVerticalRoute == EditorFocusedArrowRoute.commandShiftVertical;
       final shouldRouteFocusedHomeEnd =
           isHomeEndKey && !keyboard.isControlPressed && !keyboard.isMetaPressed;
-      if (shouldRouteFocusedControlVertical || shouldRouteFocusedHomeEnd) {
-        final modifier = shouldRouteFocusedHomeEnd ? 'home/end' : 'ctrl';
+      if (shouldRouteFocusedControlVertical ||
+          shouldRouteFocusedMetaShiftVertical ||
+          shouldRouteFocusedHomeEnd) {
+        final modifier = shouldRouteFocusedHomeEnd
+            ? 'home/end'
+            : (shouldRouteFocusedMetaShiftVertical ? 'cmd+shift' : 'ctrl');
         _lastArrowDecision = 'focused $modifier ${key.keyLabel}: route';
         return _handleEditorArrowKey(
                 _ScriptEditorScreenState._arrowKeyDummyNode, event) ==
@@ -335,9 +346,7 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
     final hasAppSelectionForKeyboard =
         (_overlayKey.currentState?.hasSelection ?? false) ||
             _hasVisibleAppSelectionRange();
-    if (keyboard.isShiftPressed &&
-        _isArrowKey(key) &&
-        !keyboard.isMetaPressed &&
+    if (_shouldRouteShiftSelectionArrow(key, keyboard) &&
         hasAppSelectionForKeyboard) {
       if (_shiftSelectionEventWasHandled(eventSignature)) {
         _lastArrowDecision = 'shift duplicate suppressed ${key.keyLabel}';
@@ -385,9 +394,7 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
 
     final isVerticalArrow = key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown;
-    if (keyboard.isShiftPressed &&
-        _isArrowKey(key) &&
-        !keyboard.isMetaPressed) {
+    if (_shouldRouteShiftSelectionArrow(key, keyboard)) {
       if (_shiftSelectionEventWasHandled(eventSignature)) {
         _lastArrowDecision = 'shift duplicate suppressed ${key.keyLabel}';
         return KeyEventResult.handled;
@@ -515,5 +522,33 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
           manualInBlock: _isPlainArrowModifierState(keyboard),
         ) ??
         KeyEventResult.ignored;
+  }
+}
+
+@visibleForTesting
+enum EditorFocusedArrowRoute {
+  none,
+  controlVertical,
+  commandShiftVertical,
+}
+
+@visibleForTesting
+class EditorFocusedArrowRoutingPolicy {
+  static EditorFocusedArrowRoute verticalBlockRoute({
+    required LogicalKeyboardKey key,
+    required bool controlPressed,
+    required bool shiftPressed,
+    required bool metaPressed,
+  }) {
+    final vertical = key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown;
+    if (!vertical) return EditorFocusedArrowRoute.none;
+    if (controlPressed && !metaPressed) {
+      return EditorFocusedArrowRoute.controlVertical;
+    }
+    if (metaPressed && shiftPressed && !controlPressed) {
+      return EditorFocusedArrowRoute.commandShiftVertical;
+    }
+    return EditorFocusedArrowRoute.none;
   }
 }

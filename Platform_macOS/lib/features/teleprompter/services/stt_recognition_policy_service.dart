@@ -68,9 +68,8 @@ class SttRecognitionPolicyService {
         i--) {
       final sentenceWords = _transcriptWords(sentenceParts[i]);
       if (sentenceWords.isEmpty) continue;
-      final start = sentenceWords.length > safeLong
-          ? sentenceWords.length - safeLong
-          : 0;
+      final start =
+          sentenceWords.length > safeLong ? sentenceWords.length - safeLong : 0;
       addWords(sentenceWords.sublist(start));
     }
 
@@ -219,5 +218,37 @@ class SttRecognitionPolicyService {
     }
 
     return null;
+  }
+
+  static String? appleWatchdogRestartReason({
+    required DateTime now,
+    required bool shouldBeListening,
+    required bool listening,
+    required bool startingSession,
+    required bool canRestart,
+    required DateTime? sessionStart,
+    required DateTime? lastNativeCallback,
+    Duration noNativeCallbacksAfter = const Duration(seconds: 25),
+  }) {
+    if (!shouldBeListening || !listening || startingSession || !canRestart) {
+      return null;
+    }
+
+    final nativeBaseline = lastNativeCallback ?? sessionStart;
+    final silentFor =
+        nativeBaseline == null ? Duration.zero : now.difference(nativeBaseline);
+    if (silentFor >= noNativeCallbacksAfter) {
+      return 'no speech callbacks for ${silentFor.inSeconds}s';
+    }
+    return null;
+  }
+
+  static bool shouldRestartDroppedListener({
+    required bool shouldBeListening,
+    required bool listening,
+    required bool startingSession,
+    required bool canRestart,
+  }) {
+    return shouldBeListening && !listening && !startingSession && canRestart;
   }
 }

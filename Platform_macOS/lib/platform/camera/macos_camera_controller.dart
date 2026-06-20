@@ -7,11 +7,13 @@ class MacOSCameraDevice {
   final String id;
   final String name;
   final String position;
+  final bool isBuiltIn;
 
   const MacOSCameraDevice({
     required this.id,
     required this.name,
     required this.position,
+    this.isBuiltIn = false,
   });
 
   factory MacOSCameraDevice.fromMap(Map<Object?, Object?> map) {
@@ -19,6 +21,7 @@ class MacOSCameraDevice {
       id: (map['id'] ?? '').toString(),
       name: (map['name'] ?? '').toString(),
       position: (map['position'] ?? 'unspecified').toString(),
+      isBuiltIn: map['isBuiltIn'] == true,
     );
   }
 }

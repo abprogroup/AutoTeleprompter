@@ -25,11 +25,11 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>AutoTeleprompt needs microphone access to listen to your voice and pace the script accordingly.</string>
+	<string>AutoTeleprompter needs microphone access to listen to your voice and pace the script accordingly.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>AutoTeleprompt needs speech recognition access to follow your reading and keep the teleprompter in sync.</string>
+	<string>AutoTeleprompter needs speech recognition access to follow your reading and keep the teleprompter in sync.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>AutoTeleprompt needs camera access so you can record yourself reading the script in Content Creator mode.</string>
+	<string>AutoTeleprompter needs camera access so you can record yourself reading the script in Content Creator mode.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

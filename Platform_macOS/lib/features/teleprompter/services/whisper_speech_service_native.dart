@@ -9,11 +9,15 @@ import 'speech_service.dart';
 /// Maps engine setting strings to WhisperModel
 WhisperModel whisperModelFromEngine(String engine) {
   switch (engine) {
-    case 'whisper_tiny': return WhisperModel.tiny;
-    case 'whisper_small': return WhisperModel.small;
-    case 'whisper_medium': return WhisperModel.medium;
+    case 'whisper_tiny':
+      return WhisperModel.tiny;
+    case 'whisper_small':
+      return WhisperModel.small;
+    case 'whisper_medium':
+      return WhisperModel.medium;
     case 'whisper_base':
-    default: return WhisperModel.base;
+    default:
+      return WhisperModel.base;
   }
 }
 
@@ -91,9 +95,11 @@ class WhisperSpeechService {
   static const int _bytesPerSample = 2;
 
   // Minimum audio before transcription (2.5s) — Whisper needs context for accuracy
-  static final int _minChunkBytes = (_sampleRate * _bytesPerSample * 2.5).toInt();
+  static final int _minChunkBytes =
+      (_sampleRate * _bytesPerSample * 2.5).toInt();
   // Maximum chunk size to cap inference time (4s)
-  static final int _maxChunkBytes = (_sampleRate * _bytesPerSample * 4.0).toInt();
+  static final int _maxChunkBytes =
+      (_sampleRate * _bytesPerSample * 4.0).toInt();
 
   // How often to check for new audio to transcribe
   static const _transcribeInterval = Duration(milliseconds: 500);
@@ -192,7 +198,8 @@ class WhisperSpeechService {
         // Clean up partial download
         if (modelFile.existsSync()) modelFile.deleteSync();
         if (markerFile.existsSync()) markerFile.deleteSync();
-        onError?.call('Offline model not downloaded. Go to Settings to download.');
+        onError
+            ?.call('Offline model not downloaded. Go to Settings to download.');
         return false;
       }
 
@@ -200,7 +207,9 @@ class WhisperSpeechService {
       _whisper = Whisper(model: model, modelDir: dir);
 
       final version = await _whisper!.getVersion();
-      if (kDebugMode) debugPrint('Whisper version: $version, model: ${model.modelName}');
+      if (kDebugMode) {
+        debugPrint('Whisper version: $version, model: ${model.modelName}');
+      }
 
       _isModelReady = true;
       onProgress?.call('Whisper ready');
@@ -305,19 +314,26 @@ class WhisperSpeechService {
           isNoTimestamps: true,
           isTranslate: false,
           threads: 4,
-          noFallback: true,  // Skip temperature fallback — faster
+          noFallback: true, // Skip temperature fallback — faster
         ),
       );
       sw.stop();
 
-      final audioMs = (pcmBytes.length / (_sampleRate * _bytesPerSample) * 1000).round();
-      if (kDebugMode) debugPrint('Whisper: ${sw.elapsedMilliseconds}ms for ${audioMs}ms audio | "${result.text.trim()}"');
+      final text = result.text.trim();
+      final audioMs =
+          (pcmBytes.length / (_sampleRate * _bytesPerSample) * 1000).round();
+      if (kDebugMode) {
+        debugPrint(
+          'Whisper: ${sw.elapsedMilliseconds}ms for ${audioMs}ms audio '
+          '| chars=${text.length}',
+        );
+      }
 
-      try { File(wavPath).deleteSync(); } catch (_) {}
+      try {
+        File(wavPath).deleteSync();
+      } catch (_) {}
 
       if (!_isActive) return;
-
-      final text = result.text.trim();
 
       // Filter artifacts
       if (text.isEmpty || text.length <= 1) return;
@@ -333,7 +349,6 @@ class WhisperSpeechService {
       // Send full accumulated transcript — the provider's WordAligner
       // needs the complete text to match against the script
       onResult?.call(SpeechResult(_fullTranscript, true));
-
     } catch (e) {
       if (kDebugMode) debugPrint('Whisper transcription error: $e');
       if (_isActive) {
@@ -366,8 +381,8 @@ class WhisperSpeechService {
     header.setUint8(2, 0x46); // F
     header.setUint8(3, 0x46); // F
     header.setUint32(4, fileSize, Endian.little);
-    header.setUint8(8, 0x57);  // W
-    header.setUint8(9, 0x41);  // A
+    header.setUint8(8, 0x57); // W
+    header.setUint8(9, 0x41); // A
     header.setUint8(10, 0x56); // V
     header.setUint8(11, 0x45); // E
     header.setUint8(12, 0x66); // f

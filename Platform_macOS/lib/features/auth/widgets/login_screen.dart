@@ -502,7 +502,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               style: TextStyle(color: Colors.white70),
             ),
             Text(
-              '- Windows encrypted local script storage',
+              '- Encrypted local script storage',
               style: TextStyle(color: Colors.white70),
             ),
             Text(

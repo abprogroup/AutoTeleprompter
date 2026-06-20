@@ -734,7 +734,9 @@ class CloudAppFolderSyncService {
       if (_isCloudAuthFailure(response.statusCode, body)) {
         throw StateError(_cloudAuthFailureMessage());
       }
-      throw StateError('cloud request failed (${response.statusCode}): $body');
+      throw StateError(
+        _providerFailure('cloud request failed', response.statusCode, body),
+      );
     }
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) {
@@ -759,7 +761,11 @@ class CloudAppFolderSyncService {
         throw StateError(_cloudAuthFailureMessage());
       }
       throw StateError(
-        'cloud request failed (${response.statusCode}): $responseBody',
+        _providerFailure(
+          'cloud request failed',
+          response.statusCode,
+          responseBody,
+        ),
       );
     }
     final decoded = jsonDecode(responseBody);

@@ -116,11 +116,43 @@ String _providerFailure(String prefix, int statusCode, String body) {
     return '$prefix. The cloud account authorization expired or was revoked. '
         'Reconnect this account, then try sync again.';
   }
-  final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+  final compact = sanitizeCloudProviderFailureDetailForTests(body);
   if (compact.isEmpty) return '$prefix ($statusCode).';
   final clipped =
       compact.length > 220 ? '${compact.substring(0, 220)}...' : compact;
   return '$prefix ($statusCode): $clipped';
+}
+
+String sanitizeCloudProviderFailureDetailForTests(String value) {
+  var text = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  text = text.replaceAll(
+    RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+    'Bearer <redacted>',
+  );
+  text = text.replaceAllMapped(
+    RegExp(
+      r'([?&](?:pin|token|access_token|refresh_token|client_secret|password)=)'
+      r'([^&#\s]+)',
+      caseSensitive: false,
+    ),
+    (match) => '${match[1]}<redacted>',
+  );
+  text = text.replaceAllMapped(
+    RegExp(
+      r'''(["']?(?:access_token|refresh_token|client_secret|password|apikey|api_key|authorization|pin|token)["']?\s*[:=]\s*)["']?[^"',}&\s]+''',
+      caseSensitive: false,
+    ),
+    (match) => '${match[1]}<redacted>',
+  );
+  text = text.replaceAll(
+    RegExp(r'/Users/[^,\s"}]+'),
+    '/Users/<redacted>',
+  );
+  text = text.replaceAll(
+    RegExp(r'(/private/var/|/var/folders/)[^,\s"}]+'),
+    '<local-path>',
+  );
+  return text;
 }
 
 bool _isCloudAuthFailure(int statusCode, String body) {
@@ -152,7 +184,7 @@ String _dropboxListFailure(Object error) {
     return 'Dropbox could not access its AutoTeleprompter app folder. '
         '${_dropboxAppFolderGuidance()}';
   }
-  return compact;
+  return sanitizeCloudProviderFailureDetailForTests(compact);
 }
 
 bool _isDropboxAppFolderAccessIssue(String body) {

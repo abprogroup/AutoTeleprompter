@@ -386,3 +386,63 @@ class _ContentSoundLevelBar extends StatelessWidget {
     );
   }
 }
+
+class _ContentSttStartingIndicator extends StatelessWidget {
+  final Color accentColor;
+
+  const _ContentSttStartingIndicator({required this.accentColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 340),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.86),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: accentColor.withValues(alpha: 0.45)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.32),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.8,
+                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                    ),
+                  ),
+                  Icon(Icons.hourglass_top, color: accentColor, size: 18),
+                ],
+              ),
+              const SizedBox(width: 14),
+              const Flexible(
+                child: Text(
+                  'Starting speech-to-text...',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

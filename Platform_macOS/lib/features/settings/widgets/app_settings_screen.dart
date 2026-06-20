@@ -24,6 +24,7 @@ import '../providers/settings_provider.dart';
 import '../services/update_check_service.dart';
 import '../services/update_download_service.dart';
 import '../services/update_install_service.dart';
+import '../services/settings_error_sanitizer.dart';
 import 'cloud_sync_screen.dart';
 
 part 'app_settings_screen.tiles.dart';
@@ -368,7 +369,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         _SettingsTile(
           icon: Icons.settings_remote_outlined,
           title: 'Local Remote Control',
-          subtitle: 'Available on Windows desktop',
+          subtitle: 'Available on desktop',
         ),
       ];
     }

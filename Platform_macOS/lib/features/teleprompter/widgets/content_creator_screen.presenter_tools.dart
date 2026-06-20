@@ -140,6 +140,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
+    if (!mounted) return;
     final index = ScriptBookmarkService.nearestBookmarkableWordIndex(
       script.words,
       _activeContentIndex(),
@@ -157,6 +158,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
       _bookmarks = ScriptBookmarkService.upsert(_bookmarks, bookmark);
     });
     await _saveBookmarksForScript(script);
+    if (!mounted) return;
     _showSnack('Bookmark saved: ${bookmark.label}');
   }
 
@@ -164,6 +166,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
+    if (!mounted) return;
     final index = ScriptBookmarkService.nearestBookmarkableWordIndex(
       script.words,
       _activeContentIndex(),
@@ -176,6 +179,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     }
     _updateContentCreatorState(() => _bookmarks = next);
     await _saveBookmarksForScript(script);
+    if (!mounted) return;
     _showSnack('Bookmark deleted.');
   }
 
@@ -183,6 +187,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
+    if (!mounted) return;
     if (_bookmarks.isEmpty) {
       _showSnack('No bookmarks saved for this script yet.');
       return;

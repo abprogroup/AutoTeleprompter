@@ -41,7 +41,7 @@ class LightweightDiagnostics {
     _events.add(DiagnosticEvent(
       time: DateTime.now().toUtc(),
       type: type,
-      message: _trim(message, 800),
+      message: _trim(_sanitizeText(message), 800),
       data: _trimData(data),
     ));
     _prune();
@@ -53,7 +53,7 @@ class LightweightDiagnostics {
     String? source,
     Map<String, Object?> data = const {},
   }) {
-    _lastError = error;
+    _lastError = _sanitizeText(error.toString());
     _lastStackTrace = stackTrace;
     record(
       'error',
@@ -88,9 +88,12 @@ class LightweightDiagnostics {
       'events': eventJson,
       if (_lastError != null)
         'lastError': {
-          'message': _lastError.toString(),
+          'message': _sanitizeText(_lastError.toString()),
           if (_lastStackTrace != null)
-            'stackTrace': _trim(_lastStackTrace.toString(), stackTraceLimit),
+            'stackTrace': _trim(
+              _sanitizeText(_lastStackTrace.toString()),
+              stackTraceLimit,
+            ),
         },
     };
   }
@@ -129,7 +132,10 @@ class LightweightDiagnostics {
         if (event.data.isNotEmpty)
           'data': event.data.map((key, value) {
             if (key == 'stackTrace' && value is String) {
-              return MapEntry(key, _trim(value, stackTraceLimit));
+              return MapEntry(
+                key,
+                _trim(_sanitizeText(value), stackTraceLimit),
+              );
             }
             return MapEntry(key, value);
           }),
@@ -142,8 +148,75 @@ class LightweightDiagnostics {
 
   static Map<String, Object?> _trimData(Map<String, Object?> data) {
     return data.map((key, value) {
-      if (value is String) return MapEntry(key, _trim(value, 1000));
-      return MapEntry(key, value);
+      return MapEntry(key, _sanitizeDataValue(key, value));
     });
+  }
+
+  static Object? _sanitizeDataValue(String key, Object? value) {
+    if (_isSensitiveKey(key)) return '<redacted>';
+    if (value is String) return _trim(_sanitizeText(value), 1000);
+    if (value is Map) {
+      return value.map(
+        (nestedKey, nestedValue) => MapEntry(
+          nestedKey.toString(),
+          _sanitizeDataValue(nestedKey.toString(), nestedValue),
+        ),
+      );
+    }
+    if (value is Iterable) {
+      return value
+          .map((item) => _sanitizeDataValue('', item))
+          .toList(growable: false);
+    }
+    return value;
+  }
+
+  static bool _isSensitiveKey(String key) {
+    final lower = key.toLowerCase();
+    return lower.contains('password') ||
+        lower.contains('access_token') ||
+        lower.contains('refresh_token') ||
+        lower.contains('client_secret') ||
+        lower == 'pin' ||
+        lower == 'pairing_pin' ||
+        lower == 'token' ||
+        lower == 'authorization' ||
+        lower == 'apikey' ||
+        lower == 'api_key';
+  }
+
+  static String _sanitizeText(String value) {
+    var sanitized = value;
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+      (_) => 'Bearer <redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'([?&](?:pin|token|access_token|refresh_token|client_secret|password)=)'
+        r'[^&\s]+',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'''\b(access_token|refresh_token|client_secret|password|apikey|api_key|authorization|pin|token)\s*[:=]\s*["']?[^"',}&\s]+''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}=<redacted>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(
+        r'(/Users/|/private/var/|/var/folders/)[^\s,;)\]}]+',
+        caseSensitive: false,
+      ),
+      '<local-path>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'[A-Z]:\\Users\\[^ \t\r\n,;)\]}]+', caseSensitive: false),
+      '<local-path>',
+    );
+    return sanitized;
   }
 }

@@ -31,7 +31,6 @@ extension _ScriptEditorCursorDetectionParts on _ScriptEditorScreenState {
     final off = rawOff.clamp(0, text.isEmpty ? 0 : text.length);
     final alignMatches =
         RegExp(r'\[(?:align=)?(center|left|right)\]').allMatches(text);
-    final dirMatches = RegExp(r'\[(rtl|ltr)\]').allMatches(text);
     String found = 'left';
     for (final m in alignMatches) {
       if (m.start <= off) {
@@ -41,25 +40,6 @@ extension _ScriptEditorCursorDetectionParts on _ScriptEditorScreenState {
         final nextClose = text.indexOf(closeTag, m.end);
         if (nextClose == -1 || nextClose >= off) found = val;
       }
-    }
-    if (found == 'left') {
-      for (final m in dirMatches) {
-        if (m.start <= off) {
-          final nextClose = text.indexOf('[/${m.group(1)}]', m.end);
-          if (nextClose == -1 || nextClose >= off) {
-            if (m.group(1) == 'rtl') {
-              found = 'right';
-            }
-          }
-        }
-      }
-    }
-    if (found == 'left') {
-      final index = _controllers.indexOf(controller);
-      final isRtl = index >= 0
-          ? _editorBlockResolvedRtl(index)
-          : EditorTextGeometryService.resolveTextRtl(text);
-      if (isRtl) found = 'right';
     }
     return found;
   }

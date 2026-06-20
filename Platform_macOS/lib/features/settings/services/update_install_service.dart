@@ -6,9 +6,19 @@ import 'update_check_service.dart';
 class UpdateInstallService {
   static const _updateTempFolderName = 'AutoTeleprompter Updates';
 
-  static Future<void> cleanupCompletedUpdateTemp() async {
-    final root = await _updatesDirectory();
+  static Future<void> cleanupCompletedUpdateTemp({
+    Directory? updatesRoot,
+    String? resolvedExecutable,
+  }) async {
+    final root = updatesRoot ?? await _updatesDirectory();
     if (!await root.exists()) return;
+    final rootPath = _normalizedPath(root.path);
+    final executablePath = _normalizedPath(
+      resolvedExecutable ?? Platform.resolvedExecutable,
+    );
+    if (executablePath == rootPath || executablePath.startsWith('$rootPath/')) {
+      return;
+    }
     final successFile = File(
       _joinPath(root.path, 'install_autoteleprompter_update.success'),
     );
@@ -42,6 +52,8 @@ class UpdateInstallService {
     }
 
     final currentApp = _currentMacAppBundle();
+    await _validateMacOSInstallTarget(currentApp);
+    await _verifyMacOSInstallWritable(currentApp);
     final stageRoot = await _createStageDirectory(result);
     await _extractMacOSPackage(packageFile, stageRoot);
     final updateApp = await _findMacOSUpdateApp(stageRoot);
@@ -53,6 +65,7 @@ class UpdateInstallService {
     if (await handoff.startedFile.exists()) await handoff.startedFile.delete();
     if (await handoff.logFile.exists()) await handoff.logFile.delete();
     if (await handoff.successFile.exists()) await handoff.successFile.delete();
+    if (await handoff.failedFile.exists()) await handoff.failedFile.delete();
 
     await _startMacOSInstallerHandoff(handoff);
     final installerStarted = await _waitForInstallerStart(handoff.startedFile);
@@ -121,6 +134,39 @@ class UpdateInstallService {
     throw StateError('Update package does not contain a macOS app bundle.');
   }
 
+  Future<void> _validateMacOSInstallTarget(Directory currentApp) async {
+    final updatesRoot = await _updatesDirectory();
+    final currentPath = _normalizedPath(currentApp.path);
+    final updatesPath = _normalizedPath(updatesRoot.path);
+    if (currentPath == updatesPath || currentPath.startsWith('$updatesPath/')) {
+      throw StateError(
+        'AutoTeleprompter is running from a temporary update folder. '
+        'Open the app from a release folder or Applications before installing '
+        'another update.',
+      );
+    }
+  }
+
+  Future<void> _verifyMacOSInstallWritable(Directory currentApp) async {
+    final parent = currentApp.parent;
+    final probe = File(
+      _joinPath(
+        parent.path,
+        '.autoteleprompter_update_write_test_$pid',
+      ),
+    );
+    try {
+      await probe.writeAsString('ok', flush: true);
+      if (await probe.exists()) await probe.delete();
+    } on FileSystemException catch (error) {
+      throw StateError(
+        'AutoTeleprompter cannot install updates into ${parent.path}. '
+        'Move the app to a writable release folder or Applications copy and '
+        'try again. Details: ${error.message}',
+      );
+    }
+  }
+
   Future<_MacUpdateHandoff> _writeMacOSHandoffScript({
     required Directory updateApp,
     required Directory currentApp,
@@ -137,6 +183,9 @@ class UpdateInstallService {
     final success = File(
       _joinPath(root.path, 'install_autoteleprompter_update.success'),
     );
+    final failed = File(
+      _joinPath(root.path, 'install_autoteleprompter_update.failed'),
+    );
     final backupRoot = Directory(_joinPath(root.path, 'rollback'));
     final content = '''
 #!/bin/bash
@@ -148,6 +197,7 @@ pid_to_wait=$pid
 log=${_shString(log.path)}
 started=${_shString(started.path)}
 success=${_shString(success.path)}
+failed=${_shString(failed.path)}
 backup_root=${_shString(backupRoot.path)}
 backup_app=""
 new_app="\$target_app.updating"
@@ -169,14 +219,17 @@ finish() {
   status=\$?
   if [ "\$status" -ne 0 ]; then
     log_msg "Update install failed with status \$status."
+    date -u +"%Y-%m-%dT%H:%M:%SZ" > "\$failed"
     rm -rf "\$new_app" >/dev/null 2>&1 || true
     if [ -n "\$backup_app" ] && [ -d "\$backup_app" ]; then
       log_msg "Attempting rollback from \$backup_app."
       rm -rf "\$target_app"
       /usr/bin/ditto "\$backup_app" "\$target_app" || true
+    fi
+    if [ -d "\$target_app" ]; then
+      log_msg "Relaunching existing AutoTeleprompter after failed update."
       /usr/bin/open -n "\$target_app" || true
     fi
-    /usr/bin/open -R "\$backup_root" || true
   fi
   exit "\$status"
 }
@@ -238,6 +291,7 @@ exit 0
       logFile: log,
       startedFile: started,
       successFile: success,
+      failedFile: failed,
     );
   }
 
@@ -285,6 +339,9 @@ exit 0
     return index < 0 ? normalized : normalized.substring(index + 1);
   }
 
+  static String _normalizedPath(String path) =>
+      path.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+
   static String _joinPath(String left, String right) {
     if (left.endsWith(Platform.pathSeparator)) return '$left$right';
     return '$left${Platform.pathSeparator}$right';
@@ -296,11 +353,13 @@ class _MacUpdateHandoff {
   final File logFile;
   final File startedFile;
   final File successFile;
+  final File failedFile;
 
   const _MacUpdateHandoff({
     required this.scriptFile,
     required this.logFile,
     required this.startedFile,
     required this.successFile,
+    required this.failedFile,
   });
 }

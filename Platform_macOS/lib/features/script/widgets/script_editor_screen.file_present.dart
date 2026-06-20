@@ -440,7 +440,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       },
     );
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
+    if (!mounted) return;
     await _forceRecentUpdate();
+    if (!mounted) return;
     try {
       final settings = ref.read(settingsProvider);
       ref.read(scriptProvider.notifier).loadText(
@@ -513,49 +515,45 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       },
     );
     await _forceRecentUpdate();
+    if (!mounted) return;
     try {
       final settings = ref.read(settingsProvider);
+      final settingsNotifier = ref.read(settingsProvider.notifier);
+      final scriptNotifier = ref.read(scriptProvider.notifier);
       if (audioOnly) {
-        await ref
-            .read(settingsProvider.notifier)
-            .setContentCreatorRecordingFormat(
-              AppSettings.contentCreatorRecordingFormatWav,
-            );
-        await ref
-            .read(settingsProvider.notifier)
-            .setContentCreatorRecordingAudioMode(
-              AppSettings.contentCreatorRecordingAudioCamera,
-            );
+        await settingsNotifier.setContentCreatorRecordingFormat(
+          AppSettings.contentCreatorRecordingFormatWav,
+        );
+        await settingsNotifier.setContentCreatorRecordingAudioMode(
+          AppSettings.contentCreatorRecordingAudioCamera,
+        );
       } else {
-        await ref
-            .read(settingsProvider.notifier)
-            .setContentCreatorRecordingFormat(
-              AppSettings.contentCreatorRecordingFormatMp4,
-            );
-        await ref
-            .read(settingsProvider.notifier)
-            .setContentCreatorRecordingAudioMode(
-              AppSettings.contentCreatorRecordingAudioCamera,
-            );
+        await settingsNotifier.setContentCreatorRecordingFormat(
+          AppSettings.contentCreatorRecordingFormatMp4,
+        );
+        await settingsNotifier.setContentCreatorRecordingAudioMode(
+          AppSettings.contentCreatorRecordingAudioCamera,
+        );
       }
-      ref.read(scriptProvider.notifier).loadText(
-            _getRefinedFullTextWithoutBookmarkSigns(),
-            title: _currentTitle,
-            sourceType: _sourceType,
-            sourcePath: _currentSourcePath,
-            sessionId: _currentSessionId,
-            historyIndex: _historyIndex,
-            historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
-            fontSize: settings.fontSize,
-            fontFamily: settings.fontFamily,
-            lineSpacing: settings.lineSpacing,
-            letterSpacing: settings.letterSpacing,
-            wordSpacing: settings.wordSpacing,
-            textAlign: settings.textAlign,
-            scriptBgColor: settings.scriptBgColor,
-            currentWordColor: settings.currentWordColor,
-            futureWordColor: settings.futureWordColor,
-          );
+      if (!mounted) return;
+      scriptNotifier.loadText(
+        _getRefinedFullTextWithoutBookmarkSigns(),
+        title: _currentTitle,
+        sourceType: _sourceType,
+        sourcePath: _currentSourcePath,
+        sessionId: _currentSessionId,
+        historyIndex: _historyIndex,
+        historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+        fontSize: settings.fontSize,
+        fontFamily: settings.fontFamily,
+        lineSpacing: settings.lineSpacing,
+        letterSpacing: settings.letterSpacing,
+        wordSpacing: settings.wordSpacing,
+        textAlign: settings.textAlign,
+        scriptBgColor: settings.scriptBgColor,
+        currentWordColor: settings.currentWordColor,
+        futureWordColor: settings.futureWordColor,
+      );
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,

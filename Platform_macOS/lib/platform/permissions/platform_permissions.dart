@@ -17,12 +17,14 @@ import 'package:speech_to_text/speech_to_text.dart';
 class PlatformPermissions {
   const PlatformPermissions._();
 
-  /// Whether this platform requires an explicit speech recognition permission
-  /// dialog at session start (in addition to the startup request).
-  /// True on iOS and macOS (Apple requires SFSpeechRecognizer authorization).
-  /// False on Android (STT permission is bundled with microphone) and Windows.
-  static bool get requiresSpeechPermissionCheck =>
-      Platform.isIOS || Platform.isMacOS;
+  /// Whether this platform should use the shared permission_handler speech
+  /// request path at session start.
+  ///
+  /// macOS also requires speech authorization, but this build requests it
+  /// through the native macOS bridge at the point of use. Keeping this false on
+  /// macOS prevents accidental calls into the unregistered permission_handler
+  /// speech backend.
+  static bool get requiresSpeechPermissionCheck => Platform.isIOS;
 
   /// Request all permissions required by the app on the current platform.
   /// Call this once in main() before runApp().

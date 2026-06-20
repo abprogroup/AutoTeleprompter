@@ -144,9 +144,14 @@ extension _ScriptEditorKeyboardSelectionParts on _ScriptEditorScreenState {
     LogicalKeyboardKey key,
     HardwareKeyboard keyboard,
   ) {
-    if (!keyboard.isControlPressed) return 'shift';
     final vertical = key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown;
+    if (vertical && _usesBlockVerticalShiftSelectionModifier(keyboard)) {
+      return keyboard.isMetaPressed && !keyboard.isControlPressed
+          ? 'cmdShiftVerticalExtend'
+          : 'ctrlShiftVerticalExtend';
+    }
+    if (!keyboard.isControlPressed) return 'shift';
     return vertical ? 'ctrlShiftVerticalExtend' : 'ctrlShiftWordExtend';
   }
 
@@ -156,6 +161,9 @@ extension _ScriptEditorKeyboardSelectionParts on _ScriptEditorScreenState {
   ) {
     final vertical = key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown;
+    if (vertical && _usesBlockVerticalShiftSelectionModifier(keyboard)) {
+      return 'ctrlVertical';
+    }
     if (keyboard.isControlPressed) {
       return vertical ? 'ctrlVertical' : 'ctrlWord';
     }
@@ -168,15 +176,16 @@ extension _ScriptEditorKeyboardSelectionParts on _ScriptEditorScreenState {
     required SelectionEndpoint anchor,
     required SelectionEndpoint focus,
   }) {
+    final vertical = key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown;
+    if (vertical && _usesBlockVerticalShiftSelectionModifier(keyboard)) {
+      return _ctrlShiftVerticalTarget(
+        anchor: anchor,
+        focus: focus,
+        moveUp: key == LogicalKeyboardKey.arrowUp,
+      );
+    }
     if (keyboard.isControlPressed) {
-      if (key == LogicalKeyboardKey.arrowUp ||
-          key == LogicalKeyboardKey.arrowDown) {
-        return _ctrlShiftVerticalTarget(
-          anchor: anchor,
-          focus: focus,
-          moveUp: key == LogicalKeyboardKey.arrowUp,
-        );
-      }
       return _arrowTargetFromPosition(
         key: key,
         block: focus.block,
@@ -201,6 +210,20 @@ extension _ScriptEditorKeyboardSelectionParts on _ScriptEditorScreenState {
       allowInBlockHorizontalStep: !keyboard.isControlPressed,
       allowInBlockVerticalStep: true,
     );
+  }
+
+  bool _usesBlockVerticalShiftSelectionModifier(HardwareKeyboard keyboard) =>
+      keyboard.isControlPressed || keyboard.isMetaPressed;
+
+  bool _shouldRouteShiftSelectionArrow(
+    LogicalKeyboardKey key,
+    HardwareKeyboard keyboard,
+  ) {
+    final vertical = key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown;
+    return keyboard.isShiftPressed &&
+        _isArrowKey(key) &&
+        (!keyboard.isMetaPressed || vertical);
   }
 
   bool _isShiftVerticalArrow(

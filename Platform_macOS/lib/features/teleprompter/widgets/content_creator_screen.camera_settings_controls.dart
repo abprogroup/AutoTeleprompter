@@ -528,7 +528,7 @@ extension _ContentCreatorCameraSettingsControls on _ContentCreatorScreenState {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Wi-Fi / IP cameras work when Windows exposes them as camera '
+              'Wi-Fi / IP cameras work when macOS exposes them as camera '
               'devices. Phone, NDI, OBS, Lightform, and bridge cameras use '
               'the same camera device.',
               style:

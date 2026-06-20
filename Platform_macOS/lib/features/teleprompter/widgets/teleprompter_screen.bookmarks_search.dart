@@ -141,6 +141,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
+    if (!mounted) return;
     final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
     final index = ScriptBookmarkService.nearestBookmarkableWordIndex(
       script.words,

@@ -60,6 +60,15 @@ abstract class AbstractSttService {
   /// Starts speech recognition.
   Future<SpeechStartResult> start({String? localeId});
 
+  /// Fully renews the active speech listener.
+  ///
+  /// Most adapters can safely stop and start. Apple-native recognition may
+  /// override this to rebuild wrapper state after SFSpeechRecognizer stalls.
+  Future<SpeechStartResult> restart({String? localeId}) async {
+    await stop();
+    return start(localeId: localeId);
+  }
+
   /// Stops speech recognition.
   Future<void> stop();
 

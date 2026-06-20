@@ -62,6 +62,11 @@ extension _CloudSyncScreenFolderMoves on _CloudSyncScreenState {
     final targetPath = CloudConnectionStore.normalizePath(newPath);
     if (sourcePath.isEmpty || targetPath.isEmpty) return;
     if (_samePath(sourcePath, targetPath)) return;
+    if (CloudConnectionStore.isPathInside(sourcePath, targetPath)) {
+      _showSnack(
+          'Choose a folder outside the current folder before moving files.');
+      return;
+    }
     final source = Directory(sourcePath);
     if (!await source.exists() || !await _hasDirectoryEntries(source)) return;
     final confirmed = await _confirmMoveFolderContents(
@@ -142,6 +147,12 @@ extension _CloudSyncScreenFolderMoves on _CloudSyncScreenState {
   }
 
   Future<void> _moveDirectory(Directory source, Directory target) async {
+    if (CloudConnectionStore.isPathInside(source.path, target.path)) {
+      throw FileSystemException(
+        'Cannot move a folder into itself.',
+        target.path,
+      );
+    }
     await target.parent.create(recursive: true);
     if (!await target.exists()) {
       try {

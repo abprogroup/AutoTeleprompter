@@ -137,61 +137,59 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          if (Platform.isWindows) ...[
-            const _WindowsSpeechSettingsSection(),
-            const SizedBox(height: 12),
-            Opacity(
-              opacity: settings.scrollMode == 'manual' ? 0.45 : 1.0,
-              child: AbsorbPointer(
-                absorbing: settings.scrollMode == 'manual',
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.pan_tool_alt_outlined,
-                          color: Color(settings.currentWordColor), size: 22),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Allow manual scrolling while listening',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
+          const _SpeechProfileSettingsSection(),
+          const SizedBox(height: 12),
+          Opacity(
+            opacity: settings.scrollMode == 'manual' ? 0.45 : 1.0,
+            child: AbsorbPointer(
+              absorbing: settings.scrollMode == 'manual',
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.pan_tool_alt_outlined,
+                        color: Color(settings.currentWordColor), size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Allow manual scrolling while listening',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
                             ),
-                            const SizedBox(height: 3),
-                            Text(
-                              settings.scrollMode == 'manual'
-                                  ? 'Manual Speed mode is not listening, so this option is not used.'
-                                  : 'A technician can wheel or drag the script during speech recognition; release scrolling to resume from the reading line.',
-                              style: const TextStyle(
-                                  color: Colors.white54, fontSize: 12),
-                            ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            settings.scrollMode == 'manual'
+                                ? 'Manual Speed mode is not listening, so this option is not used.'
+                                : 'A technician can wheel or drag the script during speech recognition; release scrolling to resume from the reading line.',
+                            style: const TextStyle(
+                                color: Colors.white54, fontSize: 12),
+                          ),
+                        ],
                       ),
-                      Switch.adaptive(
-                        value: settings.allowScrollDuringActiveSession &&
-                            settings.scrollMode != 'manual',
-                        thumbColor: WidgetStatePropertyAll<Color>(
-                            Color(settings.currentWordColor)),
-                        onChanged: notifier.setAllowScrollDuringActiveSession,
-                      ),
-                    ],
-                  ),
+                    ),
+                    Switch.adaptive(
+                      value: settings.allowScrollDuringActiveSession &&
+                          settings.scrollMode != 'manual',
+                      thumbColor: WidgetStatePropertyAll<Color>(
+                          Color(settings.currentWordColor)),
+                      onChanged: notifier.setAllowScrollDuringActiveSession,
+                    ),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-          ],
+          ),
+          const SizedBox(height: 16),
 
           if (settings.scrollMode == 'manual') ...[
             Row(children: [

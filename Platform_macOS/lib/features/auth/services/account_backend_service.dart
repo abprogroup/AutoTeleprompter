@@ -162,10 +162,7 @@ class AccountBackendService {
     _requireConfigured();
     await _putJson(
       _config.authUri('user'),
-      {
-        'password': password,
-        'data': {'saved_password': password}
-      },
+      {'password': password},
       bearerToken: accessToken,
     );
   }
@@ -314,7 +311,11 @@ class AccountBackendService {
       } catch (_) {
         if (text.trim().isNotEmpty) message = text.trim();
       }
-      throw AccountBackendError(code, message, statusCode: response.statusCode);
+      throw AccountBackendError(
+        code,
+        _safeBackendErrorText(message),
+        statusCode: response.statusCode,
+      );
     }
   }
 
@@ -386,6 +387,42 @@ class AccountBackendService {
     return <String, dynamic>{'msg': text.trim()};
   }
 
+  String _safeBackendErrorText(String value) {
+    var sanitized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+      (_) => 'Bearer <redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'([?&](?:pin|token|access_token|refresh_token|client_secret|password)=)'
+        r'[^&\s]+',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'''\b(access_token|refresh_token|client_secret|password|apikey|api_key|authorization|pin|token)\s*[:=]\s*["']?[^"',}&\s]+''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}=<redacted>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(
+        r'(/Users/|/private/var/|/var/folders/)[^\s,;)\]}]+',
+        caseSensitive: false,
+      ),
+      '<local-path>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'[A-Z]:\\Users\\[^ \t\r\n,;)\]}]+', caseSensitive: false),
+      '<local-path>',
+    );
+    if (sanitized.length <= 500) return sanitized;
+    return '${sanitized.substring(0, 497)}...';
+  }
+
   Never _throwBackendError(
     int statusCode,
     Map<String, dynamic> decoded,
@@ -404,7 +441,7 @@ class AccountBackendService {
         .toString();
     throw AccountBackendError(
       code,
-      'HTTP $statusCode: $code - $message',
+      'HTTP $statusCode: $code - ${_safeBackendErrorText(message)}',
       statusCode: statusCode,
     );
   }

@@ -98,12 +98,26 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     final now = DateTime.now();
 
     for (final token in tokens) {
-      final nextIndex = WordAligner.nextSpeakableIndex(
+      var nextIndex = WordAligner.nextSpeakableIndex(
         script.words,
         probeIndex + 1,
       );
       if (nextIndex >= script.words.length) break;
-      final nextWord = script.words[nextIndex];
+      var nextWord = script.words[nextIndex];
+      while (nextWord.isOptionalCue &&
+          !WordAligner.spokenWordMatchesNext(
+            token,
+            nextWord,
+            strictBulletMode: strictBulletMode,
+          )) {
+        nextIndex = WordAligner.nextSpeakableIndex(
+          script.words,
+          nextIndex + 1,
+        );
+        if (nextIndex >= script.words.length) break;
+        nextWord = script.words[nextIndex];
+      }
+      if (nextIndex >= script.words.length) break;
       if (WordAligner.spokenWordMatchesNext(
         token,
         nextWord,
@@ -189,7 +203,19 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _sequentialSttLastTokenAt = null;
   }
 
+  void _resetSpeechActivityMeter() {
+    _speechActivityMeterToken++;
+    _speechActivityMeterTimer?.cancel();
+    _speechActivityMeterTimer = null;
+    if (!_disposed) _writeState((s) => s.copyWith(soundLevel: 0.0));
+  }
+
   void _startFluidAdvance(int target, Script script) {
+    if (_fluidAdvanceTimer?.isActive == true) {
+      if (target > _fluidTarget) _fluidTarget = target;
+      return;
+    }
+
     _fluidAdvanceTimer?.cancel();
     _fluidTarget = target;
 
@@ -218,6 +244,23 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
 
       _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
     });
+  }
+
+  void _applySttAdvanceTarget(int target, Script script) {
+    final current = _currentState.confirmedWordIndex;
+    if (target <= current) return;
+
+    final nextSpeakable = WordAligner.nextSpeakableIndex(
+      script.words,
+      current + 1,
+    );
+    if (target <= nextSpeakable || nextSpeakable >= script.words.length) {
+      _fluidAdvanceTimer?.cancel();
+      _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
+      return;
+    }
+
+    _startFluidAdvance(target, script);
   }
 
   String? _visibleWindowStartLocale(Script script, int? start, int? end) {
@@ -422,7 +465,12 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
 
   Future<void> startSession(Script script) async {
     final pendingStop = _stopInFlight;
-    if (pendingStop != null) await pendingStop;
+    if (pendingStop != null) {
+      await _awaitStopInFlight(
+        pendingStop,
+        source: 'teleprompter.startSession.pendingStop',
+      );
+    }
     if (_disposed) return;
 
     final token = ++_sessionToken;
@@ -436,6 +484,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _resetSequentialSttStreak();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
+    _lastSttResultAt = _sessionStartTime;
     _lastSttWatchdogRestartAt = null;
     _silentWarningFired = false;
     _lastVolLog = null;
@@ -497,87 +546,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
           'STT START LOCALE: $localeId | sections=${_sectionLocales.toSet().length}');
     }
 
-    // Keep a quiet session heartbeat in release too. Apple speech recognition
-    // can naturally drop a listening task after a while; the watchdog restarts
-    // it when the provider still expects speech-driven scrolling.
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (_disposed || _sessionStopped || token != _sessionToken) return;
-      final engineName =
-          _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
-      final listening =
-          _useWhisper ? _whisperService.isListening : _sttService.isListening;
-      final pos = _currentState.confirmedWordIndex;
-      final total = script.words.where((w) => !w.isNewline).length;
-      if (settings.debugMode) {
-        _addDebugLog(
-            'HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
-      }
-
-      final shouldBeListening = !_useWhisper &&
-          (_currentState.isListening || _currentState.isStarting);
-      final canRestart = _lastSttWatchdogRestartAt == null ||
-          DateTime.now().difference(_lastSttWatchdogRestartAt!) >
-              const Duration(seconds: 8);
-      if (shouldBeListening && !listening && !_startingSession && canRestart) {
-        _lastSttWatchdogRestartAt = DateTime.now();
-        _addDebugLog('[$engineName] WATCHDOG: listener dropped; restarting.');
-        unawaited(() async {
-          try {
-            final result = await _sttService.start(localeId: _activeLocale);
-            if (_disposed || _sessionStopped || token != _sessionToken) return;
-            if (result.success && _sttService.requiresImmediateListeningFlag) {
-              _startingSession = true;
-              _safeSetState(
-                  (s) => s.copyWith(isListening: true, isStarting: false));
-              Future.delayed(const Duration(milliseconds: 1500), () {
-                if (token == _sessionToken) _startingSession = false;
-              });
-            } else if (!result.success) {
-              _safeSetState((s) => s.copyWith(
-                    statusMessage:
-                        result.message ?? 'Speech recognition stopped',
-                    hasError: true,
-                    isListening: false,
-                    isStarting: false,
-                  ));
-            }
-          } catch (error) {
-            _addDebugLog('[$engineName] WATCHDOG RESTART FAILED: $error');
-          }
-        }());
-      }
-
-      // Silent-listening detector: STT says listening but no audio level or results received.
-      if (settings.debugMode &&
-          !_useWhisper &&
-          _sttService.platformName != 'Apple' &&
-          listening &&
-          !_silentWarningFired &&
-          _lastVolLog == null &&
-          _sessionStartTime != null) {
-        final elapsed = DateTime.now().difference(_sessionStartTime!);
-        if (elapsed.inSeconds >= 10) {
-          _silentWarningFired = true;
-          _addDebugLog(
-              'SILENT LISTENING: engine is active but receiving NO audio for ${elapsed.inSeconds}s.');
-          _addDebugLog(
-              'FIX: Check macOS Privacy & Security -> Microphone and Speech Recognition permissions for AutoTeleprompter.');
-          _safeSetState((s) => s.copyWith(
-                statusMessage:
-                    'Microphone signal weak or blocked.\n1. Check macOS Privacy & Security -> Microphone.\n2. Check Speech Recognition permission for AutoTeleprompter.',
-                hasError: true,
-              ));
-        }
-      }
-
-      // Dynamic language switching for mixed Hebrew/English scripts.
-      if (!_useWhisper && listening && _currentScript != null) {
-        _syncLocaleForPosition(
-            _currentScript!, _currentState.confirmedWordIndex + 1,
-            reason: 'heartbeat');
-      }
-    });
+    _startSessionWatchdog(script: script, settings: settings, token: token);
 
     if (_useWhisper) {
       final model = whisperModelFromEngine(sttEngine);
@@ -668,7 +637,10 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
 
   Future<void> stopSession() async {
     if (_stopInFlight != null) {
-      await _stopInFlight;
+      await _awaitStopInFlight(
+        _stopInFlight!,
+        source: 'teleprompter.stopSession.pendingStop',
+      );
       return;
     }
     _sessionToken++;
@@ -676,11 +648,13 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _startingSession = false;
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
+    _resetSpeechActivityMeter();
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
     _resetSequentialSttStreak();
     _lastVolLog = null;
+    _lastSttResultAt = null;
     _scriptLanguageLocale = null;
     _activeLocale = null;
     _sectionLocales = [];
@@ -700,14 +674,28 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
 
     // Stop all engines - Whisper may have been auto-started via fallback.
     final stopFuture = Future.wait([
-      _sttService.stop(),
-      _whisperService.stop(),
-    ]);
-    _stopInFlight = stopFuture.then((_) {});
+      _sttService.stop().timeout(const Duration(seconds: 3)),
+      _whisperService.stop().timeout(const Duration(seconds: 3)),
+    ]).timeout(const Duration(seconds: 4)).then((_) {});
+    _stopInFlight = stopFuture;
     try {
-      await _stopInFlight;
+      await _awaitStopInFlight(
+        stopFuture,
+        source: 'teleprompter.stopSession',
+      );
     } finally {
       _stopInFlight = null;
+    }
+  }
+
+  Future<void> _awaitStopInFlight(
+    Future<void> stopFuture, {
+    required String source,
+  }) async {
+    try {
+      await stopFuture;
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(error, stack, source: source);
     }
   }
 

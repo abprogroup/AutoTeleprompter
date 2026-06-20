@@ -22,7 +22,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         case 'TOGGLE':
           final tState = ref.read(teleprompterProvider);
           if (tState.isListening || tState.isStarting) {
-            ref.read(teleprompterProvider.notifier).stopSession();
+            _stopSpeechSessionFromUi('presenter.remoteToggleStop');
           } else if (settings.scrollMode == 'manual') {
             _manualScrolling ? _stopManualScroll() : _startManualScroll();
           } else {
@@ -74,6 +74,16 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     });
   }
 
+  void _stopSpeechSessionFromUi(String source) {
+    _hideSttStartAffordance();
+    unawaited(_teleprompterNotifier.stopSession().catchError((
+      Object error,
+      StackTrace stack,
+    ) {
+      LightweightDiagnostics.instance.recordError(error, stack, source: source);
+    }));
+  }
+
   Future<void> _togglePresenterColorInversion() async {
     final settings = ref.read(settingsProvider);
     final nextBackground =
@@ -84,13 +94,14 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     );
 
     final settingsNotifier = ref.read(settingsProvider.notifier);
+    final scriptNotifier = ref.read(scriptProvider.notifier);
     await settingsNotifier.setScriptBgColor(nextBackground);
     await settingsNotifier.setFutureWordColor(nextFutureText);
     await settingsNotifier.setShowUpcomingWordColor(true);
-    await ref.read(scriptProvider.notifier).updateStyleMetadata(
-          scriptBgColor: nextBackground,
-          futureWordColor: nextFutureText,
-        );
+    await scriptNotifier.updateStyleMetadata(
+      scriptBgColor: nextBackground,
+      futureWordColor: nextFutureText,
+    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -136,10 +147,25 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     // `if (mounted) pop` was skipped). Cleanup now runs afterwards, best-effort.
     navigator.pop(returnWordIndex);
     _stopManualScroll();
-    unawaited(teleprompterNotifier.stopSession().catchError((_) {}));
+    unawaited(teleprompterNotifier.stopSession().catchError((
+      Object error,
+      StackTrace stack,
+    ) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'presenter.exitStopSession',
+      );
+    }));
     try {
       await _setPresenterFullscreen(false);
-    } catch (_) {}
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'presenter.exitFullscreenCleanup',
+      );
+    }
   }
 
   Future<void> _editCurrentPresenterPosition() async {
@@ -175,27 +201,75 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   void _scheduleHideControls() {
-    if (Platform.isWindows) {
-      _hideControlsTimer?.cancel();
-      final tState = ref.read(teleprompterProvider);
-      final speechActive = tState.isListening || tState.isStarting;
-      final activeAutoHide = speechActive || _manualScrolling;
-      if (!activeAutoHide) {
-        if (mounted && !_controlsVisible) {
-          _setTeleprompterState(() => _controlsVisible = true);
-        }
-        return;
+    _hideControlsTimer?.cancel();
+    final activeAutoHide = _presenterControlsAutoHideActive();
+    if (!activeAutoHide) {
+      if (mounted && !_controlsVisible) {
+        _setTeleprompterState(() => _controlsVisible = true);
       }
-      _hideControlsTimer = Timer(const Duration(milliseconds: 1400), () {
-        if (!mounted || _windowsControlsHovering) return;
-        _setTeleprompterState(() => _controlsVisible = false);
-      });
       return;
     }
-    _hideControlsTimer?.cancel();
-    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) _setTeleprompterState(() => _controlsVisible = false);
+    _hideControlsTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (!mounted) return;
+      if (_shouldKeepPresenterControlsVisible()) {
+        if (!_controlsVisible) {
+          _setTeleprompterState(() => _controlsVisible = true);
+        }
+        _scheduleHideControls();
+        return;
+      }
+      _setTeleprompterState(() => _controlsVisible = false);
     });
+  }
+
+  bool _presenterControlsAutoHideActive() {
+    final tState = ref.read(teleprompterProvider);
+    return PresenterInputLockService.controlsAutoHideActive(
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+    );
+  }
+
+  void _rememberPresenterPointer(PointerEvent event) {
+    _lastPresenterPointerGlobalPosition = event.position;
+  }
+
+  bool _shouldKeepPresenterControlsVisible() {
+    return PresenterInputLockService.shouldDeferControlsAutoHide(
+      hoveringControls: _windowsControlsHovering,
+      pointerInHotZone: _presenterPointerInControlsHotZone(),
+    );
+  }
+
+  bool _presenterPointerInControlsHotZone() {
+    final pointer = _lastPresenterPointerGlobalPosition;
+    if (pointer == null) return false;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return false;
+    final local = renderObject.globalToLocal(pointer);
+    return PresenterInputLockService.bottomControlsHotZoneContains(
+      localX: local.dx,
+      localY: local.dy,
+      surfaceWidth: renderObject.size.width,
+      surfaceHeight: renderObject.size.height,
+      hotZoneHeight: _presenterControlsHotZoneHeight,
+    );
+  }
+
+  void _showSttStartAffordance() {
+    _sttStartAffordanceTimer?.cancel();
+    _setTeleprompterState(() => _sttStartAffordanceVisible = true);
+    _sttStartAffordanceTimer = Timer(_sttStartAffordanceDuration, () {
+      if (!mounted) return;
+      _setTeleprompterState(() => _sttStartAffordanceVisible = false);
+    });
+  }
+
+  void _hideSttStartAffordance() {
+    _sttStartAffordanceTimer?.cancel();
+    if (_sttStartAffordanceVisible) {
+      _setTeleprompterState(() => _sttStartAffordanceVisible = false);
+    }
   }
 
   /// Show a dialog when speech recognition needs macOS language support.
@@ -317,17 +391,14 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   void _showControls() {
-    if (Platform.isWindows) {
-      final tState = ref.read(teleprompterProvider);
-      final speechActive = tState.isListening || tState.isStarting;
-      final activeAutoHide = speechActive || _manualScrolling;
-      if (activeAutoHide && !_windowsControlsHovering) return;
-      _setTeleprompterState(() => _controlsVisible = true);
-      if (activeAutoHide) _scheduleHideControls();
+    if (!mounted) return;
+    final activeAutoHide = _presenterControlsAutoHideActive();
+    _setTeleprompterState(() => _controlsVisible = true);
+    if (activeAutoHide) {
+      _scheduleHideControls();
       return;
     }
-    _setTeleprompterState(() => _controlsVisible = true);
-    _scheduleHideControls();
+    _hideControlsTimer?.cancel();
   }
 
   void _showWindowsControlsFromHotZone() {
@@ -344,6 +415,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   Future<void> _requestAndStart() async {
     if (Platform.isMacOS) {
       final micStatus = await MacOSPermissions.requestMicrophone();
+      if (!mounted) return;
       if (!micStatus.isGranted) {
         if (mounted) {
           showDialog(
@@ -375,6 +447,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       }
 
       final speechStatus = await MacOSPermissions.requestSpeech();
+      if (!mounted) return;
       if (!speechStatus.isGranted) {
         if (mounted) {
           showDialog(
@@ -405,6 +478,8 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         return;
       }
 
+      if (!mounted) return;
+      _showSttStartAffordance();
       await _startCurrentScriptSession();
       return;
     }
@@ -507,6 +582,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
     final script = ref.read(scriptProvider);
     if (script != null) {
+      _showSttStartAffordance();
       await _startCurrentScriptSession();
     }
   }
@@ -515,6 +591,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     final script = ref.read(scriptProvider);
     if (script == null) return;
     await _teleprompterNotifier.startSession(script);
+    if (!mounted) return;
     final currentIndex = ref
         .read(teleprompterProvider)
         .confirmedWordIndex

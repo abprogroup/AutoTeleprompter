@@ -202,13 +202,14 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
     );
 
     final settingsNotifier = ref.read(settingsProvider.notifier);
+    final scriptNotifier = ref.read(scriptProvider.notifier);
     await settingsNotifier.setScriptBgColor(nextBackground);
     await settingsNotifier.setFutureWordColor(nextFutureText);
     await settingsNotifier.setShowUpcomingWordColor(true);
-    await ref.read(scriptProvider.notifier).updateStyleMetadata(
-          scriptBgColor: nextBackground,
-          futureWordColor: nextFutureText,
-        );
+    await scriptNotifier.updateStyleMetadata(
+      scriptBgColor: nextBackground,
+      futureWordColor: nextFutureText,
+    );
     if (!mounted) return;
     _showSnack(
       Color(nextBackground).computeLuminance() > 0.5

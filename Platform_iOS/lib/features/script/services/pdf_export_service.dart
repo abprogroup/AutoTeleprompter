@@ -19,8 +19,6 @@ class PdfExportService {
       systemCandidates: const [
         '/System/Library/Fonts/Supplemental/Arial.ttf',
         '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
-        r'C:\Windows\Fonts\arial.ttf',
-        r'C:\Windows\Fonts\segoeui.ttf',
       ],
       assetFallback: 'assets/fonts/google_fonts/Inter-Regular.ttf',
       assign: (font) => _regularFont = font,
@@ -29,8 +27,6 @@ class PdfExportService {
       cached: _boldFont,
       systemCandidates: const [
         '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
-        r'C:\Windows\Fonts\arialbd.ttf',
-        r'C:\Windows\Fonts\seguisb.ttf',
       ],
       assetFallback: 'assets/fonts/google_fonts/Inter-Bold.ttf',
       assign: (font) => _boldFont = font,
@@ -39,8 +35,6 @@ class PdfExportService {
       cached: _italicFont,
       systemCandidates: const [
         '/System/Library/Fonts/Supplemental/Arial Italic.ttf',
-        r'C:\Windows\Fonts\ariali.ttf',
-        r'C:\Windows\Fonts\segoeuii.ttf',
       ],
       assetFallback: 'assets/fonts/google_fonts/Inter-Italic.ttf',
       assign: (font) => _italicFont = font,

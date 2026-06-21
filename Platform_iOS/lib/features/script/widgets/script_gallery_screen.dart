@@ -15,6 +15,7 @@ import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
 import '../../../core/services/styling_service.dart';
+import '../../../platform/file_import/platform_file_import.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {
   const ScriptGalleryScreen({super.key});
@@ -126,7 +127,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             const SizedBox(height: 12),
             _GalleryActionCard(
               title: 'Load Script',
-              subtitle: 'Import from DOCX, TXT, or PDF',
+              subtitle: 'Import ${PlatformFileImport.formatsLabel}',
               icon: Icons.file_open_outlined,
               color: Colors.white,
               onTap: () {

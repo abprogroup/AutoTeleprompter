@@ -274,7 +274,8 @@ class _PolicyBox extends StatelessWidget {
                     color: Color(0xFFFFBF00),
                     size: 18,
                   ),
-                  onPressed: () => Clipboard.setData(ClipboardData(text: value)),
+                  onPressed: () =>
+                      Clipboard.setData(ClipboardData(text: value)),
                 ),
             ],
           );

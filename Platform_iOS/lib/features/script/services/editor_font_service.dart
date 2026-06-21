@@ -5,6 +5,7 @@ class EditorFontService {
 
   static const families = <String>[
     'Inter',
+    'Bebas Neue',
     'Roboto',
     'Outfit',
     'Montserrat',

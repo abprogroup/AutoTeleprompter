@@ -78,6 +78,38 @@ void main() {
       expect(result.decision, SttAlignmentDecision.wait);
     });
 
+    test('normal mode does not advance into an unspoken following word', () {
+      final script = _words([
+        'Today',
+        'we',
+        'are',
+        'thrilled',
+        'to',
+        'announce',
+        'a',
+        'completely',
+        'new',
+        'way',
+        'to',
+        'deliver',
+        'your',
+        'message',
+        'to',
+        'the',
+        'world',
+      ]);
+
+      final result = WordAligner.align(
+        script: script,
+        transcript: 'a completely new way to deliver your message',
+        lastConfirmedIndex: 10,
+      );
+
+      expect(result.confirmedWordIndex, 13);
+      expect(script[result.confirmedWordIndex].raw, 'message');
+      expect(result.decision, SttAlignmentDecision.advance);
+    });
+
     test('bullet mode requires two big words or three small words', () {
       final script = _words(['intro', 'alpha', 'bravo', 'one', 'two', 'red']);
 

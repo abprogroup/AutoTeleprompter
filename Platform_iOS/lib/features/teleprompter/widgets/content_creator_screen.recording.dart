@@ -74,6 +74,7 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
 
   Future<void> _stopRecording() async {
     final wasAudioOnly = _isAudioOnlyRecording;
+    var savedToPhotos = wasAudioOnly;
     try {
       final String? savedPath;
       if (wasAudioOnly) {
@@ -83,8 +84,10 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
         savedPath = file.path;
         try {
           await Gal.putVideo(file.path);
+          savedToPhotos = true;
         } catch (e) {
           debugPrint('Save error: $e');
+          savedToPhotos = false;
         }
       }
       _recordTimer?.cancel();
@@ -98,8 +101,12 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
       _showSnack(
         wasAudioOnly
             ? 'Audio recording saved: $savedPath'
-            : 'Video saved to Photos.',
-        backgroundColor: Colors.green,
+            : savedToPhotos
+                ? 'Video saved to Photos.'
+                : 'Video recorded, but Photos save failed.',
+        backgroundColor: wasAudioOnly || savedToPhotos
+            ? Colors.green
+            : Colors.orangeAccent,
       );
     } catch (e) {
       debugPrint('Recording stop error: $e');

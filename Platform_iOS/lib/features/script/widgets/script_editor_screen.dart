@@ -1,19 +1,15 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/widgets/global_color_picker.dart';
 import '../models/cursor_style.dart';
 import '../models/editor_state.dart';
 import './editor/editor_dialogs.dart';
-import './editor/lobby_settings_panel.dart';
 import './editor/suites/project_actions_mvp.dart';
 import './editor/suites/formatting_toolbar_mvp.dart';
 import './editor/components/editor_primitives.dart';
@@ -24,16 +20,22 @@ import './editor/components/ghost_selection_controls.dart';
 import '../providers/script_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/widgets/login_screen.dart';
+import '../../teleprompter/widgets/content_creator_screen.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
-import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../models/script_word.dart';
 import '../services/styling_service.dart';
 import '../services/script_bookmark_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/docx_service.dart';
 import '../services/rtf_service.dart';
+import '../services/odt_service.dart';
 import '../services/pages_service.dart';
+import '../services/pdf_export_service.dart';
+import '../services/markup_export_service.dart';
 import '../services/markup_decoration_service.dart';
+import '../services/editor_font_service.dart';
 import '../services/editor_text_geometry_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../../../platform/file_import/platform_file_import.dart';
@@ -190,7 +192,10 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
 
-  void _setEditorState(VoidCallback fn) => setState(fn);
+  void _setEditorState(VoidCallback fn) {
+    if (!mounted) return;
+    setState(fn);
+  }
 
   List<String> get _editorRawBlocks =>
       _controllers.map((controller) => controller.text).toList(growable: false);
@@ -232,8 +237,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   }
 
   MarkupController? get _activeController {
-    for (var i = 0; i < _focusNodes.length; i++)
+    for (var i = 0; i < _focusNodes.length; i++) {
       if (_focusNodes[i].hasFocus) return _controllers[i];
+    }
     return _lastFocusedController ??
         (_controllers.isNotEmpty ? _controllers.last : null);
   }

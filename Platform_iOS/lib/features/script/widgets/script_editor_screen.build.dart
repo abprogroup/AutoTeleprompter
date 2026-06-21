@@ -90,7 +90,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                       onUnderline: _onUnderline,
                       onItalic: _onItalic,
                       onClear: () {
-                        setState(() => _isCommandExecuting = true);
+                        _setEditorState(() => _isCommandExecuting = true);
                         final tagPattern = RegExp(
                             r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
                         if (_isGlobalSelection ||
@@ -127,7 +127,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                               );
                             } else if (sel.isValid && sel.isCollapsed) {
                               // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
-                              final plainText = text.replaceAll(tagPattern, '');
                               final cursorInPlain = sel.start >= text.length ||
                                   text
                                       .substring(sel.start)
@@ -147,7 +146,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                           }
                         }
                         _isDirty = false;
-                        setState(() => _isCommandExecuting = false);
+                        _setEditorState(() => _isCommandExecuting = false);
                         _saveHistory(description: 'Clear Format');
                       },
                       onFontSize: onFontSize,
@@ -186,7 +185,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                           _isSuiteDirty = false;
                           _suiteSection = null;
                         }
-                        setState(() {
+                        _setEditorState(() {
                           _activeSuite = (_activeSuite == suite)
                               ? EditorSuite.none
                               : suite;
@@ -197,7 +196,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                       },
                       onLayoutInteraction: (section) {
                         _trackSuiteSection(section);
-                        setState(() => _isSuiteDirty = true);
+                        _setEditorState(() => _isSuiteDirty = true);
                       },
                     ),
                     Expanded(
@@ -214,7 +213,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                             key: _overlayKey,
                             controllers: _controllers,
                             blockKeys: _blockKeys,
-                            onSelectionChanged: () => setState(() {
+                            onSelectionChanged: () => _setEditorState(() {
                               final overlayState = _overlayKey.currentState;
                               _isGlobalSelection = _controllers.isNotEmpty &&
                                   _controllers.every((c) => c.isGlobalSelected);
@@ -463,8 +462,8 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
       decoration: BoxDecoration(
         color: Colors.black87,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.amber.withOpacity(0.5)),
-        boxShadow: [
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+        boxShadow: const [
           BoxShadow(color: Colors.black54, blurRadius: 4, spreadRadius: 1)
         ],
       ),
@@ -493,6 +492,10 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
           Text('Command: $_selectionCommandDebug',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('Range: $_recognizedBlockRangeDebug',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Arrow: $_lastArrowDecision',
+              style: const TextStyle(color: Colors.white, fontSize: 10)),
+          Text('Last Selection: ${_lastSelection ?? "None"}',
               style: const TextStyle(color: Colors.white, fontSize: 10)),
           Text('History States: ${_history.length}',
               style: const TextStyle(color: Colors.white, fontSize: 10)),

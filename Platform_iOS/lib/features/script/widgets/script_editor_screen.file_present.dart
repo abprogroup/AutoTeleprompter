@@ -10,7 +10,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     if (result == null || result.files.single.path == null) {
       // v3.9.5.59: Fluid navigation fallback
       if (widget.shouldAutoLoad) Navigator.pop(context);
-      setState(() => _isPendingLoad = false);
+      _setEditorState(() => _isPendingLoad = false);
       return;
     }
     final selectedFile = File(result.files.single.path!);
@@ -83,24 +83,33 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     final text = _getRefinedFullText();
 
-    // Generate bytes in the correct format for the chosen file type
+    final defaultRtl = _inferEditorTextDirection(text);
+
+    // Generate bytes in the correct format for the chosen file type.
     final List<int> bytes;
     if (format == 'docx') {
-      bytes = DocxService.generate(text);
+      bytes = DocxService.generate(text, defaultRtl: defaultRtl);
     } else if (format == 'rtf') {
-      bytes = RtfService.generate(text);
+      bytes = RtfService.generate(text, defaultRtl: defaultRtl);
+    } else if (format == 'odt') {
+      bytes = OdtService.generate(text, defaultRtl: defaultRtl);
+    } else if (format == 'pdf') {
+      bytes = await PdfExportService.generate(text, defaultRtl: defaultRtl);
     } else if (format == 'pages') {
       bytes = PagesService.generate(text);
     } else {
-      // txt, md — plain UTF-8
-      bytes = utf8.encode(text);
+      // txt, md, log, text - visible UTF-8 only; never leak private markup.
+      bytes = utf8.encode(
+        MarkupExportService.toPlainText(text, defaultRtl: defaultRtl),
+      );
     }
 
     // Build filename with guaranteed extension — strip any prior extension first
     final safeName = _currentTitle
         .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
         .replaceAll(
-            RegExp(r'\.(txt|pdf|docx|rtf|pages|md)$', caseSensitive: false),
+            RegExp(r'\.(txt|pdf|docx|rtf|odt|pages|md|log|text)$',
+                caseSensitive: false),
             '');
     final fileName = '$safeName.$format';
 
@@ -125,9 +134,34 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     }
   }
 
+  bool _inferEditorTextDirection(String text) {
+    final directionText = _plainTextForDirection(text);
+    var rtl = 0;
+    var ltr = 0;
+    for (final rune in directionText.runes) {
+      if ((rune >= 0x0590 && rune <= 0x05FF) ||
+          (rune >= 0x0600 && rune <= 0x06FF) ||
+          (rune >= 0x0750 && rune <= 0x077F)) {
+        rtl++;
+      } else if ((rune >= 0x0041 && rune <= 0x005A) ||
+          (rune >= 0x0061 && rune <= 0x007A)) {
+        ltr++;
+      }
+    }
+    return rtl > 0 && rtl >= ltr;
+  }
+
+  String _plainTextForDirection(String text) {
+    try {
+      return MarkupExportService.toPlainText(text);
+    } catch (_) {
+      return text;
+    }
+  }
+
   void _clearScript() {
     _clearRecognizedBlockRange('clear-script');
-    setState(() {
+    _setEditorState(() {
       _loadText('');
       _saveHistory(description: 'Clear');
     });
@@ -152,6 +186,100 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           unawaited(_reconcileEditorBookmarkSignsFromMetadata());
         }
       });
+    }
+  }
+
+  bool _readEditorPremiumAccess() {
+    final auth = ref.read(authProvider);
+    return auth.hasPremiumAccess;
+  }
+
+  Future<bool> _ensureEditorPremiumAccess(String featureName) async {
+    if (_readEditorPremiumAccess()) return true;
+    final shouldSignIn = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text('$featureName requires Pro',
+            style: const TextStyle(color: Colors.white)),
+        content: const Text(
+          'Sign in with a Pro account to unlock creator tools.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sign in'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSignIn == true && mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    }
+    return _readEditorPremiumAccess();
+  }
+
+  void _startContentCreator() {
+    unawaited(_openContentCreator());
+  }
+
+  void _startAudioOnlyContentCreator() {
+    unawaited(_openContentCreator(audioOnly: true));
+  }
+
+  Future<void> _openContentCreator({bool audioOnly = false}) async {
+    final featureName = audioOnly ? 'Audio recorder' : 'Content Creator';
+    if (!await _ensureEditorPremiumAccess(featureName)) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    await _forceRecentUpdate();
+    if (!mounted) return;
+
+    try {
+      final settings = ref.read(settingsProvider);
+      final settingsNotifier = ref.read(settingsProvider.notifier);
+      await settingsNotifier.setContentCreatorRecordingFormat(
+        audioOnly
+            ? AppSettings.contentCreatorRecordingFormatAudio
+            : AppSettings.contentCreatorRecordingFormatMp4,
+      );
+      await settingsNotifier.setContentCreatorRecordingAudioMode(
+        AppSettings.contentCreatorRecordingAudioCamera,
+      );
+      ref.read(scriptProvider.notifier).loadText(
+            _getRefinedFullTextWithoutBookmarkSigns(),
+            title: _currentTitle,
+            sourceType: _sourceType,
+            sessionId: _currentSessionId,
+            historyIndex: _historyIndex,
+            historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+            fontSize: settings.fontSize,
+            fontFamily: settings.fontFamily,
+            lineSpacing: settings.lineSpacing,
+            letterSpacing: settings.letterSpacing,
+            wordSpacing: settings.wordSpacing,
+            textAlign: settings.textAlign,
+            scriptBgColor: settings.scriptBgColor,
+            currentWordColor: settings.currentWordColor,
+            futureWordColor: settings.futureWordColor,
+          );
+    } catch (_) {}
+
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ContentCreatorScreen(audioOnlyEntry: audioOnly),
+      ),
+    );
+    if (mounted) {
+      unawaited(_reconcileEditorBookmarkSignsFromMetadata());
+      _onSelectionChanged();
     }
   }
 
@@ -211,9 +339,22 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       elevation: 12,
-                      shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+                      shadowColor:
+                          const Color(0xFFFFBF00).withValues(alpha: 0.5),
                     ),
                   ),
+                ),
+                const SizedBox(width: 10),
+                _bottomIconAction(
+                  icon: Icons.video_camera_front_rounded,
+                  tooltip: 'Content Creator',
+                  onPressed: _startContentCreator,
+                ),
+                const SizedBox(width: 8),
+                _bottomIconAction(
+                  icon: Icons.mic_rounded,
+                  tooltip: 'Audio recorder',
+                  onPressed: _startAudioOnlyContentCreator,
                 ),
                 const SizedBox(width: 16),
               ],
@@ -221,6 +362,31 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _bottomIconAction({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: IconButton.filledTonal(
+          onPressed: onPressed,
+          icon: Icon(icon, size: 22),
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFF1E1E1E),
+            foregroundColor: const Color(0xFFFFBF00),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

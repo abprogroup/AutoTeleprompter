@@ -226,7 +226,7 @@ extension _ScriptEditorSelectionClipboardPasteGlobalParts
 
     _setBlockClipboard(pastedBlocks, kind: kind);
     unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
-    setState(() {});
+    _setEditorState(() {});
     for (final c in _controllers) {
       c.refresh();
     }
@@ -268,7 +268,7 @@ extension _ScriptEditorSelectionClipboardPasteGlobalParts
     // Do not write the paste clipboard here; only Cut/Copy may do that.
     _captureGlobalSelectionSnapshot('select-all');
     _isCommandExecuting = false;
-    setState(() {});
+    _setEditorState(() {});
     // Refresh after setState so TextFields repaint with new flags.
     for (final c in _controllers) {
       c.refresh();
@@ -285,7 +285,7 @@ extension _ScriptEditorSelectionClipboardPasteGlobalParts
       c.externalSelection = null;
       c.text = '';
     }
-    setState(() {
+    _setEditorState(() {
       while (_controllers.length > 1) {
         _controllers.last.dispose();
         _focusNodes.last.dispose();
@@ -315,7 +315,7 @@ extension _ScriptEditorSelectionClipboardPasteGlobalParts
         c.selection = TextSelection.collapsed(offset: collapseAt);
       }
     }
-    setState(() {});
+    _setEditorState(() {});
     for (final c in _controllers) {
       c.refresh();
     }
@@ -338,7 +338,7 @@ extension _ScriptEditorSelectionClipboardPasteGlobalParts
         for (final c in _controllers) {
           c.refresh();
         }
-        setState(() {});
+        _setEditorState(() {});
       }
     });
   }
@@ -350,7 +350,7 @@ extension _ScriptEditorSelectionClipboardPasteGlobalParts
       c.externalSelection =
           TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
-    setState(() {});
+    _setEditorState(() {});
     for (final c in _controllers) {
       c.refresh();
     }

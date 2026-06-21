@@ -14,7 +14,7 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
     _bookmarksLoaded = false;
     final loaded = await ScriptBookmarkService.load(key);
     if (!mounted || _bookmarkScopeKey != key) return;
-    setState(() {
+    _setTeleprompterState(() {
       _bookmarks = loaded;
       _bookmarksLoaded = true;
       _bookmarkLoadingKey = null;
@@ -119,7 +119,7 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
       offset: editorPosition.offset,
       createdAt: DateTime.now(),
     );
-    setState(() {
+    _setTeleprompterState(() {
       _bookmarks = ScriptBookmarkService.upsert(_bookmarks, bookmark);
     });
     await _saveBookmarksForScript(script);
@@ -172,7 +172,7 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
   void _jumpPresenterToWordIndex(int index, Script script) {
     _smoothScrollTimer?.cancel();
     _smoothScrollActive = false;
-    setState(() => _manualWordIndex = index);
+    _setTeleprompterState(() => _manualWordIndex = index);
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(index, script: script);
@@ -216,7 +216,7 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
         .toList();
     final deleted = before - next.length;
     if (deleted <= 0) return;
-    setState(() => _bookmarks = next);
+    _setTeleprompterState(() => _bookmarks = next);
     await _saveBookmarksForScript(script);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

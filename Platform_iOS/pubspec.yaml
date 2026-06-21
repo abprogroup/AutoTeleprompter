@@ -15,7 +15,7 @@ dependencies:
   flutter_riverpod: ^2.5.1
   speech_to_text: ^7.0.0
   whisper_flutter_new: ^1.0.1
-  record: ^5.0.0
+  record: ^6.2.1
   scrollable_positioned_list: ^0.3.8
   shared_preferences: ^2.3.2
   permission_handler: ^11.3.1
@@ -25,9 +25,12 @@ dependencies:
   flutter_animate: ^4.5.0
   flutter_colorpicker: ^1.1.0
   path_provider: ^2.1.5
+  path: ^1.9.0
   camera: 0.10.5+9
   gal: ^2.3.2
   archive: ^3.6.1
+  pdf: ^3.11.3
+  crypto: ^3.0.6
   cryptography: ^2.7.0
   flutter_secure_storage: ^9.2.4
   xml: ^6.5.0
@@ -38,13 +41,119 @@ dependencies:
   shelf_router: ^1.1.4
   shelf_web_socket: ^2.0.1
 
-dependency_overrides:
-  record_platform_interface: 1.2.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
 
+dependency_overrides:
+  record_ios:
+    path: third_party/record_ios_1_2_1
+
 flutter:
   uses-material-design: true
+  assets:
+    - assets/fonts/google_fonts/
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/google_fonts/Inter-Thin.ttf
+          weight: 100
+        - asset: assets/fonts/google_fonts/Inter-ExtraLight.ttf
+          weight: 200
+        - asset: assets/fonts/google_fonts/Inter-Light.ttf
+          weight: 300
+        - asset: assets/fonts/google_fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/google_fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/google_fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Inter-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/google_fonts/Inter-Black.ttf
+          weight: 900
+    - family: Bebas Neue
+      fonts:
+        - asset: assets/fonts/google_fonts/BebasNeue-Regular.ttf
+          weight: 400
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/google_fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Roboto-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Roboto-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/google_fonts/Outfit-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Outfit-Bold.ttf
+          weight: 700
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/google_fonts/Montserrat-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Montserrat-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/Montserrat-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Montserrat-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Playfair Display
+      fonts:
+        - asset: assets/fonts/google_fonts/PlayfairDisplay-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/PlayfairDisplay-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/PlayfairDisplay-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/PlayfairDisplay-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Merriweather
+      fonts:
+        - asset: assets/fonts/google_fonts/Merriweather-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Merriweather-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/Merriweather-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Merriweather-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Lora
+      fonts:
+        - asset: assets/fonts/google_fonts/Lora-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Lora-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/Lora-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Lora-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Courier Prime
+      fonts:
+        - asset: assets/fonts/google_fonts/CourierPrime-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/CourierPrime-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/CourierPrime-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/CourierPrime-BoldItalic.ttf
+          weight: 700
+          style: italic

@@ -6,7 +6,6 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
-    final tState = ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
@@ -98,17 +97,6 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          Row(children: [
-            const Text('Allow visible text skip', style: sectionStyle),
-            const Spacer(),
-            Switch.adaptive(
-              value: settings.sttVisibleSkipEnabled,
-              activeColor: Color(settings.currentWordColor),
-              onChanged: (v) => notifier.setSttVisibleSkipEnabled(v),
-            ),
-          ]),
-          const SizedBox(height: 16),
-
           if (settings.scrollMode == 'manual') ...[
             Row(children: [
               const Text('Manual Scroll Speed', style: labelStyle),
@@ -133,22 +121,57 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const SizedBox(height: 8),
 
           // ── Text ───────────────────────────────────────────────────────────
-          const Text('Speech Input', style: sectionStyle),
-          const SizedBox(height: 8),
-          _IosMicSelector(
-            selectedDeviceId: settings.sttInputDeviceId,
-            selectedLabel: settings.sttInputDeviceLabel,
-            devices: tState.audioInputDevices,
-            accentColor: Color(settings.currentWordColor),
-            onRefresh: () => ref
-                .read(teleprompterProvider.notifier)
-                .refreshAudioInputDevices(),
-            onSelected: (deviceId, label) async {
-              await ref
-                  .read(teleprompterProvider.notifier)
-                  .setSttInputDevice(deviceId, label);
-              await notifier.setSttInputDevice(deviceId, label);
-            },
+          const _SpeechProfileSettingsSection(),
+          const SizedBox(height: 16),
+          Opacity(
+            opacity: settings.scrollMode == 'manual' ? 0.45 : 1.0,
+            child: AbsorbPointer(
+              absorbing: settings.scrollMode == 'manual',
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.pan_tool_alt_outlined,
+                      color: Color(settings.currentWordColor),
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Allow manual scrolling while listening',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'Drag the script during speech recognition; release to resume from the reading line.',
+                            style:
+                                TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch.adaptive(
+                      value: settings.allowScrollDuringActiveSession &&
+                          settings.scrollMode != 'manual',
+                      activeColor: Color(settings.currentWordColor),
+                      onChanged: notifier.setAllowScrollDuringActiveSession,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 16),
 
@@ -424,8 +447,9 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   ButtonStyle _segmentStyle(AppSettings settings) {
     return ButtonStyle(
       backgroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected))
+        if (states.contains(WidgetState.selected)) {
           return Color(settings.currentWordColor);
+        }
         return const Color(0xFF2A2A2A);
       }),
       foregroundColor: WidgetStateProperty.resolveWith((states) {

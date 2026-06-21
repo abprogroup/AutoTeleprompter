@@ -158,7 +158,7 @@ extension _ScriptEditorSelectionClipboardCommandParts
       _isCommandExecuting = false;
       unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
       _saveHistory(description: 'Cut');
-      setState(() {});
+      _setEditorState(() {});
       return;
     }
 
@@ -244,7 +244,7 @@ extension _ScriptEditorSelectionClipboardCommandParts
       _isCommandExecuting = false;
       unawaited(_syncBookmarksFromEditorSigns(notify: true, save: true));
       _saveHistory(description: 'Cut');
-      setState(() {});
+      _setEditorState(() {});
       return;
     }
 

@@ -28,6 +28,54 @@ class EncryptedFileStore {
     );
   }
 
+  Future<File> writeBytes({
+    required String collection,
+    required String id,
+    required String extension,
+    required List<int> bytes,
+    required String kind,
+    bool compress = true,
+  }) async {
+    final dir = await ensureCollection(collection);
+    final safeId = sanitizeId(id);
+    final file = File(
+      '${dir.path}${Platform.pathSeparator}$safeId.$extension.atpe',
+    );
+    final envelope = await protectToEnvelopeAsync(
+      bytes,
+      kind: kind,
+      compress: compress,
+    );
+    await file.writeAsString(envelope, flush: true);
+    return file;
+  }
+
+  Future<File?> fileFor({
+    required String collection,
+    required String id,
+    required String extension,
+  }) async {
+    final dir = await ensureCollection(collection);
+    final safeId = sanitizeId(id);
+    final file = File(
+      '${dir.path}${Platform.pathSeparator}$safeId.$extension.atpe',
+    );
+    return await file.exists() ? file : null;
+  }
+
+  Future<void> delete({
+    required String collection,
+    required String id,
+    required String extension,
+  }) async {
+    final file = await fileFor(
+      collection: collection,
+      id: id,
+      extension: extension,
+    );
+    if (file != null) await file.delete();
+  }
+
   Future<String> protectToEnvelopeAsync(
     List<int> bytes, {
     required String kind,

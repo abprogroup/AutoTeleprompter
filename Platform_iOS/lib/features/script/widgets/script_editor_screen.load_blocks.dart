@@ -127,7 +127,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       _forceRecentUpdate();
       unawaited(_loadBookmarksForCurrentScript(force: true));
     } finally {
-      if (mounted) setState(() => _isPendingLoad = false);
+      if (mounted) _setEditorState(() => _isPendingLoad = false);
     }
   }
 
@@ -202,15 +202,19 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
   void _clearControllers() {
     _clearRecognizedBlockRange('clear-controllers');
-    for (final c in _controllers) c.dispose();
-    for (final f in _focusNodes) f.dispose();
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    for (final f in _focusNodes) {
+      f.dispose();
+    }
     _controllers.clear();
     _focusNodes.clear();
     _blockKeys.clear();
   }
 
   void _addBlock(int index, {String text = ''}) {
-    setState(() {
+    _setEditorState(() {
       final controller = MarkupController(text: text);
       final blockKey = GlobalKey(); // v3.9.5.66
 
@@ -228,7 +232,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             p2 = splits[1];
             controller.text = p1;
           }
-          setState(() {
+          _setEditorState(() {
             final idx = _controllers.indexOf(controller);
             _addBlock(idx + 1, text: p2);
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -247,7 +251,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           final idx = _controllers.indexOf(controller);
           if (_controllers.length > 1 && idx != -1) {
             _clearRecognizedBlockRange('remove-empty-block');
-            setState(() {
+            _setEditorState(() {
               _controllers.removeAt(idx).dispose();
               _focusNodes.removeAt(idx).dispose();
               _blockKeys.removeAt(idx);
@@ -358,26 +362,15 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     }
   }
 
-  void _removeBlock(int index) {
-    if (_controllers.length <= 1) return;
-    _clearRecognizedBlockRange('remove-block');
-    setState(() {
-      _controllers[index].dispose();
-      _focusNodes[index].dispose();
-      _controllers.removeAt(index);
-      _focusNodes.removeAt(index);
-      _blockKeys.removeAt(index);
-    });
-  }
-
   void _loadText(String text) {
     _isLoading = true;
     _clearRecognizedBlockRange('load-text');
     try {
       _clearControllers();
       final paragraphs = text.split('\n');
-      for (int i = 0; i < paragraphs.length; i++)
+      for (int i = 0; i < paragraphs.length; i++) {
         _addBlock(i, text: paragraphs[i]);
+      }
       if (_controllers.isEmpty) _addBlock(0);
     } finally {
       Future.delayed(const Duration(milliseconds: 100), () {
@@ -529,8 +522,11 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       for (final m in dirMatches) {
         if (m.start <= off) {
           final nextClose = text.indexOf('[/${m.group(1)}]', m.end);
-          if (nextClose == -1 || nextClose >= off) if (m.group(1) == 'rtl')
-            found = 'right';
+          if (nextClose == -1 || nextClose >= off) {
+            if (m.group(1) == 'rtl') {
+              found = 'right';
+            }
+          }
         }
       }
     }
@@ -540,7 +536,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     return found;
   }
 
-  bool _detectStyleAtCursor(String open, String close, {int? offset}) {
+  bool _detectStyleAtCursor(String open, String close) {
     final controller = _activeController;
     if (controller == null) return false;
     final text = controller.text;
@@ -614,7 +610,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
   int _detectIntAtPoint(String text, TextSelection selection, int off,
       String prefix, int defaultValue) {
-    final openTag = '[' + prefix;
+    final openTag = '[$prefix';
     int check(int p) {
       if (p < 0 || p > text.length) return defaultValue;
       final tagIdx = text.lastIndexOf(openTag, p);
@@ -622,7 +618,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       final closeBracket = text.indexOf(']', tagIdx);
       if (closeBracket == -1 || closeBracket > p) return defaultValue;
       final tagName = prefix.split('=').first;
-      final closeTag = '[/' + tagName + ']';
+      final closeTag = '[/$tagName]';
       final exitIdx = text.indexOf(closeTag, tagIdx);
       if (exitIdx != -1 && exitIdx < p) return defaultValue;
       if (exitIdx == -1) return defaultValue;
@@ -649,7 +645,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
   String _detectStringAtPoint(String text, TextSelection selection, int off,
       String prefix, String defaultValue) {
-    final openTag = '[' + prefix;
+    final openTag = '[$prefix';
     String check(int p) {
       if (p < 0 || p > text.length) return defaultValue;
       final tagIdx = text.lastIndexOf(openTag, p);
@@ -657,7 +653,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
       final closeBracket = text.indexOf(']', tagIdx);
       if (closeBracket == -1 || closeBracket > p) return defaultValue;
       final tagName = prefix.split('=').first;
-      final closeTag = '[/' + tagName + ']';
+      final closeTag = '[/$tagName]';
       final exitIdx = text.indexOf(closeTag, tagIdx);
       if (exitIdx != -1 && exitIdx < p) return defaultValue;
       if (exitIdx == -1) return defaultValue;

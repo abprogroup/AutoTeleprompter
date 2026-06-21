@@ -62,21 +62,30 @@ class LayoutSuite extends ConsumerWidget {
                 icon: Icons.format_align_left_rounded,
                 tooltip: 'Align Left',
                 active: style.textAlign == 'left',
-                onTap: () { onAlign('left'); onInteraction('Alignment'); },
+                onTap: () {
+                  onAlign('left');
+                  onInteraction('Alignment');
+                },
               ),
               const SizedBox(width: 8),
               _AlignBtn(
                 icon: Icons.format_align_center_rounded,
                 tooltip: 'Align Center',
                 active: style.textAlign == 'center',
-                onTap: () { onAlign('center'); onInteraction('Alignment'); },
+                onTap: () {
+                  onAlign('center');
+                  onInteraction('Alignment');
+                },
               ),
               const SizedBox(width: 8),
               _AlignBtn(
                 icon: Icons.format_align_right_rounded,
                 tooltip: 'Align Right',
                 active: style.textAlign == 'right',
-                onTap: () { onAlign('right'); onInteraction('Alignment'); },
+                onTap: () {
+                  onAlign('right');
+                  onInteraction('Alignment');
+                },
               ),
             ],
           ),
@@ -150,7 +159,7 @@ class _AlignBtn extends StatelessWidget {
             color: active ? Colors.white12 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: active
-                ? Border.all(color: amber.withOpacity(0.4), width: 1)
+                ? Border.all(color: amber.withValues(alpha: 0.4), width: 1)
                 : Border.all(color: Colors.white10, width: 1),
           ),
           child: Icon(icon, size: 24, color: active ? amber : Colors.white70),

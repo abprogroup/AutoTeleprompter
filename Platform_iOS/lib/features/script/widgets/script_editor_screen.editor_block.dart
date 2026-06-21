@@ -41,8 +41,9 @@ class _EditorBlock extends StatelessWidget {
   });
 
   TextAlign? _markupAlign(String text) {
-    if (RegExp(r'\[(?:align=)?center\]').hasMatch(text))
+    if (RegExp(r'\[(?:align=)?center\]').hasMatch(text)) {
       return TextAlign.center;
+    }
     if (RegExp(r'\[(?:align=)?right\]').hasMatch(text)) return TextAlign.right;
     if (RegExp(r'\[(?:align=)?left\]').hasMatch(text)) return TextAlign.left;
     return null;

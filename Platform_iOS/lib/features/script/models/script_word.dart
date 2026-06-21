@@ -5,15 +5,16 @@ class ScriptWord {
   final String normalized;
   final int index;
   final bool isRtl;
-  final bool isNewline;   // paragraph break — renders as full-width empty spacer
+  final bool isNewline; // paragraph break — renders as full-width empty spacer
   final bool isBold;
   final bool isUnderline;
   final double? fontSize;
   final TextAlign? alignment; // paragraph alignment
   final bool isItalic;
   final bool? isParagraphRtl; // manual direction override
-  final Color? highlight;     // background highlight: yellow, red, green
-  final Color? textColor;     // text color override: yellow, red, green
+  final Color? highlight; // background highlight: yellow, red, green
+  final Color? textColor; // text color override: yellow, red, green
+  final bool isOptionalCue; // stage/camera cue: speakable, but skippable
 
   const ScriptWord({
     required this.raw,
@@ -29,7 +30,8 @@ class ScriptWord {
     this.isParagraphRtl, // If null, auto-detect from isRtl
     this.highlight,
     this.textColor,
+    this.isOptionalCue = false,
   });
-  
+
   bool get effectiveRtl => isParagraphRtl ?? isRtl;
 }

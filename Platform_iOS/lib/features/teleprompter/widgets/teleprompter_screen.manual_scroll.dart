@@ -4,7 +4,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   void _startManualScroll({bool backward = false}) {
     if (!_scrollController.hasClients) return;
     _scrollingBackward = backward;
-    setState(() => _manualScrolling = true);
+    _setTeleprompterState(() => _manualScrolling = true);
     _manualScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
 
@@ -71,7 +71,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
 
     if (bestIndex != _manualWordIndex) {
-      setState(() => _manualWordIndex = bestIndex);
+      _setTeleprompterState(() => _manualWordIndex = bestIndex);
     }
   }
 
@@ -79,7 +79,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _manualScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
     _scrollingBackward = false;
-    if (mounted) setState(() => _manualScrolling = false);
+    if (mounted) _setTeleprompterState(() => _manualScrolling = false);
   }
 
   /// Compute and push the rendered visible word range to the provider.
@@ -135,6 +135,20 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _manualWordIndex = 0;
     _scrollController.animateTo(0,
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+  }
+
+  void _resetPresenterPositionToStart({bool animated = true}) {
+    ref.read(teleprompterProvider.notifier).resetPosition();
+    if (!_scrollController.hasClients) return;
+    if (animated) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _scrollController.jumpTo(0);
+    }
   }
 
 // ── Speech-mode scroll ──────────────────────────────────────────────────────
@@ -212,7 +226,16 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   /// While STT is stopped, drag scrolling can update the resume point.
   bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
     final sttState = ref.read(teleprompterProvider);
-    if (sttState.isListening || sttState.isStarting) {
+    final settings = ref.read(settingsProvider);
+    final speechActive = sttState.isListening || sttState.isStarting;
+    final activeManualOverride =
+        PresenterInputLockService.allowActiveManualScroll(
+      settingEnabled: settings.allowScrollDuringActiveSession,
+      isListening: sttState.isListening,
+      isStarting: sttState.isStarting,
+    );
+    if (sttState.isStarting ||
+        (sttState.isListening && !activeManualOverride)) {
       _userBrowsingWhileStopped = false;
       return false;
     }
@@ -230,6 +253,9 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       _userBrowsingWhileStopped = false;
       _syncVisibleWordWindow(force: true);
       _syncResumePointToReadingLine();
+    }
+    if (speechActive && activeManualOverride) {
+      _syncVisibleWordWindow();
     }
     return false;
   }
@@ -263,7 +289,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
     final targetIndex = bestIndex;
     if (targetIndex == null) return;
-    setState(() => _manualWordIndex = targetIndex);
+    _setTeleprompterState(() => _manualWordIndex = targetIndex);
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(targetIndex, script: script);

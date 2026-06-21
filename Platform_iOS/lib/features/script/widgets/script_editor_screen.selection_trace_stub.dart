@@ -8,8 +8,6 @@ extension _ScriptEditorSelectionTraceParts on _ScriptEditorScreenState {
     SelectionEndpoint? focus,
     String? seedSource,
     String? targetMode,
-    String? gestureKind,
-    TextSelection? nativeSelection,
     bool? anchorCrossing,
     bool? collapsedShiftSeed,
     bool? staleOverlayRejected,

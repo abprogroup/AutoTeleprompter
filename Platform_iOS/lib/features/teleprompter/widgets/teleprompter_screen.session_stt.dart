@@ -6,16 +6,27 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     _remoteCmdSub = ref.read(remoteControlProvider).onCommand.listen((cmd) {
       if (!mounted) return;
       final settings = ref.read(settingsProvider);
+      if (cmd.startsWith('SET_SPEED:')) {
+        final speed = double.tryParse(cmd.substring('SET_SPEED:'.length));
+        if (speed != null && settings.scrollMode == 'manual') {
+          unawaited(
+            ref
+                .read(settingsProvider.notifier)
+                .setScrollSpeed(speed.clamp(-300.0, 300.0).toDouble()),
+          );
+        }
+        return;
+      }
 
       switch (cmd) {
         case 'TOGGLE':
-          if (settings.scrollMode == 'manual') {
+          final tState = ref.read(teleprompterProvider);
+          if (tState.isListening || tState.isStarting) {
+            _stopSpeechSessionFromUi('presenter.remoteToggleStop');
+          } else if (settings.scrollMode == 'manual') {
             _manualScrolling ? _stopManualScroll() : _startManualScroll();
           } else {
-            final tState = ref.read(teleprompterProvider);
-            tState.isListening
-                ? ref.read(teleprompterProvider.notifier).stopSession()
-                : _requestAndStart();
+            _requestAndStart();
           }
           break;
         case 'FASTER':
@@ -32,8 +43,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
           if (settings.scrollMode == 'manual') {
             _resetManual();
           } else {
-            ref.read(teleprompterProvider.notifier).resetPosition();
-            _scrollController.jumpTo(0);
+            _resetPresenterPositionToStart(animated: false);
           }
           break;
         case 'MODE_AUTO':
@@ -42,8 +52,59 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         case 'MODE_MANUAL':
           ref.read(settingsProvider.notifier).setScrollMode('manual');
           break;
+        case 'BOOKMARK_ADD':
+          unawaited(_addPresenterBookmark());
+          break;
+        case 'BOOKMARK_REMOVE':
+          final tState = ref.read(teleprompterProvider);
+          if (!tState.isListening && !tState.isStarting) {
+            unawaited(_deletePresenterBookmarkAtCurrentPosition());
+          }
+          break;
+        case 'BOOKMARK_PREVIOUS':
+          unawaited(_jumpPresenterBookmark(-1));
+          break;
+        case 'BOOKMARK_NEXT':
+          unawaited(_jumpPresenterBookmark(1));
+          break;
+        case 'INVERT_COLORS':
+          unawaited(_togglePresenterColorInversion());
+          break;
       }
     });
+  }
+
+  void _stopSpeechSessionFromUi(String source) {
+    unawaited(ref.read(teleprompterProvider.notifier).stopSession());
+  }
+
+  Future<void> _togglePresenterColorInversion() async {
+    final settings = ref.read(settingsProvider);
+    final nextBackground =
+        ScriptColorInversionService.nextBackgroundColor(settings);
+    final nextFutureText =
+        ScriptColorInversionService.futureTextColorForBackground(
+      nextBackground,
+    );
+
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    await settingsNotifier.setScriptBgColor(nextBackground);
+    await settingsNotifier.setFutureWordColor(nextFutureText);
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          scriptBgColor: nextBackground,
+          futureWordColor: nextFutureText,
+        );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          Color(nextBackground).computeLuminance() > 0.5
+              ? 'Script colors inverted: light background'
+              : 'Script colors inverted: dark background',
+        ),
+      ),
+    );
   }
 
   void _disposeTeleprompterScreenBody() {
@@ -54,6 +115,13 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     _wordTrackTimer?.cancel();
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
+    ref.read(remoteControlProvider).publishPresenterState(
+          scriptActive: false,
+          sessionActive: false,
+          isStarting: false,
+          scrollMode: 'auto',
+          scrollSpeed: 0,
+        );
     _scrollController.dispose();
     _presentationFocusNode.dispose();
     _remoteCmdSub?.cancel();
@@ -62,9 +130,29 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   void _scheduleHideControls() {
     _hideControlsTimer?.cancel();
+    final tState = ref.read(teleprompterProvider);
+    if (!PresenterInputLockService.controlsAutoHideActive(
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+    )) {
+      return;
+    }
     _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _controlsVisible = false);
+      if (mounted) _setTeleprompterState(() => _controlsVisible = false);
     });
+  }
+
+  void _syncControlsAutoHide(bool active) {
+    if (_controlsAutoHideActive == active) return;
+    _controlsAutoHideActive = active;
+    _hideControlsTimer?.cancel();
+    if (active) {
+      _scheduleHideControls();
+    } else if (!_controlsVisible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _setTeleprompterState(() => _controlsVisible = true);
+      });
+    }
   }
 
   /// Show a dialog when Google speech recognition fails
@@ -120,7 +208,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
             const SizedBox(height: 8),
             const Text(
               '1. Connect to WiFi or enable mobile data\n\n'
-              '2. Make sure the Google app is installed and updated\n\n'
+              '2. Make sure Speech Recognition is enabled for AutoTeleprompter in iOS Settings\n\n'
               '3. Restart the teleprompter session',
               style:
                   TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
@@ -162,13 +250,13 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       return 'Microphone not available. Check that no other app is using the microphone.';
     }
     if (error.contains('not available') || error.contains('init failed')) {
-      return 'Speech recognition not available. Make sure the Google app is installed and updated.';
+      return 'Speech recognition is not available. Check iOS Speech Recognition and Microphone permissions for AutoTeleprompter.';
     }
     return error;
   }
 
   void _showControls() {
-    setState(() => _controlsVisible = true);
+    _setTeleprompterState(() => _controlsVisible = true);
     _scheduleHideControls();
   }
 

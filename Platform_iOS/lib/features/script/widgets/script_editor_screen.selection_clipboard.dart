@@ -324,7 +324,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     _clearGlobalSelection();
     _isCommandExecuting = false;
     _saveHistory(description: 'Cut');
-    setState(() {});
+    _setEditorState(() {});
   }
 
   void _captureGlobalSelectionSnapshot(String reason) {
@@ -526,7 +526,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     _clearGlobalSelection();
     _isCommandExecuting = false;
     _saveHistory(description: 'Cut');
-    setState(() {});
+    _setEditorState(() {});
   }
 
   void _syncSelectionSnapshotFromOverlay(

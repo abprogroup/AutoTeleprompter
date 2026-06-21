@@ -2,42 +2,72 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../feedback/services/lightweight_diagnostics.dart';
+import '../../script/services/script_bookmark_service.dart';
+import '../services/local_backup_service.dart';
+
+part 'settings_provider.keys.dart';
+part 'settings_provider.script_persistence.dart';
+part 'settings_provider.stt.dart';
+
 class AppSettings {
   final double fontSize;
   final String languageMode; // 'auto', 'he', 'en'
-  final double scrollLead;   // 0.2–0.5, viewport ratio for reading line
+  final double scrollLead; // 0.2–0.5, viewport ratio for reading line
   final String lastScript;
   final String lastScriptTitle;
-  final String scrollMode;   // 'auto' (speech) | 'manual' (timer)
-  final double scrollSpeed;  // words per minute for manual mode
-  final String textAlign;    // 'center' | 'left' | 'right'
+  final String scrollMode; // 'auto' (speech) | 'manual' (timer)
+  final double scrollSpeed; // words per minute for manual mode
+  final String textAlign; // 'center' | 'left' | 'right'
   final bool mirrorHorizontal; // flip horizontally
-  final bool mirrorVertical;   // flip vertically
-  final int flipRotation;    // screen rotation: 0, 90, 180, 270 degrees
-  final double lineSpacing;  // 1.0–2.5
-  final double wordSpacing;  // extra spacing between words (px)
+  final bool mirrorVertical; // flip vertically
+  final int flipRotation; // screen rotation: 0, 90, 180, 270 degrees
+  final double lineSpacing; // 1.0–2.5
+  final double wordSpacing; // extra spacing between words (px)
   final double letterSpacing; // extra spacing between letters (px)
-  final int scriptBgColor;      // ARGB int, default black
-  final int currentWordColor;   // ARGB int, default amber
-  final int futureWordColor;    // ARGB int, default white
+  final int scriptBgColor; // ARGB int, default black
+  final int currentWordColor; // ARGB int, default amber
+  final int futureWordColor; // ARGB int, default white
   final double pastWordOpacity; // 0.0–0.6
-  final bool debugMode;         // technical mode for STT logs
+  final bool debugMode; // technical mode for STT logs
   final String videoResolution; // '480p', '720p', '1080p'
   final List<String> recentScripts; // JSON strings of script metadata
-  final String displayName;      // User's name
-  final int lastTextColor;       // Persisted selection color
-  final int lastHighlightColor;  // Persisted selection highlight
-  final String lastImportPath;  // Persisted folder path for importer
-  final int lastHistoryIndex;    // v3.8 persistence
+  final String displayName; // User's name
+  final int lastTextColor; // Persisted selection color
+  final int lastHighlightColor; // Persisted selection highlight
+  final String lastImportPath; // Persisted folder path for importer
+  final int lastHistoryIndex; // v3.8 persistence
   final bool showCurrentWordHighlight; // v3.9.5 toggle
-  final bool showUpcomingWordColor;    // v3.9.5 toggle (default off)
-  final String fontFamily;             // v3.9.5.46
-  final bool showAlignmentOverride;   // v3.9.8 toggle for presentation alignment override
-  final String sttEngine;          // v4.0: 'google', 'whisper_base', 'whisper_small'
-  final double readFadeIntensity;  // v4.1: gradient fade for read text (0.0=off, 1.0=full)
-  final bool sttVisibleSkipEnabled; // v4.1.7: opt-in viewport skip; default false
-  final String sttInputDeviceId; // iOS: AVAudioSession input UID, empty = system default
+  final bool showUpcomingWordColor; // v3.9.5 toggle (default off)
+  final String fontFamily; // v3.9.5.46
+  final bool
+      showAlignmentOverride; // v3.9.8 toggle for presentation alignment override
+  final String sttEngine; // v4.0: 'google', 'whisper_base', 'whisper_small'
+  final double
+      readFadeIntensity; // v4.1: gradient fade for read text (0.0=off, 1.0=full)
+  final bool
+      sttVisibleSkipEnabled; // v4.1.7: opt-in viewport skip; default false
+  final bool allowScrollDuringActiveSession;
+  final bool sttStrictBulletMode;
+  final bool sttHardVisibleSkipEnabled;
+  final bool sttManualProfileEnabled;
+  final int sttManualStartAdvanceSmallWords;
+  final int sttManualStartAdvanceBigWords;
+  final int sttManualSafetySmallWords;
+  final int sttManualSafetyBigWords;
+  final int sttManualVisibleSkipSmallWords;
+  final int sttManualVisibleSkipBigWords;
+  final int sttManualBigWordMinLetters;
+  final String
+      sttInputDeviceId; // iOS: AVAudioSession input UID, empty = system default
   final String sttInputDeviceLabel;
+  final String contentCreatorRecordingFormat;
+  final String contentCreatorRecordingAudioMode;
+  final bool contentCreatorRecordingControlsSpeech;
+
+  static const String contentCreatorRecordingFormatMp4 = 'mp4';
+  static const String contentCreatorRecordingFormatAudio = 'audio';
+  static const String contentCreatorRecordingAudioCamera = 'camera';
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -52,8 +82,8 @@ class AppSettings {
     this.mirrorVertical = false,
     this.flipRotation = 0,
     this.lineSpacing = 1.2,
-    this.wordSpacing = 0.0,      // default: no extra word spacing
-    this.letterSpacing = 0.0,    // default: no extra letter spacing
+    this.wordSpacing = 0.0, // default: no extra word spacing
+    this.letterSpacing = 0.0, // default: no extra letter spacing
     this.scriptBgColor = 0xFF000000,
     this.currentWordColor = 0xFFFFBF00,
     this.futureWordColor = 0xFFFFFFFF,
@@ -73,8 +103,22 @@ class AppSettings {
     this.sttEngine = 'google',
     this.readFadeIntensity = 1.0,
     this.sttVisibleSkipEnabled = false,
+    this.allowScrollDuringActiveSession = false,
+    this.sttStrictBulletMode = false,
+    this.sttHardVisibleSkipEnabled = false,
+    this.sttManualProfileEnabled = false,
+    this.sttManualStartAdvanceSmallWords = 4,
+    this.sttManualStartAdvanceBigWords = 3,
+    this.sttManualSafetySmallWords = 2,
+    this.sttManualSafetyBigWords = 1,
+    this.sttManualVisibleSkipSmallWords = 0,
+    this.sttManualVisibleSkipBigWords = 0,
+    this.sttManualBigWordMinLetters = 5,
     this.sttInputDeviceId = '',
     this.sttInputDeviceLabel = 'System default microphone',
+    this.contentCreatorRecordingFormat = contentCreatorRecordingFormatMp4,
+    this.contentCreatorRecordingAudioMode = contentCreatorRecordingAudioCamera,
+    this.contentCreatorRecordingControlsSpeech = false,
   });
 
   AppSettings copyWith({
@@ -111,8 +155,22 @@ class AppSettings {
     String? sttEngine,
     double? readFadeIntensity,
     bool? sttVisibleSkipEnabled,
+    bool? allowScrollDuringActiveSession,
+    bool? sttStrictBulletMode,
+    bool? sttHardVisibleSkipEnabled,
+    bool? sttManualProfileEnabled,
+    int? sttManualStartAdvanceSmallWords,
+    int? sttManualStartAdvanceBigWords,
+    int? sttManualSafetySmallWords,
+    int? sttManualSafetyBigWords,
+    int? sttManualVisibleSkipSmallWords,
+    int? sttManualVisibleSkipBigWords,
+    int? sttManualBigWordMinLetters,
     String? sttInputDeviceId,
     String? sttInputDeviceLabel,
+    String? contentCreatorRecordingFormat,
+    String? contentCreatorRecordingAudioMode,
+    bool? contentCreatorRecordingControlsSpeech,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -141,56 +199,53 @@ class AppSettings {
       lastHighlightColor: lastHighlightColor ?? this.lastHighlightColor,
       lastImportPath: lastImportPath ?? this.lastImportPath,
       lastHistoryIndex: lastHistoryIndex ?? this.lastHistoryIndex,
-      showCurrentWordHighlight: showCurrentWordHighlight ?? this.showCurrentWordHighlight,
-      showUpcomingWordColor: showUpcomingWordColor ?? this.showUpcomingWordColor,
+      showCurrentWordHighlight:
+          showCurrentWordHighlight ?? this.showCurrentWordHighlight,
+      showUpcomingWordColor:
+          showUpcomingWordColor ?? this.showUpcomingWordColor,
       fontFamily: fontFamily ?? this.fontFamily,
-      showAlignmentOverride: showAlignmentOverride ?? this.showAlignmentOverride,
+      showAlignmentOverride:
+          showAlignmentOverride ?? this.showAlignmentOverride,
       sttEngine: sttEngine ?? this.sttEngine,
       readFadeIntensity: readFadeIntensity ?? this.readFadeIntensity,
       sttVisibleSkipEnabled:
           sttVisibleSkipEnabled ?? this.sttVisibleSkipEnabled,
+      allowScrollDuringActiveSession:
+          allowScrollDuringActiveSession ?? this.allowScrollDuringActiveSession,
+      sttStrictBulletMode: sttStrictBulletMode ?? this.sttStrictBulletMode,
+      sttHardVisibleSkipEnabled:
+          sttHardVisibleSkipEnabled ?? this.sttHardVisibleSkipEnabled,
+      sttManualProfileEnabled:
+          sttManualProfileEnabled ?? this.sttManualProfileEnabled,
+      sttManualStartAdvanceSmallWords: sttManualStartAdvanceSmallWords ??
+          this.sttManualStartAdvanceSmallWords,
+      sttManualStartAdvanceBigWords:
+          sttManualStartAdvanceBigWords ?? this.sttManualStartAdvanceBigWords,
+      sttManualSafetySmallWords:
+          sttManualSafetySmallWords ?? this.sttManualSafetySmallWords,
+      sttManualSafetyBigWords:
+          sttManualSafetyBigWords ?? this.sttManualSafetyBigWords,
+      sttManualVisibleSkipSmallWords:
+          sttManualVisibleSkipSmallWords ?? this.sttManualVisibleSkipSmallWords,
+      sttManualVisibleSkipBigWords:
+          sttManualVisibleSkipBigWords ?? this.sttManualVisibleSkipBigWords,
+      sttManualBigWordMinLetters:
+          sttManualBigWordMinLetters ?? this.sttManualBigWordMinLetters,
       sttInputDeviceId: sttInputDeviceId ?? this.sttInputDeviceId,
       sttInputDeviceLabel: sttInputDeviceLabel ?? this.sttInputDeviceLabel,
+      contentCreatorRecordingFormat:
+          contentCreatorRecordingFormat ?? this.contentCreatorRecordingFormat,
+      contentCreatorRecordingAudioMode: contentCreatorRecordingAudioMode ??
+          this.contentCreatorRecordingAudioMode,
+      contentCreatorRecordingControlsSpeech:
+          contentCreatorRecordingControlsSpeech ??
+              this.contentCreatorRecordingControlsSpeech,
     );
   }
 }
 
-class SettingsNotifier extends Notifier<AppSettings> {
-  static const _fontSizeKey = 'fontSize';
-  static const _languageKey = 'languageMode';
-  static const _scrollLeadKey = 'scrollLead';
-  static const _lastScriptKey = 'lastScript';
-  static const _scrollModeKey = 'scrollMode';
-  static const _scrollSpeedKey = 'scrollSpeed';
-  static const _textAlignKey = 'textAlign';
-  static const _mirrorHorizontalKey = 'mirrorHorizontal';
-  static const _mirrorVerticalKey = 'mirrorVertical';
-  static const _flipRotationKey = 'flipRotation';
-  static const _lineSpacingKey = 'lineSpacing';
-  static const _wordSpacingKey = 'wordSpacing';
-  static const _letterSpacingKey = 'letterSpacing';
-  static const _scriptBgColorKey = 'scriptBgColor';
-  static const _currentWordColorKey = 'currentWordColor';
-  static const _futureWordColorKey = 'futureWordColor';
-  static const _pastWordOpacityKey = 'pastWordOpacity';
-  static const _debugModeKey = 'debugMode';
-  static const _videoResolutionKey = 'videoResolution';
-  static const _recentScriptsKey = 'recentScripts';
-  static const _displayNameKey = 'displayName';
-  static const _lastTextColorKey = 'lastTextColor';
-  static const _lastHighlightColorKey = 'lastHighlightColor';
-  static const _lastImportPathKey = 'lastImportPath';
-  static const _lastHistoryIndexKey = 'lastHistoryIndex';
-  static const _showCurrentWordHighlightKey = 'showCurrentWordHighlight';
-  static const _showUpcomingWordColorKey = 'showUpcomingWordColor';
-  static const _fontFamilyKey = 'fontFamily';
-  static const _showAlignmentOverrideKey = 'showAlignmentOverride';
-  static const _sttEngineKey = 'sttEngine';
-  static const _readFadeIntensityKey = 'readFadeIntensity';
-  static const _sttVisibleSkipEnabledKey = 'sttVisibleSkipEnabled';
-  static const _sttInputDeviceIdKey = 'sttInputDeviceId';
-  static const _sttInputDeviceLabelKey = 'sttInputDeviceLabel';
-
+class SettingsNotifier extends Notifier<AppSettings>
+    with SettingsNotifierScriptPersistence, SettingsNotifierSttProfile {
   @override
   AppSettings build() {
     _load();
@@ -200,29 +255,34 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> rawRecents = prefs.getStringList(_recentScriptsKey) ?? [];
-    
+
     // v3.9.5.55: Institutional Heuristic Healer (Data Reconstruction)
     final List<String> sanitizedRecents = [];
     bool needsResave = false;
-    
+
     for (final json in rawRecents) {
       try {
         final decoded = Map<String, dynamic>.from(jsonDecode(json));
         bool itemModified = false;
-        
+
         // 1. Repair Type Integrity (PDF/DOCX/RTF guessing)
         if (decoded['type'] == null || decoded['type'] == 'FILE') {
           final String title = (decoded['title'] ?? '').toLowerCase();
           String guessedType = 'FILE';
-          if (title.endsWith('.pdf')) guessedType = 'PDF';
-          else if (title.endsWith('.docx') || title.endsWith('.doc')) guessedType = 'DOCX';
-          else if (title.endsWith('.rtf')) guessedType = 'RTF';
-          else if (title.endsWith('.txt')) guessedType = 'TXT';
-          
+          if (title.endsWith('.pdf')) {
+            guessedType = 'PDF';
+          } else if (title.endsWith('.docx') || title.endsWith('.doc')) {
+            guessedType = 'DOCX';
+          } else if (title.endsWith('.rtf')) {
+            guessedType = 'RTF';
+          } else if (title.endsWith('.txt')) {
+            guessedType = 'TXT';
+          }
+
           decoded['type'] = guessedType;
           itemModified = true;
         }
-        
+
         // 2. Repair Date/Session IDs
         if (decoded['lastModified'] == null) {
           decoded['lastModified'] = DateTime.now().toIso8601String();
@@ -234,7 +294,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
           itemModified = true;
         }
         if (decoded['sessionId'] == null) {
-          decoded['sessionId'] = 'rec_${DateTime.now().millisecondsSinceEpoch}_${rawRecents.indexOf(json)}';
+          decoded['sessionId'] =
+              'rec_${DateTime.now().millisecondsSinceEpoch}_${rawRecents.indexOf(json)}';
           itemModified = true;
         }
 
@@ -248,6 +309,35 @@ class SettingsNotifier extends Notifier<AppSettings> {
     if (needsResave) {
       await prefs.setStringList(_recentScriptsKey, sanitizedRecents);
     }
+
+    final manualStartSmall =
+        (prefs.getInt(_sttManualStartAdvanceSmallWordsKey) ?? 4)
+            .clamp(2, 8)
+            .toInt();
+    final manualStartBig = (prefs.getInt(_sttManualStartAdvanceBigWordsKey) ??
+            (manualStartSmall <= 2 ? 1 : manualStartSmall - 1))
+        .clamp(1, 8)
+        .toInt();
+    final manualSafetySmall =
+        (prefs.getInt(_sttManualSafetySmallWordsKey) ?? 2).clamp(1, 5).toInt();
+    final manualSafetyBig = (prefs.getInt(_sttManualSafetyBigWordsKey) ??
+            (manualSafetySmall <= 2 ? 1 : manualSafetySmall - 1))
+        .clamp(1, 5)
+        .toInt();
+    final manualVisibleSmall =
+        (prefs.getInt(_sttManualVisibleSkipSmallWordsKey) ?? 0)
+            .clamp(0, 8)
+            .toInt();
+    final manualVisibleBig = (prefs.getInt(_sttManualVisibleSkipBigWordsKey) ??
+            (manualVisibleSmall <= 0
+                ? 0
+                : (manualVisibleSmall <= 2 ? 1 : manualVisibleSmall - 1)))
+        .clamp(0, 8)
+        .toInt();
+    final manualBigWordMinLetters =
+        (prefs.getInt(_sttManualBigWordMinLettersKey) ?? 5)
+            .clamp(3, 10)
+            .toInt();
 
     state = AppSettings(
       fontSize: (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(10.0, 80.0),
@@ -276,18 +366,60 @@ class SettingsNotifier extends Notifier<AppSettings> {
       lastHighlightColor: prefs.getInt(_lastHighlightColorKey) ?? 0x4DFFFFFF,
       lastImportPath: prefs.getString(_lastImportPathKey) ?? '',
       lastHistoryIndex: prefs.getInt(_lastHistoryIndexKey) ?? -1,
-      showCurrentWordHighlight: prefs.getBool(_showCurrentWordHighlightKey) ?? true,
+      showCurrentWordHighlight:
+          prefs.getBool(_showCurrentWordHighlightKey) ?? true,
       showUpcomingWordColor: prefs.getBool(_showUpcomingWordColorKey) ?? false,
       fontFamily: prefs.getString(_fontFamilyKey) ?? 'Inter',
       showAlignmentOverride: prefs.getBool(_showAlignmentOverrideKey) ?? false,
       sttEngine: prefs.getString(_sttEngineKey) ?? 'google',
       readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
-      sttVisibleSkipEnabled:
-          prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
+      sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
+      allowScrollDuringActiveSession:
+          prefs.getBool(_allowScrollDuringActiveSessionKey) ?? false,
+      sttStrictBulletMode: prefs.getBool(_sttStrictBulletModeKey) ?? false,
+      sttHardVisibleSkipEnabled:
+          prefs.getBool(_sttHardVisibleSkipEnabledKey) ?? false,
+      sttManualProfileEnabled:
+          prefs.getBool(_sttManualProfileEnabledKey) ?? false,
+      sttManualStartAdvanceSmallWords: manualStartSmall,
+      sttManualStartAdvanceBigWords: manualStartBig,
+      sttManualSafetySmallWords: manualSafetySmall,
+      sttManualSafetyBigWords: manualSafetyBig,
+      sttManualVisibleSkipSmallWords: manualVisibleSmall,
+      sttManualVisibleSkipBigWords: manualVisibleBig,
+      sttManualBigWordMinLetters: manualBigWordMinLetters,
       sttInputDeviceId: prefs.getString(_sttInputDeviceIdKey) ?? '',
       sttInputDeviceLabel: prefs.getString(_sttInputDeviceLabelKey) ??
           'System default microphone',
+      contentCreatorRecordingFormat: _normalizeContentCreatorRecordingFormat(
+        prefs.getString(_contentCreatorRecordingFormatKey),
+      ),
+      contentCreatorRecordingAudioMode:
+          _normalizeContentCreatorRecordingAudioMode(
+        prefs.getString(_contentCreatorRecordingAudioModeKey),
+      ),
+      contentCreatorRecordingControlsSpeech:
+          prefs.getBool(_contentCreatorRecordingControlsSpeechKey) ?? false,
     );
+  }
+
+  String _normalizeContentCreatorRecordingFormat(String? value) {
+    switch (value) {
+      case AppSettings.contentCreatorRecordingFormatMp4:
+      case AppSettings.contentCreatorRecordingFormatAudio:
+        return value!;
+      default:
+        return AppSettings.contentCreatorRecordingFormatMp4;
+    }
+  }
+
+  String _normalizeContentCreatorRecordingAudioMode(String? value) {
+    switch (value) {
+      case AppSettings.contentCreatorRecordingAudioCamera:
+        return value!;
+      default:
+        return AppSettings.contentCreatorRecordingAudioCamera;
+    }
   }
 
   Future<void> setFontSize(double size) async {
@@ -306,129 +438,6 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(scrollLead: lead);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_scrollLeadKey, lead);
-  }
-
-  Future<void> saveScript(String text, {
-    String? title, 
-    String? type, 
-    int? historyIndex, 
-    String? sessionId, 
-    bool isSilent = false,
-    double? fontSize,
-    String? fontFamily,
-    double? lineSpacing,
-    double? letterSpacing,
-    double? wordSpacing,
-    String? textAlign,
-    int? scriptBgColor,
-    int? currentWordColor,
-    int? futureWordColor,
-    String? historyJson,
-  }) async {
-    final currentTitle = title ?? state.lastScriptTitle;
-    
-    // v3.36.7: Silent Persistence Guard
-    if (!isSilent) {
-      state = state.copyWith(
-        lastScript: text, 
-        lastScriptTitle: currentTitle,
-        lastHistoryIndex: historyIndex ?? state.lastHistoryIndex,
-      );
-    }
-    
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastScriptKey, text);
-    if (title != null) {
-      await prefs.setString('last_script_title', title);
-    }
-    
-    // v3.9.8.1: Mandatory recentList sync to preserve Undo state
-    final recentList = List<String>.from(state.recentScripts);
-    bool updated = false;
-    final matchKey = sessionId ?? (historyIndex != null ? null : currentTitle);
-
-    for (int i = 0; i < recentList.length; i++) {
-        try {
-          final decoded = jsonDecode(recentList[i]);
-          final itemSessionId = decoded['sessionId'];
-          final itemTitle = decoded['title'];
-          
-          bool isMatch = false;
-          if (sessionId != null && itemSessionId == sessionId) {
-              isMatch = true;
-          } else if (sessionId == null && itemTitle == currentTitle) {
-              isMatch = true;
-          }
-
-          if (isMatch) {
-            decoded['fullText'] = text;
-            if (historyIndex != null) decoded['historyIndex'] = historyIndex;
-            if (type != null) decoded['type'] = type;
-            if (decoded['type'] == null) decoded['type'] = 'FILE';
-            if (historyJson != null) decoded['historyJson'] = historyJson;
-            
-            // v3.9.5.70: Persist detected/applied metadata (Nested for Gallery Compatibility)
-            final styleMap = decoded['style'] as Map<String, dynamic>? ?? {};
-            if (fontSize != null) styleMap['fontSize'] = fontSize;
-            if (fontFamily != null) styleMap['fontFamily'] = fontFamily;
-            if (lineSpacing != null) styleMap['lineSpacing'] = lineSpacing;
-            if (letterSpacing != null) styleMap['letterSpacing'] = letterSpacing;
-            if (wordSpacing != null) styleMap['wordSpacing'] = wordSpacing;
-            if (textAlign != null) styleMap['textAlign'] = textAlign;
-            if (scriptBgColor != null) styleMap['scriptBgColor'] = scriptBgColor;
-            if (currentWordColor != null) styleMap['currentWordColor'] = currentWordColor;
-            if (futureWordColor != null) styleMap['futureWordColor'] = futureWordColor;
-            
-            if (styleMap.isNotEmpty) decoded['style'] = styleMap;
-            
-            // v3.9.5.56: Positional Sovereignty (Lift-and-Prepend)
-            recentList.removeAt(i);
-            recentList.insert(0, jsonEncode(decoded));
-            
-            updated = true;
-            break; 
-          }
-        } catch (_) {}
-    }
-    
-    if (updated) {
-       if (!isSilent) {
-         state = state.copyWith(recentScripts: recentList);
-       }
-       await prefs.setStringList(_recentScriptsKey, recentList);
-    } else if (sessionId != null) {
-       // v3.9.5.52: Automatic Prepention for new sessions
-       final newEntry = {
-         'title': currentTitle,
-         'fullText': text,
-         'type': type ?? 'FILE', // v3.9.5.54: Restore Label Integrity
-         'sessionId': sessionId,
-         'historyIndex': historyIndex ?? 0,
-         'lastModified': DateTime.now().toIso8601String(),
-         // v3.9.5.70: Initial metadata baseline (Nested for Gallery Compatibility)
-         'style': {
-           if (fontSize != null) 'fontSize': fontSize,
-           if (fontFamily != null) 'fontFamily': fontFamily,
-           if (lineSpacing != null) 'lineSpacing': lineSpacing,
-           if (letterSpacing != null) 'letterSpacing': letterSpacing,
-           if (wordSpacing != null) 'wordSpacing': wordSpacing,
-           if (textAlign != null) 'textAlign': textAlign,
-           if (scriptBgColor != null) 'scriptBgColor': scriptBgColor,
-           if (currentWordColor != null) 'currentWordColor': currentWordColor,
-           if (futureWordColor != null) 'futureWordColor': futureWordColor,
-         },
-         'historyJson': historyJson,
-       };
-       recentList.insert(0, jsonEncode(newEntry));
-       if (!isSilent) {
-         state = state.copyWith(recentScripts: recentList);
-       }
-       await prefs.setStringList(_recentScriptsKey, recentList);
-    }
-
-    if (historyIndex != null) {
-      await prefs.setInt(_lastHistoryIndexKey, historyIndex);
-    }
   }
 
   Future<void> setScrollMode(String mode) async {
@@ -529,20 +538,17 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final list = List<String>.from(state.recentScripts);
     final Map<String, dynamic> newData = jsonDecode(metadataJson);
     final String? newSessionId = newData['sessionId'] as String?;
-    final String? newFullText = newData['fullText'] as String?;
     final String? newTitle = newData['title'] as String?;
-
-    // Text Normalization Helper
-    String normalize(String? t) => (t ?? '').replaceAll('\r', '').trim();
-    final String normalizedNewText = normalize(newFullText);
 
     // Smart Upsert: Deduplicate by sessionId OR (fullText + title)
     // Smart Upsert: Deduplicate by title (Primary) or sessionId
     list.removeWhere((item) {
       try {
         final decoded = jsonDecode(item);
-        final bool idMatch = newSessionId != null && decoded['sessionId'] == newSessionId;
-        final bool titleMatch = newTitle != null && decoded['title'] == newTitle;
+        final bool idMatch =
+            newSessionId != null && decoded['sessionId'] == newSessionId;
+        final bool titleMatch =
+            newTitle != null && decoded['title'] == newTitle;
         return idMatch || titleMatch;
       } catch (e) {
         return false;
@@ -552,7 +558,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
     // Insert the latest version at the top
     list.insert(0, metadataJson);
     if (list.length > 20) list.removeLast();
-    
+
     state = state.copyWith(recentScripts: list);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_recentScriptsKey, list);
@@ -560,10 +566,13 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> removeFromRecent(String sessionId) async {
     final list = List<String>.from(state.recentScripts);
+    final removedItems = <Map<String, dynamic>>[];
     list.removeWhere((item) {
       try {
-        final decoded = jsonDecode(item);
-        return decoded['sessionId'] == sessionId;
+        final decoded = Map<String, dynamic>.from(jsonDecode(item));
+        final matches = decoded['sessionId'] == sessionId;
+        if (matches) removedItems.add(decoded);
+        return matches;
       } catch (e) {
         return false;
       }
@@ -572,12 +581,23 @@ class SettingsNotifier extends Notifier<AppSettings> {
     state = state.copyWith(recentScripts: list);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_recentScriptsKey, list);
+    for (final item in removedItems) {
+      await _backupRemovedRecentItem(item);
+    }
   }
 
   Future<void> setDisplayName(String name) async {
     state = state.copyWith(displayName: name);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_displayNameKey, name);
+  }
+
+  Future<void> seedDisplayNameFromEmail(String email) async {
+    final current = state.displayName.trim();
+    if (current.isNotEmpty && current != 'Guest') return;
+    final localPart = email.trim().split('@').first.trim();
+    if (localPart.isEmpty) return;
+    await setDisplayName(localPart);
   }
 
   Future<void> setLastChosenTextColor(int color) async {
@@ -621,21 +641,44 @@ class SettingsNotifier extends Notifier<AppSettings> {
       scriptBgColor: styles['scriptBgColor'] ?? state.scriptBgColor,
       currentWordColor: styles['currentWordColor'] ?? state.currentWordColor,
       futureWordColor: styles['futureWordColor'] ?? state.futureWordColor,
-      lineSpacing: (styles['lineSpacing'] as num?)?.toDouble() ?? state.lineSpacing,
-      wordSpacing: (styles['wordSpacing'] as num?)?.toDouble() ?? state.wordSpacing,
-      letterSpacing: (styles['letterSpacing'] as num?)?.toDouble() ?? state.letterSpacing,
+      lineSpacing:
+          (styles['lineSpacing'] as num?)?.toDouble() ?? state.lineSpacing,
+      wordSpacing:
+          (styles['wordSpacing'] as num?)?.toDouble() ?? state.wordSpacing,
+      letterSpacing:
+          (styles['letterSpacing'] as num?)?.toDouble() ?? state.letterSpacing,
       fontSize: (styles['fontSize'] as num?)?.toDouble() ?? state.fontSize,
       fontFamily: styles['fontFamily'] ?? state.fontFamily,
     );
     final prefs = await SharedPreferences.getInstance();
-    if (styles.containsKey('scriptBgColor')) await prefs.setInt(_scriptBgColorKey, styles['scriptBgColor']);
-    if (styles.containsKey('currentWordColor')) await prefs.setInt(_currentWordColorKey, styles['currentWordColor']);
-    if (styles.containsKey('futureWordColor')) await prefs.setInt(_futureWordColorKey, styles['futureWordColor']);
-    if (styles.containsKey('lineSpacing')) await prefs.setDouble(_lineSpacingKey, (styles['lineSpacing'] as num).toDouble());
-    if (styles.containsKey('wordSpacing')) await prefs.setDouble(_wordSpacingKey, (styles['wordSpacing'] as num).toDouble());
-    if (styles.containsKey('letterSpacing')) await prefs.setDouble(_letterSpacingKey, (styles['letterSpacing'] as num).toDouble());
-    if (styles.containsKey('fontSize')) await prefs.setDouble(_fontSizeKey, (styles['fontSize'] as num).toDouble());
-    if (styles.containsKey('fontFamily')) await prefs.setString(_fontFamilyKey, styles['fontFamily']);
+    if (styles.containsKey('scriptBgColor')) {
+      await prefs.setInt(_scriptBgColorKey, styles['scriptBgColor']);
+    }
+    if (styles.containsKey('currentWordColor')) {
+      await prefs.setInt(_currentWordColorKey, styles['currentWordColor']);
+    }
+    if (styles.containsKey('futureWordColor')) {
+      await prefs.setInt(_futureWordColorKey, styles['futureWordColor']);
+    }
+    if (styles.containsKey('lineSpacing')) {
+      await prefs.setDouble(
+          _lineSpacingKey, (styles['lineSpacing'] as num).toDouble());
+    }
+    if (styles.containsKey('wordSpacing')) {
+      await prefs.setDouble(
+          _wordSpacingKey, (styles['wordSpacing'] as num).toDouble());
+    }
+    if (styles.containsKey('letterSpacing')) {
+      await prefs.setDouble(
+          _letterSpacingKey, (styles['letterSpacing'] as num).toDouble());
+    }
+    if (styles.containsKey('fontSize')) {
+      await prefs.setDouble(
+          _fontSizeKey, (styles['fontSize'] as num).toDouble());
+    }
+    if (styles.containsKey('fontFamily')) {
+      await prefs.setString(_fontFamilyKey, styles['fontFamily']);
+    }
   }
 
   Future<void> setFontFamily(String family) async {
@@ -699,37 +742,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_showAlignmentOverrideKey, val);
   }
-
-  Future<void> setSttEngine(String engine) async {
-    state = state.copyWith(sttEngine: engine);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sttEngineKey, engine);
-  }
-
-  Future<void> setReadFadeIntensity(double intensity) async {
-    state = state.copyWith(readFadeIntensity: intensity);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_readFadeIntensityKey, intensity);
-  }
-
-  Future<void> setSttVisibleSkipEnabled(bool enabled) async {
-    state = state.copyWith(sttVisibleSkipEnabled: enabled);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_sttVisibleSkipEnabledKey, enabled);
-  }
-
-  Future<void> setSttInputDevice(String deviceId, String label) async {
-    final normalizedLabel = label.trim().isEmpty
-        ? 'System default microphone'
-        : label.trim();
-    state = state.copyWith(
-      sttInputDeviceId: deviceId,
-      sttInputDeviceLabel: normalizedLabel,
-    );
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sttInputDeviceIdKey, deviceId);
-    await prefs.setString(_sttInputDeviceLabelKey, normalizedLabel);
-  }
 }
 
-final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+final settingsProvider =
+    NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);

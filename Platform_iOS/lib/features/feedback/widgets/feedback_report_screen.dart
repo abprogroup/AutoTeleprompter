@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../script/models/script.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
@@ -12,12 +13,19 @@ import '../services/feedback_report_service.dart';
 import '../services/lightweight_diagnostics.dart';
 
 class FeedbackReportScreen extends ConsumerStatefulWidget {
-  const FeedbackReportScreen({super.key});
+  final FeedbackReportService Function() createFeedbackService;
+
+  const FeedbackReportScreen({
+    super.key,
+    this.createFeedbackService = _createFeedbackReportService,
+  });
 
   @override
   ConsumerState<FeedbackReportScreen> createState() =>
       _FeedbackReportScreenState();
 }
+
+FeedbackReportService _createFeedbackReportService() => FeedbackReportService();
 
 class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
   final _titleCtrl = TextEditingController();
@@ -27,6 +35,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
   String _severity = 'Normal';
   bool _sending = false;
   bool _outboxBusy = false;
+  bool _attachScript = false;
   int _pendingReports = 0;
 
   @override
@@ -51,7 +60,8 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
   Widget build(BuildContext context) {
     final script = ref.watch(scriptProvider);
     final consent = ref.watch(betaConsentProvider);
-    final scriptSummary = script == null
+    final canAttachScript = script != null;
+    final scriptSummary = !canAttachScript
         ? 'No active script'
         : '${script.title} - ${script.rawText.length} characters';
 
@@ -73,6 +83,10 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         padding: const EdgeInsets.all(22),
         children: [
           _notice(scriptSummary, consent.deviceKey),
+          if (canAttachScript) ...[
+            const SizedBox(height: 12),
+            _scriptAttachmentToggle(script),
+          ],
           const SizedBox(height: 18),
           if (_pendingReports > 0) ...[
             _outboxCard(),
@@ -143,7 +157,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'This beta feedback report includes your full active script and diagnostic data.',
+            'This feedback report includes diagnostic data. Script text is attached only when you choose it for this report.',
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w800,
@@ -157,6 +171,36 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
           Text('Device key: $deviceKey',
               style: const TextStyle(color: Colors.white54, fontSize: 12)),
         ],
+      ),
+    );
+  }
+
+  Widget _scriptAttachmentToggle(Script script) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151515),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: CheckboxListTile(
+        value: _attachScript,
+        onChanged: (value) => setState(() => _attachScript = value ?? false),
+        activeColor: const Color(0xFFFFBF00),
+        checkColor: Colors.black,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(
+          'Attach my current script: ${script.title} (${script.rawText.length} chars)',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: const Text(
+          'Leave this off unless the script text is needed to reproduce the issue.',
+          style: TextStyle(color: Colors.white54),
+        ),
       ),
     );
   }
@@ -265,11 +309,38 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
     }
 
     setState(() => _sending = true);
-    final report = _buildReport();
-    final result = await FeedbackReportService().submit(report);
+    late final FeedbackSendResult result;
+    try {
+      final report = _buildReport();
+      result = await widget.createFeedbackService().submit(report);
+    } catch (error, stack) {
+      final safeError = _sanitizeDiagnosticText(error.toString());
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'feedback.submitUnexpected',
+      );
+      if (!mounted) return;
+      setState(() => _sending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Feedback could not be sent: $safeError'),
+          backgroundColor: Colors.red[800],
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() => _sending = false);
-    await _refreshPendingReports();
+    try {
+      await _refreshPendingReports();
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'feedback.refreshPendingAfterSubmit',
+      );
+    }
     if (!mounted) return;
     LightweightDiagnostics.instance.record(
       'feedback',
@@ -279,22 +350,36 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.message),
-        backgroundColor: result.sent ? Colors.green[800] : Colors.orange[800],
+        backgroundColor: result.sent
+            ? Colors.green[800]
+            : (result.queued ? Colors.orange[800] : Colors.red[800]),
       ),
     );
-    if (!mounted) return;
-    if (result.sent) Navigator.pop(context);
+    if (result.sent || result.queued) {
+      _resetFeedbackForm();
+    }
+  }
+
+  void _resetFeedbackForm() {
+    setState(() {
+      _category = 'Bug';
+      _severity = 'Normal';
+      _attachScript = false;
+      _titleCtrl.clear();
+      _descriptionCtrl.clear();
+      _stepsCtrl.clear();
+    });
   }
 
   Future<void> _refreshPendingReports() async {
-    final count = await FeedbackReportService().pendingReportCount();
+    final count = await widget.createFeedbackService().pendingReportCount();
     if (!mounted) return;
     setState(() => _pendingReports = count);
   }
 
   Future<void> _retryPendingReports() async {
     setState(() => _outboxBusy = true);
-    final result = await FeedbackReportService().retryPendingReports();
+    final result = await widget.createFeedbackService().retryPendingReports();
     if (!mounted) return;
     setState(() {
       _outboxBusy = false;
@@ -307,7 +392,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
 
   Future<void> _deletePendingReports() async {
     setState(() => _outboxBusy = true);
-    final deleted = await FeedbackReportService().deletePendingReports();
+    final deleted = await widget.createFeedbackService().deletePendingReports();
     if (!mounted) return;
     setState(() {
       _outboxBusy = false;
@@ -320,8 +405,13 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
 
   Map<String, Object?> _buildReport() {
     final script = _safeRead(() => ref.read(scriptProvider));
+    final includeScript = _attachScript && script != null;
     final settings = ref.read(settingsProvider);
     final consent = ref.read(betaConsentProvider);
+    final ringBuffer = LightweightDiagnostics.instance.snapshot(
+      budgetBytes: 96 * 1024,
+      stackTraceLimit: 2000,
+    );
     final reportId = 'rpt_${DateTime.now().toUtc().millisecondsSinceEpoch}';
     return {
       'schemaVersion': 1,
@@ -338,7 +428,7 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
         'description': _descriptionCtrl.text.trim(),
         'steps': _stepsCtrl.text.trim(),
       },
-      'activeScript': script == null
+      'activeScript': !includeScript
           ? null
           : {
               'title': script.title,
@@ -349,55 +439,144 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
               'wordCount': script.words.where((w) => !w.isNewline).length,
             },
       'diagnostics': {
-        'teleprompter': _readTeleprompterDiagnostics(),
+        'teleprompter':
+            _readTeleprompterDiagnostics(includeScript: includeScript),
         'settings': {
           'languageMode': settings.languageMode,
           'scrollMode': settings.scrollMode,
           'sttEngine': settings.sttEngine,
           'sttInputDeviceLabel': settings.sttInputDeviceLabel,
+          'sttStrictBulletMode': settings.sttStrictBulletMode,
           'sttVisibleSkipEnabled': settings.sttVisibleSkipEnabled,
+          'sttManualProfileEnabled': settings.sttManualProfileEnabled,
         },
-        'ringBuffer': LightweightDiagnostics.instance.snapshot(
-          budgetBytes: 96 * 1024,
-          stackTraceLimit: 2000,
-        ),
+        'ringBuffer': includeScript
+            ? ringBuffer
+            : _redactScriptLikeDiagnostics(ringBuffer),
       },
     };
   }
 
-  Map<String, Object?> _readTeleprompterDiagnostics() {
+  Map<String, Object?> _readTeleprompterDiagnostics({
+    required bool includeScript,
+  }) {
     try {
       final teleprompter = ref.read(teleprompterProvider);
+      final debugLogsTail = _tail(teleprompter.debugLogs, 20);
       return {
         'available': true,
         'confirmedWordIndex': teleprompter.confirmedWordIndex,
         'isListening': teleprompter.isListening,
         'isStarting': teleprompter.isStarting,
         'hasError': teleprompter.hasError,
-        'statusMessage': teleprompter.statusMessage,
-        'debugLogsTail': _tail(teleprompter.debugLogs, 20),
+        'statusMessage': _sanitizeDiagnosticText(teleprompter.statusMessage),
+        'debugLogsTail': debugLogsTail
+            .map((log) => _sanitizeTeleprompterDebugLog(
+                  log,
+                  includeScript: includeScript,
+                ))
+            .toList(growable: false),
       };
     } catch (error) {
+      final safeError = _sanitizeDiagnosticText(error.toString());
       LightweightDiagnostics.instance.record(
         'feedback',
         'teleprompter snapshot unavailable',
-        data: {'error': error.toString()},
+        data: {'error': safeError},
       );
       return {
         'available': false,
-        'snapshotError': error.toString(),
+        'snapshotError': safeError,
       };
     }
+  }
+
+  Object? _redactScriptLikeDiagnostics(Object? value) {
+    if (value is Map) {
+      return value.map((key, nestedValue) {
+        final keyText = key.toString();
+        if (_isScriptLikeDiagnosticKey(keyText)) {
+          return MapEntry(keyText, '<redacted>');
+        }
+        return MapEntry(keyText, _redactScriptLikeDiagnostics(nestedValue));
+      });
+    }
+    if (value is Iterable) {
+      return value
+          .map((item) => _redactScriptLikeDiagnostics(item))
+          .toList(growable: false);
+    }
+    if (value is String) return _redactScriptLikeText(value);
+    return value;
+  }
+
+  static bool _isScriptLikeDiagnosticKey(String key) {
+    final lower = key.toLowerCase();
+    return lower == 'heard' || lower == 'next' || lower == 'word';
+  }
+
+  static String _redactScriptLikeText(String value) {
+    var redacted = value;
+    redacted = redacted.replaceAllMapped(
+      RegExp(r'\b(heard|next)\s*[:=]\s*"[^"]*"', caseSensitive: false),
+      (match) => '${match.group(1)}: "<redacted>"',
+    );
+    redacted = redacted.replaceAllMapped(
+      RegExp(r'->\s*#(\d+)\s*"[^"]*"'),
+      (match) => '-> #${match.group(1)} "<redacted>"',
+    );
+    return redacted;
+  }
+
+  static String _sanitizeTeleprompterDebugLog(
+    String value, {
+    required bool includeScript,
+  }) {
+    final scriptSafe = includeScript ? value : _redactScriptLikeText(value);
+    return _sanitizeDiagnosticText(scriptSafe);
+  }
+
+  static String _sanitizeDiagnosticText(String value) {
+    var sanitized = _redactScriptLikeText(value);
+    sanitized = sanitized.replaceAll(
+      RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+      'Bearer <redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'([?&](?:pin|token|access_token|refresh_token|client_secret|password)=)'
+        r'[^&\s]+',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'''(["']?(?:access_token|refresh_token|client_secret|password|apikey|api_key|authorization|pin|token)["']?\s*[:=]\s*)["']?[^"',}&\s]+''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'(/Users/|/private/var/|/var/folders/)[^\s,;)\]}]+'),
+      '<local-path>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'[A-Z]:\\Users\\[^ \t\r\n,;)\]}]+', caseSensitive: false),
+      '<local-path>',
+    );
+    return sanitized;
   }
 
   T? _safeRead<T>(T Function() read) {
     try {
       return read();
     } catch (error) {
+      final safeError = _sanitizeDiagnosticText(error.toString());
       LightweightDiagnostics.instance.record(
         'feedback',
         'provider snapshot unavailable',
-        data: {'error': error.toString()},
+        data: {'error': safeError},
       );
       return null;
     }

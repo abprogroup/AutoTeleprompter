@@ -31,6 +31,9 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
+  # Xcode 14 cannot compile SDWebImage 5.21's iOS 17 HDR property reference.
+  pod 'SDWebImage', '5.20.0'
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
     inherit! :search_paths
@@ -49,6 +52,10 @@ post_install do |installer|
 
         ## permission_handler: explicitly activate speech recognition permission
         'PERMISSION_SPEECH_RECOGNIZER=1',
+
+        ## permission_handler: explicitly activate camera and photo-save access
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_PHOTOS=1',
       ]
     end
   end

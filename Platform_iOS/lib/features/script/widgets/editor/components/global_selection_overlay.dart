@@ -336,7 +336,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (_startBlock == null ||
         _endBlock == null ||
         _startOffset == null ||
-        _endOffset == null) return;
+        _endOffset == null) {
+      return;
+    }
 
     // Ensure start is before end
     int sB = _startBlock!, eB = _endBlock!;
@@ -377,7 +379,9 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     if (_startBlock == null ||
         _endBlock == null ||
         _startOffset == null ||
-        _endOffset == null) return;
+        _endOffset == null) {
+      return;
+    }
 
     _handleStartPos = _getOffsetForPosition(
       _startBlock!,
@@ -705,10 +709,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
               ? stackBox.localToGlobal(logicalStackLocal)
               : null;
           setState(() {
-            if (isStart)
+            if (isStart) {
               _draggingStart = true;
-            else
+            } else {
               _draggingEnd = true;
+            }
             _panStartGlobal = details.globalPosition;
             _panStartHandleGlobal = caretGlobal;
           });
@@ -724,10 +729,11 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
           }
         },
         onPanEnd: (_) => setState(() {
-          if (isStart)
+          if (isStart) {
             _draggingStart = false;
-          else
+          } else {
             _draggingEnd = false;
+          }
           _panStartGlobal = null;
           _panStartHandleGlobal = null;
         }),
@@ -744,7 +750,7 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
                 borderRadius: BorderRadius.circular(3),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: 0.5),
                       blurRadius: 4,
                       offset: const Offset(0, 2)),
                 ],

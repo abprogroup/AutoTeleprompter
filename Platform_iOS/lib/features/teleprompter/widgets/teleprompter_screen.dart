@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
@@ -8,11 +7,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/teleprompter_provider.dart';
-import '../services/word_aligner.dart';
+import '../models/alignment_result.dart';
+import '../services/presenter_input_lock_service.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
+import '../../script/services/script_color_inversion_service.dart';
 import '../../script/services/script_bookmark_service.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../remote/services/remote_control_service.dart';
@@ -26,8 +27,7 @@ part 'teleprompter_screen.bookmarks.dart';
 part 'teleprompter_screen.search.dart';
 part 'teleprompter_screen.control_bar.dart';
 part 'teleprompter_screen.settings_panel.dart';
-
-const _systemChannel = MethodChannel('autoteleprompter/system');
+part 'teleprompter_screen.stt_profile_settings.dart';
 
 // Regex to strip any unprocessed markup tags that somehow leaked into word.raw
 final _tagStripRe = RegExp(
@@ -52,6 +52,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   Timer? _smoothScrollTimer;
   double _scrollTarget = 0.0;
   bool _smoothScrollActive = false;
+  bool _controlsAutoHideActive = false;
   int _manualWordIndex = 0;
   bool _manualScrolling = false;
   bool _scrollingBackward = false;
@@ -70,6 +71,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<_PresenterSearchMatch> _presenterSearchMatches = const [];
   int _presenterSearchMatchIndex = -1;
   bool _resumePromptShown = false;
+  String? _lastPublishedRemoteScrollMode;
+  double? _lastPublishedRemoteScrollSpeed;
+  bool? _lastPublishedRemoteScriptActive;
+  bool? _lastPublishedRemoteSessionActive;
+  bool? _lastPublishedRemoteIsStarting;
 
   @override
   void initState() {
@@ -112,30 +118,21 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   Widget build(BuildContext context) => _buildTeleprompterScreen(context);
 
   void _updatePresenterSearchState(VoidCallback update) {
+    _setTeleprompterState(update);
+  }
+
+  void _setTeleprompterState(VoidCallback update) {
     if (!mounted) return;
     setState(update);
   }
 
   // ── Smooth pixel-based manual scroll ───────────────────────────────────────
 
-  @override
   TextAlign _toTextAlign(
       TextAlign? paraAlign, AppSettings settings, bool isRtl) {
     if (paraAlign != null) return paraAlign;
     // v3.8: Source of Truth - If no tag, Hebrew defaults to Right, English to Left
     return isRtl ? TextAlign.right : TextAlign.left;
-  }
-
-  Alignment _toAlignment(
-      TextAlign? paraAlign, AppSettings settings, bool isRtl) {
-    final textAlign = _toTextAlign(paraAlign, settings, isRtl);
-    if (textAlign == TextAlign.center) return Alignment.center;
-
-    if (textAlign == TextAlign.right) return Alignment.centerRight;
-    if (textAlign == TextAlign.left) return Alignment.centerLeft;
-
-    // Default fallback
-    return Alignment.center;
   }
 
   WrapAlignment _toWrapAlignment(
@@ -154,27 +151,6 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     }
 
     return WrapAlignment.center;
-  }
-
-  WrapAlignment _parseWrapAlignment(String align, bool isRtl) {
-    if (isRtl) {
-      switch (align) {
-        case 'right':
-          return WrapAlignment.start;
-        case 'left':
-          return WrapAlignment.end;
-        default:
-          return WrapAlignment.center;
-      }
-    }
-    switch (align) {
-      case 'left':
-        return WrapAlignment.start;
-      case 'right':
-        return WrapAlignment.end;
-      default:
-        return WrapAlignment.center;
-    }
   }
 }
 

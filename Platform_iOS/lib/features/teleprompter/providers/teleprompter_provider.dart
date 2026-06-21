@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
 import '../services/speech_service.dart';
+import '../services/stt_recognition_policy_service.dart';
 import '../services/whisper_speech_service_native.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
@@ -24,12 +25,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   Timer? _fluidAdvanceTimer;
   int _fluidTarget = 0;
   String? _scriptLanguageLocale;
-  String? _activeLocale;          // locale the STT is currently using
-  List<String> _sectionLocales = []; // per-word locale map, pre-computed at session start
+  String? _activeLocale; // locale the STT is currently using
+  List<String> _sectionLocales =
+      []; // per-word locale map, pre-computed at session start
   Future<void>? _stopInFlight;
   int _sessionToken = 0;
   int? _visibleWordStart;
   int? _visibleWordEnd;
+  bool _sttReadingStandby = false;
 
   // ── Tuning: how patient we are before force-skipping ───────────────────────
   static const int _googleSkipAfterStuck = 45;
@@ -79,9 +82,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     try {
       final settings = ref.read(settingsProvider);
       if (!settings.debugMode) return;
-    } catch (_) { return; }
+    } catch (_) {
+      return;
+    }
     final now = DateTime.now();
-    final ts = "${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}";
+    final ts =
+        "${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}";
     final entry = "[$ts] ${DebugLogFormatter.normalize(log)}";
     final logs = [...state.debugLogs, entry];
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
@@ -97,21 +103,29 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       final settings = ref.read(settingsProvider);
 
       // Voice Commands
-      if (words.contains('stop prompt') || words.contains('עצור') || words.contains('עצירה')) {
+      if (words.contains('stop prompt') ||
+          words.contains('עצור') ||
+          words.contains('עצירה')) {
         _addDebugLog('🗣️ VOICE COMMAND: STOP');
         ref.read(settingsProvider.notifier).setScrollSpeed(0);
         return;
       } else if (words.contains('start prompt') || words.contains('בוא')) {
         _addDebugLog('🗣️ VOICE COMMAND: START');
-        if (settings.scrollSpeed == 0) ref.read(settingsProvider.notifier).setScrollSpeed(100);
+        if (settings.scrollSpeed == 0) {
+          ref.read(settingsProvider.notifier).setScrollSpeed(100);
+        }
         return;
       } else if (words.contains('speed up') || words.contains('מהר')) {
         _addDebugLog('🗣️ VOICE COMMAND: FASTER');
-        ref.read(settingsProvider.notifier).setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
+        ref
+            .read(settingsProvider.notifier)
+            .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
         return;
       } else if (words.contains('slow down') || words.contains('לאט')) {
         _addDebugLog('🗣️ VOICE COMMAND: SLOWER');
-        ref.read(settingsProvider.notifier).setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
+        ref
+            .read(settingsProvider.notifier)
+            .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
         return;
       }
     } catch (_) {}
@@ -119,8 +133,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _accumulatedTranscript = result.words;
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
+    final policy =
+        SttRecognitionPolicyService.recognitionPolicyForSettings(settings);
     final maxSkipTargetIndex =
-        settings.sttVisibleSkipEnabled && _visibleWordStart != null
+        policy.visibleSkipEnabled && _visibleWordStart != null
             ? _visibleWordEnd
             : null;
 
@@ -128,28 +144,53 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       script: script.words,
       transcript: _accumulatedTranscript,
       lastConfirmedIndex: state.confirmedWordIndex,
+      visibleSkipStartIndex:
+          maxSkipTargetIndex == null ? null : _visibleWordStart,
       maxSkipTargetIndex: maxSkipTargetIndex,
+      strictBulletMode: policy.bulletMode,
+      policy: policy,
+      readingStandby: _sttReadingStandby,
     );
 
     final currentIdx = state.confirmedWordIndex;
     final nextExpected = (currentIdx + 1 < script.words.length)
-        ? script.words.skip(currentIdx + 1).where((w) => !w.isNewline).take(3).map((w) => w.raw).join(' ')
+        ? script.words
+            .skip(currentIdx + 1)
+            .where((w) => !w.isNewline)
+            .take(3)
+            .map((w) => w.raw)
+            .join(' ')
         : '<END>';
 
     final engineTag = _useWhisper ? '🤖' : '🎤';
     // Near a section boundary use a tight threshold so any unrecognised
     // word in the STT restart gap is force-skipped in under a second
     // rather than waiting the full 45-cycle window.
-    final skipThreshold = _useWhisper ? _whisperSkipAfterStuck : _effectiveSkipThreshold();
+    final skipThreshold =
+        _useWhisper ? _whisperSkipAfterStuck : _effectiveSkipThreshold();
 
-    if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
+    if (aligned.shouldEnterStandby) {
+      _sttReadingStandby = true;
       _noProgressCount = 0;
-      final capped = aligned.confirmedWordIndex.clamp(
-        state.confirmedWordIndex,
-        state.confirmedWordIndex + _maxAdvancePerUpdate,
+      _addDebugLog(
+          '$engineTag 🔒 STANDBY | ${aligned.debugInfo} | heard: "${result.words}"');
+      return;
+    }
+
+    if (aligned.shouldAdvance &&
+        aligned.confirmedWordIndex > state.confirmedWordIndex) {
+      _sttReadingStandby = true;
+      _noProgressCount = 0;
+      final capped = SttRecognitionPolicyService.resolveAdvanceTarget(
+        currentIndex: state.confirmedWordIndex,
+        alignedIndex: aligned.confirmedWordIndex,
+        visibleMaxSkipTargetIndex: maxSkipTargetIndex,
+        maxAdvancePerUpdate: _maxAdvancePerUpdate,
       );
-      final advancedWord = capped < script.words.length ? script.words[capped].raw : '?';
-      _addDebugLog('$engineTag ✅ ADVANCE → #$capped "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
+      final advancedWord =
+          capped < script.words.length ? script.words[capped].raw : '?';
+      _addDebugLog(
+          '$engineTag ✅ ADVANCE → #$capped "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
 
       // Fluid advancement: if jumping more than 3 words, animate
       // through intermediate words so the user's eye can follow.
@@ -164,15 +205,24 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
       _checkAndSwitchLocale();
     } else {
+      if (!policy.bulletMode) {
+        _sttReadingStandby = false;
+      }
       _noProgressCount++;
-      _addDebugLog('$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
+      _addDebugLog(
+          '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
 
-      if (_noProgressCount >= skipThreshold) {
+      if (SttRecognitionPolicyService.shouldForceSkipAfterNoProgress(
+        strictBulletMode: policy.bulletMode,
+        noProgressCount: _noProgressCount,
+        skipThreshold: skipThreshold,
+      )) {
         _noProgressCount = 0;
         final next = _nextRealWord(state.confirmedWordIndex, script);
         if (next != null) {
           final skippedWord = script.words[next].raw;
-          _addDebugLog('🤖 ⏭ FORCE SKIP → #$next "$skippedWord" (stuck too long)');
+          _addDebugLog(
+              '🤖 ⏭ FORCE SKIP → #$next "$skippedWord" (stuck too long)');
           _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
         }
       }
@@ -196,11 +246,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _startingSession = false;
       _addDebugLog('🎤 [$platform] STATUS: $status');
       _safeSetState((s) => s.copyWith(
-        isListening: status == SpeechStatus.listening,
-        isStarting: false,
-        statusMessage: '',
-        hasError: false,
-      ));
+            isListening: status == SpeechStatus.listening,
+            isStarting: false,
+            statusMessage: '',
+            hasError: false,
+          ));
     };
 
     _sttService.onError = (error) {
@@ -211,11 +261,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           error.contains('error_permission') ||
           error.contains('not available');
       _safeSetState((s) => s.copyWith(
-        statusMessage: isFatal ? error : '',
-        hasError: isFatal,
-        isListening: isFatal ? false : s.isListening,
-        isStarting: isFatal ? false : s.isStarting,
-      ));
+            statusMessage: isFatal ? error : '',
+            hasError: isFatal,
+            isListening: isFatal ? false : s.isListening,
+            isStarting: isFatal ? false : s.isStarting,
+          ));
     };
 
     _sttService.onLanguageUnavailable = (requestedLocale) {
@@ -225,12 +275,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       );
       _addDebugLog('🎤 [$platform] LANGUAGE UNAVAILABLE: $langName');
       _safeSetState((s) => s.copyWith(
-        missingLanguage: langName,
-        hasError: true,
-        isListening: false,
-        isStarting: false,
-        statusMessage: 'Speech recognition language not installed on this device',
-      ));
+            missingLanguage: langName,
+            hasError: true,
+            isListening: false,
+            isStarting: false,
+            statusMessage:
+                'Speech recognition language not installed on this device',
+          ));
     };
 
     // Android-only: fires when offline + cloud STT both fail for a language.
@@ -238,15 +289,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sttService.onNeedLanguagePack = (locale) {
       if (_useWhisper || _disposed || _sessionStopped) return;
       final langName = SpeechStartResult.languageNameFromLocale(locale);
-      _addDebugLog('🎤 [$platform] ALL STT FAILED for $langName — internet required');
+      _addDebugLog(
+          '🎤 [$platform] ALL STT FAILED for $langName — internet required');
       _safeSetState((s) => s.copyWith(
-        hasError: true,
-        isListening: false,
-        isStarting: false,
-        statusMessage: '$langName speech recognition requires an internet connection. '
-            'This language is not available offline on your device. '
-            'Please connect to WiFi or mobile data and try again.',
-      ));
+            hasError: true,
+            isListening: false,
+            isStarting: false,
+            statusMessage:
+                '$langName speech recognition requires an internet connection. '
+                'This language is not available offline on your device. '
+                'Please connect to WiFi or mobile data and try again.',
+          ));
     };
 
     _sttService.onAudioInputDevicesChanged = (devices) {
@@ -269,30 +322,32 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       if (!_useWhisper || _disposed || _sessionStopped) return;
       _addDebugLog('🤖 WHISPER STATUS: $status');
       _safeSetState((s) => s.copyWith(
-        isListening: status == SpeechStatus.listening,
-        isStarting: false,
-        statusMessage: '',
-        hasError: false,
-      ));
+            isListening: status == SpeechStatus.listening,
+            isStarting: false,
+            statusMessage: '',
+            hasError: false,
+          ));
     };
 
     _whisperService.onError = (error) {
       if (_disposed || _sessionStopped) return;
       _addDebugLog('🤖 WHISPER ERROR: $error');
-      final isFatal = error.contains('not available') || error.contains('init failed');
+      final isFatal =
+          error.contains('not available') || error.contains('init failed');
       if (isFatal) {
         _safeSetState((s) => s.copyWith(
-          statusMessage: error,
-          hasError: true,
-          isListening: false,
-          isStarting: false,
-        ));
+              statusMessage: error,
+              hasError: true,
+              isListening: false,
+              isStarting: false,
+            ));
       }
     };
   }
 
   /// Auto-fallback to Whisper when Google STT is completely blocked
   /// (e.g., ColorOS devices where mic permission is restricted)
+  // ignore: unused_element
   Future<void> _autoFallbackToWhisper(String langName) async {
     if (_disposed || _sessionStopped) return;
 
@@ -316,12 +371,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     // No Whisper model available — show error with guidance
     _addDebugLog('❌ NO WHISPER MODEL — cannot fallback, showing error');
     _safeSetState((s) => s.copyWith(
-      missingLanguage: langName,
-      hasError: true,
-      isListening: false,
-      statusMessage: 'Google speech blocked on this device. '
-          'Go to Settings and download a Whisper model for offline recognition.',
-    ));
+          missingLanguage: langName,
+          hasError: true,
+          isListening: false,
+          statusMessage: 'Google speech blocked on this device. '
+              'Go to Settings and download a Whisper model for offline recognition.',
+        ));
   }
 
   /// Animate word advancement from current position to [target],
@@ -330,8 +385,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _fluidAdvanceTimer?.cancel();
     _fluidTarget = target;
 
-    _fluidAdvanceTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) {
-      if (_disposed || _sessionStopped) { timer.cancel(); return; }
+    _fluidAdvanceTimer =
+        Timer.periodic(const Duration(milliseconds: 80), (timer) {
+      if (_disposed || _sessionStopped) {
+        timer.cancel();
+        return;
+      }
       final current = state.confirmedWordIndex;
 
       // If a newer result pushed the target further, follow it
@@ -367,7 +426,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     const minSectionWords = 3;
 
     final words = script.words.where((w) => !w.isNewline).toList();
-    if (words.isEmpty) { _sectionLocales = []; return; }
+    if (words.isEmpty) {
+      _sectionLocales = [];
+      return;
+    }
 
     // Step 1 — raw per-word language
     final raw = words.map((w) => w.isRtl ? 'he_IL' : 'en_US').toList();
@@ -381,7 +443,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       while (i < smoothed.length) {
         final locale = smoothed[i];
         int runStart = i;
-        while (i < smoothed.length && smoothed[i] == locale) i++;
+        while (i < smoothed.length && smoothed[i] == locale) {
+          i++;
+        }
         final runLen = i - runStart;
         if (runLen < minSectionWords) {
           // Inherit from left neighbour if available, else right
@@ -389,7 +453,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
               ? smoothed[runStart - 1]
               : (i < smoothed.length ? smoothed[i] : locale);
           if (inherit != locale) {
-            for (int j = runStart; j < i; j++) smoothed[j] = inherit;
+            for (int j = runStart; j < i; j++) {
+              smoothed[j] = inherit;
+            }
             changed = true;
           }
         }
@@ -401,9 +467,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     int wordIdx = 0;
     for (final w in script.words) {
       if (w.isNewline) {
-        _sectionLocales.add(_sectionLocales.isNotEmpty ? _sectionLocales.last : 'en_US');
+        _sectionLocales
+            .add(_sectionLocales.isNotEmpty ? _sectionLocales.last : 'en_US');
       } else {
-        _sectionLocales.add(wordIdx < smoothed.length ? smoothed[wordIdx] : 'en_US');
+        _sectionLocales
+            .add(wordIdx < smoothed.length ? smoothed[wordIdx] : 'en_US');
         wordIdx++;
       }
     }
@@ -480,6 +548,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _currentScript = script;
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sttReadingStandby = false;
     _sessionStopped = false;
     _visibleWordStart = null;
     _visibleWordEnd = null;
@@ -496,9 +565,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         isListening: false,
         isStarting: true,
         hasError: false,
-        statusMessage: '', debugLogs: [], missingLanguage: null);
+        statusMessage: '',
+        debugLogs: [],
+        missingLanguage: null);
 
-    _addDebugLog('🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
+    _addDebugLog(
+        '🚀 SESSION START | ${script.words.where((w) => !w.isNewline).length} words');
 
     // Starting locale comes from the pre-computed section map (word 0).
     // This is exact: if the script opens in English but has a Hebrew section
@@ -508,7 +580,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         : (_sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US');
     _scriptLanguageLocale = localeId;
     _activeLocale = localeId;
-    _addDebugLog('🌐 START LOCALE: $localeId | ${_sectionLocales.toSet().length} distinct section(s)');
+    _addDebugLog(
+        '🌐 START LOCALE: $localeId | ${_sectionLocales.toSet().length} distinct section(s)');
 
     // Start heartbeat timer in debug mode
     _heartbeatTimer?.cancel();
@@ -516,11 +589,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (settings.debugMode) {
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (_disposed) return;
-        final engineName = _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
-        final listening = _useWhisper ? _whisperService.isListening : _sttService.isListening;
+        final engineName =
+            _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
+        final listening =
+            _useWhisper ? _whisperService.isListening : _sttService.isListening;
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
-        _addDebugLog('💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
+        _addDebugLog(
+            '💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
       });
     }
 
@@ -552,10 +628,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       if (!result.success) {
         _addDebugLog('🎤 [$platform] STT FAILED: ${result.message}');
         _safeSetState((s) => s.copyWith(
-          statusMessage: result.message ?? 'Speech recognition failed',
-          hasError: true,
-          isListening: false,
-        ));
+              statusMessage: result.message ?? 'Speech recognition failed',
+              hasError: true,
+              isListening: false,
+            ));
         return;
       }
 
@@ -572,8 +648,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
 
       if (result.languageMissing && result.missingLanguageName != null) {
-        _addDebugLog('⚠️ [$platform] LANG MISSING: ${result.missingLanguageName} — using ${result.actualLocale}');
-        _safeSetState((s) => s.copyWith(missingLanguage: result.missingLanguageName));
+        _addDebugLog(
+            '⚠️ [$platform] LANG MISSING: ${result.missingLanguageName} — using ${result.actualLocale}');
+        _safeSetState(
+            (s) => s.copyWith(missingLanguage: result.missingLanguageName));
       } else {
         _addDebugLog('🎤 [$platform] STT using locale: ${result.actualLocale}');
       }
@@ -592,6 +670,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _fluidAdvanceTimer?.cancel();
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sttReadingStandby = false;
 
     // Update UI synchronously before the async stop so re-entry never sees
     // a stale isListening=true if the user exits and returns quickly.
@@ -622,6 +701,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   void resetPosition() {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sttReadingStandby = false;
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('🔄 POSITION RESET → 0');
     state = state.copyWith(confirmedWordIndex: 0);
@@ -652,9 +732,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   Future<void> setSttInputDevice(String deviceId, String label) async {
-    final normalizedLabel = label.trim().isEmpty
-        ? 'System default microphone'
-        : label.trim();
+    final normalizedLabel =
+        label.trim().isEmpty ? 'System default microphone' : label.trim();
     await _sttService.setAudioInputDevice(
       deviceId.trim().isEmpty ? null : deviceId.trim(),
       label: normalizedLabel,
@@ -683,6 +762,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final target = index.clamp(0, activeScript.words.length - 1);
     _accumulatedTranscript = '';
     _noProgressCount = 0;
+    _sttReadingStandby = false;
     _addDebugLog(
         '📍 POSITION JUMP → #$target "${activeScript.words[target].raw}"');
     try {
@@ -712,4 +792,5 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 }
 
 final teleprompterProvider =
-    NotifierProvider<TeleprompterNotifier, TeleprompterState>(TeleprompterNotifier.new);
+    NotifierProvider<TeleprompterNotifier, TeleprompterState>(
+        TeleprompterNotifier.new);

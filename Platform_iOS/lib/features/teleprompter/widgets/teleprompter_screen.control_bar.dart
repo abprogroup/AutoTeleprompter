@@ -61,9 +61,9 @@ class _ControlBar extends ConsumerWidget {
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
           colors: [
-            Colors.black.withOpacity(0.98),
-            Colors.black.withOpacity(0.88),
-            Colors.black.withOpacity(0.36),
+            Colors.black.withValues(alpha: 0.98),
+            Colors.black.withValues(alpha: 0.88),
+            Colors.black.withValues(alpha: 0.36),
           ],
           stops: const [0.0, 0.62, 1.0],
         ),

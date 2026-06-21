@@ -2,7 +2,7 @@ import Flutter
 import UIKit
 import AVFoundation
 
-@UIApplicationMain
+@main
 @objc class AppDelegate: FlutterAppDelegate {
   override func application(
     _ application: UIApplication,
@@ -22,6 +22,25 @@ import AVFoundation
           let args = call.arguments as? [String: Any]
           let id = (args?["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
           Self.setPreferredInput(id: id, result: result)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+      let clipboardChannel = FlutterMethodChannel(
+        name: "autoteleprompter/clipboard",
+        binaryMessenger: controller.binaryMessenger
+      )
+      clipboardChannel.setMethodCallHandler { call, result in
+        switch call.method {
+        case "setHtml":
+          let args = call.arguments as? [String: Any]
+          let plain = args?["plain"] as? String ?? ""
+          let html = args?["html"] as? String ?? ""
+          UIPasteboard.general.items = [[
+            "public.utf8-plain-text": plain,
+            "public.html": html
+          ]]
+          result(true)
         default:
           result(FlutterMethodNotImplemented)
         }

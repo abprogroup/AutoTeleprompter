@@ -8,7 +8,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     if (_activeSuite == EditorSuite.none) {
       _saveHistory(description: 'Change Background', debounce: true);
     }
-    if (mounted) setState(() {});
+    if (mounted) _setEditorState(() {});
   }
 
   /// Returns the list of controllers that should receive a style command,
@@ -29,8 +29,25 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     return active == null ? <MarkupController>[] : [active];
   }
 
+  bool _hasActiveTextSelection() {
+    _restoreSelectionIfNeeded();
+    if (_isGlobalSelection ||
+        (_overlayKey.currentState?.hasSelection ?? false)) {
+      return true;
+    }
+    for (final controller in _controllers) {
+      final external = controller.externalSelection;
+      if (external != null && external.isValid && !external.isCollapsed) {
+        return true;
+      }
+      final selection = controller.selection;
+      if (selection.isValid && !selection.isCollapsed) return true;
+    }
+    return false;
+  }
+
   void _applyStyleCmd(String open, String close, String label) {
-    setState(() => _isCommandExecuting = true);
+    _setEditorState(() => _isCommandExecuting = true);
     final skipH = _activeSuite != EditorSuite.none;
     if (skipH) _trackSuiteSection('Style');
 
@@ -105,7 +122,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     // Update cursor style BEFORE clearing _isCommandExecuting,
     // so _onSelectionChanged won't clear global selection prematurely.
     _onSelectionChanged();
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 
   void _onBold() => _applyStyleCmd('**', '**', 'Bold');
@@ -113,7 +130,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
   void _onItalic() => _applyStyleCmd('[i]', '[/i]', 'Italic');
 
   void _applyInlineCmd(String family, String open, String close, String label) {
-    setState(() => _isCommandExecuting = true);
+    _setEditorState(() => _isCommandExecuting = true);
     final skipH = _activeSuite != EditorSuite.none;
     // Section mapping: size → Font Size, font → Font Family, color → Text Color, bg → Highlight
     if (skipH) {
@@ -193,11 +210,11 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
 
     if (skipH) _isSuiteDirty = true;
     _onSelectionChanged();
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 
   void onDirection(String dir) {
-    setState(() => _isCommandExecuting = true);
+    _setEditorState(() => _isCommandExecuting = true);
     final inSuite = _activeSuite != EditorSuite.none;
     if (inSuite) _trackSuiteSection('Alignment');
 
@@ -224,7 +241,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
         controller.value = TextEditingValue(
           text: StylingService.applyLayout(
               controller.text, controller.selection, dir),
-          selection: TextSelection.collapsed(offset: 0),
+          selection: const TextSelection.collapsed(offset: 0),
         );
         if (hadSel) {
           final newStart =
@@ -253,11 +270,11 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       if (!mounted) return;
       _overlayKey.currentState?.refreshPositions();
     });
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 
   void onAlign(String align) {
-    setState(() => _isCommandExecuting = true);
+    _setEditorState(() => _isCommandExecuting = true);
     final inSuite = _activeSuite != EditorSuite.none;
     if (inSuite) _trackSuiteSection('Alignment');
 
@@ -282,7 +299,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
         controller.value = TextEditingValue(
           text: StylingService.applyLayout(
               controller.text, controller.selection, align),
-          selection: TextSelection.collapsed(offset: 0),
+          selection: const TextSelection.collapsed(offset: 0),
         );
         if (hadSel) {
           final newStart =
@@ -318,7 +335,7 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
           ref.read(cursorStyleProvider).copyWith(textAlign: align);
       _overlayKey.currentState?.refreshPositions();
     });
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 
   void onFontSize(int size) {
@@ -347,8 +364,41 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     _onSelectionChanged();
   }
 
-  void onFontFamily(String family) =>
-      _applyInlineCmd('font', '[font=$family]', '[/font]', 'Font Family');
+  Future<void> _applyGlobalFontFamily(String family) async {
+    final clean = EditorFontService.cleanFamily(family);
+    final inSuite = _activeSuite != EditorSuite.none;
+    if (inSuite) {
+      _trackSuiteSection('Font Family');
+      _isSuiteDirty = true;
+    }
+    await ref.read(settingsProvider.notifier).setFontFamily(clean);
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          fontFamily: clean,
+        );
+    if (!mounted) return;
+    ref.read(cursorStyleProvider.notifier).state =
+        ref.read(cursorStyleProvider).copyWith(fontFamily: clean);
+    if (inSuite) {
+      _scheduleRecentUpdate();
+    } else {
+      _commitHistory('Font Family');
+    }
+    _onSelectionChanged();
+  }
+
+  void onFontFamily(String family) {
+    final clean = EditorFontService.cleanFamily(family).replaceAll(']', '');
+    if (clean.isEmpty) return;
+    if (_hasActiveTextSelection()) {
+      _applyInlineCmd('font', '[font=$clean]', '[/font]', 'Font Family');
+      if (mounted) {
+        ref.read(cursorStyleProvider.notifier).state =
+            ref.read(cursorStyleProvider).copyWith(fontFamily: clean);
+      }
+      return;
+    }
+    unawaited(_applyGlobalFontFamily(clean));
+  }
 
   /// Restore the selection that was active before a dialog stole focus.
   /// Color picker dialogs cause the TextField to lose focus, collapsing the
@@ -376,8 +426,10 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       return;
     }
     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0xFFFFBF00);
-    setState(() => _lastChosenTextColor = color);
-    ref.read(settingsProvider.notifier).setLastChosenTextColor(color.value);
+    _setEditorState(() => _lastChosenTextColor = color);
+    ref
+        .read(settingsProvider.notifier)
+        .setLastChosenTextColor(color.toARGB32());
     _restoreSelectionIfNeeded();
     _applyInlineCmd('color', '[color=#$cleanHex]', '[/color]', 'Text Color');
   }
@@ -392,17 +444,17 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       return;
     }
     final color = Color(int.tryParse('FF$cleanHex', radix: 16) ?? 0x00FFFFFF);
-    setState(() => _lastChosenHighlightColor = color);
+    _setEditorState(() => _lastChosenHighlightColor = color);
     ref
         .read(settingsProvider.notifier)
-        .setLastChosenHighlightColor(color.value);
+        .setLastChosenHighlightColor(color.toARGB32());
     _restoreSelectionIfNeeded();
     _applyInlineCmd('bg', '[bg=#$cleanHex]', '[/bg]', 'Highlight Color');
   }
 
   /// Remove all tags of a given family from the selection (used when "none" color is chosen).
   void _removeInlineTags(String family, String close) {
-    setState(() => _isCommandExecuting = true);
+    _setEditorState(() => _isCommandExecuting = true);
     final openPattern = RegExp(r'\[' + family + r'=[^\]]*\]');
 
     if (_isGlobalSelection) {
@@ -462,6 +514,6 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
       if (targets.isNotEmpty) _saveHistory(description: 'Remove $family');
     }
     _onSelectionChanged();
-    setState(() => _isCommandExecuting = false);
+    _setEditorState(() => _isCommandExecuting = false);
   }
 }

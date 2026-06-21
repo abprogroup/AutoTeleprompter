@@ -5,6 +5,13 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final script = ref.watch(scriptProvider);
     final tState = ref.watch(teleprompterProvider);
     final settings = ref.watch(settingsProvider);
+    _publishPresenterStateIfChanged(script, tState, settings);
+    _syncControlsAutoHide(
+      PresenterInputLockService.controlsAutoHideActive(
+        isListening: tState.isListening,
+        isStarting: tState.isStarting,
+      ),
+    );
     if (script != null) {
       while (_wordKeys.length < script.words.length) {
         _wordKeys.add(GlobalKey());
@@ -15,6 +22,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // Auto-scroll on speech recognition
     ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex),
         (prev, next) {
+      if (_userBrowsingWhileStopped) return;
       if (settings.scrollMode == 'auto' && next > 0) {
         _scrollToWordIndex(next);
       }
@@ -112,7 +120,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     paraAlign, settings, firstWord.effectiveRtl),
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: para.map<Widget>((wordObj) {
-                  final ScriptWord word = wordObj as ScriptWord;
+                  final ScriptWord word = wordObj;
                   final i = word.index;
                   final markerOnRight = firstWord.effectiveRtl;
                   final isManual = settings.scrollMode == 'manual';
@@ -130,12 +138,14 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   // User-applied highlight (from tokenizer-parsed [bg=] tags)
                   final userBgColor = word.highlight;
                   // Word-tracking highlight (current word)
-                  final trackingBgColor =
-                      isCurrent && settings.showCurrentWordHighlight
-                          ? Color(settings.currentWordColor).withOpacity(0.3)
-                          : null;
+                  final trackingBgColor = isCurrent &&
+                          settings.showCurrentWordHighlight
+                      ? Color(settings.currentWordColor).withValues(alpha: 0.3)
+                      : null;
                   final effectiveBg = trackingBgColor ??
-                      (isPast ? userBgColor?.withOpacity(0.15) : userBgColor);
+                      (isPast
+                          ? userBgColor?.withValues(alpha: 0.15)
+                          : userBgColor);
 
                   // Text color with graduated opacity for smooth spotlight effect.
                   // Words close to the current position gently transition between
@@ -164,12 +174,13 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 (1.0 - pastDist / 3.0) *
                                 0.5
                         : settings.pastWordOpacity;
-                    textColor = base.withOpacity(gradOpacity.clamp(0.0, 1.0));
+                    textColor =
+                        base.withValues(alpha: gradOpacity.clamp(0.0, 1.0));
                   } else {
                     // Toggle ON: uniform override color. Toggle OFF: use per-word markup color.
                     textColor = settings.showUpcomingWordColor
                         ? Color(settings.futureWordColor)
-                        : (word.textColor ?? Color(0xFFFFFFFF));
+                        : (word.textColor ?? const Color(0xFFFFFFFF));
                   }
 
                   // Use Container padding instead of trailing space for word gaps.
@@ -268,6 +279,17 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         child: wordList,
       );
     }
+    final allowActiveManualScroll =
+        PresenterInputLockService.allowActiveManualScroll(
+      settingEnabled: settings.allowScrollDuringActiveSession,
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+    );
+    final activeInputLocked = PresenterInputLockService.inputLocked(
+      isListening: tState.isListening,
+      isStarting: tState.isStarting,
+      allowActiveManualScroll: allowActiveManualScroll,
+    );
 
     return PopScope(
       // Stop STT the moment the back gesture is confirmed — before the
@@ -291,7 +313,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   onNotification: _handleStoppedBrowsingScroll,
                   child: SingleChildScrollView(
                     controller: _scrollController,
-                    physics: (tState.isListening || tState.isStarting)
+                    physics: activeInputLocked
                         ? const NeverScrollableScrollPhysics()
                         : const ClampingScrollPhysics(),
                     child: wordList,
@@ -313,10 +335,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Color(settings.scriptBgColor)
-                                  .withOpacity(settings.readFadeIntensity),
-                              Color(settings.scriptBgColor).withOpacity(
-                                  settings.readFadeIntensity * 0.6),
+                              Color(settings.scriptBgColor).withValues(
+                                  alpha: settings.readFadeIntensity),
+                              Color(settings.scriptBgColor).withValues(
+                                  alpha: settings.readFadeIntensity * 0.6),
                               Colors.transparent,
                             ],
                             stops: const [0.0, 0.7, 1.0],
@@ -334,7 +356,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     child: Container(
                       height: debugConsoleHeight,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.92),
+                        color: Colors.black.withValues(alpha: 0.92),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: Colors.orange, width: 1.5),
                       ),
@@ -375,7 +397,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 ),
                                 const Spacer(),
                                 Text(
-                                  'POS: ${tState.confirmedWordIndex}/${script?.words.where((w) => !w.isNewline).length ?? 0}',
+                                  'POS: ${tState.confirmedWordIndex}/${script.words.where((w) => !w.isNewline).length}',
                                   style: const TextStyle(
                                     color: Colors.orange,
                                     fontSize: 11,
@@ -470,7 +492,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                   right: 0,
                   child: Container(
                     height: 3,
-                    color: Color(settings.currentWordColor).withOpacity(0.35),
+                    color: Color(settings.currentWordColor)
+                        .withValues(alpha: 0.35),
                   ),
                 ),
 
@@ -492,7 +515,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.9),
+                          color: Colors.red.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Column(
@@ -534,8 +557,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                             colors: [
-                              Colors.black.withOpacity(0.92),
-                              Colors.black.withOpacity(0.58),
+                              Colors.black.withValues(alpha: 0.92),
+                              Colors.black.withValues(alpha: 0.58),
                               Colors.transparent,
                             ],
                             stops: const [0.0, 0.55, 1.0],
@@ -548,7 +571,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             // Speed slider — sits just above the control bar, always visible in manual mode
                             if (settings.scrollMode == 'manual')
                               Container(
-                                color: Colors.black.withOpacity(0.75),
+                                color: Colors.black.withValues(alpha: 0.75),
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 16, vertical: 4),
                                 child: Row(
@@ -614,13 +637,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 if (settings.scrollMode == 'manual') {
                                   _resetManual();
                                 } else {
-                                  ref
-                                      .read(teleprompterProvider.notifier)
-                                      .resetPosition();
-                                  _scrollController.animateTo(0,
-                                      duration:
-                                          const Duration(milliseconds: 400),
-                                      curve: Curves.easeOutCubic);
+                                  _resetPresenterPositionToStart();
                                 }
                               },
                               onBack: () => Navigator.of(context).pop(),
@@ -645,5 +662,37 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         ),
       ),
     );
+  }
+
+  void _publishPresenterStateIfChanged(
+    Script? script,
+    TeleprompterState tState,
+    AppSettings settings,
+  ) {
+    final scriptActive = script != null && !script.isEmpty;
+    final sessionActive =
+        tState.isListening || tState.isStarting || _manualScrolling;
+    final isStarting = tState.isStarting;
+    final mode = settings.scrollMode == 'manual' ? 'manual' : 'auto';
+    final speed = settings.scrollSpeed.clamp(-300.0, 300.0).toDouble();
+    if (_lastPublishedRemoteScriptActive == scriptActive &&
+        _lastPublishedRemoteSessionActive == sessionActive &&
+        _lastPublishedRemoteIsStarting == isStarting &&
+        _lastPublishedRemoteScrollMode == mode &&
+        _lastPublishedRemoteScrollSpeed == speed) {
+      return;
+    }
+    _lastPublishedRemoteScriptActive = scriptActive;
+    _lastPublishedRemoteSessionActive = sessionActive;
+    _lastPublishedRemoteIsStarting = isStarting;
+    _lastPublishedRemoteScrollMode = mode;
+    _lastPublishedRemoteScrollSpeed = speed;
+    ref.read(remoteControlProvider).publishPresenterState(
+          scriptActive: scriptActive,
+          sessionActive: sessionActive,
+          isStarting: isStarting,
+          scrollMode: mode,
+          scrollSpeed: speed,
+        );
   }
 }

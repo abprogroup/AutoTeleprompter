@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Bridges to the native Android clipboard via MethodChannel to place
+/// Bridges to the native mobile clipboard via MethodChannel to place
 /// both plain-text and HTML flavours on the clipboard. Falls back to the
 /// Flutter plain-text clipboard on any failure or unsupported platform.
 class RichClipboard {
@@ -13,7 +13,10 @@ class RichClipboard {
     required String html,
   }) async {
     try {
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      final supportsNativeRichClipboard =
+          defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS;
+      if (!kIsWeb && supportsNativeRichClipboard) {
         final ok = await _channel.invokeMethod<bool>('setHtml', {
           'plain': plain,
           'html': html,

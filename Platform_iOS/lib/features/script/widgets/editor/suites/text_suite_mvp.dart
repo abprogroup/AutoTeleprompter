@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../components/editor_primitives.dart';
 import '../../../models/cursor_style.dart';
+import '../../../services/editor_font_service.dart';
 import '../../../../settings/providers/settings_provider.dart';
 
 // v3.9.5.60: Sovereign Text Styling MVP — Column layout, synced dropdowns
@@ -10,8 +11,21 @@ class TextSuite extends ConsumerWidget {
   final ValueChanged<int> onFontSize;
   final ValueChanged<String> onFontFamily;
 
-  static const _fontSizes = [14, 18, 24, 28, 32, 40, 48, 56, 64, 72, 80, 96, 120];
-  static const _fontFamilies = ['Inter', 'Roboto', 'Outfit', 'Montserrat', 'Playfair Display', 'Merriweather', 'Lora', 'Courier Prime'];
+  static const _fontSizes = [
+    14,
+    18,
+    24,
+    28,
+    32,
+    40,
+    48,
+    56,
+    64,
+    72,
+    80,
+    96,
+    120,
+  ];
 
   const TextSuite({
     super.key,
@@ -23,8 +37,9 @@ class TextSuite extends ConsumerWidget {
   });
 
   static String _snapFontFamily(String detected) {
-    if (_fontFamilies.contains(detected)) return detected;
-    return 'Inter';
+    final clean = EditorFontService.cleanFamily(detected);
+    if (EditorFontService.families.contains(clean)) return clean;
+    return EditorFontService.defaultFamily;
   }
 
   @override
@@ -43,9 +58,24 @@ class TextSuite extends ConsumerWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ToolBtn(label: 'B', tooltip: 'Bold',      onTap: onBold,      bold: true,      active: style.isBold),
-            ToolBtn(label: 'I', tooltip: 'Italic',    onTap: onItalic,    italic: true,    active: style.isItalic),
-            ToolBtn(label: 'U', tooltip: 'Underline', onTap: onUnderline, underline: true, active: style.isUnderline),
+            ToolBtn(
+                label: 'B',
+                tooltip: 'Bold',
+                onTap: onBold,
+                bold: true,
+                active: style.isBold),
+            ToolBtn(
+                label: 'I',
+                tooltip: 'Italic',
+                onTap: onItalic,
+                italic: true,
+                active: style.isItalic),
+            ToolBtn(
+                label: 'U',
+                tooltip: 'Underline',
+                onTap: onUnderline,
+                underline: true,
+                active: style.isUnderline),
           ],
         ),
         const SizedBox(height: 6),
@@ -59,10 +89,16 @@ class TextSuite extends ConsumerWidget {
                 child: DropdownButton<String>(
                   value: safeFontFamily,
                   dropdownColor: kEditorSurface,
-                  icon: const Icon(Icons.font_download_outlined, color: Colors.white54, size: 14),
-                  style: const TextStyle(color: kEditorAmber, fontWeight: FontWeight.bold, fontSize: 12),
-                  onChanged: (v) { if (v != null) onFontFamily(v); },
-                  items: _fontFamilies
+                  icon: const Icon(Icons.font_download_outlined,
+                      color: Colors.white54, size: 14),
+                  style: const TextStyle(
+                      color: kEditorAmber,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12),
+                  onChanged: (v) {
+                    if (v != null) onFontFamily(v);
+                  },
+                  items: EditorFontService.families
                       .map((f) => DropdownMenuItem(value: f, child: Text(f)))
                       .toList(),
                 ),
@@ -75,11 +111,18 @@ class TextSuite extends ConsumerWidget {
                 child: DropdownButton<int>(
                   value: safeFontSize,
                   dropdownColor: kEditorSurface,
-                  icon: const Icon(Icons.format_size_rounded, color: Colors.white54, size: 14),
-                  style: const TextStyle(color: kEditorAmber, fontWeight: FontWeight.bold, fontSize: 12),
-                  onChanged: (v) { if (v != null) onFontSize(v); },
+                  icon: const Icon(Icons.format_size_rounded,
+                      color: Colors.white54, size: 14),
+                  style: const TextStyle(
+                      color: kEditorAmber,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12),
+                  onChanged: (v) {
+                    if (v != null) onFontSize(v);
+                  },
                   items: fontSizeItems
-                      .map((s) => DropdownMenuItem(value: s, child: Text('${s}px')))
+                      .map((s) =>
+                          DropdownMenuItem(value: s, child: Text('${s}px')))
                       .toList(),
                 ),
               ),
@@ -96,8 +139,10 @@ class _DropdownContainer extends StatelessWidget {
   const _DropdownContainer({required this.child});
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8),
-    decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(8)),
-    child: child,
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+            color: const Color(0xFF2A2A2A),
+            borderRadius: BorderRadius.circular(8)),
+        child: child,
+      );
 }

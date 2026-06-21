@@ -13,10 +13,11 @@ class SpeechResult {
 /// Result of starting the speech service — tells the caller what happened.
 class SpeechStartResult {
   final bool success;
-  final String? actualLocale;       // The locale that was actually used
-  final String? requestedLocale;    // What was requested
-  final bool languageMissing;       // True if requested language wasn't available
-  final String? missingLanguageName; // Human-readable name of the missing language
+  final String? actualLocale; // The locale that was actually used
+  final String? requestedLocale; // What was requested
+  final bool languageMissing; // True if requested language wasn't available
+  final String?
+      missingLanguageName; // Human-readable name of the missing language
   final String? message;
 
   SpeechStartResult({
@@ -32,27 +33,49 @@ class SpeechStartResult {
   static String languageNameFromLocale(String localeId) {
     final lang = localeId.toLowerCase().split(RegExp(r'[_-]')).first;
     const names = {
-      'he': 'Hebrew', 'en': 'English', 'ar': 'Arabic', 'fr': 'French',
-      'de': 'German', 'es': 'Spanish', 'it': 'Italian', 'pt': 'Portuguese',
-      'ru': 'Russian', 'zh': 'Chinese', 'ja': 'Japanese', 'ko': 'Korean',
-      'hi': 'Hindi', 'tr': 'Turkish', 'pl': 'Polish', 'nl': 'Dutch',
-      'sv': 'Swedish', 'da': 'Danish', 'fi': 'Finnish', 'no': 'Norwegian',
-      'th': 'Thai', 'vi': 'Vietnamese', 'uk': 'Ukrainian', 'cs': 'Czech',
-      'ro': 'Romanian', 'hu': 'Hungarian', 'el': 'Greek', 'id': 'Indonesian',
-      'ms': 'Malay', 'fa': 'Persian', 'bn': 'Bengali', 'ta': 'Tamil',
+      'he': 'Hebrew',
+      'en': 'English',
+      'ar': 'Arabic',
+      'fr': 'French',
+      'de': 'German',
+      'es': 'Spanish',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ru': 'Russian',
+      'zh': 'Chinese',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'hi': 'Hindi',
+      'tr': 'Turkish',
+      'pl': 'Polish',
+      'nl': 'Dutch',
+      'sv': 'Swedish',
+      'da': 'Danish',
+      'fi': 'Finnish',
+      'no': 'Norwegian',
+      'th': 'Thai',
+      'vi': 'Vietnamese',
+      'uk': 'Ukrainian',
+      'cs': 'Czech',
+      'ro': 'Romanian',
+      'hu': 'Hungarian',
+      'el': 'Greek',
+      'id': 'Indonesian',
+      'ms': 'Malay',
+      'fa': 'Persian',
+      'bn': 'Bengali',
+      'ta': 'Tamil',
     };
     return names[lang] ?? localeId;
   }
 }
 
-/// Google STT service — designed to work reliably across ALL Android devices.
+/// Speech-to-text service wrapper for iOS speech recognition.
 ///
 /// Handles known quirks:
-/// - Oppo/Realme/OnePlus (ColorOS): Bluetooth permission issues
-/// - Xiaomi (MIUI): Intent lookup failures
-/// - Samsung (One UI): Non-standard speech recognition providers
-/// - Android 12+ (API 31+): BLUETOOTH_CONNECT permission requirement
-/// - Various devices: Locale format differences (en_US vs en-US vs en_GB)
+/// - Apple speech callbacks can arrive after start/stop state changes
+/// - Some languages require a network connection on-device
+/// - Locale identifiers can vary by device (en_US vs en-US vs en_GB)
 class SpeechService {
   final SpeechToText _stt = SpeechToText();
   bool _isActive = false;
@@ -68,6 +91,7 @@ class SpeechService {
   void Function(SpeechStatus)? onStatusChange;
   void Function(String)? onError;
   Future<void> Function()? beforeListen;
+
   /// Fires when the language is confirmed unavailable (after retries exhausted).
   /// The string is the original requested locale ID.
   void Function(String requestedLocale)? onLanguageUnavailable;
@@ -91,8 +115,7 @@ class SpeechService {
                 _scheduleRestart(const Duration(milliseconds: 300));
               }
             } else if (_languageRetries == 2) {
-              // 2nd retry: try with explicit device locale in case null didn't work
-              final deviceLocale = _stt.lastStatus; // just force one more try
+              // 2nd retry: reset locale again and force one more try.
               _localeId = '';
               if (!_isRestarting) {
                 _scheduleRestart(const Duration(milliseconds: 500));
@@ -124,7 +147,8 @@ class SpeechService {
 
           if (_isRestarting) return;
 
-          final isTimeout = msg == 'error_no_match' || msg.contains('no_match') ||
+          final isTimeout = msg == 'error_no_match' ||
+              msg.contains('no_match') ||
               msg.contains('speech_timeout');
 
           if (_consecutiveErrors >= 8) {
@@ -196,7 +220,10 @@ class SpeechService {
 
     // 2. Language match (e.g. requested en_US, found en_GB)
     for (final l in locales) {
-      if (l.localeId.toLowerCase().replaceAll('-', '_').startsWith('${lang}_')) {
+      if (l.localeId
+          .toLowerCase()
+          .replaceAll('-', '_')
+          .startsWith('${lang}_')) {
         return l.localeId;
       }
     }
@@ -221,7 +248,8 @@ class SpeechService {
       if (!ok) {
         return SpeechStartResult(
           success: false,
-          message: 'Speech recognition not available. Please install the Google app and check that speech recognition is enabled in your device settings.',
+          message:
+              'Speech recognition is not available. Check iOS Speech Recognition and Microphone permissions for AutoTeleprompter.',
         );
       }
     }
@@ -240,7 +268,6 @@ class SpeechService {
         languageMissing = true;
         _localeId = '';
       }
-
     } else {
       // No locale specified — use device default
       _localeId = '';
@@ -279,7 +306,8 @@ class SpeechService {
         onResult: (SpeechRecognitionResult result) {
           _consecutiveErrors = 0;
           if (result.recognizedWords.isNotEmpty) {
-            onResult?.call(SpeechResult(result.recognizedWords, result.finalResult));
+            onResult?.call(
+                SpeechResult(result.recognizedWords, result.finalResult));
           }
           if (result.finalResult && _isActive && !_isRestarting) {
             _scheduleRestart(const Duration(milliseconds: 100));
@@ -289,8 +317,8 @@ class SpeechService {
           partialResults: true,
           listenMode: ListenMode.dictation,
           cancelOnError: false,
+          localeId: useLocale,
         ),
-        localeId: useLocale,
       );
     } catch (e) {
       onError?.call('Listen failed: $e');

@@ -2,6 +2,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
 
+import 'editor_font_service.dart';
+
 const bool kUseCustomDocxDecorationPainting = true;
 const bool kUseCustomEditorSelectionPainting = true;
 
@@ -102,7 +104,9 @@ class MarkupDecorationParser {
         next = next.copyWith(color: textColors.last);
       }
       if (sizes.isNotEmpty) next = next.copyWith(fontSize: sizes.last);
-      if (fonts.isNotEmpty) next = next.copyWith(fontFamily: fonts.last);
+      if (fonts.isNotEmpty) {
+        next = EditorFontService.applyFamily(next, fonts.last);
+      }
       return next;
     }
 

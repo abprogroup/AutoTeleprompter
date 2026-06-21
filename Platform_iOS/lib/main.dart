@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/feedback/services/lightweight_diagnostics.dart';
-import 'platform/permissions/platform_permissions.dart';
 import 'app.dart';
 
 void main() {
@@ -13,9 +12,6 @@ void main() {
   runZonedGuarded(
     () {
       runApp(const ProviderScope(child: AutoTeleprompterApp()));
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_requestStartupPermissionsAfterFirstPaint());
-      });
     },
     (error, stackTrace) {
       LightweightDiagnostics.instance.recordError(
@@ -25,27 +21,6 @@ void main() {
       );
     },
   );
-}
-
-Future<void> _requestStartupPermissionsAfterFirstPaint() async {
-  await Future<void>.delayed(const Duration(milliseconds: 2800));
-  await _requestStartupPermissions();
-}
-
-Future<void> _requestStartupPermissions() async {
-  try {
-    await PlatformPermissions.requestAll();
-  } catch (error, stackTrace) {
-    LightweightDiagnostics.instance.recordError(
-      error,
-      stackTrace,
-      source: 'permissions',
-    );
-    if (kDebugMode) {
-      debugPrint('iOS startup permission request failed: $error');
-      debugPrintStack(stackTrace: stackTrace);
-    }
-  }
 }
 
 void _installDiagnostics() {

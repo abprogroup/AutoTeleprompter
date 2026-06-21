@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -479,7 +480,7 @@ class _ScriptListItem extends ConsumerWidget {
                           ?['futureWordColor'],
                     );
                   } catch (e) {
-                    debugPrint('Session Recovery Error: $e');
+                    if (kDebugMode) debugPrint('Session Recovery Error: $e');
                     scriptNotifier.loadText(fullText,
                         title: title, sourceType: type, sessionId: sessionId);
                   }

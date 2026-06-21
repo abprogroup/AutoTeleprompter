@@ -18,21 +18,6 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
   List<FileSystemEntity> _entities = [];
   bool _isLoading = true;
 
-  final List<String> _supportedExts = [
-    'rtf',
-    'pdf',
-    'docx',
-    'doc',
-    'pages',
-    'txt',
-    'log',
-    'md',
-    'odt',
-    'ott',
-    'rtx',
-    'dot'
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -83,7 +68,8 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
   bool _isSupported(String path) {
     if (FileSystemEntity.isDirectorySync(path)) return true;
     final lower = path.toLowerCase();
-    return _supportedExts.any((ext) => lower.endsWith('.$ext'));
+    return PlatformFileImport.supportedExtensions
+        .any((ext) => lower.endsWith('.$ext'));
   }
 
   @override

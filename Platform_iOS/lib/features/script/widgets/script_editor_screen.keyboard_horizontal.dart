@@ -1,5 +1,4 @@
 part of 'script_editor_screen.dart';
-
 extension _ScriptEditorKeyboardHorizontalParts on _ScriptEditorScreenState {
   ({int block, int offset})? _arrowTargetFromPosition({
     required LogicalKeyboardKey key,

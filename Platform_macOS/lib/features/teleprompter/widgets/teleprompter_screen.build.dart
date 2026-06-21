@@ -84,7 +84,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       isStarting: tState.isStarting,
     );
     final activeInputLocked = PresenterInputLockService.inputLocked(
-      isWindows: Platform.isWindows,
       isListening: tState.isListening,
       isStarting: tState.isStarting,
       allowActiveManualScroll: allowActiveManualScroll,

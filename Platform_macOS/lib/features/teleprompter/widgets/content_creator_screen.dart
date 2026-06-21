@@ -482,7 +482,6 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       isStarting: tState.isStarting,
     );
     final activeInputLocked = PresenterInputLockService.inputLocked(
-      isWindows: false,
       isListening: tState.isListening,
       isStarting: tState.isStarting,
       allowActiveManualScroll: allowActiveManualScroll,

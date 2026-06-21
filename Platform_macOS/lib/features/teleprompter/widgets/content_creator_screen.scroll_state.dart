@@ -65,7 +65,6 @@ extension _ContentCreatorScrollState on _ContentCreatorScreenState {
       isStarting: sttState.isStarting,
     );
     if (PresenterInputLockService.inputLocked(
-      isWindows: false,
       isListening: sttState.isListening,
       isStarting: sttState.isStarting,
       allowActiveManualScroll: allowActiveManualScroll,

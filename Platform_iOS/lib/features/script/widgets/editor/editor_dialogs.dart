@@ -73,7 +73,7 @@ class EditorDialogs {
             Text('.${ext.toUpperCase()} files cannot be used as scripts.', style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 12),
             const Text('Supported formats:', style: TextStyle(color: Colors.white54, fontSize: 12)),
-            const Text('DOCX · DOC · RTF · PDF · TXT · ODT · MD', style: TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
+            Text(PlatformFileImport.formatsLabel, style: const TextStyle(color: Color(0xFFFFBF00), fontSize: 12, fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK", style: TextStyle(color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))],

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../platform/file_import/platform_file_import.dart';
 
 class TelepromptSelectorSheet extends StatefulWidget {
   final String initialPath;
@@ -167,7 +168,7 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
                   ],
                 ),
                 content: Text(
-                    "The file '$name' is not a supported script format.\n\nPlease select an RTF, DOCX, or PDF file.",
+                    "The file '$name' is not a supported script format.\n\nSupported formats: ${PlatformFileImport.formatsLabel}.",
                     style: const TextStyle(color: Colors.white70)),
                 actions: [
                   TextButton(

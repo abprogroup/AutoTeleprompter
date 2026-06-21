@@ -104,9 +104,8 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
             : savedToPhotos
                 ? 'Video saved to Photos.'
                 : 'Video recorded, but Photos save failed.',
-        backgroundColor: wasAudioOnly || savedToPhotos
-            ? Colors.green
-            : Colors.orangeAccent,
+        backgroundColor:
+            wasAudioOnly || savedToPhotos ? Colors.green : Colors.orangeAccent,
       );
     } catch (e) {
       if (kDebugMode) debugPrint('Recording stop error: $e');
@@ -144,6 +143,7 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
     }
     _recordingStartedSpeechSession = true;
     await _requestAndStartSpeechSession();
+    if (!mounted) return;
     final afterStart = ref.read(teleprompterProvider);
     if (!afterStart.isListening && !afterStart.isStarting) {
       _recordingStartedSpeechSession = false;
@@ -167,15 +167,19 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
 
   Future<void> _requestAndStartSpeechSession() async {
     if (!await _ensureMicrophonePermission()) return;
+    if (!mounted) return;
     if (PlatformPermissions.requiresSpeechPermissionCheck) {
       var speechStatus = await Permission.speech.status;
+      if (!mounted) return;
       if (speechStatus.isPermanentlyDenied) {
         _showSnack('Speech permission is blocked. Open Settings.');
         await openAppSettings();
+        if (!mounted) return;
         return;
       }
       if (!speechStatus.isGranted) {
         speechStatus = await Permission.speech.request();
+        if (!mounted) return;
       }
       if (!speechStatus.isGranted) {
         _showSnack('Speech recognition permission is required.');
@@ -193,13 +197,16 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
 
   Future<bool> _ensureCameraAndMicrophonePermission() async {
     var cameraStatus = await Permission.camera.status;
+    if (!mounted) return false;
     if (cameraStatus.isPermanentlyDenied) {
       _showSnack('Camera permission is blocked. Open Settings.');
       await openAppSettings();
+      if (!mounted) return false;
       return false;
     }
     if (!cameraStatus.isGranted) {
       cameraStatus = await Permission.camera.request();
+      if (!mounted) return false;
     }
     if (!cameraStatus.isGranted) {
       _showSnack('Camera permission is required for video recording.');
@@ -210,13 +217,16 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
 
   Future<bool> _ensureMicrophonePermission() async {
     var micStatus = await Permission.microphone.status;
+    if (!mounted) return false;
     if (micStatus.isPermanentlyDenied) {
       _showSnack('Microphone permission is blocked. Open Settings.');
       await openAppSettings();
+      if (!mounted) return false;
       return false;
     }
     if (!micStatus.isGranted) {
       micStatus = await Permission.microphone.request();
+      if (!mounted) return false;
     }
     if (!micStatus.isGranted) {
       _showSnack('Microphone permission is required.');

@@ -284,8 +284,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               if (backendMode) ...[
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     TextButton(
                       onPressed: _isLoading

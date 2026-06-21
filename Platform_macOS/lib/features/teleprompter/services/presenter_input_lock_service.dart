@@ -48,6 +48,13 @@ class PresenterInputLockService {
     return hoveringControls || pointerInHotZone;
   }
 
+  static bool shouldCommitBrowsingPosition({
+    required bool speechActive,
+    required bool activeManualOverride,
+  }) {
+    return !(speechActive && activeManualOverride);
+  }
+
   static bool recordingControlsAutoHideActive({
     required bool isRecording,
     required bool recordStartInFlight,

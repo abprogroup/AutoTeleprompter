@@ -55,13 +55,27 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _updateManualWordIndex() {
     if (!mounted || !_scrollController.hasClients) return;
+    final settings = ref.read(settingsProvider);
+    final sttState = ref.read(teleprompterProvider);
+    final activeManualOverride =
+        PresenterInputLockService.allowActiveManualScroll(
+      settingEnabled: settings.allowScrollDuringActiveSession,
+      isListening: sttState.isListening,
+      isStarting: sttState.isStarting,
+    );
+    final commitProvider =
+        PresenterInputLockService.shouldCommitBrowsingPosition(
+      speechActive: sttState.isListening || sttState.isStarting,
+      activeManualOverride: activeManualOverride,
+    );
     if (_scrollController.offset <= 1.0) {
       final script = ref.read(scriptProvider);
       if (_manualWordIndex != 0) {
         _setTeleprompterState(() => _manualWordIndex = 0);
       }
-      if (script != null &&
-          ref.read(teleprompterProvider).confirmedWordIndex != 0) {
+      if (commitProvider &&
+          script != null &&
+          sttState.confirmedWordIndex != 0) {
         ref
             .read(teleprompterProvider.notifier)
             .jumpToPosition(0, script: script);
@@ -69,7 +83,6 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       return;
     }
     var bestIndex = _wordIndexNearestReadingLine() ?? _manualWordIndex;
-    final settings = ref.read(settingsProvider);
 
     if (_manualScrolling && settings.scrollMode == 'manual') {
       final speed = settings.scrollSpeed;
@@ -83,7 +96,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (bestIndex != _manualWordIndex) {
       _setTeleprompterState(() => _manualWordIndex = bestIndex);
       final script = ref.read(scriptProvider);
-      if (script != null && script.words.isNotEmpty) {
+      if (commitProvider && script != null && script.words.isNotEmpty) {
         ref
             .read(teleprompterProvider.notifier)
             .jumpToPosition(bestIndex, script: script);
@@ -470,7 +483,36 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _userBrowsingWhileStopped = false;
     _lastBrowsingWordSync = null;
     _syncVisibleWordWindow(force: true);
-    _syncResumePointToReadingLine();
+    final sttState = ref.read(teleprompterProvider);
+    final settings = ref.read(settingsProvider);
+    final activeManualOverride =
+        PresenterInputLockService.allowActiveManualScroll(
+      settingEnabled: settings.allowScrollDuringActiveSession,
+      isListening: sttState.isListening,
+      isStarting: sttState.isStarting,
+    );
+    final shouldCommit = PresenterInputLockService.shouldCommitBrowsingPosition(
+      speechActive: sttState.isListening || sttState.isStarting,
+      activeManualOverride: activeManualOverride,
+    );
+    if (shouldCommit) {
+      _syncResumePointToReadingLine();
+      return;
+    }
+    _returnActivePreviewToConfirmedWord(sttState.confirmedWordIndex);
+  }
+
+  void _returnActivePreviewToConfirmedWord(int confirmedWordIndex) {
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) return;
+    final targetIndex =
+        confirmedWordIndex.clamp(0, script.words.length - 1).toInt();
+    ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
+    _setTeleprompterState(() => _manualWordIndex = targetIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollToWordIndex(targetIndex, anticipate: true);
+    });
   }
 
   void _syncResumePointToReadingLine({

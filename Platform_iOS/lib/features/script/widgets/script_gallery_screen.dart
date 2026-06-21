@@ -238,7 +238,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   }
 }
 
-// v4.0: _ProDashboard, _RemoteDashboard, _RemoteActionBtn removed (premium features)
+// Premium account state is owned by ScriptGalleryPremiumPanel.
 
 class _FullHistorySheet extends ConsumerWidget {
   const _FullHistorySheet();

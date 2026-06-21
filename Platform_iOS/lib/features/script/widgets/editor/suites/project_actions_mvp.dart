@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-// v4.0: Stable Release — Record and Settings buttons hidden (premium features)
+// Compact editor action suite. Premium creator/settings entry points live in
+// the surrounding editor and gallery surfaces.
 class ProjectActionsSuite extends StatelessWidget {
   final VoidCallback onBack, onPresent, onClear, onSave, onImport, onRename;
   final VoidCallback onSearch;

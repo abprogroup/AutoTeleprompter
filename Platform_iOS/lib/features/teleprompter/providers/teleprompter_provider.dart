@@ -59,7 +59,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     return const TeleprompterState();
   }
 
-  // v4.0: Remote control features hidden for stable release
+  // Remote commands are translated at the presenter screen edge.
   void _setupRemoteCallbacks() {}
 
   bool _sessionStopped = false;

@@ -53,8 +53,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                 : _openLogin(context),
           ),
 
-          // v4.1+: Speech Recognition Engine selector and Whisper offline models
-          // are hidden for stable release. See MASTER_TODO.md deferred section.
+          // Advanced speech-engine selection remains deferred; stable settings
+          // expose account and feedback controls.
           const SizedBox(height: 22),
           const _SectionHeader(title: 'BETA FEEDBACK'),
           const SizedBox(height: 8),

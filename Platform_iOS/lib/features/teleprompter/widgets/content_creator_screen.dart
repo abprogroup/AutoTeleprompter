@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
@@ -107,7 +108,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         _cameraError = null;
       });
     } catch (e) {
-      debugPrint('Camera error: $e');
+      if (kDebugMode) debugPrint('Camera error: $e');
       if (mounted) {
         setState(() {
           _isInit = false;

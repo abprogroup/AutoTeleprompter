@@ -37,7 +37,7 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
         _recordStartInFlight = false;
       });
     } catch (e) {
-      debugPrint('Recording start error: $e');
+      if (kDebugMode) debugPrint('Recording start error: $e');
       await _stopSpeechIfOwnedByRecording();
       if (mounted) {
         _setContentCreatorState(() => _recordStartInFlight = false);
@@ -63,7 +63,7 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
       });
       _showSnack('Audio recording started: $savedPath');
     } catch (e) {
-      debugPrint('Audio recording start error: $e');
+      if (kDebugMode) debugPrint('Audio recording start error: $e');
       await _stopSpeechIfOwnedByRecording();
       if (mounted) {
         _setContentCreatorState(() => _recordStartInFlight = false);
@@ -86,7 +86,7 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
           await Gal.putVideo(file.path);
           savedToPhotos = true;
         } catch (e) {
-          debugPrint('Save error: $e');
+          if (kDebugMode) debugPrint('Save error: $e');
           savedToPhotos = false;
         }
       }
@@ -109,7 +109,7 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
             : Colors.orangeAccent,
       );
     } catch (e) {
-      debugPrint('Recording stop error: $e');
+      if (kDebugMode) debugPrint('Recording stop error: $e');
       if (mounted) _showSnack('Recording could not stop cleanly.');
     }
   }

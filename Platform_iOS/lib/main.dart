@@ -14,7 +14,7 @@ void main() {
     () {
       runApp(const ProviderScope(child: AutoTeleprompterApp()));
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_requestStartupPermissions());
+        unawaited(_requestStartupPermissionsAfterFirstPaint());
       });
     },
     (error, stackTrace) {
@@ -25,6 +25,11 @@ void main() {
       );
     },
   );
+}
+
+Future<void> _requestStartupPermissionsAfterFirstPaint() async {
+  await Future<void>.delayed(const Duration(milliseconds: 2800));
+  await _requestStartupPermissions();
 }
 
 Future<void> _requestStartupPermissions() async {

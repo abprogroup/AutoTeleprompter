@@ -371,7 +371,7 @@ class SettingsNotifier extends Notifier<AppSettings>
       showUpcomingWordColor: prefs.getBool(_showUpcomingWordColorKey) ?? false,
       fontFamily: prefs.getString(_fontFamilyKey) ?? 'Inter',
       showAlignmentOverride: prefs.getBool(_showAlignmentOverrideKey) ?? false,
-      sttEngine: prefs.getString(_sttEngineKey) ?? 'google',
+      sttEngine: sanitizeSttEngine(prefs.getString(_sttEngineKey)),
       readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
       sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
       allowScrollDuringActiveSession:

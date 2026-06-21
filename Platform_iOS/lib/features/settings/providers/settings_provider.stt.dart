@@ -1,10 +1,18 @@
 part of 'settings_provider.dart';
 
+const _stableSttEngine = 'google';
+const _stableSttEngines = {_stableSttEngine};
+
+String sanitizeSttEngine(String? engine) {
+  return _stableSttEngines.contains(engine) ? engine! : _stableSttEngine;
+}
+
 mixin SettingsNotifierSttProfile on Notifier<AppSettings> {
   Future<void> setSttEngine(String engine) async {
-    state = state.copyWith(sttEngine: engine);
+    final safeEngine = sanitizeSttEngine(engine);
+    state = state.copyWith(sttEngine: safeEngine);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sttEngineKey, engine);
+    await prefs.setString(_sttEngineKey, safeEngine);
   }
 
   Future<void> setReadFadeIntensity(double intensity) async {

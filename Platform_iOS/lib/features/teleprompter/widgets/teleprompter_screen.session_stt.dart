@@ -88,12 +88,13 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     );
 
     final settingsNotifier = ref.read(settingsProvider.notifier);
+    final scriptNotifier = ref.read(scriptProvider.notifier);
     await settingsNotifier.setScriptBgColor(nextBackground);
     await settingsNotifier.setFutureWordColor(nextFutureText);
-    await ref.read(scriptProvider.notifier).updateStyleMetadata(
-          scriptBgColor: nextBackground,
-          futureWordColor: nextFutureText,
-        );
+    await scriptNotifier.updateStyleMetadata(
+      scriptBgColor: nextBackground,
+      futureWordColor: nextFutureText,
+    );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -339,11 +340,13 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     // Request if not yet granted
     if (!micStatus.isGranted) {
       micStatus = await Permission.microphone.request();
+      if (!mounted) return;
     }
 
     // On Apple platforms (iOS/macOS), also need speech recognition permission
     if (PlatformPermissions.requiresSpeechPermissionCheck) {
       final speechStatus = await Permission.speech.request();
+      if (!mounted) return;
       if (!speechStatus.isGranted) {
         if (mounted) {
           showDialog(
@@ -398,6 +401,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       return;
     }
 
+    if (!mounted) return;
     final script = ref.read(scriptProvider);
     if (script != null) {
       await _teleprompterNotifier.startSession(script);

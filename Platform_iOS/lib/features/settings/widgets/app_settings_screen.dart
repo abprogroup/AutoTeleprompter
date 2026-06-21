@@ -61,7 +61,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           _SettingsTile(
             icon: Icons.bug_report_outlined,
             title: 'Send Feedback',
-            subtitle: 'Includes full active script and diagnostics',
+            subtitle: 'Diagnostics, with optional script attachment',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),

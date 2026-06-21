@@ -1,6 +1,4 @@
 import 'dart:io';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 
 /// Handles OS-level permission checks shared by feature entry points.
 ///
@@ -22,22 +20,4 @@ class PlatformPermissions {
   /// False on Android (STT permission is bundled with microphone) and Windows.
   static bool get requiresSpeechPermissionCheck =>
       Platform.isIOS || Platform.isMacOS;
-
-  /// Warm up Apple speech permissions only when a feature explicitly asks for
-  /// it. iOS startup intentionally avoids permission prompts before beta
-  /// consent is accepted.
-  static Future<void> requestAll() async {
-    if (Platform.isIOS || Platform.isMacOS) {
-      await Permission.microphone.request();
-      await Permission.speech.request();
-      // speech_to_text's initialize() triggers the native
-      // SFSpeechRecognizer.requestAuthorization() API directly,
-      // which is required for the permission to appear in iOS/macOS Settings.
-      try {
-        await SpeechToText().initialize();
-      } catch (_) {}
-    }
-    // Android: STT service requests mic permission when it first starts.
-    // Windows: uses system Privacy Settings, no programmatic request needed.
-  }
 }

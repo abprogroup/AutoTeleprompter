@@ -1,5 +1,5 @@
 name: Build macOS App
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.7+20' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.7+21' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -16,7 +16,7 @@ on:
       app_version:
         description: 'Flutter app version, for example 5.0.5+16'
         required: true
-        default: '5.0.7+20'
+        default: '5.0.7+21'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false

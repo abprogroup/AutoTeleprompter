@@ -3,7 +3,7 @@ part of 'teleprompter_screen.dart';
 extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   void _initRemoteListener() {
     _remoteCmdSub?.cancel();
-    _remoteCmdSub = ref.read(remoteControlProvider).onCommand.listen((cmd) {
+    _remoteCmdSub = _remoteControlService.onCommand.listen((cmd) {
       if (!mounted) return;
       final settings = ref.read(settingsProvider);
       if (cmd.startsWith('SET_SPEED:')) {
@@ -75,7 +75,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   }
 
   void _stopSpeechSessionFromUi(String source) {
-    unawaited(ref.read(teleprompterProvider.notifier).stopSession());
+    unawaited(_teleprompterNotifier.stopSession());
   }
 
   Future<void> _togglePresenterColorInversion() async {
@@ -115,17 +115,17 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     _wordTrackTimer?.cancel();
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
-    ref.read(remoteControlProvider).publishPresenterState(
-          scriptActive: false,
-          sessionActive: false,
-          isStarting: false,
-          scrollMode: 'auto',
-          scrollSpeed: 0,
-        );
+    _remoteControlService.publishPresenterState(
+      scriptActive: false,
+      sessionActive: false,
+      isStarting: false,
+      scrollMode: 'auto',
+      scrollSpeed: 0,
+    );
     _scrollController.dispose();
     _presentationFocusNode.dispose();
     _remoteCmdSub?.cancel();
-    ref.read(teleprompterProvider.notifier).stopSession();
+    _teleprompterNotifier.stopSession();
   }
 
   void _scheduleHideControls() {
@@ -400,7 +400,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
     final script = ref.read(scriptProvider);
     if (script != null) {
-      await ref.read(teleprompterProvider.notifier).startSession(script);
+      await _teleprompterNotifier.startSession(script);
     }
   }
 }

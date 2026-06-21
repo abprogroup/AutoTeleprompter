@@ -71,6 +71,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<_PresenterSearchMatch> _presenterSearchMatches = const [];
   int _presenterSearchMatchIndex = -1;
   bool _resumePromptShown = false;
+  late final TeleprompterNotifier _teleprompterNotifier;
+  late final RemoteControlService _remoteControlService;
   String? _lastPublishedRemoteScrollMode;
   double? _lastPublishedRemoteScrollSpeed;
   bool? _lastPublishedRemoteScriptActive;
@@ -80,6 +82,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   @override
   void initState() {
     super.initState();
+    _teleprompterNotifier = ref.read(teleprompterProvider.notifier);
+    _remoteControlService = ref.read(remoteControlProvider);
     WakelockPlus.enable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _scheduleHideControls();
@@ -89,7 +93,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         // dispose() of the previous screen calls stopSession(), but the
         // async STT teardown may not have fully completed before this
         // screen's initState fires, leaving the recognizer active.
-        ref.read(teleprompterProvider.notifier).stopSession();
+        _teleprompterNotifier.stopSession();
         _initRemoteListener();
         // Listen for missing language notifications
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage),

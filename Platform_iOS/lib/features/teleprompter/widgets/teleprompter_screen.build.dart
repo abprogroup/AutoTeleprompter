@@ -296,7 +296,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       // exit animation starts and long before dispose() is called.
       // dispose() still calls stopSession() as a safety net.
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) ref.read(teleprompterProvider.notifier).stopSession();
+        if (didPop) _teleprompterNotifier.stopSession();
       },
       child: KeyboardListener(
         focusNode: _presentationFocusNode,

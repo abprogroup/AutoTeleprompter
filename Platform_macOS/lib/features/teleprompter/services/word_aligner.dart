@@ -289,10 +289,9 @@ class WordAligner {
       final effectiveSingleThreshold =
           policyBulletMode ? _strictMatchThreshold : singleThreshold;
       if (bestSingleSim >= effectiveSingleThreshold) {
-        final jumpDist = bestSingleIdx - lastConfirmedIndex;
         final allowSingleAdvance =
             activeStandby && localThreshold.passes([lastSpoken]);
-        if (allowSingleAdvance && jumpDist <= _maxSingleJump) {
+        if (allowSingleAdvance && bestSingleIdx == searchStart) {
           return AlignmentResult(bestSingleIdx, bestSingleSim,
               'SINGLE: "$lastSpoken" -> [$bestSingleIdx]"${script[bestSingleIdx].normalized}" = ${bestSingleSim.toStringAsFixed(2)}\n$debugScans');
         }
@@ -321,7 +320,6 @@ class WordAligner {
       maxJump: _maxSingleJump,
       minPhraseWords: localThreshold.bigWords,
       evidenceThreshold: localThreshold,
-      scriptGapThreshold: effectivePolicy.safetyRecovery,
       overrideWordThreshold: policyBulletMode ? _strictPhraseThreshold : null,
       minPhraseScore:
           policyBulletMode ? _strictPhraseThreshold : _matchThreshold,

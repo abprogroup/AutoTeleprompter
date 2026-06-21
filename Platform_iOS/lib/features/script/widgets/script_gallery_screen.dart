@@ -42,9 +42,10 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             setState(() => _logoTaps++);
             if (_logoTaps >= 5) {
               setState(() => _logoTaps = 0);
-              await ref.read(settingsProvider.notifier).toggleDebugMode();
-              final isNowDebug = ref.read(settingsProvider).debugMode;
+              final settingsNotifier = ref.read(settingsProvider.notifier);
+              await settingsNotifier.toggleDebugMode();
               if (context.mounted) {
+                final isNowDebug = ref.read(settingsProvider).debugMode;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('DEBUG MODE: ${isNowDebug ? 'ON' : 'OFF'}'),

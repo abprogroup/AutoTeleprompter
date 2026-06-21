@@ -233,6 +233,31 @@ mixin StylingLogicMixin<T extends StatefulWidget> on State<T> {
     wrapSelection(open, close);
   }
 
+  /// Broadcast paragraph direction while preserving alignment and inline styles.
+  void broadcastDirection(String direction,
+      {required String open, required String close}) {
+    if (isGlobalSelection) {
+      isCleaning = true;
+      try {
+        for (final c in controllers) {
+          if (c.text.isEmpty) continue;
+          final clean = c.text.replaceAll(
+            RegExp(r'\[(?:rtl|ltr)\]|\[\/(?:rtl|ltr)\]'),
+            '',
+          );
+          c.text = '$open$clean$close';
+        }
+        saveHistory(
+            description: 'Global Direction: $direction', debounce: false);
+      } finally {
+        isCleaning = false;
+      }
+      return;
+    }
+
+    wrapSelection(open, close);
+  }
+
   /// Detect if cursor position is inside an open/close tag pair.
   bool _isStyleActiveAt(
       String text, int start, int end, String open, String close) {

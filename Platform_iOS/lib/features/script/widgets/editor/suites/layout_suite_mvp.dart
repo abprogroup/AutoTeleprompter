@@ -6,7 +6,7 @@ import '../../../providers/script_provider.dart';
 import '../../../../settings/providers/settings_provider.dart';
 
 // v3.9.5.60: Sovereign Layout MVP
-// — Alignment via icons (format_align_*), RTL/LTR deferred
+// — Alignment and explicit RTL/LTR direction via icons
 // — Column layout: each group stacked vertically, no overflow
 class LayoutSuite extends ConsumerWidget {
   final ValueChanged<String> onAlign, onDirection;
@@ -91,7 +91,35 @@ class LayoutSuite extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 8),
-        // ── Row 2: Line spacing ─────────────────────────────────────────
+        // ── Row 2: Explicit text direction ──────────────────────────────
+        Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _AlignBtn(
+                icon: Icons.format_textdirection_l_to_r_rounded,
+                tooltip: 'Force LTR',
+                active: style.textDirection == 'ltr',
+                onTap: () {
+                  onDirection('ltr');
+                  onInteraction('Text Direction');
+                },
+              ),
+              const SizedBox(width: 8),
+              _AlignBtn(
+                icon: Icons.format_textdirection_r_to_l_rounded,
+                tooltip: 'Force RTL',
+                active: style.textDirection == 'rtl',
+                onTap: () {
+                  onDirection('rtl');
+                  onInteraction('Text Direction');
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // ── Row 3: Line spacing ─────────────────────────────────────────
         SliderRow(
           label: 'Line Spacing',
           value: settings.lineSpacing.clamp(0.5, 3.0),
@@ -103,7 +131,7 @@ class LayoutSuite extends ConsumerWidget {
           ),
           onChanged: applyLineSpacing,
         ),
-        // ── Row 3: Letter spacing ───────────────────────────────────────
+        // ── Row 4: Letter spacing ───────────────────────────────────────
         SliderRow(
           label: 'Letter Spacing',
           value: settings.letterSpacing.clamp(-2.0, 5.0),
@@ -111,7 +139,7 @@ class LayoutSuite extends ConsumerWidget {
           max: 5.0,
           onChanged: applyLetterSpacing,
         ),
-        // ── Row 4: Word spacing ─────────────────────────────────────────
+        // ── Row 5: Word spacing ─────────────────────────────────────────
         SliderRow(
           label: 'Word Spacing',
           value: settings.wordSpacing.toDouble().clamp(-5.0, 20.0),

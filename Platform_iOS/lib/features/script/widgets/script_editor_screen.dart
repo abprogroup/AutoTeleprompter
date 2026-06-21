@@ -58,6 +58,7 @@ part 'script_editor_screen.keyboard_navigation.dart';
 part 'script_editor_screen.keyboard_selection.dart';
 part 'script_editor_screen.keyboard_vertical.dart';
 part 'script_editor_screen.keyboard_horizontal.dart';
+part 'script_editor_screen.keyboard_bookmarks.dart';
 part 'script_editor_screen.keyboard_focus.dart';
 part 'script_editor_screen.selection_trace_stub.dart';
 part 'script_editor_screen.arrow_trace_stub.dart';

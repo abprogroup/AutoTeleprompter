@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
 import '../services/speech_service.dart';
+import '../services/stt_locale_section_service.dart';
 import '../services/stt_recognition_policy_service.dart';
 import '../services/whisper_speech_service_native.dart';
 import '../services/word_aligner.dart';
@@ -412,86 +413,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     });
   }
 
-  /// Pre-compute a per-word locale map for the entire script.
-  ///
-  /// Algorithm:
-  /// 1. Assign each real word its raw language (Hebrew / English).
-  /// 2. Find contiguous same-language runs.
-  /// 3. Absorb any run shorter than [minSectionWords] into the surrounding
-  ///    language so isolated foreign words (names, technical terms) don't
-  ///    trigger a pointless STT restart.
-  /// 4. Map the result back across the full word list (including newlines)
-  ///    so it aligns with confirmedWordIndex.
-  void _precomputeSectionLocales(Script script) {
-    const minSectionWords = 3;
-
-    final words = script.words.where((w) => !w.isNewline).toList();
-    if (words.isEmpty) {
-      _sectionLocales = [];
-      return;
-    }
-
-    // Step 1 — raw per-word language
-    final raw = words.map((w) => w.isRtl ? 'he_IL' : 'en_US').toList();
-
-    // Step 2 — find runs, absorb short ones into surrounding context
-    final smoothed = List<String>.from(raw);
-    bool changed = true;
-    while (changed) {
-      changed = false;
-      int i = 0;
-      while (i < smoothed.length) {
-        final locale = smoothed[i];
-        int runStart = i;
-        while (i < smoothed.length && smoothed[i] == locale) {
-          i++;
-        }
-        final runLen = i - runStart;
-        if (runLen < minSectionWords) {
-          // Inherit from left neighbour if available, else right
-          final inherit = runStart > 0
-              ? smoothed[runStart - 1]
-              : (i < smoothed.length ? smoothed[i] : locale);
-          if (inherit != locale) {
-            for (int j = runStart; j < i; j++) {
-              smoothed[j] = inherit;
-            }
-            changed = true;
-          }
-        }
-      }
-    }
-
-    // Step 3 — map back onto the full word list (newlines inherit previous)
-    _sectionLocales = [];
-    int wordIdx = 0;
-    for (final w in script.words) {
-      if (w.isNewline) {
-        _sectionLocales
-            .add(_sectionLocales.isNotEmpty ? _sectionLocales.last : 'en_US');
-      } else {
-        _sectionLocales
-            .add(wordIdx < smoothed.length ? smoothed[wordIdx] : 'en_US');
-        wordIdx++;
-      }
-    }
-  }
-
   /// Returns a tight force-skip threshold when the current position is within
   /// 2 words of an upcoming language boundary, normal threshold otherwise.
   /// This lets the STT skip over the ~1 unrecognised word in the restart gap
   /// in under a second instead of waiting the full 45-cycle window.
   int _effectiveSkipThreshold() {
-    if (_sectionLocales.isEmpty) return _googleSkipAfterStuck;
-    final currentIdx = state.confirmedWordIndex;
-    for (int lookahead = 1; lookahead <= 2; lookahead++) {
-      final checkIdx = currentIdx + lookahead;
-      if (checkIdx < _sectionLocales.length &&
-          _sectionLocales[checkIdx] != _activeLocale) {
-        return 5; // near boundary — skip fast
-      }
-    }
-    return _googleSkipAfterStuck;
+    return SttLocaleSectionService.effectiveSkipThreshold(
+      sectionLocales: _sectionLocales,
+      currentIndex: state.confirmedWordIndex,
+      activeLocale: _activeLocale,
+      normalThreshold: _googleSkipAfterStuck,
+    );
   }
 
   /// Pre-emptively switch STT locale 1 word BEFORE the section boundary so
@@ -508,8 +440,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (currentIdx < 0 || currentIdx >= _sectionLocales.length) return;
 
     // Look 1 word ahead — switch early so STT is ready at the boundary.
-    final lookIdx = (currentIdx + 1).clamp(0, _sectionLocales.length - 1);
-    final needed = _sectionLocales[lookIdx];
+    final needed = SttLocaleSectionService.localeForIndex(
+      _sectionLocales,
+      currentIdx + 1,
+    );
     if (needed == _activeLocale) return;
 
     _addDebugLog('🌐 PRE-SWITCH: ${_activeLocale ?? "?"} → $needed '
@@ -552,7 +486,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sessionStopped = false;
     _visibleWordStart = null;
     _visibleWordEnd = null;
-    _precomputeSectionLocales(script);
+    _sectionLocales = SttLocaleSectionService.sectionLocalesForScript(script);
     final sttEngine = ref.read(settingsProvider).sttEngine;
     _useWhisper = sttEngine.startsWith('whisper');
     final resumeIndex = sameScript ? state.confirmedWordIndex : 0;
@@ -575,9 +509,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     // Starting locale comes from the pre-computed section map (word 0).
     // This is exact: if the script opens in English but has a Hebrew section
     // later, we start in English — not skewed by the whole-script ratio.
-    final localeId = startIndex < _sectionLocales.length
-        ? _sectionLocales[startIndex]
-        : (_sectionLocales.isNotEmpty ? _sectionLocales.first : 'en_US');
+    final localeId = SttLocaleSectionService.localeForIndex(
+      _sectionLocales,
+      startIndex,
+    );
     _scriptLanguageLocale = localeId;
     _activeLocale = localeId;
     _addDebugLog(
@@ -780,8 +715,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   void _syncLocaleForPosition(int index, {String reason = ''}) {
     if (_useWhisper || _disposed || _sessionStopped) return;
     if (_sectionLocales.isEmpty) return;
-    final lookIdx = index.clamp(0, _sectionLocales.length - 1);
-    final needed = _sectionLocales[lookIdx];
+    final needed = SttLocaleSectionService.localeForIndex(
+      _sectionLocales,
+      index,
+    );
     if (needed == _activeLocale) return;
     _addDebugLog(
         '🌐 POSITION-SYNC: ${_activeLocale ?? "?"} → $needed (${reason.isEmpty ? "jump" : reason})');

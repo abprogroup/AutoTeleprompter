@@ -244,25 +244,59 @@ class _PolicyBox extends StatelessWidget {
   Widget _policyLine(String label, String value, {bool copyable = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 92,
-            child: Text(label,
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          ),
-          Expanded(
-            child: Text(value,
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w600)),
-          ),
-          if (copyable)
-            IconButton(
-              tooltip: 'Copy device key',
-              icon: const Icon(Icons.copy, color: Color(0xFFFFBF00), size: 18),
-              onPressed: () => Clipboard.setData(ClipboardData(text: value)),
-            ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 420;
+          final labelText = Text(
+            label,
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          );
+          final valueRow = Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (copyable)
+                IconButton(
+                  tooltip: 'Copy device key',
+                  constraints:
+                      const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(
+                    Icons.copy,
+                    color: Color(0xFFFFBF00),
+                    size: 18,
+                  ),
+                  onPressed: () => Clipboard.setData(ClipboardData(text: value)),
+                ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                labelText,
+                const SizedBox(height: 2),
+                valueRow,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              SizedBox(width: 92, child: labelText),
+              Expanded(child: valueRow),
+            ],
+          );
+        },
       ),
     );
   }

@@ -138,32 +138,51 @@ class _CloudSyncOptionsState extends ConsumerState<_CloudSyncOptions> {
   }
 
   Future<void> _chooseLocalBackup() async {
-    final path = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Choose Local Backup Folder',
-    );
+    String? path;
+    try {
+      path = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Choose Local Backup Folder',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack(
+        'Local backup folder selection is not available on this device build.',
+      );
+      return;
+    }
     if (!mounted || path == null) return;
-    await _store.setLocalBackupPath(path);
+    try {
+      await _store.setLocalBackupPath(path);
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack('Could not connect that local backup folder.');
+      return;
+    }
     if (!mounted) return;
     _refresh();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Local backup folder connected.')),
-    );
+    _showSnack('Local backup folder connected.');
   }
 
   Future<void> _disconnectLocalBackup() async {
-    await _store.disconnectLocalBackup();
+    try {
+      await _store.disconnectLocalBackup();
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack('Could not disconnect the local backup folder.');
+      return;
+    }
     if (!mounted) return;
     _refresh();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Local backup folder disconnected.')),
-    );
+    _showSnack('Local backup folder disconnected.');
   }
 
   void _showMobileProviderPending(String label) {
+    _showSnack('$label account sign-in is not available in this build.');
+  }
+
+  void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label account sign-in is not available in this build.'),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 

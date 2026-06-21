@@ -79,6 +79,7 @@ class _EditorBlock extends StatelessWidget {
         ScriptColorInversionService.highlightsMoveToText(settings);
     final editorTextStyle = TextStyle(
       color: Color(settings.futureWordColor),
+      fontFamily: EditorFontService.cleanFamily(settings.fontFamily),
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,

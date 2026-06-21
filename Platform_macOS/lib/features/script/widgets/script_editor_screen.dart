@@ -39,6 +39,7 @@ import '../services/markup_decoration_service.dart';
 import '../services/highlight_band_painter.dart';
 import '../services/markup_export_service.dart';
 import '../services/editor_text_geometry_service.dart';
+import '../services/editor_font_service.dart';
 import '../services/editor_inline_style_operation.dart';
 import '../services/script_color_inversion_service.dart';
 import '../../teleprompter/services/word_aligner.dart';

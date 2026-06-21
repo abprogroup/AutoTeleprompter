@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/editor_font_service.dart';
 import '../../services/markup_decoration_service.dart';
 
 /// Premium Highlighting Controller with inline markup rendering.
@@ -350,7 +351,9 @@ class MarkupController extends TextEditingController {
         s = s.copyWith(backgroundColor: bgColors.last);
       }
       if (sizes.isNotEmpty) s = s.copyWith(fontSize: sizes.last);
-      if (fonts.isNotEmpty) s = s.copyWith(fontFamily: fonts.last);
+      if (fonts.isNotEmpty) {
+        s = EditorFontService.applyFamily(s, fonts.last);
+      }
       return s;
     }
 

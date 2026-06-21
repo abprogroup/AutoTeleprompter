@@ -1,7 +1,7 @@
 name: autoteleprompter
 description: Auto-scrolling teleprompter with speech recognition for Hebrew and English.
 publish_to: 'none'
-version: 5.0.7+22
+version: 5.0.7+23
 
 environment:
   sdk: '>=3.4.4 <4.0.0'
@@ -52,3 +52,108 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/fonts/google_fonts/
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/google_fonts/Inter-Thin.ttf
+          weight: 100
+        - asset: assets/fonts/google_fonts/Inter-ExtraLight.ttf
+          weight: 200
+        - asset: assets/fonts/google_fonts/Inter-Light.ttf
+          weight: 300
+        - asset: assets/fonts/google_fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/google_fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/google_fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Inter-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/google_fonts/Inter-Black.ttf
+          weight: 900
+    - family: Bebas Neue
+      fonts:
+        - asset: assets/fonts/google_fonts/BebasNeue-Regular.ttf
+          weight: 400
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/google_fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Roboto-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Roboto-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/google_fonts/Outfit-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Outfit-Bold.ttf
+          weight: 700
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/google_fonts/Montserrat-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Montserrat-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/Montserrat-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Montserrat-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Playfair Display
+      fonts:
+        - asset: assets/fonts/google_fonts/PlayfairDisplay-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/PlayfairDisplay-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/PlayfairDisplay-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/PlayfairDisplay-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Merriweather
+      fonts:
+        - asset: assets/fonts/google_fonts/Merriweather-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Merriweather-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/Merriweather-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Merriweather-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Lora
+      fonts:
+        - asset: assets/fonts/google_fonts/Lora-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/Lora-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/Lora-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/Lora-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Courier Prime
+      fonts:
+        - asset: assets/fonts/google_fonts/CourierPrime-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/google_fonts/CourierPrime-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/google_fonts/CourierPrime-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/google_fonts/CourierPrime-BoldItalic.ttf
+          weight: 700
+          style: italic

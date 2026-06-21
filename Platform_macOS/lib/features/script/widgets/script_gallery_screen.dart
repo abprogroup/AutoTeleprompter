@@ -696,4 +696,4 @@ class _StartupUpdatePreferences {
   });
 }
 
-// Gallery remote status is now restored through RemoteStatusCard.
+// Gallery remote entry routes through the Pro hub and Settings Remote tab.

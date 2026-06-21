@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../components/editor_primitives.dart';
 import '../../../models/cursor_style.dart';
+import '../../../services/editor_font_service.dart';
 
 // v3.9.5.60: Sovereign Text Styling MVP — Column layout, synced dropdowns
 class TextSuite extends ConsumerWidget {
@@ -24,17 +25,6 @@ class TextSuite extends ConsumerWidget {
     96,
     120,
   ];
-  static const _fontFamilies = [
-    'Inter',
-    'Roboto',
-    'Outfit',
-    'Montserrat',
-    'Playfair Display',
-    'Merriweather',
-    'Lora',
-    'Courier Prime'
-  ];
-
   const TextSuite({
     super.key,
     required this.onBold,
@@ -49,9 +39,11 @@ class TextSuite extends ConsumerWidget {
     final style = ref.watch(cursorStyleProvider);
     final safeFontSize = style.fontSize.clamp(1, 300).toDouble();
     final fontSizeItems = {..._fontSizes, safeFontSize}.toList()..sort();
-    final safeFontFamily =
-        style.fontFamily.trim().isEmpty ? 'Inter' : style.fontFamily.trim();
-    final fontFamilies = {..._fontFamilies, safeFontFamily}.toList();
+    final safeFontFamily = EditorFontService.cleanFamily(style.fontFamily);
+    final fontFamilies = {
+      ...EditorFontService.families,
+      safeFontFamily,
+    }.toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,

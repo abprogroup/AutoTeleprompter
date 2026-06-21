@@ -103,30 +103,61 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              TextButton.icon(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 360;
+              final exitButton = TextButton.icon(
                 onPressed: SystemNavigator.pop,
                 icon: const Icon(Icons.close, color: Colors.white54),
-                label: const Text('Exit beta',
-                    style: TextStyle(color: Colors.white70)),
-              ),
-              const Spacer(),
-              ElevatedButton.icon(
+                label: const Text(
+                  'Exit beta',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.white70),
+                ),
+              );
+              final acceptButton = ElevatedButton.icon(
                 onPressed: _acknowledged && !_accepting ? _accept : null,
                 icon: const Icon(Icons.check_circle_outline),
                 label: Text(
-                    _accepting ? 'Entering beta...' : 'Accept and continue'),
+                  _accepting ? 'Entering beta...' : 'Accept and continue',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFBF00),
                   foregroundColor: Colors.black,
                   disabledBackgroundColor: Colors.white12,
                   disabledForegroundColor: Colors.white38,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 ),
-              ),
-            ],
+              );
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(width: double.infinity, child: acceptButton),
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerLeft, child: exitButton),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Flexible(
+                      child: Align(
+                          alignment: Alignment.centerLeft, child: exitButton)),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: acceptButton,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),

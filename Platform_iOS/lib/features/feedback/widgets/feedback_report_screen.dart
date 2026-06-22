@@ -379,7 +379,26 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
 
   Future<void> _retryPendingReports() async {
     setState(() => _outboxBusy = true);
-    final result = await widget.createFeedbackService().retryPendingReports();
+    late final FeedbackOutboxRetryResult result;
+    try {
+      result = await widget.createFeedbackService().retryPendingReports();
+    } catch (error, stack) {
+      final safeError = _sanitizeDiagnosticText(error.toString());
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'feedback.retryPendingReports',
+      );
+      if (!mounted) return;
+      setState(() => _outboxBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Pending feedback could not be retried: $safeError'),
+          backgroundColor: Colors.red[800],
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _outboxBusy = false;
@@ -392,7 +411,26 @@ class _FeedbackReportScreenState extends ConsumerState<FeedbackReportScreen> {
 
   Future<void> _deletePendingReports() async {
     setState(() => _outboxBusy = true);
-    final deleted = await widget.createFeedbackService().deletePendingReports();
+    late final int deleted;
+    try {
+      deleted = await widget.createFeedbackService().deletePendingReports();
+    } catch (error, stack) {
+      final safeError = _sanitizeDiagnosticText(error.toString());
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'feedback.deletePendingReports',
+      );
+      if (!mounted) return;
+      setState(() => _outboxBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Pending feedback could not be deleted: $safeError'),
+          backgroundColor: Colors.red[800],
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _outboxBusy = false;

@@ -71,16 +71,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _isLoading = true);
 
     final authNotifier = ref.read(authProvider.notifier);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     await authNotifier.login(email);
-    await ref.read(settingsProvider.notifier).seedDisplayNameFromEmail(email);
+    if (!mounted) return;
+    await settingsNotifier.seedDisplayNameFromEmail(email);
+    if (!mounted) return;
 
     bool success = false;
     if (license.isNotEmpty) {
       success = await authNotifier.activateLicense(license);
+      if (!mounted) return;
     } else {
       success = ref.read(authProvider).hasPremiumAccess;
     }
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (success) {
@@ -119,6 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     final authNotifier = ref.read(authProvider.notifier);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     setState(() => _isLoading = true);
     try {
       if (_passwordMode) {
@@ -131,9 +137,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           email: email,
           password: credential,
         );
-        await ref
-            .read(settingsProvider.notifier)
-            .seedDisplayNameFromEmail(email);
+        if (!mounted) return;
+        await settingsNotifier.seedDisplayNameFromEmail(email);
+        if (!mounted) return;
         setState(() => _isLoading = false);
         if (!success) {
           _showSnack('This account does not have active Pro access.');
@@ -145,6 +151,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
       if (credential.isEmpty) {
         await authNotifier.requestBackendLoginCode(email);
+        if (!mounted) return;
         setState(() {
           _backendCodeRequested = true;
           _isLoading = false;
@@ -157,7 +164,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         email: email,
         code: credential,
       );
-      await ref.read(settingsProvider.notifier).seedDisplayNameFromEmail(email);
+      if (!mounted) return;
+      await settingsNotifier.seedDisplayNameFromEmail(email);
+      if (!mounted) return;
       setState(() => _isLoading = false);
       if (!success) {
         _showSnack('This account does not have active Pro access.');

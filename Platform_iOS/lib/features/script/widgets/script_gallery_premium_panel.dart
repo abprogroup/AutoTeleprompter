@@ -26,8 +26,8 @@ class ScriptGalleryPremiumPanel extends StatelessWidget {
             ? 'Checking account'
             : 'Free plan';
     final subtitle = hasPro
-        ? 'Cloud sync, remote control, content creation, and recording are unlocked.'
-        : 'Connect a Pro account to unlock cloud, remote, creator tools, and recording.';
+        ? 'Local backup, remote control, content creation, and recording are unlocked.'
+        : 'Connect a Pro account to unlock backup, remote, creator tools, and recording.';
 
     return Container(
       width: double.infinity,

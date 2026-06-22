@@ -85,7 +85,7 @@ class _CloudLockedState extends StatelessWidget {
           Text(
             backendUnavailable
                 ? 'This build does not include account backend configuration.'
-                : 'Sign in with a Pro account to connect storage providers.',
+                : 'Sign in with a Pro account to manage backups and provider options.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white54, fontSize: 13),
           ),
@@ -177,7 +177,7 @@ class _CloudSyncOptionsState extends ConsumerState<_CloudSyncOptions> {
   }
 
   void _showMobileProviderPending(String label) {
-    _showSnack('$label account sign-in is not available in this build.');
+    _showSnack('$label sync is planned for a future iOS provider build.');
   }
 
   void _showSnack(String message) {
@@ -205,7 +205,7 @@ class _CloudSyncOptionsState extends ConsumerState<_CloudSyncOptions> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Connect storage for scripts and backups.',
+              'Manage local backups and future provider sync.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
             const SizedBox(height: 24),

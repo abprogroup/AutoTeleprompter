@@ -166,14 +166,25 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
 
   Future<void> _accept() async {
     setState(() => _accepting = true);
-    await ref.read(betaConsentProvider.notifier).acceptCurrentPolicy();
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const ScriptGalleryScreen(),
-      ),
-    );
+    try {
+      await ref.read(betaConsentProvider.notifier).acceptCurrentPolicy();
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => const ScriptGalleryScreen(),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _accepting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not save beta consent. Please try again.'),
+          backgroundColor: Colors.red[800],
+        ),
+      );
+    }
   }
 }
 

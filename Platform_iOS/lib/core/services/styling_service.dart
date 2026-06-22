@@ -7,7 +7,8 @@ class StylingService {
   static String stripTags(String text) {
     if (text.isEmpty) return '';
     // v3.9.5.56: Standardized Tag Extraction
-    final regex = RegExp(r'\[\/?(u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
+    final regex = RegExp(
+        r'\[\/?(u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
     return text.replaceAll(regex, '');
   }
 
@@ -32,7 +33,8 @@ class StylingService {
 
   /// Alignment is paragraph-level and mutually exclusive.
   /// Strips ALL existing alignment tags from the entire text, then re-wraps.
-  static String applyLayout(String text, TextSelection selection, String layout) {
+  static String applyLayout(
+      String text, TextSelection selection, String layout) {
     if (text.isEmpty) return text;
 
     // v3.9.5.60: Total-text reconciler — strip ALL alignment tags everywhere
@@ -54,7 +56,8 @@ class StylingService {
     final p1 = currentText.substring(0, splitIndex);
     final p2 = currentText.substring(splitIndex);
 
-    final regex = RegExp(r'\*\*|\[\/?(?:u|i|size|font|color|bg|center|left|right|rtl|ltr|align)(?:=[^\]]+)?\]');
+    final regex = RegExp(
+        r'\*\*|\[\/?(?:u|i|size|font|color|bg|center|left|right|rtl|ltr|align)(?:=[^\]]+)?\]');
     final stack = <String>[];
 
     for (final match in regex.allMatches(p1)) {
@@ -84,8 +87,8 @@ class StylingService {
     for (final tag in stack) {
       String closeTag = '**';
       if (tag != '**') {
-        final family = tag.contains('=') 
-            ? tag.substring(1, tag.indexOf('=')) 
+        final family = tag.contains('=')
+            ? tag.substring(1, tag.indexOf('='))
             : tag.substring(1, tag.indexOf(']'));
         closeTag = '[/$family]';
       }
@@ -190,4 +193,3 @@ class StylingService {
     return '<p style="text-align:$align;margin:0">${buf.toString()}</p>';
   }
 }
-

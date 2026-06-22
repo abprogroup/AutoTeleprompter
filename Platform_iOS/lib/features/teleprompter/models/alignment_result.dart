@@ -6,12 +6,14 @@ const _clearSentinel = '\x00__CLEAR__';
 class TeleprompterState {
   final int confirmedWordIndex;
   final bool isListening;
+
   /// STT start is in flight between `startSession()` and first listening status.
   final bool isStarting;
   final String statusMessage;
   final bool hasError;
   final List<String> debugLogs;
   final List<SttAudioInputDevice> audioInputDevices;
+
   /// Non-null when the script's language isn't available for Google STT.
   /// The UI should show a dialog prompting the user to download it.
   final String? missingLanguage;

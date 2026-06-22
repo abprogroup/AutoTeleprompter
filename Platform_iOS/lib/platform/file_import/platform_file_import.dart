@@ -17,9 +17,17 @@ class PlatformFileImport {
 
   /// File extensions the app can import on the current platform.
   static List<String> get supportedExtensions => [
-    'rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text',
-    if (Platform.isIOS || Platform.isMacOS) 'pages',
-  ];
+        'rtf',
+        'pdf',
+        'docx',
+        'doc',
+        'odt',
+        'txt',
+        'md',
+        'log',
+        'text',
+        if (Platform.isIOS || Platform.isMacOS) 'pages',
+      ];
 
   /// Human-readable formats string shown in the "not supported" error dialog.
   static String get formatsLabel {

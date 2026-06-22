@@ -41,6 +41,9 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
             onImport: _importFile,
             onRename: _showRenameDialog,
             onSearch: () => unawaited(_showEditorSearchDialog()),
+            onSettings: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+            ),
           ),
         ),
         bottomNavigationBar:

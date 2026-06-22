@@ -6,7 +6,12 @@ import '../providers/auth_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  final bool initialPasswordMode;
+
+  const LoginScreen({
+    super.key,
+    this.initialPasswordMode = false,
+  });
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -24,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    _passwordMode = widget.initialPasswordMode;
     _emailCtrl.addListener(_trackEmailEdits);
     _licenseCtrl.addListener(_refreshBackendCodeState);
   }

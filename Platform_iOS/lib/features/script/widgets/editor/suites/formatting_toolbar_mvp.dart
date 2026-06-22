@@ -196,66 +196,77 @@ class _BookmarkSuiteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<_BookmarkAction>(
-      tooltip: 'Bookmarks',
-      color: kEditorSurface,
-      icon: const Icon(Icons.bookmarks_rounded, color: kEditorAmber, size: 22),
-      onSelected: (action) {
-        switch (action) {
-          case _BookmarkAction.previous:
-            onPreviousBookmark();
-            break;
-          case _BookmarkAction.add:
-            onAddBookmark();
-            break;
-          case _BookmarkAction.remove:
-            onRemoveBookmark();
-            break;
-          case _BookmarkAction.next:
-            onNextBookmark();
-            break;
-        }
+    return MenuAnchor(
+      style: const MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(kEditorSurface),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 4)),
+      ),
+      builder: (context, controller, child) {
+        return IconButton(
+          tooltip: 'Bookmarks',
+          icon: const Icon(Icons.bookmarks_rounded,
+              color: kEditorAmber, size: 22),
+          onPressed: () {
+            controller.isOpen ? controller.close() : controller.open();
+          },
+        );
       },
-      itemBuilder: (_) => const [
-        PopupMenuItem(
-          value: _BookmarkAction.previous,
-          child: _BookmarkMenuItem(Icons.skip_previous, 'Previous Bookmark'),
+      menuChildren: [
+        _BookmarkMenuButton(
+          icon: Icons.skip_previous,
+          label: 'Previous Bookmark',
+          closeOnActivate: false,
+          onPressed: onPreviousBookmark,
         ),
-        PopupMenuItem(
-          value: _BookmarkAction.add,
-          child: _BookmarkMenuItem(Icons.bookmark_add_outlined, 'Add Bookmark'),
+        _BookmarkMenuButton(
+          icon: Icons.bookmark_add_outlined,
+          label: 'Add Bookmark',
+          onPressed: onAddBookmark,
         ),
-        PopupMenuItem(
-          value: _BookmarkAction.remove,
-          child: _BookmarkMenuItem(
-              Icons.bookmark_remove_outlined, 'Remove Bookmark'),
+        _BookmarkMenuButton(
+          icon: Icons.bookmark_remove_outlined,
+          label: 'Remove Bookmark',
+          onPressed: onRemoveBookmark,
         ),
-        PopupMenuItem(
-          value: _BookmarkAction.next,
-          child: _BookmarkMenuItem(Icons.skip_next, 'Next Bookmark'),
+        _BookmarkMenuButton(
+          icon: Icons.skip_next,
+          label: 'Next Bookmark',
+          closeOnActivate: false,
+          onPressed: onNextBookmark,
         ),
       ],
     );
   }
 }
 
-class _BookmarkMenuItem extends StatelessWidget {
+class _BookmarkMenuButton extends StatelessWidget {
   final IconData icon;
   final String label;
+  final VoidCallback onPressed;
+  final bool closeOnActivate;
 
-  const _BookmarkMenuItem(this.icon, this.label);
+  const _BookmarkMenuButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.closeOnActivate = true,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: kEditorAmber, size: 18),
-        const SizedBox(width: 10),
-        Text(label, style: const TextStyle(color: Colors.white70)),
-      ],
+    return MenuItemButton(
+      closeOnActivate: closeOnActivate,
+      onPressed: onPressed,
+      style: const ButtonStyle(
+        foregroundColor: WidgetStatePropertyAll(Colors.white70),
+        overlayColor: WidgetStatePropertyAll(Colors.white10),
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        ),
+      ),
+      leadingIcon: Icon(icon, color: kEditorAmber, size: 18),
+      child: Text(label),
     );
   }
 }
-
-enum _BookmarkAction { previous, add, remove, next }

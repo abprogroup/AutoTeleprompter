@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 // the surrounding editor and gallery surfaces.
 class ProjectActionsSuite extends StatelessWidget {
   final VoidCallback onBack, onPresent, onClear, onSave, onImport, onRename;
-  final VoidCallback onSearch;
+  final VoidCallback onSearch, onSettings;
   final String title;
 
   const ProjectActionsSuite({
@@ -16,6 +16,7 @@ class ProjectActionsSuite extends StatelessWidget {
     required this.onImport,
     required this.onRename,
     required this.onSearch,
+    required this.onSettings,
     required this.title,
   });
 
@@ -35,6 +36,11 @@ class ProjectActionsSuite extends StatelessWidget {
             IconButton(icon: const Icon(Icons.save_alt), onPressed: onSave),
             IconButton(
                 icon: const Icon(Icons.folder_open), onPressed: onImport),
+            IconButton(
+              tooltip: 'Settings',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: onSettings,
+            ),
           ],
         ),
         const SizedBox(height: 8),

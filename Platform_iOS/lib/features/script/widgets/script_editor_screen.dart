@@ -20,6 +20,7 @@ import './editor/components/ghost_selection_controls.dart';
 import '../providers/script_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../settings/widgets/app_settings_screen.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
 import '../../teleprompter/widgets/content_creator_screen.dart';

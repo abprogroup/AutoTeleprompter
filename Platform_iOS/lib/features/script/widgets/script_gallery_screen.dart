@@ -76,11 +76,19 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           _GalleryShortcutButton(
             tooltip: 'Feedback',
             icon: Icons.bug_report_outlined,
+            compact: compactPhone,
             onPressed: () => _openFeedback(context),
+          ),
+          _GalleryShortcutButton(
+            tooltip: 'Remote',
+            icon: Icons.settings_remote_outlined,
+            compact: compactPhone,
+            onPressed: () => _openRemote(context, auth),
           ),
           _GalleryShortcutButton(
             tooltip: 'Cloud',
             icon: Icons.cloud_outlined,
+            compact: compactPhone,
             onPressed: () => _openCloud(context),
           ),
           _GalleryShortcutButton(
@@ -88,11 +96,13 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             icon: auth.isSignedIn
                 ? Icons.account_circle_outlined
                 : Icons.login_rounded,
+            compact: compactPhone,
             onPressed: () => _openAccount(context),
           ),
           _GalleryShortcutButton(
             tooltip: 'Settings',
             icon: Icons.settings_outlined,
+            compact: compactPhone,
             onPressed: () => _openSettings(context),
           ),
           const SizedBox(width: 4),
@@ -115,10 +125,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             const SizedBox(height: 24),
             ScriptGalleryPremiumPanel(
               auth: auth,
-              onSignIn: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              ),
+              onSignIn: () => _openAccount(context),
               onOpenCloud: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
@@ -265,10 +272,24 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     );
   }
 
+  void _openRemote(BuildContext context, AuthState auth) {
+    if (!auth.hasPremiumAccess) {
+      _openAccount(context);
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Remote control starts from Present mode.'),
+      ),
+    );
+  }
+
   void _openAccount(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(initialPasswordMode: true),
+      ),
     );
   }
 
@@ -285,22 +306,25 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
 class _GalleryShortcutButton extends StatelessWidget {
   final String tooltip;
   final IconData icon;
+  final bool compact;
   final VoidCallback onPressed;
 
   const _GalleryShortcutButton({
     required this.tooltip,
     required this.icon,
+    this.compact = false,
     required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
+    final size = compact ? 36.0 : 40.0;
     return IconButton(
       tooltip: tooltip,
       visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-      padding: const EdgeInsets.all(8),
-      icon: Icon(icon, color: Colors.white60, size: 24),
+      constraints: BoxConstraints(minWidth: size, minHeight: size),
+      padding: EdgeInsets.all(compact ? 6 : 8),
+      icon: Icon(icon, color: Colors.white60, size: compact ? 22 : 24),
       onPressed: onPressed,
     );
   }

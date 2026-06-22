@@ -123,8 +123,10 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
                             if (format ==
                                 AppSettings
                                     .contentCreatorRecordingFormatAudio) {
-                              _cameraController?.dispose();
+                              _cameraInitGeneration++;
+                              final controller = _cameraController;
                               _cameraController = null;
+                              unawaited(controller?.dispose());
                               _setContentCreatorState(() => _isInit = true);
                             } else {
                               unawaited(_initializeCamera());

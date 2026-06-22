@@ -36,6 +36,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   final List<GlobalKey> _wordKeys = [];
   List<CameraDescription> _availableCameras = const [];
   int _selectedCameraIndex = 0;
+  int _cameraInitGeneration = 0;
   bool _isInit = false;
   bool _isCameraInitializing = false;
   bool _isRecording = false;
@@ -59,14 +60,16 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   }
 
   Future<void> _initializeCamera() async {
+    final initGeneration = ++_cameraInitGeneration;
     if (!mounted) return;
     setState(() {
       _isCameraInitializing = true;
       _cameraError = null;
     });
+    CameraController? nextController;
     try {
       final cameras = await availableCameras();
-      if (!mounted) return;
+      if (!mounted || initGeneration != _cameraInitGeneration) return;
       _availableCameras = cameras;
       if (cameras.isEmpty) {
         setState(() {
@@ -93,7 +96,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       }
 
       final previousController = _cameraController;
-      final nextController = CameraController(
+      nextController = CameraController(
         cameras[_selectedCameraIndex],
         preset,
         enableAudio: true,
@@ -102,14 +105,27 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       await previousController?.dispose();
       await nextController.initialize();
       if (!mounted) return;
+      if (initGeneration != _cameraInitGeneration) {
+        if (identical(_cameraController, nextController)) {
+          _cameraController = null;
+        }
+        await nextController.dispose();
+        return;
+      }
       setState(() {
         _isInit = true;
         _isCameraInitializing = false;
         _cameraError = null;
       });
     } catch (e) {
+      if (identical(_cameraController, nextController)) {
+        _cameraController = null;
+      }
+      if (nextController != null) {
+        await nextController.dispose();
+      }
       if (kDebugMode) debugPrint('Camera error: $e');
-      if (mounted) {
+      if (mounted && initGeneration == _cameraInitGeneration) {
         setState(() {
           _isInit = false;
           _isCameraInitializing = false;
@@ -121,6 +137,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
 
   @override
   void dispose() {
+    _cameraInitGeneration++;
     _recordTimer?.cancel();
     unawaited(_audioRecorder.cancel());
     unawaited(_audioRecorder.dispose());

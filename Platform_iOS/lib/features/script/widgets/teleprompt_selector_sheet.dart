@@ -21,6 +21,7 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
   @override
   void initState() {
     super.initState();
+    _currentDir = Directory(widget.initialPath);
     _initDirectory();
   }
 
@@ -28,6 +29,7 @@ class _TelepromptSelectorSheetState extends State<TelepromptSelectorSheet> {
     final prefs = await SharedPreferences.getInstance();
     final lastPath = prefs.getString('last_picker_path');
 
+    if (!mounted) return;
     setState(() {
       // Step 2: Show most recent used folder if available
       if (lastPath != null && Directory(lastPath).existsSync()) {

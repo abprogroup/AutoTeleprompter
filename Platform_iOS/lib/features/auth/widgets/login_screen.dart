@@ -411,7 +411,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final passwordController = TextEditingController();
     var codeRequested = false;
     var busy = false;
-    showDialog(
+    var dialogOpen = true;
+    final resetDialog = showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
@@ -462,6 +463,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           await auth.requestBackendPasswordResetCode(
                             emailController.text,
                           );
+                          if (!mounted || !dialogOpen) return;
                           setDialogState(() {
                             codeRequested = true;
                             busy = false;
@@ -474,11 +476,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           code: codeController.text,
                           newPassword: passwordController.text,
                         );
-                        if (!mounted) return;
+                        if (!mounted || !dialogOpen) return;
                         dialogNavigator.pop();
                         screenNavigator.pop();
                         _showSnack('Password reset complete.');
                       } catch (error) {
+                        if (!mounted || !dialogOpen) return;
                         setDialogState(() => busy = false);
                         _showSnack(_friendlyBackendError(error));
                       }
@@ -489,6 +492,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       ),
     );
+    resetDialog.whenComplete(() {
+      dialogOpen = false;
+      emailController.dispose();
+      codeController.dispose();
+      passwordController.dispose();
+    });
   }
 
   void _showPurchaseDialog(BuildContext context) {

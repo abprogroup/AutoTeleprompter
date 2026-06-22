@@ -32,11 +32,13 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final auth = ref.watch(authProvider);
+    final compactPhone = MediaQuery.sizeOf(context).width < 430;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
-        toolbarHeight: 80,
+        toolbarHeight: compactPhone ? 72 : 80,
+        titleSpacing: compactPhone ? 12 : null,
         title: GestureDetector(
           onTap: () async {
             setState(() => _logoTaps++);
@@ -57,36 +59,48 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               }
             }
           },
-          child: Text('AutoTeleprompter',
-              style: GoogleFonts.bebasNeue(
-                  letterSpacing: 1.5,
-                  fontSize: 28,
-                  color: const Color(0xFFFFBF00))),
+          child: Text(
+            'AutoTeleprompter',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.bebasNeue(
+              letterSpacing: 1.5,
+              fontSize: compactPhone ? 25 : 28,
+              color: const Color(0xFFFFBF00),
+            ),
+          ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          IconButton(
-            tooltip: 'Send beta feedback',
-            icon: const Icon(Icons.bug_report_outlined, color: Colors.white54),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
-            ),
+          _GalleryShortcutButton(
+            tooltip: 'Feedback',
+            icon: Icons.bug_report_outlined,
+            onPressed: () => _openFeedback(context),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Colors.white54),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
-            ),
+          _GalleryShortcutButton(
+            tooltip: 'Cloud',
+            icon: Icons.cloud_outlined,
+            onPressed: () => _openCloud(context),
+          ),
+          _GalleryShortcutButton(
+            tooltip: auth.isSignedIn ? 'Account' : 'Sign in',
+            icon: auth.isSignedIn
+                ? Icons.account_circle_outlined
+                : Icons.login_rounded,
+            onPressed: () => _openAccount(context),
+          ),
+          _GalleryShortcutButton(
+            tooltip: 'Settings',
+            icon: Icons.settings_outlined,
+            onPressed: () => _openSettings(context),
           ),
           const SizedBox(width: 4),
         ],
       ),
       body: SingleChildScrollView(
         physics: const ClampingScrollPhysics(),
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(compactPhone ? 18 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -236,9 +250,61 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       ),
     );
   }
+
+  void _openFeedback(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
+    );
+  }
+
+  void _openCloud(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
+    );
+  }
+
+  void _openAccount(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  void _openSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+    );
+  }
 }
 
 // Premium account state is owned by ScriptGalleryPremiumPanel.
+
+class _GalleryShortcutButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _GalleryShortcutButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      padding: const EdgeInsets.all(8),
+      icon: Icon(icon, color: Colors.white60, size: 24),
+      onPressed: onPressed,
+    );
+  }
+}
 
 class _FullHistorySheet extends ConsumerWidget {
   const _FullHistorySheet();

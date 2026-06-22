@@ -31,7 +31,7 @@ class ScriptGalleryPremiumPanel extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF111111),
         borderRadius: BorderRadius.circular(18),
@@ -45,8 +45,8 @@ class ScriptGalleryPremiumPanel extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFBF00).withValues(alpha: .16),
                   borderRadius: BorderRadius.circular(12),
@@ -60,7 +60,7 @@ class ScriptGalleryPremiumPanel extends StatelessWidget {
                   color: const Color(0xFFFFBF00),
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,10 +87,10 @@ class ScriptGalleryPremiumPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Wrap(
-            spacing: 10,
-            runSpacing: 10,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               _PremiumPanelButton(
                 icon: hasPro ? Icons.cloud_outlined : Icons.lock_outline,
@@ -179,14 +179,22 @@ class _PremiumPanelButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return FilledButton.icon(
       onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
+      icon: Icon(icon, size: 16),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
       style: FilledButton.styleFrom(
         backgroundColor:
             secondary ? const Color(0xFF1D1D1D) : const Color(0xFFFFBF00),
         foregroundColor: secondary ? Colors.white70 : Colors.black,
-        minimumSize: const Size(110, 44),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        minimumSize: const Size(0, 36),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }

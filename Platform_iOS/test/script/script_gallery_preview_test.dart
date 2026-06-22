@@ -1,7 +1,15 @@
 import 'package:autoteleprompter/core/services/styling_service.dart';
+import 'package:autoteleprompter/features/script/widgets/script_gallery_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   test('recent preview uses first two non-empty visible lines', () {
     final preview = StylingService.recentScriptPreviewText(
       fullText: '\n\n[align=right]\nשלום עולם\nשורה שניה\nשורה שלישית',
@@ -17,5 +25,45 @@ void main() {
     );
 
     expect(preview, 'EP1: Intro\nImported text');
+  });
+
+  testWidgets('mobile gallery shows shortcuts and compact premium actions',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: ScriptGalleryScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Feedback'), findsOneWidget);
+    expect(find.byTooltip('Cloud'), findsOneWidget);
+    expect(find.byTooltip('Sign in'), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+
+    Finder premiumButton(String label) => find.ancestor(
+          of: find.text(label),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is ButtonStyleButton,
+          ),
+        );
+
+    final cloudButton = premiumButton('Cloud');
+    final remoteButton = premiumButton('Remote');
+    final signInButton = premiumButton('Sign in');
+
+    expect(cloudButton, findsOneWidget);
+    expect(remoteButton, findsOneWidget);
+    expect(signInButton, findsOneWidget);
+    expect(tester.getSize(cloudButton).height, lessThanOrEqualTo(40));
+    expect(tester.getSize(remoteButton).height, lessThanOrEqualTo(40));
+    expect(tester.getSize(signInButton).height, lessThanOrEqualTo(40));
   });
 }

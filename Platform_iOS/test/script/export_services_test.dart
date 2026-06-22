@@ -5,9 +5,12 @@ import 'package:autoteleprompter/features/script/services/docx_service.dart';
 import 'package:autoteleprompter/features/script/services/markup_export_service.dart';
 import 'package:autoteleprompter/features/script/services/pdf_export_service.dart';
 import 'package:autoteleprompter/features/script/services/rtf_service.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('markup export keeps highlights separate from text colors', () {
     final paragraph = MarkupExportService.parse(
       '[rtl][y]highlight[/y] [yc]yellow text[/yc][/rtl]',
@@ -62,5 +65,10 @@ void main() {
 
     expect(bytes.length, greaterThan(1000));
     expect(String.fromCharCodes(bytes.take(4).toList()), '%PDF');
+  });
+
+  test('PDF export italic fallback points at a bundled italic font', () async {
+    final data = await rootBundle.load(PdfExportService.italicAssetFallback);
+    expect(data.lengthInBytes, greaterThan(1000));
   });
 }

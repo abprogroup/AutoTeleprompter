@@ -9,6 +9,9 @@ import 'markup_export_service.dart';
 class PdfExportService {
   PdfExportService._();
 
+  static const italicAssetFallback =
+      'assets/fonts/google_fonts/Roboto-Italic.ttf';
+
   static pw.Font? _regularFont;
   static pw.Font? _boldFont;
   static pw.Font? _italicFont;
@@ -36,7 +39,7 @@ class PdfExportService {
       systemCandidates: const [
         '/System/Library/Fonts/Supplemental/Arial Italic.ttf',
       ],
-      assetFallback: 'assets/fonts/google_fonts/Inter-Italic.ttf',
+      assetFallback: italicAssetFallback,
       assign: (font) => _italicFont = font,
       allowRegularFallback: true,
     );

@@ -171,6 +171,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     FocusManager.instance.primaryFocus?.unfocus();
     try {
       await _syncBookmarksFromEditorSigns(notify: false, save: true);
+      if (!mounted) return;
       ref.read(scriptProvider.notifier).loadText(
             _getRefinedFullTextWithoutBookmarkSigns(),
             title: _currentTitle,
@@ -218,10 +219,12 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         ],
       ),
     );
-    if (shouldSignIn == true && mounted) {
+    if (!mounted) return false;
+    if (shouldSignIn == true) {
       await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
+      if (!mounted) return false;
     }
     return _readEditorPremiumAccess();
   }

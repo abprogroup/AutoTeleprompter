@@ -305,6 +305,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   Future<void> _requestAndStart() async {
     // Check current status first
     var micStatus = await Permission.microphone.status;
+    if (!mounted) return;
 
     // If permanently denied, go straight to app settings
     if (micStatus.isPermanentlyDenied) {

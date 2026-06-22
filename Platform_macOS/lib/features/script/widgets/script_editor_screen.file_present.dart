@@ -428,6 +428,25 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   void _startPresenting() async {
+    final presenterText = _getRefinedFullTextWithoutBookmarkSigns();
+    if (StylingService.stripTags(presenterText).trim().isEmpty) {
+      LightweightDiagnostics.instance.record(
+        'editor',
+        'presenter blocked for empty script',
+        data: {
+          'title': _currentTitle,
+          'sessionId': _currentSessionId,
+          'blockCount': _controllers.length,
+        },
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add script text before presenting.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     final editorSnapshot = _captureEditorModeReturnSnapshot();
     _suspendEditorFocusForReaderMode();
     LightweightDiagnostics.instance.record(
@@ -446,7 +465,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     try {
       final settings = ref.read(settingsProvider);
       ref.read(scriptProvider.notifier).loadText(
-            _getRefinedFullTextWithoutBookmarkSigns(),
+            presenterText,
             title: _currentTitle,
             sourceType: _sourceType,
             sourcePath: _currentSourcePath,

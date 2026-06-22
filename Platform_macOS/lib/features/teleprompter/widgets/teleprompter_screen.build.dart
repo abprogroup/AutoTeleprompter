@@ -39,11 +39,40 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     });
 
     if (script == null || script.isEmpty) {
-      return Scaffold(
-        backgroundColor: Color(settings.scriptBgColor),
-        body: const Center(
-            child: Text('No script loaded.',
-                style: TextStyle(color: Colors.white))),
+      return PopScope(
+        canPop: _closingPresentation,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          await _exitPresentation();
+        },
+        child: Scaffold(
+          backgroundColor: Color(settings.scriptBgColor),
+          body: SafeArea(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const Center(
+                  child: Text(
+                    'No script loaded.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+                Positioned(
+                  left: 16,
+                  top: 16,
+                  child: TextButton.icon(
+                    onPressed: () => _exitPresentation(),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    label: const Text(
+                      'Back',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 

@@ -123,9 +123,16 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     final isSearchShortcut = event.logicalKey == LogicalKeyboardKey.keyF &&
         keyboard.isShiftPressed &&
         (keyboard.isControlPressed || keyboard.isMetaPressed);
-    if (event.logicalKey == LogicalKeyboardKey.escape && _presenterFullscreen) {
-      Future.microtask(() => _setPresenterFullscreen(false));
-      return true;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (_presenterFullscreen) {
+        Future.microtask(() => _setPresenterFullscreen(false));
+        return true;
+      }
+      final script = ref.read(scriptProvider);
+      if (script == null || script.isEmpty) {
+        Future.microtask(_exitPresentation);
+        return true;
+      }
     }
     if (!isSearchShortcut) return false;
     Future.microtask(_showSearchDialog);

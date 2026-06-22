@@ -96,8 +96,8 @@ class _ConsentContentState extends ConsumerState<_ConsentContent> {
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
             title: const Text(
-              'I understand and agree that beta feedback reports include my full '
-              'active script and diagnostic data.',
+              'I understand and agree that beta feedback reports include '
+              'diagnostic data, and script text only when I choose to attach it.',
               style:
                   TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
             ),
@@ -201,9 +201,10 @@ class _PolicyBox extends StatelessWidget {
             const SizedBox(height: 14),
             _paragraph(
               'What we collect: when you send feedback or confirm a crash/error '
-              'report, the report includes your full active script, bug text, '
-              'current app/session state, speech-to-text/editor diagnostic '
-              'events, app version, platform, and this anonymous device key.',
+              'report, the report includes bug text, current app/session state, '
+              'speech-to-text/editor diagnostic events, app version, platform, '
+              'and this anonymous device key. Script text is included only when '
+              'you explicitly choose to attach it to that report.',
             ),
             _paragraph(
               'What we do not do: normal app use does not continuously upload '

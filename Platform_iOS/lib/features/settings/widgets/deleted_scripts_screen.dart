@@ -6,7 +6,9 @@ import '../../script/widgets/script_editor_screen.dart';
 import '../services/deleted_scripts_service.dart';
 
 class DeletedScriptsScreen extends ConsumerStatefulWidget {
-  const DeletedScriptsScreen({super.key});
+  final DeletedScriptsService? service;
+
+  const DeletedScriptsScreen({super.key, this.service});
 
   @override
   ConsumerState<DeletedScriptsScreen> createState() =>
@@ -14,12 +16,13 @@ class DeletedScriptsScreen extends ConsumerStatefulWidget {
 }
 
 class _DeletedScriptsScreenState extends ConsumerState<DeletedScriptsScreen> {
-  final DeletedScriptsService _service = DeletedScriptsService();
+  late final DeletedScriptsService _service;
   late Future<List<DeletedScriptEntry>> _entriesFuture;
 
   @override
   void initState() {
     super.initState();
+    _service = widget.service ?? DeletedScriptsService();
     _entriesFuture = _loadEntries();
   }
 
@@ -33,8 +36,20 @@ class _DeletedScriptsScreenState extends ConsumerState<DeletedScriptsScreen> {
   }
 
   Future<void> _restore(DeletedScriptEntry entry) async {
-    final result = await _service.restoreLocalDeletedScript(entry);
-    if (!mounted || result == null) return;
+    DeletedScriptRestoreResult? result;
+    try {
+      result = await _service.restoreLocalDeletedScript(entry);
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack('Could not restore ${entry.displayName}.', isError: true);
+      return;
+    }
+    if (!mounted) return;
+    if (result == null) {
+      _showSnack('Could not restore ${entry.displayName}.', isError: true);
+      _refresh();
+      return;
+    }
     ref.read(scriptProvider.notifier).loadText(
           result.text,
           title: result.title,
@@ -53,9 +68,7 @@ class _DeletedScriptsScreenState extends ConsumerState<DeletedScriptsScreen> {
           futureWordColor: result.futureWordColor,
         );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Restored ${result.title}.')),
-    );
+    _showSnack('Restored ${result.title}.');
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ScriptEditorScreen()),
@@ -92,13 +105,26 @@ class _DeletedScriptsScreenState extends ConsumerState<DeletedScriptsScreen> {
           ),
         ) ??
         false;
-    if (!confirmed) return;
-    await _service.permanentlyDeleteLocal(entry);
+    if (!mounted || !confirmed) return;
+    try {
+      await _service.permanentlyDeleteLocal(entry);
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack('Could not delete ${entry.displayName}.', isError: true);
+      return;
+    }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Deleted ${entry.displayName}.')),
-    );
+    _showSnack('Deleted ${entry.displayName}.');
     _refresh();
+  }
+
+  void _showSnack(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red[800] : null,
+      ),
+    );
   }
 
   @override

@@ -1,6 +1,30 @@
 part of 'content_creator_screen.dart';
 
 extension _ContentCreatorCamera on _ContentCreatorScreenState {
+  Future<void> _playRecordingCountdownTick() async {
+    try {
+      await SystemSound.play(SystemSoundType.click);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'contentCreator.recordingCountdownTick',
+      );
+    }
+  }
+
+  Future<void> _playRecordingStartCue() async {
+    try {
+      await SystemSound.play(SystemSoundType.alert);
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'contentCreator.recordingStartCue',
+      );
+    }
+  }
+
   Future<void> _initializeCamera({
     CameraDescription? preferredCamera,
     bool enableAudio = false,
@@ -478,11 +502,13 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         if (!mounted) return;
         if (!_recordStartInFlight) return;
         _updateContentCreatorState(() => _countdown = i);
+        await _playRecordingCountdownTick();
         await Future.delayed(const Duration(seconds: 1));
       }
       if (!mounted) return;
       if (!_recordStartInFlight) return;
       _updateContentCreatorState(() => _countdown = 0);
+      await _playRecordingStartCue();
 
       if (!mounted || !_recordStartInFlight) return;
       try {
@@ -602,10 +628,12 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     for (int i = 3; i > 0; i--) {
       if (!mounted || !_recordStartInFlight) return;
       _updateContentCreatorState(() => _countdown = i);
+      await _playRecordingCountdownTick();
       await Future.delayed(const Duration(seconds: 1));
     }
     if (!mounted || !_recordStartInFlight) return;
     _updateContentCreatorState(() => _countdown = 0);
+    await _playRecordingStartCue();
 
     try {
       final directory = Directory(await _effectiveRecordingFolderPath());

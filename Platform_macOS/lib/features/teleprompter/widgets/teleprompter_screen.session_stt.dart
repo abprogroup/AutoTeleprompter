@@ -209,6 +209,12 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   void _scheduleHideControls() {
     _hideControlsTimer?.cancel();
+    if (_presenterWalkthroughVisible) {
+      if (mounted && !_controlsVisible) {
+        _setTeleprompterState(() => _controlsVisible = true);
+      }
+      return;
+    }
     final activeAutoHide = _presenterControlsAutoHideActive();
     if (!activeAutoHide) {
       if (mounted && !_controlsVisible) {

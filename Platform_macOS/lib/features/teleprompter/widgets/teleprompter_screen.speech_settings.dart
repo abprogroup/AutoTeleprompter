@@ -44,6 +44,17 @@ class _SpeechProfileSettingsSection extends ConsumerWidget {
                 .setSttInputDevice('', 'System default microphone');
           },
         ),
+        const SizedBox(height: 12),
+        _SwitchRow(
+          icon: Icons.graphic_eq_rounded,
+          title: 'Show Listening Meter',
+          subtitle: settings.showSoundLevelMeter
+              ? 'A live sound bar appears during speech-control sessions.'
+              : 'Show a sound bar so users can confirm the app is hearing them.',
+          value: settings.showSoundLevelMeter,
+          accentColor: Color(settings.currentWordColor),
+          onChanged: notifier.setShowSoundLevelMeter,
+        ),
         const SizedBox(height: 16),
         _SwitchRow(
           icon: Icons.tune_outlined,

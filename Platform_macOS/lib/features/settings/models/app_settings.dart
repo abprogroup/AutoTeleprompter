@@ -86,6 +86,7 @@ class AppSettings {
   final int futureWordColor; // ARGB int, default white
   final double pastWordOpacity; // 0.05-1.0
   final bool debugMode; // technical mode for STT logs
+  final bool showSoundLevelMeter;
   final String videoResolution; // '480p', '720p', '1080p'
   final List<String> recentScripts; // JSON strings of script metadata
   final String displayName; // User's name
@@ -148,6 +149,7 @@ class AppSettings {
   final bool cloudAutoSyncOnSave;
   final bool syncDeletedScriptsFolder;
   final bool recordingAutoBackup;
+  final String macOnboardingVersionSeen;
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -170,6 +172,7 @@ class AppSettings {
     this.futureWordColor = 0xFFFFFFFF,
     this.pastWordOpacity = 0.3,
     this.debugMode = false,
+    this.showSoundLevelMeter = false,
     this.videoResolution = '720p',
     this.recentScripts = const [],
     this.displayName = 'Guest',
@@ -225,6 +228,7 @@ class AppSettings {
     this.cloudAutoSyncOnSave = true,
     this.syncDeletedScriptsFolder = false,
     this.recordingAutoBackup = false,
+    this.macOnboardingVersionSeen = '',
   });
 
   AppSettings copyWith({
@@ -248,6 +252,7 @@ class AppSettings {
     int? futureWordColor,
     double? pastWordOpacity,
     bool? debugMode,
+    bool? showSoundLevelMeter,
     String? videoResolution,
     List<String>? recentScripts,
     String? displayName,
@@ -303,6 +308,7 @@ class AppSettings {
     bool? cloudAutoSyncOnSave,
     bool? syncDeletedScriptsFolder,
     bool? recordingAutoBackup,
+    String? macOnboardingVersionSeen,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -325,6 +331,7 @@ class AppSettings {
       futureWordColor: futureWordColor ?? this.futureWordColor,
       pastWordOpacity: pastWordOpacity ?? this.pastWordOpacity,
       debugMode: debugMode ?? this.debugMode,
+      showSoundLevelMeter: showSoundLevelMeter ?? this.showSoundLevelMeter,
       videoResolution: videoResolution ?? this.videoResolution,
       recentScripts: recentScripts ?? this.recentScripts,
       displayName: displayName ?? this.displayName,
@@ -417,6 +424,8 @@ class AppSettings {
       syncDeletedScriptsFolder:
           syncDeletedScriptsFolder ?? this.syncDeletedScriptsFolder,
       recordingAutoBackup: recordingAutoBackup ?? this.recordingAutoBackup,
+      macOnboardingVersionSeen:
+          macOnboardingVersionSeen ?? this.macOnboardingVersionSeen,
     );
   }
 }

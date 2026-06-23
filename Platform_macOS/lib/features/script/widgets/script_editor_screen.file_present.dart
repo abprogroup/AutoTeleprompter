@@ -427,7 +427,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     }
   }
 
-  void _startPresenting() async {
+  void _startPresenting({bool continueWalkthrough = false}) async {
     final presenterText = _getRefinedFullTextWithoutBookmarkSigns();
     if (StylingService.stripTags(presenterText).trim().isEmpty) {
       LightweightDiagnostics.instance.record(
@@ -495,7 +495,11 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     }
     if (mounted) {
       final returnWordIndex = await Navigator.of(context).push<int>(
-        MaterialPageRoute(builder: (_) => const TeleprompterScreen()),
+        MaterialPageRoute(
+          builder: (_) => TeleprompterScreen(
+            showWalkthroughGuide: continueWalkthrough,
+          ),
+        ),
       );
       if (mounted) {
         await _loadBookmarksForCurrentScript(force: true);

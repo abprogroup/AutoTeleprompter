@@ -125,6 +125,12 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setBool(_debugModeKey, newVal);
   }
 
+  Future<void> setShowSoundLevelMeter(bool enabled) async {
+    state = state.copyWith(showSoundLevelMeter: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showSoundLevelMeterKey, enabled);
+  }
+
   Future<void> setVideoResolution(String resolution) async {
     final normalized = _normalizeVideoResolution(resolution);
     state = state.copyWith(videoResolution: normalized);
@@ -313,6 +319,13 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     state = state.copyWith(recordingAutoBackup: enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_recordingAutoBackupKey, enabled);
+  }
+
+  Future<void> setMacOnboardingVersionSeen(String version) async {
+    final normalized = version.trim();
+    state = state.copyWith(macOnboardingVersionSeen: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_macOnboardingVersionSeenKey, normalized);
   }
 
   Future<void> setDisplayName(String name) async {

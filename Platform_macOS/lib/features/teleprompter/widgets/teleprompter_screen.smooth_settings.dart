@@ -33,14 +33,29 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
     _showControls();
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       isScrollControlled: true,
-      builder: (_) => TeleprompterSettingsPanel(
-        onFontSizeChanged: _preserveReadingPositionAfterLayoutChange,
-        onLayoutChanged: () => _preserveReadingPositionAfterLayoutChange(0),
-        onInvertColors: _togglePresenterColorInversion,
+      builder: (_) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.84),
+              border: const Border(
+                top: BorderSide(color: Colors.white24),
+              ),
+            ),
+            child: TeleprompterSettingsPanel(
+              onFontSizeChanged: _preserveReadingPositionAfterLayoutChange,
+              onLayoutChanged: () =>
+                  _preserveReadingPositionAfterLayoutChange(0),
+              onInvertColors: _togglePresenterColorInversion,
+            ),
+          ),
+        ),
       ),
     );
   }

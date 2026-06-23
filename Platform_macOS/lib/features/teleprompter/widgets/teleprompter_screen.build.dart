@@ -215,6 +215,29 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             ),
                           ),
                         ),
+                      if (settings.showSoundLevelMeter &&
+                          !settings.debugMode &&
+                          (controlsState.isListening ||
+                              controlsState.isStarting))
+                        Positioned(
+                          left: 24,
+                          right: 24,
+                          bottom: controlsReservedHeight + 16,
+                          child: IgnorePointer(
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 360),
+                                child: _SoundLevelBar(
+                                  level: controlsState.soundLevel,
+                                  isListening: controlsState.isListening,
+                                  isStarting: controlsState.isStarting,
+                                  accentColor: Color(settings.currentWordColor),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       if (settings.debugMode)
                         _buildPresenterDebugConsole(
                           context,
@@ -333,11 +356,16 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         bottom: 0,
                         left: 0,
                         right: 0,
-                        child: _buildPresenterControlsOverlay(
-                          settings: settings,
-                          tState: controlsState,
+                        child: KeyedSubtree(
+                          key: _presenterControlsKey,
+                          child: _buildPresenterControlsOverlay(
+                            settings: settings,
+                            tState: controlsState,
+                          ),
                         ),
                       ),
+                      if (_presenterWalkthroughVisible)
+                        _buildPresenterWalkthroughOverlay(),
                     ],
                   ),
                 ),

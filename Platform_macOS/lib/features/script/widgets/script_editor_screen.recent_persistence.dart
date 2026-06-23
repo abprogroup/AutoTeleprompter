@@ -9,6 +9,7 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
       }
       final text = _getRefinedFullTextWithoutBookmarkSigns();
       if (text.isEmpty && _currentTitle == 'New Project') return;
+      if (_sourceType == _walkthroughTempSourceType) return;
       _persistRecentSafely('autosaveTimer');
     });
   }
@@ -36,6 +37,7 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
 
   Future<void> _forceRecentUpdate() async {
     _recentTimer?.cancel();
+    if (_sourceType == _walkthroughTempSourceType) return;
     if (_recentPersistRunning) {
       _recentPersistQueued = true;
       return;

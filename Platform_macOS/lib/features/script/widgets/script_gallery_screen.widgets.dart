@@ -17,49 +17,53 @@ class _GalleryActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(12),
+    return Tooltip(
+      message: title,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: Colors.black, size: 28),
               ),
-              child: Icon(icon, color: Colors.black, size: 28),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: Colors.white54, fontSize: 13),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style:
+                          const TextStyle(color: Colors.white54, fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white24),
-          ],
+              const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+            ],
+          ),
         ),
       ),
     );
@@ -145,7 +149,7 @@ class _ProDashboard extends StatelessWidget {
                           ? Icons.verified_rounded
                           : isCheckingAccess
                               ? Icons.sync_rounded
-                          : Icons.workspace_premium_outlined,
+                              : Icons.workspace_premium_outlined,
                       color: const Color(0xFFFFBF00),
                       size: 24,
                     ),
@@ -222,7 +226,8 @@ class _ProDashboard extends StatelessWidget {
                               : onLockedFeature,
                         ),
                       ),
-                    if (Platform.isWindows || Platform.isMacOS) const SizedBox(width: 8),
+                    if (Platform.isWindows || Platform.isMacOS)
+                      const SizedBox(width: 8),
                     Expanded(
                       child: _ProFeaturePill(
                         icon: Icons.cloud_outlined,
@@ -327,7 +332,8 @@ class _ProDashboard extends StatelessWidget {
                             : onLockedFeature,
                       ),
                     ),
-                  if (Platform.isWindows || Platform.isMacOS) const SizedBox(height: 4),
+                  if (Platform.isWindows || Platform.isMacOS)
+                    const SizedBox(height: 4),
                   SizedBox(
                     width: 94,
                     child: _ProFeaturePill(

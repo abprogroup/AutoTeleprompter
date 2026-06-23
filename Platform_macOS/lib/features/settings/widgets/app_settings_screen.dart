@@ -143,6 +143,24 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
   List<Widget> _generalTab(AppSettings settings) {
     return [
+      if (Platform.isMacOS) ...[
+        const _SectionHeader(title: 'GUIDED SETUP'),
+        const SizedBox(height: 8),
+        _SettingsActionsTile(
+          icon: Icons.auto_awesome_motion_outlined,
+          title: 'Replay Mac walkthrough',
+          subtitle:
+              'Open the guided lobby tour, sample script, STT setup, and Content Creator defaults again',
+          actions: [
+            _SettingsAction(
+              icon: Icons.play_circle_outline_rounded,
+              label: 'Replay',
+              onPressed: _replayMacWalkthrough,
+            ),
+          ],
+        ),
+        const SizedBox(height: 22),
+      ],
       const _SectionHeader(title: 'IMPORT DEFAULTS'),
       const SizedBox(height: 8),
       _SettingsChoiceTile<String>(
@@ -254,6 +272,16 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         ],
         onChanged: ref.read(settingsProvider.notifier).setLanguageMode,
       ),
+      const SizedBox(height: 12),
+      _SettingsSwitchTile(
+        icon: Icons.graphic_eq_rounded,
+        title: 'Show listening meter',
+        subtitle: settings.showSoundLevelMeter
+            ? 'Live microphone level appears during speech-control sessions'
+            : 'Show a sound bar so users can see AutoTeleprompter is hearing them',
+        value: settings.showSoundLevelMeter,
+        onChanged: ref.read(settingsProvider.notifier).setShowSoundLevelMeter,
+      ),
       const SizedBox(height: 22),
       const _SectionHeader(title: 'FEEDBACK'),
       const SizedBox(height: 8),
@@ -279,6 +307,12 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         onChanged: (_) => ref.read(settingsProvider.notifier).toggleDebugMode(),
       ),
     ];
+  }
+
+  Future<void> _replayMacWalkthrough() async {
+    await ref.read(settingsProvider.notifier).setMacOnboardingVersionSeen('');
+    if (!mounted) return;
+    Navigator.of(context).maybePop();
   }
 
   String _recordingFolderLabel(AppSettings settings) {

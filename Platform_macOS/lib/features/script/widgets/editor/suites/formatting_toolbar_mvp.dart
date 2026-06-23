@@ -9,6 +9,9 @@ import 'history_suite_mvp.dart';
 // v3.9.5.59: Sovereign Formatting Toolbar (Orchestrator MVP)
 class FormattingToolbarMVP extends StatelessWidget {
   final VoidCallback onBold, onUnderline, onItalic, onClear, onUndo, onRedo;
+  final VoidCallback onAddBookmark, onRemoveBookmark;
+  final VoidCallback onPreviousBookmark, onNextBookmark;
+  final VoidCallback onLockedBookmarks;
   final VoidCallback onInvertColors;
   final ValueChanged<double> onFontSize;
   final ValueChanged<String> onAlign,
@@ -19,6 +22,8 @@ class FormattingToolbarMVP extends StatelessWidget {
   final ValueChanged<int> onBgColorChange;
   final Color lastTextColor, lastHighlightColor;
   final bool canUndo, canRedo;
+  final bool bookmarksEnabled;
+  final Key? bookmarksSuiteKey;
   final List<EditorState> history; // v3.9.5.59: Typed History
   final int historyIndex;
   final ValueChanged<int> onHistorySelected;
@@ -44,8 +49,15 @@ class FormattingToolbarMVP extends StatelessWidget {
       required this.lastHighlightColor,
       required this.onUndo,
       required this.onRedo,
+      required this.onAddBookmark,
+      required this.onRemoveBookmark,
+      required this.onPreviousBookmark,
+      required this.onNextBookmark,
+      required this.onLockedBookmarks,
       required this.canUndo,
       required this.canRedo,
+      required this.bookmarksEnabled,
+      this.bookmarksSuiteKey,
       required this.history,
       required this.historyIndex,
       required this.onHistorySelected,
@@ -108,20 +120,41 @@ class FormattingToolbarMVP extends StatelessWidget {
                     FormatPopup(
                         label: 'TEXT',
                         icon: Icons.text_fields_rounded,
+                        tooltip: 'Text tools',
                         active: activeSuite == EditorSuite.text,
                         onTap: () => onSuiteToggle(EditorSuite.text)),
                     const SizedBox(width: 8),
                     FormatPopup(
                         label: 'LAYOUT',
                         icon: Icons.format_align_center_rounded,
+                        tooltip: 'Layout tools',
                         active: activeSuite == EditorSuite.layout,
                         onTap: () => onSuiteToggle(EditorSuite.layout)),
                     const SizedBox(width: 8),
                     FormatPopup(
                         label: 'COLOR',
                         icon: Icons.palette_rounded,
+                        tooltip: 'Color tools',
                         active: activeSuite == EditorSuite.color,
                         onTap: () => onSuiteToggle(EditorSuite.color)),
+                    const SizedBox(width: 8),
+                    FormatPopup(
+                        key: bookmarksSuiteKey,
+                        label: 'BOOKMARKS',
+                        icon: bookmarksEnabled
+                            ? Icons.bookmarks_rounded
+                            : Icons.lock_outline_rounded,
+                        tooltip: bookmarksEnabled
+                            ? 'Bookmarks'
+                            : 'Bookmarks are included with Pro',
+                        active: activeSuite == EditorSuite.bookmarks,
+                        onTap: () {
+                          if (!bookmarksEnabled) {
+                            onLockedBookmarks();
+                            return;
+                          }
+                          onSuiteToggle(EditorSuite.bookmarks);
+                        }),
                   ],
                 ),
               );
@@ -163,8 +196,64 @@ class FormattingToolbarMVP extends StatelessWidget {
             onInvertColors: onInvertColors,
             lastTextColor: lastTextColor,
             lastHighlightColor: lastHighlightColor);
+      case EditorSuite.bookmarks:
+        return _BookmarkSuite(
+          onPreviousBookmark: onPreviousBookmark,
+          onAddBookmark: onAddBookmark,
+          onRemoveBookmark: onRemoveBookmark,
+          onNextBookmark: onNextBookmark,
+        );
       default:
         return const SizedBox.shrink();
     }
+  }
+}
+
+class _BookmarkSuite extends StatelessWidget {
+  final VoidCallback onPreviousBookmark;
+  final VoidCallback onAddBookmark;
+  final VoidCallback onRemoveBookmark;
+  final VoidCallback onNextBookmark;
+
+  const _BookmarkSuite({
+    required this.onPreviousBookmark,
+    required this.onAddBookmark,
+    required this.onRemoveBookmark,
+    required this.onNextBookmark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: [
+        ToolBtn(
+          label: 'Previous',
+          icon: Icons.skip_previous_rounded,
+          tooltip: 'Previous bookmark',
+          onTap: onPreviousBookmark,
+        ),
+        ToolBtn(
+          label: 'Add',
+          icon: Icons.bookmark_add_outlined,
+          tooltip: 'Add bookmark',
+          onTap: onAddBookmark,
+        ),
+        ToolBtn(
+          label: 'Remove',
+          icon: Icons.bookmark_remove_outlined,
+          tooltip: 'Remove bookmark',
+          onTap: onRemoveBookmark,
+        ),
+        ToolBtn(
+          label: 'Next',
+          icon: Icons.skip_next_rounded,
+          tooltip: 'Next bookmark',
+          onTap: onNextBookmark,
+        ),
+      ],
+    );
   }
 }

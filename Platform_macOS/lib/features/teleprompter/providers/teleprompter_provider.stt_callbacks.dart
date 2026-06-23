@@ -49,17 +49,10 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
 
     _sttService.onSoundLevelChange = (level) {
       if (_useWhisper || _disposed || _sessionStopped) return;
-      final clampedLevel = level.clamp(0.0, 1.0).toDouble();
+      final clampedLevel = _normalizeSoundLevelForMeter(level);
       final now = DateTime.now();
       if (_sttService.platformName == 'Apple') {
         _lastVolLog = now;
-      }
-      if (_sttService.platformName == 'Apple' &&
-          clampedLevel <= 0.02 &&
-          _lastSttResultAt != null &&
-          now.difference(_lastSttResultAt!) <
-              const Duration(milliseconds: 900)) {
-        return;
       }
       _safeSetState(
         (s) => s.copyWith(soundLevel: clampedLevel),
@@ -190,6 +183,26 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
         : '${sanitized.substring(0, 280)}...';
   }
 
+  double _normalizeSoundLevelForMeter(double rawLevel) {
+    if (rawLevel.isNaN || rawLevel.isInfinite) return 0.0;
+    if (rawLevel >= 0.0 && rawLevel <= 1.0) {
+      return rawLevel.clamp(0.0, 1.0).toDouble();
+    }
+
+    // speech_to_text reports platform-native level units. Depending on the
+    // backend this can be 0-10, 0-100, or a negative dB-like value.
+    if (rawLevel > 1.0 && rawLevel <= 10.0) {
+      return (rawLevel / 10.0).clamp(0.0, 1.0).toDouble();
+    }
+    if (rawLevel > 10.0 && rawLevel <= 100.0) {
+      return (rawLevel / 100.0).clamp(0.0, 1.0).toDouble();
+    }
+    if (rawLevel < 0.0) {
+      return ((rawLevel + 60.0) / 60.0).clamp(0.0, 1.0).toDouble();
+    }
+    return 1.0;
+  }
+
   void _pulseSpeechActivityMeterFromResult(SpeechResult result) {
     if (_useWhisper ||
         _disposed ||
@@ -201,16 +214,16 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
 
     final token = ++_speechActivityMeterToken;
     _speechActivityMeterTimer?.cancel();
-    final peak = result.isFinal ? 0.44 : 0.72;
+    final peak = result.isFinal ? 0.52 : 0.82;
     _safeSetState((s) => s.copyWith(soundLevel: peak));
-    _speechActivityMeterTimer = Timer(const Duration(milliseconds: 650), () {
+    _speechActivityMeterTimer = Timer(const Duration(milliseconds: 260), () {
       if (_disposed || _sessionStopped || token != _speechActivityMeterToken) {
         return;
       }
       final recent = _lastSttResultAt != null &&
           DateTime.now().difference(_lastSttResultAt!) <
-              const Duration(milliseconds: 950);
-      _safeSetState((s) => s.copyWith(soundLevel: recent ? 0.18 : 0.0));
+              const Duration(milliseconds: 420);
+      _safeSetState((s) => s.copyWith(soundLevel: recent ? 0.12 : 0.0));
     });
   }
 }

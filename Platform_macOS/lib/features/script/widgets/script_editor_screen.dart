@@ -25,6 +25,7 @@ import '../providers/script_provider.dart';
 import '../../../core/services/runtime_file_storage.dart';
 import '../../../core/security/encrypted_file_store.dart';
 import '../../../core/security/secure_script_store.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
@@ -85,6 +86,7 @@ part 'script_editor_screen.keyboard_horizontal.dart';
 part 'script_editor_screen.keyboard_horizontal_route.dart';
 part 'script_editor_screen.keyboard_bookmark_helpers.dart';
 part 'script_editor_screen.keyboard_focus.dart';
+part 'script_editor_screen.walkthrough.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // -- Switchboard Orchestrator --------------------------------------------------
@@ -120,10 +122,12 @@ class _RedoIntent extends Intent {
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
+  final bool showWalkthroughSampleGuide;
   const ScriptEditorScreen({
     super.key,
     this.shouldAutoLoad = false,
     this.pendingFile,
+    this.showWalkthroughSampleGuide = false,
   });
 
   @override
@@ -131,6 +135,7 @@ class ScriptEditorScreen extends ConsumerStatefulWidget {
 }
 
 const String _keyboardBookmarkSign = '\u00BB';
+const String _walkthroughTempSourceType = 'WALKTHROUGH_TEMP';
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     with WidgetsBindingObserver, StylingLogicMixin<ScriptEditorScreen> {
@@ -221,6 +226,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String? _bookmarkLoadingKey;
   bool _bookmarksLoaded = false;
   List<ScriptBookmark> _bookmarks = const [];
+  bool _walkthroughSampleGuideVisible = false;
+  int _walkthroughSampleGuideStep = 0;
+  final GlobalKey _walkthroughRenameKey = GlobalKey();
+  final GlobalKey _walkthroughSaveKey = GlobalKey();
+  final GlobalKey _walkthroughBookmarksKey = GlobalKey();
+  final GlobalKey _walkthroughPresentKey = GlobalKey();
 
   bool _isInit = false;
   bool _isCleaning = false; // v3.9.5.1: Suppression flag
@@ -310,6 +321,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onGlobalArrowKey);
     _startAutoSave();
+    _walkthroughSampleGuideVisible = widget.showWalkthroughSampleGuide;
     if (widget.pendingFile != null) {
       _isInit = true;
       _isPendingLoad = true;

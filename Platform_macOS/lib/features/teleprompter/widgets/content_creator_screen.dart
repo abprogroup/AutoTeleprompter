@@ -26,6 +26,8 @@ import '../providers/teleprompter_provider.dart';
 import '../services/approximate_spoken_search_service.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/widgets/login_screen.dart';
 import '../../../core/window/presenter_fullscreen_service.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -531,6 +533,27 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
               if (_isRecording) _buildRecordingTimerHud(),
               if (_recordExportProgress != null) _buildRecordingExportHud(),
               if (_countdown > 0) _buildCountdownOverlay(),
+              if (settings.showSoundLevelMeter &&
+                  !settings.debugMode &&
+                  (controlsState.isListening || controlsState.isStarting))
+                Positioned(
+                  left: 24,
+                  right: 24,
+                  bottom: controlsReservedHeight + 16,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 360),
+                        child: _ContentSoundLevelBar(
+                          level: controlsState.soundLevel,
+                          isListening: controlsState.isListening,
+                          isStarting: controlsState.isStarting,
+                          accentColor: Color(settings.currentWordColor),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               if (_contentResumeDecisionPending) _buildContentResumeBlocker(),
               Positioned(
                 top: 8,

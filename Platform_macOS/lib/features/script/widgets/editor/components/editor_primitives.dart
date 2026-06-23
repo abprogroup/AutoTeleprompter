@@ -6,19 +6,23 @@ const kEditorBg = Color(0xFF141414);
 const kEditorSurface = Color(0xFF1E1E1E);
 
 // v3.9.5.59: Extracted Editor Suite Enum
-enum EditorSuite { none, text, layout, color }
+enum EditorSuite { none, text, layout, color, bookmarks }
 
 class ToolBtn extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final String? tooltip;
   final VoidCallback onTap;
+  final bool enabled;
   final bool active, bold, italic, underline;
   final Color? color;
   const ToolBtn(
       {super.key,
       required this.label,
+      this.icon,
       this.tooltip,
       required this.onTap,
+      this.enabled = true,
       this.active = false,
       this.bold = false,
       this.italic = false,
@@ -26,40 +30,59 @@ class ToolBtn extends StatelessWidget {
       this.color});
   @override
   Widget build(BuildContext context) {
+    final foreground = enabled
+        ? (color ?? (active ? kEditorAmber : Colors.white70))
+        : Colors.white24;
     final btn = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      constraints: const BoxConstraints(minWidth: 38, minHeight: 34),
+      padding: EdgeInsets.symmetric(
+        horizontal: icon == null ? 12 : 8,
+        vertical: 4,
+      ),
       decoration: BoxDecoration(
           color: active ? Colors.white12 : Colors.transparent,
           borderRadius: BorderRadius.circular(8)),
-      child: Text(label,
-          style: TextStyle(
-              color: color ?? (active ? kEditorAmber : Colors.white70),
-              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-              fontStyle: italic ? FontStyle.italic : FontStyle.normal,
-              decoration:
-                  underline ? TextDecoration.underline : TextDecoration.none,
-              fontSize: 16)),
+      child: Center(
+        child: icon == null
+            ? Text(label,
+                style: TextStyle(
+                    color: foreground,
+                    fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+                    fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+                    decoration: underline
+                        ? TextDecoration.underline
+                        : TextDecoration.none,
+                    fontSize: 16))
+            : Icon(icon, color: foreground, size: 22),
+      ),
+    );
+    final wrapped = InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: btn,
     );
     return tooltip != null
-        ? Tooltip(message: tooltip!, child: InkWell(onTap: onTap, child: btn))
-        : InkWell(onTap: onTap, child: btn);
+        ? Tooltip(message: tooltip!, child: wrapped)
+        : wrapped;
   }
 }
 
 class FormatPopup extends StatelessWidget {
   final String label;
   final IconData icon;
+  final String? tooltip;
   final bool active;
   final VoidCallback onTap;
   const FormatPopup(
       {super.key,
       required this.label,
       required this.icon,
+      this.tooltip,
       required this.active,
       required this.onTap});
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    final button = InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -79,6 +102,10 @@ class FormatPopup extends StatelessWidget {
           ],
         ),
       ),
+    );
+    return Tooltip(
+      message: tooltip ?? label,
+      child: button,
     );
   }
 }

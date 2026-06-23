@@ -186,8 +186,22 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => TeleprompterSettingsPanel(
-        onInvertColors: _toggleContentColorInversion,
+      builder: (_) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.84),
+              border: const Border(
+                top: BorderSide(color: Colors.white24),
+              ),
+            ),
+            child: TeleprompterSettingsPanel(
+              onInvertColors: _toggleContentColorInversion,
+            ),
+          ),
+        ),
       ),
     );
   }

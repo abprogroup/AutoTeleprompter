@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
@@ -23,6 +24,9 @@ import '../../script/services/highlight_band_painter.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/widgets/login_screen.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../core/window/presenter_fullscreen_service.dart';
@@ -50,6 +54,7 @@ part 'teleprompter_screen.control_bar.dart';
 part 'teleprompter_screen.settings_panel.dart';
 part 'teleprompter_screen.speech_settings.dart';
 part 'teleprompter_screen.settings_widgets.dart';
+part 'teleprompter_screen.walkthrough.dart';
 
 // Regex to strip any unprocessed markup tags that somehow leaked into word.raw
 final _tagStripRe = RegExp(
@@ -63,7 +68,9 @@ class _PresentationSearchIntent extends Intent {
 }
 
 class TeleprompterScreen extends ConsumerStatefulWidget {
-  const TeleprompterScreen({super.key});
+  final bool showWalkthroughGuide;
+
+  const TeleprompterScreen({super.key, this.showWalkthroughGuide = false});
 
   @override
   ConsumerState<TeleprompterScreen> createState() => _TeleprompterScreenState();
@@ -73,6 +80,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _presenterContentKey = GlobalKey();
   final GlobalKey _presenterReadingLineKey = GlobalKey();
+  final GlobalKey _presenterControlsKey = GlobalKey();
+  final GlobalKey _presenterSettingsButtonKey = GlobalKey();
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
   bool _debugConsoleMinimized = false;
@@ -121,6 +130,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   Offset? _lastPresenterPointerGlobalPosition;
   bool _windowsControlsHovering = false;
   bool _presenterFullscreen = false;
+  bool _presenterWalkthroughVisible = false;
+  int _presenterWalkthroughStep = 0;
+  int _presenterSttQuestionIndex = 0;
+  bool _presenterSttGuideDefaultsApplied = false;
   late final TeleprompterNotifier _teleprompterNotifier;
   late final RemoteControlService _remoteControlService;
 
@@ -129,6 +142,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     super.initState();
     _teleprompterNotifier = ref.read(teleprompterProvider.notifier);
     _remoteControlService = ref.read(remoteControlProvider);
+    _presenterWalkthroughVisible = widget.showWalkthroughGuide;
     HardwareKeyboard.instance.addHandler(_handlePresentationKey);
     WakelockPlus.enable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);

@@ -99,6 +99,7 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
   // Add bookmark.
 
   Future<void> _addEditorBookmark() async {
+    if (!await _ensureEditorPremiumAccess('Bookmarks')) return;
     if (_controllers.isEmpty) return;
     await _loadBookmarksForCurrentScript(force: true);
     final block = _currentEditorBlockIndex();
@@ -144,6 +145,7 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
   // Navigate bookmarks.
 
   Future<void> _jumpEditorBookmark(int direction) async {
+    if (!await _ensureEditorPremiumAccess('Bookmarks')) return;
     await _loadBookmarksForCurrentScript(force: true);
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
     if (_bookmarks.isEmpty) {
@@ -287,6 +289,7 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
   // Delete bookmarks.
 
   Future<void> _deleteEditorBookmarkAtCurrentPosition() async {
+    if (!await _ensureEditorPremiumAccess('Bookmarks')) return;
     await _loadBookmarksForCurrentScript(force: true);
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
     if (_bookmarks.isEmpty) {
@@ -326,6 +329,7 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
   }
 
   Future<void> _deleteEditorBookmarksForBlock(int block) async {
+    if (!await _ensureEditorPremiumAccess('Bookmarks')) return;
     final ids = _bookmarks
         .where(
             (bookmark) => _editorPositionForBookmark(bookmark).block == block)

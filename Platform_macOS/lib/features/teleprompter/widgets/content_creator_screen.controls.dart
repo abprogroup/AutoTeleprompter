@@ -34,16 +34,38 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
     final audioOnly = settings.contentCreatorRecordingFormat ==
         AppSettings.contentCreatorRecordingFormatWav;
     final isReady = audioOnly || _isActiveCameraInitialized();
+    final hasBookmarkAccess = ref.watch(authProvider).hasPremiumAccess;
+    void showLockedBookmarks() {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Bookmarks are included with Pro.'),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'Connect',
+            onPressed: () {
+              messenger.hideCurrentSnackBar();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            },
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
+          stops: const [0.0, 0.58, 1.0],
           colors: [
-            Colors.black.withValues(alpha: 0.95),
-            Colors.black.withValues(alpha: 0.08),
-            Colors.transparent,
+            Colors.black.withValues(alpha: 0.98),
+            Colors.black.withValues(alpha: 0.68),
+            Colors.black.withValues(alpha: 0.0),
           ],
         ),
       ),
@@ -54,8 +76,16 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
             _barIcon(Icons.arrow_back, 'Back to editor', _exitContentCreator),
             _barIcon(Icons.edit_note, 'Edit current position',
                 _exitContentCreatorAtCurrentPosition),
-            _barIcon(Icons.skip_previous, 'Previous bookmark',
-                () => _jumpContentBookmark(-1)),
+            _barIcon(
+                hasBookmarkAccess
+                    ? Icons.skip_previous_rounded
+                    : Icons.lock_outline_rounded,
+                hasBookmarkAccess
+                    ? 'Previous bookmark'
+                    : 'Bookmarks are included with Pro',
+                hasBookmarkAccess
+                    ? () => _jumpContentBookmark(-1)
+                    : showLockedBookmarks),
             _barText('A', 'Smaller font', () => _applyContentFontDelta(-4)),
             if (!settings.contentCreatorRecordingControlsSpeech)
               _contentSpeechButton(settings, tState),
@@ -66,10 +96,26 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
             ),
             _barText('A', 'Larger font', () => _applyContentFontDelta(4),
                 large: true),
-            _barIcon(Icons.bookmark_add_outlined, 'Add bookmark',
-                _addContentBookmark),
-            _barIcon(Icons.bookmark_remove_outlined, 'Remove bookmark',
-                _isRecording ? null : _deleteContentBookmarkAtCurrentPosition),
+            _barIcon(
+                hasBookmarkAccess
+                    ? Icons.bookmark_add_outlined
+                    : Icons.lock_outline_rounded,
+                hasBookmarkAccess
+                    ? 'Add bookmark'
+                    : 'Bookmarks are included with Pro',
+                hasBookmarkAccess ? _addContentBookmark : showLockedBookmarks),
+            _barIcon(
+                hasBookmarkAccess
+                    ? Icons.bookmark_remove_outlined
+                    : Icons.lock_outline_rounded,
+                hasBookmarkAccess
+                    ? 'Remove bookmark'
+                    : 'Bookmarks are included with Pro',
+                !hasBookmarkAccess
+                    ? showLockedBookmarks
+                    : (_isRecording
+                        ? null
+                        : _deleteContentBookmarkAtCurrentPosition)),
             _barIcon(Icons.photo_camera, 'Camera source',
                 _showContentCreatorSettings),
             _barIcon(Icons.tune, 'Prompter settings', _showPrompterSettings),
@@ -78,8 +124,16 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
               _contentFullscreen ? 'Exit fullscreen' : 'Fullscreen',
               _toggleContentFullscreen,
             ),
-            _barIcon(Icons.skip_next, 'Next bookmark',
-                () => _jumpContentBookmark(1)),
+            _barIcon(
+                hasBookmarkAccess
+                    ? Icons.skip_next_rounded
+                    : Icons.lock_outline_rounded,
+                hasBookmarkAccess
+                    ? 'Next bookmark'
+                    : 'Bookmarks are included with Pro',
+                hasBookmarkAccess
+                    ? () => _jumpContentBookmark(1)
+                    : showLockedBookmarks),
             _barIcon(Icons.replay, 'Restart script', _resetContentPosition),
             _barIcon(Icons.search, 'Search script', _showContentSearchDialog),
           ],

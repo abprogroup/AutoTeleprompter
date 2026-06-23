@@ -224,36 +224,48 @@ class _BookmarkSuite extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.center,
-      children: [
-        ToolBtn(
-          label: 'Previous',
-          icon: Icons.skip_previous_rounded,
-          tooltip: 'Previous bookmark',
-          onTap: onPreviousBookmark,
-        ),
-        ToolBtn(
-          label: 'Add',
-          icon: Icons.bookmark_add_outlined,
-          tooltip: 'Add bookmark',
-          onTap: onAddBookmark,
-        ),
-        ToolBtn(
-          label: 'Remove',
-          icon: Icons.bookmark_remove_outlined,
-          tooltip: 'Remove bookmark',
-          onTap: onRemoveBookmark,
-        ),
-        ToolBtn(
-          label: 'Next',
-          icon: Icons.skip_next_rounded,
-          tooltip: 'Next bookmark',
-          onTap: onNextBookmark,
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ToolBtn(
+                  label: 'Previous',
+                  icon: Icons.skip_previous_rounded,
+                  tooltip: 'Previous bookmark',
+                  onTap: onPreviousBookmark,
+                ),
+                const SizedBox(width: 8),
+                ToolBtn(
+                  label: 'Add',
+                  icon: Icons.bookmark_add_outlined,
+                  tooltip: 'Add bookmark',
+                  onTap: onAddBookmark,
+                ),
+                const SizedBox(width: 8),
+                ToolBtn(
+                  label: 'Remove',
+                  icon: Icons.bookmark_remove_outlined,
+                  tooltip: 'Remove bookmark',
+                  onTap: onRemoveBookmark,
+                ),
+                const SizedBox(width: 8),
+                ToolBtn(
+                  label: 'Next',
+                  icon: Icons.skip_next_rounded,
+                  tooltip: 'Next bookmark',
+                  onTap: onNextBookmark,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

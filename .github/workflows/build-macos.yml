@@ -1,5 +1,5 @@
 name: Build macOS App
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+28' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+29' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -14,9 +14,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.8+28'
+        description: 'Flutter app version, for example 5.0.8+29'
         required: true
-        default: '5.0.8+28'
+        default: '5.0.8+29'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false
@@ -71,10 +71,10 @@ jobs:
           esac
           appVersion="${{ github.event.inputs.app_version }}"
           if [ -z "$appVersion" ]; then
-            appVersion="5.0.8+28"
+            appVersion="5.0.8+29"
           fi
           if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
-            echo "app_version must look like 5.0.8+28." >&2
+            echo "app_version must look like 5.0.8+29." >&2
             exit 1
           fi
           versionName="${appVersion%%+*}"
@@ -225,6 +225,9 @@ jobs:
           tooltip polish, speech-control setup defaults, safer fast-reading
           STT jump handling, resilient Apple STT recovery, duplicate Present
           route protection, and corrected Present word spacing.
+          This build also pins the listening meter near the top of the
+          presentation and improves low-volume next-word STT progression
+          without relaxing large skip protection.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -272,7 +275,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, and corrected Present word spacing.",
+              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, corrected Present word spacing, top-pinned listening meter placement, and improved low-volume next-word STT progression.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

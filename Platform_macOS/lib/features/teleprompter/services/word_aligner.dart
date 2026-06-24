@@ -188,6 +188,39 @@ class WordAligner {
             .toInt()
         : searchStart;
 
+    AlignmentResult? earlyDirectNextWord(int candidateIndex) {
+      if (candidateIndex >= script.length ||
+          script[candidateIndex].isNewline ||
+          _isUnspeakable(script[candidateIndex])) {
+        return null;
+      }
+      final nextWord = script[candidateIndex].normalized;
+      final isHebrew = script[candidateIndex].isRtl;
+      final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
+      final lowEvidenceThreshold =
+          policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.62 : 0.72);
+      if (sim < lowEvidenceThreshold) return null;
+      final skippedCue =
+          candidateIndex != searchStart ? ' optionalCueSkip' : '';
+      return AlignmentResult(
+        candidateIndex,
+        sim,
+        'NEXT_WORD_LOW_EVIDENCE$skippedCue: "$lastSpoken" ~ "$nextWord" = ${sim.toStringAsFixed(2)}',
+      );
+    }
+
+    if (!transcriptPassesLocal &&
+        !(visibleSkipEnabled && transcriptPassesVisible)) {
+      final directNext = earlyDirectNextWord(searchStart);
+      if (directNext != null) return directNext;
+      if (script[searchStart].isOptionalCue) {
+        final requiredStart =
+            nextRequiredSpeakableIndex(script, searchStart + 1);
+        final requiredNext = earlyDirectNextWord(requiredStart);
+        if (requiredNext != null) return requiredNext;
+      }
+    }
+
     if (!transcriptPassesLocal &&
         !(visibleSkipEnabled && transcriptPassesVisible)) {
       if (!activeStandby) {

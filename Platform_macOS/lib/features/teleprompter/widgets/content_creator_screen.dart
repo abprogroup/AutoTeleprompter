@@ -539,7 +539,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                 Positioned(
                   left: 24,
                   right: 24,
-                  bottom: controlsReservedHeight + 16,
+                  top: MediaQuery.paddingOf(context).top + 16,
                   child: IgnorePointer(
                     child: Center(
                       child: ConstrainedBox(

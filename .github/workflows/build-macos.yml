@@ -169,8 +169,8 @@ jobs:
             exit 1
           fi
           require_value "SUPABASE_ANON_KEY" "$SUPABASE_ANON_KEY"
-          if [[ ! "$SUPABASE_ANON_KEY" =~ ^eyJ.+\..+\..+ ]]; then
-            echo "SUPABASE_ANON_KEY must look like a Supabase anon JWT." >&2
+          if [[ ! "$SUPABASE_ANON_KEY" =~ ^eyJ.+\..+\..+ ]] && [[ ! "$SUPABASE_ANON_KEY" =~ ^sb_publishable_ ]]; then
+            echo "SUPABASE_ANON_KEY must be a Supabase anon JWT or publishable key." >&2
             exit 1
           fi
           require_value "GOOGLE_DRIVE_CLIENT_ID" "$GOOGLE_DRIVE_CLIENT_ID"

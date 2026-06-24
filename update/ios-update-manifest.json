@@ -1,0 +1,35 @@
+{
+  "_comment": "Update manifest read by Platform_iOS UpdateCheckService. Host this file at a stable HTTPS URL (e.g. the raw GitHub URL of this file on the default branch) and build the app with --dart-define=UPDATE_MANIFEST_URL=<that url>. On each iOS release: bump the per-channel ios.version to match pubspec (e.g. 5.0.8+24) and point ios.url at the GitHub release that carries the installable IPA. iOS cannot self-install, so 'url' should be a human-openable release page.",
+  "channels": {
+    "stable": {
+      "platforms": {
+        "ios": {
+          "version": "5.0.7+23",
+          "url": "https://github.com/abprogroup/AutoTeleprompter/releases/latest",
+          "notes": "Latest stable AutoTeleprompter iOS build.",
+          "publishedAt": "2026-06-24T00:00:00Z"
+        }
+      }
+    },
+    "beta": {
+      "platforms": {
+        "ios": {
+          "version": "5.0.7+23",
+          "url": "https://github.com/abprogroup/AutoTeleprompter/releases/latest",
+          "notes": "Latest beta AutoTeleprompter iOS build.",
+          "publishedAt": "2026-06-24T00:00:00Z"
+        }
+      }
+    },
+    "internal": {
+      "platforms": {
+        "ios": {
+          "version": "5.0.7+23",
+          "url": "https://github.com/abprogroup/AutoTeleprompter/releases",
+          "notes": "Latest internal AutoTeleprompter iOS build for sideload/TestFlight testing.",
+          "publishedAt": "2026-06-24T00:00:00Z"
+        }
+      }
+    }
+  }
+}

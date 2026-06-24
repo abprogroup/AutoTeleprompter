@@ -21,6 +21,12 @@ mixin SettingsNotifierSttProfile on Notifier<AppSettings> {
     await prefs.setDouble(_readFadeIntensityKey, intensity);
   }
 
+  Future<void> setShowSoundLevelMeter(bool enabled) async {
+    state = state.copyWith(showSoundLevelMeter: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showSoundLevelMeterKey, enabled);
+  }
+
   Future<void> setSttVisibleSkipEnabled(bool enabled) async {
     state = state.copyWith(
       sttVisibleSkipEnabled: enabled,

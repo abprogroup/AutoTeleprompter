@@ -1,24 +1,107 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/security/secure_script_store.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../auth/widgets/login_screen.dart';
+import '../../script/models/script.dart';
+import '../../script/providers/script_provider.dart';
+import '../../script/services/script_bookmark_service.dart';
+import '../../script/services/script_project_codec.dart';
+import '../providers/settings_provider.dart';
+import '../services/cloud_app_folder_sync_service.dart';
 import '../services/cloud_connection_store.dart';
+import '../services/cloud_oauth_service.dart';
+import '../services/deleted_scripts_service.dart';
+import '../services/local_backup_service.dart';
+import '../services/settings_error_sanitizer.dart';
+import '../../../platform/system/external_url_launcher.dart';
 import 'deleted_scripts_screen.dart';
 
-class CloudSyncScreen extends ConsumerWidget {
-  const CloudSyncScreen({super.key});
+part 'cloud_sync_screen.actions.dart';
+part 'cloud_sync_screen.deleted_actions.dart';
+part 'cloud_sync_screen.folder_moves.dart';
+part 'cloud_sync_screen.local_backup_dialogs.dart';
+part 'cloud_sync_screen.managed_sync.dart';
+part 'cloud_sync_screen.payloads.dart';
+part 'cloud_sync_screen.sync_with_app.dart';
+part 'cloud_sync_screen.synced_scripts_dialog.dart';
+part 'cloud_sync_screen.widgets.dart';
+
+class CloudSyncScreen extends ConsumerStatefulWidget {
+  final bool embedded;
+
+  const CloudSyncScreen({
+    super.key,
+    this.embedded = false,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CloudSyncScreen> createState() => _CloudSyncScreenState();
+}
+
+class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
+  final _store = CloudConnectionStore();
+  final _oauth = CloudOAuthService();
+  late final _sync = CloudAppFolderSyncService(oauth: _oauth);
+
+  List<CloudProviderConnection> _connections = const [];
+  Map<String, CloudAccountInfo> _accounts = const {};
+  CloudProviderConnection? _localBackup;
+  bool _deletedFolderOverride = false;
+  String _deletedFolderPath = '';
+  bool _loading = true;
+  bool _syncingScripts = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConnections();
+  }
+
+  Future<void> _loadConnections() async {
+    final connections = await _store.loadConnections();
+    final localBackup = await _store.loadLocalBackupConnection();
+    final deletedFolderOverride =
+        await _store.loadDeletedScriptsCustomFolderEnabled();
+    final deletedFolderPath = await _store.loadDeletedScriptsCustomFolderPath();
+    final accounts = await _oauth.loadAccounts();
+    if (!mounted) return;
+    setState(() {
+      _connections = connections;
+      _localBackup = localBackup;
+      _deletedFolderOverride = deletedFolderOverride;
+      _deletedFolderPath = deletedFolderPath;
+      _accounts = accounts;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = ref.watch(settingsProvider);
     final auth = ref.watch(authProvider);
+    final premiumUnlocked = auth.hasPremiumAccess;
+    final anyConnected =
+        (_localBackup?.isConnected ?? false) || _accounts.isNotEmpty;
+    final body = _buildCloudManagementBody(
+      anyConnected,
+      settings,
+      premiumUnlocked,
+    );
+
+    if (widget.embedded) return body;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: Text(
-          'CLOUD MANAGEMENT',
+          'Cloud Management',
           style: GoogleFonts.bebasNeue(
             letterSpacing: 2,
             fontSize: 24,
@@ -36,329 +119,232 @@ class CloudSyncScreen extends ConsumerWidget {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: auth.hasPremiumAccess
-            ? const _CloudSyncOptions()
-            : _CloudLockedState(
-                backendUnavailable: auth.accountBackendEnabled &&
-                    auth.backendStatus == 'notConfigured',
-              ),
-      ),
+      body: body,
     );
   }
-}
 
-class _CloudLockedState extends StatelessWidget {
-  final bool backendUnavailable;
-
-  const _CloudLockedState({required this.backendUnavailable});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: .08)),
-      ),
+  Widget _buildCloudManagementBody(
+    bool anyConnected,
+    AppSettings settings,
+    bool premiumUnlocked,
+  ) {
+    final localBackup = _localBackup ??
+        const CloudProviderConnection(
+          provider: CloudConnectionStore.localBackupProvider,
+          folderPath: '',
+        );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.lock_outline_rounded,
-            color: Color(0xFFFFBF00),
-            size: 42,
-          ),
-          const SizedBox(height: 16),
           const Text(
-            'Cloud sync requires Pro access',
-            textAlign: TextAlign.center,
+            'Cloud Connections',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            backendUnavailable
-                ? 'This build does not include account backend configuration.'
-                : 'Sign in with a Pro account to manage backups and provider options.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54, fontSize: 13),
+          const Text(
+            'Connect Google Drive or Dropbox accounts for online '
+            'sync. Use Local Backup for Pro local folder backup, including '
+            'folders already synced by desktop cloud apps.',
+            style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: backendUnavailable
-                ? null
-                : () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    ),
-            icon: const Icon(Icons.login_rounded),
-            label: const Text('Sign in'),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFFFBF00),
-              foregroundColor: Colors.black,
+          const SizedBox(height: 16),
+          const _CloudDisclosureNote(),
+          const SizedBox(height: 16),
+          _CloudActionBar(
+            enabled: premiumUnlocked && anyConnected && !_syncingScripts,
+            syncing: _syncingScripts,
+            onSyncScripts: _syncAllScripts,
+            onSyncWithApp: _syncAllBackupsWithApp,
+          ),
+          const SizedBox(height: 32),
+          const _SectionLabel('LOCAL BACKUP'),
+          const SizedBox(height: 12),
+          _LocalBackupCard(
+            connection: localBackup,
+            enabled: premiumUnlocked,
+            onChoose: _chooseLocalBackupFolder,
+            onOpen: localBackup.isConnected
+                ? () => _openFolder(localBackup.folderPath)
+                : null,
+            onForget: localBackup.isConnected ? _disconnectLocalBackup : null,
+            onUpload:
+                localBackup.isConnected ? _uploadLocalBackupScripts : null,
+            onList: localBackup.isConnected ? _showLocalBackupScripts : null,
+            onSyncWithApp:
+                localBackup.isConnected ? _syncLocalBackupWithApp : null,
+          ),
+          const SizedBox(height: 12),
+          _DeletedScriptsFolderCard(
+            enabled: premiumUnlocked,
+            useCustomFolder: _deletedFolderOverride,
+            folderPath: _resolvedDeletedFolderLabel(localBackup),
+            onToggleCustomFolder: _setDeletedFolderOverride,
+            onChoose: _chooseDeletedScriptsFolder,
+            onOpen: _deletedFolderPath.trim().isNotEmpty
+                ? () => _openFolder(_deletedFolderPath)
+                : null,
+            onForget: _deletedFolderPath.trim().isNotEmpty
+                ? _forgetDeletedScriptsFolder
+                : null,
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: premiumUnlocked
+                  ? () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DeletedScriptsScreen(),
+                        ),
+                      )
+                  : null,
+              icon: const Icon(Icons.restore_from_trash_outlined),
+              label: const Text('Browse / restore deleted scripts'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFFFBF00),
+                side: BorderSide(
+                  color: const Color(0xFFFFBF00).withValues(alpha: 0.5),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
             ),
+          ),
+          const SizedBox(height: 24),
+          const _SectionLabel('PERSONAL CLOUD STORAGE'),
+          const SizedBox(height: 12),
+          if (_loading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(color: Color(0xFFFFBF00)),
+              ),
+            )
+          else
+            for (final connection in _connections)
+              _CloudOption(
+                connection: connection,
+                account: _accounts[connection.provider.id],
+                onConnectAccount: premiumUnlocked &&
+                        _providerSupportsAccount(connection.provider.id)
+                    ? () => _connectProviderAccount(connection.provider)
+                    : null,
+                onUploadAccount: premiumUnlocked &&
+                        _accounts.containsKey(connection.provider.id)
+                    ? () => _uploadSelectedScripts(connection.provider.id)
+                    : null,
+                onListAccount: premiumUnlocked &&
+                        _accounts.containsKey(connection.provider.id)
+                    ? () => _showSyncedScripts(connection.provider)
+                    : null,
+                onSyncWithApp: premiumUnlocked &&
+                        _accounts.containsKey(connection.provider.id)
+                    ? () => _syncProviderWithApp(connection.provider.id)
+                    : null,
+                onDisconnectAccount: premiumUnlocked &&
+                        _accounts.containsKey(connection.provider.id)
+                    ? () => _disconnectProviderAccount(connection.provider.id)
+                    : null,
+              ),
+          const SizedBox(height: 16),
+          const _SectionLabel('MANAGED CLOUD'),
+          const SizedBox(height: 6),
+          const Text(
+            'Waiting for future development. This will use AutoTeleprompter '
+            'accounts and company-managed storage, not personal providers.',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          const _ManagedCloudCard(),
+          const SizedBox(height: 32),
+          const _SectionLabel('AUTOMATION'),
+          const SizedBox(height: 8),
+          _AutomationCard(
+            anyConnected: anyConnected,
+            premiumUnlocked: premiumUnlocked,
+            cloudAccountsConnected: _accounts.isNotEmpty,
+            autoSyncScripts: settings.cloudAutoSyncOnSave,
+            syncDeletedScriptsFolder: settings.syncDeletedScriptsFolder,
+            recordingAutoBackup: settings.recordingAutoBackup,
+            onAutoSyncScriptsChanged: _setAutoSyncScripts,
+            onSyncDeletedScriptsFolderChanged: _setSyncDeletedScriptsFolder,
+            onRecordingAutoBackupChanged: _setRecordingAutoBackup,
           ),
         ],
       ),
     );
   }
-}
 
-class _CloudSyncOptions extends ConsumerStatefulWidget {
-  const _CloudSyncOptions();
-
-  @override
-  ConsumerState<_CloudSyncOptions> createState() => _CloudSyncOptionsState();
-}
-
-class _CloudSyncOptionsState extends ConsumerState<_CloudSyncOptions> {
-  final CloudConnectionStore _store = CloudConnectionStore();
-  late Future<_CloudSyncState> _stateFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _stateFuture = _loadState();
+  bool _providerSupportsAccount(String providerId) {
+    return providerId == CloudConnectionStore.googleDrive ||
+        providerId == CloudConnectionStore.dropbox;
   }
 
-  Future<_CloudSyncState> _loadState() async {
-    final local = await _store.loadLocalBackupConnection();
-    final providers = await _store.loadConnections();
-    return _CloudSyncState(localBackup: local, providers: providers);
-  }
-
-  void _refresh() {
-    setState(() => _stateFuture = _loadState());
-  }
-
-  Future<void> _chooseLocalBackup() async {
-    String? path;
-    try {
-      path = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Choose Local Backup Folder',
-      );
-    } catch (_) {
-      if (!mounted) return;
-      _showSnack(
-        'Local backup folder selection is not available on this device build.',
-      );
+  Future<void> _chooseLocalBackupFolder() async {
+    final oldFolder = _localBackup?.folderPath.trim() ?? '';
+    final folder = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose local backup folder',
+    );
+    if (folder == null) return;
+    final directory = Directory(folder);
+    if (!await directory.exists()) {
+      _showSnack('Selected folder does not exist.');
       return;
     }
-    if (!mounted || path == null) return;
-    try {
-      await _store.setLocalBackupPath(path);
-    } catch (_) {
-      if (!mounted) return;
-      _showSnack('Could not connect that local backup folder.');
-      return;
-    }
-    if (!mounted) return;
-    _refresh();
-    _showSnack('Local backup folder connected.');
+    await _maybeMoveExistingFolderContents(
+      oldPath: oldFolder,
+      newPath: folder,
+      title: 'Move existing Local Backup files?',
+      message:
+          'Move existing backed-up scripts and deleted-script folders to the '
+          'new Local Backup folder?',
+    );
+    await _store.setLocalBackupPath(folder);
+    await _loadConnections();
+    _showSnack('Local backup folder linked.');
   }
 
   Future<void> _disconnectLocalBackup() async {
-    try {
-      await _store.disconnectLocalBackup();
-    } catch (_) {
-      if (!mounted) return;
-      _showSnack('Could not disconnect the local backup folder.');
-      return;
-    }
-    if (!mounted) return;
-    _refresh();
-    _showSnack('Local backup folder disconnected.');
+    await _store.disconnectLocalBackup();
+    await _loadConnections();
+    _showSnack('Local backup folder forgotten.');
   }
 
-  void _showMobileProviderPending(String label) {
-    _showSnack('$label sync is planned for a future iOS provider build.');
+  String _resolvedDeletedFolderLabel(CloudProviderConnection localBackup) {
+    if (_deletedFolderOverride) {
+      return _deletedFolderPath.trim();
+    }
+    final localPath = localBackup.folderPath.trim();
+    if (localPath.isEmpty) return '';
+    return CloudConnectionStore.joinPath(
+      localPath,
+      CloudConnectionStore.deletedScriptsFolderName,
+    );
+  }
+
+  void _setSyncingScripts(bool value) {
+    if (!mounted) return;
+    setState(() => _syncingScripts = value);
   }
 
   void _showSnack(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<_CloudSyncState>(
-      future: _stateFuture,
-      builder: (context, snapshot) {
-        final data = snapshot.data;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Sync Sources',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Manage local backups and future provider sync.',
-              style: TextStyle(color: Colors.white54, fontSize: 14),
-            ),
-            const SizedBox(height: 24),
-            _CloudOption(
-              label: CloudConnectionStore.localBackupProvider.label,
-              subtitle: CloudConnectionStore.localBackupProvider.subtitle,
-              icon: Icons.folder_copy_rounded,
-              color: const Color(0xFFFFBF00),
-              status: _statusText(data?.localBackup.folderPath),
-              actionLabel:
-                  data?.localBackup.isConnected == true ? 'Disconnect' : null,
-              onTap: _chooseLocalBackup,
-              onAction: data?.localBackup.isConnected == true
-                  ? _disconnectLocalBackup
-                  : null,
-            ),
-            _CloudOption(
-              label: 'Deleted Scripts',
-              subtitle: 'Restore or permanently remove local deleted backups',
-              icon: Icons.restore_from_trash_outlined,
-              color: Colors.redAccent,
-              status: data?.localBackup.isConnected == true
-                  ? 'Available for local backups'
-                  : 'Connect Local Backup first',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const DeletedScriptsScreen()),
-              ),
-            ),
-            for (final connection in data?.providers ??
-                CloudConnectionStore.providers.map(
-                  (provider) => CloudProviderConnection(
-                    provider: provider,
-                    folderPath: '',
-                  ),
-                ))
-              _CloudOption(
-                label: connection.provider.label,
-                subtitle: connection.provider.subtitle,
-                icon: connection.provider.id == CloudConnectionStore.dropbox
-                    ? Icons.cloud_queue_rounded
-                    : Icons.add_to_drive_rounded,
-                color: Colors.blueAccent,
-                status: _statusText(connection.folderPath),
-                onTap: () => _showMobileProviderPending(
-                  connection.provider.label,
-                ),
-              ),
-            if (snapshot.connectionState == ConnectionState.waiting)
-              const Padding(
-                padding: EdgeInsets.only(top: 16),
-                child: LinearProgressIndicator(
-                  color: Color(0xFFFFBF00),
-                  backgroundColor: Colors.white12,
-                ),
-              ),
-          ],
-        );
-      },
-    );
+  String _shortError(Object error) {
+    final compact = sanitizeSettingsErrorForUser(error)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (compact.length <= 220) return compact;
+    return '${compact.substring(0, 220)}...';
   }
-
-  static String _statusText(String? path) {
-    final clean = CloudConnectionStore.normalizePath(path);
-    return clean.isEmpty ? 'Not connected' : clean;
-  }
-}
-
-class _CloudOption extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final String status;
-  final VoidCallback onTap;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  const _CloudOption({
-    required this.label,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.status,
-    required this.onTap,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final connected = status != 'Not connected';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: connected
-              ? const Color(0xFFFFBF00).withValues(alpha: .28)
-              : Colors.white.withValues(alpha: 0.05),
-        ),
-      ),
-      child: ListTile(
-        onTap: onTap,
-        leading: Icon(icon, color: color, size: 28),
-        title: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(subtitle, style: const TextStyle(color: Colors.white54)),
-              const SizedBox(height: 4),
-              Text(
-                status,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: connected ? const Color(0xFFFFBF00) : Colors.white38,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-        trailing: actionLabel == null
-            ? const Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.white24,
-                size: 16,
-              )
-            : TextButton(
-                onPressed: onAction,
-                child: Text(actionLabel!),
-              ),
-      ),
-    );
-  }
-}
-
-class _CloudSyncState {
-  final CloudProviderConnection localBackup;
-  final List<CloudProviderConnection> providers;
-
-  const _CloudSyncState({
-    required this.localBackup,
-    required this.providers,
-  });
 }

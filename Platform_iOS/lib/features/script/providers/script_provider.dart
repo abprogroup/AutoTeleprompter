@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:archive/archive.dart';
@@ -8,6 +9,7 @@ import '../models/script_word.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../../core/extensions/string_extensions.dart';
+import '../../../core/security/secure_script_store.dart';
 import '../../../features/teleprompter/services/word_aligner.dart';
 
 part 'script_provider.docx.dart';
@@ -23,10 +25,32 @@ const int _maxArchiveExpandedBytes = 120 * 1024 * 1024;
 const int _maxImportXmlBytes = 30 * 1024 * 1024;
 
 class ScriptNotifier extends Notifier<Script?> {
+  int _storedLoadGeneration = 0;
+  bool _isDisposed = false;
+
   @override
   Script? build() {
-    // Load last saved script on startup
+    void scheduleStoredScriptLoad(AppSettings settings) {
+      if (settings.lastScriptSessionId.isEmpty) return;
+      final generation = ++_storedLoadGeneration;
+      Future<void>.delayed(Duration.zero, () {
+        if (_isDisposed || generation != _storedLoadGeneration) return;
+        unawaited(_loadStoredScriptFromSettings(settings, generation));
+      });
+    }
+
+    _isDisposed = false;
+    ref.onDispose(() {
+      _isDisposed = true;
+      _storedLoadGeneration++;
+    });
+    ref.listen<AppSettings>(settingsProvider, (previous, next) {
+      if (previous?.lastScriptSessionId != next.lastScriptSessionId) {
+        scheduleStoredScriptLoad(next);
+      }
+    });
     final settings = ref.read(settingsProvider);
+    scheduleStoredScriptLoad(settings);
     final lastText = settings.lastScript;
     final lastTitle = settings.lastScriptTitle;
 
@@ -105,6 +129,64 @@ class ScriptNotifier extends Notifier<Script?> {
     return null;
   }
 
+  bool get _hasActiveScript => state != null;
+
+  Future<void> _loadStoredScriptFromSettings(
+    AppSettings settings,
+    int generation,
+  ) async {
+    if (_isDisposed ||
+        generation != _storedLoadGeneration ||
+        settings.lastScriptSessionId.isEmpty ||
+        _hasActiveScript) {
+      return;
+    }
+    Map<String, dynamic>? meta;
+    for (final item in settings.recentScripts) {
+      try {
+        final decoded = Map<String, dynamic>.from(jsonDecode(item));
+        final secureId = SecureScriptStore.recordIdFromMetadata(decoded);
+        if (secureId == settings.lastScriptSessionId ||
+            decoded['sessionId'] == settings.lastScriptSessionId) {
+          meta = decoded;
+          break;
+        }
+      } catch (_) {}
+    }
+    try {
+      final data = await SecureScriptStore().read(settings.lastScriptSessionId);
+      if (_isDisposed || generation != _storedLoadGeneration || data == null) {
+        return;
+      }
+      state = _buildScript(
+        data.text,
+        title: settings.lastScriptTitle.isNotEmpty
+            ? settings.lastScriptTitle
+            : meta?['title'] as String?,
+        sourceType: meta?['type'] as String?,
+        sourcePath: meta?['sourcePath'] as String?,
+        sessionId: meta?['sessionId'] as String?,
+        historyJson: data.historyJson,
+        historyIndex: (meta?['historyIndex'] as num?)?.toInt(),
+        fontSize: (meta?['style']?['fontSize'] as num?)?.toDouble(),
+        fontFamily: meta?['style']?['fontFamily'] as String?,
+        lineSpacing: (meta?['style']?['lineSpacing'] as num?)?.toDouble(),
+        letterSpacing: (meta?['style']?['letterSpacing'] as num?)?.toDouble(),
+        wordSpacing: (meta?['style']?['wordSpacing'] as num?)?.toDouble(),
+        textAlign: meta?['style']?['textAlign'] as String?,
+        scriptBgColor: meta?['style']?['scriptBgColor'] as int?,
+        currentWordColor: meta?['style']?['currentWordColor'] as int?,
+        futureWordColor: meta?['style']?['futureWordColor'] as int?,
+      );
+    } catch (error, stackTrace) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stackTrace,
+        source: 'script-provider-ios-secure-read',
+      );
+    }
+  }
+
   Script _buildScript(
     String text, {
     String? title,
@@ -173,6 +255,7 @@ class ScriptNotifier extends Notifier<Script?> {
     int? scriptBgColor,
     int? currentWordColor,
     int? futureWordColor,
+    bool persist = true,
   }) {
     state = _buildScript(
       text,
@@ -192,6 +275,7 @@ class ScriptNotifier extends Notifier<Script?> {
       currentWordColor: currentWordColor,
       futureWordColor: futureWordColor,
     );
+    if (!persist) return;
     ref.read(settingsProvider.notifier).saveScript(
           text,
           title: title,

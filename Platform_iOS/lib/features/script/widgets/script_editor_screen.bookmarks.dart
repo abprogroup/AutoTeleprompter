@@ -3,6 +3,16 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   static const String _bookmarkSign = '\u00BB';
 
+  bool _editorBookmarksAllowed() {
+    if (ref.read(authProvider).hasPremiumAccess) return true;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bookmarks are included with Pro')),
+      );
+    }
+    return false;
+  }
+
   Future<void> _loadBookmarksForCurrentScript({bool force = false}) async {
     final key =
         ScriptBookmarkService.scopeKey(_currentSessionId, _currentTitle);
@@ -264,6 +274,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   }
 
   Future<void> _addEditorBookmark() async {
+    if (!_editorBookmarksAllowed()) return;
     if (_controllers.isEmpty) return;
     await _loadBookmarksForCurrentScript(force: true);
     final block = _currentEditorBlockIndex();
@@ -299,6 +310,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   }
 
   Future<void> _jumpEditorBookmark(int direction) async {
+    if (!_editorBookmarksAllowed()) return;
     await _loadBookmarksForCurrentScript(force: true);
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
     if (_bookmarks.isEmpty) {
@@ -415,6 +427,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   }
 
   Future<void> _deleteEditorBookmarkAtCurrentPosition() async {
+    if (!_editorBookmarksAllowed()) return;
     await _loadBookmarksForCurrentScript(force: true);
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
     if (_bookmarks.isEmpty) {
@@ -456,6 +469,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   }
 
   Future<void> _deleteEditorBookmarksForBlock(int block) async {
+    if (!_editorBookmarksAllowed()) return;
     final ids = _bookmarks
         .where(
             (bookmark) => _editorPositionForBookmark(bookmark).block == block)
@@ -465,6 +479,7 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
   }
 
   Future<void> _deleteEditorBookmarkById(String id) async {
+    if (!_editorBookmarksAllowed()) return;
     await _deleteEditorBookmarkIds({id});
   }
 

@@ -23,340 +23,380 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
     });
 
     final settings = ref.watch(settingsProvider);
+    final hasPremiumBookmarks = ref.watch(authProvider).hasPremiumAccess;
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    void showLockedBookmarks() {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bookmarks are included with Pro')),
+      );
+    }
+
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0A0A0A),
-        appBar: AppBar(
-          toolbarHeight: 110,
-          backgroundColor: const Color(0xFF0A0A0A),
-          automaticallyImplyLeading: false,
-          title: ProjectActionsSuite(
-            title: _currentTitle,
-            onBack: () => Navigator.pop(context),
-            onPresent: _startPresenting,
-            onClear: _clearScript,
-            onSave: _saveScript,
-            onImport: _importFile,
-            onRename: _showRenameDialog,
-            onSearch: () => unawaited(_showEditorSearchDialog()),
-            onSettings: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+      child: Stack(
+        children: [
+          Scaffold(
+            backgroundColor: const Color(0xFF0A0A0A),
+            appBar: AppBar(
+              toolbarHeight: 110,
+              backgroundColor: const Color(0xFF0A0A0A),
+              automaticallyImplyLeading: false,
+              title: ProjectActionsSuite(
+                title: _currentTitle,
+                onBack: () => Navigator.pop(context),
+                onPresent: _startPresenting,
+                onClear: _clearScript,
+                onSave: _saveScript,
+                onImport: _importFile,
+                onRename: _showRenameDialog,
+                onSearch: () => unawaited(_showEditorSearchDialog()),
+                onSettings: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+                ),
+                saveKey: _walkthroughSaveKey,
+                renameKey: _walkthroughRenameKey,
+              ),
             ),
-          ),
-        ),
-        bottomNavigationBar:
-            _buildBottomActions(keyboardVisible: keyboardVisible),
-        body: Stack(
-          children: [
-            Shortcuts(
-              shortcuts: {
-                LogicalKeySet(
-                        LogicalKeyboardKey.control, LogicalKeyboardKey.keyA):
-                    const _SelectAllIntent(),
-                LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
-                    const _SelectAllIntent(),
-                LogicalKeySet(
-                        LogicalKeyboardKey.control, LogicalKeyboardKey.keyC):
-                    const _CopyIntent(),
-                LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
-                    const _CopyIntent(),
-                LogicalKeySet(
-                    LogicalKeyboardKey.control,
-                    LogicalKeyboardKey.shift,
-                    LogicalKeyboardKey.keyF): const _SearchIntent(),
-                LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.shift,
-                    LogicalKeyboardKey.keyF): const _SearchIntent(),
-              },
-              child: Actions(
-                actions: {
-                  _SelectAllIntent:
-                      CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
-                    _selectAllBlocks();
-                    return null;
-                  }),
-                  _CopyIntent: CallbackAction<_CopyIntent>(onInvoke: (intent) {
-                    _onCopyClean();
-                    return null;
-                  }),
-                  _SearchIntent:
-                      CallbackAction<_SearchIntent>(onInvoke: (intent) {
-                    unawaited(_showEditorSearchDialog());
-                    return null;
-                  }),
-                },
-                child: Column(
-                  children: [
-                    FormattingToolbarMVP(
-                      onBold: _onBold,
-                      onUnderline: _onUnderline,
-                      onItalic: _onItalic,
-                      onClear: () {
-                        _setEditorState(() => _isCommandExecuting = true);
-                        final tagPattern = RegExp(
-                            r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
-                        if (_isGlobalSelection ||
-                            (_overlayKey.currentState?.hasSelection ?? false)) {
-                          // Global: strip ALL tags from every block
-                          for (final c in _controllers) {
-                            c.text = c.text.replaceAll(tagPattern, '');
-                          }
-                        } else {
-                          final c = _activeController;
-                          if (c != null) {
-                            final text = c.text;
-                            final sel = c.selection;
-                            if (sel.isValid && !sel.isCollapsed) {
-                              // Selection: strip tags inside the selected range, then
-                              // split any enclosing tags so surrounding text keeps style.
-                              final before = text.substring(0, sel.start);
-                              final selected =
-                                  text.substring(sel.start, sel.end);
-                              final after = text.substring(sel.end);
-                              final cleaned =
-                                  selected.replaceAll(tagPattern, '');
-                              final intermediate = before + cleaned + after;
-                              final cleanEnd = sel.start + cleaned.length;
-                              final result = _splitAllEnclosingStyles(
-                                  intermediate,
-                                  sel.start,
-                                  cleanEnd,
-                                  tagPattern);
-                              c.value = TextEditingValue(
-                                text: result,
-                                selection:
-                                    TextSelection.collapsed(offset: sel.start),
-                              );
-                            } else if (sel.isValid && sel.isCollapsed) {
-                              // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
-                              final cursorInPlain = sel.start >= text.length ||
-                                  text
-                                      .substring(sel.start)
-                                      .replaceAll(tagPattern, '')
-                                      .isEmpty;
-                              if (cursorInPlain) {
-                                // Baseline Mode: clear ALL tags from ALL blocks
-                                for (final ctrl in _controllers) {
-                                  ctrl.text =
-                                      ctrl.text.replaceAll(tagPattern, '');
+            bottomNavigationBar:
+                _buildBottomActions(keyboardVisible: keyboardVisible),
+            body: Stack(
+              children: [
+                Shortcuts(
+                  shortcuts: {
+                    LogicalKeySet(LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyA): const _SelectAllIntent(),
+                    LogicalKeySet(
+                            LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
+                        const _SelectAllIntent(),
+                    LogicalKeySet(LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyC): const _CopyIntent(),
+                    LogicalKeySet(
+                            LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC):
+                        const _CopyIntent(),
+                    LogicalKeySet(
+                        LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.shift,
+                        LogicalKeyboardKey.keyF): const _SearchIntent(),
+                    LogicalKeySet(
+                        LogicalKeyboardKey.meta,
+                        LogicalKeyboardKey.shift,
+                        LogicalKeyboardKey.keyF): const _SearchIntent(),
+                  },
+                  child: Actions(
+                    actions: {
+                      _SelectAllIntent:
+                          CallbackAction<_SelectAllIntent>(onInvoke: (intent) {
+                        _selectAllBlocks();
+                        return null;
+                      }),
+                      _CopyIntent:
+                          CallbackAction<_CopyIntent>(onInvoke: (intent) {
+                        _onCopyClean();
+                        return null;
+                      }),
+                      _SearchIntent:
+                          CallbackAction<_SearchIntent>(onInvoke: (intent) {
+                        unawaited(_showEditorSearchDialog());
+                        return null;
+                      }),
+                    },
+                    child: Column(
+                      children: [
+                        FormattingToolbarMVP(
+                          onBold: _onBold,
+                          onUnderline: _onUnderline,
+                          onItalic: _onItalic,
+                          onClear: () {
+                            _setEditorState(() => _isCommandExecuting = true);
+                            final tagPattern = RegExp(
+                                r'\[\/?(?:u|i|center|left|right|rtl|ltr|color|bg|font|align|size)(?:=[^\]]+)?\]|\*\*');
+                            if (_isGlobalSelection ||
+                                (_overlayKey.currentState?.hasSelection ??
+                                    false)) {
+                              // Global: strip ALL tags from every block
+                              for (final c in _controllers) {
+                                c.text = c.text.replaceAll(tagPattern, '');
+                              }
+                            } else {
+                              final c = _activeController;
+                              if (c != null) {
+                                final text = c.text;
+                                final sel = c.selection;
+                                if (sel.isValid && !sel.isCollapsed) {
+                                  // Selection: strip tags inside the selected range, then
+                                  // split any enclosing tags so surrounding text keeps style.
+                                  final before = text.substring(0, sel.start);
+                                  final selected =
+                                      text.substring(sel.start, sel.end);
+                                  final after = text.substring(sel.end);
+                                  final cleaned =
+                                      selected.replaceAll(tagPattern, '');
+                                  final intermediate = before + cleaned + after;
+                                  final cleanEnd = sel.start + cleaned.length;
+                                  final result = _splitAllEnclosingStyles(
+                                      intermediate,
+                                      sel.start,
+                                      cleanEnd,
+                                      tagPattern);
+                                  c.value = TextEditingValue(
+                                    text: result,
+                                    selection: TextSelection.collapsed(
+                                        offset: sel.start),
+                                  );
+                                } else if (sel.isValid && sel.isCollapsed) {
+                                  // Check if cursor is at end of line/paragraph → Baseline Mode: clear whole script
+                                  final cursorInPlain =
+                                      sel.start >= text.length ||
+                                          text
+                                              .substring(sel.start)
+                                              .replaceAll(tagPattern, '')
+                                              .isEmpty;
+                                  if (cursorInPlain) {
+                                    // Baseline Mode: clear ALL tags from ALL blocks
+                                    for (final ctrl in _controllers) {
+                                      ctrl.text =
+                                          ctrl.text.replaceAll(tagPattern, '');
+                                    }
+                                  } else {
+                                    // Word Mode: clear styles for the word at cursor
+                                    _clearStyleAtCursor(c, sel.start);
+                                  }
                                 }
-                              } else {
-                                // Word Mode: clear styles for the word at cursor
-                                _clearStyleAtCursor(c, sel.start);
                               }
                             }
-                          }
-                        }
-                        _isDirty = false;
-                        _setEditorState(() => _isCommandExecuting = false);
-                        _saveHistory(description: 'Clear Format');
-                      },
-                      onFontSize: onFontSize,
-                      onAlign: onAlign,
-                      onDirection: onDirection,
-                      onTextColor: onTextColorSelected,
-                      onBgColor: onBgColorSelected,
-                      onFontFamily: onFontFamily,
-                      onBgColorChange: handleBgColorChange,
-                      onAddBookmark: () => unawaited(_addEditorBookmark()),
-                      onRemoveBookmark: () =>
-                          unawaited(_deleteEditorBookmarkAtCurrentPosition()),
-                      onPreviousBookmark: () =>
-                          unawaited(_jumpEditorBookmark(-1)),
-                      onNextBookmark: () => unawaited(_jumpEditorBookmark(1)),
-                      lastTextColor: _lastChosenTextColor,
-                      lastHighlightColor: _lastChosenHighlightColor,
-                      onUndo: _undo,
-                      onRedo: _redo,
-                      canUndo: _historyIndex > 0,
-                      canRedo: _historyIndex < _history.length - 1,
-                      history: _history,
-                      historyIndex: _historyIndex,
-                      onHistorySelected: (idx) => _jumpToHistory(idx),
-                      activeSuite: _activeSuite,
-                      onSuiteToggle: (suite) {
-                        // Closing = explicitly closing (none), toggling same suite off, or switching suites
-                        final willClose =
-                            suite == EditorSuite.none || suite == _activeSuite;
-                        final willSwitch = suite != _activeSuite &&
-                            _activeSuite != EditorSuite.none;
-                        _suiteAutoSaveTimer?.cancel();
-                        if ((willClose || willSwitch) && _isSuiteDirty) {
-                          _commitHistory(_suiteSection ??
-                              '${_activeSuite.name.toUpperCase()} Session');
-                          _isSuiteDirty = false;
-                          _suiteSection = null;
-                        }
-                        _setEditorState(() {
-                          _activeSuite = (_activeSuite == suite)
-                              ? EditorSuite.none
-                              : suite;
-                        });
-                        if (_activeSuite != EditorSuite.none) {
-                          _suiteSection = null;
-                        }
-                      },
-                      onLayoutInteraction: (section) {
-                        _trackSuiteSection(section);
-                        _setEditorState(() => _isSuiteDirty = true);
-                      },
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          _dismissEditorSelectionForUserNavigation(
-                              'background-tap');
-                          FocusScope.of(context).unfocus();
-                        },
-                        behavior: HitTestBehavior.translucent,
-                        child: Container(
-                          color: Color(settings.scriptBgColor),
-                          child: GlobalSelectionOverlay(
-                            key: _overlayKey,
-                            controllers: _controllers,
-                            blockKeys: _blockKeys,
-                            onSelectionChanged: () => _setEditorState(() {
-                              final overlayState = _overlayKey.currentState;
-                              _isGlobalSelection = _controllers.isNotEmpty &&
-                                  _controllers.every((c) => c.isGlobalSelected);
-                              _syncSelectionSnapshotFromOverlay(
-                                'overlay-selection',
-                                allowShrink:
-                                    overlayState?.isRefinedSelection ?? false,
-                              );
-                              final rawRange = overlayState?.currentRawRange;
-                              if ((overlayState?.isRefinedSelection ?? false) &&
-                                  rawRange != null) {
-                                _setRecognizedBlockRange(
-                                  _normalizeBlockRange(
-                                    _BlockSelectionPoint(
-                                      blockIndex: rawRange.startBlock,
-                                      rawOffset: rawRange.startOffset,
-                                    ),
-                                    _BlockSelectionPoint(
-                                      blockIndex: rawRange.endBlock,
-                                      rawOffset: rawRange.endOffset,
-                                    ),
+                            _isDirty = false;
+                            _setEditorState(() => _isCommandExecuting = false);
+                            _saveHistory(description: 'Clear Format');
+                          },
+                          onFontSize: onFontSize,
+                          onAlign: onAlign,
+                          onDirection: onDirection,
+                          onTextColor: onTextColorSelected,
+                          onBgColor: onBgColorSelected,
+                          onFontFamily: onFontFamily,
+                          onBgColorChange: handleBgColorChange,
+                          onAddBookmark: () => unawaited(_addEditorBookmark()),
+                          onRemoveBookmark: () => unawaited(
+                              _deleteEditorBookmarkAtCurrentPosition()),
+                          onPreviousBookmark: () =>
+                              unawaited(_jumpEditorBookmark(-1)),
+                          onNextBookmark: () =>
+                              unawaited(_jumpEditorBookmark(1)),
+                          onLockedBookmarks: showLockedBookmarks,
+                          lastTextColor: _lastChosenTextColor,
+                          lastHighlightColor: _lastChosenHighlightColor,
+                          onUndo: _undo,
+                          onRedo: _redo,
+                          canUndo: _historyIndex > 0,
+                          canRedo: _historyIndex < _history.length - 1,
+                          history: _history,
+                          historyIndex: _historyIndex,
+                          onHistorySelected: (idx) => _jumpToHistory(idx),
+                          activeSuite: _activeSuite,
+                          onSuiteToggle: (suite) {
+                            // Closing = explicitly closing (none), toggling same suite off, or switching suites
+                            final willClose = suite == EditorSuite.none ||
+                                suite == _activeSuite;
+                            final willSwitch = suite != _activeSuite &&
+                                _activeSuite != EditorSuite.none;
+                            _suiteAutoSaveTimer?.cancel();
+                            if ((willClose || willSwitch) && _isSuiteDirty) {
+                              _commitHistory(_suiteSection ??
+                                  '${_activeSuite.name.toUpperCase()} Session');
+                              _isSuiteDirty = false;
+                              _suiteSection = null;
+                            }
+                            _setEditorState(() {
+                              _activeSuite = (_activeSuite == suite)
+                                  ? EditorSuite.none
+                                  : suite;
+                            });
+                            if (_activeSuite != EditorSuite.none) {
+                              _suiteSection = null;
+                            }
+                          },
+                          onLayoutInteraction: (section) {
+                            _trackSuiteSection(section);
+                            _setEditorState(() => _isSuiteDirty = true);
+                          },
+                          bookmarksEnabled: hasPremiumBookmarks,
+                          bookmarksSuiteKey: _walkthroughBookmarksKey,
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              _dismissEditorSelectionForUserNavigation(
+                                  'background-tap');
+                              FocusScope.of(context).unfocus();
+                            },
+                            behavior: HitTestBehavior.translucent,
+                            child: Container(
+                              color: Color(settings.scriptBgColor),
+                              child: GlobalSelectionOverlay(
+                                key: _overlayKey,
+                                controllers: _controllers,
+                                blockKeys: _blockKeys,
+                                onSelectionChanged: () => _setEditorState(() {
+                                  final overlayState = _overlayKey.currentState;
+                                  _isGlobalSelection =
+                                      _controllers.isNotEmpty &&
+                                          _controllers
+                                              .every((c) => c.isGlobalSelected);
+                                  _syncSelectionSnapshotFromOverlay(
                                     'overlay-selection',
-                                  ),
-                                  'overlay-selection',
-                                );
-                              } else if (!(overlayState?.hasSelection ??
-                                  false)) {
-                                _clearRecognizedBlockRange(
-                                    'overlay-selection-empty');
-                              }
-                            }),
-                            child: NotificationListener<ScrollNotification>(
-                              onNotification: (_) {
-                                _overlayKey.currentState?.refreshPositions();
-                                return false;
-                              },
-                              child: ListView.builder(
-                                padding:
-                                    const EdgeInsets.fromLTRB(24, 24, 24, 250),
-                                itemCount: _controllers.length,
-                                itemBuilder: (context, index) {
-                                  final overlayHasSelection =
-                                      _overlayKey.currentState?.hasSelection ??
-                                          false;
-                                  return _EditorBlock(
-                                    key: _blockKeys[index],
-                                    controller: _controllers[index],
-                                    focusNode: _focusNodes[index],
-                                    settings: settings,
-                                    isGlobalSelected: _isGlobalSelection,
-                                    hasOverlaySelection: overlayHasSelection,
-                                    inheritedRtl:
-                                        _editorBlockResolvedRtl(index),
-                                    onSubmitted: () => _addBlock(index + 1),
-                                    onTap: () {
-                                      _verticalArrowPreferredX = null;
-                                      _keyboardDismissedForSelection = false;
-                                      _dismissEditorSelectionForUserNavigation(
-                                          'block-tap');
-                                    },
-                                    onSelectAll: _selectAllBlocks,
-                                    onCopy: _onCopyClean,
-                                    onCut: _onCutClean,
-                                    onExtendSelection: () =>
-                                        _extendNativeSelectionToOverlay(index),
-                                    onPaste: _hasPasteableBlockClipboard
-                                        ? _pasteFromGlobalClipboard
-                                        : null,
-                                    hasBookmark:
-                                        _hasBookmarkInEditorBlock(index),
-                                    onBookmarkTap: () => unawaited(
-                                      _deleteEditorBookmarksForBlock(index),
-                                    ),
-                                    bookmarkAnchors:
-                                        _bookmarkAnchorsForEditorBlock(index),
-                                    onInlineBookmarkTap: (bookmarkId) =>
-                                        unawaited(
-                                      _deleteEditorBookmarkById(bookmarkId),
-                                    ),
+                                    allowShrink:
+                                        overlayState?.isRefinedSelection ??
+                                            false,
                                   );
-                                },
+                                  final rawRange =
+                                      overlayState?.currentRawRange;
+                                  if ((overlayState?.isRefinedSelection ??
+                                          false) &&
+                                      rawRange != null) {
+                                    _setRecognizedBlockRange(
+                                      _normalizeBlockRange(
+                                        _BlockSelectionPoint(
+                                          blockIndex: rawRange.startBlock,
+                                          rawOffset: rawRange.startOffset,
+                                        ),
+                                        _BlockSelectionPoint(
+                                          blockIndex: rawRange.endBlock,
+                                          rawOffset: rawRange.endOffset,
+                                        ),
+                                        'overlay-selection',
+                                      ),
+                                      'overlay-selection',
+                                    );
+                                  } else if (!(overlayState?.hasSelection ??
+                                      false)) {
+                                    _clearRecognizedBlockRange(
+                                        'overlay-selection-empty');
+                                  }
+                                }),
+                                child: KeyedSubtree(
+                                  key: _walkthroughEditorViewportKey,
+                                  child:
+                                      NotificationListener<ScrollNotification>(
+                                    onNotification: (_) {
+                                      _overlayKey.currentState
+                                          ?.refreshPositions();
+                                      return false;
+                                    },
+                                    child: ListView.builder(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          24, 24, 24, 250),
+                                      itemCount: _controllers.length,
+                                      itemBuilder: (context, index) {
+                                        final overlayHasSelection = _overlayKey
+                                                .currentState?.hasSelection ??
+                                            false;
+                                        return _EditorBlock(
+                                          key: _blockKeys[index],
+                                          controller: _controllers[index],
+                                          focusNode: _focusNodes[index],
+                                          settings: settings,
+                                          isGlobalSelected: _isGlobalSelection,
+                                          hasOverlaySelection:
+                                              overlayHasSelection,
+                                          inheritedRtl:
+                                              _editorBlockResolvedRtl(index),
+                                          onSubmitted: () =>
+                                              _addBlock(index + 1),
+                                          onTap: () {
+                                            _verticalArrowPreferredX = null;
+                                            _keyboardDismissedForSelection =
+                                                false;
+                                            _dismissEditorSelectionForUserNavigation(
+                                                'block-tap');
+                                          },
+                                          onSelectAll: _selectAllBlocks,
+                                          onCopy: _onCopyClean,
+                                          onCut: _onCutClean,
+                                          onExtendSelection: () =>
+                                              _extendNativeSelectionToOverlay(
+                                                  index),
+                                          onPaste: _hasPasteableBlockClipboard
+                                              ? _pasteFromGlobalClipboard
+                                              : null,
+                                          hasBookmark:
+                                              _hasBookmarkInEditorBlock(index),
+                                          onBookmarkTap: () => unawaited(
+                                            _deleteEditorBookmarksForBlock(
+                                                index),
+                                          ),
+                                          bookmarkAnchors:
+                                              _bookmarkAnchorsForEditorBlock(
+                                                  index),
+                                          onInlineBookmarkTap: (bookmarkId) =>
+                                              unawaited(
+                                            _deleteEditorBookmarkById(
+                                                bookmarkId),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (_isPendingLoad)
-              Positioned.fill(
-                child: Container(
-                  color: const Color(0xFF0A0A0A),
-                  child: const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 56,
-                          height: 56,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 4,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFFFFBF00)),
-                          ),
-                        ),
-                        SizedBox(height: 18),
-                        Text('Loading script…',
-                            style: TextStyle(
-                                color: Color(0xFFFFBF00),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
                 ),
-              ),
-            if (!_isPendingLoad && _hasAnyActiveEditorSelection)
-              Positioned(
-                right: 20,
-                bottom: 24,
-                child: _buildAppSelectionToolbar(),
-              ),
-            if (!_isPendingLoad && _editorSearchToolbarVisible)
-              Positioned(
-                left: 20,
-                right: 20,
-                bottom: _hasAnyActiveEditorSelection ? 86 : 24,
-                child: _buildEditorSearchToolbar(),
-              ),
-            if (settings.debugMode)
-              Positioned(
-                bottom: 24,
-                left: 24,
-                child: IgnorePointer(child: _buildDebugSentry()),
-              ),
-          ],
-        ),
+                if (_isPendingLoad)
+                  Positioned.fill(
+                    child: Container(
+                      color: const Color(0xFF0A0A0A),
+                      child: const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 56,
+                              height: 56,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 4,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFFFFBF00)),
+                              ),
+                            ),
+                            SizedBox(height: 18),
+                            Text('Loading script…',
+                                style: TextStyle(
+                                    color: Color(0xFFFFBF00),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                if (!_isPendingLoad && _hasAnyActiveEditorSelection)
+                  Positioned(
+                    right: 20,
+                    bottom: 24,
+                    child: _buildAppSelectionToolbar(),
+                  ),
+                if (!_isPendingLoad && _editorSearchToolbarVisible)
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: _hasAnyActiveEditorSelection ? 86 : 24,
+                    child: _buildEditorSearchToolbar(),
+                  ),
+                if (settings.debugMode)
+                  Positioned(
+                    bottom: 24,
+                    left: 24,
+                    child: IgnorePointer(child: _buildDebugSentry()),
+                  ),
+              ],
+            ),
+          ),
+          if (_walkthroughSampleGuideVisible) _buildSampleWalkthroughOverlay(),
+        ],
       ),
     );
   }

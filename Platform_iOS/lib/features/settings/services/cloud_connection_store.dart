@@ -43,12 +43,12 @@ class CloudConnectionStore {
     CloudProviderDefinition(
       id: googleDrive,
       label: 'Google Drive',
-      subtitle: 'Provider sync is planned for a future iOS build',
+      subtitle: 'Connect your Google Drive account for app-folder sync',
     ),
     CloudProviderDefinition(
       id: dropbox,
       label: 'Dropbox',
-      subtitle: 'Provider sync is planned for a future iOS build',
+      subtitle: 'Connect Dropbox account sync for AutoTeleprompter scripts',
     ),
   ];
 

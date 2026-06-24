@@ -43,7 +43,15 @@ class AuthState {
 
   bool get isSignedIn => email != null && email!.trim().isNotEmpty;
 
-  bool get hasPremiumAccess => isSignedIn && isPro;
+  // Debug-only escape hatch so simulator/debug builds can exercise Pro-gated
+  // UI (Cloud, Remote, creator tools) without a real subscription. It is
+  // compiled out of release builds (kDebugMode is false there) and additionally
+  // requires an explicit --dart-define=DEBUG_FORCE_PRO=true, so it can never
+  // unlock Pro for end users.
+  static const bool _debugForcePro = bool.fromEnvironment('DEBUG_FORCE_PRO');
+
+  bool get hasPremiumAccess =>
+      (isSignedIn && isPro) || (kDebugMode && _debugForcePro);
 
   bool get isBackendActive =>
       accountBackendEnabled && backendStatus == 'active';

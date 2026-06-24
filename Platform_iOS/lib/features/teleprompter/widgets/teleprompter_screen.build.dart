@@ -540,6 +540,15 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       ),
                     ),
                   ),
+                if (!settings.debugMode &&
+                    settings.showSoundLevelMeter &&
+                    (tState.isListening || tState.isStarting))
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: controlsReservedHeight + 10,
+                    child: _buildListeningMeter(tState),
+                  ),
 
                 // Controls overlay — control bar + speed slider stacked at bottom
                 Positioned(
@@ -649,6 +658,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                   _jumpPresenterBookmark(-1),
                               onNextBookmark: () => _jumpPresenterBookmark(1),
                               onSearch: _showPresenterSearchDialog,
+                              sttKey: _presenterSttKey,
+                              settingsKey: _presenterSettingsKey,
+                              bookmarksKey: _presenterBookmarksKey,
+                              resetKey: _presenterResetKey,
                             ),
                           ],
                         ),
@@ -656,10 +669,56 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     ),
                   ),
                 ),
+                if (_presenterWalkthroughVisible)
+                  _buildPresenterWalkthroughOverlay(),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildListeningMeter(TeleprompterState state) {
+    final level =
+        state.isStarting ? 0.0 : state.soundLevel.clamp(0.0, 1.0).toDouble();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: const Color(0xFFFFBF00).withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            state.isStarting ? Icons.hourglass_empty_rounded : Icons.graphic_eq,
+            color: const Color(0xFFFFBF00),
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: state.isStarting ? null : level,
+                minHeight: 8,
+                backgroundColor: Colors.white12,
+                color: const Color(0xFFFFBF00),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            state.isStarting ? 'STARTING' : 'LISTENING',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

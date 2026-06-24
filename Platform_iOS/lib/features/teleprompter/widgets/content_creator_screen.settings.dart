@@ -155,6 +155,16 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
                       style: TextStyle(color: Colors.white54),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  _CreatorResolutionSelector(
+                    value: settings.videoResolution,
+                    enabled: !_isRecording && !_recordStartInFlight,
+                    onChanged: (value) => unawaited(
+                      ref.read(settingsProvider.notifier).setVideoResolution(
+                            value,
+                          ),
+                    ),
+                  ),
                   if (!audioOnly && _availableCameras.isNotEmpty)
                     _CameraSelector(
                       cameras: _availableCameras,
@@ -190,6 +200,45 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
           );
         },
       ),
+    );
+  }
+}
+
+class _CreatorResolutionSelector extends StatelessWidget {
+  final String value;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  const _CreatorResolutionSelector({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Resolution',
+          style: TextStyle(
+            color: Colors.white70,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: '480p', label: Text('480')),
+            ButtonSegment(value: '720p', label: Text('720')),
+            ButtonSegment(value: '1080p', label: Text('1080')),
+          ],
+          selected: {value},
+          onSelectionChanged:
+              enabled ? (values) => onChanged(values.first) : null,
+        ),
+      ],
     );
   }
 }

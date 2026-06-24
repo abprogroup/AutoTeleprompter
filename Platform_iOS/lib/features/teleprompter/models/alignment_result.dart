@@ -13,6 +13,7 @@ class TeleprompterState {
   final bool hasError;
   final List<String> debugLogs;
   final List<SttAudioInputDevice> audioInputDevices;
+  final double soundLevel;
 
   /// Non-null when the script's language isn't available for Google STT.
   /// The UI should show a dialog prompting the user to download it.
@@ -26,6 +27,7 @@ class TeleprompterState {
     this.hasError = false,
     this.debugLogs = const [],
     this.audioInputDevices = const [],
+    this.soundLevel = 0,
     this.missingLanguage,
   });
 
@@ -37,6 +39,7 @@ class TeleprompterState {
     bool? hasError,
     List<String>? debugLogs,
     List<SttAudioInputDevice>? audioInputDevices,
+    double? soundLevel,
     String? missingLanguage = _clearSentinel,
   }) {
     return TeleprompterState(
@@ -47,6 +50,7 @@ class TeleprompterState {
       hasError: hasError ?? this.hasError,
       debugLogs: debugLogs ?? this.debugLogs,
       audioInputDevices: audioInputDevices ?? this.audioInputDevices,
+      soundLevel: soundLevel ?? this.soundLevel,
       missingLanguage: missingLanguage == _clearSentinel
           ? this.missingLanguage
           : missingLanguage,

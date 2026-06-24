@@ -4,245 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../script/services/script_bookmark_service.dart';
+import '../../../core/security/secure_script_store.dart';
 import '../services/local_backup_service.dart';
 
+part 'settings_provider.model.dart';
 part 'settings_provider.keys.dart';
 part 'settings_provider.script_persistence.dart';
 part 'settings_provider.stt.dart';
-
-class AppSettings {
-  final double fontSize;
-  final String languageMode; // 'auto', 'he', 'en'
-  final double scrollLead; // 0.2–0.5, viewport ratio for reading line
-  final String lastScript;
-  final String lastScriptTitle;
-  final String scrollMode; // 'auto' (speech) | 'manual' (timer)
-  final double scrollSpeed; // words per minute for manual mode
-  final String textAlign; // 'center' | 'left' | 'right'
-  final bool mirrorHorizontal; // flip horizontally
-  final bool mirrorVertical; // flip vertically
-  final int flipRotation; // screen rotation: 0, 90, 180, 270 degrees
-  final double lineSpacing; // 1.0–2.5
-  final double wordSpacing; // extra spacing between words (px)
-  final double letterSpacing; // extra spacing between letters (px)
-  final int scriptBgColor; // ARGB int, default black
-  final int currentWordColor; // ARGB int, default amber
-  final int futureWordColor; // ARGB int, default white
-  final double pastWordOpacity; // 0.0–0.6
-  final bool debugMode; // technical mode for STT logs
-  final String videoResolution; // '480p', '720p', '1080p'
-  final List<String> recentScripts; // JSON strings of script metadata
-  final String displayName; // User's name
-  final int lastTextColor; // Persisted selection color
-  final int lastHighlightColor; // Persisted selection highlight
-  final String lastImportPath; // Persisted folder path for importer
-  final int lastHistoryIndex; // v3.8 persistence
-  final bool showCurrentWordHighlight; // v3.9.5 toggle
-  final bool showUpcomingWordColor; // v3.9.5 toggle (default off)
-  final String fontFamily; // v3.9.5.46
-  final bool
-      showAlignmentOverride; // v3.9.8 toggle for presentation alignment override
-  final String sttEngine; // v4.0: 'google', 'whisper_base', 'whisper_small'
-  final double
-      readFadeIntensity; // v4.1: gradient fade for read text (0.0=off, 1.0=full)
-  final bool
-      sttVisibleSkipEnabled; // v4.1.7: opt-in viewport skip; default false
-  final bool allowScrollDuringActiveSession;
-  final bool sttStrictBulletMode;
-  final bool sttHardVisibleSkipEnabled;
-  final bool sttManualProfileEnabled;
-  final int sttManualStartAdvanceSmallWords;
-  final int sttManualStartAdvanceBigWords;
-  final int sttManualSafetySmallWords;
-  final int sttManualSafetyBigWords;
-  final int sttManualVisibleSkipSmallWords;
-  final int sttManualVisibleSkipBigWords;
-  final int sttManualBigWordMinLetters;
-  final String
-      sttInputDeviceId; // iOS: AVAudioSession input UID, empty = system default
-  final String sttInputDeviceLabel;
-  final String contentCreatorRecordingFormat;
-  final String contentCreatorRecordingAudioMode;
-  final bool contentCreatorRecordingControlsSpeech;
-
-  static const String contentCreatorRecordingFormatMp4 = 'mp4';
-  static const String contentCreatorRecordingFormatAudio = 'audio';
-  static const String contentCreatorRecordingAudioCamera = 'camera';
-
-  const AppSettings({
-    this.fontSize = 20.0,
-    this.languageMode = 'auto',
-    this.scrollLead = 0.32,
-    this.lastScript = '',
-    this.lastScriptTitle = '',
-    this.scrollMode = 'auto',
-    this.scrollSpeed = 100.0,
-    this.textAlign = 'center',
-    this.mirrorHorizontal = false,
-    this.mirrorVertical = false,
-    this.flipRotation = 0,
-    this.lineSpacing = 1.2,
-    this.wordSpacing = 0.0, // default: no extra word spacing
-    this.letterSpacing = 0.0, // default: no extra letter spacing
-    this.scriptBgColor = 0xFF000000,
-    this.currentWordColor = 0xFFFFBF00,
-    this.futureWordColor = 0xFFFFFFFF,
-    this.pastWordOpacity = 0.7,
-    this.debugMode = false,
-    this.videoResolution = '720p',
-    this.recentScripts = const [],
-    this.displayName = 'Guest',
-    this.lastTextColor = 0xFFFFBF00,
-    this.lastHighlightColor = 0x4DFFFFFF,
-    this.lastImportPath = '',
-    this.lastHistoryIndex = -1,
-    this.showCurrentWordHighlight = false,
-    this.showUpcomingWordColor = false,
-    this.fontFamily = 'Inter',
-    this.showAlignmentOverride = false,
-    this.sttEngine = 'google',
-    this.readFadeIntensity = 1.0,
-    this.sttVisibleSkipEnabled = false,
-    this.allowScrollDuringActiveSession = false,
-    this.sttStrictBulletMode = false,
-    this.sttHardVisibleSkipEnabled = false,
-    this.sttManualProfileEnabled = false,
-    this.sttManualStartAdvanceSmallWords = 4,
-    this.sttManualStartAdvanceBigWords = 3,
-    this.sttManualSafetySmallWords = 2,
-    this.sttManualSafetyBigWords = 1,
-    this.sttManualVisibleSkipSmallWords = 0,
-    this.sttManualVisibleSkipBigWords = 0,
-    this.sttManualBigWordMinLetters = 5,
-    this.sttInputDeviceId = '',
-    this.sttInputDeviceLabel = 'System default microphone',
-    this.contentCreatorRecordingFormat = contentCreatorRecordingFormatMp4,
-    this.contentCreatorRecordingAudioMode = contentCreatorRecordingAudioCamera,
-    this.contentCreatorRecordingControlsSpeech = false,
-  });
-
-  AppSettings copyWith({
-    double? fontSize,
-    String? languageMode,
-    double? scrollLead,
-    String? lastScript,
-    String? lastScriptTitle,
-    String? scrollMode,
-    double? scrollSpeed,
-    String? textAlign,
-    bool? mirrorHorizontal,
-    bool? mirrorVertical,
-    int? flipRotation,
-    double? lineSpacing,
-    double? wordSpacing,
-    double? letterSpacing,
-    int? scriptBgColor,
-    int? currentWordColor,
-    int? futureWordColor,
-    double? pastWordOpacity,
-    bool? debugMode,
-    String? videoResolution,
-    List<String>? recentScripts,
-    String? displayName,
-    int? lastTextColor,
-    int? lastHighlightColor,
-    String? lastImportPath,
-    int? lastHistoryIndex,
-    bool? showCurrentWordHighlight,
-    bool? showUpcomingWordColor,
-    String? fontFamily,
-    bool? showAlignmentOverride,
-    String? sttEngine,
-    double? readFadeIntensity,
-    bool? sttVisibleSkipEnabled,
-    bool? allowScrollDuringActiveSession,
-    bool? sttStrictBulletMode,
-    bool? sttHardVisibleSkipEnabled,
-    bool? sttManualProfileEnabled,
-    int? sttManualStartAdvanceSmallWords,
-    int? sttManualStartAdvanceBigWords,
-    int? sttManualSafetySmallWords,
-    int? sttManualSafetyBigWords,
-    int? sttManualVisibleSkipSmallWords,
-    int? sttManualVisibleSkipBigWords,
-    int? sttManualBigWordMinLetters,
-    String? sttInputDeviceId,
-    String? sttInputDeviceLabel,
-    String? contentCreatorRecordingFormat,
-    String? contentCreatorRecordingAudioMode,
-    bool? contentCreatorRecordingControlsSpeech,
-  }) {
-    return AppSettings(
-      fontSize: fontSize ?? this.fontSize,
-      languageMode: languageMode ?? this.languageMode,
-      scrollLead: scrollLead ?? this.scrollLead,
-      lastScript: lastScript ?? this.lastScript,
-      lastScriptTitle: lastScriptTitle ?? this.lastScriptTitle,
-      scrollMode: scrollMode ?? this.scrollMode,
-      scrollSpeed: scrollSpeed ?? this.scrollSpeed,
-      textAlign: textAlign ?? this.textAlign,
-      mirrorHorizontal: mirrorHorizontal ?? this.mirrorHorizontal,
-      mirrorVertical: mirrorVertical ?? this.mirrorVertical,
-      flipRotation: flipRotation ?? this.flipRotation,
-      lineSpacing: lineSpacing ?? this.lineSpacing,
-      wordSpacing: wordSpacing ?? this.wordSpacing,
-      letterSpacing: letterSpacing ?? this.letterSpacing,
-      scriptBgColor: scriptBgColor ?? this.scriptBgColor,
-      currentWordColor: currentWordColor ?? this.currentWordColor,
-      futureWordColor: futureWordColor ?? this.futureWordColor,
-      pastWordOpacity: pastWordOpacity ?? this.pastWordOpacity,
-      debugMode: debugMode ?? this.debugMode,
-      videoResolution: videoResolution ?? this.videoResolution,
-      recentScripts: recentScripts ?? this.recentScripts,
-      displayName: displayName ?? this.displayName,
-      lastTextColor: lastTextColor ?? this.lastTextColor,
-      lastHighlightColor: lastHighlightColor ?? this.lastHighlightColor,
-      lastImportPath: lastImportPath ?? this.lastImportPath,
-      lastHistoryIndex: lastHistoryIndex ?? this.lastHistoryIndex,
-      showCurrentWordHighlight:
-          showCurrentWordHighlight ?? this.showCurrentWordHighlight,
-      showUpcomingWordColor:
-          showUpcomingWordColor ?? this.showUpcomingWordColor,
-      fontFamily: fontFamily ?? this.fontFamily,
-      showAlignmentOverride:
-          showAlignmentOverride ?? this.showAlignmentOverride,
-      sttEngine: sttEngine ?? this.sttEngine,
-      readFadeIntensity: readFadeIntensity ?? this.readFadeIntensity,
-      sttVisibleSkipEnabled:
-          sttVisibleSkipEnabled ?? this.sttVisibleSkipEnabled,
-      allowScrollDuringActiveSession:
-          allowScrollDuringActiveSession ?? this.allowScrollDuringActiveSession,
-      sttStrictBulletMode: sttStrictBulletMode ?? this.sttStrictBulletMode,
-      sttHardVisibleSkipEnabled:
-          sttHardVisibleSkipEnabled ?? this.sttHardVisibleSkipEnabled,
-      sttManualProfileEnabled:
-          sttManualProfileEnabled ?? this.sttManualProfileEnabled,
-      sttManualStartAdvanceSmallWords: sttManualStartAdvanceSmallWords ??
-          this.sttManualStartAdvanceSmallWords,
-      sttManualStartAdvanceBigWords:
-          sttManualStartAdvanceBigWords ?? this.sttManualStartAdvanceBigWords,
-      sttManualSafetySmallWords:
-          sttManualSafetySmallWords ?? this.sttManualSafetySmallWords,
-      sttManualSafetyBigWords:
-          sttManualSafetyBigWords ?? this.sttManualSafetyBigWords,
-      sttManualVisibleSkipSmallWords:
-          sttManualVisibleSkipSmallWords ?? this.sttManualVisibleSkipSmallWords,
-      sttManualVisibleSkipBigWords:
-          sttManualVisibleSkipBigWords ?? this.sttManualVisibleSkipBigWords,
-      sttManualBigWordMinLetters:
-          sttManualBigWordMinLetters ?? this.sttManualBigWordMinLetters,
-      sttInputDeviceId: sttInputDeviceId ?? this.sttInputDeviceId,
-      sttInputDeviceLabel: sttInputDeviceLabel ?? this.sttInputDeviceLabel,
-      contentCreatorRecordingFormat:
-          contentCreatorRecordingFormat ?? this.contentCreatorRecordingFormat,
-      contentCreatorRecordingAudioMode: contentCreatorRecordingAudioMode ??
-          this.contentCreatorRecordingAudioMode,
-      contentCreatorRecordingControlsSpeech:
-          contentCreatorRecordingControlsSpeech ??
-              this.contentCreatorRecordingControlsSpeech,
-    );
-  }
-}
 
 class SettingsNotifier extends Notifier<AppSettings>
     with SettingsNotifierScriptPersistence, SettingsNotifierSttProfile {
@@ -262,7 +30,7 @@ class SettingsNotifier extends Notifier<AppSettings>
 
     for (final json in rawRecents) {
       try {
-        final decoded = Map<String, dynamic>.from(jsonDecode(json));
+        var decoded = Map<String, dynamic>.from(jsonDecode(json));
         bool itemModified = false;
 
         // 1. Repair Type Integrity (PDF/DOCX/RTF guessing)
@@ -298,6 +66,15 @@ class SettingsNotifier extends Notifier<AppSettings>
               'rec_${DateTime.now().millisecondsSinceEpoch}_${rawRecents.indexOf(json)}';
           itemModified = true;
         }
+        final legacyText = decoded['fullText'];
+        if (legacyText is String && legacyText.isNotEmpty) {
+          decoded = await SecureScriptStore().secureMetadata(
+            decoded,
+            text: legacyText,
+            historyJson: decoded['historyJson'] as String?,
+          );
+          itemModified = true;
+        }
 
         if (itemModified) needsResave = true;
         sanitizedRecents.add(jsonEncode(decoded));
@@ -306,8 +83,33 @@ class SettingsNotifier extends Notifier<AppSettings>
       }
     }
 
+    var recentsForState = sanitizedRecents;
+    // Collapse any pre-existing duplicates (same file/title) accumulated before
+    // the dedup guard existed, so the activity list shows each script once.
+    if (_dedupeRecentMetadataList(recentsForState)) {
+      needsResave = true;
+    }
     if (needsResave) {
-      await prefs.setStringList(_recentScriptsKey, sanitizedRecents);
+      await prefs.setStringList(_recentScriptsKey, recentsForState);
+    }
+    var lastScriptSessionId = prefs.getString(_lastScriptSessionIdKey) ?? '';
+    final legacyLastScript = prefs.getString(_lastScriptKey) ?? '';
+    if (legacyLastScript.trim().isNotEmpty) {
+      try {
+        final secureId = await SecureScriptStore().save(
+          recordId: 'last_${DateTime.now().microsecondsSinceEpoch}',
+          text: legacyLastScript,
+        );
+        lastScriptSessionId = secureId;
+        await prefs.setString(_lastScriptSessionIdKey, secureId);
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'settings.iosSecureLastScriptMigration',
+        );
+      }
+      await prefs.remove(_lastScriptKey);
     }
 
     final manualStartSmall =
@@ -343,8 +145,9 @@ class SettingsNotifier extends Notifier<AppSettings>
       fontSize: (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(10.0, 80.0),
       languageMode: prefs.getString(_languageKey) ?? 'auto',
       scrollLead: prefs.getDouble(_scrollLeadKey) ?? 0.32,
-      lastScript: prefs.getString(_lastScriptKey) ?? '',
+      lastScript: '',
       lastScriptTitle: prefs.getString('last_script_title') ?? '',
+      lastScriptSessionId: lastScriptSessionId,
       scrollMode: prefs.getString(_scrollModeKey) ?? 'auto',
       scrollSpeed: prefs.getDouble(_scrollSpeedKey) ?? 100.0,
       textAlign: prefs.getString(_textAlignKey) ?? 'center',
@@ -360,7 +163,7 @@ class SettingsNotifier extends Notifier<AppSettings>
       pastWordOpacity: prefs.getDouble(_pastWordOpacityKey) ?? 0.3,
       debugMode: prefs.getBool(_debugModeKey) ?? false,
       videoResolution: prefs.getString(_videoResolutionKey) ?? '720p',
-      recentScripts: sanitizedRecents,
+      recentScripts: recentsForState,
       displayName: prefs.getString(_displayNameKey) ?? 'Guest',
       lastTextColor: prefs.getInt(_lastTextColorKey) ?? 0xFFFFBF00,
       lastHighlightColor: prefs.getInt(_lastHighlightColorKey) ?? 0x4DFFFFFF,
@@ -373,6 +176,7 @@ class SettingsNotifier extends Notifier<AppSettings>
       showAlignmentOverride: prefs.getBool(_showAlignmentOverrideKey) ?? false,
       sttEngine: sanitizeSttEngine(prefs.getString(_sttEngineKey)),
       readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
+      showSoundLevelMeter: prefs.getBool(_showSoundLevelMeterKey) ?? false,
       sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
       allowScrollDuringActiveSession:
           prefs.getBool(_allowScrollDuringActiveSessionKey) ?? false,
@@ -400,6 +204,15 @@ class SettingsNotifier extends Notifier<AppSettings>
       ),
       contentCreatorRecordingControlsSpeech:
           prefs.getBool(_contentCreatorRecordingControlsSpeechKey) ?? false,
+      importColorMode: _normalizeImportColorMode(
+        prefs.getString(_importColorModeKey),
+      ),
+      reduceMotion: prefs.getBool(_reduceMotionKey) ?? false,
+      uiScale: _normalizeUiScale(prefs.getDouble(_uiScaleKey)),
+      cloudAutoSyncOnSave: prefs.getBool(_cloudAutoSyncOnSaveKey) ?? true,
+      syncDeletedScriptsFolder:
+          prefs.getBool(_syncDeletedScriptsFolderKey) ?? false,
+      recordingAutoBackup: prefs.getBool(_recordingAutoBackupKey) ?? false,
     );
   }
 
@@ -420,6 +233,20 @@ class SettingsNotifier extends Notifier<AppSettings>
       default:
         return AppSettings.contentCreatorRecordingAudioCamera;
     }
+  }
+
+  String _normalizeImportColorMode(String? value) {
+    switch (value) {
+      case AppSettings.importColorModePrompter:
+      case AppSettings.importColorModeDocument:
+        return value!;
+      default:
+        return AppSettings.importColorModePrompter;
+    }
+  }
+
+  double _normalizeUiScale(double? value) {
+    return (value ?? 1.0).clamp(0.90, 1.25).toDouble();
   }
 
   Future<void> setFontSize(double size) async {
@@ -534,9 +361,55 @@ class SettingsNotifier extends Notifier<AppSettings>
     await prefs.setString(_videoResolutionKey, resolution);
   }
 
+  Future<void> setImportColorMode(String mode) async {
+    final normalized = _normalizeImportColorMode(mode);
+    state = state.copyWith(importColorMode: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_importColorModeKey, normalized);
+  }
+
+  Future<void> setReduceMotion(bool enabled) async {
+    state = state.copyWith(reduceMotion: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_reduceMotionKey, enabled);
+  }
+
+  Future<void> setUiScale(double scale) async {
+    final normalized = _normalizeUiScale(scale);
+    state = state.copyWith(uiScale: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_uiScaleKey, normalized);
+  }
+
+  Future<void> setCloudAutoSyncOnSave(bool enabled) async {
+    state = state.copyWith(cloudAutoSyncOnSave: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_cloudAutoSyncOnSaveKey, enabled);
+  }
+
+  Future<void> setSyncDeletedScriptsFolder(bool enabled) async {
+    state = state.copyWith(syncDeletedScriptsFolder: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_syncDeletedScriptsFolderKey, enabled);
+  }
+
+  Future<void> setRecordingAutoBackup(bool enabled) async {
+    state = state.copyWith(recordingAutoBackup: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_recordingAutoBackupKey, enabled);
+  }
+
   Future<void> addToRecent(String metadataJson) async {
     final list = List<String>.from(state.recentScripts);
-    final Map<String, dynamic> newData = jsonDecode(metadataJson);
+    var newData = Map<String, dynamic>.from(jsonDecode(metadataJson));
+    final legacyText = newData['fullText'];
+    if (legacyText is String && legacyText.isNotEmpty) {
+      newData = await SecureScriptStore().secureMetadata(
+        newData,
+        text: legacyText,
+        historyJson: newData['historyJson'] as String?,
+      );
+    }
     final String? newSessionId = newData['sessionId'] as String?;
     final String? newTitle = newData['title'] as String?;
 
@@ -556,7 +429,7 @@ class SettingsNotifier extends Notifier<AppSettings>
     });
 
     // Insert the latest version at the top
-    list.insert(0, metadataJson);
+    list.insert(0, jsonEncode(newData));
     if (list.length > 20) list.removeLast();
 
     state = state.copyWith(recentScripts: list);
@@ -583,6 +456,9 @@ class SettingsNotifier extends Notifier<AppSettings>
     await prefs.setStringList(_recentScriptsKey, list);
     for (final item in removedItems) {
       await _backupRemovedRecentItem(item);
+      await SecureScriptStore().delete(
+        SecureScriptStore.recordIdFromMetadata(item),
+      );
     }
   }
 
@@ -633,6 +509,19 @@ class SettingsNotifier extends Notifier<AppSettings>
     await prefs.setDouble(_letterSpacingKey, 0.0);
     await prefs.setDouble(_fontSizeKey, 18.0);
     await prefs.setString(_fontFamilyKey, 'Inter');
+  }
+
+  Future<void> setDocumentImportAppearance({int? scriptBgColor}) async {
+    final normalizedBg = scriptBgColor ?? 0xFFFFFFFF;
+    state = state.copyWith(
+      scriptBgColor: normalizedBg,
+      currentWordColor: 0xFFFFBF00,
+      futureWordColor: 0xFF000000,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_scriptBgColorKey, normalizedBg);
+    await prefs.setInt(_currentWordColorKey, 0xFFFFBF00);
+    await prefs.setInt(_futureWordColorKey, 0xFF000000);
   }
 
   Future<void> applySessionStyles(Map<String, dynamic> styles) async {

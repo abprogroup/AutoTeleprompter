@@ -19,6 +19,7 @@ import './editor/components/global_selection_overlay.dart';
 import './editor/components/ghost_selection_controls.dart';
 import '../providers/script_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
+import '../../../core/security/secure_script_store.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -39,6 +40,7 @@ import '../services/markup_decoration_service.dart';
 import '../services/editor_font_service.dart';
 import '../services/editor_text_geometry_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 import '../../../platform/keyboard/platform_keyboard.dart';
 
@@ -48,6 +50,7 @@ part 'script_editor_screen.dialogs_history.dart';
 part 'script_editor_screen.styling_commands.dart';
 part 'script_editor_screen.file_present.dart';
 part 'script_editor_screen.build.dart';
+part 'script_editor_screen.walkthrough.dart';
 part 'script_editor_screen.selection_clipboard.dart';
 part 'script_editor_screen.selection_clipboard_commands.dart';
 part 'script_editor_screen.selection_clipboard_paste.dart';
@@ -87,14 +90,19 @@ enum _BlockClipboardKind {
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
+  final bool showWalkthroughSampleGuide;
   const ScriptEditorScreen(
-      {super.key, this.shouldAutoLoad = false, this.pendingFile});
+      {super.key,
+      this.shouldAutoLoad = false,
+      this.pendingFile,
+      this.showWalkthroughSampleGuide = false});
 
   @override
   ConsumerState<ScriptEditorScreen> createState() => _ScriptEditorScreenState();
 }
 
 const String _keyboardBookmarkSign = '\u00BB';
+const String _walkthroughTempSourceType = 'WALKTHROUGH_TEMP';
 
 class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     with StylingLogicMixin<ScriptEditorScreen>, WidgetsBindingObserver {
@@ -148,6 +156,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isSuiteDirty = false;
   bool _isCommandExecuting = false;
   bool _isDirty = false;
+  bool _walkthroughSampleGuideVisible = false;
+  int _walkthroughSampleGuideStep = 0;
+  final GlobalKey _walkthroughEditorViewportKey = GlobalKey();
+  final GlobalKey _walkthroughRenameKey = GlobalKey();
+  final GlobalKey _walkthroughSaveKey = GlobalKey();
+  final GlobalKey _walkthroughBookmarksKey = GlobalKey();
+  final GlobalKey _walkthroughPresentKey = GlobalKey();
   bool _isLoading = false;
   List<String>? _blockClipboard; // raw markup per block, written by Cut/Copy
   _BlockClipboardKind _blockClipboardKind =
@@ -223,6 +238,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _isInit = true;
       _isPendingLoad = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _importFile());
+    }
+    if (widget.showWalkthroughSampleGuide) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scheduleSampleWalkthroughStart(),
+      );
     }
   }
 

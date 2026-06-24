@@ -251,6 +251,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             isStarting: false,
             statusMessage: '',
             hasError: false,
+            soundLevel: status == SpeechStatus.listening ? s.soundLevel : 0,
           ));
     };
 
@@ -266,7 +267,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             hasError: isFatal,
             isListening: isFatal ? false : s.isListening,
             isStarting: isFatal ? false : s.isStarting,
+            soundLevel: isFatal ? 0 : s.soundLevel,
           ));
+    };
+
+    _sttService.onSoundLevelChange = (level) {
+      if (_useWhisper || _disposed || _sessionStopped) return;
+      final normalized = ((level + 2) / 12).clamp(0.0, 1.0).toDouble();
+      _safeSetState((s) => s.copyWith(soundLevel: normalized));
     };
 
     _sttService.onLanguageUnavailable = (requestedLocale) {
@@ -280,6 +288,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             hasError: true,
             isListening: false,
             isStarting: false,
+            soundLevel: 0,
             statusMessage:
                 'Speech recognition language not installed on this device',
           ));
@@ -296,6 +305,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             hasError: true,
             isListening: false,
             isStarting: false,
+            soundLevel: 0,
             statusMessage:
                 '$langName speech recognition requires an internet connection. '
                 'This language is not available offline on your device. '
@@ -341,6 +351,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
               hasError: true,
               isListening: false,
               isStarting: false,
+              soundLevel: 0,
             ));
       }
     };
@@ -377,6 +388,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           isListening: false,
           statusMessage: 'Google speech blocked on this device. '
               'Go to Settings and download a Whisper model for offline recognition.',
+          soundLevel: 0,
         ));
   }
 
@@ -501,6 +513,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         hasError: false,
         statusMessage: '',
         debugLogs: [],
+        soundLevel: 0,
         missingLanguage: null);
 
     _addDebugLog(
@@ -566,6 +579,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
               statusMessage: result.message ?? 'Speech recognition failed',
               hasError: true,
               isListening: false,
+              soundLevel: 0,
             ));
         return;
       }
@@ -616,6 +630,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           isStarting: false,
           hasError: false,
           statusMessage: '',
+          soundLevel: 0,
         );
       } catch (_) {}
     }

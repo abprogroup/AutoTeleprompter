@@ -6,6 +6,8 @@ class ProjectActionsSuite extends StatelessWidget {
   final VoidCallback onBack, onPresent, onClear, onSave, onImport, onRename;
   final VoidCallback onSearch, onSettings;
   final String title;
+  final Key? saveKey;
+  final Key? renameKey;
 
   const ProjectActionsSuite({
     super.key,
@@ -18,6 +20,8 @@ class ProjectActionsSuite extends StatelessWidget {
     required this.onSearch,
     required this.onSettings,
     required this.title,
+    this.saveKey,
+    this.renameKey,
   });
 
   @override
@@ -33,7 +37,10 @@ class ProjectActionsSuite extends StatelessWidget {
             IconButton(icon: const Icon(Icons.search), onPressed: onSearch),
             IconButton(
                 icon: const Icon(Icons.delete_outline), onPressed: onClear),
-            IconButton(icon: const Icon(Icons.save_alt), onPressed: onSave),
+            IconButton(
+                key: saveKey,
+                icon: const Icon(Icons.save_alt),
+                onPressed: onSave),
             IconButton(
                 icon: const Icon(Icons.folder_open), onPressed: onImport),
             IconButton(
@@ -56,6 +63,7 @@ class ProjectActionsSuite extends StatelessWidget {
                     overflow: TextOverflow.ellipsis)),
             const SizedBox(width: 4),
             IconButton(
+                key: renameKey,
                 icon: const Icon(Icons.edit_outlined,
                     size: 18, color: Color(0xFFFFBF00)),
                 onPressed: onRename),

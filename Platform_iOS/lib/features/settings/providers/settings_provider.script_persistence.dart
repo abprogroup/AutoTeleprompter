@@ -22,22 +22,40 @@ mixin SettingsNotifierScriptPersistence on Notifier<AppSettings> {
     String? historyJson,
   }) async {
     final currentTitle = title ?? state.lastScriptTitle;
+    final effectiveSessionId =
+        sessionId ?? 'script_${DateTime.now().microsecondsSinceEpoch}';
+    final secureRecordId = text.trim().isEmpty
+        ? ''
+        : await SecureScriptStore().save(
+            recordId: effectiveSessionId,
+            text: text,
+            historyJson: historyJson,
+          );
 
     if (!isSilent) {
       state = state.copyWith(
-        lastScript: text,
+        lastScript: '',
         lastScriptTitle: currentTitle,
+        lastScriptSessionId: secureRecordId,
         lastHistoryIndex: historyIndex ?? state.lastHistoryIndex,
       );
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastScriptKey, text);
+    await prefs.remove(_lastScriptKey);
+    if (secureRecordId.isNotEmpty) {
+      await prefs.setString(_lastScriptSessionIdKey, secureRecordId);
+    }
     if (title != null) {
       await prefs.setString('last_script_title', title);
     }
 
     final recentList = List<String>.from(state.recentScripts);
+    final currentIdentityKeys = _recentIdentityKeys(
+      title: currentTitle,
+      type: type,
+      sourcePath: sourcePath,
+    );
     var updated = false;
 
     for (var i = 0; i < recentList.length; i++) {
@@ -45,23 +63,38 @@ mixin SettingsNotifierScriptPersistence on Notifier<AppSettings> {
         final decoded = jsonDecode(recentList[i]);
         final itemSessionId = decoded['sessionId'];
         final itemTitle = decoded['title'];
+        final itemIdentityKeys = _recentIdentityKeys(
+          title: itemTitle?.toString(),
+          type: decoded['type']?.toString(),
+          sourcePath: decoded['sourcePath']?.toString(),
+        );
 
         var isMatch = false;
         if (sessionId != null && itemSessionId == sessionId) {
+          isMatch = true;
+        } else if (currentIdentityKeys.isNotEmpty &&
+            itemIdentityKeys.any(currentIdentityKeys.contains)) {
           isMatch = true;
         } else if (sessionId == null && itemTitle == currentTitle) {
           isMatch = true;
         }
 
         if (isMatch) {
-          decoded['fullText'] = text;
+          decoded['sessionId'] = effectiveSessionId;
+          if (secureRecordId.isNotEmpty) {
+            decoded[SecureScriptStore.recordIdKey] = secureRecordId;
+            decoded[SecureScriptStore.storageVersionKey] =
+                SecureScriptStore.storageVersion;
+          }
+          decoded.remove('fullText');
+          decoded.remove('historyJson');
+          decoded.remove('snippet');
           if (historyIndex != null) decoded['historyIndex'] = historyIndex;
           if (type != null) decoded['type'] = type;
           if (decoded['type'] == null) decoded['type'] = 'FILE';
           if (sourcePath != null && sourcePath.trim().isNotEmpty) {
             decoded['sourcePath'] = sourcePath;
           }
-          if (historyJson != null) decoded['historyJson'] = historyJson;
 
           final styleMap = decoded['style'] as Map<String, dynamic>? ?? {};
           if (fontSize != null) styleMap['fontSize'] = fontSize;
@@ -83,6 +116,7 @@ mixin SettingsNotifierScriptPersistence on Notifier<AppSettings> {
 
           recentList.removeAt(i);
           recentList.insert(0, jsonEncode(decoded));
+          _dedupeRecentMetadataList(recentList);
 
           updated = true;
           break;
@@ -95,14 +129,15 @@ mixin SettingsNotifierScriptPersistence on Notifier<AppSettings> {
         state = state.copyWith(recentScripts: recentList);
       }
       await prefs.setStringList(_recentScriptsKey, recentList);
-    } else if (sessionId != null) {
+    } else if (secureRecordId.isNotEmpty) {
       final newEntry = {
         'title': currentTitle,
-        'fullText': text,
         'type': type ?? 'FILE',
         if (sourcePath != null && sourcePath.trim().isNotEmpty)
           'sourcePath': sourcePath,
-        'sessionId': sessionId,
+        'sessionId': effectiveSessionId,
+        SecureScriptStore.recordIdKey: secureRecordId,
+        SecureScriptStore.storageVersionKey: SecureScriptStore.storageVersion,
         'historyIndex': historyIndex ?? 0,
         'lastModified': DateTime.now().toIso8601String(),
         'style': {
@@ -117,7 +152,6 @@ mixin SettingsNotifierScriptPersistence on Notifier<AppSettings> {
           if (futureWordColor != null) 'futureWordColor': futureWordColor,
           if (isRtl != null) 'isRtl': isRtl,
         },
-        'historyJson': historyJson,
       };
       recentList.insert(0, jsonEncode(newEntry));
       if (!isSilent) {
@@ -187,15 +221,16 @@ mixin SettingsNotifierScriptPersistence on Notifier<AppSettings> {
   }
 
   Future<void> _backupRemovedRecentItem(Map<String, dynamic> item) async {
-    final text = item['fullText']?.toString() ?? '';
-    if (text.trim().isEmpty) return;
     try {
+      final data = await SecureScriptStore().readFromMetadata(item);
+      final text = data?.text ?? '';
+      if (text.trim().isEmpty) return;
       await LocalBackupService().backupDeletedScript(
         title: item['title']?.toString() ?? 'Untitled script',
         text: text,
         sourceType: item['type']?.toString(),
         sourcePath: item['sourcePath']?.toString(),
-        historyJson: item['historyJson']?.toString(),
+        historyJson: data?.historyJson,
         historyIndex: (item['historyIndex'] as num?)?.toInt(),
         recentMetadata: item,
       );
@@ -207,4 +242,74 @@ mixin SettingsNotifierScriptPersistence on Notifier<AppSettings> {
       );
     }
   }
+}
+
+/// Collapses recent entries that point at the same script (same source file or
+/// same normalized title+type) so the activity list never shows the same file
+/// twice. Mirrors the macOS dedup so re-imports and re-saves coalesce. Returns
+/// true if anything was removed.
+bool _dedupeRecentMetadataList(List<String> recentList) {
+  final seen = <String>{};
+  var changed = false;
+  for (var i = 0; i < recentList.length; i++) {
+    try {
+      final decoded = Map<String, dynamic>.from(jsonDecode(recentList[i]));
+      final keys = _recentIdentityKeys(
+        title: decoded['title']?.toString(),
+        type: decoded['type']?.toString(),
+        sourcePath: decoded['sourcePath']?.toString(),
+      );
+      if (keys.isEmpty) continue;
+      final duplicate = keys.any(seen.contains);
+      if (!duplicate) {
+        seen.addAll(keys);
+        continue;
+      }
+      recentList.removeAt(i);
+      changed = true;
+      i--;
+    } catch (_) {
+      continue;
+    }
+  }
+  return changed;
+}
+
+List<String> _recentIdentityKeys({
+  String? title,
+  String? type,
+  String? sourcePath,
+}) {
+  final keys = <String>[];
+  final path = _normalizeRecentPath(sourcePath);
+  if (path.isNotEmpty) keys.add('path:$path');
+  final cleanTitle = _normalizeRecentTitle(title);
+  if (cleanTitle.isNotEmpty) {
+    final cleanType = (type ?? '').trim().toUpperCase();
+    keys.add('title:$cleanType:$cleanTitle');
+  }
+  return keys;
+}
+
+String _normalizeRecentPath(String? value) {
+  final path = value?.trim();
+  if (path == null || path.isEmpty) return '';
+  return path.replaceAll('\\', '/').toLowerCase();
+}
+
+String _normalizeRecentTitle(String? value) {
+  var title = value?.trim().toLowerCase() ?? '';
+  var changed = true;
+  while (changed) {
+    changed = false;
+    final next = title.replaceFirst(
+      RegExp(r'\.(?:atp|atp\.txt)$', caseSensitive: false),
+      '',
+    );
+    if (next != title) {
+      title = next;
+      changed = true;
+    }
+  }
+  return title.replaceAll(RegExp(r'\s+'), ' ');
 }

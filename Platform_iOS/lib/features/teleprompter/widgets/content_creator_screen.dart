@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:gal/gal.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../providers/teleprompter_provider.dart';
 import '../services/mobile_audio_recorder_service.dart';
@@ -12,10 +14,12 @@ import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import 'teleprompter_screen.dart';
 
 part 'content_creator_screen.recording.dart';
 part 'content_creator_screen.settings.dart';
+part 'content_creator_screen.walkthrough.dart';
 
 class ContentCreatorScreen extends ConsumerStatefulWidget {
   final bool audioOnlyEntry;
@@ -47,6 +51,12 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   int _countdown = 0;
   int _recordSeconds = 0;
   Timer? _recordTimer;
+  bool _creatorWalkthroughVisible = false;
+  int _creatorWalkthroughStep = 0;
+  final GlobalKey _creatorSurfaceKey = GlobalKey();
+  final GlobalKey _creatorRecordKey = GlobalKey();
+  final GlobalKey _creatorSpeechKey = GlobalKey();
+  final GlobalKey _creatorSettingsKey = GlobalKey();
 
   @override
   void initState() {
@@ -57,6 +67,18 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     } else {
       _initializeCamera();
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted ||
+          prefs.getBool('iosContentCreatorWalkthroughSeen') == true) {
+        return;
+      }
+      _setContentCreatorState(() {
+        _creatorWalkthroughVisible = true;
+        _creatorWalkthroughStep = 0;
+      });
+    });
   }
 
   Future<void> _initializeCamera() async {
@@ -175,6 +197,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
               children: [
                 const Spacer(flex: 6),
                 Expanded(
+                  key: _creatorSurfaceKey,
                   flex: 4,
                   child: audioOnly
                       ? _buildAudioOnlySurface()
@@ -286,6 +309,16 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
             ),
           ),
 
+          if (settings.showSoundLevelMeter &&
+              !settings.debugMode &&
+              (tState.isListening || tState.isStarting))
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 132,
+              child: _buildCreatorListeningMeter(tState),
+            ),
+
           // 3. Recording Controls & Floating Buttons
           Positioned(
             bottom: 20,
@@ -295,6 +328,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
               children: [
                 // Red Trigger Button
                 GestureDetector(
+                  key: _creatorRecordKey,
                   onTap: _recordStartInFlight ? null : _toggleRecording,
                   child: Container(
                     padding: const EdgeInsets.all(4),
@@ -339,6 +373,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                       ),
                       if (!settings.contentCreatorRecordingControlsSpeech)
                         IconButton(
+                          key: _creatorSpeechKey,
                           icon: Icon(
                             tState.isListening || tState.isStarting
                                 ? Icons.mic
@@ -350,6 +385,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                           onPressed: _toggleSpeechSession,
                         ),
                       IconButton(
+                        key: _creatorSettingsKey,
                         icon: const Icon(Icons.tune, color: Colors.white70),
                         onPressed: _showCreatorSettings,
                       ),
@@ -361,6 +397,54 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          if (_creatorWalkthroughVisible) _buildCreatorWalkthroughOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreatorListeningMeter(dynamic tState) {
+    final level = tState.isStarting
+        ? 0.0
+        : (tState.soundLevel as double).clamp(0.0, 1.0).toDouble();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: const Color(0xFFFFBF00).withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            tState.isStarting
+                ? Icons.hourglass_empty_rounded
+                : Icons.graphic_eq,
+            color: const Color(0xFFFFBF00),
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: tState.isStarting ? null : level,
+                minHeight: 8,
+                backgroundColor: Colors.white12,
+                color: const Color(0xFFFFBF00),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            tState.isStarting ? 'STARTING' : 'LISTENING',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

@@ -130,9 +130,7 @@ class EncryptedFileStore {
   }
 
   Future<Directory> ensureCollection(String collection) async {
-    final base = _baseDirectory == null
-        ? await getApplicationSupportDirectory()
-        : await _baseDirectory();
+    final base = await _resolveBaseDirectory();
     final dir = Directory(
       '${base.path}${Platform.pathSeparator}secure_storage'
       '${Platform.pathSeparator}${sanitizeId(collection)}',
@@ -142,10 +140,50 @@ class EncryptedFileStore {
   }
 
   Future<List<int>> _readOrCreateKey() async {
-    final existing = await _secureStorage.read(key: _keyName);
-    if (existing != null && existing.isNotEmpty) return base64Decode(existing);
+    try {
+      final existing = await _secureStorage.read(key: _keyName);
+      if (existing != null && existing.isNotEmpty) {
+        return base64Decode(existing);
+      }
+    } catch (_) {
+      return _readOrCreateFallbackKey();
+    }
     final key = _randomBytes(32);
-    await _secureStorage.write(key: _keyName, value: base64Encode(key));
+    try {
+      await _secureStorage.write(key: _keyName, value: base64Encode(key));
+    } catch (_) {
+      return _readOrCreateFallbackKey(seed: key);
+    }
+    return key;
+  }
+
+  Future<Directory> _resolveBaseDirectory() async {
+    if (_baseDirectory != null) return _baseDirectory();
+    try {
+      return await getApplicationSupportDirectory();
+    } catch (_) {
+      final dir = Directory(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        'autoteleprompter_ios_secure_store',
+      );
+      if (!await dir.exists()) await dir.create(recursive: true);
+      return dir;
+    }
+  }
+
+  Future<List<int>> _readOrCreateFallbackKey({List<int>? seed}) async {
+    final base = await _resolveBaseDirectory();
+    final dir = Directory(
+      '${base.path}${Platform.pathSeparator}secure_storage',
+    );
+    if (!await dir.exists()) await dir.create(recursive: true);
+    final file = File('${dir.path}${Platform.pathSeparator}$_keyName.key');
+    if (await file.exists()) {
+      final existing = await file.readAsString();
+      if (existing.trim().isNotEmpty) return base64Decode(existing);
+    }
+    final key = seed ?? _randomBytes(32);
+    await file.writeAsString(base64Encode(key), flush: true);
     return key;
   }
 

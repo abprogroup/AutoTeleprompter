@@ -3,12 +3,25 @@ part of 'script_editor_screen.dart';
 extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
   Future<void> _runPendingFileLoad(File file) async {
     try {
-      final settings = ref.read(settingsProvider);
-      _lastChosenTextColor = Color(settings.lastTextColor);
-      _lastChosenHighlightColor = Color(settings.lastHighlightColor);
+      final settingsBeforeImport = ref.read(settingsProvider);
+      _lastChosenTextColor = Color(settingsBeforeImport.lastTextColor);
+      _lastChosenHighlightColor =
+          Color(settingsBeforeImport.lastHighlightColor);
 
-      await ref.read(settingsProvider.notifier).resetToDefaultAppearance();
       final result = await ref.read(scriptProvider.notifier).parseFile(file);
+      if (result.isError) return;
+      final parsedSettings = ref.read(settingsProvider);
+      final settingsNotifier = ref.read(settingsProvider.notifier);
+      if (settingsBeforeImport.importColorMode ==
+          AppSettings.importColorModeDocument) {
+        final parsedBgChanged =
+            parsedSettings.scriptBgColor != settingsBeforeImport.scriptBgColor;
+        await settingsNotifier.setDocumentImportAppearance(
+          scriptBgColor: parsedBgChanged ? parsedSettings.scriptBgColor : null,
+        );
+      } else {
+        await settingsNotifier.resetToDefaultAppearance();
+      }
       final String content = result.text;
       final String title = file.path.split('/').last;
 
@@ -36,7 +49,10 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
       if (existingMeta != null) {
         final decoded = jsonDecode(existingMeta);
-        final String existingContent = decoded['fullText'] ?? '';
+        final secureData = await SecureScriptStore().readFromMetadata(
+          Map<String, dynamic>.from(decoded),
+        );
+        final String existingContent = secureData?.text ?? '';
         final String sessionId = decoded['sessionId'];
         final String type = decoded['type'] ?? 'TXT';
 
@@ -44,7 +60,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           finalContent = existingContent;
           finalType = type;
           finalSessionId = sessionId;
-          finalHistoryJson = decoded['historyJson'];
+          finalHistoryJson = secureData?.historyJson;
         } else {
           if (!mounted) return;
           final choice = await showDialog<String>(
@@ -99,7 +115,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             finalContent = existingContent;
             finalType = type;
             finalSessionId = sessionId;
-            finalHistoryJson = decoded['historyJson'];
+            finalHistoryJson = secureData?.historyJson;
           } else {
             if (mounted) Navigator.pop(context);
             return;
@@ -447,6 +463,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     _recentTimer?.cancel();
     final text = _getRefinedFullText();
     if (text.trim().isEmpty) return;
+    if (_sourceType == _walkthroughTempSourceType) return;
     final settings = ref.read(settingsProvider);
     await ref.read(settingsProvider.notifier).saveScript(
           text,

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,8 +15,13 @@ import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
+import '../../../core/security/secure_script_store.dart';
 import '../../../core/services/styling_service.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../../platform/file_import/platform_file_import.dart';
+
+part 'script_gallery_screen.onboarding.dart';
+part 'script_gallery_screen.recent_item.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {
   const ScriptGalleryScreen({super.key});
@@ -27,12 +33,24 @@ class ScriptGalleryScreen extends ConsumerStatefulWidget {
 
 class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   int _logoTaps = 0;
+  final GlobalKey _walkthroughNewScriptKey = GlobalKey();
+  final GlobalKey _walkthroughLoadScriptKey = GlobalKey();
+  final GlobalKey _walkthroughRecentsKey = GlobalKey();
+  bool _iosOnboardingVisible = false;
+  bool _iosOnboardingScheduled = false;
+  int _iosOnboardingStep = 0;
+
+  void _setGalleryState(VoidCallback fn) {
+    if (!mounted) return;
+    setState(fn);
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final auth = ref.watch(authProvider);
     final compactPhone = MediaQuery.sizeOf(context).width < 430;
+    _scheduleIosOnboardingIfNeeded();
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
@@ -108,108 +126,125 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: SingleChildScrollView(
-        physics: const ClampingScrollPhysics(),
-        padding: EdgeInsets.all(compactPhone ? 18 : 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Welcome Back, ${settings.displayName}.',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            const Text('Ready for your next broadcast?',
-                style: TextStyle(color: Colors.white54, fontSize: 15)),
-            const SizedBox(height: 24),
-            ScriptGalleryPremiumPanel(
-              auth: auth,
-              onSignIn: () => _openAccount(context),
-              onOpenCloud: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
-              ),
-              onLogout: () async {
-                await ref.read(authProvider.notifier).logout();
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Signed out.')),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            _GalleryActionCard(
-              title: 'New Script',
-              subtitle: 'Start with a blank canvas',
-              icon: Icons.add_rounded,
-              color: const Color(0xFFFFBF00),
-              onTap: () => _showNewScriptDialog(context),
-            ),
-            const SizedBox(height: 12),
-            _GalleryActionCard(
-              title: 'Load Script',
-              subtitle: 'Import ${PlatformFileImport.formatsLabel}',
-              icon: Icons.file_open_outlined,
-              color: Colors.white,
-              onTap: () {
-                // v3.9.5.59: Sovereign Fluid Transition
-                // Immediately navigate to the editor shell; the editor will handle
-                // triggering the file picker over its amber loading screen,
-                // eliminating home-to-home flicker.
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          const ScriptEditorScreen(shouldAutoLoad: true)),
-                );
-              },
-            ),
-            const SizedBox(height: 48),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            padding: EdgeInsets.all(compactPhone ? 18 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Recent Activity',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 18,
+                Text('Welcome Back, ${settings.displayName}.',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
                         fontWeight: FontWeight.bold)),
-                if (settings.recentScripts.length > 3)
-                  TextButton(
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        backgroundColor: const Color(0xFF0A0A0A),
-                        isScrollControlled: true,
-                        builder: (_) => const _FullHistorySheet(),
-                      );
-                    },
-                    child: const Text('show more',
-                        style: TextStyle(
-                            color: Color(0xFFFFBF00),
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                const Text('Ready for your next broadcast?',
+                    style: TextStyle(color: Colors.white54, fontSize: 15)),
+                const SizedBox(height: 24),
+                ScriptGalleryPremiumPanel(
+                  auth: auth,
+                  onSignIn: () => _openAccount(context),
+                  onOpenCloud: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
                   ),
+                  onLogout: () async {
+                    await ref.read(authProvider.notifier).logout();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Signed out.')),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                Column(
+                  children: [
+                    KeyedSubtree(
+                      key: _walkthroughNewScriptKey,
+                      child: _GalleryActionCard(
+                        title: 'New Script',
+                        subtitle: 'Start with a blank canvas',
+                        icon: Icons.add_rounded,
+                        color: const Color(0xFFFFBF00),
+                        onTap: () => _showNewScriptDialog(context),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    KeyedSubtree(
+                      key: _walkthroughLoadScriptKey,
+                      child: _GalleryActionCard(
+                        title: 'Load Script',
+                        subtitle: 'Import ${PlatformFileImport.formatsLabel}',
+                        icon: Icons.file_open_outlined,
+                        color: Colors.white,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ScriptEditorScreen(
+                                    shouldAutoLoad: true)),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 48),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Recent Activity',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    if (settings.recentScripts.length > 3)
+                      TextButton(
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            backgroundColor: const Color(0xFF0A0A0A),
+                            isScrollControlled: true,
+                            builder: (_) => const _FullHistorySheet(),
+                          );
+                        },
+                        child: const Text('show more',
+                            style: TextStyle(
+                                color: Color(0xFFFFBF00),
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                KeyedSubtree(
+                  key: _walkthroughRecentsKey,
+                  child: Column(
+                    children: settings.recentScripts.isEmpty
+                        ? [const _EmptyStatePlaceholder()]
+                        : settings.recentScripts.take(3).map((metaJson) {
+                            final meta = jsonDecode(metaJson);
+                            return _ScriptListItem(
+                              title: meta['title'] ?? 'Untitled Script',
+                              date: meta['date'] ?? 'Imported',
+                              type: meta['type'] ?? 'FILE',
+                              fullText: meta['fullText'] ?? '',
+                              snippet: meta['snippet'],
+                              sessionId: meta['sessionId'],
+                              secureRecordId:
+                                  meta[SecureScriptStore.recordIdKey],
+                            );
+                          }).toList(),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 12),
-            Column(
-              children: settings.recentScripts.isEmpty
-                  ? [const _EmptyStatePlaceholder()]
-                  : settings.recentScripts.take(3).map((metaJson) {
-                      final meta = jsonDecode(metaJson);
-                      return _ScriptListItem(
-                        title: meta['title'] ?? 'Untitled Script',
-                        date: meta['date'] ?? 'Imported',
-                        type: meta['type'] ?? 'FILE',
-                        fullText: meta['fullText'] ?? '',
-                        snippet: meta['snippet'],
-                        sessionId: meta['sessionId'],
-                      );
-                    }).toList(),
-            ),
-          ],
-        ),
+          ),
+          if (_iosOnboardingVisible)
+            _buildIosOnboardingOverlay(auth.hasPremiumAccess),
+        ],
       ),
     );
   }
@@ -277,9 +312,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       _openAccount(context);
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Remote control starts from Present mode.'),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const AppSettingsScreen(initialTab: AppSettingsTab.remote),
       ),
     );
   }
@@ -365,6 +402,7 @@ class _FullHistorySheet extends ConsumerWidget {
                     fullText: meta['fullText'] ?? '',
                     snippet: meta['snippet'],
                     sessionId: meta['sessionId'],
+                    secureRecordId: meta[SecureScriptStore.recordIdKey],
                   );
                 },
               );
@@ -427,227 +465,6 @@ class _GalleryActionCard extends StatelessWidget {
               ),
             ),
             const Icon(Icons.chevron_right_rounded, color: Colors.white24),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ScriptListItem extends ConsumerWidget {
-  final String title, date, type, fullText;
-  final String? snippet;
-  final String? sessionId;
-
-  const _ScriptListItem({
-    super.key,
-    required this.title,
-    required this.date,
-    required this.type,
-    required this.fullText,
-    this.snippet,
-    this.sessionId,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    Color labelColor;
-    Color labelBgColor;
-    Color labelBorderColor;
-
-    switch (type.toUpperCase()) {
-      case 'PRO':
-        labelColor = Colors.black;
-        labelBgColor = const Color(0xFFFFBF00);
-        labelBorderColor = Colors.transparent;
-        break;
-      case 'TEMP':
-        labelColor = const Color(0xFF64B5F6);
-        labelBgColor = labelColor.withValues(alpha: 0.15);
-        labelBorderColor = labelColor.withValues(alpha: 0.3);
-        break;
-      case 'RTF':
-      case 'DOCX':
-      case 'DOC':
-      case 'ODT':
-      case 'PAGES':
-        labelColor = const Color(0xFF81C784); // Greenish for documents
-        labelBgColor = labelColor.withValues(alpha: 0.15);
-        labelBorderColor = labelColor.withValues(alpha: 0.3);
-        break;
-      case 'PDF':
-        labelColor = const Color(0xFFE57373); // Reddish for PDF
-        labelBgColor = labelColor.withValues(alpha: 0.15);
-        labelBorderColor = labelColor.withValues(alpha: 0.3);
-        break;
-      case 'TXT':
-      case 'MD':
-      case 'LOG':
-        labelColor = Colors.white70;
-        labelBgColor = Colors.white10;
-        labelBorderColor = Colors.white24;
-        break;
-      default:
-        labelColor = const Color(0xFFCE93D8); // Purple for others
-        labelBgColor = labelColor.withValues(alpha: 0.15);
-        labelBorderColor = labelColor.withValues(alpha: 0.3);
-    }
-
-    final previewText = StylingService.recentScriptPreviewText(
-      fullText: fullText,
-      snippet: snippet,
-    );
-
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            Expanded(
-              child: InkWell(
-                onTap: () async {
-                  final settingsNotifier = ref.read(settingsProvider.notifier);
-                  final scriptNotifier = ref.read(scriptProvider.notifier);
-
-                  try {
-                    final List<String> recentScripts =
-                        ref.read(settingsProvider).recentScripts;
-                    String? targetMeta;
-                    for (var s in recentScripts) {
-                      final decodedJson = jsonDecode(s);
-                      if (sessionId != null &&
-                          decodedJson['sessionId'] == sessionId) {
-                        targetMeta = s;
-                        break;
-                      }
-                      if (sessionId == null &&
-                          decodedJson['title'] == title &&
-                          decodedJson['fullText'] == fullText) {
-                        targetMeta = s;
-                        break;
-                      }
-                    }
-
-                    Map<String, dynamic>? decodedMeta;
-                    if (targetMeta != null) {
-                      decodedMeta = jsonDecode(targetMeta);
-                      if (decodedMeta!['style'] != null) {
-                        await settingsNotifier
-                            .applySessionStyles(decodedMeta['style']);
-                      }
-                    }
-
-                    scriptNotifier.loadText(
-                      fullText,
-                      title: title,
-                      sourceType: type,
-                      sessionId: sessionId,
-                      historyIndex:
-                          (decodedMeta?['historyIndex'] as num?)?.toInt(),
-                      historyJson: decodedMeta?['historyJson'],
-                      fontSize: (decodedMeta?['style']?['fontSize'] as num?)
-                          ?.toDouble(),
-                      fontFamily: decodedMeta?['style']?['fontFamily'],
-                      lineSpacing:
-                          (decodedMeta?['style']?['lineSpacing'] as num?)
-                              ?.toDouble(),
-                      letterSpacing:
-                          (decodedMeta?['style']?['letterSpacing'] as num?)
-                              ?.toDouble(),
-                      wordSpacing:
-                          (decodedMeta?['style']?['wordSpacing'] as num?)
-                              ?.toDouble(),
-                      textAlign: decodedMeta?['style']?['textAlign'],
-                      scriptBgColor: decodedMeta?['style']?['scriptBgColor'],
-                      currentWordColor: decodedMeta?['style']
-                          ?['currentWordColor'],
-                      futureWordColor: decodedMeta?['style']
-                          ?['futureWordColor'],
-                    );
-                  } catch (e) {
-                    if (kDebugMode) debugPrint('Session Recovery Error: $e');
-                    scriptNotifier.loadText(fullText,
-                        title: title, sourceType: type, sessionId: sessionId);
-                  }
-                  if (context.mounted) {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const ScriptEditorScreen()));
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 50,
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: labelBgColor,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: labelBorderColor),
-                        ),
-                        child: Text(type.toUpperCase(),
-                            style: TextStyle(
-                                color: labelColor,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(title,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15)),
-                            const SizedBox(height: 2),
-                            Text(previewText,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: Colors.white38, fontSize: 13)),
-                            Text(date,
-                                style: const TextStyle(
-                                    color: Colors.white24, fontSize: 11)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                icon: const Icon(Icons.delete_outline_rounded,
-                    color: Colors.white24, size: 20),
-                onPressed: () {
-                  if (sessionId != null) {
-                    ref
-                        .read(settingsProvider.notifier)
-                        .removeFromRecent(sessionId!);
-                  }
-                },
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: Icon(Icons.chevron_right_rounded, color: Colors.white24),
-            ),
           ],
         ),
       ),

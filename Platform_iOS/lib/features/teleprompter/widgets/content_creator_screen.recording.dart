@@ -1,6 +1,22 @@
 part of 'content_creator_screen.dart';
 
 extension _ContentCreatorRecording on _ContentCreatorScreenState {
+  Future<void> _playRecordingCountdownTick() async {
+    try {
+      await SystemSound.play(SystemSoundType.click);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Countdown tick cue failed: $e');
+    }
+  }
+
+  Future<void> _playRecordingStartCue() async {
+    try {
+      await SystemSound.play(SystemSoundType.alert);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Recording start cue failed: $e');
+    }
+  }
+
   Future<void> _toggleRecording() async {
     if (_recordStartInFlight) return;
 
@@ -117,9 +133,12 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
     for (int i = 3; i > 0; i--) {
       if (!mounted || !_recordStartInFlight) return;
       _setContentCreatorState(() => _countdown = i);
+      await _playRecordingCountdownTick();
       await Future.delayed(const Duration(seconds: 1));
     }
-    if (mounted) _setContentCreatorState(() => _countdown = 0);
+    if (!mounted || !_recordStartInFlight) return;
+    _setContentCreatorState(() => _countdown = 0);
+    await _playRecordingStartCue();
   }
 
   void _startRecordTimer() {

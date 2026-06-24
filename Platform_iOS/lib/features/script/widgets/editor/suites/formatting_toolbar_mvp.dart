@@ -12,7 +12,8 @@ class FormattingToolbarMVP extends StatelessWidget {
   final VoidCallback onAddBookmark,
       onRemoveBookmark,
       onPreviousBookmark,
-      onNextBookmark;
+      onNextBookmark,
+      onLockedBookmarks;
   final ValueChanged<int> onFontSize;
   final ValueChanged<String> onAlign,
       onDirection,
@@ -28,6 +29,8 @@ class FormattingToolbarMVP extends StatelessWidget {
   final EditorSuite activeSuite;
   final ValueChanged<EditorSuite> onSuiteToggle;
   final ValueChanged<String> onLayoutInteraction;
+  final bool bookmarksEnabled;
+  final Key? bookmarksSuiteKey;
 
   const FormattingToolbarMVP(
       {super.key,
@@ -46,6 +49,7 @@ class FormattingToolbarMVP extends StatelessWidget {
       required this.onRemoveBookmark,
       required this.onPreviousBookmark,
       required this.onNextBookmark,
+      required this.onLockedBookmarks,
       required this.lastTextColor,
       required this.lastHighlightColor,
       required this.onUndo,
@@ -57,7 +61,9 @@ class FormattingToolbarMVP extends StatelessWidget {
       required this.onHistorySelected,
       required this.activeSuite,
       required this.onSuiteToggle,
-      required this.onLayoutInteraction});
+      required this.onLayoutInteraction,
+      required this.bookmarksEnabled,
+      this.bookmarksSuiteKey});
 
   @override
   Widget build(BuildContext context) {
@@ -83,13 +89,6 @@ class FormattingToolbarMVP extends StatelessWidget {
                         history: history,
                         historyIndex: historyIndex,
                         onHistorySelected: onHistorySelected),
-                    const SizedBox(width: 8),
-                    _BookmarkSuiteButton(
-                      onPreviousBookmark: onPreviousBookmark,
-                      onAddBookmark: onAddBookmark,
-                      onRemoveBookmark: onRemoveBookmark,
-                      onNextBookmark: onNextBookmark,
-                    ),
                     const SizedBox(width: 8),
                     Tooltip(
                       message: 'Reset Paragraph Styles',
@@ -121,20 +120,37 @@ class FormattingToolbarMVP extends StatelessWidget {
                     FormatPopup(
                         label: 'TEXT',
                         icon: Icons.text_fields_rounded,
+                        tooltip: 'Text tools',
                         active: activeSuite == EditorSuite.text,
                         onTap: () => onSuiteToggle(EditorSuite.text)),
                     const SizedBox(width: 8),
                     FormatPopup(
                         label: 'LAYOUT',
                         icon: Icons.format_align_center_rounded,
+                        tooltip: 'Layout tools',
                         active: activeSuite == EditorSuite.layout,
                         onTap: () => onSuiteToggle(EditorSuite.layout)),
                     const SizedBox(width: 8),
                     FormatPopup(
                         label: 'COLOR',
                         icon: Icons.palette_rounded,
+                        tooltip: 'Color tools',
                         active: activeSuite == EditorSuite.color,
                         onTap: () => onSuiteToggle(EditorSuite.color)),
+                    const SizedBox(width: 8),
+                    FormatPopup(
+                        key: bookmarksSuiteKey,
+                        label: 'BOOKMARKS',
+                        icon: bookmarksEnabled
+                            ? Icons.bookmarks_rounded
+                            : Icons.lock_outline_rounded,
+                        tooltip: bookmarksEnabled
+                            ? 'Bookmarks'
+                            : 'Bookmarks are included with Pro',
+                        active: activeSuite == EditorSuite.bookmarks,
+                        onTap: bookmarksEnabled
+                            ? () => onSuiteToggle(EditorSuite.bookmarks)
+                            : onLockedBookmarks),
                   ],
                 ),
               );
@@ -175,19 +191,26 @@ class FormattingToolbarMVP extends StatelessWidget {
             onBgColorChange: onBgColorChange,
             lastTextColor: lastTextColor,
             lastHighlightColor: lastHighlightColor);
+      case EditorSuite.bookmarks:
+        return _BookmarkSuite(
+          onPreviousBookmark: onPreviousBookmark,
+          onAddBookmark: onAddBookmark,
+          onRemoveBookmark: onRemoveBookmark,
+          onNextBookmark: onNextBookmark,
+        );
       default:
         return const SizedBox.shrink();
     }
   }
 }
 
-class _BookmarkSuiteButton extends StatelessWidget {
+class _BookmarkSuite extends StatelessWidget {
   final VoidCallback onAddBookmark;
   final VoidCallback onRemoveBookmark;
   final VoidCallback onPreviousBookmark;
   final VoidCallback onNextBookmark;
 
-  const _BookmarkSuiteButton({
+  const _BookmarkSuite({
     required this.onAddBookmark,
     required this.onRemoveBookmark,
     required this.onPreviousBookmark,
@@ -196,77 +219,44 @@ class _BookmarkSuiteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MenuAnchor(
-      style: const MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(kEditorSurface),
-        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
-        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 4)),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ToolBtn(
+            label: 'Previous',
+            icon: Icons.skip_previous_rounded,
+            color: Colors.white,
+            onTap: onPreviousBookmark,
+            tooltip: 'Previous bookmark',
+          ),
+          const SizedBox(width: 8),
+          ToolBtn(
+            label: 'Add',
+            icon: Icons.bookmark_add_outlined,
+            color: kEditorAmber,
+            onTap: onAddBookmark,
+            tooltip: 'Add bookmark',
+          ),
+          const SizedBox(width: 8),
+          ToolBtn(
+            label: 'Remove',
+            icon: Icons.bookmark_remove_outlined,
+            color: Colors.white,
+            onTap: onRemoveBookmark,
+            tooltip: 'Remove bookmark',
+          ),
+          const SizedBox(width: 8),
+          ToolBtn(
+            label: 'Next',
+            icon: Icons.skip_next_rounded,
+            color: Colors.white,
+            onTap: onNextBookmark,
+            tooltip: 'Next bookmark',
+          ),
+        ],
       ),
-      builder: (context, controller, child) {
-        return IconButton(
-          tooltip: 'Bookmarks',
-          icon: const Icon(Icons.bookmarks_rounded,
-              color: kEditorAmber, size: 22),
-          onPressed: () {
-            controller.isOpen ? controller.close() : controller.open();
-          },
-        );
-      },
-      menuChildren: [
-        _BookmarkMenuButton(
-          icon: Icons.skip_previous,
-          label: 'Previous Bookmark',
-          closeOnActivate: false,
-          onPressed: onPreviousBookmark,
-        ),
-        _BookmarkMenuButton(
-          icon: Icons.bookmark_add_outlined,
-          label: 'Add Bookmark',
-          onPressed: onAddBookmark,
-        ),
-        _BookmarkMenuButton(
-          icon: Icons.bookmark_remove_outlined,
-          label: 'Remove Bookmark',
-          onPressed: onRemoveBookmark,
-        ),
-        _BookmarkMenuButton(
-          icon: Icons.skip_next,
-          label: 'Next Bookmark',
-          closeOnActivate: false,
-          onPressed: onNextBookmark,
-        ),
-      ],
-    );
-  }
-}
-
-class _BookmarkMenuButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final bool closeOnActivate;
-
-  const _BookmarkMenuButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.closeOnActivate = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return MenuItemButton(
-      closeOnActivate: closeOnActivate,
-      onPressed: onPressed,
-      style: const ButtonStyle(
-        foregroundColor: WidgetStatePropertyAll(Colors.white70),
-        overlayColor: WidgetStatePropertyAll(Colors.white10),
-        padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        ),
-      ),
-      leadingIcon: Icon(icon, color: kEditorAmber, size: 18),
-      child: Text(label),
     );
   }
 }

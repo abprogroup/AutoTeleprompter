@@ -40,6 +40,74 @@ void main() {
       (tester) async {
     var previousTapCount = 0;
     var nextTapCount = 0;
+    var activeSuite = EditorSuite.none;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              return FormattingToolbarMVP(
+                onBold: () {},
+                onUnderline: () {},
+                onItalic: () {},
+                onClear: () {},
+                onFontSize: (_) {},
+                onAlign: (_) {},
+                onDirection: (_) {},
+                onTextColor: (_) {},
+                onBgColor: (_) {},
+                onFontFamily: (_) {},
+                onBgColorChange: (_) {},
+                onAddBookmark: () {},
+                onRemoveBookmark: () {},
+                onPreviousBookmark: () => previousTapCount++,
+                onNextBookmark: () => nextTapCount++,
+                onLockedBookmarks: () {},
+                lastTextColor: Colors.white,
+                lastHighlightColor: Colors.transparent,
+                onUndo: () {},
+                onRedo: () {},
+                canUndo: false,
+                canRedo: false,
+                history: const <EditorState>[],
+                historyIndex: 0,
+                onHistorySelected: (_) {},
+                activeSuite: activeSuite,
+                onSuiteToggle: (suite) => setState(() {
+                  activeSuite = activeSuite == suite ? EditorSuite.none : suite;
+                }),
+                onLayoutInteraction: (_) {},
+                bookmarksEnabled: true,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Bookmarks'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Next bookmark'));
+    await tester.pumpAndSettle();
+    expect(nextTapCount, 1);
+    expect(find.byTooltip('Next bookmark'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Next bookmark'));
+    await tester.pumpAndSettle();
+    expect(nextTapCount, 2);
+    expect(find.byTooltip('Next bookmark'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Previous bookmark'));
+    await tester.pumpAndSettle();
+    expect(previousTapCount, 1);
+    expect(find.byTooltip('Previous bookmark'), findsOneWidget);
+  });
+
+  testWidgets('locked bookmark suite calls pro discovery action',
+      (tester) async {
+    var lockedTapCount = 0;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -58,8 +126,9 @@ void main() {
             onBgColorChange: (_) {},
             onAddBookmark: () {},
             onRemoveBookmark: () {},
-            onPreviousBookmark: () => previousTapCount++,
-            onNextBookmark: () => nextTapCount++,
+            onPreviousBookmark: () {},
+            onNextBookmark: () {},
+            onLockedBookmarks: () => lockedTapCount++,
             lastTextColor: Colors.white,
             lastHighlightColor: Colors.transparent,
             onUndo: () {},
@@ -72,27 +141,16 @@ void main() {
             activeSuite: EditorSuite.none,
             onSuiteToggle: (_) {},
             onLayoutInteraction: (_) {},
+            bookmarksEnabled: false,
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byTooltip('Bookmarks'));
+    await tester.tap(find.byTooltip('Bookmarks are included with Pro'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Next Bookmark'));
-    await tester.pumpAndSettle();
-    expect(nextTapCount, 1);
-    expect(find.text('Next Bookmark'), findsOneWidget);
-
-    await tester.tap(find.text('Next Bookmark'));
-    await tester.pumpAndSettle();
-    expect(nextTapCount, 2);
-    expect(find.text('Next Bookmark'), findsOneWidget);
-
-    await tester.tap(find.text('Previous Bookmark'));
-    await tester.pumpAndSettle();
-    expect(previousTapCount, 1);
-    expect(find.text('Previous Bookmark'), findsOneWidget);
+    expect(lockedTapCount, 1);
+    expect(find.byTooltip('Add bookmark'), findsNothing);
   });
 }

@@ -3,10 +3,14 @@ import 'package:autoteleprompter/features/feedback/widgets/beta_consent_gate.dar
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('shows mobile privacy and permission consent areas',
-      (tester) async {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('shows all mobile privacy consent steps', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -25,6 +29,23 @@ void main() {
     expect(find.text('Remote control and local network'), findsOneWidget);
     expect(find.text('Account, cloud, and local backup'), findsOneWidget);
     expect(find.text('File import and local documents'), findsOneWidget);
+
+    await tester.ensureVisible(find.byType(CheckboxListTile));
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Accept feedback notice'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Speech-To-Text Disclosure'), findsOneWidget);
+    expect(find.textContaining('selected microphone'), findsOneWidget);
+
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Accept speech disclosure'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cloud Storage Disclosure'), findsOneWidget);
+    expect(find.textContaining('Personal cloud providers'), findsOneWidget);
   });
 
   testWidgets('recovers when beta consent cannot be saved', (tester) async {
@@ -38,13 +59,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.ensureVisible(find.byType(CheckboxListTile));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox));
+    await tester.tap(find.byType(CheckboxListTile));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Accept and continue'));
+    await tester.ensureVisible(find.text('Accept feedback notice'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept and continue'));
+    await tester.tap(find.text('Accept feedback notice'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
@@ -52,7 +73,7 @@ void main() {
       find.text('Could not save beta consent. Please try again.'),
       findsOneWidget,
     );
-    expect(find.text('Accept and continue'), findsOneWidget);
+    expect(find.text('Accept feedback notice'), findsOneWidget);
   });
 }
 
@@ -76,7 +97,7 @@ class _FailingConsentNotifier extends BetaConsentNotifier {
   }
 
   @override
-  Future<void> acceptCurrentPolicy() async {
+  Future<void> acceptFeedbackPolicy() async {
     throw StateError('storage unavailable');
   }
 }

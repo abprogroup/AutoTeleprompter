@@ -36,6 +36,9 @@ abstract class AbstractSttService {
   /// Fired when adapters discover/select available audio input routes.
   void Function(List<SttAudioInputDevice> devices)? onAudioInputDevicesChanged;
 
+  /// Fired with platform-native microphone level updates when available.
+  void Function(double level)? onSoundLevelChange;
+
   /// Starts speech recognition.
   Future<SpeechStartResult> start({String? localeId});
 

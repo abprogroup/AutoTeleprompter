@@ -27,16 +27,20 @@ class HistorySuite extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         ToolBtn(
-            label: '⎌',
+            label: 'Undo',
+            icon: Icons.undo_rounded,
             tooltip: 'Undo',
             onTap: onUndo,
-            color: canUndo ? Colors.white : Colors.white10),
+            enabled: canUndo,
+            color: Colors.white),
         const SizedBox(width: 8),
         ToolBtn(
-            label: '↻',
+            label: 'Redo',
+            icon: Icons.redo_rounded,
             tooltip: 'Redo',
             onTap: onRedo,
-            color: canRedo ? Colors.white : Colors.white10),
+            enabled: canRedo,
+            color: Colors.white),
         const SizedBox(width: 2),
         _HistoryMenu(
             history: history,

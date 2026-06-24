@@ -17,6 +17,7 @@ class SttDesktopAdapter extends AbstractSttService {
     _inner.onStatusChange = (s) => onStatusChange?.call(s);
     _inner.onError = (e) => onError?.call(e);
     _inner.onLanguageUnavailable = (l) => onLanguageUnavailable?.call(l);
+    _inner.onSoundLevelChange = (level) => onSoundLevelChange?.call(level);
     // onNeedLanguagePack: not applicable on Windows
   }
 

@@ -73,6 +73,42 @@ void main() {
     expect(parsed.errorMessage, contains('DOCX'));
   });
 
+  test('importFile applies default prompter contrast import colors', () async {
+    final file = File('${tempDir.path}/plain.txt');
+    await file.writeAsString('Plain import');
+    final notifier = container.read(settingsProvider.notifier);
+    await notifier.setScriptBgColor(0xFFFFFFFF);
+    await notifier.setFutureWordColor(0xFF000000);
+
+    await container.read(scriptProvider.notifier).importFile(file);
+
+    final settings = container.read(settingsProvider);
+    final script = container.read(scriptProvider);
+    expect(script?.rawText, 'Plain import');
+    expect(settings.importColorMode, AppSettings.importColorModePrompter);
+    expect(settings.scriptBgColor, 0xFF000000);
+    expect(settings.currentWordColor, 0xFFFFBF00);
+    expect(settings.futureWordColor, 0xFFFFFFFF);
+  });
+
+  test('importFile applies document-original import colors when selected',
+      () async {
+    final file = File('${tempDir.path}/document.txt');
+    await file.writeAsString('Document import');
+    final notifier = container.read(settingsProvider.notifier);
+    await notifier.setImportColorMode(AppSettings.importColorModeDocument);
+
+    await container.read(scriptProvider.notifier).importFile(file);
+
+    final settings = container.read(settingsProvider);
+    final script = container.read(scriptProvider);
+    expect(script?.rawText, 'Document import');
+    expect(settings.importColorMode, AppSettings.importColorModeDocument);
+    expect(settings.scriptBgColor, 0xFFFFFFFF);
+    expect(settings.currentWordColor, 0xFFFFBF00);
+    expect(settings.futureWordColor, 0xFF000000);
+  });
+
   test('script persistence stores sourcePath metadata for cloud sync',
       () async {
     const sourcePath = '/private/var/mobile/Containers/script.docx';

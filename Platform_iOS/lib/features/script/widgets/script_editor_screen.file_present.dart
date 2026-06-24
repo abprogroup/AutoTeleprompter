@@ -132,6 +132,10 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         );
       }
     }
+    if (savedPath != null) {
+      _sourceType = format.toUpperCase();
+      await _forceRecentUpdate();
+    }
   }
 
   bool _inferEditorTextDirection(String text) {
@@ -167,13 +171,20 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     });
   }
 
-  Future<void> _startPresenting() async {
+  Future<void> _startPresenting({bool continueWalkthrough = false}) async {
     FocusManager.instance.primaryFocus?.unfocus();
+    final refinedText = _getRefinedFullTextWithoutBookmarkSigns();
+    if (refinedText.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add script text before Present mode.')),
+      );
+      return;
+    }
     try {
       await _syncBookmarksFromEditorSigns(notify: false, save: true);
       if (!mounted) return;
       ref.read(scriptProvider.notifier).loadText(
-            _getRefinedFullTextWithoutBookmarkSigns(),
+            refinedText,
             title: _currentTitle,
             sourceType: _sourceType,
             sessionId: _currentSessionId,
@@ -181,7 +192,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     } catch (_) {}
     if (mounted) {
       Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()))
+          .push(MaterialPageRoute(
+              builder: (_) => TeleprompterScreen(
+                  showWalkthroughGuide: continueWalkthrough)))
           .then((_) {
         if (mounted) {
           unawaited(_reconcileEditorBookmarkSignsFromMetadata());
@@ -222,7 +235,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     if (!mounted) return false;
     if (shouldSignIn == true) {
       await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(initialPasswordMode: true),
+        ),
       );
       if (!mounted) return false;
     }
@@ -327,6 +342,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton.icon(
+                    key: _walkthroughPresentKey,
                     onPressed: _startPresenting,
                     icon:
                         const Icon(Icons.play_circle_filled_rounded, size: 24),

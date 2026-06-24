@@ -106,9 +106,22 @@ extension ScriptProviderImportParsing on ScriptNotifier {
   }
 
   Future<void> importFile(File file) async {
+    final settingsBeforeImport = ref.read(settingsProvider);
     final result = await parseFile(file);
     if (result.isError) return;
     if (result.text.isEmpty) return;
+    final parsedSettings = ref.read(settingsProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    if (settingsBeforeImport.importColorMode ==
+        AppSettings.importColorModeDocument) {
+      final parsedBgChanged =
+          parsedSettings.scriptBgColor != settingsBeforeImport.scriptBgColor;
+      await settingsNotifier.setDocumentImportAppearance(
+        scriptBgColor: parsedBgChanged ? parsedSettings.scriptBgColor : null,
+      );
+    } else {
+      await settingsNotifier.resetToDefaultAppearance();
+    }
     final title = file.path.split(RegExp(r'[\\/]')).last;
     final extension =
         title.contains('.') ? title.split('.').last.toUpperCase() : 'FILE';

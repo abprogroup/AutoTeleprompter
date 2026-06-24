@@ -91,6 +91,7 @@ class SpeechService {
   void Function(SpeechResult)? onResult;
   void Function(SpeechStatus)? onStatusChange;
   void Function(String)? onError;
+  void Function(double level)? onSoundLevelChange;
   Future<void> Function()? beforeListen;
 
   /// Fires when the language is confirmed unavailable (after retries exhausted).
@@ -314,6 +315,7 @@ class SpeechService {
             _scheduleRestart(const Duration(milliseconds: 100));
           }
         },
+        onSoundLevelChange: (level) => onSoundLevelChange?.call(level),
         listenOptions: SpeechListenOptions(
           partialResults: true,
           listenMode: ListenMode.dictation,

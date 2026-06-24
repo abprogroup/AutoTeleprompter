@@ -11,11 +11,13 @@ import '../models/alignment_result.dart';
 import '../services/presenter_input_lock_service.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
 import '../../script/services/script_color_inversion_service.dart';
 import '../../script/services/script_bookmark_service.dart';
 import '../../../core/widgets/global_color_picker.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
@@ -26,6 +28,7 @@ part 'teleprompter_screen.build.dart';
 part 'teleprompter_screen.bookmarks.dart';
 part 'teleprompter_screen.search.dart';
 part 'teleprompter_screen.control_bar.dart';
+part 'teleprompter_screen.walkthrough.dart';
 part 'teleprompter_screen.settings_panel.dart';
 part 'teleprompter_screen.stt_profile_settings.dart';
 
@@ -34,7 +37,9 @@ final _tagStripRe = RegExp(
     r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
 
 class TeleprompterScreen extends ConsumerStatefulWidget {
-  const TeleprompterScreen({super.key});
+  final bool showWalkthroughGuide;
+
+  const TeleprompterScreen({super.key, this.showWalkthroughGuide = false});
 
   @override
   ConsumerState<TeleprompterScreen> createState() => _TeleprompterScreenState();
@@ -68,6 +73,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   String _lastSearchQuery = '';
   bool _searchWholeWord = false;
   bool _presenterSearchToolbarVisible = false;
+  bool _presenterWalkthroughVisible = false;
+  int _presenterWalkthroughStep = 0;
+  final GlobalKey _presenterSttKey = GlobalKey();
+  final GlobalKey _presenterSettingsKey = GlobalKey();
+  final GlobalKey _presenterBookmarksKey = GlobalKey();
+  final GlobalKey _presenterResetKey = GlobalKey();
   List<_PresenterSearchMatch> _presenterSearchMatches = const [];
   int _presenterSearchMatchIndex = -1;
   bool _resumePromptShown = false;
@@ -95,6 +106,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         // screen's initState fires, leaving the recognizer active.
         _teleprompterNotifier.stopSession();
         _initRemoteListener();
+        if (widget.showWalkthroughGuide) {
+          _setTeleprompterState(() {
+            _presenterWalkthroughVisible = true;
+            _presenterWalkthroughStep = 0;
+          });
+        }
         // Listen for missing language notifications
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage),
             (prev, next) {

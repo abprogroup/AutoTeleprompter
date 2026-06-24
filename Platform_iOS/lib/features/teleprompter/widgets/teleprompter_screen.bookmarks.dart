@@ -1,6 +1,16 @@
 part of 'teleprompter_screen.dart';
 
 extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
+  bool _presenterBookmarksAllowed() {
+    if (ref.read(authProvider).hasPremiumAccess) return true;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bookmarks are included with Pro')),
+      );
+    }
+    return false;
+  }
+
   Future<void> _loadBookmarksForScript(Script script,
       {bool force = false}) async {
     final key = ScriptBookmarkService.scopeKey(script.sessionId, script.title);
@@ -99,6 +109,7 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
   }
 
   Future<void> _addPresenterBookmark() async {
+    if (!_presenterBookmarksAllowed()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
@@ -133,6 +144,7 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
   }
 
   Future<void> _jumpPresenterBookmark(int direction) async {
+    if (!_presenterBookmarksAllowed()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
@@ -208,6 +220,7 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
   }
 
   Future<void> _deletePresenterBookmark(int wordIndex) async {
+    if (!_presenterBookmarksAllowed()) return;
     final script = ref.read(scriptProvider);
     if (script == null) return;
     final before = _bookmarks.length;
@@ -229,6 +242,7 @@ extension _TeleprompterBookmarkParts on _TeleprompterScreenState {
   }
 
   Future<void> _deletePresenterBookmarkAtCurrentPosition() async {
+    if (!_presenterBookmarksAllowed()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);

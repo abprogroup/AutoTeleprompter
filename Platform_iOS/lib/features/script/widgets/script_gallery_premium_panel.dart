@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../auth/providers/auth_provider.dart';
+import '../../settings/widgets/app_settings_screen.dart';
 
 class ScriptGalleryPremiumPanel extends StatelessWidget {
   final AuthState auth;
@@ -126,9 +127,11 @@ class ScriptGalleryPremiumPanel extends StatelessWidget {
 
   VoidCallback _showRemoteHint(BuildContext context) {
     return () {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Remote control starts from Present mode.'),
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              const AppSettingsScreen(initialTab: AppSettingsTab.remote),
         ),
       );
     };

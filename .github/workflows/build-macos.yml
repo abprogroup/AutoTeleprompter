@@ -1,5 +1,5 @@
 name: Build macOS App
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+31' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+32' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -14,9 +14,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.8+31'
+        description: 'Flutter app version, for example 5.0.8+32'
         required: true
-        default: '5.0.8+31'
+        default: '5.0.8+32'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false
@@ -71,10 +71,10 @@ jobs:
           esac
           appVersion="${{ github.event.inputs.app_version }}"
           if [ -z "$appVersion" ]; then
-            appVersion="5.0.8+31"
+            appVersion="5.0.8+32"
           fi
           if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
-            echo "app_version must look like 5.0.8+31." >&2
+            echo "app_version must look like 5.0.8+32." >&2
             exit 1
           fi
           versionName="${appVersion%%+*}"
@@ -231,6 +231,11 @@ jobs:
           callbacks, and adds build 31 Apple STT reliability mode so noisy
           rooms and far speakers are coached without overriding the user's
           saved speech-control profile thresholds.
+          Build 32 reduces Apple Speech blackout windows by treating retry
+          bursts as quality/coaching signals instead of restart triggers, avoids
+          poor-recognition restart loops, allows mic preflight from any visible
+          line, and adds visible-anchor relocking for imperfect proper-name
+          recognition while keeping large-jump protection intact.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -278,7 +283,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, corrected Present word spacing, top-pinned listening meter placement, improved low-volume next-word STT progression, build 30 stale Apple Speech callback recovery, and build 31 Apple STT reliability mode for noisy rooms/far speakers without overriding saved speech-control profile thresholds.",
+              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, corrected Present word spacing, top-pinned listening meter placement, improved low-volume next-word STT progression, build 30 stale Apple Speech callback recovery, build 31 Apple STT reliability mode for noisy rooms/far speakers without overriding saved speech-control profile thresholds, and build 32 reduced Apple Speech blackout windows by treating retry bursts as quality/coaching signals, avoiding poor-recognition restart loops, allowing mic preflight from any visible line, and adding visible-anchor relocking for imperfect proper-name recognition while preserving large-jump protection.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

@@ -294,9 +294,12 @@ class SttRecognitionPolicyService {
       lastNativeCallback: lastNativeCallback,
       noNativeCallbacksAfter: noNativeCallbacksAfter,
     );
-    final retryBurstDropped = retryBurstCount >= 3 && canRestart;
-    if ((!listening && !startingSession && canRestart) ||
-        retryBurstDropped ||
+    final nativeBaseline = lastNativeCallback ?? sessionStart;
+    final callbackSilentFor =
+        nativeBaseline == null ? Duration.zero : now.difference(nativeBaseline);
+    final listenerActuallySilent = callbackSilentFor >= noNativeCallbacksAfter;
+    if (((!listening && !startingSession && canRestart) &&
+            listenerActuallySilent) ||
         droppedReason != null) {
       return const AppleSttHealthAssessment(
         health: AppleSttHealth.engineDropped,
@@ -322,7 +325,9 @@ class SttRecognitionPolicyService {
         .length;
     final normalizedSound = soundLevel.clamp(0.0, 1.0).toDouble();
     final noisyRoom = reliabilityMode == AppSettings.sttReliabilityNoisyRoom;
-    final sustainedPoor = noProgressCount >= 3 ||
+    final retryNoise = retryBurstCount >= 3;
+    final sustainedPoor = retryNoise ||
+        noProgressCount >= 3 ||
         repeatedTranscriptCount >= 2 ||
         poorQualityDuration >= const Duration(seconds: 6);
     final shouldSuggestManual =
@@ -355,7 +360,7 @@ class SttRecognitionPolicyService {
       );
     }
 
-    if (sustainedPoor && normalizedSound >= 0.18) {
+    if (sustainedPoor && (retryNoise || normalizedSound >= 0.18)) {
       return AppleSttHealthAssessment(
         health: AppleSttHealth.noisyInput,
         action: shouldSuggestManual
@@ -363,8 +368,9 @@ class SttRecognitionPolicyService {
             : (!noisyRoom
                 ? AppleSttRecoveryAction.suggestNoisyRoom
                 : AppleSttRecoveryAction.coach),
-        message:
-            'Mic signal is active, but Apple Speech is not finding clear script words. Try Noisy room mode or reduce room noise.',
+        message: retryNoise
+            ? 'Apple Speech is retrying, but the microphone listener is still active. Keep reading; AutoTeleprompter will wait instead of restarting.'
+            : 'Mic signal is active, but Apple Speech is not finding clear script words. Try Noisy room mode or reduce room noise.',
         quality: 0.45,
       );
     }
@@ -389,14 +395,7 @@ class SttRecognitionPolicyService {
     if (lastRestartAt != null && now.difference(lastRestartAt) < cooldown) {
       return false;
     }
-    final noisyRoom = reliabilityMode == AppSettings.sttReliabilityNoisyRoom;
-    final minimumDuration =
-        noisyRoom ? const Duration(seconds: 30) : const Duration(seconds: 15);
-    final minimumWaits = noisyRoom ? 14 : 10;
-    final minimumRepeats = noisyRoom ? 4 : 3;
-    return poorQualityDuration >= minimumDuration &&
-        noProgressCount >= minimumWaits &&
-        repeatedTranscriptCount >= minimumRepeats;
+    return false;
   }
 
   static String? browserRecoveryReason({
@@ -457,7 +456,16 @@ class SttRecognitionPolicyService {
     required bool listening,
     required bool startingSession,
     required bool canRestart,
+    required DateTime now,
+    required DateTime? sessionStart,
+    required DateTime? lastNativeCallback,
+    Duration idleGrace = const Duration(seconds: 20),
   }) {
-    return shouldBeListening && !listening && !startingSession && canRestart;
+    if (!shouldBeListening || listening || startingSession || !canRestart) {
+      return false;
+    }
+    final baseline = lastNativeCallback ?? sessionStart;
+    if (baseline == null) return false;
+    return now.difference(baseline) >= idleGrace;
   }
 }

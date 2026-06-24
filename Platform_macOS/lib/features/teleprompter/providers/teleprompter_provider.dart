@@ -18,6 +18,7 @@ import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../platform/stt/stt_service_factory.dart';
 
 part 'teleprompter_provider.session_parts.dart';
+part 'teleprompter_provider.relock.dart';
 part 'teleprompter_provider.session_watchdog.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
 part 'teleprompter_provider.apple_quality.dart';
@@ -72,7 +73,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   Timer? _speechActivityMeterTimer;
   int _speechActivityMeterToken = 0;
   bool _stateFailureDiagnosticRecorded = false;
-
   static const int _maxAdvancePerUpdate = 30;
   static const int _maxLocalSttJumpWithoutWait = 5;
   static const int _maxTrustedVisibleSttJumpWithoutWait = 12;
@@ -83,7 +83,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const int _stuckRelockAfterWaits = 3;
   static const int _relaxedVisibleRelockAfterWaits = 12;
   static const int _appleSilentRestartLimit = 3;
-  static const Duration _appleNativeCallbackStaleAfter = Duration(seconds: 25);
+  static const Duration _appleNativeCallbackStaleAfter = Duration(seconds: 45);
   static const Duration _appleSilentRestartWindow = Duration(seconds: 70);
   static const Duration _applePoorQualityRestartCooldown =
       Duration(seconds: 45);
@@ -92,7 +92,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
       Duration(milliseconds: 5000);
-
   @override
   TeleprompterState build() {
     _disposed = false;
@@ -428,7 +427,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     try {
       final settings = ref.read(settingsProvider);
 
-      // Voice Commands
       if (words.contains('stop prompt') ||
           words.contains('\u05E2\u05E6\u05D5\u05E8') ||
           words.contains('\u05E2\u05E6\u05D9\u05E8\u05D4')) {
@@ -706,13 +704,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _checkAndSwitchLocale();
       }
 
-      if (_handlePoorAppleRecognitionIfNeeded(
-        script: script,
-        transcript: alignmentTranscript,
-      )) {
-        return;
-      }
-
       final relockTranscript = _accumulatedTranscript.trim().isEmpty
           ? alignmentTranscript
           : _accumulatedTranscript;
@@ -729,12 +720,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           visibleWordStart: _visibleWordStart,
           visibleWordEnd: _visibleWordEnd,
         );
-        if (TeleprompterNotifier.shouldWaitForLargeSttAdvance(
-          currentIndex: relockFrom,
-          targetIndex: relockTarget,
-          visibleSkipTargetTrusted: relockVisibleTrusted,
-          noProgressCount: _noProgressCount,
-        )) {
+        final trustedVisibleRelock =
+            relockVisibleTrusted && _lastRelockScope.startsWith('visible-');
+        final shouldDelayRelock = !trustedVisibleRelock &&
+            TeleprompterNotifier.shouldWaitForLargeSttAdvance(
+              currentIndex: relockFrom,
+              targetIndex: relockTarget,
+              visibleSkipTargetTrusted: relockVisibleTrusted,
+              noProgressCount: _noProgressCount,
+            );
+        if (shouldDelayRelock) {
           _fluidAdvanceTimer?.cancel();
           _resetSequentialSttStreak();
           final relockJump = relockTarget - relockFrom;
@@ -776,6 +771,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _sttReadingStandby = true;
         _applySttAdvanceTarget(relockTarget, script);
         _syncLocaleForPosition(script, relockTarget + 1, reason: 'relock');
+        return;
+      }
+
+      if (_handlePoorAppleRecognitionIfNeeded(
+        script: script,
+        transcript: alignmentTranscript,
+      )) {
         return;
       }
 

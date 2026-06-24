@@ -31,6 +31,9 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
         listening: listening,
         startingSession: _startingSession,
         canRestart: canRestart,
+        now: now,
+        sessionStart: _sessionStartTime,
+        lastNativeCallback: _lastVolLog,
       )) {
         _restartDroppedSttListener(now, engineName: engineName, token: token);
       }
@@ -74,7 +77,8 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
 
   bool _canRestartSttFromWatchdog(DateTime now) {
     return _lastSttWatchdogRestartAt == null ||
-        now.difference(_lastSttWatchdogRestartAt!) > const Duration(seconds: 8);
+        now.difference(_lastSttWatchdogRestartAt!) >
+            const Duration(seconds: 20);
   }
 
   void _logHeartbeat({

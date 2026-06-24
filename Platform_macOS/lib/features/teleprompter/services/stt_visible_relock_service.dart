@@ -1,6 +1,7 @@
 import '../../../core/extensions/string_extensions.dart';
 import '../../script/models/script_word.dart';
 import 'approximate_spoken_search_service.dart';
+import 'word_aligner.dart';
 
 class SttVisibleRelockService {
   const SttVisibleRelockService();
@@ -113,6 +114,78 @@ class SttVisibleRelockService {
     return safeMatches.first.endWordIndex;
   }
 
+  int? anchorTarget({
+    required List<ScriptWord> words,
+    required String transcript,
+    required int currentIndex,
+    required int? visibleWordStart,
+    required int? visibleWordEnd,
+    double minimumAnchorSimilarity = 0.78,
+  }) {
+    if (visibleWordStart == null || visibleWordEnd == null) return null;
+    final queryTokens = ApproximateSpokenSearchService.tokenize(transcript);
+    if (queryTokens.length < 3 || words.isEmpty) return null;
+
+    final start =
+        visibleWordStart <= visibleWordEnd ? visibleWordStart : visibleWordEnd;
+    final end =
+        visibleWordStart <= visibleWordEnd ? visibleWordEnd : visibleWordStart;
+    final safeStart = start.clamp(0, words.length - 1).toInt();
+    final safeEnd = end.clamp(safeStart, words.length - 1).toInt();
+    final candidateWords = words
+        .where((word) =>
+            !word.isNewline &&
+            word.normalized.isNotEmpty &&
+            word.index > currentIndex &&
+            word.index >= safeStart &&
+            word.index <= safeEnd)
+        .toList(growable: false);
+    if (candidateWords.length < 3) return null;
+
+    _AnchorRun? best;
+    for (var i = 0; i < candidateWords.length; i++) {
+      var tokenIndex = 0;
+      var matched = 0;
+      var score = 0.0;
+      var endWord = candidateWords[i].index;
+      for (var j = i;
+          j < candidateWords.length && tokenIndex < queryTokens.length;
+          j++) {
+        final word = candidateWords[j];
+        var bestToken = -1;
+        var bestSim = 0.0;
+        final tokenLimit = (tokenIndex + 3).clamp(
+          tokenIndex + 1,
+          queryTokens.length,
+        );
+        for (var t = tokenIndex; t < tokenLimit; t++) {
+          final sim = WordAligner.spokenWordSimilarity(queryTokens[t], word);
+          if (sim > bestSim) {
+            bestSim = sim;
+            bestToken = t;
+          }
+        }
+        if (bestSim < minimumAnchorSimilarity || bestToken < 0) {
+          if (matched == 0) continue;
+          if (j - i > queryTokens.length + 2) break;
+          continue;
+        }
+        matched++;
+        score += bestSim;
+        tokenIndex = bestToken + 1;
+        endWord = word.index;
+        if (matched >= 2 && score / matched >= minimumAnchorSimilarity) {
+          final run = _AnchorRun(endWord, matched, score / matched);
+          if (best == null || run.isBetterThan(best)) best = run;
+        }
+      }
+    }
+    if (best == null) return null;
+    final hasEnoughEvidence = best.matchedAnchors >= 3 ||
+        (best.matchedAnchors >= 2 && best.averageSimilarity >= 0.88);
+    return hasEnoughEvidence ? best.targetIndex : null;
+  }
+
   static int _maxApproximateAdvance(int tokenCount) {
     if (tokenCount >= 8) return 96;
     if (tokenCount >= 6) return 64;
@@ -143,5 +216,28 @@ class SttVisibleRelockService {
     );
     if (match == null || match.endWordIndex <= currentIndex) return null;
     return match.endWordIndex;
+  }
+}
+
+class _AnchorRun {
+  final int targetIndex;
+  final int matchedAnchors;
+  final double averageSimilarity;
+
+  const _AnchorRun(
+    this.targetIndex,
+    this.matchedAnchors,
+    this.averageSimilarity,
+  );
+
+  bool isBetterThan(_AnchorRun? other) {
+    if (other == null) return true;
+    if (matchedAnchors != other.matchedAnchors) {
+      return matchedAnchors > other.matchedAnchors;
+    }
+    if ((averageSimilarity - other.averageSimilarity).abs() > 0.04) {
+      return averageSimilarity > other.averageSimilarity;
+    }
+    return targetIndex < other.targetIndex;
   }
 }

@@ -624,15 +624,6 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       return;
     }
 
-    final script = ref.read(scriptProvider);
-    final phrase = script?.words
-            .where((word) => !word.isNewline && word.raw.trim().isNotEmpty)
-            .take(5)
-            .map((word) => word.raw)
-            .join(' ')
-            .trim() ??
-        '';
-    final phraseText = phrase.isEmpty ? 'the first line' : '"$phrase"';
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -652,24 +643,26 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
             ),
           ],
         ),
-        content: Column(
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'When the session starts, read $phraseText once at the same distance you will use while presenting.',
+              'When the session starts, read any clearly visible line near the place you want to begin, using the same distance and volume you will use while presenting.',
               style:
-                  const TextStyle(color: Colors.white70, fontSize: 13, height: 1.35),
+                  TextStyle(color: Colors.white70, fontSize: 13, height: 1.35),
             ),
-            const SizedBox(height: 14),
-            const Text(
+            SizedBox(height: 14),
+            Text(
               'Watch the Mic signal meter and quality badge. Clear means Apple Speech is matching the script. Low voice, Noise, or Matching means the app will keep listening and coach instead of restarting in a loop.',
-              style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
             ),
-            const SizedBox(height: 14),
-            const Text(
-              'For far speakers or loud rooms, use Noisy room mode, move the mic closer, lower room speaker volume, or have an operator ready with Manual Speed or Remote Control.',
-              style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.35),
+            SizedBox(height: 14),
+            Text(
+              'For far speakers or loud rooms, use Noisy room mode, move the mic closer, lower room speaker volume, or have an operator ready with Manual Speed or Remote Control. If the room changes later, reopen Present settings and watch the Mic signal and quality badge again.',
+              style:
+                  TextStyle(color: Colors.white38, fontSize: 12, height: 1.35),
             ),
           ],
         ),

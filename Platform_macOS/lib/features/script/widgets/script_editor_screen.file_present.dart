@@ -428,6 +428,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
   }
 
   void _startPresenting({bool continueWalkthrough = false}) async {
+    if (_presenterRouteOpening) return;
     final presenterText = _getRefinedFullTextWithoutBookmarkSigns();
     if (StylingService.stripTags(presenterText).trim().isEmpty) {
       LightweightDiagnostics.instance.record(
@@ -447,53 +448,55 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       );
       return;
     }
+    _presenterRouteOpening = true;
     final editorSnapshot = _captureEditorModeReturnSnapshot();
-    _suspendEditorFocusForReaderMode();
-    LightweightDiagnostics.instance.record(
-      'editor',
-      'presenter opened',
-      data: {
-        'title': _currentTitle,
-        'sessionId': _currentSessionId,
-        'blockCount': _controllers.length,
-      },
-    );
-    await _syncBookmarksFromEditorSigns(notify: true, save: true);
-    if (!mounted) return;
-    await _forceRecentUpdate();
-    if (!mounted) return;
     try {
-      final settings = ref.read(settingsProvider);
-      ref.read(scriptProvider.notifier).loadText(
-            presenterText,
-            title: _currentTitle,
-            sourceType: _sourceType,
-            sourcePath: _currentSourcePath,
-            sessionId: _currentSessionId,
-            historyIndex: _historyIndex,
-            historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
-            fontSize: settings.fontSize,
-            fontFamily: settings.fontFamily,
-            lineSpacing: settings.lineSpacing,
-            letterSpacing: settings.letterSpacing,
-            wordSpacing: settings.wordSpacing,
-            textAlign: settings.textAlign,
-            scriptBgColor: settings.scriptBgColor,
-            currentWordColor: settings.currentWordColor,
-            futureWordColor: settings.futureWordColor,
-          );
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'scriptEditor.startPresentLoad',
+      _suspendEditorFocusForReaderMode();
+      LightweightDiagnostics.instance.record(
+        'editor',
+        'presenter opened',
         data: {
           'title': _currentTitle,
           'sessionId': _currentSessionId,
+          'blockCount': _controllers.length,
         },
       );
-    }
-    if (mounted) {
+      await _syncBookmarksFromEditorSigns(notify: true, save: true);
+      if (!mounted) return;
+      await _forceRecentUpdate();
+      if (!mounted) return;
+      try {
+        final settings = ref.read(settingsProvider);
+        ref.read(scriptProvider.notifier).loadText(
+              presenterText,
+              title: _currentTitle,
+              sourceType: _sourceType,
+              sourcePath: _currentSourcePath,
+              sessionId: _currentSessionId,
+              historyIndex: _historyIndex,
+              historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+              fontSize: settings.fontSize,
+              fontFamily: settings.fontFamily,
+              lineSpacing: settings.lineSpacing,
+              letterSpacing: settings.letterSpacing,
+              wordSpacing: settings.wordSpacing,
+              textAlign: settings.textAlign,
+              scriptBgColor: settings.scriptBgColor,
+              currentWordColor: settings.currentWordColor,
+              futureWordColor: settings.futureWordColor,
+            );
+      } catch (error, stack) {
+        LightweightDiagnostics.instance.recordError(
+          error,
+          stack,
+          source: 'scriptEditor.startPresentLoad',
+          data: {
+            'title': _currentTitle,
+            'sessionId': _currentSessionId,
+          },
+        );
+      }
+      if (!mounted) return;
       final returnWordIndex = await Navigator.of(context).push<int>(
         MaterialPageRoute(
           builder: (_) => TeleprompterScreen(
@@ -511,6 +514,8 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         }
         _onSelectionChanged();
       }
+    } finally {
+      _presenterRouteOpening = false;
     }
   }
 

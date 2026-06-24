@@ -359,8 +359,15 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
   }
 
   double _contentWordGap(double fontSize, AppSettings settings) {
-    final defaultSpace = fontSize * 0.24;
-    return (defaultSpace + settings.wordSpacing).clamp(0.0, 80.0).toDouble();
+    final defaultSpace = fontSize * 0.33;
+    final editorFontSize =
+        settings.fontSize <= 0 ? fontSize : settings.fontSize;
+    final presentationScale = (fontSize / editorFontSize).clamp(1.0, 2.5);
+    final scaledWordSpacing = settings.wordSpacing * presentationScale;
+    final minimumReadableGap = fontSize * 0.18;
+    return (defaultSpace + scaledWordSpacing)
+        .clamp(minimumReadableGap, 96.0)
+        .toDouble();
   }
 
   double _contentDecorationGapTolerance(double wordGap) {

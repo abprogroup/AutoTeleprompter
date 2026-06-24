@@ -91,6 +91,7 @@ class SpeechService {
   Future<void> _engineQueue = Future.value();
   Timer? _restartTimer;
   DateTime? _engineRecoveryUntil;
+  DateTime? _automaticRecoveryGraceUntil;
 
   int _consecutiveErrors = 0;
   Timer? _errorResetTimer;
@@ -191,6 +192,7 @@ class SpeechService {
         },
         onStatus: (status) {
           if (status == 'done' || status == 'notListening') {
+            if (_inAutomaticRecoveryGrace) return;
             if (_isActive && !_isRestarting && !_inLocaleSwitchGrace) {
               _scheduleRestart(const Duration(milliseconds: 150));
             } else if (!_isActive) {
@@ -228,27 +230,49 @@ class SpeechService {
     return graceUntil != null && DateTime.now().isBefore(graceUntil);
   }
 
+  bool get _inAutomaticRecoveryGrace {
+    final graceUntil = _automaticRecoveryGraceUntil;
+    return graceUntil != null && DateTime.now().isBefore(graceUntil);
+  }
+
+  void _beginAutomaticRecoveryGrace([
+    Duration duration = const Duration(seconds: 5),
+  ]) {
+    _automaticRecoveryGraceUntil = DateTime.now().add(duration);
+  }
+
   void _handleAppleUnknownSpeechError(String msg) {
-    _isActive = false;
-    _isRestarting = false;
+    if (_isRestarting || _inAutomaticRecoveryGrace) return;
+    _isRestarting = true;
     _isInitialized = false;
-    _localeSwitchToken++;
     _consecutiveErrors = 0;
     _errorResetTimer?.cancel();
-    _cancelPendingRestart();
-    _engineRecoveryUntil =
-        DateTime.now().add(const Duration(milliseconds: 1600));
-
-    onError?.call(
-      'Apple Speech not available right now ($msg). Wait a moment, then start STT again. '
-      'If it repeats, check macOS Microphone and Speech Recognition permissions.',
-    );
-    onStatusChange?.call(SpeechStatus.error);
+    _restartTimer?.cancel();
+    _restartTimer = null;
+    _beginAutomaticRecoveryGrace();
+    onError?.call('Apple Speech renewed the listener automatically.');
 
     unawaited(_runEngineOperation(() async {
-      await _cancelNativeRecognition(
-        settle: const Duration(milliseconds: 1200),
-      );
+      try {
+        await _cancelNativeRecognition(
+          settle: const Duration(milliseconds: 1200),
+        );
+        if (!_isActive) return;
+        _replaceSpeechWrapper();
+        _engineRecoveryUntil =
+            DateTime.now().add(const Duration(milliseconds: 400));
+        final result = await _startLocked(localeId: _localeId);
+        if (!result.success && _isActive) {
+          _isActive = false;
+          onError?.call(
+            result.message ??
+                'Apple Speech could not renew the listener. Stop STT and start it again.',
+          );
+          onStatusChange?.call(SpeechStatus.error);
+        }
+      } finally {
+        _isRestarting = false;
+      }
     }));
   }
 
@@ -267,10 +291,10 @@ class SpeechService {
     })();
   }
 
-  void _cancelPendingRestart() {
+  void _cancelPendingRestart({bool keepRestarting = false}) {
     _restartTimer?.cancel();
     _restartTimer = null;
-    _isRestarting = false;
+    if (!keepRestarting) _isRestarting = false;
   }
 
   void _replaceSpeechWrapper() {
@@ -406,8 +430,10 @@ class SpeechService {
   }
 
   Future<SpeechStartResult> _restartLocked({String? localeId}) async {
-    _isActive = false;
-    _cancelPendingRestart();
+    _isActive = true;
+    _isRestarting = true;
+    _beginAutomaticRecoveryGrace();
+    _cancelPendingRestart(keepRestarting: true);
     await _cancelNativeRecognition(settle: const Duration(milliseconds: 450));
     _replaceSpeechWrapper();
     _engineRecoveryUntil = null;

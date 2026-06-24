@@ -242,6 +242,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isLoading = false;
   bool _isPendingLoad = false;
   bool _isBulkLoadingBlocks = false;
+  bool _presenterRouteOpening = false;
   bool _editorToolbarFocusGuard = false;
   bool _recentPersistRunning = false;
   bool _recentPersistQueued = false;

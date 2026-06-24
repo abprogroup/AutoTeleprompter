@@ -106,8 +106,8 @@ extension _SettingsSections on _AppSettingsScreenState {
       const _SectionHeader(
         title: 'UPDATES',
         subtitle:
-            'Check GitHub releases for a newer build. iOS installs through the '
-            'App Store/TestFlight or by re-installing the published IPA.',
+            'Updates arrive automatically through the App Store / TestFlight. '
+            'You can also check here for a newer published version.',
       ),
       _SettingsTile(
         icon: _checkingForUpdate
@@ -116,21 +116,21 @@ extension _SettingsSections on _AppSettingsScreenState {
                 ? Icons.system_update_alt_rounded
                 : Icons.update_rounded),
         iconColor: available ? const Color(0xFFFFBF00) : Colors.white54,
-        title: _checkingForUpdate ? 'Checking for updates…' : 'Check for updates',
+        title:
+            _checkingForUpdate ? 'Checking for updates…' : 'Check for updates',
         subtitle: result == null
-            ? 'Compares this build against the published update manifest.'
+            ? 'Compares this build against the version on the App Store.'
             : '${result.message}'
                 '${result.latestVersion != null ? '\nLatest: ${result.latestVersion} • Current: ${result.currentVersion}' : ''}',
         onTap: _checkingForUpdate ? null : () => unawaited(_checkForUpdates()),
       ),
-      if (available && result!.hasDownload)
+      if (available && result!.hasStorePage)
         _SettingsTile(
-          icon: Icons.open_in_browser_rounded,
+          icon: Icons.shop_rounded,
           iconColor: const Color(0xFFFFBF00),
-          title: 'Open release to update',
-          subtitle: result.installUnavailableMessage ??
-              'Opens the release page to download the new build.',
-          onTap: () => unawaited(_openUpdateDownload(result.downloadUrl!)),
+          title: 'Update in the App Store',
+          subtitle: 'Opens the App Store so you can tap Update.',
+          onTap: () => unawaited(_openAppStore(result.appStoreUrl!)),
         ),
     ];
   }

@@ -47,6 +47,8 @@ dependencies:
   # Opens external URLs (e.g. cloud provider links). Backs the iOS
   # external_url_launcher shim used by the cloud sync screen.
   url_launcher: ^6.3.0
+  # Reads the installed app version/bundle id for the App Store update check.
+  package_info_plus: ^8.0.0
 
 dev_dependencies:
   flutter_test:

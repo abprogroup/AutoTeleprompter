@@ -48,8 +48,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   // address other devices can actually reach (not localhost).
   final Map<String, String> _remoteLanUrls = {};
 
-  // Update check state (GitHub Releases manifest). iOS can't self-install, so
-  // the UI opens the release page on an available update.
+  // App Store update check: compares the installed version against the version
+  // Apple has published for this bundle id, then deep-links to the App Store.
   final UpdateCheckService _updateService = UpdateCheckService();
   UpdateCheckResult? _updateResult;
   bool _checkingForUpdate = false;
@@ -58,7 +58,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     if (_checkingForUpdate) return;
     setState(() => _checkingForUpdate = true);
     try {
-      final result = await _updateService.check(channel: UpdateChannels.beta);
+      final result = await _updateService.check();
       if (!mounted) return;
       setState(() => _updateResult = result);
     } finally {
@@ -66,9 +66,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     }
   }
 
-  Future<void> _openUpdateDownload(String url) async {
+  Future<void> _openAppStore(String url) async {
     final opened = await ExternalUrlLauncher.openUrl(url);
-    if (!opened) _showSnack('Could not open the release page.');
+    if (!opened) _showSnack('Could not open the App Store.');
   }
 
   @override

@@ -48,6 +48,7 @@ part 'content_creator_screen.presenter_view.dart';
 part 'content_creator_screen.session.dart';
 part 'content_creator_screen.debug.dart';
 part 'content_creator_screen.camera.dart';
+part 'content_creator_screen.recording_flow.dart';
 part 'content_creator_screen.camera_helpers.dart';
 part 'content_creator_screen.scroll_state.dart';
 part 'content_creator_screen.camera_settings.dart';

@@ -492,6 +492,8 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       }
 
       if (!mounted) return;
+      await _maybeShowAppleSttPreflight();
+      if (!mounted) return;
       _showSttStartAffordance();
       await _startCurrentScriptSession();
       return;
@@ -613,6 +615,82 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _scrollToWordIndex(currentIndex, anticipate: true);
     });
+  }
+
+  Future<void> _maybeShowAppleSttPreflight() async {
+    final settings = ref.read(settingsProvider);
+    if (settings.sttPreflightCompletedForVersion ==
+        TeleprompterNotifier.appleSttPreflightVersion) {
+      return;
+    }
+
+    final script = ref.read(scriptProvider);
+    final phrase = script?.words
+            .where((word) => !word.isNewline && word.raw.trim().isNotEmpty)
+            .take(5)
+            .map((word) => word.raw)
+            .join(' ')
+            .trim() ??
+        '';
+    final phraseText = phrase.isEmpty ? 'the first line' : '"$phrase"';
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF181818),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.record_voice_over_outlined,
+                color: Color(0xFFFFBF00), size: 24),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Speech-control mic check',
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'When the session starts, read $phraseText once at the same distance you will use while presenting.',
+              style:
+                  const TextStyle(color: Colors.white70, fontSize: 13, height: 1.35),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Watch the Mic signal meter and quality badge. Clear means Apple Speech is matching the script. Low voice, Noise, or Matching means the app will keep listening and coach instead of restarting in a loop.',
+              style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'For far speakers or loud rooms, use Noisy room mode, move the mic closer, lower room speaker volume, or have an operator ready with Manual Speed or Remote Control.',
+              style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.35),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await ref
+                  .read(settingsProvider.notifier)
+                  .setSttPreflightCompletedForVersion(
+                    TeleprompterNotifier.appleSttPreflightVersion,
+                  );
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text(
+              'Start speech control',
+              style: TextStyle(color: Color(0xFFFFBF00)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // Smooth pixel-based manual scroll.

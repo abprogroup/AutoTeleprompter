@@ -275,12 +275,33 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       const SizedBox(height: 12),
       _SettingsSwitchTile(
         icon: Icons.graphic_eq_rounded,
-        title: 'Show listening meter',
+        title: 'Show mic signal meter',
         subtitle: settings.showSoundLevelMeter
-            ? 'Live microphone level appears during speech-control sessions'
-            : 'Show a sound bar so users can see AutoTeleprompter is hearing them',
+            ? 'Live microphone input level appears during speech-control sessions'
+            : 'Show mic signal separately from speech recognition quality',
         value: settings.showSoundLevelMeter,
         onChanged: ref.read(settingsProvider.notifier).setShowSoundLevelMeter,
+      ),
+      const SizedBox(height: 12),
+      _SettingsChoiceTile<String>(
+        icon: Icons.hearing_rounded,
+        title: 'Speech reliability',
+        subtitle:
+            settings.sttReliabilityMode == AppSettings.sttReliabilityNoisyRoom
+                ? 'Noisy room waits longer and protects against false jumps'
+                : 'Standard Apple Speech behavior with safer recovery',
+        value: settings.sttReliabilityMode,
+        choices: const [
+          _SettingsChoice(
+            label: 'Standard',
+            value: AppSettings.sttReliabilityStandard,
+          ),
+          _SettingsChoice(
+            label: 'Noisy room',
+            value: AppSettings.sttReliabilityNoisyRoom,
+          ),
+        ],
+        onChanged: ref.read(settingsProvider.notifier).setSttReliabilityMode,
       ),
       const SizedBox(height: 22),
       const _SectionHeader(title: 'FEEDBACK'),

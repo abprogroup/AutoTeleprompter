@@ -20,6 +20,7 @@ import '../../../platform/stt/stt_service_factory.dart';
 part 'teleprompter_provider.session_parts.dart';
 part 'teleprompter_provider.session_watchdog.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
+part 'teleprompter_provider.apple_quality.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final AbstractSttService _sttService;
@@ -44,7 +45,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _appleSilentRestartCount = 0;
   String? _lastNoProgressTranscriptKey;
   int _staleNoProgressTranscriptCount = 0;
-  DateTime? _lastStaleTranscriptRecoveryAt;
+  DateTime? _poorAppleRecognitionStartedAt;
+  DateTime? _lastPoorAppleRecognitionRestartAt;
+  AppleSttHealth? _lastLoggedAppleHealth;
+  AppleSttRecoveryAction? _lastLoggedAppleAction;
+  DateTime? _appleRetryBurstWindowStart;
+  int _appleRetryBurstCount = 0;
   bool _silentWarningFired = false;
   Future<void>? _stopInFlight;
   int _sessionToken = 0;
@@ -67,7 +73,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _speechActivityMeterToken = 0;
   bool _stateFailureDiagnosticRecorded = false;
 
-  // STT tuning
   static const int _maxAdvancePerUpdate = 30;
   static const int _maxLocalSttJumpWithoutWait = 5;
   static const int _maxTrustedVisibleSttJumpWithoutWait = 12;
@@ -78,13 +83,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const int _stuckRelockAfterWaits = 3;
   static const int _relaxedVisibleRelockAfterWaits = 12;
   static const int _appleSilentRestartLimit = 3;
-  static const Duration _appleNativeCallbackStaleAfter =
-      Duration(seconds: 12);
+  static const Duration _appleNativeCallbackStaleAfter = Duration(seconds: 25);
   static const Duration _appleSilentRestartWindow = Duration(seconds: 70);
-  static const int _staleTranscriptRecoveryRepeats = 3;
-  static const int _staleTranscriptFallbackWaits = 8;
-  static const Duration _staleTranscriptRecoveryCooldown =
-      Duration(seconds: 6);
+  static const Duration _applePoorQualityRestartCooldown =
+      Duration(seconds: 45);
+  static const String appleSttPreflightVersion = 'apple-stt-reliability-v1';
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
@@ -121,12 +124,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     return const TeleprompterState();
   }
 
-  // v4.0: Remote control features hidden for stable release
   void _setupRemoteCallbacks() {}
 
   bool _sessionStopped = false;
-  // Guard against the race where iOS fires an async 'notListening' status
-  // from the previous stop() call after the new session has already started.
   bool _startingSession = false;
 
   void _recordDisposeStopFailure(
@@ -149,11 +149,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
   }
 
-  /// Writes state guarded only by disposal — used by session-control methods
-  /// (start/stop/reset/jump/device refresh) that must apply even after the
-  /// session is stopped (e.g. clearing isListening on stop, or moving the
-  /// resume point while browsing stopped). Lives in the class so extension
-  /// parts never touch the protected `state` member directly.
   void _writeState(TeleprompterState Function(TeleprompterState) updater) {
     if (_disposed) return;
     try {
@@ -534,6 +529,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _sttReadingStandby = true;
       _noProgressCount = 0;
       _resetStaleNoProgressTracking();
+      _resetAppleRecognitionQuality();
       _addDebugLog(
           '$engineTag STANDBY LOCK | ${aligned.debugInfo} | heard: "$alignmentTranscript"');
       LightweightDiagnostics.instance.record(
@@ -600,6 +596,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _sttReadingStandby = true;
       _noProgressCount = 0;
       _resetStaleNoProgressTracking();
+      _resetAppleRecognitionQuality();
       _resetVisibleLocaleAssist();
       final target = TeleprompterNotifier.resolveAdvanceTarget(
         currentIndex: advanceFrom,
@@ -650,6 +647,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           _fluidAdvanceTimer?.cancel();
           _noProgressCount = 0;
           _resetStaleNoProgressTracking();
+          _resetAppleRecognitionQuality();
           _sttReadingStandby = true;
           _resetVisibleLocaleAssist();
           _addDebugLog(
@@ -672,6 +670,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
         _noProgressCount = 0;
         _resetStaleNoProgressTracking();
+        _resetAppleRecognitionQuality();
         _sttReadingStandby = true;
         _addDebugLog('$engineTag SEQUENTIAL HOLD | ${sequential.debugInfo}');
         return;
@@ -707,11 +706,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _checkAndSwitchLocale();
       }
 
-      if (_recoverStaleAppleNoProgressIfNeeded(
+      if (_handlePoorAppleRecognitionIfNeeded(
         script: script,
-        policy: policy,
         transcript: alignmentTranscript,
-        engineTag: engineTag,
       )) {
         return;
       }
@@ -775,6 +772,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         );
         _noProgressCount = 0;
         _resetStaleNoProgressTracking();
+        _resetAppleRecognitionQuality();
         _sttReadingStandby = true;
         _applySttAdvanceTarget(relockTarget, script);
         _syncLocaleForPosition(script, relockTarget + 1, reason: 'relock');

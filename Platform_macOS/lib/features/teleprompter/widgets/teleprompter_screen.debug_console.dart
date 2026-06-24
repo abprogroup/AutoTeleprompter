@@ -58,6 +58,10 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                       isListening: tState.isListening,
                       isStarting: tState.isStarting,
                       accentColor: accentColor,
+                      qualityLabel:
+                          expanded ? _sttQualityLabel(tState.sttHealth) : null,
+                      qualityColor:
+                          _sttQualityColor(tState.sttHealth, accentColor),
                       compact: !expanded,
                     ),
                   ),
@@ -209,6 +213,12 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
     }
     if (log.contains('[MIC]')) {
       return Colors.greenAccent.shade100;
+    }
+    if (log.contains('[QUALITY]')) {
+      return Colors.amber.shade200;
+    }
+    if (log.contains('[RECOVERY]')) {
+      return Colors.orangeAccent.shade100;
     }
     return Colors.greenAccent;
   }

@@ -35,6 +35,7 @@ part 'script_gallery_screen.premium_hub.dart';
 part 'script_gallery_screen.recent_item.dart';
 part 'script_gallery_screen.widgets.dart';
 part 'script_gallery_screen.onboarding.dart';
+part 'script_gallery_screen.onboarding_setup.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {
   final Duration initialInputShieldDuration;

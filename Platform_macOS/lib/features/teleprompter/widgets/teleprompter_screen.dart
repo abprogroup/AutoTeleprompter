@@ -15,6 +15,7 @@ import '../providers/teleprompter_provider.dart';
 import '../services/approximate_spoken_search_service.dart';
 import '../services/presenter_reading_position_service.dart';
 import '../services/presenter_input_lock_service.dart';
+import '../services/stt_recognition_policy_service.dart';
 import '../../script/services/script_color_inversion_service.dart';
 import '../../script/providers/script_provider.dart';
 import '../../script/models/script.dart';

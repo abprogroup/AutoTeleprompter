@@ -218,6 +218,10 @@ class SettingsNotifier extends Notifier<AppSettings>
       sttManualVisibleSkipSmallWords: manualVisibleSmall,
       sttManualVisibleSkipBigWords: manualVisibleBig,
       sttManualBigWordMinLetters: manualBigWordMinLetters,
+      sttReliabilityMode:
+          _normalizeSttReliabilityMode(prefs.getString(_sttReliabilityModeKey)),
+      sttPreflightCompletedForVersion:
+          prefs.getString(_sttPreflightCompletedForVersionKey) ?? '',
       defaultCameraDeviceName:
           prefs.getString(_defaultCameraDeviceNameKey) ?? '',
       contentCreatorCameraSourceMode: _normalizeContentCreatorCameraSource(

@@ -208,99 +208,6 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _staleNoProgressTranscriptCount = 0;
   }
 
-  String _noProgressTranscriptKey(String transcript) {
-    final words = transcript
-        .split(RegExp(r'\s+'))
-        .map((word) => word.trim().normalizeForMatching())
-        .where((word) => word.isNotEmpty)
-        .toList(growable: false);
-    if (words.isEmpty) return '';
-    final start = words.length > 8 ? words.length - 8 : 0;
-    return words.sublist(start).join(' ');
-  }
-
-  int _recordNoProgressTranscript(String transcript) {
-    final key = _noProgressTranscriptKey(transcript);
-    if (key.isEmpty) {
-      _resetStaleNoProgressTracking();
-      return 0;
-    }
-    if (key == _lastNoProgressTranscriptKey) {
-      _staleNoProgressTranscriptCount++;
-    } else {
-      _lastNoProgressTranscriptKey = key;
-      _staleNoProgressTranscriptCount = 1;
-    }
-    return _staleNoProgressTranscriptCount;
-  }
-
-  bool _recoverStaleAppleNoProgressIfNeeded({
-    required Script script,
-    required SttRecognitionPolicy policy,
-    required String transcript,
-    required String engineTag,
-  }) {
-    if (_useWhisper || _sttService.platformName != 'Apple') return false;
-    if (_sessionStopped || _disposed || transcript.trim().isEmpty) {
-      return false;
-    }
-
-    final repeatCount = _recordNoProgressTranscript(transcript);
-    final safetyWaits = policy.safetyRecovery.smallWords.clamp(2, 6).toInt();
-    final repeatedStale = repeatCount >=
-            TeleprompterNotifier._staleTranscriptRecoveryRepeats &&
-        _noProgressCount >= safetyWaits;
-    final extendedNoProgress =
-        _noProgressCount >= TeleprompterNotifier._staleTranscriptFallbackWaits;
-    if (!repeatedStale && !extendedNoProgress) return false;
-
-    final now = DateTime.now();
-    final lastRecoveryAt = _lastStaleTranscriptRecoveryAt;
-    if (lastRecoveryAt != null &&
-        now.difference(lastRecoveryAt) <
-            TeleprompterNotifier._staleTranscriptRecoveryCooldown) {
-      return false;
-    }
-
-    _lastStaleTranscriptRecoveryAt = now;
-    _resetStaleNoProgressTracking();
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
-    _sttReadingStandby = false;
-    _resetSequentialSttStreak();
-    _resetVisibleLocaleAssist();
-    _fluidAdvanceTimer?.cancel();
-
-    _addDebugLog(
-      '$engineTag RECOVER STALE APPLE RECOGNITION | repeat=$repeatCount | heard="$transcript"',
-    );
-    LightweightDiagnostics.instance.record(
-      'stt',
-      'recover stale apple recognition',
-      data: {
-        'heard': transcript,
-        'position': _currentState.confirmedWordIndex,
-        'scriptWords': script.words.length,
-        'repeatCount': repeatCount,
-      },
-    );
-    _safeSetState((s) => s.copyWith(
-          statusMessage:
-              'Speech recognition is receiving audio but not producing usable words. Recovering...',
-          hasError: true,
-          isListening: true,
-          isStarting: true,
-          soundLevel: 0.0,
-        ));
-    _lastSttWatchdogRestartAt = now;
-    unawaited(_restartSttFromWatchdog(
-      token: _sessionToken,
-      source: '[APPLE] STALE TRANSCRIPT RECOVERY FAILED',
-      forceFullCycle: true,
-    ));
-    return true;
-  }
-
   void _resetSpeechActivityMeter() {
     _speechActivityMeterToken++;
     _speechActivityMeterTimer?.cancel();
@@ -416,6 +323,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _sttReadingStandby = false;
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
+    _resetAppleRecognitionQuality();
     final engineName = _sttService.platformName.toUpperCase();
     _addDebugLog('STT LOCALE [$engineName]: $previous -> $locale ($reason)');
     _safeSetState((s) => s.copyWith(isStarting: true, soundLevel: 0.0));
@@ -582,12 +490,15 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _sttReadingStandby = false;
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
+    _resetAppleRecognitionQuality();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
     _lastSttResultAt = _sessionStartTime;
     _lastSttWatchdogRestartAt = null;
     _appleSilentRestartWindowStart = null;
     _appleSilentRestartCount = 0;
+    _poorAppleRecognitionStartedAt = null;
+    _lastPoorAppleRecognitionRestartAt = null;
     _silentWarningFired = false;
     _lastVolLog = null;
     final startupVisibleStart = _visibleWordStart;
@@ -608,6 +519,9 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
         isStarting: true,
         hasError: false,
         statusMessage: '',
+        sttHealth: AppleSttHealth.healthy.name,
+        sttQualityMessage: '',
+        sttRecognitionQuality: 1.0,
         debugLogs: [],
         missingLanguage: null));
 
@@ -756,6 +670,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _sttReadingStandby = false;
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
+    _resetAppleRecognitionQuality();
     _lastVolLog = null;
     _lastSttResultAt = null;
     _appleSilentRestartWindowStart = null;
@@ -774,6 +689,9 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
             hasError: false,
             statusMessage: '',
             soundLevel: 0.0,
+            sttHealth: AppleSttHealth.healthy.name,
+            sttQualityMessage: '',
+            sttRecognitionQuality: 1.0,
           ));
     }
 
@@ -810,6 +728,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _sttReadingStandby = false;
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
+    _resetAppleRecognitionQuality();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('POSITION RESET -> 0');
@@ -831,6 +750,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _sttReadingStandby = false;
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
+    _resetAppleRecognitionQuality();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(

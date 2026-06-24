@@ -48,6 +48,13 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
           token: token,
           reason: appleRestartReason,
         );
+      } else {
+        _updateAppleHealthFromHeartbeat(
+          now: now,
+          shouldBeListening: shouldBeListening,
+          listening: listening,
+          canRestart: canRestart,
+        );
       }
 
       _warnForSilentNonAppleListener(
@@ -112,7 +119,8 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
       canRestart: canRestart,
       sessionStart: _sessionStartTime,
       lastNativeCallback: _lastVolLog,
-      noNativeCallbacksAfter: TeleprompterNotifier._appleNativeCallbackStaleAfter,
+      noNativeCallbacksAfter:
+          TeleprompterNotifier._appleNativeCallbackStaleAfter,
     );
   }
 
@@ -134,8 +142,8 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
     );
 
     _safeSetState((s) => s.copyWith(
-          statusMessage:
-              restartCount >= TeleprompterNotifier._appleSilentRestartLimit
+          statusMessage: restartCount >=
+                  TeleprompterNotifier._appleSilentRestartLimit
               ? 'Speech recognition is not returning audio callbacks. Recovering the microphone listener...'
               : 'Recovering speech recognition...',
           hasError:
@@ -143,6 +151,10 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
           isListening: true,
           isStarting: true,
           soundLevel: 0.0,
+          sttHealth: AppleSttHealth.engineDropped.name,
+          sttQualityMessage:
+              'Apple Speech stopped returning microphone callbacks. Recovering the listener...',
+          sttRecognitionQuality: 0.0,
         ));
 
     unawaited(_restartSttFromWatchdog(
@@ -195,19 +207,19 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
               ),
             );
       } else {
-        result =
-            await _sttService.restart(localeId: _activeLocale).timeout(
-                  const Duration(seconds: 8),
-                  onTimeout: () => SpeechStartResult(
-                    success: false,
-                    message:
-                        'Speech recognition listener restart timed out. Try stopping and starting STT again.',
-                  ),
-                );
+        result = await _sttService.restart(localeId: _activeLocale).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => SpeechStartResult(
+                success: false,
+                message:
+                    'Speech recognition listener restart timed out. Try stopping and starting STT again.',
+              ),
+            );
       }
       if (_disposed || _sessionStopped || token != _sessionToken) return;
       if (result.success && _sttService.requiresImmediateListeningFlag) {
         _startingSession = true;
+        _resetAppleRecognitionQuality();
         _safeSetState(
           (s) => s.copyWith(
             isListening: true,

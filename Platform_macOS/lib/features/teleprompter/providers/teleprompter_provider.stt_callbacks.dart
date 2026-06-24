@@ -113,6 +113,9 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
       final safeError = _sanitizeSttStatusText(error);
       _addDebugLog('[$platform] STT ERROR: $safeError');
       if (error.contains('error_language')) return;
+      if (platform == 'Apple' && error.contains('error_retry')) {
+        _recordAppleRetryError();
+      }
       final isFatal = error.contains('error_audio') ||
           error.contains('error_permission') ||
           error.contains('not available') ||
@@ -220,6 +223,7 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
         result.words.trim().isEmpty) {
       return;
     }
+    if (_currentState.soundLevel > 0.03) return;
 
     final token = ++_speechActivityMeterToken;
     _speechActivityMeterTimer?.cancel();

@@ -2,6 +2,8 @@ class AppSettings {
   static const String sttEngineAuto = 'windows_auto';
   static const String sttEngineWindowsOffline = 'windows_offline';
   static const String sttEngineBrowserOnline = 'browser_online';
+  static const String sttReliabilityStandard = 'standard';
+  static const String sttReliabilityNoisyRoom = 'noisyRoom';
   static const String importColorModePrompter = 'prompter_contrast';
   static const String importColorModeDocument = 'document_original';
   static const String updateChannelStable = 'stable';
@@ -66,6 +68,16 @@ class AppSettings {
     }
   }
 
+  static String normalizeSttReliabilityMode(String? mode) {
+    switch (mode) {
+      case sttReliabilityStandard:
+      case sttReliabilityNoisyRoom:
+        return mode!;
+      default:
+        return sttReliabilityStandard;
+    }
+  }
+
   final double fontSize;
   final String languageMode; // 'auto', 'he', 'en'
   final double scrollLead; // 0.2-0.5, viewport ratio for reading line
@@ -122,6 +134,8 @@ class AppSettings {
   final int sttManualVisibleSkipSmallWords; // 0 = Off
   final int sttManualVisibleSkipBigWords; // 0 = Off
   final int sttManualBigWordMinLetters;
+  final String sttReliabilityMode;
+  final String sttPreflightCompletedForVersion;
   final String defaultCameraDeviceName;
   final String contentCreatorCameraSourceMode;
   final String contentCreatorLayoutPreset;
@@ -201,6 +215,8 @@ class AppSettings {
     this.sttManualVisibleSkipSmallWords = 0,
     this.sttManualVisibleSkipBigWords = 0,
     this.sttManualBigWordMinLetters = 5,
+    this.sttReliabilityMode = sttReliabilityStandard,
+    this.sttPreflightCompletedForVersion = '',
     this.defaultCameraDeviceName = '',
     this.contentCreatorCameraSourceMode = contentCreatorSourceNative,
     this.contentCreatorLayoutPreset = contentCreatorLayoutReading,
@@ -281,6 +297,8 @@ class AppSettings {
     int? sttManualVisibleSkipSmallWords,
     int? sttManualVisibleSkipBigWords,
     int? sttManualBigWordMinLetters,
+    String? sttReliabilityMode,
+    String? sttPreflightCompletedForVersion,
     String? defaultCameraDeviceName,
     String? contentCreatorCameraSourceMode,
     String? contentCreatorLayoutPreset,
@@ -375,6 +393,9 @@ class AppSettings {
           sttManualVisibleSkipBigWords ?? this.sttManualVisibleSkipBigWords,
       sttManualBigWordMinLetters:
           sttManualBigWordMinLetters ?? this.sttManualBigWordMinLetters,
+      sttReliabilityMode: sttReliabilityMode ?? this.sttReliabilityMode,
+      sttPreflightCompletedForVersion: sttPreflightCompletedForVersion ??
+          this.sttPreflightCompletedForVersion,
       defaultCameraDeviceName:
           defaultCameraDeviceName ?? this.defaultCameraDeviceName,
       contentCreatorCameraSourceMode:

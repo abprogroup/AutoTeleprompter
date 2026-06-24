@@ -47,13 +47,19 @@ class _SpeechProfileSettingsSection extends ConsumerWidget {
         const SizedBox(height: 12),
         _SwitchRow(
           icon: Icons.graphic_eq_rounded,
-          title: 'Show Listening Meter',
+          title: 'Show Mic Signal Meter',
           subtitle: settings.showSoundLevelMeter
-              ? 'A live sound bar appears during speech-control sessions.'
-              : 'Show a sound bar so users can confirm the app is hearing them.',
+              ? 'Shows microphone input level during speech-control sessions.'
+              : 'Show mic signal separately from recognition quality.',
           value: settings.showSoundLevelMeter,
           accentColor: Color(settings.currentWordColor),
           onChanged: notifier.setShowSoundLevelMeter,
+        ),
+        const SizedBox(height: 12),
+        _ReliabilityModeSelector(
+          mode: settings.sttReliabilityMode,
+          accentColor: Color(settings.currentWordColor),
+          onChanged: notifier.setSttReliabilityMode,
         ),
         const SizedBox(height: 16),
         _SwitchRow(

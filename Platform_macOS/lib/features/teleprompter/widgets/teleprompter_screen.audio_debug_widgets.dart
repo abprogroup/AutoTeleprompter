@@ -6,6 +6,8 @@ class _SoundLevelBar extends StatelessWidget {
   final bool isStarting;
   final Color accentColor;
   final bool compact;
+  final String? qualityLabel;
+  final Color? qualityColor;
 
   const _SoundLevelBar({
     required this.level,
@@ -13,6 +15,8 @@ class _SoundLevelBar extends StatelessWidget {
     required this.isStarting,
     required this.accentColor,
     this.compact = false,
+    this.qualityLabel,
+    this.qualityColor,
   });
 
   @override
@@ -43,6 +47,17 @@ class _SoundLevelBar extends StatelessWidget {
               size: iconSize,
             ),
             SizedBox(width: compact ? 5 : 8),
+            if (!compact) ...[
+              const Text(
+                'Mic signal',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(999),
@@ -68,6 +83,30 @@ class _SoundLevelBar extends StatelessWidget {
                   ),
                 ),
               ),
+              if (qualityLabel != null && qualityLabel!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        (qualityColor ?? activeColor).withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color:
+                          (qualityColor ?? activeColor).withValues(alpha: 0.42),
+                    ),
+                  ),
+                  child: Text(
+                    qualityLabel!,
+                    style: TextStyle(
+                      color: qualityColor ?? activeColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ],
         ),

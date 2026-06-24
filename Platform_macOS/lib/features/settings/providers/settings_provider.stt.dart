@@ -131,4 +131,18 @@ mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_sttManualBigWordMinLettersKey, clamped);
   }
+
+  Future<void> setSttReliabilityMode(String mode) async {
+    final normalized = _normalizeSttReliabilityMode(mode);
+    state = state.copyWith(sttReliabilityMode: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sttReliabilityModeKey, normalized);
+  }
+
+  Future<void> setSttPreflightCompletedForVersion(String version) async {
+    final sanitized = version.replaceAll(RegExp(r'[\r\n]'), '').trim();
+    state = state.copyWith(sttPreflightCompletedForVersion: sanitized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sttPreflightCompletedForVersionKey, sanitized);
+  }
 }

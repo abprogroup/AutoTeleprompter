@@ -24,6 +24,11 @@ class TeleprompterState {
   /// Audio input devices discovered by the active STT adapter.
   final List<SttAudioInputDevice> audioInputDevices;
 
+  /// Apple STT health state used for coaching and diagnostics.
+  final String sttHealth;
+  final String sttQualityMessage;
+  final double sttRecognitionQuality;
+
   const TeleprompterState({
     this.confirmedWordIndex = 0,
     this.isListening = false,
@@ -35,6 +40,9 @@ class TeleprompterState {
     this.soundLevel = 0.0,
     this.sttBrowserUrl,
     this.audioInputDevices = const [],
+    this.sttHealth = 'healthy',
+    this.sttQualityMessage = '',
+    this.sttRecognitionQuality = 1.0,
   });
 
   TeleprompterState copyWith({
@@ -48,6 +56,9 @@ class TeleprompterState {
     double? soundLevel,
     String? sttBrowserUrl = _clearSentinel,
     List<SttAudioInputDevice>? audioInputDevices,
+    String? sttHealth,
+    String? sttQualityMessage,
+    double? sttRecognitionQuality,
   }) {
     return TeleprompterState(
       confirmedWordIndex: confirmedWordIndex ?? this.confirmedWordIndex,
@@ -63,6 +74,10 @@ class TeleprompterState {
       sttBrowserUrl:
           sttBrowserUrl == _clearSentinel ? this.sttBrowserUrl : sttBrowserUrl,
       audioInputDevices: audioInputDevices ?? this.audioInputDevices,
+      sttHealth: sttHealth ?? this.sttHealth,
+      sttQualityMessage: sttQualityMessage ?? this.sttQualityMessage,
+      sttRecognitionQuality:
+          sttRecognitionQuality ?? this.sttRecognitionQuality,
     );
   }
 }

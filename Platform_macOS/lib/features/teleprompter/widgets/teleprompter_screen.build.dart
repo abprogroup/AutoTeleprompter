@@ -223,17 +223,31 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                           left: 24,
                           right: 24,
                           top: MediaQuery.paddingOf(context).top + 16,
-                          child: IgnorePointer(
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 360),
-                                child: _SoundLevelBar(
-                                  level: controlsState.soundLevel,
-                                  isListening: controlsState.isListening,
-                                  isStarting: controlsState.isStarting,
-                                  accentColor: Color(settings.currentWordColor),
-                                ),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 620),
+                              child: _buildSttSignalCoach(
+                                tState: controlsState,
+                                settings: settings,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (!settings.showSoundLevelMeter &&
+                          !settings.debugMode &&
+                          controlsState.sttQualityMessage.isNotEmpty &&
+                          (controlsState.isListening ||
+                              controlsState.isStarting))
+                        Positioned(
+                          left: 24,
+                          right: 24,
+                          top: MediaQuery.paddingOf(context).top + 16,
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 560),
+                              child: _buildSttQualityMessage(
+                                tState: controlsState,
+                                settings: settings,
                               ),
                             ),
                           ),
@@ -406,6 +420,145 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
           scrollMode: mode,
           scrollSpeed: speed,
         );
+  }
+
+  Widget _buildSttSignalCoach({
+    required TeleprompterState tState,
+    required AppSettings settings,
+  }) {
+    final accent = Color(settings.currentWordColor);
+    final healthColor = _sttQualityColor(tState.sttHealth, accent);
+    final qualityMessage = tState.sttQualityMessage.trim();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IgnorePointer(
+          child: _SoundLevelBar(
+            level: tState.soundLevel,
+            isListening: tState.isListening,
+            isStarting: tState.isStarting,
+            accentColor: accent,
+            qualityLabel: _sttQualityLabel(tState.sttHealth),
+            qualityColor: healthColor,
+          ),
+        ),
+        if (qualityMessage.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _buildSttQualityMessage(tState: tState, settings: settings),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSttQualityMessage({
+    required TeleprompterState tState,
+    required AppSettings settings,
+  }) {
+    final accent = Color(settings.currentWordColor);
+    final healthColor = _sttQualityColor(tState.sttHealth, accent);
+    final suggestNoisyRoom = tState.sttHealth != AppleSttHealth.healthy.name &&
+        settings.sttReliabilityMode != AppSettings.sttReliabilityNoisyRoom;
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.84),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: healthColor.withValues(alpha: 0.45)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_sttQualityIcon(tState.sttHealth),
+                color: healthColor, size: 18),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                tState.sttQualityMessage,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  height: 1.25,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (suggestNoisyRoom) ...[
+              const SizedBox(width: 10),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: accent,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () {
+                  unawaited(
+                    ref.read(settingsProvider.notifier).setSttReliabilityMode(
+                          AppSettings.sttReliabilityNoisyRoom,
+                        ),
+                  );
+                },
+                child: const Text('Use Noisy room'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _sttQualityLabel(String health) {
+    switch (health) {
+      case 'lowVoiceSignal':
+        return 'Low voice';
+      case 'noisyInput':
+        return 'Noise';
+      case 'recognizingWrongWords':
+        return 'Matching';
+      case 'engineDropped':
+        return 'Recovering';
+      default:
+        return 'Clear';
+    }
+  }
+
+  IconData _sttQualityIcon(String health) {
+    switch (health) {
+      case 'lowVoiceSignal':
+        return Icons.record_voice_over_outlined;
+      case 'noisyInput':
+        return Icons.noise_control_off_outlined;
+      case 'recognizingWrongWords':
+        return Icons.manage_search_outlined;
+      case 'engineDropped':
+        return Icons.sync_problem_outlined;
+      default:
+        return Icons.check_circle_outline;
+    }
+  }
+
+  Color _sttQualityColor(String health, Color accent) {
+    switch (health) {
+      case 'lowVoiceSignal':
+        return Colors.orangeAccent;
+      case 'noisyInput':
+      case 'recognizingWrongWords':
+        return accent;
+      case 'engineDropped':
+        return Colors.redAccent;
+      default:
+        return Colors.greenAccent;
+    }
   }
 
   String _presenterLayoutKey(

@@ -1,6 +1,45 @@
 import '../../settings/models/app_settings.dart';
 import 'word_aligner.dart';
 
+enum AppleSttHealth {
+  healthy,
+  recognizingWrongWords,
+  lowVoiceSignal,
+  noisyInput,
+  engineDropped,
+}
+
+enum AppleSttRecoveryAction {
+  none,
+  coach,
+  suggestNoisyRoom,
+  suggestManualFallback,
+  softRestart,
+  fullRestart,
+}
+
+class AppleSttHealthAssessment {
+  final AppleSttHealth health;
+  final AppleSttRecoveryAction action;
+  final String message;
+  final double quality;
+
+  const AppleSttHealthAssessment({
+    required this.health,
+    required this.action,
+    required this.message,
+    required this.quality,
+  });
+
+  bool get shouldRestart =>
+      action == AppleSttRecoveryAction.softRestart ||
+      action == AppleSttRecoveryAction.fullRestart;
+
+  bool get shouldFullRestart => action == AppleSttRecoveryAction.fullRestart;
+
+  String get healthKey => health.name;
+}
+
 class SttRecognitionPolicyService {
   static bool isEnglishLocale(String locale) =>
       locale.toLowerCase().replaceAll('_', '-').startsWith('en-') ||
@@ -171,6 +210,8 @@ class SttRecognitionPolicyService {
   static SttRecognitionPolicy recognitionPolicyForSettings(
     AppSettings settings,
   ) {
+    final noisyRoom =
+        settings.sttReliabilityMode == AppSettings.sttReliabilityNoisyRoom;
     if (settings.sttManualProfileEnabled) {
       final manualVisibleSmall = settings.sttManualVisibleSkipSmallWords;
       final manualVisibleBig = settings.sttManualVisibleSkipBigWords;
@@ -192,8 +233,16 @@ class SttRecognitionPolicyService {
           bigWordMinLetters,
         ),
         visibleSkip: SttEvidenceThreshold(
-          manualVisibleEnabled ? manualVisibleSmall : 4,
-          manualVisibleEnabled ? manualVisibleBig : 3,
+          manualVisibleEnabled
+              ? (noisyRoom
+                  ? manualVisibleSmall.clamp(5, 8).toInt()
+                  : manualVisibleSmall)
+              : (noisyRoom ? 5 : 4),
+          manualVisibleEnabled
+              ? (noisyRoom
+                  ? manualVisibleBig.clamp(4, 8).toInt()
+                  : manualVisibleBig)
+              : (noisyRoom ? 4 : 3),
           bigWordMinLetters,
         ),
       );
@@ -203,9 +252,151 @@ class SttRecognitionPolicyService {
     return SttRecognitionPolicy(
       bulletMode: settings.sttStrictBulletMode,
       visibleSkipEnabled: visibleSkipEnabled,
-      hardVisibleSkipEnabled:
-          visibleSkipEnabled && settings.sttHardVisibleSkipEnabled,
+      hardVisibleSkipEnabled: visibleSkipEnabled &&
+          (settings.sttHardVisibleSkipEnabled || noisyRoom),
     );
+  }
+
+  static AppleSttHealthAssessment classifyAppleSttHealth({
+    required String reliabilityMode,
+    required bool shouldBeListening,
+    required bool listening,
+    required bool startingSession,
+    required bool canRestart,
+    required DateTime now,
+    required DateTime? sessionStart,
+    required DateTime? lastNativeCallback,
+    required double soundLevel,
+    required String transcript,
+    required bool matchedScript,
+    required int noProgressCount,
+    required int repeatedTranscriptCount,
+    required Duration poorQualityDuration,
+    int retryBurstCount = 0,
+    Duration noNativeCallbacksAfter = const Duration(seconds: 25),
+  }) {
+    if (!shouldBeListening) {
+      return const AppleSttHealthAssessment(
+        health: AppleSttHealth.healthy,
+        action: AppleSttRecoveryAction.none,
+        message: '',
+        quality: 1.0,
+      );
+    }
+
+    final droppedReason = appleWatchdogRestartReason(
+      now: now,
+      shouldBeListening: shouldBeListening,
+      listening: listening,
+      startingSession: startingSession,
+      canRestart: canRestart,
+      sessionStart: sessionStart,
+      lastNativeCallback: lastNativeCallback,
+      noNativeCallbacksAfter: noNativeCallbacksAfter,
+    );
+    final retryBurstDropped = retryBurstCount >= 3 && canRestart;
+    if ((!listening && !startingSession && canRestart) ||
+        retryBurstDropped ||
+        droppedReason != null) {
+      return const AppleSttHealthAssessment(
+        health: AppleSttHealth.engineDropped,
+        action: AppleSttRecoveryAction.fullRestart,
+        message: 'Speech recognizer stopped responding. Recovering listener...',
+        quality: 0.0,
+      );
+    }
+
+    if (matchedScript) {
+      return const AppleSttHealthAssessment(
+        health: AppleSttHealth.healthy,
+        action: AppleSttRecoveryAction.none,
+        message: '',
+        quality: 1.0,
+      );
+    }
+
+    final words = transcript
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((word) => word.trim().isNotEmpty)
+        .length;
+    final normalizedSound = soundLevel.clamp(0.0, 1.0).toDouble();
+    final noisyRoom = reliabilityMode == AppSettings.sttReliabilityNoisyRoom;
+    final sustainedPoor = noProgressCount >= 3 ||
+        repeatedTranscriptCount >= 2 ||
+        poorQualityDuration >= const Duration(seconds: 6);
+    final shouldSuggestManual =
+        poorQualityDuration >= const Duration(seconds: 30);
+
+    if (noProgressCount >= 2 && normalizedSound <= 0.08 && words == 0) {
+      return AppleSttHealthAssessment(
+        health: AppleSttHealth.lowVoiceSignal,
+        action: shouldSuggestManual
+            ? AppleSttRecoveryAction.suggestManualFallback
+            : AppleSttRecoveryAction.coach,
+        message:
+            'Mic signal is low. Move closer to the microphone, choose a closer input, or use an external mic.',
+        quality: 0.20,
+      );
+    }
+
+    final shortWrongFragment = words > 0 && words <= 2 && noProgressCount >= 1;
+    if (shortWrongFragment || repeatedTranscriptCount >= 2) {
+      return AppleSttHealthAssessment(
+        health: AppleSttHealth.recognizingWrongWords,
+        action: shouldSuggestManual
+            ? AppleSttRecoveryAction.suggestManualFallback
+            : (!noisyRoom && sustainedPoor
+                ? AppleSttRecoveryAction.suggestNoisyRoom
+                : AppleSttRecoveryAction.coach),
+        message:
+            'Mic signal is active, but Apple Speech is hearing words that do not match the script. Move the mic closer or reduce room noise.',
+        quality: 0.36,
+      );
+    }
+
+    if (sustainedPoor && normalizedSound >= 0.18) {
+      return AppleSttHealthAssessment(
+        health: AppleSttHealth.noisyInput,
+        action: shouldSuggestManual
+            ? AppleSttRecoveryAction.suggestManualFallback
+            : (!noisyRoom
+                ? AppleSttRecoveryAction.suggestNoisyRoom
+                : AppleSttRecoveryAction.coach),
+        message:
+            'Mic signal is active, but Apple Speech is not finding clear script words. Try Noisy room mode or reduce room noise.',
+        quality: 0.45,
+      );
+    }
+
+    return const AppleSttHealthAssessment(
+      health: AppleSttHealth.healthy,
+      action: AppleSttRecoveryAction.none,
+      message: '',
+      quality: 0.75,
+    );
+  }
+
+  static bool shouldSoftRestartPoorAppleRecognition({
+    required String reliabilityMode,
+    required int noProgressCount,
+    required int repeatedTranscriptCount,
+    required Duration poorQualityDuration,
+    required DateTime now,
+    required DateTime? lastRestartAt,
+    Duration cooldown = const Duration(seconds: 45),
+  }) {
+    if (lastRestartAt != null && now.difference(lastRestartAt) < cooldown) {
+      return false;
+    }
+    final noisyRoom = reliabilityMode == AppSettings.sttReliabilityNoisyRoom;
+    final minimumDuration =
+        noisyRoom ? const Duration(seconds: 30) : const Duration(seconds: 15);
+    final minimumWaits = noisyRoom ? 14 : 10;
+    final minimumRepeats = noisyRoom ? 4 : 3;
+    return poorQualityDuration >= minimumDuration &&
+        noProgressCount >= minimumWaits &&
+        repeatedTranscriptCount >= minimumRepeats;
   }
 
   static String? browserRecoveryReason({

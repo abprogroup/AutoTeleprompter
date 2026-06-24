@@ -1,5 +1,5 @@
-name: Build macOS App
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+32' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+name: Build macOS App (v5.0.8)
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+33' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -14,9 +14,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.8+32'
+        description: 'Flutter app version, for example 5.0.8+33'
         required: true
-        default: '5.0.8+32'
+        default: '5.0.8+33'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false
@@ -71,10 +71,10 @@ jobs:
           esac
           appVersion="${{ github.event.inputs.app_version }}"
           if [ -z "$appVersion" ]; then
-            appVersion="5.0.8+32"
+            appVersion="5.0.8+33"
           fi
           if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
-            echo "app_version must look like 5.0.8+32." >&2
+            echo "app_version must look like 5.0.8+33." >&2
             exit 1
           fi
           versionName="${appVersion%%+*}"
@@ -109,6 +109,77 @@ jobs:
             echo "manifest_asset=$manifestAsset"
             echo "manifest_url=$manifestUrl"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Verify macOS Release Credentials
+        env:
+          RELEASE_CHANNEL: ${{ steps.release.outputs.release_channel }}
+          RELEASE_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
+          FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
+          DROPBOX_CLIENT_ID: ${{ secrets.DROPBOX_CLIENT_ID }}
+          DROPBOX_CLIENT_SECRET: ${{ secrets.DROPBOX_CLIENT_SECRET }}
+          MACOS_UPDATE_MANIFEST_URL_SECRET: ${{ secrets.MACOS_UPDATE_MANIFEST_URL }}
+          MACOS_UPDATE_MANIFEST_URL_VAR: ${{ vars.MACOS_UPDATE_MANIFEST_URL }}
+          FALLBACK_MANIFEST_URL: ${{ steps.release.outputs.manifest_url }}
+        run: |
+          set -euo pipefail
+          require_value() {
+            local name="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "$name is required for a published macOS release build." >&2
+              exit 1
+            fi
+            if [[ "$value" == *"TODO"* || "$value" == *"REPLACE"* || "$value" == *"placeholder"* ]]; then
+              echo "$name looks like a placeholder and cannot be published." >&2
+              exit 1
+            fi
+          }
+          require_https() {
+            local name="$1"
+            local value="$2"
+            require_value "$name" "$value"
+            if [[ ! "$value" =~ ^https:// ]]; then
+              echo "$name must be an HTTPS URL for a published macOS release." >&2
+              exit 1
+            fi
+          }
+
+          case "$RELEASE_CHANNEL" in
+            stable|beta) ;;
+            *) echo "Unsupported release channel: $RELEASE_CHANNEL" >&2; exit 1 ;;
+          esac
+
+          manifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_SECRET:-}" | tr -d '\r\n' | xargs)"
+          if [ -z "$manifestUrl" ]; then
+            manifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_VAR:-}" | tr -d '\r\n' | xargs)"
+          fi
+          if [ -z "$manifestUrl" ]; then
+            manifestUrl="$FALLBACK_MANIFEST_URL"
+          fi
+
+          require_value "AUTOTELEPROMPTER_RELEASES_TOKEN" "$RELEASE_TOKEN"
+          require_https "FEEDBACK_ENDPOINT" "$FEEDBACK_ENDPOINT"
+          require_https "SUPABASE_URL" "$SUPABASE_URL"
+          if [[ "$SUPABASE_URL" != *".supabase.co"* ]]; then
+            echo "SUPABASE_URL must point to the production Supabase project." >&2
+            exit 1
+          fi
+          require_value "SUPABASE_ANON_KEY" "$SUPABASE_ANON_KEY"
+          if [[ ! "$SUPABASE_ANON_KEY" =~ ^eyJ.+\..+\..+ ]]; then
+            echo "SUPABASE_ANON_KEY must look like a Supabase anon JWT." >&2
+            exit 1
+          fi
+          require_value "GOOGLE_DRIVE_CLIENT_ID" "$GOOGLE_DRIVE_CLIENT_ID"
+          require_value "GOOGLE_DRIVE_CLIENT_SECRET" "$GOOGLE_DRIVE_CLIENT_SECRET"
+          require_value "DROPBOX_CLIENT_ID" "$DROPBOX_CLIENT_ID"
+          require_value "DROPBOX_CLIENT_SECRET" "$DROPBOX_CLIENT_SECRET"
+          require_https "UPDATE_MANIFEST_URL" "$manifestUrl"
+
+          echo "macOS production release credential preflight passed."
 
       - name: Build macOS App
         run: |
@@ -236,6 +307,10 @@ jobs:
           poor-recognition restart loops, allows mic preflight from any visible
           line, and adds visible-anchor relocking for imperfect proper-name
           recognition while keeping large-jump protection intact.
+          Build 33 adds a mandatory production credential preflight so macOS
+          releases cannot publish unless the Supabase backend, feedback route,
+          cloud credentials, release token, and update manifest URL are all
+          present before the app is compiled.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -283,7 +358,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, corrected Present word spacing, top-pinned listening meter placement, improved low-volume next-word STT progression, build 30 stale Apple Speech callback recovery, build 31 Apple STT reliability mode for noisy rooms/far speakers without overriding saved speech-control profile thresholds, and build 32 reduced Apple Speech blackout windows by treating retry bursts as quality/coaching signals, avoiding poor-recognition restart loops, allowing mic preflight from any visible line, and adding visible-anchor relocking for imperfect proper-name recognition while preserving large-jump protection.",
+              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, corrected Present word spacing, top-pinned listening meter placement, improved low-volume next-word STT progression, build 30 stale Apple Speech callback recovery, build 31 Apple STT reliability mode for noisy rooms/far speakers without overriding saved speech-control profile thresholds, build 32 reduced Apple Speech blackout windows by treating retry bursts as quality/coaching signals, avoiding poor-recognition restart loops, allowing mic preflight from any visible line, and adding visible-anchor relocking for imperfect proper-name recognition while preserving large-jump protection, and build 33 adds mandatory production credential preflight so published macOS releases cannot ship without the Supabase backend, feedback route, cloud credentials, release token, and update manifest URL.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

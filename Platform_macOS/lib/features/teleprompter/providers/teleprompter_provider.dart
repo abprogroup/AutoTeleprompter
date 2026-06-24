@@ -64,6 +64,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
   // STT tuning
   static const int _maxAdvancePerUpdate = 30;
+  static const int _maxLocalSttJumpWithoutWait = 5;
+  static const int _maxTrustedVisibleSttJumpWithoutWait = 12;
   static const int _visibleLocaleAssistAfterWaits = 2;
   static const int _sttLiveAlignmentWindowWords = 10;
   static const int _sttAlignmentWindowWords = 18;
@@ -246,6 +248,23 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         alignedIndex: alignedIndex,
         visibleMaxSkipTargetIndex: visibleMaxSkipTargetIndex,
         maxAdvancePerUpdate: _maxAdvancePerUpdate,
+      );
+
+  static bool shouldWaitForLargeSttAdvance({
+    required int currentIndex,
+    required int targetIndex,
+    required bool visibleSkipTargetTrusted,
+    required int noProgressCount,
+  }) =>
+      SttRecognitionPolicyService.shouldWaitForLargeAdvance(
+        currentIndex: currentIndex,
+        targetIndex: targetIndex,
+        visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+        noProgressCount: noProgressCount,
+        maxLocalAdvanceWithoutWait: _maxLocalSttJumpWithoutWait,
+        maxTrustedVisibleAdvanceWithoutWait:
+            _maxTrustedVisibleSttJumpWithoutWait,
+        forceVisibleAfterWaits: _relaxedVisibleRelockAfterWaits,
       );
 
   static bool shouldForceSkipAfterNoProgress({
@@ -525,8 +544,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         visibleWordEnd: _visibleWordEnd,
       );
       final rawJump = aligned.confirmedWordIndex - advanceFrom;
-      if (!visibleSkipTargetTrusted && rawJump > 5) {
+      final shouldWaitForJump =
+          TeleprompterNotifier.shouldWaitForLargeSttAdvance(
+        currentIndex: advanceFrom,
+        targetIndex: aligned.confirmedWordIndex,
+        visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+        noProgressCount: _noProgressCount,
+      );
+      if (shouldWaitForJump) {
         _fluidAdvanceTimer?.cancel();
+        _resetSequentialSttStreak();
         if (!strictBulletMode) {
           _sttReadingStandby = false;
         }
@@ -536,16 +563,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           visibleAssistThreshold:
               TeleprompterNotifier._visibleLocaleAssistAfterWaits,
         );
+        final scope = visibleSkipTargetTrusted ? 'visible' : 'off-screen';
         _addDebugLog(
-          '$engineTag WAIT #$_noProgressCount | blocked off-screen advance '
-          '->${aligned.confirmedWordIndex} | heard: "$alignmentTranscript"',
+          '$engineTag WAIT #$_noProgressCount | blocked $scope advance '
+          '+$rawJump ->${aligned.confirmedWordIndex} | heard: "$alignmentTranscript"',
         );
         LightweightDiagnostics.instance.record(
           'stt',
-          'blocked off-screen advance',
+          'blocked $scope advance',
           data: {
             'from': advanceFrom,
             'aligned': aligned.confirmedWordIndex,
+            'jump': rawJump,
             'visibleStart': _visibleWordStart,
             'visibleEnd': _visibleWordEnd,
             'heard': alignmentTranscript,
@@ -670,6 +699,39 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       );
       if (relockTarget != null &&
           relockTarget > _currentState.confirmedWordIndex) {
+        final relockFrom = _currentState.confirmedWordIndex;
+        final relockVisibleTrusted =
+            TeleprompterNotifier.isTrustedVisibleSkipTarget(
+          alignedIndex: relockTarget,
+          visibleWordStart: _visibleWordStart,
+          visibleWordEnd: _visibleWordEnd,
+        );
+        if (TeleprompterNotifier.shouldWaitForLargeSttAdvance(
+          currentIndex: relockFrom,
+          targetIndex: relockTarget,
+          visibleSkipTargetTrusted: relockVisibleTrusted,
+          noProgressCount: _noProgressCount,
+        )) {
+          _fluidAdvanceTimer?.cancel();
+          _resetSequentialSttStreak();
+          final relockJump = relockTarget - relockFrom;
+          _addDebugLog(
+            '$engineTag WAIT #$_noProgressCount | delayed ${_lastRelockScope.toUpperCase()} relock '
+            '+$relockJump ->$relockTarget | heard: "$relockTranscript"',
+          );
+          LightweightDiagnostics.instance.record(
+            'stt',
+            'delayed relock',
+            data: {
+              'from': relockFrom,
+              'to': relockTarget,
+              'jump': relockJump,
+              'scope': _lastRelockScope,
+              'heard': relockTranscript,
+            },
+          );
+          return;
+        }
         final relockedWord = script.words[relockTarget].raw;
         _addDebugLog(
           '$engineTag RELOCK ${_lastRelockScope.toUpperCase()} -> #$relockTarget "$relockedWord" | heard: "$relockTranscript"',

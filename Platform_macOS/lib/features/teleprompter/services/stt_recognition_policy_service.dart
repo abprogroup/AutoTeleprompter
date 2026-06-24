@@ -134,6 +134,24 @@ class SttRecognitionPolicyService {
         .toInt();
   }
 
+  static bool shouldWaitForLargeAdvance({
+    required int currentIndex,
+    required int targetIndex,
+    required bool visibleSkipTargetTrusted,
+    required int noProgressCount,
+    required int maxLocalAdvanceWithoutWait,
+    required int maxTrustedVisibleAdvanceWithoutWait,
+    required int forceVisibleAfterWaits,
+  }) {
+    final jump = targetIndex - currentIndex;
+    if (jump <= 0) return false;
+    if (!visibleSkipTargetTrusted) {
+      return jump > maxLocalAdvanceWithoutWait;
+    }
+    if (jump <= maxTrustedVisibleAdvanceWithoutWait) return false;
+    return noProgressCount < forceVisibleAfterWaits;
+  }
+
   static bool shouldForceSkipAfterNoProgress({
     required bool strictBulletMode,
     required int noProgressCount,

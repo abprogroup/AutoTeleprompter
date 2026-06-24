@@ -40,6 +40,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   DateTime? _lastSttResultAt;
   DateTime? _sessionStartTime;
   DateTime? _lastSttWatchdogRestartAt;
+  DateTime? _appleSilentRestartWindowStart;
+  int _appleSilentRestartCount = 0;
   bool _silentWarningFired = false;
   Future<void>? _stopInFlight;
   int _sessionToken = 0;
@@ -72,6 +74,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const int _sttRelockTranscriptMaxWords = 96;
   static const int _stuckRelockAfterWaits = 3;
   static const int _relaxedVisibleRelockAfterWaits = 12;
+  static const int _appleSilentRestartLimit = 3;
+  static const Duration _appleNativeCallbackStaleAfter =
+      Duration(seconds: 12);
+  static const Duration _appleSilentRestartWindow = Duration(seconds: 70);
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =

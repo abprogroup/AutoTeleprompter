@@ -486,6 +486,8 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _sessionStartTime = DateTime.now();
     _lastSttResultAt = _sessionStartTime;
     _lastSttWatchdogRestartAt = null;
+    _appleSilentRestartWindowStart = null;
+    _appleSilentRestartCount = 0;
     _silentWarningFired = false;
     _lastVolLog = null;
     final startupVisibleStart = _visibleWordStart;
@@ -655,6 +657,8 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _resetSequentialSttStreak();
     _lastVolLog = null;
     _lastSttResultAt = null;
+    _appleSilentRestartWindowStart = null;
+    _appleSilentRestartCount = 0;
     _scriptLanguageLocale = null;
     _activeLocale = null;
     _sectionLocales = [];

@@ -41,8 +41,9 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
     _sttService.onResult = (result) {
       if (_disposed || _sessionStopped) return;
       final now = DateTime.now();
-      _lastVolLog = now;
+      _markNativeSpeechCallback(now);
       _lastSttResultAt = now;
+      _safeSetState((s) => s.copyWith(statusMessage: '', hasError: false));
       _pulseSpeechActivityMeterFromResult(result);
       _handleSttResult(result);
     };
@@ -52,12 +53,15 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
       final clampedLevel = _normalizeSoundLevelForMeter(level);
       final now = DateTime.now();
       if (_sttService.platformName == 'Apple') {
-        _lastVolLog = now;
+        _markNativeSpeechCallback(now);
       }
-      _safeSetState(
-        (s) => s.copyWith(soundLevel: clampedLevel),
-      );
-      if (clampedLevel > 0.02) _lastVolLog = now;
+      _safeSetState((s) => s.copyWith(
+            soundLevel: clampedLevel,
+            statusMessage:
+                _sttService.platformName == 'Apple' ? '' : s.statusMessage,
+            hasError: _sttService.platformName == 'Apple' ? false : s.hasError,
+          ));
+      if (clampedLevel > 0.02) _markNativeSpeechCallback(now);
     };
 
     _sttService.onDiagnostic = (msg) {
@@ -91,11 +95,16 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
       if (_startingSession && status != SpeechStatus.listening) return;
       _startingSession = false;
       _addDebugLog('[$platform] STATUS: $status');
+      final waitingForAppleCallback = platform == 'Apple' &&
+          status == SpeechStatus.listening &&
+          (_lastVolLog == null ||
+              DateTime.now().difference(_lastVolLog!) >=
+                  TeleprompterNotifier._appleNativeCallbackStaleAfter);
       _safeSetState((s) => s.copyWith(
             isListening: status == SpeechStatus.listening,
             isStarting: false,
-            statusMessage: '',
-            hasError: false,
+            statusMessage: waitingForAppleCallback ? s.statusMessage : '',
+            hasError: waitingForAppleCallback ? s.hasError : false,
           ));
     };
 
@@ -225,5 +234,12 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
               const Duration(milliseconds: 420);
       _safeSetState((s) => s.copyWith(soundLevel: recent ? 0.12 : 0.0));
     });
+  }
+
+  void _markNativeSpeechCallback(DateTime now) {
+    _lastVolLog = now;
+    if (_sttService.platformName != 'Apple') return;
+    _appleSilentRestartWindowStart = null;
+    _appleSilentRestartCount = 0;
   }
 }

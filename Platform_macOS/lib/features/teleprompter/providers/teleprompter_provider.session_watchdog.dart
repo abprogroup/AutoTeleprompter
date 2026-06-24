@@ -112,6 +112,7 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
       canRestart: canRestart,
       sessionStart: _sessionStartTime,
       lastNativeCallback: _lastVolLog,
+      noNativeCallbacksAfter: TeleprompterNotifier._appleNativeCallbackStaleAfter,
     );
   }
 
@@ -121,39 +122,98 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
     required int token,
     required String reason,
   }) {
+    final restartCount = _recordAppleSilentRestart(now);
+    final forceFullCycle =
+        restartCount >= TeleprompterNotifier._appleSilentRestartLimit;
     _lastSttWatchdogRestartAt = now;
-    _lastVolLog = now;
-    _lastSttResultAt = now;
+    _resetSpeechActivityMeter();
     _addDebugLog(
-      '[$engineName] WATCHDOG: $reason; restarting listener.',
+      '[$engineName] WATCHDOG: $reason; '
+      '${forceFullCycle ? "full-resetting" : "restarting"} listener '
+      '(attempt $restartCount/${TeleprompterNotifier._appleSilentRestartLimit}).',
     );
+
+    _safeSetState((s) => s.copyWith(
+          statusMessage:
+              restartCount >= TeleprompterNotifier._appleSilentRestartLimit
+              ? 'Speech recognition is not returning audio callbacks. Recovering the microphone listener...'
+              : 'Recovering speech recognition...',
+          hasError:
+              restartCount >= TeleprompterNotifier._appleSilentRestartLimit,
+          isListening: true,
+          isStarting: true,
+          soundLevel: 0.0,
+        ));
+
     unawaited(_restartSttFromWatchdog(
       token: token,
       source: '[$engineName] SILENT RESTART FAILED',
+      forceFullCycle: forceFullCycle,
     ));
+  }
+
+  int _recordAppleSilentRestart(DateTime now) {
+    final windowStart = _appleSilentRestartWindowStart;
+    if (windowStart == null ||
+        now.difference(windowStart) >
+            TeleprompterNotifier._appleSilentRestartWindow) {
+      _appleSilentRestartWindowStart = now;
+      _appleSilentRestartCount = 1;
+      return _appleSilentRestartCount;
+    }
+    _appleSilentRestartCount++;
+    return _appleSilentRestartCount;
   }
 
   Future<void> _restartSttFromWatchdog({
     required int token,
     required String source,
+    bool forceFullCycle = false,
   }) async {
     try {
-      final result = await _sttService.restart(localeId: _activeLocale).timeout(
-            const Duration(seconds: 8),
-            onTimeout: () => SpeechStartResult(
-              success: false,
-              message:
-                  'Speech recognition listener restart timed out. Try stopping and starting STT again.',
-            ),
-          );
+      final SpeechStartResult result;
+      if (forceFullCycle) {
+        await _sttService.stop().timeout(const Duration(seconds: 4));
+        if (_disposed || _sessionStopped || token != _sessionToken) return;
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (_sttService.requiresImmediateListeningFlag) {
+          _startingSession = true;
+          _safeSetState((s) => s.copyWith(
+                isListening: true,
+                isStarting: true,
+                soundLevel: 0.0,
+                statusMessage: 'Recovering speech recognition...',
+                hasError: false,
+              ));
+        }
+        result = await _sttService.start(localeId: _activeLocale).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () => SpeechStartResult(
+                success: false,
+                message:
+                    'Speech recognition full reset timed out. Try stopping and starting STT again.',
+              ),
+            );
+      } else {
+        result =
+            await _sttService.restart(localeId: _activeLocale).timeout(
+                  const Duration(seconds: 8),
+                  onTimeout: () => SpeechStartResult(
+                    success: false,
+                    message:
+                        'Speech recognition listener restart timed out. Try stopping and starting STT again.',
+                  ),
+                );
+      }
       if (_disposed || _sessionStopped || token != _sessionToken) return;
       if (result.success && _sttService.requiresImmediateListeningFlag) {
         _startingSession = true;
-        final now = DateTime.now();
-        _lastVolLog = now;
-        _lastSttResultAt = now;
         _safeSetState(
-          (s) => s.copyWith(isListening: true, isStarting: false),
+          (s) => s.copyWith(
+            isListening: true,
+            isStarting: false,
+            soundLevel: 0.0,
+          ),
         );
         Future.delayed(const Duration(milliseconds: 1500), () {
           if (token == _sessionToken) _startingSession = false;

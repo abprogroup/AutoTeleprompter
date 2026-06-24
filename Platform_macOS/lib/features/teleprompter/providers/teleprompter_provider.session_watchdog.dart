@@ -78,9 +78,9 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
   }) {
     if (!settings.debugMode) return;
     final pos = _currentState.confirmedWordIndex;
-    final total = script.words.where((w) => !w.isNewline).length;
+    final lastIndex = script.words.isEmpty ? 0 : script.words.length - 1;
     _addDebugLog(
-      'HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount',
+      'HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$lastIndex | stuck=$_noProgressCount',
     );
   }
 

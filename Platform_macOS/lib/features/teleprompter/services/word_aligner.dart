@@ -209,7 +209,9 @@ class WordAligner {
       );
     }
 
-    if (!transcriptPassesLocal &&
+    if (!policyBulletMode &&
+        activeStandby &&
+        !transcriptPassesLocal &&
         !(visibleSkipEnabled && transcriptPassesVisible)) {
       final directNext = earlyDirectNextWord(searchStart);
       if (directNext != null) return directNext;
@@ -337,7 +339,9 @@ class WordAligner {
       searchStart: searchStart,
       lastConfirmedIndex: lastConfirmedIndex,
       maxPhraseWords: _localRecoveryPhraseMaxWords,
-      evidenceThreshold: effectivePolicy.safetyRecovery,
+      evidenceThreshold: policyBulletMode
+          ? effectivePolicy.bulletAdvance
+          : effectivePolicy.safetyRecovery,
       overrideWordThreshold: policyBulletMode ? _strictPhraseThreshold : null,
       minPhraseScore: policyBulletMode ? _strictPhraseThreshold : 0.70,
     );

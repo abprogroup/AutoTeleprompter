@@ -246,8 +246,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                           height: debugConsoleHeight,
                           expanded: debugConsoleExpanded,
                           accentColor: Color(settings.currentWordColor),
-                          wordCount:
-                              script.words.where((w) => !w.isNewline).length,
+                          wordCount: script.words.length,
                         ),
 
                       // Error banner with actionable guidance

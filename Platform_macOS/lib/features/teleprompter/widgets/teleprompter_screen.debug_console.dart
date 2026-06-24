@@ -64,7 +64,7 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                   if (expanded) ...[
                     const SizedBox(width: 8),
                     Text(
-                      'POS: ${tState.confirmedWordIndex}/$wordCount',
+                      'POS: ${tState.confirmedWordIndex}/${wordCount == 0 ? 0 : wordCount - 1}',
                       style: const TextStyle(
                         color: Colors.orange,
                         fontSize: 11,

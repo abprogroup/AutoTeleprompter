@@ -118,6 +118,7 @@ class SpeechService {
           }
           if (_isAppleTransientRetryError(msg)) {
             onError?.call(msg);
+            _handleAppleTransientRetryError();
             return;
           }
 
@@ -223,6 +224,26 @@ class SpeechService {
 
   bool _isAppleTransientRetryError(String msg) {
     return msg.toLowerCase().contains('error_retry');
+  }
+
+  void _handleAppleTransientRetryError() {
+    _consecutiveErrors++;
+    _errorResetTimer?.cancel();
+    _errorResetTimer =
+        Timer(const Duration(seconds: 10), () => _consecutiveErrors = 0);
+    if (_isRestarting) return;
+
+    final reinit = _consecutiveErrors >= 3;
+    if (reinit) {
+      _consecutiveErrors = 0;
+      _isInitialized = false;
+    }
+    _scheduleRestart(
+      reinit
+          ? const Duration(milliseconds: 700)
+          : const Duration(milliseconds: 180),
+      reinit: reinit,
+    );
   }
 
   bool get _inLocaleSwitchGrace {

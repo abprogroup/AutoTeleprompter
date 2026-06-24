@@ -42,6 +42,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   DateTime? _lastSttWatchdogRestartAt;
   DateTime? _appleSilentRestartWindowStart;
   int _appleSilentRestartCount = 0;
+  String? _lastNoProgressTranscriptKey;
+  int _staleNoProgressTranscriptCount = 0;
+  DateTime? _lastStaleTranscriptRecoveryAt;
   bool _silentWarningFired = false;
   Future<void>? _stopInFlight;
   int _sessionToken = 0;
@@ -78,6 +81,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const Duration _appleNativeCallbackStaleAfter =
       Duration(seconds: 12);
   static const Duration _appleSilentRestartWindow = Duration(seconds: 70);
+  static const int _staleTranscriptRecoveryRepeats = 3;
+  static const int _staleTranscriptFallbackWaits = 8;
+  static const Duration _staleTranscriptRecoveryCooldown =
+      Duration(seconds: 6);
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
@@ -526,6 +533,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (aligned.shouldEnterStandby) {
       _sttReadingStandby = true;
       _noProgressCount = 0;
+      _resetStaleNoProgressTracking();
       _addDebugLog(
           '$engineTag STANDBY LOCK | ${aligned.debugInfo} | heard: "$alignmentTranscript"');
       LightweightDiagnostics.instance.record(
@@ -591,6 +599,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
       _sttReadingStandby = true;
       _noProgressCount = 0;
+      _resetStaleNoProgressTracking();
       _resetVisibleLocaleAssist();
       final target = TeleprompterNotifier.resolveAdvanceTarget(
         currentIndex: advanceFrom,
@@ -640,6 +649,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
               target < script.words.length ? script.words[target].raw : '?';
           _fluidAdvanceTimer?.cancel();
           _noProgressCount = 0;
+          _resetStaleNoProgressTracking();
           _sttReadingStandby = true;
           _resetVisibleLocaleAssist();
           _addDebugLog(
@@ -661,6 +671,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         }
 
         _noProgressCount = 0;
+        _resetStaleNoProgressTracking();
         _sttReadingStandby = true;
         _addDebugLog('$engineTag SEQUENTIAL HOLD | ${sequential.debugInfo}');
         return;
@@ -694,6 +705,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           },
         );
         _checkAndSwitchLocale();
+      }
+
+      if (_recoverStaleAppleNoProgressIfNeeded(
+        script: script,
+        policy: policy,
+        transcript: alignmentTranscript,
+        engineTag: engineTag,
+      )) {
+        return;
       }
 
       final relockTranscript = _accumulatedTranscript.trim().isEmpty
@@ -754,6 +774,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           },
         );
         _noProgressCount = 0;
+        _resetStaleNoProgressTracking();
         _sttReadingStandby = true;
         _applySttAdvanceTarget(relockTarget, script);
         _syncLocaleForPosition(script, relockTarget + 1, reason: 'relock');

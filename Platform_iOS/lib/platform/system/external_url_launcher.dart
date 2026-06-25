@@ -21,12 +21,30 @@ class ExternalUrlLauncher {
   static Future<bool> openPath(String path) async {
     final trimmed = path.trim();
     if (trimmed.isEmpty) return false;
-    try {
-      final uri = Uri.file(trimmed);
-      if (!await canLaunchUrl(uri)) return false;
-      return await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      return false;
+    final absolute = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    // iOS has no Finder. The Files app responds to the `shareddocuments`
+    // scheme to reveal a folder the app can access (its own container or an
+    // iCloud Drive / On My iPhone location the user picked).
+    for (final candidate in <String>[
+      'shareddocuments://$absolute',
+      'shareddocuments://${Uri.encodeFull(absolute)}',
+    ]) {
+      final uri = Uri.tryParse(candidate);
+      if (uri == null) continue;
+      try {
+        if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+          return true;
+        }
+      } catch (_) {
+        // Try the next candidate / fall through.
+      }
     }
+    try {
+      final fileUri = Uri.file(trimmed);
+      if (await canLaunchUrl(fileUri)) {
+        return await launchUrl(fileUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+    return false;
   }
 }

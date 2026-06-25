@@ -43,7 +43,10 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
         stack,
         source: 'cloud.openFolder',
       );
-      _showSnack('Could not open the folder.');
+      _showSnack(
+        'Open the Files app to view this folder '
+        '(On My iPhone / iCloud Drive → your backup folder).',
+      );
     }
   }
 

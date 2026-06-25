@@ -54,12 +54,13 @@ extension _SettingsSections on _AppSettingsScreenState {
         ],
         onChanged: notifier.setImportColorMode,
       ),
-      _SettingsSwitchTile(
+      _SettingsTile(
         icon: Icons.auto_awesome_rounded,
+        iconColor: const Color(0xFFFFBF00),
         title: 'Replay guided walkthrough',
-        subtitle: 'Reset lobby, editor, present, and creator walkthrough keys.',
-        value: false,
-        onChanged: (_) => unawaited(_resetGuidedWalkthrough(context)),
+        subtitle: 'Resets the lobby, editor, present, and creator guides. '
+            'Tap, then return to the lobby to see it again.',
+        onTap: () => unawaited(_resetGuidedWalkthrough(context)),
       ),
       _SettingsSwitchTile(
         icon: Icons.bug_report_outlined,

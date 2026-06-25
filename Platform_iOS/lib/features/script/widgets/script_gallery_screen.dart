@@ -331,9 +331,16 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   }
 
   void _openSettings(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+    unawaited(
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+      ).then((_) {
+        // The walkthrough "seen" flag may have been reset in Settings. The
+        // lobby stays mounted while Settings is on top, so re-check on return
+        // to replay the guide without needing an app restart.
+        if (mounted) _scheduleIosOnboardingIfNeeded();
+      }),
     );
   }
 }

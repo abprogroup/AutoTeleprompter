@@ -285,7 +285,13 @@ List<String> _recentIdentityKeys({
   if (path.isNotEmpty) keys.add('path:$path');
   final cleanTitle = _normalizeRecentTitle(title);
   if (cleanTitle.isNotEmpty) {
-    final cleanType = (type ?? '').trim().toUpperCase();
+    var cleanType = (type ?? '').trim().toUpperCase();
+    // The walkthrough sample is first stored as WALKTHROUGH_SAMPLE on load, then
+    // re-saved as a normal FILE from the editor. Treat them as the same script
+    // so the activity list shows it once instead of twice.
+    if (cleanType.isEmpty || cleanType == 'WALKTHROUGH_SAMPLE') {
+      cleanType = 'FILE';
+    }
     keys.add('title:$cleanType:$cleanTitle');
   }
   return keys;

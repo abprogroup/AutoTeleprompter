@@ -53,6 +53,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
       FocusNode(debugLabel: 'iOS presentation shortcuts');
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
+  bool _debugConsoleMinimized = false;
   Timer? _manualScrollTimer;
   Timer? _wordTrackTimer;
   Timer? _hideControlsTimer;

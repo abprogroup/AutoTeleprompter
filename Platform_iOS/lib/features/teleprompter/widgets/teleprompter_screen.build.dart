@@ -58,11 +58,16 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // Presentation mode uses 2x font size for readability.
     // The editor shows smaller text for fluid editing; the teleprompter enlarges it.
     final presentationFontSize = settings.fontSize * 2.0;
-    final debugConsoleHeight = settings.debugMode ? 220.0 : 0.0;
+    final debugConsoleHeight = settings.debugMode
+        ? (_debugConsoleMinimized ? 40.0 : 220.0)
+        : 0.0;
     final controlsReservedHeight =
         settings.scrollMode == 'manual' ? 150.0 : 104.0;
-    final debugConsoleBottom =
-        settings.debugMode ? controlsReservedHeight : 10.0;
+    // Drop the box to the bottom edge when the toolbar hides during a session,
+    // otherwise keep it above the reserved control area.
+    final debugConsoleBottom = !settings.debugMode
+        ? 10.0
+        : (_controlsVisible ? controlsReservedHeight : 10.0);
 
     Widget wordList = Padding(
       padding: EdgeInsets.symmetric(
@@ -429,6 +434,23 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                     ),
                                   ),
                                 ),
+                                IconButton(
+                                  icon: Icon(
+                                    _debugConsoleMinimized
+                                        ? Icons.keyboard_arrow_up_rounded
+                                        : Icons.keyboard_arrow_down_rounded,
+                                    color: Colors.orange,
+                                    size: 18,
+                                  ),
+                                  tooltip: _debugConsoleMinimized
+                                      ? 'Expand debug box'
+                                      : 'Minimize debug box',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _setTeleprompterState(() =>
+                                      _debugConsoleMinimized =
+                                          !_debugConsoleMinimized),
+                                ),
                                 const SizedBox(width: 4),
                                 IconButton(
                                   icon: const Icon(Icons.copy,
@@ -455,9 +477,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                             ),
                           ),
                           // Log list
-                          Expanded(
-                            child: ListView.builder(
-                              reverse: true,
+                          if (!_debugConsoleMinimized)
+                            Expanded(
+                              child: ListView.builder(
+                                reverse: true,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),
                               itemCount: tState.debugLogs.length,

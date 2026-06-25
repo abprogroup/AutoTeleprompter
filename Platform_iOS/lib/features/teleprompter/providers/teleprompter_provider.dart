@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
@@ -90,6 +91,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final ts =
         "${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}";
     final entry = "[$ts] ${DebugLogFormatter.normalize(log)}";
+    // Also emit to the device console so logs can be captured over USB
+    // (idevicesyslog) for diagnosis without on-device copy/paste. Gated by
+    // debugMode (checked above), so it stays silent in normal use.
+    debugPrint('ATPLOG $entry');
     final logs = [...state.debugLogs, entry];
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
     _safeSetState((s) => s.copyWith(debugLogs: logs));

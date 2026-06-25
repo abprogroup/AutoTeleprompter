@@ -5,26 +5,27 @@ import '../../../core/extensions/string_extensions.dart';
 part 'word_aligner_tokenizer.dart';
 part 'word_aligner_similarity.dart';
 part 'word_aligner_policy.dart';
+part 'word_aligner_name_anchor.dart';
 
 class WordAligner {
   // -- Tuning constants -------------------------------------------------------
   // Window size to search ahead (in non-newline words).
   static const int _searchWindowSize = 50;
   // Max words for a SINGLE-word match (prevents false jumps on common words).
-  static const int _maxSingleJump = 5;
+  static const int _maxSingleJump = 2;
   // Nearby phrase window checked before the visible-skip fallback.
   static const int _nearPhrasePriorityWindow = 50;
   static const int _nearPhraseMaxWords = 8;
   static const int _localRecoveryPhraseMaxWords = 5;
   // Minimum similarity for a word to be considered a match
-  static const double _matchThreshold = 0.55;
+  static const double _matchThreshold = 0.72;
   // Stricter threshold for the fast single-word path
-  static const double _fastMatchThreshold = 0.65;
+  static const double _fastMatchThreshold = 0.82;
   // Penalty applied per word of distance from the current position.
   static const double _distancePenaltyPerWord = 0.025;
   // Cross-language (e.g. Latin word in Hebrew script) - more lenient
   // Hebrew-specific: even more lenient because STT often returns approximate matches
-  static const double _hebrewMatchThreshold = 0.50;
+  static const double _hebrewMatchThreshold = 0.62;
   // Bullet/header prompting must not silently walk through guessed words.
   static const double _strictMatchThreshold = 0.82;
   static const double _strictPhraseThreshold = 0.78;
@@ -71,7 +72,7 @@ class WordAligner {
   }) {
     if (spoken.isEmpty || word.normalized.isEmpty) return false;
     final threshold =
-        strictBulletMode ? _strictMatchThreshold : (word.isRtl ? 0.45 : 0.55);
+        strictBulletMode ? _strictMatchThreshold : (word.isRtl ? 0.70 : 0.82);
     return spokenWordSimilarity(spoken, word) >= threshold;
   }
 
@@ -188,6 +189,41 @@ class WordAligner {
             .toInt()
         : searchStart;
 
+    AlignmentResult? earlyDirectNextWord(int candidateIndex) {
+      if (candidateIndex >= script.length ||
+          script[candidateIndex].isNewline ||
+          _isUnspeakable(script[candidateIndex])) {
+        return null;
+      }
+      final nextWord = script[candidateIndex].normalized;
+      final isHebrew = script[candidateIndex].isRtl;
+      final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
+      final lowEvidenceThreshold =
+          policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.76 : 0.88);
+      if (sim < lowEvidenceThreshold) return null;
+      final skippedCue =
+          candidateIndex != searchStart ? ' optionalCueSkip' : '';
+      return AlignmentResult(
+        candidateIndex,
+        sim,
+        'NEXT_WORD_LOW_EVIDENCE$skippedCue: "$lastSpoken" ~ "$nextWord" = ${sim.toStringAsFixed(2)}',
+      );
+    }
+
+    if (!policyBulletMode &&
+        activeStandby &&
+        !transcriptPassesLocal &&
+        !(visibleSkipEnabled && transcriptPassesVisible)) {
+      final directNext = earlyDirectNextWord(searchStart);
+      if (directNext != null) return directNext;
+      if (script[searchStart].isOptionalCue) {
+        final requiredStart =
+            nextRequiredSpeakableIndex(script, searchStart + 1);
+        final requiredNext = earlyDirectNextWord(requiredStart);
+        if (requiredNext != null) return requiredNext;
+      }
+    }
+
     if (!transcriptPassesLocal &&
         !(visibleSkipEnabled && transcriptPassesVisible)) {
       if (!activeStandby) {
@@ -237,9 +273,8 @@ class WordAligner {
       final nextWord = script[candidateIndex].normalized;
       final isHebrew = script[candidateIndex].isRtl;
       final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
-      // Hebrew STT is less precise - use a lower threshold for the next word
       final nextThreshold =
-          policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
+          policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.70 : 0.82);
       if (sim < nextThreshold) return null;
       final skippedCue =
           candidateIndex != searchStart ? ' optionalCueSkip' : '';
@@ -304,7 +339,9 @@ class WordAligner {
       searchStart: searchStart,
       lastConfirmedIndex: lastConfirmedIndex,
       maxPhraseWords: _localRecoveryPhraseMaxWords,
-      evidenceThreshold: effectivePolicy.safetyRecovery,
+      evidenceThreshold: policyBulletMode
+          ? effectivePolicy.bulletAdvance
+          : effectivePolicy.safetyRecovery,
       overrideWordThreshold: policyBulletMode ? _strictPhraseThreshold : null,
       minPhraseScore: policyBulletMode ? _strictPhraseThreshold : 0.70,
     );

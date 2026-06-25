@@ -57,8 +57,9 @@ double _wordSimilarity(String spoken, String scriptWord, bool isRtl) {
 
     if (sim < 0.60 && ls.length >= 3 && ss.length >= 3) {
       if (ls.contains(ss) || ss.contains(ls)) {
-        final overlapRatio = (ls.length < ss.length ? ls.length : ss.length) /
-            (ls.length > ss.length ? ls.length : ss.length);
+        final overlapRatio =
+            (ls.length < ss.length ? ls.length : ss.length) /
+                (ls.length > ss.length ? ls.length : ss.length);
         final subSim = 0.70 * overlapRatio + 0.20;
         if (subSim > sim) sim = subSim;
       }

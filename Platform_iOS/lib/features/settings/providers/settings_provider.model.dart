@@ -105,7 +105,7 @@ class AppSettings {
     this.sttEngine = 'google',
     this.readFadeIntensity = 1.0,
     this.showSoundLevelMeter = false,
-    this.sttVisibleSkipEnabled = false,
+    this.sttVisibleSkipEnabled = true,
     this.allowScrollDuringActiveSession = false,
     this.sttStrictBulletMode = false,
     this.sttHardVisibleSkipEnabled = false,

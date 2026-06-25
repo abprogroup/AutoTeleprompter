@@ -177,7 +177,7 @@ class SettingsNotifier extends Notifier<AppSettings>
       sttEngine: sanitizeSttEngine(prefs.getString(_sttEngineKey)),
       readFadeIntensity: prefs.getDouble(_readFadeIntensityKey) ?? 0.0,
       showSoundLevelMeter: prefs.getBool(_showSoundLevelMeterKey) ?? false,
-      sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
+      sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? true,
       allowScrollDuringActiveSession:
           prefs.getBool(_allowScrollDuringActiveSessionKey) ?? false,
       sttStrictBulletMode: prefs.getBool(_sttStrictBulletModeKey) ?? false,

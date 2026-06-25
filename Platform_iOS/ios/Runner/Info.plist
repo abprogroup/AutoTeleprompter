@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -20,13 +22,46 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>autoteleprompter.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>autoteleprompter</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>google.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.717843429044-pe8saq67kcftu6bb9vbptgrff4dttg3b</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>UIFileSharingEnabled</key>
-	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>AutoTeleprompter uses the camera for Content Creator video recording.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>AutoTeleprompter uses your local network only when you start Remote Control, so nearby devices can control your teleprompter session.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AutoTeleprompter needs the microphone to listen to your voice as you read.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>AutoTeleprompter saves finished recordings to your photo library when you choose to record video.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>AutoTeleprompter may request photo library access to save finished video recordings you create.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AutoTeleprompter uses speech recognition to follow along as you read your script aloud.</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -45,22 +80,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>AutoTeleprompter uses speech recognition to follow along as you read your script aloud.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>AutoTeleprompter needs the microphone to listen to your voice as you read.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>AutoTeleprompter uses the camera for Content Creator video recording.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>AutoTeleprompter uses your local network only when you start Remote Control, so nearby devices can control your teleprompter session.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>AutoTeleprompter may request photo library access to save finished video recordings you create.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>AutoTeleprompter saves finished recordings to your photo library when you choose to record video.</string>
 </dict>
 </plist>

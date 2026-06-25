@@ -12,20 +12,24 @@ class WordAligner {
   // Window size to search ahead (in non-newline words).
   static const int _searchWindowSize = 50;
   // Max words for a SINGLE-word match (prevents false jumps on common words).
-  static const int _maxSingleJump = 2;
+  // Looser on mobile: Apple iOS STT often returns multi-word chunks and splits
+  // compound words (e.g. "AutoTeleprompter" -> "auto teleprompter").
+  static const int _maxSingleJump = 5;
   // Nearby phrase window checked before the visible-skip fallback.
   static const int _nearPhrasePriorityWindow = 50;
   static const int _nearPhraseMaxWords = 8;
   static const int _localRecoveryPhraseMaxWords = 5;
-  // Minimum similarity for a word to be considered a match
-  static const double _matchThreshold = 0.72;
-  // Stricter threshold for the fast single-word path
-  static const double _fastMatchThreshold = 0.82;
+  // Minimum similarity for a word to be considered a match. Mobile STT is
+  // strong but rephrases/splits words, so iOS uses a more lenient threshold
+  // than the desktop reference.
+  static const double _matchThreshold = 0.55;
+  // Lenient threshold for the fast single-word path on mobile.
+  static const double _fastMatchThreshold = 0.65;
   // Penalty applied per word of distance from the current position.
   static const double _distancePenaltyPerWord = 0.025;
   // Cross-language (e.g. Latin word in Hebrew script) - more lenient
   // Hebrew-specific: even more lenient because STT often returns approximate matches
-  static const double _hebrewMatchThreshold = 0.62;
+  static const double _hebrewMatchThreshold = 0.50;
   // Bullet/header prompting must not silently walk through guessed words.
   static const double _strictMatchThreshold = 0.82;
   static const double _strictPhraseThreshold = 0.78;
@@ -72,7 +76,7 @@ class WordAligner {
   }) {
     if (spoken.isEmpty || word.normalized.isEmpty) return false;
     final threshold =
-        strictBulletMode ? _strictMatchThreshold : (word.isRtl ? 0.70 : 0.82);
+        strictBulletMode ? _strictMatchThreshold : (word.isRtl ? 0.45 : 0.55);
     return spokenWordSimilarity(spoken, word) >= threshold;
   }
 
@@ -199,7 +203,7 @@ class WordAligner {
       final isHebrew = script[candidateIndex].isRtl;
       final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
       final lowEvidenceThreshold =
-          policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.76 : 0.88);
+          policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.62 : 0.72);
       if (sim < lowEvidenceThreshold) return null;
       final skippedCue =
           candidateIndex != searchStart ? ' optionalCueSkip' : '';
@@ -274,7 +278,7 @@ class WordAligner {
       final isHebrew = script[candidateIndex].isRtl;
       final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
       final nextThreshold =
-          policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.70 : 0.82);
+          policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
       if (sim < nextThreshold) return null;
       final skippedCue =
           candidateIndex != searchStart ? ' optionalCueSkip' : '';

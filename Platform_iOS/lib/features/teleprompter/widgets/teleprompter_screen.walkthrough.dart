@@ -64,9 +64,20 @@ extension _TeleprompterWalkthroughParts on _TeleprompterScreenState {
       cardBuilder: (context, targetRect, constraints) {
         final width =
             constraints.maxWidth < 620 ? constraints.maxWidth - 28 : 520.0;
-        final top = targetRect == null
-            ? constraints.maxHeight * 0.16
-            : (targetRect.top - 260).clamp(24.0, constraints.maxHeight - 300);
+        // Keep the card clear of the highlighted control: if the target sits in
+        // the lower half of the screen (mic/settings/bookmark controls), float
+        // the card near the top; otherwise place it just below the target.
+        const double estimatedCardHeight = 300;
+        final double top;
+        if (targetRect == null) {
+          top = constraints.maxHeight * 0.16;
+        } else if (targetRect.center.dy > constraints.maxHeight * 0.5) {
+          top = 28;
+        } else {
+          top = (targetRect.bottom + 16)
+              .clamp(24.0, constraints.maxHeight - estimatedCardHeight)
+              .toDouble();
+        }
         return Positioned(
           left: ((constraints.maxWidth - width) / 2).clamp(14.0, 40.0),
           top: top.toDouble(),

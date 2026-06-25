@@ -395,7 +395,16 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                     fontFamily: 'monospace',
                                   ),
                                 ),
-                                const Spacer(),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _SoundLevelBar(
+                                    level: tState.soundLevel,
+                                    isListening: tState.isListening,
+                                    isStarting: tState.isStarting,
+                                    accentColor: Colors.orange,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 Text(
                                   'POS: ${tState.confirmedWordIndex}/${script.words.where((w) => !w.isNewline).length}',
                                   style: const TextStyle(
@@ -405,11 +414,20 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                     fontFamily: 'monospace',
                                   ),
                                 ),
-                                const Spacer(),
-                                const Text(
-                                  '🔧 DEV',
-                                  style: TextStyle(
-                                      color: Colors.orange, fontSize: 10),
+                                const SizedBox(width: 6),
+                                IconButton(
+                                  icon: const Icon(Icons.bug_report_outlined,
+                                      color: Colors.orange, size: 16),
+                                  tooltip: 'Send feedback',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const FeedbackReportScreen(),
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(width: 4),
                                 IconButton(

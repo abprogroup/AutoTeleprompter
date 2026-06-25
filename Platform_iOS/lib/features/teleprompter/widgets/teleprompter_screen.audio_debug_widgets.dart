@@ -1,0 +1,57 @@
+part of 'teleprompter_screen.dart';
+
+/// Compact microphone signal meter for the present-mode debug console.
+/// Mirrors the macOS sound bar so users can confirm STT is hearing them.
+/// `level` is already normalized to 0..1 by the provider.
+class _SoundLevelBar extends StatelessWidget {
+  final double level;
+  final bool isListening;
+  final bool isStarting;
+  final Color accentColor;
+
+  const _SoundLevelBar({
+    required this.level,
+    required this.isListening,
+    required this.isStarting,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final clampedLevel = level.clamp(0.0, 1.0).toDouble();
+    final activeColor = isListening ? accentColor : Colors.white38;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          children: [
+            Icon(
+              isStarting
+                  ? Icons.hourglass_top
+                  : (isListening ? Icons.graphic_eq : Icons.volume_off),
+              color: activeColor,
+              size: 12,
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: clampedLevel,
+                  minHeight: 5,
+                  backgroundColor: Colors.white.withValues(alpha: 0.12),
+                  valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

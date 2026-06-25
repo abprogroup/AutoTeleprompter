@@ -19,9 +19,11 @@ import '../../script/services/script_bookmark_service.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../remote/services/remote_control_service.dart';
+import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
 
+part 'teleprompter_screen.audio_debug_widgets.dart';
 part 'teleprompter_screen.session_stt.dart';
 part 'teleprompter_screen.manual_scroll.dart';
 part 'teleprompter_screen.build.dart';

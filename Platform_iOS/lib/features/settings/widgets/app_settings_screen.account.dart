@@ -281,11 +281,11 @@ extension _SettingsAccountActions on _AppSettingsScreenState {
     );
   }
 
-  // Subscription / entitlement section (macOS parity). On iOS the "Manage
-  // subscription" link opens the account portal in the browser; Apple in-app
-  // purchase management would route to the App Store instead if IAP is used.
+  // Subscription / entitlement section. App Store policy (Option B:
+  // multiplatform service): the iOS app must NOT sell Pro or link to an
+  // external purchase page. It only shows the current plan and lets a user who
+  // already bought Pro elsewhere refresh/sign in to unlock it here.
   List<Widget> _accountSubscriptionSection(AuthState auth) {
-    final manageUrl = _accountManageSubscriptionUrl.trim();
     return [
       const _SectionHeader(title: 'SUBSCRIPTION'),
       _SettingsTile(
@@ -294,17 +294,10 @@ extension _SettingsAccountActions on _AppSettingsScreenState {
         title: 'Plan status',
         subtitle: _subscriptionStatusSubtitle(auth),
       ),
-      if (manageUrl.isNotEmpty)
-        _SettingsTile(
-          icon: Icons.open_in_browser_rounded,
-          title: 'Manage subscription',
-          subtitle: 'Opens your account page in the external browser.',
-          onTap: () => unawaited(_openExternalAccountUrl(manageUrl)),
-        ),
       _SettingsTile(
         icon: Icons.refresh_rounded,
         title: 'Restore / refresh entitlement',
-        subtitle: 'Re-check after payment, renewal, or admin changes.',
+        subtitle: 'Re-check after a renewal or account change.',
         onTap: () => unawaited(_refreshAccountEntitlement()),
       ),
     ];
@@ -351,24 +344,4 @@ extension _SettingsAccountActions on _AppSettingsScreenState {
     }
   }
 
-  Future<void> _openExternalAccountUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null || !uri.hasScheme) {
-      _showSnack('Subscription portal is not configured.');
-      return;
-    }
-    try {
-      final opened = await ExternalUrlLauncher.openUrl(uri.toString());
-      if (!opened) throw StateError('External launcher failed for $uri');
-    } catch (error) {
-      _showSnack(
-        'Could not open subscription portal: '
-        '${sanitizeSettingsErrorForUser(error)}',
-      );
-    }
-  }
 }
-
-const _accountManageSubscriptionUrl = String.fromEnvironment(
-  'ACCOUNT_MANAGE_SUBSCRIPTION_URL',
-);

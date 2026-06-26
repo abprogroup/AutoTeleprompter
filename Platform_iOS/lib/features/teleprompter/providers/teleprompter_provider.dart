@@ -136,7 +136,16 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
     } catch (_) {}
 
-    _accumulatedTranscript = result.words;
+    // Apple returns the whole utterance cumulatively, which can grow very large
+    // and lag the aligner. Only the recent tail matters for tracking the
+    // reading position, so keep the last few words. This also keeps the debug
+    // output readable.
+    const recentWordWindow = 12;
+    final spokenWords = result.words.split(RegExp(r'\s+'))
+      ..removeWhere((w) => w.trim().isEmpty);
+    _accumulatedTranscript = spokenWords.length <= recentWordWindow
+        ? result.words
+        : spokenWords.sublist(spokenWords.length - recentWordWindow).join(' ');
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
     final policy =

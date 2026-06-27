@@ -69,6 +69,26 @@ class WordAligner {
     return _wordSimilarity(spoken, word.normalized, word.isRtl);
   }
 
+  /// Best similarity between a script word and the recent spoken words,
+  /// considering single tokens AND joins of the last 2-3 tokens. Mobile STT
+  /// often splits a compound script word ("AutoTeleprompter" -> "auto
+  /// teleprompter") or returns a fuzzy split ("auto telephone"); joining the
+  /// tokens lets the whole compound be compared instead of one half.
+  static double _bestSpokenSimilarity(
+    List<String> spokenWords,
+    String scriptWord,
+    bool isRtl,
+  ) {
+    if (spokenWords.isEmpty || scriptWord.isEmpty) return 0.0;
+    var best = _wordSimilarity(spokenWords.last, scriptWord, isRtl);
+    for (var n = 2; n <= 3 && n <= spokenWords.length && best < 0.97; n++) {
+      final joined = spokenWords.sublist(spokenWords.length - n).join();
+      final sim = _wordSimilarity(joined, scriptWord, isRtl);
+      if (sim > best) best = sim;
+    }
+    return best;
+  }
+
   static bool spokenWordMatchesNext(
     String spoken,
     ScriptWord word, {
@@ -276,7 +296,7 @@ class WordAligner {
       }
       final nextWord = script[candidateIndex].normalized;
       final isHebrew = script[candidateIndex].isRtl;
-      final sim = _wordSimilarity(lastSpoken, nextWord, isHebrew);
+      final sim = _bestSpokenSimilarity(transcriptWords, nextWord, isHebrew);
       final nextThreshold =
           policyBulletMode ? _strictMatchThreshold : (isHebrew ? 0.45 : 0.55);
       if (sim < nextThreshold) return null;
@@ -305,7 +325,8 @@ class WordAligner {
       final scriptWord = script[i].normalized;
       if (scriptWord.isEmpty) continue;
 
-      final sim = _wordSimilarity(lastSpoken, scriptWord, script[i].isRtl);
+      final sim =
+          _bestSpokenSimilarity(transcriptWords, scriptWord, script[i].isRtl);
       final distance = i - searchStart;
       // Apply distance penalty - farther words need higher confidence
       final adjustedSim = sim - (distance * _distancePenaltyPerWord);

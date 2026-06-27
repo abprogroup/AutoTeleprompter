@@ -78,6 +78,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   bool _sequentialSttUnlocked = false;
   String? _sequentialSttLastToken;
   DateTime? _sequentialSttLastTokenAt;
+  int? _pendingStartEvidenceBaseIndex;
+  int? _pendingStartEvidenceTargetIndex;
+  double _pendingStartEvidenceScore = 0.0;
+  List<String> _pendingStartEvidenceWords = const [];
+  DateTime? _pendingStartEvidenceAt;
   Timer? _speechActivityMeterTimer;
   int _speechActivityMeterToken = 0;
   bool _stateFailureDiagnosticRecorded = false;
@@ -98,6 +103,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
       Duration(milliseconds: 5000);
+  static const Duration _pendingStartEvidenceGrace = Duration(seconds: 5);
   @override
   TeleprompterState build() {
     _disposed = false;

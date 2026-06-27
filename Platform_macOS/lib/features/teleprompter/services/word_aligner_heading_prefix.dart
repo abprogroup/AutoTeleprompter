@@ -64,6 +64,13 @@ int? _headingPrefixBodyStart(
   int searchStart,
   int lastConfirmedIndex,
 ) {
+  if (_confirmedInsideHeadingPrefixBeforeBody(
+    script,
+    searchStart,
+    lastConfirmedIndex,
+  )) {
+    return searchStart;
+  }
   if (!_hasRecentHeadingMarker(script, lastConfirmedIndex, searchStart)) {
     return null;
   }
@@ -83,6 +90,35 @@ int? _headingPrefixBodyStart(
   if (!_isValidHeadingPrefix(prefix)) return null;
   final bodyStart = WordAligner.nextRequiredSpeakableIndex(script, cursor);
   return bodyStart < script.length ? bodyStart : null;
+}
+
+bool _confirmedInsideHeadingPrefixBeforeBody(
+  List<ScriptWord> script,
+  int searchStart,
+  int lastConfirmedIndex,
+) {
+  if (lastConfirmedIndex < 0 ||
+      lastConfirmedIndex >= script.length ||
+      searchStart >= script.length) {
+    return false;
+  }
+  final nextRequired =
+      WordAligner.nextRequiredSpeakableIndex(script, lastConfirmedIndex + 1);
+  if (nextRequired != searchStart) return false;
+
+  final prefix = <String>[];
+  for (var cursor = lastConfirmedIndex;
+      cursor >= 0 && prefix.length < 4;
+      cursor--) {
+    final word = script[cursor];
+    if (word.isNewline) return false;
+    if (_isUnspeakable(word)) {
+      return _isValidHeadingPrefix(prefix.reversed.toList());
+    }
+    if (!_isHeadingPrefixWord(word.normalized)) return false;
+    prefix.add(word.normalized);
+  }
+  return false;
 }
 
 bool _hasRecentHeadingMarker(

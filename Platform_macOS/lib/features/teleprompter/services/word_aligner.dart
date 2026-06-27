@@ -78,6 +78,86 @@ class WordAligner {
     return bodyStart == null ? words : '$words (after heading)';
   }
 
+  static AlignmentResult? continuePendingStartEvidence({
+    required List<ScriptWord> script,
+    required String transcript,
+    required int pendingTargetIndex,
+    bool strictBulletMode = false,
+  }) {
+    if (script.isEmpty ||
+        pendingTargetIndex < 0 ||
+        pendingTargetIndex >= script.length ||
+        transcript.trim().isEmpty) {
+      return null;
+    }
+
+    final rawWords = transcript
+        .split(RegExp(r'\s+'))
+        .map((w) => w.trim().normalizeForMatching())
+        .where((w) => w.isNotEmpty)
+        .toList();
+    final transcriptWords = _collapseAbbreviations(rawWords);
+    if (transcriptWords.isEmpty) return null;
+
+    final searchStart =
+        nextRequiredSpeakableIndex(script, pendingTargetIndex + 1);
+    if (searchStart >= script.length) return null;
+
+    final repeatedTail = _confirmedTailBridgeMatch(
+      script: script,
+      transcriptWords: transcriptWords,
+      lastConfirmedIndex: pendingTargetIndex,
+      strictBulletMode: strictBulletMode,
+    );
+    if (repeatedTail != null) {
+      return repeatedTail.copyWith(
+        debugInfo: 'CONTINUED_START | ${repeatedTail.debugInfo}',
+        thresholdFamily: SttThresholdFamily.startAdvance,
+      );
+    }
+
+    final nameBridge = _properNameRunBridgeMatch(
+      script: script,
+      transcriptWords: transcriptWords,
+      searchStart: searchStart,
+      lastConfirmedIndex: pendingTargetIndex,
+      strictBulletMode: strictBulletMode,
+    );
+    if (nameBridge != null) {
+      return nameBridge.copyWith(
+        debugInfo: 'CONTINUED_START | ${nameBridge.debugInfo}',
+        thresholdFamily: SttThresholdFamily.startAdvance,
+      );
+    }
+
+    final oneWord = _pendingSingleWordContinuation(
+      script: script,
+      transcriptWords: transcriptWords,
+      searchStart: searchStart,
+      pendingTargetIndex: pendingTargetIndex,
+      strictBulletMode: strictBulletMode,
+    );
+    if (oneWord != null) return oneWord;
+
+    final phrase = _contiguousNextPhraseMatch(
+      script: script,
+      transcriptWords: transcriptWords,
+      searchStart: searchStart,
+      lastConfirmedIndex: pendingTargetIndex,
+      maxPhraseWords: _localRecoveryPhraseMaxWords,
+      evidenceThreshold: const SttEvidenceThreshold(1, 1),
+      thresholdFamily: SttThresholdFamily.startAdvance,
+      overrideWordThreshold: strictBulletMode ? _strictPhraseThreshold : null,
+      minPhraseScore: strictBulletMode ? _strictPhraseThreshold : 0.70,
+    );
+    if (phrase == null) return null;
+    return phrase.copyWith(
+      debugInfo: 'CONTINUED_START | ${phrase.debugInfo}',
+      kind: SttAlignmentKind.confirmedTailBridge,
+      thresholdFamily: SttThresholdFamily.startAdvance,
+    );
+  }
+
   static double spokenWordSimilarity(String spoken, ScriptWord word) {
     if (word.normalized.isEmpty) return 0.0;
     return _wordSimilarity(spoken, word.normalized, word.isRtl);

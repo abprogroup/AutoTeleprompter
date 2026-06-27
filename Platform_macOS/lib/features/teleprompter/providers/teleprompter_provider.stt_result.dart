@@ -101,6 +101,23 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
         WordAligner.debugNextExpected(script.words, currentIdx);
     final engineTag = _useWhisper ? '[Whisper]' : '[Speech]';
 
+    final pendingStart = _pendingStartEvidenceContinuation(
+      script: script,
+      transcript: alignmentTranscript,
+      policy: policy,
+      strictBulletMode: strictBulletMode,
+    );
+    if (pendingStart != null) {
+      _handlePendingStartEvidenceCandidate(
+        candidate: pendingStart,
+        script: script,
+        policy: policy,
+        alignmentTranscript: alignmentTranscript,
+        engineTag: engineTag,
+      );
+      return;
+    }
+
     if (aligned.shouldEnterStandby) {
       _sttReadingStandby = true;
       _sttEvidenceTrackingState = SttEvidenceTrackingState.recovering;
@@ -265,6 +282,11 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
       visibleSkipTargetTrusted: visibleSkipTargetTrusted,
     );
     if (!gateDecision.shouldAdvance) {
+      _rememberPendingStartEvidence(
+        decision: gateDecision,
+        candidate: SttEvidenceGateCandidate.fromAlignment(aligned),
+        currentIndex: advanceFrom,
+      );
       _applyGateState(gateDecision);
       _fluidAdvanceTimer?.cancel();
       _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
@@ -394,6 +416,76 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
     );
     _applySttAdvanceTarget(target, script);
     _syncLocaleForPosition(script, target + 1, reason: 'sequential');
+  }
+
+  void _handlePendingStartEvidenceCandidate({
+    required SttEvidenceGateCandidate candidate,
+    required Script script,
+    required SttRecognitionPolicy policy,
+    required String alignmentTranscript,
+    required String engineTag,
+  }) {
+    final advanceFrom = _currentState.confirmedWordIndex;
+    final advanceGuardFrom = _currentSttAdvanceGuardIndex(advanceFrom);
+    if (candidate.targetIndex <= advanceGuardFrom) return;
+    final visibleSkipTargetTrusted =
+        TeleprompterNotifier.isTrustedVisibleSkipTarget(
+      alignedIndex: candidate.targetIndex,
+      visibleWordStart: _visibleWordStart,
+      visibleWordEnd: _visibleWordEnd,
+    );
+    final gateDecision = _evaluateSttGate(
+      candidate: candidate,
+      policy: policy,
+      currentIndex: advanceFrom,
+      advanceGuardIndex: advanceGuardFrom,
+      visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+    );
+    final debugHeard =
+        TeleprompterNotifier.debugTranscriptSnippet(alignmentTranscript);
+    if (!gateDecision.shouldAdvance) {
+      _rememberPendingStartEvidence(
+        decision: gateDecision,
+        candidate: candidate,
+        currentIndex: advanceFrom,
+      );
+      _applyGateState(gateDecision);
+      _addDebugLog(
+        '$engineTag ${gateDecision.debugSummary} | ${candidate.debugInfo} | heard: "$debugHeard"',
+      );
+      return;
+    }
+
+    _applyGateState(gateDecision);
+    _sttReadingStandby = true;
+    _noProgressCount = 0;
+    _resetStaleNoProgressTracking();
+    _resetAppleRecognitionQuality();
+    _resetVisibleLocaleAssist();
+    final target = TeleprompterNotifier.resolveAdvanceTarget(
+      currentIndex: advanceFrom,
+      alignedIndex: candidate.targetIndex,
+      visibleMaxSkipTargetIndex:
+          visibleSkipTargetTrusted ? _visibleWordEnd : null,
+    );
+    final advancedWord =
+        target < script.words.length ? script.words[target].raw : '?';
+    _addDebugLog(
+      '$engineTag ${gateDecision.debugSummary} -> #$target "$advancedWord" '
+      '| CONTINUED_START ${candidate.debugInfo} | heard: "$debugHeard"',
+    );
+    LightweightDiagnostics.instance.record(
+      'stt',
+      'continued start advanced',
+      data: {
+        'from': advanceFrom,
+        'to': target,
+        'heard': alignmentTranscript,
+        'debug': candidate.debugInfo,
+      },
+    );
+    _applySttAdvanceTarget(target, script);
+    _syncLocaleForPosition(script, target + 1, reason: 'continued start');
   }
 
   void _handleRelockSttCandidate({

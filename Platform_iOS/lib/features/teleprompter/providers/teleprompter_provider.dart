@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
 import '../services/speech_service.dart';
@@ -551,7 +552,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _heartbeatTimer?.cancel();
     final settings = ref.read(settingsProvider);
     if (settings.debugMode) {
+      // Stamp the running build so the debug box confirms which IPA is live.
+      unawaited(PackageInfo.fromPlatform().then((info) {
+        if (!_disposed) {
+          _addDebugLog('🏷️ BUILD ${info.version}+${info.buildNumber}');
+        }
+      }));
       String? lastHeartbeat;
+      var ticksSinceLog = 0;
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (_disposed) return;
         final engineName =
@@ -561,8 +569,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
         final signature = '$listening|$pos|$_noProgressCount';
-        if (signature == lastHeartbeat) return;
+        ticksSinceLog++;
+        // Log on any change, or as a slow keepalive (every ~15s) so the box is
+        // never fully silent while listening.
+        if (signature == lastHeartbeat && ticksSinceLog < 3) return;
         lastHeartbeat = signature;
+        ticksSinceLog = 0;
         _addDebugLog(
             '💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
       });

@@ -58,8 +58,13 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // Presentation mode uses 2x font size for readability.
     // The editor shows smaller text for fluid editing; the teleprompter enlarges it.
     final presentationFontSize = settings.fontSize * 2.0;
+    // Auto-minimize the debug box when the toolbar hides (session running),
+    // unless the user pinned it. Tapping the screen reveals the toolbar again
+    // (_controlsVisible) which re-opens it. A manual minimize always wins.
+    final debugConsoleMinimized = _debugConsoleMinimized ||
+        (!_controlsVisible && !_debugConsolePinned);
     final debugConsoleHeight = settings.debugMode
-        ? (_debugConsoleMinimized ? 40.0 : 220.0)
+        ? (debugConsoleMinimized ? 62.0 : 220.0)
         : 0.0;
     final controlsReservedHeight =
         settings.scrollMode == 'manual' ? 150.0 : 104.0;
@@ -400,16 +405,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                     fontFamily: 'monospace',
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _SoundLevelBar(
-                                    level: tState.soundLevel,
-                                    isListening: tState.isListening,
-                                    isStarting: tState.isStarting,
-                                    accentColor: Colors.orange,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
+                                const Spacer(),
                                 Text(
                                   'POS: ${tState.confirmedWordIndex}/${script.words.where((w) => !w.isNewline).length}',
                                   style: const TextStyle(
@@ -420,6 +416,23 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                   ),
                                 ),
                                 const SizedBox(width: 6),
+                                IconButton(
+                                  icon: Icon(
+                                    _debugConsolePinned
+                                        ? Icons.push_pin
+                                        : Icons.push_pin_outlined,
+                                    color: Colors.orange,
+                                    size: 16,
+                                  ),
+                                  tooltip: _debugConsolePinned
+                                      ? 'Unpin (auto-minimize with toolbar)'
+                                      : 'Pin (keep open during session)',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _setTeleprompterState(() =>
+                                      _debugConsolePinned =
+                                          !_debugConsolePinned),
+                                ),
                                 IconButton(
                                   icon: const Icon(Icons.bug_report_outlined,
                                       color: Colors.orange, size: 16),
@@ -436,13 +449,13 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 ),
                                 IconButton(
                                   icon: Icon(
-                                    _debugConsoleMinimized
+                                    debugConsoleMinimized
                                         ? Icons.keyboard_arrow_up_rounded
                                         : Icons.keyboard_arrow_down_rounded,
                                     color: Colors.orange,
                                     size: 18,
                                   ),
-                                  tooltip: _debugConsoleMinimized
+                                  tooltip: debugConsoleMinimized
                                       ? 'Expand debug box'
                                       : 'Minimize debug box',
                                   padding: EdgeInsets.zero,
@@ -476,8 +489,23 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                               ],
                             ),
                           ),
+                          // Sound meter — its own full-width row so it stays
+                          // clearly visible (even when minimized) to confirm the
+                          // mic is hearing you.
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+                            child: SizedBox(
+                              height: 22,
+                              child: _SoundLevelBar(
+                                level: tState.soundLevel,
+                                isListening: tState.isListening,
+                                isStarting: tState.isStarting,
+                                accentColor: Colors.orange,
+                              ),
+                            ),
+                          ),
                           // Log list
-                          if (!_debugConsoleMinimized)
+                          if (!debugConsoleMinimized)
                             Expanded(
                               child: ListView.builder(
                                 reverse: true,

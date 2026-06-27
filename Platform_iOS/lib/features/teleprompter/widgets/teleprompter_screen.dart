@@ -54,6 +54,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
   bool _debugConsoleMinimized = false;
+  bool _debugConsolePinned = false;
   Timer? _manualScrollTimer;
   Timer? _wordTrackTimer;
   Timer? _hideControlsTimer;

@@ -1,11 +1,25 @@
-name: Build iOS IPA (v5.0.0)
-run-name: iOS v5.0.0 IPA run ${{ github.run_number }} - ${{ github.event_name == 'workflow_dispatch' && 'manual dispatch' || github.event.head_commit.message }}
+name: Build iOS IPA (v5.0.7)
+run-name: iOS ${{ github.event.inputs.app_version || '5.0.7+43' }} ${{ github.event.inputs.release_channel || 'stable' }} IPA run ${{ github.run_number }} - manual dispatch
 
 on:
   workflow_dispatch:
+    inputs:
+      release_channel:
+        description: 'Release channel for this iOS build'
+        required: true
+        type: choice
+        default: stable
+        options:
+          - stable
+          - beta
+      app_version:
+        description: 'Flutter app version, for example 5.0.7+43'
+        required: true
+        default: '5.0.7+43'
 
 jobs:
   build:
+    name: Build AutoTeleprompter for iOS
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -33,38 +47,56 @@ jobs:
         working-directory: Platform_iOS
 
       - name: Install Dependencies
-        run: flutter pub upgrade
+        run: flutter pub get
         working-directory: Platform_iOS
 
-      - name: Verify iOS v5.0.0 metadata
+      - name: Verify iOS version metadata matches input
         run: |
-          grep -Fxq 'version: 5.0.0+8' pubspec.yaml
+          grep -Fxq "version: ${{ github.event.inputs.app_version }}" pubspec.yaml
         working-directory: Platform_iOS
 
       - name: Install Cocoapods (iOS only)
         run: |
           sudo gem install cocoapods
           pod --version
-        
-      - name: Build iOS (No Signing)
-        # We add 'v' for verbose logging so we can see the exact error if it fails
+
+      - name: Build iOS (No Signing, backend-enabled)
         run: |
+          version="${{ github.event.inputs.app_version }}"
+          buildName="${version%+*}"
+          buildNumber="${version#*+}"
           endpoint="$(python3 ../.github/scripts/sanitize_feedback_endpoint.py "$FEEDBACK_ENDPOINT")"
-          flutter build ios --release --no-codesign -v "--dart-define=APP_VERSION=5.0.0+8" "--dart-define=FEEDBACK_ENDPOINT=$endpoint"
+          flutter build ios --release --no-codesign -v \
+            "--build-name=$buildName" "--build-number=$buildNumber" \
+            "--dart-define=APP_VERSION=$version" \
+            "--dart-define=ACCOUNT_BACKEND_ENABLED=true" \
+            "--dart-define=SUPABASE_URL=$SUPABASE_URL" \
+            "--dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" \
+            "--dart-define=FEEDBACK_ENDPOINT=$endpoint" \
+            "--dart-define=GOOGLE_DRIVE_CLIENT_ID=$GOOGLE_DRIVE_CLIENT_ID" \
+            "--dart-define=DROPBOX_CLIENT_ID=$DROPBOX_CLIENT_ID"
         working-directory: Platform_iOS
         env:
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # iOS needs an iOS-type Google OAuth client id (not the desktop one).
+          # Set the GOOGLE_DRIVE_CLIENT_ID secret to the iOS client for working
+          # cloud in CI builds; otherwise cloud sign-in is inert in the artifact.
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          DROPBOX_CLIENT_ID: ${{ secrets.DROPBOX_CLIENT_ID }}
 
       - name: Zip .app to .ipa
         run: |
+          version="${{ github.event.inputs.app_version }}"
           mkdir -p build/ios/iphoneos/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
           cd build/ios/iphoneos/
-          zip -r AutoTeleprompter-iOS-v5.0.0.ipa Payload
+          zip -r "AutoTeleprompter-iOS-$version.ipa" Payload
         working-directory: Platform_iOS
 
       - name: Upload IPA
         uses: actions/upload-artifact@v7
         with:
-          name: AutoTeleprompter-iOS-v5.0.0
-          path: Platform_iOS/build/ios/iphoneos/AutoTeleprompter-iOS-v5.0.0.ipa
+          name: AutoTeleprompter-iOS-${{ github.event.inputs.app_version }}
+          path: Platform_iOS/build/ios/iphoneos/AutoTeleprompter-iOS-${{ github.event.inputs.app_version }}.ipa

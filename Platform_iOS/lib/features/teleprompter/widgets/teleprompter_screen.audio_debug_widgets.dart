@@ -27,7 +27,7 @@ class _SoundLevelBar extends StatelessWidget {
         border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         child: Row(
           children: [
             Icon(
@@ -35,17 +35,30 @@ class _SoundLevelBar extends StatelessWidget {
                   ? Icons.hourglass_top
                   : (isListening ? Icons.graphic_eq : Icons.volume_off),
               color: activeColor,
-              size: 12,
+              size: 15,
             ),
-            const SizedBox(width: 5),
+            const SizedBox(width: 7),
             Expanded(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
                   value: clampedLevel,
-                  minHeight: 5,
-                  backgroundColor: Colors.white.withValues(alpha: 0.12),
+                  minHeight: 12,
+                  backgroundColor: Colors.white.withValues(alpha: 0.14),
                   valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 34,
+              child: Text(
+                '${(clampedLevel * 100).round()}%',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontFamily: 'monospace',
                 ),
               ),
             ),

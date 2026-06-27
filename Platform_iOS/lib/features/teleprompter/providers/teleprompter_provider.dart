@@ -24,6 +24,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String _accumulatedTranscript = '';
   bool _disposed = false;
   int _noProgressCount = 0;
+  // Number of leading cumulative spoken words to ignore. Bumped after sustained
+  // off-script reading (improv/back-read) so the start-advance streak must be
+  // re-earned from FRESH words instead of stale pre-improv words in the window.
+  int _transcriptFloor = 0;
   Timer? _heartbeatTimer;
   Timer? _fluidAdvanceTimer;
   int _fluidTarget = 0;
@@ -148,9 +152,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     const recentWordWindow = 12;
     final spokenWords = result.words.split(RegExp(r'\s+'))
       ..removeWhere((w) => w.trim().isEmpty);
-    _accumulatedTranscript = spokenWords.length <= recentWordWindow
-        ? result.words
-        : spokenWords.sublist(spokenWords.length - recentWordWindow).join(' ');
+    // If Apple recycled its session (transcript got shorter), the floor no
+    // longer applies.
+    if (spokenWords.length < _transcriptFloor) _transcriptFloor = 0;
+    // Only words spoken since the last deviation count toward matching.
+    final freshWords = (_transcriptFloor > 0 &&
+            _transcriptFloor <= spokenWords.length)
+        ? spokenWords.sublist(_transcriptFloor)
+        : spokenWords;
+    _accumulatedTranscript = freshWords.length <= recentWordWindow
+        ? freshWords.join(' ')
+        : freshWords.sublist(freshWords.length - recentWordWindow).join(' ');
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
     final policy =
@@ -229,6 +241,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _sttReadingStandby = false;
       }
       _noProgressCount++;
+      // Sustained off-script reading (improv / back-read) — not just one
+      // mis-heard word — drops the stale words from the matching window so the
+      // start-advance streak must be re-earned from fresh speech.
+      const deviationResetAfter = 3;
+      if (_noProgressCount >= deviationResetAfter && spokenWords.isNotEmpty) {
+        _transcriptFloor = spokenWords.length;
+      }
       _addDebugLog(
           '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "$_accumulatedTranscript" | next: "$nextExpected"');
 
@@ -512,6 +531,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final sameScript = _isSameScriptSession(_currentScript, script);
     _currentScript = script;
     _accumulatedTranscript = '';
+    _transcriptFloor = 0;
     _noProgressCount = 0;
     _sttReadingStandby = false;
     _sessionStopped = false;
@@ -654,6 +674,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
     _accumulatedTranscript = '';
+    _transcriptFloor = 0;
     _noProgressCount = 0;
     _sttReadingStandby = false;
 
@@ -686,6 +707,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
   void resetPosition() {
     _accumulatedTranscript = '';
+    _transcriptFloor = 0;
     _noProgressCount = 0;
     _sttReadingStandby = false;
     _fluidAdvanceTimer?.cancel();
@@ -747,6 +769,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (activeScript == null || activeScript.words.isEmpty) return;
     final target = index.clamp(0, activeScript.words.length - 1);
     _accumulatedTranscript = '';
+    _transcriptFloor = 0;
     _noProgressCount = 0;
     _sttReadingStandby = false;
     _addDebugLog(

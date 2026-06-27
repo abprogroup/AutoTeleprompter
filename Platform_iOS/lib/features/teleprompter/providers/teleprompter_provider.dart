@@ -28,6 +28,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   // off-script reading (improv/back-read) so the start-advance streak must be
   // re-earned from FRESH words instead of stale pre-improv words in the window.
   int _transcriptFloor = 0;
+  // True once we have advanced at least once (locked on). Only then does
+  // sustained deviation clear the window — during initial lock-on, the WAITs
+  // that build the streak must NOT clear it, or it can never lock on.
+  bool _lockedOn = false;
   Timer? _heartbeatTimer;
   Timer? _fluidAdvanceTimer;
   int _fluidTarget = 0;
@@ -212,6 +216,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (aligned.shouldAdvance &&
         aligned.confirmedWordIndex > state.confirmedWordIndex) {
       _sttReadingStandby = true;
+      _lockedOn = true;
       _noProgressCount = 0;
       final capped = SttRecognitionPolicyService.resolveAdvanceTarget(
         currentIndex: state.confirmedWordIndex,
@@ -243,10 +248,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _noProgressCount++;
       // Sustained off-script reading (improv / back-read) — not just one
       // mis-heard word — drops the stale words from the matching window so the
-      // start-advance streak must be re-earned from fresh speech.
+      // start-advance streak must be re-earned from fresh speech. Only once
+      // we are LOCKED ON (already reading): during the initial lock-on the
+      // streak-building WAITs must not clear the window.
       const deviationResetAfter = 3;
-      if (_noProgressCount >= deviationResetAfter && spokenWords.isNotEmpty) {
+      if (_lockedOn &&
+          _noProgressCount >= deviationResetAfter &&
+          spokenWords.isNotEmpty) {
         _transcriptFloor = spokenWords.length;
+        _lockedOn = false;
       }
       _addDebugLog(
           '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "$_accumulatedTranscript" | next: "$nextExpected"');
@@ -532,6 +542,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _currentScript = script;
     _accumulatedTranscript = '';
     _transcriptFloor = 0;
+    _lockedOn = false;
     _noProgressCount = 0;
     _sttReadingStandby = false;
     _sessionStopped = false;

@@ -63,8 +63,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // (_controlsVisible) which re-opens it. A manual minimize always wins.
     final debugConsoleMinimized = _debugConsoleMinimized ||
         (!_controlsVisible && !_debugConsolePinned);
+    // Minimized still shows the header row + the sound bar row, so the mic
+    // meter stays visible during a session.
     final debugConsoleHeight = settings.debugMode
-        ? (debugConsoleMinimized ? 62.0 : 220.0)
+        ? (debugConsoleMinimized ? 74.0 : 220.0)
         : 0.0;
     final controlsReservedHeight =
         settings.scrollMode == 'manual' ? 150.0 : 104.0;
@@ -460,9 +462,16 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                       : 'Minimize debug box',
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
-                                  onPressed: () => _setTeleprompterState(() =>
-                                      _debugConsoleMinimized =
-                                          !_debugConsoleMinimized),
+                                  onPressed: () => _setTeleprompterState(() {
+                                    if (debugConsoleMinimized) {
+                                      // Expand AND pin so it stays open even
+                                      // while the toolbar is hidden.
+                                      _debugConsoleMinimized = false;
+                                      _debugConsolePinned = true;
+                                    } else {
+                                      _debugConsoleMinimized = true;
+                                    }
+                                  }),
                                 ),
                                 const SizedBox(width: 4),
                                 IconButton(

@@ -336,11 +336,6 @@ class SpeechService {
           listenMode: ListenMode.dictation,
           cancelOnError: false,
           localeId: useLocale,
-          // Cap each session so the cumulative transcript stays short and the
-          // recognizer recycles quickly (lower latency, smaller debug output).
-          // The restart loop keeps recognition effectively continuous.
-          listenFor: const Duration(seconds: 8),
-          pauseFor: const Duration(seconds: 4),
         ),
       );
     } catch (e) {

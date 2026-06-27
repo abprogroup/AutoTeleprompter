@@ -545,10 +545,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _addDebugLog(
         '🌐 START LOCALE: $localeId | ${_sectionLocales.toSet().length} distinct section(s)');
 
-    // Start heartbeat timer in debug mode
+    // Start heartbeat timer in debug mode. Only log when something actually
+    // changes (position, stuck count, or listening state) so a quiet/stuck
+    // session does not spam the debug box with identical lines.
     _heartbeatTimer?.cancel();
     final settings = ref.read(settingsProvider);
     if (settings.debugMode) {
+      String? lastHeartbeat;
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (_disposed) return;
         final engineName =
@@ -557,6 +560,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
             _useWhisper ? _whisperService.isListening : _sttService.isListening;
         final pos = state.confirmedWordIndex;
         final total = script.words.where((w) => !w.isNewline).length;
+        final signature = '$listening|$pos|$_noProgressCount';
+        if (signature == lastHeartbeat) return;
+        lastHeartbeat = signature;
         _addDebugLog(
             '💓 HEARTBEAT: $engineName ${listening ? "LISTENING" : "IDLE"} | pos=$pos/$total | stuck=$_noProgressCount');
       });

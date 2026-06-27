@@ -340,8 +340,13 @@ extension _SettingsAccountActions on _AppSettingsScreenState {
             : 'Account refreshed. Premium is not active.',
       );
     } catch (error) {
-      _showSnack('Account refresh failed: ${sanitizeSettingsErrorForUser(error)}');
+      // Surface the real cause (status code + message) instead of a bare
+      // "AccountBackendError" so account/key/network issues are diagnosable.
+      final detail = error is AccountBackendError
+          ? '[${error.code}${error.statusCode != null ? ' ${error.statusCode}' : ''}] '
+              '${error.message}'
+          : sanitizeSettingsErrorForUser(error);
+      _showSnack('Account refresh failed: $detail');
     }
   }
-
 }

@@ -151,6 +151,12 @@ class SettingsNotifier extends Notifier<AppSettings>
         (prefs.getInt(_sttManualBigWordMinLettersKey) ?? 5)
             .clamp(3, 10)
             .toInt();
+    final manualProfileEnabled =
+        prefs.getBool(_sttManualProfileEnabledKey) ?? false;
+    final manualVisibleEnabled = manualVisibleSmall > 0 && manualVisibleBig > 0;
+    final visibleSkipEnabled = manualProfileEnabled
+        ? manualVisibleEnabled
+        : (prefs.getBool(_sttVisibleSkipEnabledKey) ?? false);
 
     state = AppSettings(
       fontSize:
@@ -205,12 +211,11 @@ class SettingsNotifier extends Notifier<AppSettings>
       sttInputDeviceId: prefs.getString(_sttInputDeviceIdKey) ?? '',
       sttInputDeviceLabel: prefs.getString(_sttInputDeviceLabelKey) ??
           'System default microphone',
-      sttVisibleSkipEnabled: prefs.getBool(_sttVisibleSkipEnabledKey) ?? false,
+      sttVisibleSkipEnabled: visibleSkipEnabled,
       sttStrictBulletMode: prefs.getBool(_sttStrictBulletModeKey) ?? false,
       sttHardVisibleSkipEnabled:
           prefs.getBool(_sttHardVisibleSkipEnabledKey) ?? false,
-      sttManualProfileEnabled:
-          prefs.getBool(_sttManualProfileEnabledKey) ?? false,
+      sttManualProfileEnabled: manualProfileEnabled,
       sttManualStartAdvanceSmallWords: manualStartSmall,
       sttManualStartAdvanceBigWords: manualStartBig,
       sttManualSafetySmallWords: manualSafetySmall,

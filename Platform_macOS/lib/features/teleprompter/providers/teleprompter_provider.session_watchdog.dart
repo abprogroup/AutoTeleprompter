@@ -101,6 +101,20 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
     required int token,
   }) {
     _lastSttWatchdogRestartAt = now;
+    if (!_useWhisper && _sttService.platformName == 'Apple') {
+      _resetSpeechActivityMeter();
+      _safeSetState((s) => s.copyWith(
+            isListening: false,
+            isStarting: true,
+            soundLevel: 0.0,
+            sttHealth: AppleSttHealth.engineDropped.name,
+            sttQualityMessage:
+                'Apple Speech stopped listening. Reconnecting microphone input...',
+            sttRecognitionQuality: 0.0,
+            statusMessage: 'Reconnecting speech recognition...',
+            hasError: false,
+          ));
+    }
     _addDebugLog('[$engineName] WATCHDOG: listener dropped; restarting.');
     unawaited(_restartSttFromWatchdog(
       token: token,
@@ -152,7 +166,7 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
               : 'Recovering speech recognition...',
           hasError:
               restartCount >= TeleprompterNotifier._appleSilentRestartLimit,
-          isListening: true,
+          isListening: false,
           isStarting: true,
           soundLevel: 0.0,
           sttHealth: AppleSttHealth.engineDropped.name,
@@ -195,7 +209,7 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
         if (_sttService.requiresImmediateListeningFlag) {
           _startingSession = true;
           _safeSetState((s) => s.copyWith(
-                isListening: true,
+                isListening: false,
                 isStarting: true,
                 soundLevel: 0.0,
                 statusMessage: 'Recovering speech recognition...',
@@ -222,6 +236,10 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
       }
       if (_disposed || _sessionStopped || token != _sessionToken) return;
       if (result.success && _sttService.requiresImmediateListeningFlag) {
+        _markAppleWatchdogRecoveryBaseline(
+          DateTime.now(),
+          resetSilentRestartWindow: forceFullCycle,
+        );
         _startingSession = true;
         _resetAppleRecognitionQuality();
         _safeSetState(
@@ -247,6 +265,17 @@ extension TeleprompterNotifierSessionWatchdog on TeleprompterNotifier {
     } catch (error) {
       _addDebugLog('$source: $error');
     }
+  }
+
+  void _markAppleWatchdogRecoveryBaseline(
+    DateTime now, {
+    required bool resetSilentRestartWindow,
+  }) {
+    if (_sttService.platformName != 'Apple') return;
+    _lastVolLog = now;
+    if (!resetSilentRestartWindow) return;
+    _appleSilentRestartWindowStart = null;
+    _appleSilentRestartCount = 0;
   }
 
   void _warnForSilentNonAppleListener({

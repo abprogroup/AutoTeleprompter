@@ -1,9 +1,17 @@
 part of 'teleprompter_provider.dart';
 
 extension TeleprompterNotifierRelock on TeleprompterNotifier {
-  int? _relockTargetFromTranscript(Script script, String transcript) {
+  int? _relockTargetFromTranscript(
+    Script script,
+    String transcript,
+    SttRecognitionPolicy policy,
+  ) {
     _lastRelockScope = 'none';
     if (transcript.trim().isEmpty) return null;
+    if (!policy.visibleSkipEnabled) {
+      _lastRelockScope = 'visible-skip-off';
+      return null;
+    }
 
     final quickOnly =
         _noProgressCount < TeleprompterNotifier._stuckRelockAfterWaits;
@@ -13,6 +21,7 @@ extension TeleprompterNotifierRelock on TeleprompterNotifier {
       final target = _relockTargetFromTranscriptWindow(
         script,
         candidates[i],
+        policy: policy,
         quickOnly: quickOnly,
       );
       if (target == null) continue;
@@ -25,6 +34,7 @@ extension TeleprompterNotifierRelock on TeleprompterNotifier {
   int? _relockTargetFromTranscriptWindow(
     Script script,
     String transcript, {
+    required SttRecognitionPolicy policy,
     required bool quickOnly,
   }) {
     if (_visibleWordStart == null || _visibleWordEnd == null) {
@@ -33,47 +43,22 @@ extension TeleprompterNotifierRelock on TeleprompterNotifier {
     }
 
     const relockService = SttVisibleRelockService();
-    final anchorTarget = relockService.anchorTarget(
-      words: script.words,
-      transcript: transcript,
-      currentIndex: _currentState.confirmedWordIndex,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: _visibleWordEnd,
-    );
-    if (anchorTarget != null) {
-      _lastRelockScope = 'visible-anchor';
-      return anchorTarget;
-    }
     if (quickOnly) {
       _lastRelockScope = 'quick-visible-no-match';
       return null;
     }
 
-    final fuzzyTarget = relockService.fuzzyTarget(
-      words: script.words,
-      transcript: transcript,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: _visibleWordEnd,
-    );
-    if (fuzzyTarget != null) {
-      _lastRelockScope = 'visible-fuzzy';
-      return fuzzyTarget;
-    }
-
-    final visibleApproximateTarget = relockService.approximateTarget(
+    final exactTarget = relockService.exactPhraseTarget(
       words: script.words,
       transcript: transcript,
       currentIndex: _currentState.confirmedWordIndex,
       visibleWordStart: _visibleWordStart,
       visibleWordEnd: _visibleWordEnd,
-      minimumScore: _noProgressCount >=
-              TeleprompterNotifier._relaxedVisibleRelockAfterWaits
-          ? 0.76
-          : 0.88,
+      minWords: policy.visibleSkip.smallWords.clamp(3, 8).toInt(),
     );
-    if (visibleApproximateTarget != null) {
-      _lastRelockScope = 'visible-approximate';
-      return visibleApproximateTarget;
+    if (exactTarget != null) {
+      _lastRelockScope = 'visible-exact';
+      return exactTarget;
     }
 
     _lastRelockScope = 'visible-only-no-match';

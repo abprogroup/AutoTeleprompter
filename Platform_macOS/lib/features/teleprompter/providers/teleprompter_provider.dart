@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
+import '../services/stt_evidence_gate_service.dart';
 import '../services/stt_recognition_policy_service.dart';
 import '../services/stt_visible_relock_service.dart';
 import '../services/teleprompter_locale_resolver.dart';
@@ -22,6 +24,9 @@ part 'teleprompter_provider.relock.dart';
 part 'teleprompter_provider.session_watchdog.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
 part 'teleprompter_provider.apple_quality.dart';
+part 'teleprompter_provider.stt_gate.dart';
+part 'teleprompter_provider.stt_result.dart';
+part 'teleprompter_provider.registration.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final AbstractSttService _sttService;
@@ -48,6 +53,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _staleNoProgressTranscriptCount = 0;
   DateTime? _poorAppleRecognitionStartedAt;
   DateTime? _lastPoorAppleRecognitionRestartAt;
+  DateTime? _lastTranscriptSourceRenewalAt;
   AppleSttHealth? _lastLoggedAppleHealth;
   AppleSttRecoveryAction? _lastLoggedAppleAction;
   DateTime? _appleRetryBurstWindowStart;
@@ -63,6 +69,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _visibleLocaleAssistPinnedLocale;
   String? _pendingVisibleLocaleAssistLocale;
   bool _sttReadingStandby = false;
+  SttEvidenceTrackingState _sttEvidenceTrackingState =
+      SttEvidenceTrackingState.locked;
   String _lastRelockScope = 'none';
   int? _sequentialSttBaseIndex;
   int? _sequentialSttEndIndex;
@@ -74,14 +82,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _speechActivityMeterToken = 0;
   bool _stateFailureDiagnosticRecorded = false;
   static const int _maxAdvancePerUpdate = 30;
-  static const int _maxLocalSttJumpWithoutWait = 5;
-  static const int _maxTrustedVisibleSttJumpWithoutWait = 12;
+  static const int _maxLocalSttJumpWithoutWait = 2;
   static const int _visibleLocaleAssistAfterWaits = 2;
-  static const int _sttLiveAlignmentWindowWords = 10;
-  static const int _sttAlignmentWindowWords = 18;
-  static const int _sttRelockTranscriptMaxWords = 96;
+  static const int _sttLiveAlignmentWindowWords = 12;
+  static const int _sttAlignmentWindowWords = 16;
+  static const int _sttRelockTranscriptMaxWords = 18;
   static const int _stuckRelockAfterWaits = 3;
-  static const int _relaxedVisibleRelockAfterWaits = 12;
   static const int _appleSilentRestartLimit = 3;
   static const Duration _appleNativeCallbackStaleAfter = Duration(seconds: 45);
   static const Duration _appleSilentRestartWindow = Duration(seconds: 70);
@@ -190,8 +196,22 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final now = DateTime.now();
     final ts =
         "${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}";
-    final entry = "[$ts] ${DebugLogFormatter.normalize(log)}";
-    final logs = [...state.debugLogs, entry];
+    final normalized = DebugLogFormatter.normalize(log);
+    final entry = "[$ts] $normalized";
+    final logs = [...state.debugLogs];
+    final fingerprint = DebugLogFormatter.coalesceFingerprint(normalized);
+    if (fingerprint.isNotEmpty && logs.isNotEmpty) {
+      final previous = DebugLogFormatter.coalesceFingerprint(
+        DebugLogFormatter.stripTimestamp(logs.last),
+      );
+      if (previous == fingerprint) {
+        logs[logs.length - 1] = entry;
+      } else {
+        logs.add(entry);
+      }
+    } else {
+      logs.add(entry);
+    }
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
     _safeSetState((s) => s.copyWith(debugLogs: logs));
   }
@@ -211,17 +231,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         sectionLocales.isNotEmpty &&
         sectionLocales.every(_isEnglishLocale);
   }
-
-  static List<String> rollingTranscriptWindowsForAlignment(
-    String transcript, {
-    int windowWords = _sttAlignmentWindowWords,
-    int maxWindows = 6,
-  }) =>
-      SttRecognitionPolicyService.rollingTranscriptWindowsForAlignment(
-        transcript,
-        windowWords: windowWords,
-        maxWindows: maxWindows,
-      );
 
   static List<String> liveTranscriptWindowsForAlignment(
     String transcript, {
@@ -245,6 +254,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         maxWords: maxWords,
       );
 
+  static String debugTranscriptSnippet(String transcript) =>
+      SttRecognitionPolicyService.debugTranscriptSnippet(transcript);
+
   static int resolveAdvanceTarget({
     required int currentIndex,
     required int alignedIndex,
@@ -257,33 +269,21 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         maxAdvancePerUpdate: _maxAdvancePerUpdate,
       );
 
+  /// Legacy numeric guard retained for focused tests only.
+  /// Runtime STT movement must go through SttEvidenceGateService.
+  @visibleForTesting
   static bool shouldWaitForLargeSttAdvance({
     required int currentIndex,
     required int targetIndex,
     required bool visibleSkipTargetTrusted,
     required int noProgressCount,
-  }) =>
-      SttRecognitionPolicyService.shouldWaitForLargeAdvance(
-        currentIndex: currentIndex,
-        targetIndex: targetIndex,
-        visibleSkipTargetTrusted: visibleSkipTargetTrusted,
-        noProgressCount: noProgressCount,
-        maxLocalAdvanceWithoutWait: _maxLocalSttJumpWithoutWait,
-        maxTrustedVisibleAdvanceWithoutWait:
-            _maxTrustedVisibleSttJumpWithoutWait,
-        forceVisibleAfterWaits: _relaxedVisibleRelockAfterWaits,
-      );
-
-  static bool shouldForceSkipAfterNoProgress({
-    required bool strictBulletMode,
-    required int noProgressCount,
-    required int skipThreshold,
-  }) =>
-      SttRecognitionPolicyService.shouldForceSkipAfterNoProgress(
-        strictBulletMode: strictBulletMode,
-        noProgressCount: noProgressCount,
-        skipThreshold: skipThreshold,
-      );
+  }) {
+    final jump = targetIndex - currentIndex;
+    if (jump <= 0) return false;
+    if (!visibleSkipTargetTrusted) return jump > _maxLocalSttJumpWithoutWait;
+    if (jump <= 3) return false;
+    return noProgressCount < 4;
+  }
 
   static bool shouldUseImprovisationNoMatch({
     required bool strictBulletMode,
@@ -418,383 +418,4 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         );
     }
   }
-
-  void _handleSttResult(SpeechResult result) {
-    if (_currentScript == null || _disposed) return;
-    _safeSetState((s) => s.copyWith(isStarting: false));
-
-    final words = result.words.toLowerCase();
-    try {
-      final settings = ref.read(settingsProvider);
-
-      if (words.contains('stop prompt') ||
-          words.contains('\u05E2\u05E6\u05D5\u05E8') ||
-          words.contains('\u05E2\u05E6\u05D9\u05E8\u05D4')) {
-        _addDebugLog('VOICE COMMAND: STOP');
-        ref.read(settingsProvider.notifier).setScrollSpeed(0);
-        return;
-      } else if (words.contains('start prompt') ||
-          words.contains('\u05D1\u05D5\u05D0')) {
-        _addDebugLog('VOICE COMMAND: START');
-        if (settings.scrollSpeed == 0) {
-          ref.read(settingsProvider.notifier).setScrollSpeed(100);
-        }
-        return;
-      } else if (words.contains('speed up') ||
-          words.contains('\u05DE\u05D4\u05E8')) {
-        _addDebugLog('VOICE COMMAND: FASTER');
-        ref
-            .read(settingsProvider.notifier)
-            .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
-        return;
-      } else if (words.contains('slow down') ||
-          words.contains('\u05DC\u05D0\u05D8')) {
-        _addDebugLog('VOICE COMMAND: SLOWER');
-        ref
-            .read(settingsProvider.notifier)
-            .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
-        return;
-      }
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'teleprompterProvider.voiceCommandSettings',
-      );
-    }
-
-    _accumulatedTranscript =
-        TeleprompterNotifier.capTranscriptForRelock(result.words);
-    final alignmentWindows = _recentTranscriptWindows(_accumulatedTranscript);
-    var alignmentTranscript =
-        alignmentWindows.isEmpty ? '' : alignmentWindows.first;
-    final script = _currentScript!;
-    final settings = ref.read(settingsProvider);
-    final policy = TeleprompterNotifier.recognitionPolicyForSettings(settings);
-    final strictBulletMode = policy.bulletMode;
-    final maxSkipTargetIndex = TeleprompterNotifier.resolveVisibleSkipTarget(
-      visibleSkipEnabled: policy.visibleSkipEnabled,
-      strictBulletMode: false,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: _visibleWordEnd,
-    );
-
-    AlignmentResult alignWindow(String transcriptWindow) => WordAligner.align(
-          script: script.words,
-          transcript: transcriptWindow,
-          lastConfirmedIndex: _currentState.confirmedWordIndex,
-          visibleSkipStartIndex:
-              maxSkipTargetIndex == null ? null : _visibleWordStart,
-          maxSkipTargetIndex: maxSkipTargetIndex,
-          strictBulletMode: strictBulletMode,
-          policy: policy,
-          readingStandby: _sttReadingStandby,
-        );
-
-    var aligned = alignWindow(alignmentTranscript);
-    if (!aligned.shouldAdvance &&
-        !aligned.shouldEnterStandby &&
-        alignmentWindows.length > 1) {
-      for (var i = 1; i < alignmentWindows.length; i++) {
-        final candidateTranscript = alignmentWindows[i];
-        final candidate = alignWindow(candidateTranscript);
-        if (candidate.shouldAdvance &&
-            candidate.confirmedWordIndex > _currentState.confirmedWordIndex) {
-          alignmentTranscript = candidateTranscript;
-          aligned = AlignmentResult(
-            candidate.confirmedWordIndex,
-            candidate.confidence,
-            '${candidate.debugInfo} | rollingWindow=${i + 1}/${alignmentWindows.length}',
-            candidate.decision,
-          );
-          break;
-        }
-      }
-    }
-
-    final currentIdx = _currentState.confirmedWordIndex;
-    final nextExpected = (currentIdx + 1 < script.words.length)
-        ? script.words
-            .skip(currentIdx + 1)
-            .where((w) => !w.isNewline && w.normalized.isNotEmpty)
-            .take(3)
-            .map((w) => w.raw)
-            .join(' ')
-        : '<END>';
-
-    final engineTag = _useWhisper ? '[Whisper]' : '[Speech]';
-    if (aligned.shouldEnterStandby) {
-      _sttReadingStandby = true;
-      _noProgressCount = 0;
-      _resetStaleNoProgressTracking();
-      _resetAppleRecognitionQuality();
-      _addDebugLog(
-          '$engineTag STANDBY LOCK | ${aligned.debugInfo} | heard: "$alignmentTranscript"');
-      LightweightDiagnostics.instance.record(
-        'stt',
-        'standby lock',
-        data: {
-          'heard': alignmentTranscript,
-          'position': _currentState.confirmedWordIndex,
-          'confidence': aligned.confidence,
-        },
-      );
-      return;
-    }
-
-    if (aligned.shouldAdvance &&
-        aligned.confirmedWordIndex > _currentState.confirmedWordIndex) {
-      final advanceFrom = _currentState.confirmedWordIndex;
-      final visibleSkipTargetTrusted =
-          TeleprompterNotifier.isTrustedVisibleSkipTarget(
-        alignedIndex: aligned.confirmedWordIndex,
-        visibleWordStart: _visibleWordStart,
-        visibleWordEnd: _visibleWordEnd,
-      );
-      final rawJump = aligned.confirmedWordIndex - advanceFrom;
-      final shouldWaitForJump =
-          TeleprompterNotifier.shouldWaitForLargeSttAdvance(
-        currentIndex: advanceFrom,
-        targetIndex: aligned.confirmedWordIndex,
-        visibleSkipTargetTrusted: visibleSkipTargetTrusted,
-        noProgressCount: _noProgressCount,
-      );
-      if (shouldWaitForJump) {
-        _fluidAdvanceTimer?.cancel();
-        _resetSequentialSttStreak();
-        if (!strictBulletMode) {
-          _sttReadingStandby = false;
-        }
-        _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
-          currentCount: _noProgressCount,
-          improvising: false,
-          visibleAssistThreshold:
-              TeleprompterNotifier._visibleLocaleAssistAfterWaits,
-        );
-        final scope = visibleSkipTargetTrusted ? 'visible' : 'off-screen';
-        _addDebugLog(
-          '$engineTag WAIT #$_noProgressCount | blocked $scope advance '
-          '+$rawJump ->${aligned.confirmedWordIndex} | heard: "$alignmentTranscript"',
-        );
-        LightweightDiagnostics.instance.record(
-          'stt',
-          'blocked $scope advance',
-          data: {
-            'from': advanceFrom,
-            'aligned': aligned.confirmedWordIndex,
-            'jump': rawJump,
-            'visibleStart': _visibleWordStart,
-            'visibleEnd': _visibleWordEnd,
-            'heard': alignmentTranscript,
-          },
-        );
-        return;
-      }
-
-      _sttReadingStandby = true;
-      _noProgressCount = 0;
-      _resetStaleNoProgressTracking();
-      _resetAppleRecognitionQuality();
-      _resetVisibleLocaleAssist();
-      final target = TeleprompterNotifier.resolveAdvanceTarget(
-        currentIndex: advanceFrom,
-        alignedIndex: aligned.confirmedWordIndex,
-        visibleMaxSkipTargetIndex:
-            visibleSkipTargetTrusted ? maxSkipTargetIndex : null,
-      );
-      final advancedWord =
-          target < script.words.length ? script.words[target].raw : '?';
-      _addDebugLog(
-          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "$alignmentTranscript"');
-      LightweightDiagnostics.instance.record(
-        'stt',
-        'advanced',
-        data: {
-          'from': _currentState.confirmedWordIndex,
-          'to': target,
-          'word': advancedWord,
-          'confidence': aligned.confidence,
-          'heard': alignmentTranscript,
-        },
-      );
-
-      _applySttAdvanceTarget(target, script);
-      _syncLocaleForPosition(script, target + 1, reason: 'advance');
-    } else {
-      final improvising = TeleprompterNotifier.shouldUseImprovisationNoMatch(
-        strictBulletMode: strictBulletMode,
-        alignedIndex: aligned.confirmedWordIndex,
-        currentIndex: _currentState.confirmedWordIndex,
-      );
-      if (!strictBulletMode) {
-        _sttReadingStandby = false;
-      }
-
-      final sequential = _consumeSequentialSttStreak(
-        script: script,
-        transcript: alignmentTranscript,
-        policy: policy,
-        strictBulletMode: strictBulletMode,
-      );
-      if (sequential != null) {
-        if (sequential.targetIndex != null &&
-            sequential.targetIndex! > _currentState.confirmedWordIndex) {
-          final target = sequential.targetIndex!;
-          final advancedWord =
-              target < script.words.length ? script.words[target].raw : '?';
-          _fluidAdvanceTimer?.cancel();
-          _noProgressCount = 0;
-          _resetStaleNoProgressTracking();
-          _resetAppleRecognitionQuality();
-          _sttReadingStandby = true;
-          _resetVisibleLocaleAssist();
-          _addDebugLog(
-            '$engineTag SEQUENTIAL ADVANCE -> #$target "$advancedWord" | ${sequential.debugInfo}',
-          );
-          LightweightDiagnostics.instance.record(
-            'stt',
-            'sequential advanced',
-            data: {
-              'to': target,
-              'word': advancedWord,
-              'heard': alignmentTranscript,
-              'debug': sequential.debugInfo,
-            },
-          );
-          _applySttAdvanceTarget(target, script);
-          _syncLocaleForPosition(script, target + 1, reason: 'sequential');
-          return;
-        }
-
-        _noProgressCount = 0;
-        _resetStaleNoProgressTracking();
-        _resetAppleRecognitionQuality();
-        _sttReadingStandby = true;
-        _addDebugLog('$engineTag SEQUENTIAL HOLD | ${sequential.debugInfo}');
-        return;
-      }
-
-      _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
-        currentCount: _noProgressCount,
-        improvising: improvising,
-        visibleAssistThreshold:
-            TeleprompterNotifier._visibleLocaleAssistAfterWaits,
-      );
-      if (improvising) {
-        _addDebugLog(
-            '$engineTag IMPROVISING | heard: "$alignmentTranscript" | visible relock waiting');
-        LightweightDiagnostics.instance.record(
-          'stt',
-          'improvising',
-          data: {'heard': alignmentTranscript, 'position': currentIdx},
-        );
-      } else {
-        _addDebugLog(
-            '$engineTag WAIT #$_noProgressCount | heard: "$alignmentTranscript" | next: "$nextExpected"');
-        LightweightDiagnostics.instance.record(
-          'stt',
-          'waiting',
-          data: {
-            'heard': alignmentTranscript,
-            'next': nextExpected,
-            'position': currentIdx,
-            'stuckCount': _noProgressCount,
-          },
-        );
-        _checkAndSwitchLocale();
-      }
-
-      final relockTranscript = _accumulatedTranscript.trim().isEmpty
-          ? alignmentTranscript
-          : _accumulatedTranscript;
-      final relockTarget = _relockTargetFromTranscript(
-        script,
-        relockTranscript,
-      );
-      if (relockTarget != null &&
-          relockTarget > _currentState.confirmedWordIndex) {
-        final relockFrom = _currentState.confirmedWordIndex;
-        final relockVisibleTrusted =
-            TeleprompterNotifier.isTrustedVisibleSkipTarget(
-          alignedIndex: relockTarget,
-          visibleWordStart: _visibleWordStart,
-          visibleWordEnd: _visibleWordEnd,
-        );
-        final trustedVisibleRelock =
-            relockVisibleTrusted && _lastRelockScope.startsWith('visible-');
-        final shouldDelayRelock = !trustedVisibleRelock &&
-            TeleprompterNotifier.shouldWaitForLargeSttAdvance(
-              currentIndex: relockFrom,
-              targetIndex: relockTarget,
-              visibleSkipTargetTrusted: relockVisibleTrusted,
-              noProgressCount: _noProgressCount,
-            );
-        if (shouldDelayRelock) {
-          _fluidAdvanceTimer?.cancel();
-          _resetSequentialSttStreak();
-          final relockJump = relockTarget - relockFrom;
-          _addDebugLog(
-            '$engineTag WAIT #$_noProgressCount | delayed ${_lastRelockScope.toUpperCase()} relock '
-            '+$relockJump ->$relockTarget | heard: "$relockTranscript"',
-          );
-          LightweightDiagnostics.instance.record(
-            'stt',
-            'delayed relock',
-            data: {
-              'from': relockFrom,
-              'to': relockTarget,
-              'jump': relockJump,
-              'scope': _lastRelockScope,
-              'heard': relockTranscript,
-            },
-          );
-          return;
-        }
-        final relockedWord = script.words[relockTarget].raw;
-        _addDebugLog(
-          '$engineTag RELOCK ${_lastRelockScope.toUpperCase()} -> #$relockTarget "$relockedWord" | heard: "$relockTranscript"',
-        );
-        LightweightDiagnostics.instance.record(
-          'stt',
-          'relocked',
-          data: {
-            'from': _currentState.confirmedWordIndex,
-            'to': relockTarget,
-            'word': relockedWord,
-            'scope': _lastRelockScope,
-            'heard': relockTranscript,
-          },
-        );
-        _noProgressCount = 0;
-        _resetStaleNoProgressTracking();
-        _resetAppleRecognitionQuality();
-        _sttReadingStandby = true;
-        _applySttAdvanceTarget(relockTarget, script);
-        _syncLocaleForPosition(script, relockTarget + 1, reason: 'relock');
-        return;
-      }
-
-      if (_handlePoorAppleRecognitionIfNeeded(
-        script: script,
-        transcript: alignmentTranscript,
-      )) {
-        return;
-      }
-
-      if (_maybeAssistVisibleLocale(script, policy, alignmentTranscript)) {
-        return;
-      }
-    }
-  }
 }
-
-class _SequentialSttProgress {
-  final int? targetIndex;
-  final String debugInfo;
-
-  const _SequentialSttProgress(this.targetIndex, this.debugInfo);
-}
-
-final teleprompterProvider =
-    NotifierProvider<TeleprompterNotifier, TeleprompterState>(
-        TeleprompterNotifier.new);

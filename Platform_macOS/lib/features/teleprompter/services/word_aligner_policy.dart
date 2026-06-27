@@ -5,22 +5,83 @@ class AlignmentResult {
   final double confidence;
   final String debugInfo;
   final SttAlignmentDecision decision;
+  final SttAlignmentKind kind;
+  final SttThresholdFamily thresholdFamily;
+  final List<int> matchedScriptIndices;
+  final List<String> evidenceWords;
+  final int? candidateStartIndex;
+  final int? candidateEndIndex;
 
   AlignmentResult(
     this.confirmedWordIndex,
     this.confidence, [
     this.debugInfo = '',
     this.decision = SttAlignmentDecision.advance,
+    this.kind = SttAlignmentKind.unknown,
+    this.thresholdFamily = SttThresholdFamily.none,
+    this.matchedScriptIndices = const [],
+    this.evidenceWords = const [],
+    this.candidateStartIndex,
+    this.candidateEndIndex,
   ]);
 
   bool get shouldAdvance => decision == SttAlignmentDecision.advance;
   bool get shouldEnterStandby => decision == SttAlignmentDecision.standby;
+
+  AlignmentResult copyWith({
+    int? confirmedWordIndex,
+    double? confidence,
+    String? debugInfo,
+    SttAlignmentDecision? decision,
+    SttAlignmentKind? kind,
+    SttThresholdFamily? thresholdFamily,
+    List<int>? matchedScriptIndices,
+    List<String>? evidenceWords,
+    int? candidateStartIndex,
+    int? candidateEndIndex,
+  }) {
+    return AlignmentResult(
+      confirmedWordIndex ?? this.confirmedWordIndex,
+      confidence ?? this.confidence,
+      debugInfo ?? this.debugInfo,
+      decision ?? this.decision,
+      kind ?? this.kind,
+      thresholdFamily ?? this.thresholdFamily,
+      matchedScriptIndices ?? this.matchedScriptIndices,
+      evidenceWords ?? this.evidenceWords,
+      candidateStartIndex ?? this.candidateStartIndex,
+      candidateEndIndex ?? this.candidateEndIndex,
+    );
+  }
 }
 
 enum SttAlignmentDecision {
   wait,
   standby,
   advance,
+}
+
+enum SttAlignmentKind {
+  unknown,
+  nextWordLowEvidence,
+  nextWord,
+  singleWord,
+  nextPhrase,
+  localRecoveryPhrase,
+  visiblePhrase,
+  sequence,
+  sentenceRecovery,
+  headingPrefixSkip,
+  confirmedTailBridge,
+  nameRunBodyBridge,
+}
+
+enum SttThresholdFamily {
+  none,
+  startAdvance,
+  safetyRecovery,
+  bulletAdvance,
+  visibleSkip,
 }
 
 class SttEvidenceThreshold {

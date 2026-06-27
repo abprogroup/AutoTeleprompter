@@ -22,7 +22,9 @@ class _SoundLevelBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clampedLevel = level.clamp(0.0, 1.0).toDouble();
-    final activeColor = isListening ? accentColor : Colors.white38;
+    final activeColor = isStarting
+        ? (qualityColor ?? accentColor)
+        : (isListening ? accentColor : Colors.white38);
     final iconSize = compact ? 12.0 : 16.0;
     final barHeight = compact ? 5.0 : 7.0;
 

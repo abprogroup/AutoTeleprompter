@@ -53,7 +53,7 @@ class SttRecognitionPolicyService {
 
   static String capTranscriptWords(
     String transcript, {
-    int maxWords = 96,
+    int maxWords = 18,
   }) {
     final words = _transcriptWords(transcript);
     if (words.isEmpty) return '';
@@ -62,11 +62,34 @@ class SttRecognitionPolicyService {
     return words.sublist(words.length - safeMax).join(' ');
   }
 
+  static String debugTranscriptSnippet(
+    String transcript, {
+    int maxWords = 6,
+    int maxChars = 72,
+  }) {
+    final words = _transcriptWords(transcript);
+    if (words.isEmpty) return '';
+    final safeMax = maxWords.clamp(3, 12).toInt();
+    final safeChars = maxChars.clamp(32, 160).toInt();
+    final selected = <String>[];
+    for (var i = words.length - 1; i >= 0 && selected.length < safeMax; i--) {
+      final candidate = [words[i], ...selected].join(' ');
+      if (selected.isNotEmpty && candidate.length > safeChars) break;
+      selected.insert(0, words[i]);
+      if (candidate.length >= safeChars) break;
+    }
+    final clipped = selected.join(' ');
+    final snippet = clipped.length > safeChars
+        ? clipped.substring(clipped.length - safeChars)
+        : clipped;
+    return words.length > selected.length ? '... $snippet' : snippet;
+  }
+
   static List<String> liveTranscriptWindowsForAlignment(
     String transcript, {
-    int shortWindowWords = 10,
+    int shortWindowWords = 12,
     int mediumWindowWords = 14,
-    int longWindowWords = 18,
+    int longWindowWords = 16,
     int maxWindows = 8,
   }) {
     final words = _transcriptWords(transcript);
@@ -102,60 +125,35 @@ class SttRecognitionPolicyService {
         .map((part) => part.trim())
         .where((part) => part.isNotEmpty)
         .toList(growable: false);
+    var sentenceTailCount = 0;
     for (var i = sentenceParts.length - 1;
-        i >= 0 && windows.length < maxWindows;
+        i >= 0 && windows.length < maxWindows && sentenceTailCount < 2;
         i--) {
       final sentenceWords = _transcriptWords(sentenceParts[i]);
       if (sentenceWords.isEmpty) continue;
       final start =
           sentenceWords.length > safeLong ? sentenceWords.length - safeLong : 0;
       addWords(sentenceWords.sublist(start));
-    }
-
-    for (final window in rollingTranscriptWindowsForAlignment(
-      transcript,
-      windowWords: safeLong,
-      maxWindows: maxWindows,
-    )) {
-      if (windows.length >= maxWindows) break;
-      addWords(_transcriptWords(window));
+      sentenceTailCount++;
     }
 
     return windows.take(maxWindows).toList(growable: false);
   }
 
-  static List<String> rollingTranscriptWindowsForAlignment(
+  static bool shouldRenewAccumulatedTranscriptSource(
     String transcript, {
-    required int windowWords,
-    int maxWindows = 6,
+    int maxWords = 28,
+    int duplicateWindowWords = 5,
   }) {
     final words = _transcriptWords(transcript);
-    if (words.isEmpty) return const [];
-    final safeWindow = windowWords.clamp(4, 80).toInt();
-    if (words.length <= safeWindow) return [words.join(' ')];
-
-    final windows = <String>[];
-    final seen = <String>{};
-
-    void addWindow(int rawStart, int rawEnd) {
-      final start = rawStart.clamp(0, words.length).toInt();
-      final end = rawEnd.clamp(start, words.length).toInt();
-      if (end <= start) return;
-      final window = words.sublist(start, end).join(' ');
-      if (seen.add(window)) windows.add(window);
+    if (words.length > maxWords) return true;
+    final window = duplicateWindowWords.clamp(3, 8).toInt();
+    if (words.length < window * 2) return false;
+    final tail = words.sublist(words.length - window).join(' ');
+    for (var end = words.length - window; end >= window; end--) {
+      if (words.sublist(end - window, end).join(' ') == tail) return true;
     }
-
-    addWindow(words.length - safeWindow, words.length);
-
-    final step = (safeWindow / 2).round().clamp(3, safeWindow).toInt();
-    for (var end = words.length - step;
-        end > 0 && windows.length < maxWindows - 1;
-        end -= step) {
-      addWindow(end - safeWindow, end);
-    }
-
-    addWindow(0, safeWindow);
-    return windows.take(maxWindows).toList(growable: false);
+    return false;
   }
 
   static int resolveAdvanceTarget({
@@ -173,30 +171,20 @@ class SttRecognitionPolicyService {
         .toInt();
   }
 
-  static bool shouldWaitForLargeAdvance({
-    required int currentIndex,
-    required int targetIndex,
-    required bool visibleSkipTargetTrusted,
-    required int noProgressCount,
-    required int maxLocalAdvanceWithoutWait,
-    required int maxTrustedVisibleAdvanceWithoutWait,
-    required int forceVisibleAfterWaits,
+  static int effectiveAdvanceGuardIndex({
+    required int confirmedIndex,
+    required int? pendingAdvanceTarget,
   }) {
-    final jump = targetIndex - currentIndex;
-    if (jump <= 0) return false;
-    if (!visibleSkipTargetTrusted) {
-      return jump > maxLocalAdvanceWithoutWait;
+    if (pendingAdvanceTarget != null && pendingAdvanceTarget > confirmedIndex) {
+      return pendingAdvanceTarget;
     }
-    if (jump <= maxTrustedVisibleAdvanceWithoutWait) return false;
-    return noProgressCount < forceVisibleAfterWaits;
+    return confirmedIndex;
   }
 
-  static bool shouldForceSkipAfterNoProgress({
-    required bool strictBulletMode,
-    required int noProgressCount,
-    required int skipThreshold,
-  }) {
-    return false;
+  static bool isLocalStructuralAlignment(String debugInfo) {
+    return debugInfo.startsWith('HEADING_PREFIX_SKIP') ||
+        debugInfo.startsWith('CONFIRMED_TAIL_BRIDGE') ||
+        debugInfo.startsWith('NAME_RUN_BODY_BRIDGE');
   }
 
   static bool shouldUseImprovisationNoMatch({
@@ -215,8 +203,10 @@ class SttRecognitionPolicyService {
     if (settings.sttManualProfileEnabled) {
       final manualVisibleSmall = settings.sttManualVisibleSkipSmallWords;
       final manualVisibleBig = settings.sttManualVisibleSkipBigWords;
-      final manualVisibleEnabled =
+      final manualVisibleThresholdsEnabled =
           manualVisibleSmall > 0 && manualVisibleBig > 0;
+      final manualVisibleEnabled =
+          settings.sttVisibleSkipEnabled && manualVisibleThresholdsEnabled;
       final bigWordMinLetters = settings.sttManualBigWordMinLetters;
       return SttRecognitionPolicy(
         bulletMode: false,

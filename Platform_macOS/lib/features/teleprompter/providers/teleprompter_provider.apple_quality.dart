@@ -46,7 +46,8 @@ extension TeleprompterNotifierAppleQuality on TeleprompterNotifier {
         'quality=${(assessment.quality * 100).round()}%',
         if (waitCount != null) 'wait=$waitCount',
         if (repeatCount != null) 'repeat=$repeatCount',
-        if (heard.trim().isNotEmpty) 'heard="$heard"',
+        if (heard.trim().isNotEmpty)
+          'heard="${TeleprompterNotifier.debugTranscriptSnippet(heard)}"',
       ].join(' | ');
       _addDebugLog('[QUALITY] $details');
     }
@@ -69,7 +70,9 @@ extension TeleprompterNotifierAppleQuality on TeleprompterNotifier {
               ? message
               : s.statusMessage,
           hasError: assessment.health == AppleSttHealth.engineDropped,
-          isListening: s.isListening || !_sessionStopped,
+          isListening: assessment.health == AppleSttHealth.engineDropped
+              ? false
+              : s.isListening || !_sessionStopped,
           isStarting: assessment.health == AppleSttHealth.engineDropped
               ? true
               : s.isStarting,
@@ -171,6 +174,7 @@ extension TeleprompterNotifierAppleQuality on TeleprompterNotifier {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSttEvidenceGate();
     _resetSequentialSttStreak();
     _resetVisibleLocaleAssist();
     _resetStaleNoProgressTracking();
@@ -182,8 +186,9 @@ extension TeleprompterNotifierAppleQuality on TeleprompterNotifier {
       waitCount: _noProgressCount,
     );
 
+    final debugHeard = TeleprompterNotifier.debugTranscriptSnippet(transcript);
     _addDebugLog(
-      '[RECOVERY] ${assessment.shouldFullRestart ? "full" : "soft"} Apple STT refresh | heard="$transcript"',
+      '[RECOVERY] ${assessment.shouldFullRestart ? "full" : "soft"} Apple STT refresh | heard="$debugHeard"',
     );
     LightweightDiagnostics.instance.record(
       'stt',

@@ -6,6 +6,56 @@ import 'word_aligner.dart';
 class SttVisibleRelockService {
   const SttVisibleRelockService();
 
+  int? exactPhraseTarget({
+    required List<ScriptWord> words,
+    required String transcript,
+    required int currentIndex,
+    required int? visibleWordStart,
+    required int? visibleWordEnd,
+    int minWords = 3,
+  }) {
+    if (visibleWordStart == null || visibleWordEnd == null) return null;
+    final tokens = transcript
+        .split(RegExp(r'\s+'))
+        .map((word) => word.trim().normalizeForMatching())
+        .where((word) => word.isNotEmpty)
+        .toList(growable: false);
+    final safeMinWords = minWords.clamp(3, 8).toInt();
+    if (tokens.length < safeMinWords) return null;
+
+    final start =
+        visibleWordStart <= visibleWordEnd ? visibleWordStart : visibleWordEnd;
+    final end =
+        visibleWordStart <= visibleWordEnd ? visibleWordEnd : visibleWordStart;
+    final visibleWords = words
+        .where((word) =>
+            !word.isNewline &&
+            word.normalized.isNotEmpty &&
+            word.index > currentIndex &&
+            word.index >= start &&
+            word.index <= end)
+        .toList(growable: false);
+    if (visibleWords.length < safeMinWords) return null;
+
+    final maxPhrase = tokens.length < 8 ? tokens.length : 8;
+    for (var phraseLen = maxPhrase; phraseLen >= safeMinWords; phraseLen--) {
+      final phrase = tokens.sublist(tokens.length - phraseLen);
+      final maxStart = visibleWords.length - phraseLen;
+      for (var i = 0; i <= maxStart; i++) {
+        var matched = true;
+        for (var j = 0; j < phraseLen; j++) {
+          if (visibleWords[i + j].normalized != phrase[j]) {
+            matched = false;
+            break;
+          }
+        }
+        if (matched) return visibleWords[i + phraseLen - 1].index;
+      }
+    }
+
+    return null;
+  }
+
   int? fuzzyTarget({
     required List<ScriptWord> words,
     required String transcript,
@@ -58,7 +108,8 @@ class SttVisibleRelockService {
             if (mismatches > allowedMismatches) break;
           }
         }
-        if (mismatches <= allowedMismatches) {
+        if (mismatches <= allowedMismatches &&
+            _hasReliableFuzzyPhraseEvidence(realWords, i, phraseLen)) {
           return realWords[i + phraseLen - 1].index;
         }
       }
@@ -121,6 +172,9 @@ class SttVisibleRelockService {
     required int? visibleWordStart,
     required int? visibleWordEnd,
     double minimumAnchorSimilarity = 0.78,
+    int maxLeadingNoiseTokens = 2,
+    int maxSkippedTokens = 2,
+    int maxSkippedScriptWords = 1,
   }) {
     if (visibleWordStart == null || visibleWordEnd == null) return null;
     final queryTokens = ApproximateSpokenSearchService.tokenize(transcript);
@@ -147,6 +201,8 @@ class SttVisibleRelockService {
       var tokenIndex = 0;
       var matched = 0;
       var score = 0.0;
+      var skippedTokens = 0;
+      var skippedScriptWords = 0;
       var endWord = candidateWords[i].index;
       for (var j = i;
           j < candidateWords.length && tokenIndex < queryTokens.length;
@@ -167,23 +223,184 @@ class SttVisibleRelockService {
         }
         if (bestSim < minimumAnchorSimilarity || bestToken < 0) {
           if (matched == 0) continue;
+          skippedScriptWords++;
+          if (skippedScriptWords > maxSkippedScriptWords) break;
           if (j - i > queryTokens.length + 2) break;
           continue;
+        }
+        final skippedBeforeMatch = bestToken - tokenIndex;
+        final leadingNoiseIsSafe = matched > 0 ||
+            _leadingNoiseIsFiller(
+              queryTokens,
+              tokenIndex,
+              skippedBeforeMatch,
+            );
+        if (matched == 0 && bestToken > maxLeadingNoiseTokens) {
+          break;
+        }
+        if (!leadingNoiseIsSafe) {
+          break;
+        }
+        if (matched > 0 && skippedBeforeMatch > 0) {
+          skippedTokens += skippedBeforeMatch;
+          if (skippedTokens > maxSkippedTokens) break;
         }
         matched++;
         score += bestSim;
         tokenIndex = bestToken + 1;
         endWord = word.index;
         if (matched >= 2 && score / matched >= minimumAnchorSimilarity) {
-          final run = _AnchorRun(endWord, matched, score / matched);
+          final run = _AnchorRun(
+            endWord,
+            matched,
+            score / matched,
+            skippedTokens,
+            skippedScriptWords,
+          );
           if (best == null || run.isBetterThan(best)) best = run;
         }
       }
     }
     if (best == null) return null;
-    final hasEnoughEvidence = best.matchedAnchors >= 3 ||
-        (best.matchedAnchors >= 2 && best.averageSimilarity >= 0.88);
+    final hasTightEvidence =
+        best.skippedTokens == 0 && best.skippedScriptWords <= 1;
+    final hasEnoughEvidence = best.matchedAnchors >= 4 ||
+        (best.matchedAnchors >= 3 &&
+            (hasTightEvidence || best.averageSimilarity >= 0.90)) ||
+        (best.matchedAnchors >= 2 &&
+            hasTightEvidence &&
+            best.averageSimilarity >= 0.82);
     return hasEnoughEvidence ? best.targetIndex : null;
+  }
+
+  static bool _leadingNoiseIsFiller(
+    List<String> queryTokens,
+    int start,
+    int count,
+  ) {
+    if (count <= 0) return true;
+    if (start < 0 || start + count > queryTokens.length) return false;
+    for (var i = start; i < start + count; i++) {
+      if (!_isFillerToken(queryTokens[i])) return false;
+    }
+    return true;
+  }
+
+  static bool _isFillerToken(String token) {
+    switch (token) {
+      case 'um':
+      case 'uh':
+      case 'ah':
+      case 'er':
+      case 'erm':
+      case 'mm':
+      case 'hmm':
+      case 'like':
+      case 'so':
+      case 'well':
+      case 'ok':
+      case 'okay':
+      case 'now':
+      case 'then':
+      case 'אמ':
+      case 'אממ':
+      case 'אה':
+      case 'אז':
+      case 'טוב':
+      case 'כאילו':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static bool _hasReliableFuzzyPhraseEvidence(
+    List<ScriptWord> realWords,
+    int start,
+    int phraseLen,
+  ) {
+    var meaningfulWords = 0;
+    var hasDistinctiveWord = false;
+
+    for (var i = start; i < start + phraseLen; i++) {
+      final token = realWords[i].normalized.normalizeForMatching();
+      if (token.isEmpty || _isFuzzyStopWord(token)) continue;
+
+      final isRtl = realWords[i].isRtl;
+      final meaningfulLength = isRtl ? 3 : 4;
+      final distinctiveLength = isRtl ? 4 : 5;
+      if (token.length >= meaningfulLength) meaningfulWords++;
+      if (token.length >= distinctiveLength) hasDistinctiveWord = true;
+    }
+
+    return hasDistinctiveWord || meaningfulWords >= 3;
+  }
+
+  static bool _isFuzzyStopWord(String token) {
+    switch (token) {
+      case 'a':
+      case 'an':
+      case 'the':
+      case 'of':
+      case 'to':
+      case 'in':
+      case 'on':
+      case 'at':
+      case 'by':
+      case 'for':
+      case 'from':
+      case 'with':
+      case 'and':
+      case 'or':
+      case 'is':
+      case 'are':
+      case 'was':
+      case 'were':
+      case 'be':
+      case 'it':
+      case 'this':
+      case 'that':
+      case 'these':
+      case 'those':
+      case 'one':
+      case 'i':
+      case 'we':
+      case 'you':
+      case 'he':
+      case 'she':
+      case 'they':
+      case 'me':
+      case 'my':
+      case 'your':
+      case 'our':
+      case 'their':
+      case 'not':
+      case 'go':
+      case 'going':
+      case 'do':
+      case 'does':
+      case 'did':
+      case 'so':
+      case 'now':
+      case 'then':
+      case 'ה':
+      case 'של':
+      case 'את':
+      case 'עם':
+      case 'על':
+      case 'אל':
+      case 'או':
+      case 'אם':
+      case 'זה':
+      case 'זו':
+      case 'אני':
+      case 'אתה':
+      case 'אתם':
+      case 'אנחנו':
+        return true;
+      default:
+        return false;
+    }
   }
 
   static int _maxApproximateAdvance(int tokenCount) {
@@ -223,11 +440,15 @@ class _AnchorRun {
   final int targetIndex;
   final int matchedAnchors;
   final double averageSimilarity;
+  final int skippedTokens;
+  final int skippedScriptWords;
 
   const _AnchorRun(
     this.targetIndex,
     this.matchedAnchors,
     this.averageSimilarity,
+    this.skippedTokens,
+    this.skippedScriptWords,
   );
 
   bool isBetterThan(_AnchorRun? other) {
@@ -237,6 +458,12 @@ class _AnchorRun {
     }
     if ((averageSimilarity - other.averageSimilarity).abs() > 0.04) {
       return averageSimilarity > other.averageSimilarity;
+    }
+    if (skippedScriptWords != other.skippedScriptWords) {
+      return skippedScriptWords < other.skippedScriptWords;
+    }
+    if (skippedTokens != other.skippedTokens) {
+      return skippedTokens < other.skippedTokens;
     }
     return targetIndex < other.targetIndex;
   }

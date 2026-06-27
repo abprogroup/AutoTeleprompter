@@ -4,6 +4,24 @@ class DebugLogFormatter {
     return _tagKnownMessage(cleaned);
   }
 
+  static String stripTimestamp(String log) =>
+      log.replaceFirst(RegExp(r'^\[\d{2}:\d{2}\.\d\]\s+'), '');
+
+  static String coalesceFingerprint(String normalizedLog) {
+    final value = stripTimestamp(normalizedLog);
+    if (RegExp(r'\]\s+WAIT #\d+').hasMatch(value) ||
+        value.startsWith('[WAIT] WAIT #')) {
+      return value
+          .replaceFirst(RegExp(r'WAIT #\d+'), 'WAIT #')
+          .replaceAll(RegExp(r'heard: ".*?"'), 'heard: "<heard>"')
+          .replaceAll(RegExp(r'heard=".*?"'), 'heard="<heard>"');
+    }
+    if (value.contains('[HEARTBEAT] HEARTBEAT')) {
+      return value.replaceAll(RegExp(r'stuck=\d+'), 'stuck=#');
+    }
+    return '';
+  }
+
   static String _stripCorruptPrefix(String value) {
     var current = value.trimLeft();
     for (var attempts = 0; attempts < 4; attempts++) {

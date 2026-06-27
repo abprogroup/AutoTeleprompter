@@ -57,6 +57,16 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
       }
       _safeSetState((s) => s.copyWith(
             soundLevel: clampedLevel,
+            sttHealth: s.sttHealth == AppleSttHealth.engineDropped.name
+                ? AppleSttHealth.healthy.name
+                : s.sttHealth,
+            sttQualityMessage: s.sttHealth == AppleSttHealth.engineDropped.name
+                ? ''
+                : s.sttQualityMessage,
+            sttRecognitionQuality:
+                s.sttHealth == AppleSttHealth.engineDropped.name
+                    ? 0.75
+                    : s.sttRecognitionQuality,
             statusMessage:
                 _sttService.platformName == 'Apple' ? '' : s.statusMessage,
             hasError: _sttService.platformName == 'Apple' ? false : s.hasError,
@@ -95,6 +105,21 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
       if (_startingSession && status != SpeechStatus.listening) return;
       _startingSession = false;
       _addDebugLog('[$platform] STATUS: $status');
+      if (platform == 'Apple' && status == SpeechStatus.paused) {
+        _resetSpeechActivityMeter();
+        _safeSetState((s) => s.copyWith(
+              isListening: false,
+              isStarting: true,
+              soundLevel: 0.0,
+              sttHealth: AppleSttHealth.engineDropped.name,
+              sttQualityMessage:
+                  'Apple Speech paused the listener. Reconnecting microphone input...',
+              sttRecognitionQuality: 0.0,
+              statusMessage: 'Reconnecting speech recognition...',
+              hasError: false,
+            ));
+        return;
+      }
       final waitingForAppleCallback = platform == 'Apple' &&
           status == SpeechStatus.listening &&
           (_lastVolLog == null ||

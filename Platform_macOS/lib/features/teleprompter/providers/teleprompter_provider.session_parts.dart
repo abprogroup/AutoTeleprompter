@@ -4,6 +4,28 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
   List<String> _recentTranscriptWindows(String transcript) =>
       TeleprompterNotifier.liveTranscriptWindowsForAlignment(transcript);
 
+  void _maybeRenewAppleTranscriptSource(String rawTranscript) {
+    if (_useWhisper || _sttService.platformName != 'Apple') return;
+    if (!SttRecognitionPolicyService.shouldRenewAccumulatedTranscriptSource(
+      rawTranscript,
+    )) {
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastTranscriptSourceRenewalAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 20)) {
+      return;
+    }
+    _lastTranscriptSourceRenewalAt = now;
+    _addDebugLog('[APPLE] transcript grew stale; refreshing listener source');
+    unawaited(_sttService.restart(localeId: _activeLocale).then((result) {
+      if (_disposed || _sessionStopped) return;
+      if (!result.success) {
+        _addDebugLog('[APPLE] transcript refresh failed: ${result.message}');
+      }
+    }));
+  }
+
   _SequentialSttProgress? _consumeSequentialSttStreak({
     required Script script,
     required String transcript,
@@ -33,6 +55,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _sequentialSttEndIndex ??= currentIndex;
     var probeIndex = _sequentialSttEndIndex!;
     var evidence = _sequentialSttEvidence;
+    final evidenceWords = <String>[];
     var matched = 0;
     var duplicateIgnored = 0;
     var consumedPrefixIgnored = 0;
@@ -66,6 +89,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
       )) {
         probeIndex = nextIndex;
         evidence += policy.startAdvance.evidenceCost(nextWord.normalized);
+        evidenceWords.add(nextWord.normalized);
         matched++;
         _sequentialSttLastToken = token;
         _sequentialSttLastTokenAt = now;
@@ -122,6 +146,8 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
       return _SequentialSttProgress(
         null,
         'matched=$matched ignored=${duplicateIgnored + consumedPrefixIgnored} evidence=${evidence.toStringAsFixed(1)}/${needed.toStringAsFixed(1)} end=$probeIndex',
+        evidenceWords: evidenceWords,
+        evidenceScore: evidence,
       );
     }
 
@@ -132,6 +158,8 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     return _SequentialSttProgress(
       probeIndex,
       'matched=$matched ignored=${duplicateIgnored + consumedPrefixIgnored} evidence=${evidence.toStringAsFixed(1)}/${needed.toStringAsFixed(1)}',
+      evidenceWords: evidenceWords,
+      evidenceScore: evidence,
     );
   }
 
@@ -155,6 +183,11 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _speechActivityMeterTimer = null;
     if (!_disposed) _writeState((s) => s.copyWith(soundLevel: 0.0));
   }
+
+  int _currentSttAdvanceGuardIndex(int confirmedIndex) =>
+      _fluidAdvanceTimer?.isActive == true && _fluidTarget > confirmedIndex
+          ? _fluidTarget
+          : confirmedIndex;
 
   void _startFluidAdvance(int target, Script script) {
     if (_fluidAdvanceTimer?.isActive == true) {
@@ -262,6 +295,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _scriptLanguageLocale = locale;
     _accumulatedTranscript = '';
     _sttReadingStandby = false;
+    _resetSttEvidenceGate();
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
     _resetAppleRecognitionQuality();
@@ -429,6 +463,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSttEvidenceGate();
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
     _resetAppleRecognitionQuality();
@@ -440,6 +475,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _appleSilentRestartCount = 0;
     _poorAppleRecognitionStartedAt = null;
     _lastPoorAppleRecognitionRestartAt = null;
+    _lastTranscriptSourceRenewalAt = null;
     _silentWarningFired = false;
     _lastVolLog = null;
     final startupVisibleStart = _visibleWordStart;
@@ -466,6 +502,11 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
         debugLogs: [],
         missingLanguage: null));
 
+    const buildVersion = String.fromEnvironment(
+      'APP_VERSION',
+      defaultValue: 'local',
+    );
+    _addDebugLog('BUILD $buildVersion');
     _addDebugLog(
         'SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
     final visibleLocale = _visibleWindowStartLocale(
@@ -609,6 +650,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSttEvidenceGate();
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
     _resetAppleRecognitionQuality();
@@ -667,6 +709,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSttEvidenceGate();
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
     _resetAppleRecognitionQuality();
@@ -689,6 +732,7 @@ extension TeleprompterNotifierSessionParts on TeleprompterNotifier {
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
+    _resetSttEvidenceGate();
     _resetSequentialSttStreak();
     _resetStaleNoProgressTracking();
     _resetAppleRecognitionQuality();

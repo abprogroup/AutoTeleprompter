@@ -121,6 +121,12 @@ class SpeechService {
             _handleAppleTransientRetryError();
             return;
           }
+          if (_isBenignNoMatch(msg)) {
+            if (_isActive && !_isRestarting) {
+              _scheduleRestart(const Duration(milliseconds: 350));
+            }
+            return;
+          }
 
           if (_inLocaleSwitchGrace &&
               (msg.contains('error_language') ||
@@ -195,6 +201,7 @@ class SpeechService {
           if (status == 'done' || status == 'notListening') {
             if (_inAutomaticRecoveryGrace) return;
             if (_isActive && !_isRestarting && !_inLocaleSwitchGrace) {
+              onStatusChange?.call(SpeechStatus.paused);
               _scheduleRestart(const Duration(milliseconds: 150));
             } else if (!_isActive) {
               onStatusChange?.call(SpeechStatus.idle);
@@ -224,6 +231,13 @@ class SpeechService {
 
   bool _isAppleTransientRetryError(String msg) {
     return msg.toLowerCase().contains('error_retry');
+  }
+
+  bool _isBenignNoMatch(String msg) {
+    final lower = msg.toLowerCase();
+    return lower == 'error_no_match' ||
+        lower.contains('no_match') ||
+        lower.contains('speech_timeout');
   }
 
   void _handleAppleTransientRetryError() {

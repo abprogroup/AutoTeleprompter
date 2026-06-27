@@ -1,5 +1,5 @@
 name: Build macOS App (v5.0.8)
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+33' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+35' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -14,9 +14,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.8+33'
+        description: 'Flutter app version, for example 5.0.8+35'
         required: true
-        default: '5.0.8+33'
+        default: '5.0.8+35'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false
@@ -71,10 +71,10 @@ jobs:
           esac
           appVersion="${{ github.event.inputs.app_version }}"
           if [ -z "$appVersion" ]; then
-            appVersion="5.0.8+33"
+            appVersion="5.0.8+35"
           fi
           if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
-            echo "app_version must look like 5.0.8+33." >&2
+            echo "app_version must look like 5.0.8+35." >&2
             exit 1
           fi
           versionName="${appVersion%%+*}"
@@ -311,6 +311,10 @@ jobs:
           releases cannot publish unless the Supabase backend, feedback route,
           cloud credentials, release token, and update manifest URL are all
           present before the app is compiled.
+          Build 35 replaces direct STT movement paths with one profile-locked
+          evidence gate. Sequential tracking, heading/body recovery, visible
+          skips, and delayed relocks now all must satisfy the user's saved STT
+          profile thresholds before the prompter moves.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -358,7 +362,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, corrected Present word spacing, top-pinned listening meter placement, improved low-volume next-word STT progression, build 30 stale Apple Speech callback recovery, build 31 Apple STT reliability mode for noisy rooms/far speakers without overriding saved speech-control profile thresholds, build 32 reduced Apple Speech blackout windows by treating retry bursts as quality/coaching signals, avoiding poor-recognition restart loops, allowing mic preflight from any visible line, and adding visible-anchor relocking for imperfect proper-name recognition while preserving large-jump protection, and build 33 adds mandatory production credential preflight so published macOS releases cannot ship without the Supabase backend, feedback route, cloud credentials, release token, and update manifest URL.",
+              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, corrected Present word spacing, top-pinned listening meter placement, improved low-volume next-word STT progression, build 30 stale Apple Speech callback recovery, build 31 Apple STT reliability mode for noisy rooms/far speakers without overriding saved speech-control profile thresholds, build 32 reduced Apple Speech blackout windows by treating retry bursts as quality/coaching signals, avoiding poor-recognition restart loops, allowing mic preflight from any visible line, and adding visible-anchor relocking for imperfect proper-name recognition while preserving large-jump protection, build 33 adds mandatory production credential preflight so published macOS releases cannot ship without the Supabase backend, feedback route, cloud credentials, release token, and update manifest URL, and build 35 centralizes STT movement behind a profile-locked evidence gate so sequential tracking, heading/body recovery, visible skips, and delayed relocks must satisfy saved STT profile thresholds before moving.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

@@ -34,6 +34,34 @@ mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
   }
 
   Future<void> setSttVisibleSkipEnabled(bool enabled) async {
+    if (state.sttManualProfileEnabled) {
+      final nextSmall = enabled
+          ? (state.sttManualVisibleSkipSmallWords <= 0
+              ? 4
+              : state.sttManualVisibleSkipSmallWords)
+          : 0;
+      final nextBig = enabled
+          ? (state.sttManualVisibleSkipBigWords <= 0
+              ? 3
+              : state.sttManualVisibleSkipBigWords)
+          : 0;
+      state = state.copyWith(
+        sttVisibleSkipEnabled: enabled,
+        sttManualVisibleSkipSmallWords: nextSmall,
+        sttManualVisibleSkipBigWords: nextBig,
+        sttHardVisibleSkipEnabled:
+            enabled ? state.sttHardVisibleSkipEnabled : false,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_sttVisibleSkipEnabledKey, enabled);
+      await prefs.setInt(_sttManualVisibleSkipSmallWordsKey, nextSmall);
+      await prefs.setInt(_sttManualVisibleSkipBigWordsKey, nextBig);
+      if (!enabled) {
+        await prefs.setBool(_sttHardVisibleSkipEnabledKey, false);
+      }
+      return;
+    }
+
     state = state.copyWith(
       sttVisibleSkipEnabled: enabled,
       sttHardVisibleSkipEnabled:
@@ -100,11 +128,14 @@ mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
         : (state.sttManualVisibleSkipBigWords <= 0
             ? 3
             : state.sttManualVisibleSkipBigWords);
+    final visibleEnabled = normalized > 0 && nextBig > 0;
     state = state.copyWith(
+      sttVisibleSkipEnabled: visibleEnabled,
       sttManualVisibleSkipSmallWords: normalized,
       sttManualVisibleSkipBigWords: nextBig,
     );
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sttVisibleSkipEnabledKey, visibleEnabled);
     await prefs.setInt(_sttManualVisibleSkipSmallWordsKey, normalized);
     await prefs.setInt(_sttManualVisibleSkipBigWordsKey, nextBig);
   }
@@ -116,11 +147,14 @@ mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
         : (state.sttManualVisibleSkipSmallWords <= 0
             ? 4
             : state.sttManualVisibleSkipSmallWords);
+    final visibleEnabled = nextSmall > 0 && normalized > 0;
     state = state.copyWith(
+      sttVisibleSkipEnabled: visibleEnabled,
       sttManualVisibleSkipSmallWords: nextSmall,
       sttManualVisibleSkipBigWords: normalized,
     );
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sttVisibleSkipEnabledKey, visibleEnabled);
     await prefs.setInt(_sttManualVisibleSkipSmallWordsKey, nextSmall);
     await prefs.setInt(_sttManualVisibleSkipBigWordsKey, normalized);
   }

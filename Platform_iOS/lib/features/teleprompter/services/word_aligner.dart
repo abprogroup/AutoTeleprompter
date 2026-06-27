@@ -358,8 +358,10 @@ class WordAligner {
     // The most common case: user said the very next word. Check it first with
     // a slightly lower threshold since position makes it very likely.
     AlignmentResult? nextWordPriority(int candidateIndex) {
-      final canAdvanceOneWord =
-          activeStandby || localThreshold.passes([lastSpoken]);
+      // Single-word advance only when already in flow. From a cold start or
+      // after the streak was reset (improv / back-read), a lone near-match must
+      // NOT jump — the reader must re-earn the streak via the sequence path.
+      final canAdvanceOneWord = activeStandby;
       if (!canAdvanceOneWord ||
           candidateIndex >= script.length ||
           script[candidateIndex].isNewline ||
@@ -548,7 +550,15 @@ class WordAligner {
         final thresholdForSeq =
             visibleSkipEnabled ? visibleThreshold : localThreshold;
         final matchedWords = recentWords.take(matchCount);
-        if (thresholdForSeq.passes(matchedWords) && seqJump <= maxSeqJump) {
+        // Streak gate: when NOT already in flow (cold start, or after the streak
+        // was reset by improv/back-read), a forward jump must be backed by the
+        // profile's full word count — the "words to advance" (or "words to
+        // skip") streak — not a single lucky big-word match.
+        final coldStreakRequired =
+            activeStandby ? 1 : thresholdForSeq.smallWords;
+        if (thresholdForSeq.passes(matchedWords) &&
+            seqJump <= maxSeqJump &&
+            matchCount >= coldStreakRequired) {
           bestSeqScore = normalizedScore;
           bestSeqStartIdx = i;
           bestSeqEndIdx = (si - 1).clamp(lastConfirmedIndex, script.length - 1);

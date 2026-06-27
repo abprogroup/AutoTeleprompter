@@ -23,11 +23,22 @@ extension TeleprompterNotifierSttGate on TeleprompterNotifier {
   SttEvidenceGateDecision _evaluateSttNoMatchGate({
     required String transcript,
     required AlignmentResult alignment,
+    required Script script,
+    required SttRecognitionPolicy policy,
+    required bool strictBulletMode,
   }) {
+    final preserveTrackingContext = WordAligner.shouldPreserveSlowContext(
+      script: script.words,
+      transcript: transcript,
+      lastConfirmedIndex: _currentState.confirmedWordIndex,
+      policy: policy,
+      strictBulletMode: strictBulletMode,
+    );
     return const SttEvidenceGateService().evaluateNoMatch(
       transcript: transcript,
       alignment: alignment,
       trackingState: _sttEvidenceTrackingState,
+      preserveTrackingContext: preserveTrackingContext,
     );
   }
 

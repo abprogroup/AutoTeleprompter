@@ -191,6 +191,9 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
     final noMatchGate = _evaluateSttNoMatchGate(
       transcript: alignmentTranscript,
       alignment: aligned,
+      script: script,
+      policy: policy,
+      strictBulletMode: strictBulletMode,
     );
     _applyGateState(noMatchGate);
     _noProgressCount = TeleprompterNotifier.nextNoProgressCount(

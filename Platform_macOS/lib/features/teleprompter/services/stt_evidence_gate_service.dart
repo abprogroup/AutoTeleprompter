@@ -119,12 +119,20 @@ class SttEvidenceGateService {
 
     final jump = target - advanceGuardIndex;
     final structuralLocal = _isStructuralLocal(candidate.kind);
-    final visibleJump =
-        visibleSkipTargetTrusted && jump > maxLocalAdvanceWithoutWait;
-    final offscreenJump =
-        !visibleSkipTargetTrusted && jump > maxLocalAdvanceWithoutWait;
+    final localContinuation = _isLocalContinuation(
+      candidate,
+      advanceGuardIndex,
+      maxLocalAdvanceWithoutWait,
+    );
+    final visibleJump = visibleSkipTargetTrusted &&
+        jump > maxLocalAdvanceWithoutWait &&
+        !localContinuation;
+    final offscreenJump = !visibleSkipTargetTrusted &&
+        jump > maxLocalAdvanceWithoutWait &&
+        !localContinuation;
     final cleanTrackingNext =
-        trackingState == SttEvidenceTrackingState.tracking &&
+        (trackingState == SttEvidenceTrackingState.tracking ||
+                trackingState == SttEvidenceTrackingState.recovering) &&
             jump <= maxLocalAdvanceWithoutWait &&
             _isCleanNextCandidate(candidate.kind) &&
             candidate.confidence >= 0.70;
@@ -138,6 +146,11 @@ class SttEvidenceGateService {
       family = trackingState == SttEvidenceTrackingState.tracking
           ? SttThresholdFamily.safetyRecovery
           : SttThresholdFamily.startAdvance;
+    }
+    if (family == SttThresholdFamily.startAdvance &&
+        trackingState == SttEvidenceTrackingState.recovering &&
+        localContinuation) {
+      family = SttThresholdFamily.safetyRecovery;
     }
     if ((trackingState == SttEvidenceTrackingState.locked ||
             trackingState == SttEvidenceTrackingState.offScript) &&
@@ -225,6 +238,7 @@ class SttEvidenceGateService {
     required String transcript,
     required AlignmentResult alignment,
     required SttEvidenceTrackingState trackingState,
+    bool preserveTrackingContext = false,
   }) {
     final heardSomething = transcript.trim().isNotEmpty;
     final debug = alignment.debugInfo;
@@ -239,6 +253,17 @@ class SttEvidenceGateService {
         targetIndex: alignment.confirmedWordIndex,
         label: 'GATE_HOLD',
         reason: 'waiting_for_profile_evidence',
+      );
+    }
+    if (preserveTrackingContext &&
+        (trackingState == SttEvidenceTrackingState.tracking ||
+            trackingState == SttEvidenceTrackingState.recovering)) {
+      return _decision(
+        action: SttEvidenceGateAction.hold,
+        nextState: SttEvidenceTrackingState.recovering,
+        targetIndex: alignment.confirmedWordIndex,
+        label: 'GATE_HOLD',
+        reason: 'local_context_waiting',
       );
     }
     if (debug.startsWith('NO_MATCH') || debug.startsWith('WAIT_EVIDENCE')) {
@@ -286,6 +311,19 @@ class SttEvidenceGateService {
     return kind == SttAlignmentKind.headingPrefixSkip ||
         kind == SttAlignmentKind.confirmedTailBridge ||
         kind == SttAlignmentKind.nameRunBodyBridge;
+  }
+
+  bool _isLocalContinuation(
+    SttEvidenceGateCandidate candidate,
+    int advanceGuardIndex,
+    int maxLocalAdvanceWithoutWait,
+  ) {
+    if (candidate.thresholdFamily == SttThresholdFamily.visibleSkip) {
+      return false;
+    }
+    final start = candidate.candidateStartIndex;
+    if (start == null) return false;
+    return start <= advanceGuardIndex + maxLocalAdvanceWithoutWait + 1;
   }
 
   String _labelForFamily(SttThresholdFamily family) {

@@ -105,6 +105,21 @@ class SpeechService {
           if (!_isActive) return;
 
           final msg = error.errorMsg;
+
+          // error_no_match / speech_timeout are NORMAL "heard nothing yet"
+          // conditions on iOS, not real errors. Quietly recycle the session
+          // without logging, counting, or tight-looping, so they don't spam the
+          // debug output or escalate into a reinit loop. Just wait for speech.
+          final benignTimeout = msg == 'error_no_match' ||
+              msg.contains('no_match') ||
+              msg.contains('speech_timeout');
+          if (benignTimeout) {
+            if (_isActive && !_isRestarting) {
+              _scheduleRestart(const Duration(milliseconds: 350));
+            }
+            return;
+          }
+
           onError?.call(msg);
 
           // Language error — try fallback, then give up and notify

@@ -141,16 +141,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     // and lag the aligner. Only the recent tail matters for tracking the
     // reading position, so keep the last few words. This also keeps the debug
     // output readable.
+    // We do NOT restart the recognizer to bound the transcript — a forced
+    // restart can leave SFSpeechRecognizer "listening" but no longer delivering
+    // results (it went deaf after a visible-skip jump). Trimming the matching
+    // input to the recent tail is the safe bound.
     const recentWordWindow = 12;
-    const transcriptResetCap = 16;
     final spokenWords = result.words.split(RegExp(r'\s+'))
       ..removeWhere((w) => w.trim().isEmpty);
-    // Apple's long dictation session can grow and even duplicate the transcript
-    // ("welcome to ... welcome to ..."). Recycle the recognizer once it gets
-    // large so the spoken "sentence" stays short and clean for matching.
-    if (!_useWhisper && spokenWords.length >= transcriptResetCap) {
-      unawaited(_sttService.restartRecognition());
-    }
     _accumulatedTranscript = spokenWords.length <= recentWordWindow
         ? result.words
         : spokenWords.sublist(spokenWords.length - recentWordWindow).join(' ');

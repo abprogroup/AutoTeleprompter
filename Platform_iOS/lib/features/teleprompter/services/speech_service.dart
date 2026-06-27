@@ -356,6 +356,13 @@ class SpeechService {
     onStatusChange?.call(SpeechStatus.idle);
   }
 
+  /// Recycle the recognizer to clear an accumulated/duplicated transcript.
+  /// Uses the guarded restart path so overlapping requests are coalesced.
+  Future<void> restartRecognition() async {
+    if (!_isActive || _isRestarting) return;
+    _scheduleRestart(const Duration(milliseconds: 120));
+  }
+
   Future<void> pause() async {
     _isActive = false;
     _isRestarting = false;

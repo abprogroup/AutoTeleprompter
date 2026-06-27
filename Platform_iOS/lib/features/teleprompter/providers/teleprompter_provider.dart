@@ -142,8 +142,15 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     // reading position, so keep the last few words. This also keeps the debug
     // output readable.
     const recentWordWindow = 12;
+    const transcriptResetCap = 16;
     final spokenWords = result.words.split(RegExp(r'\s+'))
       ..removeWhere((w) => w.trim().isEmpty);
+    // Apple's long dictation session can grow and even duplicate the transcript
+    // ("welcome to ... welcome to ..."). Recycle the recognizer once it gets
+    // large so the spoken "sentence" stays short and clean for matching.
+    if (!_useWhisper && spokenWords.length >= transcriptResetCap) {
+      unawaited(_sttService.restartRecognition());
+    }
     _accumulatedTranscript = spokenWords.length <= recentWordWindow
         ? result.words
         : spokenWords.sublist(spokenWords.length - recentWordWindow).join(' ');
@@ -189,7 +196,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _sttReadingStandby = true;
       _noProgressCount = 0;
       _addDebugLog(
-          '$engineTag 🔒 STANDBY | ${aligned.debugInfo} | heard: "${result.words}"');
+          '$engineTag 🔒 STANDBY | ${aligned.debugInfo} | heard: "$_accumulatedTranscript"');
       return;
     }
 
@@ -206,7 +213,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       final advancedWord =
           capped < script.words.length ? script.words[capped].raw : '?';
       _addDebugLog(
-          '$engineTag ✅ ADVANCE → #$capped "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
+          '$engineTag ✅ ADVANCE → #$capped "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "$_accumulatedTranscript"');
 
       // Fluid advancement: if jumping more than 3 words, animate
       // through intermediate words so the user's eye can follow.
@@ -226,7 +233,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       }
       _noProgressCount++;
       _addDebugLog(
-          '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
+          '$engineTag ⏸ WAIT #$_noProgressCount/$skipThreshold | heard: "$_accumulatedTranscript" | next: "$nextExpected"');
 
       if (SttRecognitionPolicyService.shouldForceSkipAfterNoProgress(
         strictBulletMode: policy.bulletMode,

@@ -38,6 +38,9 @@ class SttAppleAdapter extends AbstractSttService {
   Future<void> stop() => _inner.stop();
 
   @override
+  Future<void> restartRecognition() => _inner.restartRecognition();
+
+  @override
   bool get isListening => _inner.isListening;
 
   @override

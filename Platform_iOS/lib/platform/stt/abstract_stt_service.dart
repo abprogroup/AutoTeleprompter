@@ -45,6 +45,11 @@ abstract class AbstractSttService {
   /// Stops speech recognition.
   Future<void> stop();
 
+  /// Force the recognizer to recycle, clearing any accumulated transcript.
+  /// Default no-op; overridden by services that hold a long growing session
+  /// (e.g. Apple dictation) so callers can bound runaway/duplicated transcripts.
+  Future<void> restartRecognition() async {}
+
   /// Whether the service is currently listening.
   bool get isListening;
 

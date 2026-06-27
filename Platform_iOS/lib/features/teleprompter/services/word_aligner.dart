@@ -89,6 +89,68 @@ class WordAligner {
     return best;
   }
 
+  /// Sentence-level recovery used ONLY when strict per-word matching is stuck.
+  /// Greedily aligns the spoken words (single tokens or joins of 2-3 tokens) to
+  /// the on-screen script span as a subsequence. If enough of the spanned script
+  /// words were covered by speech (matched / span >= [recoveryRatio]), advance
+  /// to the furthest matched word. This recovers from Apple STT mis-reads of a
+  /// single word once the surrounding words confirm the position. Bounded by the
+  /// visible window so it never jumps off-screen. See STT_SENTENCE_RECOVERY_SPEC.
+  static AlignmentResult? _sentenceRecoveryMatch({
+    required List<ScriptWord> script,
+    required List<String> transcriptWords,
+    required int searchStart,
+    required int visibleEnd,
+    required bool policyBulletMode,
+    int minRecoveryWords = 2,
+    double recoveryRatio = 0.75,
+  }) {
+    if (policyBulletMode) return null;
+    if (transcriptWords.length < minRecoveryWords) return null;
+    final spanEnd = visibleEnd.clamp(searchStart, script.length - 1).toInt();
+    if (spanEnd < searchStart) return null;
+
+    var spokenPtr = 0;
+    var matched = 0;
+    var lastMatch = -1;
+    for (var i = searchStart; i <= spanEnd; i++) {
+      final word = script[i];
+      if (word.isNewline || _isUnspeakable(word)) continue;
+      final target = word.normalized;
+      if (target.isEmpty) continue;
+      final threshold = word.isRtl ? 0.45 : 0.55;
+      for (var j = spokenPtr; j < transcriptWords.length; j++) {
+        var bestSim = _wordSimilarity(transcriptWords[j], target, word.isRtl);
+        var bestN = 1;
+        for (var n = 2; n <= 3 && j + n <= transcriptWords.length; n++) {
+          final joined = transcriptWords.sublist(j, j + n).join();
+          final sim = _wordSimilarity(joined, target, word.isRtl);
+          if (sim > bestSim) {
+            bestSim = sim;
+            bestN = n;
+          }
+        }
+        if (bestSim >= threshold) {
+          matched++;
+          lastMatch = i;
+          spokenPtr = j + bestN;
+          break;
+        }
+      }
+    }
+
+    if (lastMatch < searchStart || matched < minRecoveryWords) return null;
+    final span = lastMatch - searchStart + 1;
+    final ratio = span > 0 ? matched / span : 0.0;
+    if (ratio < recoveryRatio) return null;
+    return AlignmentResult(
+      lastMatch,
+      ratio,
+      'SENTENCE_RECOVERY: matched=$matched/$span ratio=${ratio.toStringAsFixed(2)} '
+      '-> [$lastMatch]"${script[lastMatch].normalized}"',
+    );
+  }
+
   static bool spokenWordMatchesNext(
     String spoken,
     ScriptWord word, {
@@ -491,6 +553,21 @@ class WordAligner {
     if (bestSeqScore >= minSeqScore && bestSeqEndIdx > lastConfirmedIndex) {
       return AlignmentResult(
           bestSeqEndIdx, bestSeqScore, '$bestSeqDebug\n$debugScans');
+    }
+
+    // -- SENTENCE-% RECOVERY (only when strict matching is stuck) ------------
+    // Apple STT can mis-read a single word while predicting ahead. If enough of
+    // the on-screen sentence was covered by speech (single tokens or joins),
+    // advance past the mis-read word. Bounded by the visible window.
+    if (visibleSkipEnabled) {
+      final recovery = _sentenceRecoveryMatch(
+        script: script,
+        transcriptWords: transcriptWords,
+        searchStart: searchStart,
+        visibleEnd: visibleMaxSkipTargetIndex,
+        policyBulletMode: policyBulletMode,
+      );
+      if (recovery != null) return recovery;
     }
 
     // -- NO MATCH ------------------------------------------------------------

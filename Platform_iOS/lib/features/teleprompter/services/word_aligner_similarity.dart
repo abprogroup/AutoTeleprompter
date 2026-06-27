@@ -33,6 +33,23 @@ double _wordSimilarity(String spoken, String scriptWord, bool isRtl) {
 
   double sim = spoken.similarity(scriptWord);
 
+  // Containment boost for ALL languages. Mobile STT frequently splits compound
+  // words ("AutoTeleprompter" -> "auto teleprompter") or returns a partial/
+  // jumped-ahead guess ("teleprompt", "telephone"). When one word clearly
+  // contains the other, give strong partial credit so the reader still
+  // advances. e.g. "teleprompter" or "teleprompt" inside "autoteleprompter".
+  if (sim < 0.80 && spoken.length >= 3 && scriptWord.length >= 3) {
+    if (spoken.contains(scriptWord) || scriptWord.contains(spoken)) {
+      final shorter =
+          spoken.length < scriptWord.length ? spoken.length : scriptWord.length;
+      final longer =
+          spoken.length > scriptWord.length ? spoken.length : scriptWord.length;
+      final overlapRatio = shorter / longer;
+      final subSim = 0.70 * overlapRatio + 0.25;
+      if (subSim > sim) sim = subSim;
+    }
+  }
+
   if (isRtl && sim < 0.75) {
     final ss = scriptWord.stripHebrewPrefixes();
     final ls = spoken.stripHebrewPrefixes();

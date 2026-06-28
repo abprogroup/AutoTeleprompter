@@ -204,6 +204,9 @@ class SettingsNotifier extends Notifier<AppSettings>
       ),
       contentCreatorRecordingControlsSpeech:
           prefs.getBool(_contentCreatorRecordingControlsSpeechKey) ?? false,
+      contentCreatorFeedMode: _normalizeContentCreatorFeedMode(
+        prefs.getString(_contentCreatorFeedModeKey),
+      ),
       importColorMode: _normalizeImportColorMode(
         prefs.getString(_importColorModeKey),
       ),
@@ -242,6 +245,17 @@ class SettingsNotifier extends Notifier<AppSettings>
         return value!;
       default:
         return AppSettings.importColorModePrompter;
+    }
+  }
+
+  String _normalizeContentCreatorFeedMode(String? value) {
+    switch (value) {
+      case AppSettings.contentCreatorFeedStrip:
+      case AppSettings.contentCreatorFeedBubble:
+      case AppSettings.contentCreatorFeedFull:
+        return value!;
+      default:
+        return AppSettings.contentCreatorFeedStrip;
     }
   }
 

@@ -22,6 +22,7 @@ import 'teleprompter_screen.dart';
 part 'content_creator_screen.recording.dart';
 part 'content_creator_screen.settings.dart';
 part 'content_creator_screen.controls.dart';
+part 'content_creator_screen.feed.dart';
 part 'content_creator_screen.walkthrough.dart';
 
 class ContentCreatorScreen extends ConsumerStatefulWidget {
@@ -61,6 +62,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   bool _creatorSearchToolbarVisible = false;
   List<_CreatorSearchMatch> _creatorSearchMatches = const [];
   int _creatorSearchMatchIndex = -1;
+
+  // Controls auto-hide while a session (recording/STT) is active; a tap on the
+  // screen reveals them again.
+  bool _controlsVisible = true;
+  Timer? _controlsHideTimer;
   int _cameraInitGeneration = 0;
   bool _isInit = false;
   bool _isCameraInitializing = false;
@@ -182,6 +188,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   void dispose() {
     _cameraInitGeneration++;
     _recordTimer?.cancel();
+    _controlsHideTimer?.cancel();
     unawaited(_audioRecorder.cancel());
     unawaited(_audioRecorder.dispose());
     _cameraController?.dispose();
@@ -209,148 +216,70 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       }
     }
 
+    final feedMode = settings.contentCreatorFeedMode;
+    final sessionActive = _isRecording ||
+        _recordStartInFlight ||
+        tState.isListening ||
+        tState.isStarting;
+    final controlsVisible = _controlsVisible || !sessionActive;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // 1. Camera Preview (Bottom 40%)
-          Positioned.fill(
-            child: Column(
-              children: [
-                const Spacer(flex: 6),
-                Expanded(
-                  key: _creatorSurfaceKey,
-                  flex: 4,
-                  child: audioOnly
-                      ? _buildAudioOnlySurface()
-                      : _isInit
-                          ? Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                ClipRect(
-                                  child: FittedBox(
-                                    fit: BoxFit.cover,
-                                    child: SizedBox(
-                                      width: _cameraController!
-                                          .value.previewSize!.height,
-                                      height: _cameraController!
-                                          .value.previewSize!.width,
-                                      child: CameraPreview(_cameraController!),
-                                    ),
-                                  ),
-                                ),
-                                // V3 Pro: Enhanced Eye-Contact Radial Vignette
-                                Container(
-                                  decoration: BoxDecoration(
-                                    gradient: RadialGradient(
-                                      center: Alignment.center,
-                                      radius: 0.85,
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.black.withValues(alpha: 0.5),
-                                        Colors.black.withValues(alpha: 0.9),
-                                      ],
-                                      stops: const [0.4, 0.7, 1.0],
-                                    ),
-                                  ),
-                                ),
-                                // V3 Pro: Camera Lens HUD Painter
-                                CustomPaint(
-                                  painter: _LensHUDPainter(),
-                                  child: Container(),
-                                ),
-                                // V3 Pro: Session Timer HUD
-                                if (_isRecording)
-                                  Positioned(
-                                    top: 20,
-                                    right: 20,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                          color: Colors.red,
-                                          borderRadius:
-                                              BorderRadius.circular(6)),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.circle,
-                                              color: Colors.white, size: 8),
-                                          const SizedBox(width: 6),
-                                          Text(_formatTimer(_recordSeconds),
-                                              style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 13)),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                // V3 Pro: Countdown Overlay
-                                if (_countdown > 0)
-                                  Center(
-                                    child: Container(
-                                      padding: const EdgeInsets.all(40),
-                                      decoration: BoxDecoration(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.4),
-                                          shape: BoxShape.circle),
-                                      child: Text('$_countdown',
-                                          style: const TextStyle(
-                                              color: Color(0xFFFFBF00),
-                                              fontSize: 80,
-                                              fontWeight: FontWeight.bold)),
-                                    ),
-                                  ),
-                              ],
-                            )
-                          : _buildCameraFallback(),
-                ),
-              ],
-            ),
-          ),
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _handleCreatorTap,
+        child: Stack(
+          children: [
+            // Camera feed behind the prompter (strip / full background). Bubble
+            // and audio-only are handled separately below.
+            if (!audioOnly && feedMode != AppSettings.contentCreatorFeedBubble)
+              _buildCreatorCameraLayer(settings, feedMode),
 
-          // 2. Eye-Contact Prompter (Top 60%)
-          SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  flex: 6,
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    padding: EdgeInsets.only(
-                      top: 40,
-                      bottom: MediaQuery.of(context).size.height * 0.3,
-                      left: 20,
-                      right: 20,
-                    ),
-                    child: _buildPrompterContent(script, settings, tState),
-                  ),
-                ),
-                const Spacer(flex: 4),
-              ],
-            ),
-          ),
+            // Prompter text.
+            _buildCreatorPrompterLayer(
+                script, settings, tState, audioOnly, feedMode),
 
-          if (settings.showSoundLevelMeter &&
-              !settings.debugMode &&
-              (tState.isListening || tState.isStarting))
+            // Floating self-view bubble (drawn above the prompter).
+            if (!audioOnly && feedMode == AppSettings.contentCreatorFeedBubble)
+              _buildCreatorBubble(),
+
+            // Recording timer + countdown overlays (independent of feed mode).
+            if (_isRecording)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 12,
+                right: 20,
+                child: _buildRecordTimerChip(),
+              ),
+            if (_countdown > 0) Center(child: _buildCountdownBadge()),
+
+            if (settings.showSoundLevelMeter &&
+                !settings.debugMode &&
+                (tState.isListening || tState.isStarting))
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 232,
+                child: _buildCreatorListeningMeter(tState),
+              ),
+
+            // Controls: draggable overflow row (upper) + record button + fixed
+            // most-needed row (lower). Auto-hides while a session is running.
             Positioned(
-              left: 20,
-              right: 20,
-              bottom: 232,
-              child: _buildCreatorListeningMeter(tState),
+              bottom: 20,
+              left: 0,
+              right: 0,
+              child: AnimatedOpacity(
+                opacity: controlsVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 240),
+                child: IgnorePointer(
+                  ignoring: !controlsVisible,
+                  child: _buildCreatorControls(settings, tState, audioOnly),
+                ),
+              ),
             ),
-
-          // 3. Recording controls: draggable overflow row (upper) + record
-          //    button + fixed most-needed row (lower).
-          Positioned(
-            bottom: 20,
-            left: 0,
-            right: 0,
-            child: _buildCreatorControls(settings, tState, audioOnly),
-          ),
-          if (_creatorWalkthroughVisible) _buildCreatorWalkthroughOverlay(),
-        ],
+            if (_creatorWalkthroughVisible) _buildCreatorWalkthroughOverlay(),
+          ],
+        ),
       ),
     );
   }
@@ -403,12 +332,24 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   }
 
   Widget _buildPrompterContent(
-      Script? script, AppSettings settings, dynamic tState) {
+      Script? script, AppSettings settings, dynamic tState,
+      {bool transparentBg = false}) {
     if (script == null || script.isEmpty) {
       return const Center(
           child:
               Text('No script loaded.', style: TextStyle(color: Colors.white)));
     }
+    // Present mode enlarges the editor font for readability; match it here so
+    // the creator prompter reads like present mode, not the small editor.
+    final basePrompterFontSize = settings.fontSize * 2.0;
+    // Over a live camera (full-background feed) drop the page colour and add a
+    // shadow so the words stay legible against the video.
+    final shadows = transparentBg
+        ? const [
+            Shadow(color: Colors.black, blurRadius: 6, offset: Offset(0, 1)),
+            Shadow(color: Colors.black87, blurRadius: 12),
+          ]
+        : null;
 
     final paragraphs = <List<ScriptWord>>[];
     List<ScriptWord> currentParagraph = [];
@@ -426,7 +367,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     if (currentParagraph.isNotEmpty) paragraphs.add(currentParagraph);
 
     return Container(
-      color: Color(settings.scriptBgColor),
+      color: transparentBg ? Colors.transparent : Color(settings.scriptBgColor),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: paragraphs.map<Widget>((para) {
@@ -435,7 +376,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
               key: para[0].index < _wordKeys.length
                   ? _wordKeys[para[0].index]
                   : null,
-              height: settings.fontSize * 1.5 + (settings.lineSpacing * 4),
+              height: basePrompterFontSize * 0.75 + (settings.lineSpacing * 4),
             );
           }
 
@@ -476,8 +417,8 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                     }
 
                     final effectiveFontSize = word.fontSize != null
-                        ? settings.fontSize * (word.fontSize! / 17.0)
-                        : settings.fontSize;
+                        ? basePrompterFontSize * (word.fontSize! / 17.0)
+                        : basePrompterFontSize;
 
                     return Directionality(
                       textDirection: word.effectiveRtl
@@ -497,6 +438,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                                 : FontStyle.normal,
                             letterSpacing: settings.letterSpacing,
                             color: wordColor,
+                            shadows: shadows,
                             decoration: word.isUnderline
                                 ? TextDecoration.underline
                                 : null,

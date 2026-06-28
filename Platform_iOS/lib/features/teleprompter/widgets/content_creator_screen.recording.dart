@@ -148,6 +148,7 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
       if (mounted) _setContentCreatorState(() => _recordSeconds = t.tick);
     });
     unawaited(ref.read(settingsProvider.notifier).setScrollSpeed(100));
+    _onCreatorSessionActivated();
   }
 
   Future<void> _startSpeechForRecordingIfNeeded(AppSettings settings) async {
@@ -212,6 +213,7 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
       return;
     }
     await _teleprompterNotifier.startSession(script);
+    _onCreatorSessionActivated();
   }
 
   Future<bool> _ensureCameraAndMicrophonePermission() async {

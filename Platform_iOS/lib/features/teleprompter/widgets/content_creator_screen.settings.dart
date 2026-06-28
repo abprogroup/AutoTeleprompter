@@ -1,37 +1,6 @@
 part of 'content_creator_screen.dart';
 
 extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
-  Widget _buildAudioOnlySurface() {
-    return Container(
-      width: double.infinity,
-      color: const Color(0xFF111111),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            _isRecording ? Icons.graphic_eq_rounded : Icons.mic_none_rounded,
-            color: _isRecording ? Colors.redAccent : const Color(0xFFFFBF00),
-            size: 46,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _isRecording ? 'Audio recording' : 'Audio-only creator',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Saved to the app documents folder.',
-            style: TextStyle(color: Colors.white54, fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCameraFallback() {
     if (_isCameraInitializing) {
       return const Center(child: CircularProgressIndicator());
@@ -156,6 +125,14 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  if (!audioOnly)
+                    _CreatorFeedModeSelector(
+                      value: settings.contentCreatorFeedMode,
+                      enabled: !_isRecording && !_recordStartInFlight,
+                      onChanged: (value) => unawaited(ref
+                          .read(settingsProvider.notifier)
+                          .setContentCreatorFeedMode(value)),
+                    ),
                   _CreatorResolutionSelector(
                     value: settings.videoResolution,
                     enabled: !_isRecording && !_recordStartInFlight,
@@ -200,6 +177,55 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
           );
         },
       ),
+    );
+  }
+}
+
+class _CreatorFeedModeSelector extends StatelessWidget {
+  final String value;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  const _CreatorFeedModeSelector({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Camera feed',
+          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(
+              value: AppSettings.contentCreatorFeedStrip,
+              icon: Icon(Icons.view_stream_outlined),
+              label: Text('Strip'),
+            ),
+            ButtonSegment(
+              value: AppSettings.contentCreatorFeedBubble,
+              icon: Icon(Icons.circle_outlined),
+              label: Text('Bubble'),
+            ),
+            ButtonSegment(
+              value: AppSettings.contentCreatorFeedFull,
+              icon: Icon(Icons.fullscreen),
+              label: Text('Full'),
+            ),
+          ],
+          selected: {value},
+          onSelectionChanged:
+              enabled ? (values) => onChanged(values.first) : null,
+        ),
+        const SizedBox(height: 14),
+      ],
     );
   }
 }

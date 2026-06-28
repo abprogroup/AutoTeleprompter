@@ -167,4 +167,17 @@ mixin SettingsNotifierSttProfile on Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_contentCreatorRecordingControlsSpeechKey, enabled);
   }
+
+  Future<void> setContentCreatorFeedMode(String mode) async {
+    const allowed = {
+      AppSettings.contentCreatorFeedStrip,
+      AppSettings.contentCreatorFeedBubble,
+      AppSettings.contentCreatorFeedFull,
+    };
+    final normalized =
+        allowed.contains(mode) ? mode : AppSettings.contentCreatorFeedStrip;
+    state = state.copyWith(contentCreatorFeedMode: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorFeedModeKey, normalized);
+  }
 }

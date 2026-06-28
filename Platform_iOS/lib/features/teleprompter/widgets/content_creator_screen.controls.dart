@@ -24,54 +24,28 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
           _buildCreatorSearchToolbar(),
         ],
         const SizedBox(height: 14),
-        // Red record trigger.
-        GestureDetector(
-          key: _creatorRecordKey,
-          onTap: _recordStartInFlight ? null : _toggleRecording,
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-            ),
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _isRecording
-                    ? Colors.red
-                    : _recordStartInFlight
-                        ? const Color(0xFFFFBF00)
-                        : Colors.red.withValues(alpha: 0.5),
-              ),
-              child: Icon(
-                _isRecording
-                    ? Icons.stop
-                    : _recordStartInFlight
-                        ? Icons.hourglass_top_rounded
-                        : (audioOnly ? Icons.mic : Icons.videocam),
-                color: _recordStartInFlight ? Colors.black : Colors.white,
-                size: 32,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // LOWER: fixed, most-needed controls.
-        _buildCreatorFixedBar(settings, tState),
+        // LOWER: fixed, most-needed controls — the record button sits between
+        // the mic (speech) and settings buttons to save vertical space.
+        _buildCreatorFixedBar(settings, tState, audioOnly),
       ],
     );
   }
 
-  Widget _buildCreatorFixedBar(AppSettings settings, dynamic tState) {
+  Widget _buildCreatorFixedBar(
+    AppSettings settings,
+    dynamic tState,
+    bool audioOnly,
+  ) {
+    final speechLinked = settings.contentCreatorRecordingControlsSpeech;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _creatorBarIcon(Icons.close, 'Back to editor', _exitContentCreator),
-          if (!settings.contentCreatorRecordingControlsSpeech)
+          // Separate STT button only when record is NOT linked to speech.
+          if (!speechLinked)
             _creatorBarIcon(
               tState.isListening || tState.isStarting
                   ? Icons.mic
@@ -85,11 +59,51 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
                   ? const Color(0xFFFFBF00)
                   : Colors.white70,
             ),
+          _buildCreatorRecordButton(audioOnly, speechLinked),
           _creatorBarIcon(Icons.tune, 'Prompter & camera settings',
               _showCreatorSettings,
               key: _creatorSettingsKey),
           _creatorBarIcon(Icons.replay, 'Restart script', _resetCreatorPosition),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCreatorRecordButton(bool audioOnly, bool speechLinked) {
+    final busy = _isRecording || _recordStartInFlight;
+    // Amber ring when the record button also drives speech (combined mode).
+    final ringColor =
+        speechLinked && !busy ? const Color(0xFFFFBF00) : Colors.white;
+    return GestureDetector(
+      key: _creatorRecordKey,
+      onTap: _recordStartInFlight ? null : _toggleRecording,
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: ringColor, width: 3),
+        ),
+        child: Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _isRecording
+                ? Colors.red
+                : _recordStartInFlight
+                    ? const Color(0xFFFFBF00)
+                    : Colors.red.withValues(alpha: 0.55),
+          ),
+          child: Icon(
+            _isRecording
+                ? Icons.stop
+                : _recordStartInFlight
+                    ? Icons.hourglass_top_rounded
+                    : (audioOnly ? Icons.mic : Icons.videocam),
+            color: _recordStartInFlight ? Colors.black : Colors.white,
+            size: 28,
+          ),
+        ),
       ),
     );
   }

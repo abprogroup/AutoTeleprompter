@@ -59,6 +59,7 @@ class AppSettings {
   final String contentCreatorRecordingFormat;
   final String contentCreatorRecordingAudioMode;
   final bool contentCreatorRecordingControlsSpeech;
+  final String contentCreatorFeedMode;
   final String importColorMode;
   final bool reduceMotion;
   final double uiScale;
@@ -69,6 +70,14 @@ class AppSettings {
   static const String contentCreatorRecordingFormatMp4 = 'mp4';
   static const String contentCreatorRecordingFormatAudio = 'audio';
   static const String contentCreatorRecordingAudioCamera = 'camera';
+
+  // Camera feed layout in the Content Creator present mode.
+  // 'strip'  — the mobile bottom-strip preview with eye-contact vignette.
+  // 'bubble' — a small floating self-view bubble (bottom-right).
+  // 'full'   — the camera fills the whole background behind the script.
+  static const String contentCreatorFeedStrip = 'strip';
+  static const String contentCreatorFeedBubble = 'bubble';
+  static const String contentCreatorFeedFull = 'full';
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -122,6 +131,7 @@ class AppSettings {
     this.contentCreatorRecordingFormat = contentCreatorRecordingFormatMp4,
     this.contentCreatorRecordingAudioMode = contentCreatorRecordingAudioCamera,
     this.contentCreatorRecordingControlsSpeech = false,
+    this.contentCreatorFeedMode = contentCreatorFeedStrip,
     this.importColorMode = importColorModePrompter,
     this.reduceMotion = false,
     this.uiScale = 1.0,
@@ -182,6 +192,7 @@ class AppSettings {
     String? contentCreatorRecordingFormat,
     String? contentCreatorRecordingAudioMode,
     bool? contentCreatorRecordingControlsSpeech,
+    String? contentCreatorFeedMode,
     String? importColorMode,
     bool? reduceMotion,
     double? uiScale,
@@ -259,6 +270,8 @@ class AppSettings {
       contentCreatorRecordingControlsSpeech:
           contentCreatorRecordingControlsSpeech ??
               this.contentCreatorRecordingControlsSpeech,
+      contentCreatorFeedMode:
+          contentCreatorFeedMode ?? this.contentCreatorFeedMode,
       importColorMode: importColorMode ?? this.importColorMode,
       reduceMotion: reduceMotion ?? this.reduceMotion,
       uiScale: uiScale ?? this.uiScale,

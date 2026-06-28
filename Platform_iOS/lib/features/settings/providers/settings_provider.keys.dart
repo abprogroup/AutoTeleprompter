@@ -54,6 +54,7 @@ const _contentCreatorRecordingFormatKey = 'contentCreatorRecordingFormat';
 const _contentCreatorRecordingAudioModeKey = 'contentCreatorRecordingAudioMode';
 const _contentCreatorRecordingControlsSpeechKey =
     'contentCreatorRecordingControlsSpeech';
+const _contentCreatorFeedModeKey = 'contentCreatorFeedMode';
 const _importColorModeKey = 'importColorMode';
 const _reduceMotionKey = 'reduceMotion';
 const _uiScaleKey = 'uiScale';

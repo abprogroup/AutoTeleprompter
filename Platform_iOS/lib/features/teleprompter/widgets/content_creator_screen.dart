@@ -10,15 +10,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../providers/teleprompter_provider.dart';
 import '../services/mobile_audio_recorder_service.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../script/providers/script_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';
+import '../../script/services/script_bookmark_service.dart';
 import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import 'teleprompter_screen.dart';
 
 part 'content_creator_screen.recording.dart';
 part 'content_creator_screen.settings.dart';
+part 'content_creator_screen.controls.dart';
 part 'content_creator_screen.walkthrough.dart';
 
 class ContentCreatorScreen extends ConsumerStatefulWidget {
@@ -37,9 +40,27 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   final MobileAudioRecorderService _audioRecorder =
       MobileAudioRecorderService();
   final ScrollController _scrollController = ScrollController();
+  // Upper (draggable) overflow control row — horizontally scrollable.
+  final ScrollController _overflowBarController = ScrollController();
   final List<GlobalKey> _wordKeys = [];
   List<CameraDescription> _availableCameras = const [];
-  int _selectedCameraIndex = 0;
+  // -1 until the first init resolves it to the front camera (selfie teleprompter
+  // default); user/camera-flip then sets an explicit index.
+  int _selectedCameraIndex = -1;
+
+  // Bookmarks (Pro) — scoped to the active script, same model as present mode.
+  String? _bookmarkScopeKey;
+  String? _bookmarkLoadingKey;
+  bool _bookmarksLoaded = false;
+  List<ScriptBookmark> _bookmarks = const [];
+
+  // In-script search while presenting/recording.
+  String _lastSearchQuery = '';
+  bool _searchWholeWord = false;
+  bool _searchDialogOpen = false;
+  bool _creatorSearchToolbarVisible = false;
+  List<_CreatorSearchMatch> _creatorSearchMatches = const [];
+  int _creatorSearchMatchIndex = -1;
   int _cameraInitGeneration = 0;
   bool _isInit = false;
   bool _isCameraInitializing = false;
@@ -165,6 +186,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     unawaited(_audioRecorder.dispose());
     _cameraController?.dispose();
     _scrollController.dispose();
+    _overflowBarController.dispose();
     unawaited(_teleprompterNotifier.stopSession());
     super.dispose();
   }
@@ -315,89 +337,17 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
             Positioned(
               left: 20,
               right: 20,
-              bottom: 132,
+              bottom: 232,
               child: _buildCreatorListeningMeter(tState),
             ),
 
-          // 3. Recording Controls & Floating Buttons
+          // 3. Recording controls: draggable overflow row (upper) + record
+          //    button + fixed most-needed row (lower).
           Positioned(
             bottom: 20,
             left: 0,
             right: 0,
-            child: Column(
-              children: [
-                // Red Trigger Button
-                GestureDetector(
-                  key: _creatorRecordKey,
-                  onTap: _recordStartInFlight ? null : _toggleRecording,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                    ),
-                    child: Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _isRecording
-                            ? Colors.red
-                            : _recordStartInFlight
-                                ? const Color(0xFFFFBF00)
-                                : Colors.red.withValues(alpha: 0.5),
-                      ),
-                      child: Icon(
-                        _isRecording
-                            ? Icons.stop
-                            : _recordStartInFlight
-                                ? Icons.hourglass_top_rounded
-                                : (audioOnly ? Icons.mic : Icons.videocam),
-                        color:
-                            _recordStartInFlight ? Colors.black : Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Standard Controls Bar (Close, Settings, Replay)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white70),
-                        onPressed: _exitContentCreator,
-                      ),
-                      if (!settings.contentCreatorRecordingControlsSpeech)
-                        IconButton(
-                          key: _creatorSpeechKey,
-                          icon: Icon(
-                            tState.isListening || tState.isStarting
-                                ? Icons.mic
-                                : Icons.mic_none_outlined,
-                            color: tState.isListening || tState.isStarting
-                                ? const Color(0xFFFFBF00)
-                                : Colors.white70,
-                          ),
-                          onPressed: _toggleSpeechSession,
-                        ),
-                      IconButton(
-                        key: _creatorSettingsKey,
-                        icon: const Icon(Icons.tune, color: Colors.white70),
-                        onPressed: _showCreatorSettings,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.replay, color: Colors.white70),
-                        onPressed: _resetCreatorPosition,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            child: _buildCreatorControls(settings, tState, audioOnly),
           ),
           if (_creatorWalkthroughVisible) _buildCreatorWalkthroughOverlay(),
         ],

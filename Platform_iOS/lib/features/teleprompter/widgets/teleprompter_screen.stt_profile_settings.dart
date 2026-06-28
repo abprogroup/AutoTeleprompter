@@ -81,6 +81,24 @@ class _SpeechProfileSettingsSection extends ConsumerWidget {
           enabled: visibleControlsEnabled,
           onChanged: notifier.setSttStrictBulletMode,
         ),
+        const SizedBox(height: 10),
+        _SpeechSwitchRow(
+          icon: Icons.graphic_eq_rounded,
+          title: 'Listening Meter',
+          subtitle: 'Show the microphone level bar while listening.',
+          value: settings.showSoundLevelMeter,
+          accentColor: accent,
+          onChanged: notifier.setShowSoundLevelMeter,
+        ),
+        const SizedBox(height: 10),
+        _SpeechSwitchRow(
+          icon: Icons.pan_tool_alt_outlined,
+          title: 'Manual Scroll While Listening',
+          subtitle: 'Releasing a manual scroll relocks to the reading line.',
+          value: settings.allowScrollDuringActiveSession,
+          accentColor: accent,
+          onChanged: notifier.setAllowScrollDuringActiveSession,
+        ),
         if (manualProfile) ...[
           const SizedBox(height: 12),
           _SpeechStepperCard(

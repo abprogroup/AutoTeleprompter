@@ -669,10 +669,10 @@ class _AutomationCard extends StatelessWidget {
             title: 'Sync deleted scripts folder',
             subtitle: !premiumUnlocked
                 ? 'Connect a Pro account to sync deleted-script cleanup.'
-                : cloudAccountsConnected
-                    ? 'When deleted backups are removed from the app, remove matching cloud Deleted Scripts files and metadata.'
-                    : 'Connect Google Drive or Dropbox before syncing deleted-script cleanup.',
-            enabled: premiumUnlocked && cloudAccountsConnected,
+                : anyConnected
+                    ? 'When deleted backups are removed from the app, remove matching Deleted Scripts files from connected cloud accounts and the Local Backup folder.'
+                    : 'Connect a cloud account or choose a Local Backup folder first.',
+            enabled: premiumUnlocked && anyConnected,
             value: syncDeletedScriptsFolder,
             onChanged: onSyncDeletedScriptsFolderChanged,
           ),

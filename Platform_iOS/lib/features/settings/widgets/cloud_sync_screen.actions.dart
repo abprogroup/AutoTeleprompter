@@ -103,9 +103,9 @@ extension _CloudSyncScreenActions on _CloudSyncScreenState {
   }
 
   Future<void> _setSyncDeletedScriptsFolder(bool enabled) async {
-    if (enabled && _accounts.isEmpty) {
+    if (enabled && _accounts.isEmpty && !(_localBackup?.isConnected ?? false)) {
       _showSnack(
-          'Connect Google Drive or Dropbox before syncing deleted-script cleanup.');
+          'Connect a cloud account or choose a Local Backup folder first.');
       return;
     }
     await ref

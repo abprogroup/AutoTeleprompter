@@ -216,61 +216,6 @@ class _StackedSettingCard extends StatelessWidget {
   }
 }
 
-class _StepperTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final int value;
-  final int min;
-  final int max;
-  final ValueChanged<int> onChanged;
-
-  const _StepperTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _StackedSettingCard(
-      icon: icon,
-      title: title,
-      subtitle: subtitle,
-      control: Row(
-        children: [
-          IconButton(
-            onPressed: value <= min ? null : () => onChanged(value - 1),
-            icon: const Icon(Icons.remove_circle_outline_rounded),
-            color: const Color(0xFFFFBF00),
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                '$value',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: value >= max ? null : () => onChanged(value + 1),
-            icon: const Icon(Icons.add_circle_outline_rounded),
-            color: const Color(0xFFFFBF00),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SliderTile extends StatelessWidget {
   final IconData icon;
   final String title;

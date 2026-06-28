@@ -62,10 +62,17 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
       expand: false,
       initialChildSize: 0.80,
       maxChildSize: 0.97,
-      builder: (_, controller) => ListView(
-        controller: controller,
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-        children: [
+      builder: (_, controller) => DecoratedBox(
+        // Solid panel so the script behind it never bleeds through and makes
+        // the settings hard to read/change.
+        decoration: const BoxDecoration(
+          color: Color(0xFF161616),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: ListView(
+          controller: controller,
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          children: [
           Center(
             child: Container(
               width: 40,
@@ -439,7 +446,8 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             style: _segmentStyle(settings),
           ),
           const SizedBox(height: 16),
-        ],
+          ],
+        ),
       ),
     );
   }

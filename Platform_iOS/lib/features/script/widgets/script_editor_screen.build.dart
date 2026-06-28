@@ -2,6 +2,17 @@ part of 'script_editor_screen.dart';
 
 extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
   Widget _buildScriptEditorScreen(BuildContext context) {
+    // "Edit at current position" from present/creator modes: place the caret at
+    // the requested block/offset once, then clear the request.
+    ref.listen(pendingEditorCursorProvider, (previous, next) {
+      if (next == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _focusEditorPosition(next.block, next.offset);
+        ref.read(pendingEditorCursorProvider.notifier).state = null;
+      });
+    });
+
     // v3.9.5.71: Style History Sentry
     // Detects when the user changes global formatting and triggers an Undo point + Auto-save
     ref.listen(settingsProvider, (previous, next) {

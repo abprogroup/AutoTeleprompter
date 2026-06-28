@@ -1,6 +1,96 @@
 part of 'content_creator_screen.dart';
 
 extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
+  /// Feed-appearance sliders shown contextually for the active feed mode
+  /// (Mac parity: bubble size/opacity/roundness, camera opacity, blur, scrim,
+  /// vignette).
+  List<Widget> _creatorFeedTuningSliders(
+    WidgetRef ref,
+    AppSettings settings, {
+    required bool enabled,
+  }) {
+    final notifier = ref.read(settingsProvider.notifier);
+    final mode = settings.contentCreatorFeedMode;
+    final sliders = <Widget>[];
+
+    if (mode == AppSettings.contentCreatorFeedBubble) {
+      sliders.addAll([
+        _CreatorSlider(
+          label: 'Bubble size',
+          value: settings.contentCreatorBubbleSize,
+          min: 0.04,
+          max: 0.60,
+          enabled: enabled,
+          onChanged: notifier.setContentCreatorBubbleSize,
+        ),
+        _CreatorSlider(
+          label: 'Bubble opacity',
+          value: settings.contentCreatorBubbleOpacity,
+          min: 0.25,
+          max: 1.0,
+          enabled: enabled,
+          onChanged: notifier.setContentCreatorBubbleOpacity,
+        ),
+        _CreatorSlider(
+          label: 'Bubble roundness',
+          value: settings.contentCreatorBubbleRoundness,
+          min: 0.0,
+          max: 1.0,
+          enabled: enabled,
+          onChanged: notifier.setContentCreatorBubbleRoundness,
+        ),
+      ]);
+    } else if (mode == AppSettings.contentCreatorFeedFull) {
+      sliders.addAll([
+        _CreatorSlider(
+          label: 'Camera opacity',
+          value: settings.contentCreatorCameraOpacity,
+          min: 0.2,
+          max: 1.0,
+          enabled: enabled,
+          onChanged: notifier.setContentCreatorCameraOpacity,
+        ),
+        _CreatorSlider(
+          label: 'Feed blur',
+          value: settings.contentCreatorFeedBlur,
+          min: 0.0,
+          max: 30.0,
+          enabled: enabled,
+          onChanged: notifier.setContentCreatorFeedBlur,
+        ),
+        _CreatorSlider(
+          label: 'Text scrim',
+          value: settings.contentCreatorTextScrim,
+          min: 0.0,
+          max: 0.9,
+          enabled: enabled,
+          onChanged: notifier.setContentCreatorTextScrim,
+        ),
+      ]);
+    } else {
+      // strip
+      sliders.addAll([
+        _CreatorSlider(
+          label: 'Vignette',
+          value: settings.contentCreatorVignetteIntensity,
+          min: 0.0,
+          max: 1.0,
+          enabled: enabled,
+          onChanged: notifier.setContentCreatorVignetteIntensity,
+        ),
+        _CreatorSlider(
+          label: 'Feed blur',
+          value: settings.contentCreatorFeedBlur,
+          min: 0.0,
+          max: 30.0,
+          enabled: enabled,
+          onChanged: notifier.setContentCreatorFeedBlur,
+        ),
+      ]);
+    }
+    return sliders;
+  }
+
   Widget _buildCameraFallback() {
     if (_isCameraInitializing) {
       return const Center(child: CircularProgressIndicator());
@@ -143,6 +233,12 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
                           .read(settingsProvider.notifier)
                           .setContentCreatorBubbleShape(value)),
                     ),
+                  if (!audioOnly)
+                    ..._creatorFeedTuningSliders(
+                      ref,
+                      settings,
+                      enabled: !_isRecording && !_recordStartInFlight,
+                    ),
                   _CreatorResolutionSelector(
                     value: settings.videoResolution,
                     enabled: !_isRecording && !_recordStartInFlight,
@@ -186,6 +282,55 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _CreatorSlider extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final bool enabled;
+  final ValueChanged<double> onChanged;
+
+  const _CreatorSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = ((value - min) / (max - min) * 100).round();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(label,
+                  style: const TextStyle(
+                      color: Colors.white70, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Text('$pct%',
+                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            ],
+          ),
+          Slider(
+            value: value.clamp(min, max).toDouble(),
+            min: min,
+            max: max,
+            activeColor: const Color(0xFFFFBF00),
+            inactiveColor: Colors.white24,
+            onChanged: enabled ? onChanged : null,
+          ),
+        ],
       ),
     );
   }

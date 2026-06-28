@@ -210,6 +210,34 @@ class SettingsNotifier extends Notifier<AppSettings>
       contentCreatorBubbleShape: _normalizeContentCreatorBubbleShape(
         prefs.getString(_contentCreatorBubbleShapeKey),
       ),
+      contentCreatorBubbleSize:
+          (prefs.getDouble(_contentCreatorBubbleSizeKey) ?? 0.24)
+              .clamp(0.04, 0.60)
+              .toDouble(),
+      contentCreatorBubbleOpacity:
+          (prefs.getDouble(_contentCreatorBubbleOpacityKey) ?? 1.0)
+              .clamp(0.25, 1.0)
+              .toDouble(),
+      contentCreatorBubbleRoundness:
+          (prefs.getDouble(_contentCreatorBubbleRoundnessKey) ?? 0.18)
+              .clamp(0.0, 1.0)
+              .toDouble(),
+      contentCreatorCameraOpacity:
+          (prefs.getDouble(_contentCreatorCameraOpacityKey) ?? 0.72)
+              .clamp(0.2, 1.0)
+              .toDouble(),
+      contentCreatorFeedBlur:
+          (prefs.getDouble(_contentCreatorFeedBlurKey) ?? 14.0)
+              .clamp(0.0, 30.0)
+              .toDouble(),
+      contentCreatorTextScrim:
+          (prefs.getDouble(_contentCreatorTextScrimKey) ?? 0.55)
+              .clamp(0.0, 0.9)
+              .toDouble(),
+      contentCreatorVignetteIntensity:
+          (prefs.getDouble(_contentCreatorVignetteIntensityKey) ?? 0.45)
+              .clamp(0.0, 1.0)
+              .toDouble(),
       importColorMode: _normalizeImportColorMode(
         prefs.getString(_importColorModeKey),
       ),

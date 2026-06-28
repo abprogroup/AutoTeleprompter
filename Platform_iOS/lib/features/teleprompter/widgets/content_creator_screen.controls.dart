@@ -140,6 +140,11 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
 
     final busy = _isRecording || _recordStartInFlight;
     final buttons = <Widget>[
+      _creatorBarIcon(
+        Icons.edit_note,
+        'Edit at current position',
+        busy ? null : () => unawaited(_editContentAtCurrentPosition()),
+      ),
       // Switch the feed on/off both ways: audio mode → add video; video mode →
       // stop the feed (audio only).
       _creatorBarIcon(
@@ -264,6 +269,34 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
     final clamped = (settings.fontSize + delta).clamp(14.0, 120.0).toDouble();
     if (clamped == settings.fontSize) return;
     unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
+  }
+
+  /// Return to the editor with the caret placed at the word currently on the
+  /// reading line (Mac's "Edit current position").
+  Future<void> _editContentAtCurrentPosition() async {
+    if (_isRecording || _recordStartInFlight) {
+      _showSnack('Stop recording before editing.');
+      return;
+    }
+    final script = ref.read(scriptProvider);
+    if (script == null || script.words.isEmpty) {
+      await _exitContentCreator();
+      return;
+    }
+    final index = _snapCreatorBookmarkIndex(
+      script,
+      ref
+          .read(teleprompterProvider)
+          .confirmedWordIndex
+          .clamp(0, script.words.length - 1)
+          .toInt(),
+    );
+    final pos = _editorPositionForCreatorWord(script, index);
+    ref.read(pendingEditorCursorProvider.notifier).state =
+        EditorCursorTarget(pos.block, pos.offset);
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    unawaited(_teleprompterNotifier.stopSession());
   }
 
   /// Open the full present-mode settings (same panel the present screen uses)

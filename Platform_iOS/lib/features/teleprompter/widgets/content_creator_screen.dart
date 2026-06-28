@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,7 @@ import '../providers/teleprompter_provider.dart';
 import '../services/mobile_audio_recorder_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../script/providers/script_provider.dart';
+import '../../script/providers/pending_editor_cursor_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../script/models/script.dart';

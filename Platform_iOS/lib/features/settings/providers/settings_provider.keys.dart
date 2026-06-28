@@ -56,6 +56,13 @@ const _contentCreatorRecordingControlsSpeechKey =
     'contentCreatorRecordingControlsSpeech';
 const _contentCreatorFeedModeKey = 'contentCreatorFeedMode';
 const _contentCreatorBubbleShapeKey = 'contentCreatorBubbleShape';
+const _contentCreatorBubbleSizeKey = 'contentCreatorBubbleSize';
+const _contentCreatorBubbleOpacityKey = 'contentCreatorBubbleOpacity';
+const _contentCreatorBubbleRoundnessKey = 'contentCreatorBubbleRoundness';
+const _contentCreatorCameraOpacityKey = 'contentCreatorCameraOpacity';
+const _contentCreatorFeedBlurKey = 'contentCreatorFeedBlur';
+const _contentCreatorTextScrimKey = 'contentCreatorTextScrim';
+const _contentCreatorVignetteIntensityKey = 'contentCreatorVignetteIntensity';
 const _importColorModeKey = 'importColorMode';
 const _reduceMotionKey = 'reduceMotion';
 const _uiScaleKey = 'uiScale';

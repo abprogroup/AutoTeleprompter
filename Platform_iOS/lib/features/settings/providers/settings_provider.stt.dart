@@ -193,4 +193,45 @@ mixin SettingsNotifierSttProfile on Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_contentCreatorBubbleShapeKey, normalized);
   }
+
+  Future<void> _setContentCreatorDouble(
+    String key,
+    double value,
+    double min,
+    double max,
+    AppSettings Function(double) apply,
+  ) async {
+    final clamped = value.clamp(min, max).toDouble();
+    state = apply(clamped);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(key, clamped);
+  }
+
+  Future<void> setContentCreatorBubbleSize(double value) =>
+      _setContentCreatorDouble(_contentCreatorBubbleSizeKey, value, 0.04, 0.60,
+          (v) => state.copyWith(contentCreatorBubbleSize: v));
+
+  Future<void> setContentCreatorBubbleOpacity(double value) =>
+      _setContentCreatorDouble(_contentCreatorBubbleOpacityKey, value, 0.25, 1.0,
+          (v) => state.copyWith(contentCreatorBubbleOpacity: v));
+
+  Future<void> setContentCreatorBubbleRoundness(double value) =>
+      _setContentCreatorDouble(_contentCreatorBubbleRoundnessKey, value, 0.0,
+          1.0, (v) => state.copyWith(contentCreatorBubbleRoundness: v));
+
+  Future<void> setContentCreatorCameraOpacity(double value) =>
+      _setContentCreatorDouble(_contentCreatorCameraOpacityKey, value, 0.2, 1.0,
+          (v) => state.copyWith(contentCreatorCameraOpacity: v));
+
+  Future<void> setContentCreatorFeedBlur(double value) =>
+      _setContentCreatorDouble(_contentCreatorFeedBlurKey, value, 0.0, 30.0,
+          (v) => state.copyWith(contentCreatorFeedBlur: v));
+
+  Future<void> setContentCreatorTextScrim(double value) =>
+      _setContentCreatorDouble(_contentCreatorTextScrimKey, value, 0.0, 0.9,
+          (v) => state.copyWith(contentCreatorTextScrim: v));
+
+  Future<void> setContentCreatorVignetteIntensity(double value) =>
+      _setContentCreatorDouble(_contentCreatorVignetteIntensityKey, value, 0.0,
+          1.0, (v) => state.copyWith(contentCreatorVignetteIntensity: v));
 }

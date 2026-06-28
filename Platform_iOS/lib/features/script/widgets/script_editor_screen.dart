@@ -18,6 +18,7 @@ import './editor/markup_controller.dart';
 import './editor/components/global_selection_overlay.dart';
 import './editor/components/ghost_selection_controls.dart';
 import '../providers/script_provider.dart';
+import '../providers/pending_editor_cursor_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../../core/security/secure_script_store.dart';
 import '../../settings/providers/settings_provider.dart';

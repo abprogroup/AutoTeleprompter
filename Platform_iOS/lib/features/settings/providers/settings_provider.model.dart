@@ -61,6 +61,13 @@ class AppSettings {
   final bool contentCreatorRecordingControlsSpeech;
   final String contentCreatorFeedMode;
   final String contentCreatorBubbleShape;
+  final double contentCreatorBubbleSize;
+  final double contentCreatorBubbleOpacity;
+  final double contentCreatorBubbleRoundness;
+  final double contentCreatorCameraOpacity;
+  final double contentCreatorFeedBlur;
+  final double contentCreatorTextScrim;
+  final double contentCreatorVignetteIntensity;
   final String importColorMode;
   final bool reduceMotion;
   final double uiScale;
@@ -139,6 +146,13 @@ class AppSettings {
     this.contentCreatorRecordingControlsSpeech = false,
     this.contentCreatorFeedMode = contentCreatorFeedStrip,
     this.contentCreatorBubbleShape = contentCreatorBubbleRounded,
+    this.contentCreatorBubbleSize = 0.24,
+    this.contentCreatorBubbleOpacity = 1.0,
+    this.contentCreatorBubbleRoundness = 0.18,
+    this.contentCreatorCameraOpacity = 0.72,
+    this.contentCreatorFeedBlur = 14.0,
+    this.contentCreatorTextScrim = 0.55,
+    this.contentCreatorVignetteIntensity = 0.45,
     this.importColorMode = importColorModePrompter,
     this.reduceMotion = false,
     this.uiScale = 1.0,
@@ -201,6 +215,13 @@ class AppSettings {
     bool? contentCreatorRecordingControlsSpeech,
     String? contentCreatorFeedMode,
     String? contentCreatorBubbleShape,
+    double? contentCreatorBubbleSize,
+    double? contentCreatorBubbleOpacity,
+    double? contentCreatorBubbleRoundness,
+    double? contentCreatorCameraOpacity,
+    double? contentCreatorFeedBlur,
+    double? contentCreatorTextScrim,
+    double? contentCreatorVignetteIntensity,
     String? importColorMode,
     bool? reduceMotion,
     double? uiScale,
@@ -282,6 +303,20 @@ class AppSettings {
           contentCreatorFeedMode ?? this.contentCreatorFeedMode,
       contentCreatorBubbleShape:
           contentCreatorBubbleShape ?? this.contentCreatorBubbleShape,
+      contentCreatorBubbleSize:
+          contentCreatorBubbleSize ?? this.contentCreatorBubbleSize,
+      contentCreatorBubbleOpacity:
+          contentCreatorBubbleOpacity ?? this.contentCreatorBubbleOpacity,
+      contentCreatorBubbleRoundness:
+          contentCreatorBubbleRoundness ?? this.contentCreatorBubbleRoundness,
+      contentCreatorCameraOpacity:
+          contentCreatorCameraOpacity ?? this.contentCreatorCameraOpacity,
+      contentCreatorFeedBlur:
+          contentCreatorFeedBlur ?? this.contentCreatorFeedBlur,
+      contentCreatorTextScrim:
+          contentCreatorTextScrim ?? this.contentCreatorTextScrim,
+      contentCreatorVignetteIntensity: contentCreatorVignetteIntensity ??
+          this.contentCreatorVignetteIntensity,
       importColorMode: importColorMode ?? this.importColorMode,
       reduceMotion: reduceMotion ?? this.reduceMotion,
       uiScale: uiScale ?? this.uiScale,

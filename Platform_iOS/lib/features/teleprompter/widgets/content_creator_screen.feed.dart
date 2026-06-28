@@ -57,20 +57,46 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
     );
   }
 
+  /// The camera preview with optional opacity + blur applied (shared by the
+  /// strip/full/bubble layers).
+  Widget _creatorCameraVisual(AppSettings settings, {double opacity = 1.0}) {
+    Widget feed = _creatorCameraCover();
+    final blur = settings.contentCreatorFeedBlur;
+    if (blur > 0.1) {
+      feed = ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: feed,
+      );
+    }
+    if (opacity < 0.999) {
+      feed = Opacity(opacity: opacity, child: feed);
+    }
+    return feed;
+  }
+
   Widget _buildCreatorCameraLayer(AppSettings settings, String feedMode) {
     if (feedMode == AppSettings.contentCreatorFeedFull) {
-      // Camera fills the whole background; a soft scrim keeps the text legible.
+      // Camera fills the background; opacity dims it and a tunable scrim keeps
+      // the text legible.
+      final scrim = settings.contentCreatorTextScrim;
       return Positioned.fill(
         child: Stack(
           fit: StackFit.expand,
           children: [
-            _creatorCameraCover(),
-            const DecoratedBox(
+            ColoredBox(
+              color: Colors.black,
+              child: _creatorCameraVisual(settings,
+                  opacity: settings.contentCreatorCameraOpacity),
+            ),
+            DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0x55000000), Color(0xAA000000)],
+                  colors: [
+                    Colors.black.withValues(alpha: scrim * 0.6),
+                    Colors.black.withValues(alpha: scrim),
+                  ],
                 ),
               ),
             ),
@@ -78,7 +104,8 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
         ),
       );
     }
-    // Default 'strip': bottom-40% preview with the eye-contact vignette + HUD.
+    // Default 'strip': bottom-40% preview with a tunable eye-contact vignette.
+    final vignette = settings.contentCreatorVignetteIntensity;
     return Positioned.fill(
       child: Column(
         children: [
@@ -88,7 +115,7 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _creatorCameraCover(),
+                _creatorCameraVisual(settings),
                 Container(
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
@@ -96,8 +123,10 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
                       radius: 0.85,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withValues(alpha: 0.5),
-                        Colors.black.withValues(alpha: 0.9),
+                        Colors.black
+                            .withValues(alpha: (vignette * 1.1).clamp(0.0, 1.0)),
+                        Colors.black
+                            .withValues(alpha: (vignette * 2.0).clamp(0.0, 1.0)),
                       ],
                       stops: const [0.4, 0.7, 1.0],
                     ),
@@ -115,22 +144,30 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
   Widget _buildCreatorBubble(AppSettings settings) {
     final shape = settings.contentCreatorBubbleShape;
     final isCircle = shape == AppSettings.contentCreatorBubbleCircle;
-    final double w = isCircle ? 140 : 128;
-    final double h = isCircle ? 140 : 168;
     final media = MediaQuery.of(context);
     final screen = media.size;
+
+    // Size is a fraction of screen width; circle stays square, others 4:5.
+    final double w = (screen.width * settings.contentCreatorBubbleSize)
+        .clamp(72.0, screen.width * 0.6)
+        .toDouble();
+    final double h = isCircle ? w : w * 1.3;
     final defaultPos = Offset(screen.width - w - 16, screen.height - h - 232);
     final minTop = media.padding.top + 8;
 
     double clampLeft(double x) => x.clamp(8.0, screen.width - w - 8);
     double clampTop(double y) => y.clamp(minTop, screen.height - h - 8);
 
-    final pos = _bubbleOffset ?? defaultPos;
+    final maxRadius = (isCircle ? w : (w < h ? w : h)) / 2;
     final radius = BorderRadius.circular(
       isCircle
-          ? w / 2
-          : (shape == AppSettings.contentCreatorBubbleRectangle ? 4 : 18),
+          ? maxRadius
+          : (shape == AppSettings.contentCreatorBubbleRectangle
+              ? 0.0
+              : settings.contentCreatorBubbleRoundness * maxRadius),
     );
+
+    final pos = _bubbleOffset ?? defaultPos;
 
     return Positioned(
       left: clampLeft(pos.dx),
@@ -148,16 +185,20 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
             );
           });
         },
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            border: Border.all(color: const Color(0xFFFFBF00), width: 2),
-            boxShadow: const [
-              BoxShadow(
-                  color: Colors.black54, blurRadius: 12, offset: Offset(0, 4)),
-            ],
+        child: Opacity(
+          opacity: settings.contentCreatorBubbleOpacity,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(color: const Color(0xFFFFBF00), width: 2),
+              boxShadow: const [
+                BoxShadow(
+                    color: Colors.black54, blurRadius: 12, offset: Offset(0, 4)),
+              ],
+            ),
+            child: ClipRRect(
+                borderRadius: radius, child: _creatorCameraVisual(settings)),
           ),
-          child: ClipRRect(borderRadius: radius, child: _creatorCameraCover()),
         ),
       ),
     );

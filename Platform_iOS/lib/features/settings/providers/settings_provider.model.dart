@@ -60,6 +60,7 @@ class AppSettings {
   final String contentCreatorRecordingAudioMode;
   final bool contentCreatorRecordingControlsSpeech;
   final String contentCreatorFeedMode;
+  final String contentCreatorBubbleShape;
   final String importColorMode;
   final bool reduceMotion;
   final double uiScale;
@@ -78,6 +79,11 @@ class AppSettings {
   static const String contentCreatorFeedStrip = 'strip';
   static const String contentCreatorFeedBubble = 'bubble';
   static const String contentCreatorFeedFull = 'full';
+
+  // Shape of the floating self-view bubble.
+  static const String contentCreatorBubbleRectangle = 'rectangle';
+  static const String contentCreatorBubbleRounded = 'rounded';
+  static const String contentCreatorBubbleCircle = 'circle';
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -132,6 +138,7 @@ class AppSettings {
     this.contentCreatorRecordingAudioMode = contentCreatorRecordingAudioCamera,
     this.contentCreatorRecordingControlsSpeech = false,
     this.contentCreatorFeedMode = contentCreatorFeedStrip,
+    this.contentCreatorBubbleShape = contentCreatorBubbleRounded,
     this.importColorMode = importColorModePrompter,
     this.reduceMotion = false,
     this.uiScale = 1.0,
@@ -193,6 +200,7 @@ class AppSettings {
     String? contentCreatorRecordingAudioMode,
     bool? contentCreatorRecordingControlsSpeech,
     String? contentCreatorFeedMode,
+    String? contentCreatorBubbleShape,
     String? importColorMode,
     bool? reduceMotion,
     double? uiScale,
@@ -272,6 +280,8 @@ class AppSettings {
               this.contentCreatorRecordingControlsSpeech,
       contentCreatorFeedMode:
           contentCreatorFeedMode ?? this.contentCreatorFeedMode,
+      contentCreatorBubbleShape:
+          contentCreatorBubbleShape ?? this.contentCreatorBubbleShape,
       importColorMode: importColorMode ?? this.importColorMode,
       reduceMotion: reduceMotion ?? this.reduceMotion,
       uiScale: uiScale ?? this.uiScale,

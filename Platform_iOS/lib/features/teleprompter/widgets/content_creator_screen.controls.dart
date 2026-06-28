@@ -45,6 +45,8 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
         children: [
           _creatorBarIcon(Icons.close, 'Back to editor', _exitContentCreator),
           // Separate STT button only when record is NOT linked to speech.
+          // Always amber so it reads clearly as the speech control (like
+          // present mode).
           if (!speechLinked)
             _creatorBarIcon(
               tState.isListening || tState.isStarting
@@ -55,13 +57,10 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
                   : 'Start speech',
               _toggleSpeechSession,
               key: _creatorSpeechKey,
-              color: tState.isListening || tState.isStarting
-                  ? const Color(0xFFFFBF00)
-                  : Colors.white70,
+              color: const Color(0xFFFFBF00),
             ),
           _buildCreatorRecordButton(audioOnly, speechLinked),
-          _creatorBarIcon(Icons.tune, 'Prompter & camera settings',
-              _showCreatorSettings,
+          _creatorBarIcon(Icons.tune, 'Prompter settings', _showPrompterSettings,
               key: _creatorSettingsKey),
           _creatorBarIcon(Icons.replay, 'Restart script', _resetCreatorPosition),
         ],
@@ -118,18 +117,26 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
         hasBookmarkAccess ? Colors.white70 : Colors.white24;
     const lockTip = 'Bookmarks are included with Pro';
 
+    final busy = _isRecording || _recordStartInFlight;
     final buttons = <Widget>[
+      // Switch the feed on/off both ways: audio mode → add video; video mode →
+      // stop the feed (audio only).
+      _creatorBarIcon(
+        audioOnly ? Icons.videocam_outlined : Icons.videocam_off_outlined,
+        audioOnly ? 'Turn camera feed on (video)' : 'Turn camera feed off (audio)',
+        busy ? null : _toggleCreatorFeed,
+      ),
       if (!audioOnly && _availableCameras.length > 1)
         _creatorBarIcon(
           Icons.flip_camera_ios_outlined,
           'Switch front/back camera',
-          (_isRecording || _recordStartInFlight) ? null : _flipCreatorCamera,
+          busy ? null : _flipCreatorCamera,
         ),
       if (!audioOnly)
         _creatorBarIcon(
           Icons.photo_camera_outlined,
-          'Camera source',
-          (_isRecording || _recordStartInFlight) ? null : _showCreatorSettings,
+          'Camera & feed settings',
+          busy ? null : _showCreatorSettings,
         ),
       _creatorBarText('A', 'Smaller font', () => _applyCreatorFontDelta(-2)),
       _creatorBarText('A', 'Larger font', () => _applyCreatorFontDelta(2),
@@ -238,27 +245,50 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
     unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
   }
 
+  /// Open the full present-mode settings (same panel the present screen uses)
+  /// so every prompter setting is available in the creator modes too.
+  void _showPrompterSettings() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const TeleprompterSettingsPanel(),
+    );
+  }
+
+  /// Toggle the camera feed on/off (switch between video and audio-only),
+  /// available from both modes.
+  Future<void> _toggleCreatorFeed() async {
+    if (_isRecording || _recordStartInFlight) return;
+    final audioOnly = _contentAudioOnlyMode(ref.read(settingsProvider));
+    final next = audioOnly
+        ? AppSettings.contentCreatorRecordingFormatMp4
+        : AppSettings.contentCreatorRecordingFormatAudio;
+    await ref.read(settingsProvider.notifier).setContentCreatorRecordingFormat(next);
+    if (!mounted) return;
+    if (next == AppSettings.contentCreatorRecordingFormatAudio) {
+      // Tear the camera down for audio-only.
+      _cameraInitGeneration++;
+      final controller = _cameraController;
+      _cameraController = null;
+      unawaited(controller?.dispose());
+      _setContentCreatorState(() => _isInit = true);
+    } else {
+      await _initializeCamera();
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Position jump shared by bookmarks + search
   // ---------------------------------------------------------------------------
 
   void _jumpCreatorToWordIndex(int index, Script script) {
     final clamped = index.clamp(0, script.words.length - 1).toInt();
+    _lastFollowedWordIndex = clamped;
     _teleprompterNotifier.jumpToPosition(clamped, script: script);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final ctx = clamped < _wordKeys.length
-          ? _wordKeys[clamped].currentContext
-          : null;
-      if (ctx == null) return;
-      final lead =
-          ref.read(settingsProvider).scrollLead.clamp(0.0, 1.0).toDouble();
-      Scrollable.ensureVisible(
-        ctx,
-        alignment: lead,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
-      );
+      _scrollToWordIndex(clamped);
     });
   }
 

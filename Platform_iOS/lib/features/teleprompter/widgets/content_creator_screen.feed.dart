@@ -112,23 +112,52 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
     );
   }
 
-  Widget _buildCreatorBubble() {
+  Widget _buildCreatorBubble(AppSettings settings) {
+    final shape = settings.contentCreatorBubbleShape;
+    final isCircle = shape == AppSettings.contentCreatorBubbleCircle;
+    final double w = isCircle ? 140 : 128;
+    final double h = isCircle ? 140 : 168;
+    final media = MediaQuery.of(context);
+    final screen = media.size;
+    final defaultPos = Offset(screen.width - w - 16, screen.height - h - 232);
+    final minTop = media.padding.top + 8;
+
+    double clampLeft(double x) => x.clamp(8.0, screen.width - w - 8);
+    double clampTop(double y) => y.clamp(minTop, screen.height - h - 8);
+
+    final pos = _bubbleOffset ?? defaultPos;
+    final radius = BorderRadius.circular(
+      isCircle
+          ? w / 2
+          : (shape == AppSettings.contentCreatorBubbleRectangle ? 4 : 18),
+    );
+
     return Positioned(
-      right: 16,
-      bottom: 224,
-      width: 128,
-      height: 168,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFFFBF00), width: 2),
-          boxShadow: const [
-            BoxShadow(color: Colors.black54, blurRadius: 12, offset: Offset(0, 4)),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: _creatorCameraCover(),
+      left: clampLeft(pos.dx),
+      top: clampTop(pos.dy),
+      width: w,
+      height: h,
+      child: GestureDetector(
+        // Drag the bubble anywhere instead of fixed corner offsets.
+        onPanUpdate: (details) {
+          final base = _bubbleOffset ?? defaultPos;
+          _setContentCreatorState(() {
+            _bubbleOffset = Offset(
+              clampLeft(base.dx + details.delta.dx),
+              clampTop(base.dy + details.delta.dy),
+            );
+          });
+        },
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            border: Border.all(color: const Color(0xFFFFBF00), width: 2),
+            boxShadow: const [
+              BoxShadow(
+                  color: Colors.black54, blurRadius: 12, offset: Offset(0, 4)),
+            ],
+          ),
+          child: ClipRRect(borderRadius: radius, child: _creatorCameraCover()),
         ),
       ),
     );
@@ -225,5 +254,135 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
         ),
       ),
     );
+  }
+
+  Widget _buildCreatorReadingLine(AppSettings settings) {
+    return Positioned(
+      top: MediaQuery.of(context).size.height * settings.scrollLead - 2,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Container(
+          height: 3,
+          color: Color(settings.currentWordColor).withValues(alpha: 0.35),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreatorReadFade(AppSettings settings) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      height: MediaQuery.of(context).size.height * settings.scrollLead + 20,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(settings.scriptBgColor)
+                    .withValues(alpha: settings.readFadeIntensity),
+                Color(settings.scriptBgColor)
+                    .withValues(alpha: settings.readFadeIntensity * 0.6),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.7, 1.0],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Smooth auto-scroll that follows the spoken word (ported from present mode).
+  // ---------------------------------------------------------------------------
+
+  void _scrollToWordIndex(int index) {
+    if (index < 0 || index >= _wordKeys.length) return;
+    if (!_scrollController.hasClients) return;
+    final ctx = _wordKeys[index].currentContext;
+    if (ctx == null) return;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null) return;
+
+    final settings = ref.read(settingsProvider);
+    final screenH = MediaQuery.of(context).size.height;
+    final targetY = screenH * settings.scrollLead;
+    final wordPos =
+        box.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
+    final rowProgress = _visualRowProgress(index, box);
+    final lineAdvance =
+        (box.size.height * settings.lineSpacing).clamp(0.0, screenH * 0.22);
+    final rawTarget = _scrollController.offset +
+        wordPos.dy -
+        targetY +
+        rowProgress * lineAdvance;
+    _scrollTarget =
+        rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
+
+    if (!_smoothScrollActive) {
+      _smoothScrollActive = true;
+      _smoothScrollTimer?.cancel();
+      _smoothScrollTimer =
+          Timer.periodic(const Duration(milliseconds: 16), _smoothScrollTick);
+    }
+  }
+
+  double _visualRowProgress(int index, RenderBox currentBox) {
+    if (index < 0 || index >= _wordKeys.length) return 0.0;
+    final currentDy = currentBox.localToGlobal(Offset.zero).dy;
+    final tolerance = (currentBox.size.height * 0.7).clamp(10.0, 90.0);
+
+    var rowStart = index;
+    for (var i = index - 1; i >= 0; i--) {
+      final box = _boxForWordIndex(i);
+      if (box == null) break;
+      if ((box.localToGlobal(Offset.zero).dy - currentDy).abs() > tolerance) {
+        break;
+      }
+      rowStart = i;
+    }
+    var rowEnd = index;
+    for (var i = index + 1; i < _wordKeys.length; i++) {
+      final box = _boxForWordIndex(i);
+      if (box == null) break;
+      if ((box.localToGlobal(Offset.zero).dy - currentDy).abs() > tolerance) {
+        break;
+      }
+      rowEnd = i;
+    }
+    final span = rowEnd - rowStart;
+    if (span <= 0) return 0.0;
+    return ((index - rowStart) / span).clamp(0.0, 1.0).toDouble();
+  }
+
+  RenderBox? _boxForWordIndex(int index) {
+    if (index < 0 || index >= _wordKeys.length) return null;
+    final ctx = _wordKeys[index].currentContext;
+    if (ctx == null) return null;
+    return ctx.findRenderObject() as RenderBox?;
+  }
+
+  void _smoothScrollTick(Timer timer) {
+    if (!mounted || !_scrollController.hasClients) {
+      timer.cancel();
+      _smoothScrollActive = false;
+      return;
+    }
+    final current = _scrollController.offset;
+    final diff = _scrollTarget - current;
+    if (diff.abs() < 0.5) {
+      _scrollController.jumpTo(_scrollTarget);
+      timer.cancel();
+      _smoothScrollActive = false;
+      return;
+    }
+    final next = current + diff * 0.12;
+    _scrollController
+        .jumpTo(next.clamp(0.0, _scrollController.position.maxScrollExtent));
   }
 }

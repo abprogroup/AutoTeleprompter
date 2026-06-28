@@ -67,6 +67,16 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   // screen reveals them again.
   bool _controlsVisible = true;
   Timer? _controlsHideTimer;
+
+  // Smooth auto-scroll that follows the spoken word to the reading line —
+  // ported from present mode so the creator actually advances the script.
+  bool _smoothScrollActive = false;
+  Timer? _smoothScrollTimer;
+  double _scrollTarget = 0;
+  int _lastFollowedWordIndex = -1;
+
+  // Draggable self-view bubble position (null until the user drags it).
+  Offset? _bubbleOffset;
   int _cameraInitGeneration = 0;
   bool _isInit = false;
   bool _isCameraInitializing = false;
@@ -189,6 +199,7 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     _cameraInitGeneration++;
     _recordTimer?.cancel();
     _controlsHideTimer?.cancel();
+    _smoothScrollTimer?.cancel();
     unawaited(_audioRecorder.cancel());
     unawaited(_audioRecorder.dispose());
     _cameraController?.dispose();
@@ -209,6 +220,15 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     final settings = ref.watch(settingsProvider);
     final tState = ref.watch(teleprompterProvider);
     final audioOnly = _contentAudioOnlyMode(settings);
+
+    // Follow the spoken word: when the engine advances, smooth-scroll the
+    // script so the current word sits on the reading line (present-mode parity).
+    ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex),
+        (prev, next) {
+      if (next == _lastFollowedWordIndex) return;
+      _lastFollowedWordIndex = next;
+      _scrollToWordIndex(next);
+    });
 
     if (script != null) {
       while (_wordKeys.length < script.words.length) {
@@ -239,9 +259,18 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
             _buildCreatorPrompterLayer(
                 script, settings, tState, audioOnly, feedMode),
 
-            // Floating self-view bubble (drawn above the prompter).
+            // Read-fade gradient over already-read text (skip over a live full
+            // camera so the video stays visible).
+            if (settings.readFadeIntensity > 0 &&
+                !(feedMode == AppSettings.contentCreatorFeedFull && !audioOnly))
+              _buildCreatorReadFade(settings),
+
+            // Reading line — the word the reader should be on.
+            _buildCreatorReadingLine(settings),
+
+            // Floating, draggable self-view bubble (drawn above the prompter).
             if (!audioOnly && feedMode == AppSettings.contentCreatorFeedBubble)
-              _buildCreatorBubble(),
+              _buildCreatorBubble(settings),
 
             // Recording timer + countdown overlays (independent of feed mode).
             if (_isRecording)

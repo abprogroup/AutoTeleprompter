@@ -133,6 +133,16 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
                           .read(settingsProvider.notifier)
                           .setContentCreatorFeedMode(value)),
                     ),
+                  if (!audioOnly &&
+                      settings.contentCreatorFeedMode ==
+                          AppSettings.contentCreatorFeedBubble)
+                    _CreatorBubbleShapeSelector(
+                      value: settings.contentCreatorBubbleShape,
+                      enabled: !_isRecording && !_recordStartInFlight,
+                      onChanged: (value) => unawaited(ref
+                          .read(settingsProvider.notifier)
+                          .setContentCreatorBubbleShape(value)),
+                    ),
                   _CreatorResolutionSelector(
                     value: settings.videoResolution,
                     enabled: !_isRecording && !_recordStartInFlight,
@@ -177,6 +187,60 @@ extension _ContentCreatorSettingsUi on _ContentCreatorScreenState {
           );
         },
       ),
+    );
+  }
+}
+
+class _CreatorBubbleShapeSelector extends StatelessWidget {
+  final String value;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  const _CreatorBubbleShapeSelector({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Bubble shape',
+          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Drag the bubble on screen to reposition it.',
+          style: TextStyle(color: Colors.white38, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(
+              value: AppSettings.contentCreatorBubbleRounded,
+              icon: Icon(Icons.crop_square_rounded),
+              label: Text('Rounded'),
+            ),
+            ButtonSegment(
+              value: AppSettings.contentCreatorBubbleRectangle,
+              icon: Icon(Icons.crop_din),
+              label: Text('Square'),
+            ),
+            ButtonSegment(
+              value: AppSettings.contentCreatorBubbleCircle,
+              icon: Icon(Icons.circle_outlined),
+              label: Text('Circle'),
+            ),
+          ],
+          selected: {value},
+          onSelectionChanged:
+              enabled ? (values) => onChanged(values.first) : null,
+        ),
+        const SizedBox(height: 14),
+      ],
     );
   }
 }

@@ -55,6 +55,7 @@ const _contentCreatorRecordingAudioModeKey = 'contentCreatorRecordingAudioMode';
 const _contentCreatorRecordingControlsSpeechKey =
     'contentCreatorRecordingControlsSpeech';
 const _contentCreatorFeedModeKey = 'contentCreatorFeedMode';
+const _contentCreatorBubbleShapeKey = 'contentCreatorBubbleShape';
 const _importColorModeKey = 'importColorMode';
 const _reduceMotionKey = 'reduceMotion';
 const _uiScaleKey = 'uiScale';

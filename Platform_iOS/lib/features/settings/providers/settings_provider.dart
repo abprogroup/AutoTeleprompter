@@ -207,6 +207,9 @@ class SettingsNotifier extends Notifier<AppSettings>
       contentCreatorFeedMode: _normalizeContentCreatorFeedMode(
         prefs.getString(_contentCreatorFeedModeKey),
       ),
+      contentCreatorBubbleShape: _normalizeContentCreatorBubbleShape(
+        prefs.getString(_contentCreatorBubbleShapeKey),
+      ),
       importColorMode: _normalizeImportColorMode(
         prefs.getString(_importColorModeKey),
       ),
@@ -256,6 +259,17 @@ class SettingsNotifier extends Notifier<AppSettings>
         return value!;
       default:
         return AppSettings.contentCreatorFeedStrip;
+    }
+  }
+
+  String _normalizeContentCreatorBubbleShape(String? value) {
+    switch (value) {
+      case AppSettings.contentCreatorBubbleRectangle:
+      case AppSettings.contentCreatorBubbleRounded:
+      case AppSettings.contentCreatorBubbleCircle:
+        return value!;
+      default:
+        return AppSettings.contentCreatorBubbleRounded;
     }
   }
 

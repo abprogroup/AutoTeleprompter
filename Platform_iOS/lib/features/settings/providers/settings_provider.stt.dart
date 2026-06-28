@@ -180,4 +180,17 @@ mixin SettingsNotifierSttProfile on Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_contentCreatorFeedModeKey, normalized);
   }
+
+  Future<void> setContentCreatorBubbleShape(String shape) async {
+    const allowed = {
+      AppSettings.contentCreatorBubbleRectangle,
+      AppSettings.contentCreatorBubbleRounded,
+      AppSettings.contentCreatorBubbleCircle,
+    };
+    final normalized =
+        allowed.contains(shape) ? shape : AppSettings.contentCreatorBubbleRounded;
+    state = state.copyWith(contentCreatorBubbleShape: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_contentCreatorBubbleShapeKey, normalized);
+  }
 }

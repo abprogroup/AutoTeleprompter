@@ -274,6 +274,9 @@ extension _ContentCreatorRecording on _ContentCreatorScreenState {
   }
 
   void _resetCreatorPosition() {
+    _smoothScrollTimer?.cancel();
+    _smoothScrollActive = false;
+    _lastFollowedWordIndex = 0;
     _teleprompterNotifier.resetPosition();
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
   }

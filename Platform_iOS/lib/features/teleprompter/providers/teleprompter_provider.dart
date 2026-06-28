@@ -321,7 +321,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     _sttService.onSoundLevelChange = (level) {
       if (_useWhisper || _disposed || _sessionStopped) return;
-      final normalized = ((level + 2) / 12).clamp(0.0, 1.0).toDouble();
+      final normalized = _normalizeSoundLevel(level);
       _safeSetState((s) => s.copyWith(soundLevel: normalized));
     };
 
@@ -369,6 +369,20 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _disposed = true;
       }
     };
+  }
+
+  /// Map a raw `speech_to_text` sound level to a 0..1 meter value.
+  ///
+  /// Apple (iOS) reports average microphone power in **dB**, roughly -60
+  /// (silence) .. 0 (loud), so the Android-style `(level + 2) / 12` mapping
+  /// clamped every real value to 0%. We map the dB band -50..-5 to 0..1.
+  /// Positive readings (Android-like -2..10, e.g. on macOS desktop) fall back
+  /// to the legacy mapping so the meter still works there.
+  double _normalizeSoundLevel(double level) {
+    if (level <= 0) {
+      return ((level + 50.0) / 45.0).clamp(0.0, 1.0).toDouble();
+    }
+    return ((level + 2.0) / 12.0).clamp(0.0, 1.0).toDouble();
   }
 
   void _setupWhisperCallbacks() {

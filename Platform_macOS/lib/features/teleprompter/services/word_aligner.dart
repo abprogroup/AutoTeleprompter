@@ -16,20 +16,20 @@ class WordAligner {
   // Window size to search ahead (in non-newline words).
   static const int _searchWindowSize = 50;
   // Max words for a SINGLE-word match (prevents false jumps on common words).
-  static const int _maxSingleJump = 2;
+  static const int _maxSingleJump = 5;
   // Nearby phrase window checked before the visible-skip fallback.
   static const int _nearPhrasePriorityWindow = 50;
   static const int _nearPhraseMaxWords = 8;
   static const int _localRecoveryPhraseMaxWords = 5;
   // Minimum similarity for a word to be considered a match
-  static const double _matchThreshold = 0.72;
+  static const double _matchThreshold = 0.55;
   // Stricter threshold for the fast single-word path
-  static const double _fastMatchThreshold = 0.82;
+  static const double _fastMatchThreshold = 0.65;
   // Penalty applied per word of distance from the current position.
   static const double _distancePenaltyPerWord = 0.025;
   // Cross-language (e.g. Latin word in Hebrew script) - more lenient
   // Hebrew-specific: even more lenient because STT often returns approximate matches
-  static const double _hebrewMatchThreshold = 0.62;
+  static const double _hebrewMatchThreshold = 0.50;
   // Bullet/header prompting must not silently walk through guessed words.
   static const double _strictMatchThreshold = 0.82;
   static const double _strictPhraseThreshold = 0.78;
@@ -456,6 +456,14 @@ class WordAligner {
       strictBulletMode: policyBulletMode,
     );
     if (headingSkip != null) return headingSkip;
+    final tailNext = _confirmedTailNextWordMatch(
+      script: script,
+      transcriptWords: transcriptWords,
+      searchStart: searchStart,
+      lastConfirmedIndex: lastConfirmedIndex,
+      strictBulletMode: policyBulletMode,
+    );
+    if (tailNext != null) return tailNext;
     final tailBridge = _confirmedTailBridgeMatch(
       script: script,
       transcriptWords: transcriptWords,
@@ -661,6 +669,18 @@ class WordAligner {
       if (nearbyPhrase != null) return nearbyPhrase;
     }
 
+    if (visibleSkipEnabled && !effectivePolicy.hardVisibleSkipEnabled) {
+      final recovery = _sentenceRecoveryMatch(
+        script: script,
+        transcriptWords: transcriptWords,
+        searchStart: searchStart,
+        visibleEnd: visibleMaxSkipTargetIndex,
+        policyBulletMode: policyBulletMode,
+        recoveryThreshold: effectivePolicy.visibleSkip,
+      );
+      if (recovery != null) return recovery;
+    }
+
     // -- STEP 3: MULTI-WORD SEQUENCE CONFIRMATION ----------------------------
     // Use the last K spoken words to find a matching sequence in the script.
     // This helps confirm position when single words are ambiguous.
@@ -757,18 +777,6 @@ class WordAligner {
         bestSeqStartIdx,
         bestSeqEndIdx,
       );
-    }
-
-    if (visibleSkipEnabled && !effectivePolicy.hardVisibleSkipEnabled) {
-      final recovery = _sentenceRecoveryMatch(
-        script: script,
-        transcriptWords: transcriptWords,
-        searchStart: searchStart,
-        visibleEnd: visibleMaxSkipTargetIndex,
-        policyBulletMode: policyBulletMode,
-        recoveryThreshold: effectivePolicy.visibleSkip,
-      );
-      if (recovery != null) return recovery;
     }
 
     // -- NO MATCH ------------------------------------------------------------

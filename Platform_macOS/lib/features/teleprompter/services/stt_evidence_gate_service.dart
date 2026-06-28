@@ -1,11 +1,6 @@
+import 'stt_tracking_state.dart';
 import 'word_aligner.dart';
-
-enum SttEvidenceTrackingState {
-  locked,
-  tracking,
-  recovering,
-  offScript,
-}
+export 'stt_tracking_state.dart';
 
 enum SttEvidenceGateAction {
   advance,

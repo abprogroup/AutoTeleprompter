@@ -119,7 +119,8 @@ extension TeleprompterNotifierAppleQuality on TeleprompterNotifier {
       waitCount: _noProgressCount,
     );
 
-    if (assessment.shouldRestart) {
+    if (assessment.health == AppleSttHealth.engineDropped &&
+        assessment.shouldRestart) {
       return _restartPoorAppleRecognition(
         now: now,
         assessment: assessment,
@@ -129,31 +130,7 @@ extension TeleprompterNotifierAppleQuality on TeleprompterNotifier {
       );
     }
 
-    final shouldSoftRestart =
-        SttRecognitionPolicyService.shouldSoftRestartPoorAppleRecognition(
-      reliabilityMode: settings.sttReliabilityMode,
-      noProgressCount: _noProgressCount,
-      repeatedTranscriptCount: repeatCount,
-      poorQualityDuration: poorDuration,
-      now: now,
-      lastRestartAt: _lastPoorAppleRecognitionRestartAt,
-      cooldown: TeleprompterNotifier._applePoorQualityRestartCooldown,
-    );
-    if (!shouldSoftRestart) return false;
-
-    return _restartPoorAppleRecognition(
-      now: now,
-      assessment: const AppleSttHealthAssessment(
-        health: AppleSttHealth.recognizingWrongWords,
-        action: AppleSttRecoveryAction.softRestart,
-        message:
-            'Apple Speech is still hearing unmatched fragments. Refreshing the listener without moving the script.',
-        quality: 0.32,
-      ),
-      script: script,
-      transcript: transcript,
-      repeatCount: repeatCount,
-    );
+    return false;
   }
 
   bool _restartPoorAppleRecognition({
@@ -172,12 +149,10 @@ extension TeleprompterNotifierAppleQuality on TeleprompterNotifier {
 
     _lastPoorAppleRecognitionRestartAt = now;
     _accumulatedTranscript = '';
-    _noProgressCount = 0;
-    _sttReadingStandby = false;
-    _resetSttEvidenceGate();
-    _resetSequentialSttStreak();
+    _transcriptFloor = 0;
     _resetVisibleLocaleAssist();
     _resetStaleNoProgressTracking();
+    _resetPostAdvancePartialGuard();
     _fluidAdvanceTimer?.cancel();
     _applyAppleQualityAssessment(
       assessment,
@@ -188,7 +163,7 @@ extension TeleprompterNotifierAppleQuality on TeleprompterNotifier {
 
     final debugHeard = TeleprompterNotifier.debugTranscriptSnippet(transcript);
     _addDebugLog(
-      '[RECOVERY] ${assessment.shouldFullRestart ? "full" : "soft"} Apple STT refresh | heard="$debugHeard"',
+      '[Speech] TRACK_ENGINE_RECOVERY ${assessment.shouldFullRestart ? "full" : "soft"} Apple STT refresh | heard="$debugHeard"',
     );
     LightweightDiagnostics.instance.record(
       'stt',

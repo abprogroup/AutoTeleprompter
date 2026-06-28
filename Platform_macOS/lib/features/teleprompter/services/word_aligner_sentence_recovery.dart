@@ -101,7 +101,8 @@ AlignmentResult? _sentenceRecoveryMatch({
     final ratio = speakableSpan > 0 ? matched / speakableSpan : 0.0;
     if (ratio < recoveryRatio) continue;
     final average = score / matched;
-    final distancePenalty = (candidateStart - searchStart) * 0.012;
+    final distancePenalty =
+        ((candidateStart - searchStart) * 0.012).clamp(0.0, 0.20);
     final confidence = (ratio * 0.7 + average * 0.3 - distancePenalty)
         .clamp(0.0, 1.0)
         .toDouble();

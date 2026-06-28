@@ -67,6 +67,65 @@ AlignmentResult? _confirmedTailBridgeMatch({
   return null;
 }
 
+AlignmentResult? _confirmedTailNextWordMatch({
+  required List<ScriptWord> script,
+  required List<String> transcriptWords,
+  required int searchStart,
+  required int lastConfirmedIndex,
+  required bool strictBulletMode,
+}) {
+  if (transcriptWords.length < 2 ||
+      lastConfirmedIndex < 0 ||
+      lastConfirmedIndex >= script.length ||
+      searchStart >= script.length) {
+    return null;
+  }
+  final anchor = script[lastConfirmedIndex];
+  final next = script[searchStart];
+  if (anchor.isNewline ||
+      next.isNewline ||
+      _isUnspeakable(anchor) ||
+      _isUnspeakable(next) ||
+      anchor.isOptionalCue) {
+    return null;
+  }
+
+  final first =
+      (transcriptWords.length - 8).clamp(0, transcriptWords.length - 1).toInt();
+  for (var i = transcriptWords.length - 2; i >= first; i--) {
+    final anchorScore =
+        _wordSimilarity(transcriptWords[i], anchor.normalized, anchor.isRtl);
+    final nextScore = _wordSimilarity(
+      transcriptWords[i + 1],
+      next.normalized,
+      next.isRtl,
+    );
+    final anchorThreshold = strictBulletMode
+        ? WordAligner._strictPhraseThreshold
+        : (anchor.isRtl ? 0.70 : 0.82);
+    final nextThreshold = strictBulletMode
+        ? WordAligner._strictPhraseThreshold
+        : (next.isRtl ? 0.70 : 0.82);
+    if (anchorScore < anchorThreshold || nextScore < nextThreshold) continue;
+    final confidence = (anchorScore + nextScore) / 2;
+    return AlignmentResult(
+      searchStart,
+      confidence,
+      'CONFIRMED_TAIL_NEXT@$lastConfirmedIndex: end=$searchStart '
+      'score=${confidence.toStringAsFixed(2)}',
+      SttAlignmentDecision.advance,
+      SttAlignmentKind.nextWord,
+      SttThresholdFamily.safetyRecovery,
+      [lastConfirmedIndex, searchStart],
+      [next.normalized],
+      lastConfirmedIndex,
+      searchStart,
+    );
+  }
+
+  return null;
+}
+
 AlignmentResult? _properNameRunBridgeMatch({
   required List<ScriptWord> script,
   required List<String> transcriptWords,

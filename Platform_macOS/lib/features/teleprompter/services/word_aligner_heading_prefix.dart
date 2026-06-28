@@ -56,6 +56,97 @@ AlignmentResult? _headingPrefixSkipMatch({
     );
   }
 
+  final bodyBridge = _headingPrefixAnchoredBodyBridgeMatch(
+    script: script,
+    transcriptWords: transcriptWords,
+    bodyStart: bodyStart,
+    strictBulletMode: strictBulletMode,
+  );
+  if (bodyBridge != null) return bodyBridge;
+
+  return null;
+}
+
+AlignmentResult? _headingPrefixAnchoredBodyBridgeMatch({
+  required List<ScriptWord> script,
+  required List<String> transcriptWords,
+  required int bodyStart,
+  required bool strictBulletMode,
+}) {
+  if (transcriptWords.length < 3) return null;
+  final bodyWords = _requiredSpeakableWords(script, bodyStart, 10);
+  if (bodyWords.length < 4) return null;
+
+  final firstBody = bodyWords.first;
+  final threshold = strictBulletMode
+      ? WordAligner._strictPhraseThreshold
+      : (firstBody.isRtl ? 0.70 : 0.82);
+  var anchorTranscriptIndex = -1;
+  for (var i = 0; i < transcriptWords.length && i < 2; i++) {
+    final sim = _wordSimilarity(
+        transcriptWords[i], firstBody.normalized, firstBody.isRtl);
+    if (sim >= threshold) {
+      anchorTranscriptIndex = i;
+      break;
+    }
+  }
+  if (anchorTranscriptIndex < 0) return null;
+
+  for (var phraseLen = 3; phraseLen >= 2; phraseLen--) {
+    for (var bodyOffset = 1;
+        bodyOffset <= 6 && bodyOffset + phraseLen <= bodyWords.length;
+        bodyOffset++) {
+      final phraseWords = bodyWords.sublist(bodyOffset, bodyOffset + phraseLen);
+      final scriptGap = bodyWords.sublist(1, bodyOffset);
+      if (!_headingBridgeCanSkipGap(scriptGap)) continue;
+
+      for (var transcriptStart = anchorTranscriptIndex + 1;
+          transcriptStart + phraseLen <= transcriptWords.length &&
+              transcriptStart <= anchorTranscriptIndex + 5;
+          transcriptStart++) {
+        var score = 0.0;
+        var matched = true;
+        for (var i = 0; i < phraseLen; i++) {
+          final phraseWord = phraseWords[i];
+          final phraseThreshold = strictBulletMode
+              ? WordAligner._strictPhraseThreshold
+              : (phraseWord.isRtl ? 0.70 : 0.82);
+          final sim = _wordSimilarity(
+            transcriptWords[transcriptStart + i],
+            phraseWord.normalized,
+            phraseWord.isRtl,
+          );
+          if (sim < phraseThreshold) {
+            matched = false;
+            break;
+          }
+          score += sim;
+        }
+        if (!matched) continue;
+
+        final target = phraseWords.last.index;
+        final average = score / phraseLen;
+        return AlignmentResult(
+          target,
+          average,
+          'HEADING_NAME_BODY_BRIDGE@$bodyStart: phrase=$bodyOffset '
+          'words=$phraseLen transcript=$transcriptStart end=$target '
+          'score=${average.toStringAsFixed(2)}',
+          SttAlignmentDecision.advance,
+          SttAlignmentKind.headingPrefixSkip,
+          SttThresholdFamily.startAdvance,
+          [firstBody.index, for (final word in phraseWords) word.index],
+          [
+            firstBody.normalized,
+            ...phraseWords.map((word) => word.normalized),
+          ],
+          bodyStart,
+          target,
+        );
+      }
+    }
+  }
+
   return null;
 }
 
@@ -176,4 +267,18 @@ bool _isValidHeadingPrefix(List<String> prefix) {
       const {'opening', 'closing', 'welcome'}.contains(prefix.first);
   return startsRemarkHeading &&
       (prefix.contains('remarks') || prefix.contains('remark'));
+}
+
+bool _headingBridgeCanSkipGap(List<ScriptWord> gap) {
+  if (gap.isEmpty || gap.length > 4) return false;
+  var properNames = 0;
+  for (final word in gap) {
+    if (word.isNewline || _isUnspeakable(word) || word.isOptionalCue) {
+      continue;
+    }
+    if (_isNameBridgeTitle(word.normalized)) continue;
+    if (!_isLikelyProperNameWord(word)) return false;
+    properNames++;
+  }
+  return properNames > 0;
 }

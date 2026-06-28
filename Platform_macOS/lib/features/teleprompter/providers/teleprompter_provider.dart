@@ -6,9 +6,10 @@ import '../services/debug_log_formatter.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
-import '../services/stt_evidence_gate_service.dart';
+import '../services/stt_movement_policy_service.dart';
 import '../services/stt_recognition_policy_service.dart';
-import '../services/stt_visible_relock_service.dart';
+import '../services/stt_transcript_buffer_service.dart';
+import '../services/stt_tracking_state.dart';
 import '../services/teleprompter_locale_resolver.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
@@ -27,6 +28,8 @@ part 'teleprompter_provider.apple_quality.dart';
 part 'teleprompter_provider.stt_gate.dart';
 part 'teleprompter_provider.stt_result.dart';
 part 'teleprompter_provider.registration.dart';
+part 'teleprompter_provider.transcript_refresh.dart';
+part 'teleprompter_provider.stale_partials.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final AbstractSttService _sttService;
@@ -53,7 +56,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _staleNoProgressTranscriptCount = 0;
   DateTime? _poorAppleRecognitionStartedAt;
   DateTime? _lastPoorAppleRecognitionRestartAt;
-  DateTime? _lastTranscriptSourceRenewalAt;
+  DateTime? _lastManualJumpTranscriptRefreshAt;
+  String? _lastSttAdvanceTranscriptKey;
+  int? _lastSttAdvanceTargetIndex;
+  DateTime? _lastSttAdvanceAt;
   AppleSttHealth? _lastLoggedAppleHealth;
   AppleSttRecoveryAction? _lastLoggedAppleAction;
   DateTime? _appleRetryBurstWindowStart;
@@ -69,20 +75,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _visibleLocaleAssistPinnedLocale;
   String? _pendingVisibleLocaleAssistLocale;
   bool _sttReadingStandby = false;
+  bool _lockedOn = false;
+  int _transcriptFloor = 0;
   SttEvidenceTrackingState _sttEvidenceTrackingState =
       SttEvidenceTrackingState.locked;
-  String _lastRelockScope = 'none';
-  int? _sequentialSttBaseIndex;
-  int? _sequentialSttEndIndex;
-  double _sequentialSttEvidence = 0.0;
-  bool _sequentialSttUnlocked = false;
-  String? _sequentialSttLastToken;
-  DateTime? _sequentialSttLastTokenAt;
-  int? _pendingStartEvidenceBaseIndex;
-  int? _pendingStartEvidenceTargetIndex;
-  double _pendingStartEvidenceScore = 0.0;
-  List<String> _pendingStartEvidenceWords = const [];
-  DateTime? _pendingStartEvidenceAt;
   Timer? _speechActivityMeterTimer;
   int _speechActivityMeterToken = 0;
   bool _stateFailureDiagnosticRecorded = false;
@@ -92,18 +88,33 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const int _sttLiveAlignmentWindowWords = 12;
   static const int _sttAlignmentWindowWords = 16;
   static const int _sttRelockTranscriptMaxWords = 18;
-  static const int _stuckRelockAfterWaits = 3;
   static const int _appleSilentRestartLimit = 3;
   static const Duration _appleNativeCallbackStaleAfter = Duration(seconds: 45);
   static const Duration _appleSilentRestartWindow = Duration(seconds: 70);
   static const Duration _applePoorQualityRestartCooldown =
       Duration(seconds: 45);
+  static const Duration _manualBackJumpTranscriptRefreshCooldown =
+      Duration(seconds: 2);
+  static const Duration _postAdvanceStalePartialWindow =
+      Duration(milliseconds: 1800);
   static const String appleSttPreflightVersion = 'apple-stt-reliability-v1';
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
       Duration(milliseconds: 5000);
-  static const Duration _pendingStartEvidenceGrace = Duration(seconds: 5);
+
+  void _resetSttTrackingContext({bool clearTranscriptFloor = true}) {
+    _accumulatedTranscript = '';
+    _noProgressCount = 0;
+    _sttReadingStandby = false;
+    _lockedOn = false;
+    if (clearTranscriptFloor) _transcriptFloor = 0;
+    _sttEvidenceTrackingState = SttEvidenceTrackingState.locked;
+    _resetSttEvidenceGate();
+    _resetStaleNoProgressTracking();
+    _resetPostAdvancePartialGuard();
+  }
+
   @override
   TeleprompterState build() {
     _disposed = false;
@@ -263,6 +274,31 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static String debugTranscriptSnippet(String transcript) =>
       SttRecognitionPolicyService.debugTranscriptSnippet(transcript);
 
+  static String sttPostAdvancePartialKey(String transcript) {
+    final words = SttRecognitionPolicyService.capTranscriptWords(
+      transcript,
+      maxWords: 12,
+    )
+        .split(RegExp(r'\s+'))
+        .map((word) => word.trim().normalizeForMatching())
+        .where((word) => word.isNotEmpty)
+        .toList(growable: false);
+    return words.join(' ');
+  }
+
+  static bool isStalePostAdvancePartial({
+    required String currentKey,
+    required String? lastAdvanceKey,
+  }) {
+    if (currentKey.isEmpty ||
+        lastAdvanceKey == null ||
+        lastAdvanceKey.isEmpty) {
+      return false;
+    }
+    return currentKey == lastAdvanceKey ||
+        lastAdvanceKey.endsWith(' $currentKey');
+  }
+
   static int resolveAdvanceTarget({
     required int currentIndex,
     required int alignedIndex,
@@ -276,7 +312,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       );
 
   /// Legacy numeric guard retained for focused tests only.
-  /// Runtime STT movement must go through SttEvidenceGateService.
+  /// Runtime STT movement must go through SttMovementPolicyService.
   @visibleForTesting
   static bool shouldWaitForLargeSttAdvance({
     required int currentIndex,

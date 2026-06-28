@@ -1,57 +1,26 @@
 part of 'teleprompter_provider.dart';
 
 extension TeleprompterNotifierSttResult on TeleprompterNotifier {
+  static const _transcriptBuffer = SttTranscriptBufferService();
+  static const _movementPolicy = SttMovementPolicyService();
+
   void _handleSttResult(SpeechResult result) {
     if (_currentScript == null || _disposed) return;
     _safeSetState((s) => s.copyWith(isStarting: false));
-
-    final words = result.words.toLowerCase();
-    try {
-      final settings = ref.read(settingsProvider);
-
-      if (words.contains('stop prompt') ||
-          words.contains('\u05E2\u05E6\u05D5\u05E8') ||
-          words.contains('\u05E2\u05E6\u05D9\u05E8\u05D4')) {
-        _addDebugLog('VOICE COMMAND: STOP');
-        ref.read(settingsProvider.notifier).setScrollSpeed(0);
-        return;
-      } else if (words.contains('start prompt') ||
-          words.contains('\u05D1\u05D5\u05D0')) {
-        _addDebugLog('VOICE COMMAND: START');
-        if (settings.scrollSpeed == 0) {
-          ref.read(settingsProvider.notifier).setScrollSpeed(100);
-        }
-        return;
-      } else if (words.contains('speed up') ||
-          words.contains('\u05DE\u05D4\u05E8')) {
-        _addDebugLog('VOICE COMMAND: FASTER');
-        ref
-            .read(settingsProvider.notifier)
-            .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
-        return;
-      } else if (words.contains('slow down') ||
-          words.contains('\u05DC\u05D0\u05D8')) {
-        _addDebugLog('VOICE COMMAND: SLOWER');
-        ref
-            .read(settingsProvider.notifier)
-            .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
-        return;
-      }
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'teleprompterProvider.voiceCommandSettings',
-      );
-    }
+    if (_handleVoiceCommand(result.words)) return;
 
     final rawTranscript = result.words;
-    _accumulatedTranscript =
-        TeleprompterNotifier.capTranscriptForRelock(rawTranscript);
-    _maybeRenewAppleTranscriptSource(rawTranscript);
-    final alignmentWindows = _recentTranscriptWindows(_accumulatedTranscript);
-    var alignmentTranscript =
-        alignmentWindows.isEmpty ? '' : alignmentWindows.first;
+    if (_shouldIgnorePostAdvanceApplePartial(rawTranscript)) return;
+
+    final buffer = _transcriptBuffer.update(
+      rawTranscript: rawTranscript,
+      transcriptFloor: _transcriptFloor,
+      recentWordWindow: TeleprompterNotifier._sttLiveAlignmentWindowWords,
+    );
+    _transcriptFloor = buffer.transcriptFloor;
+    if (!buffer.hasFreshSpeech) return;
+
+    _accumulatedTranscript = buffer.recentTranscript;
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
     final policy = TeleprompterNotifier.recognitionPolicyForSettings(settings);
@@ -62,8 +31,115 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
       visibleWordStart: _visibleWordStart,
       visibleWordEnd: _visibleWordEnd,
     );
+    final aligned = _bestAlignmentForTranscript(
+      script: script,
+      transcript: _accumulatedTranscript,
+      policy: policy,
+      strictBulletMode: strictBulletMode,
+      maxSkipTargetIndex: maxSkipTargetIndex,
+    );
+    final engineTag = _useWhisper ? '[Whisper]' : '[Speech]';
 
-    AlignmentResult alignWindow(String transcriptWindow) => WordAligner.align(
+    if (aligned.shouldEnterStandby) {
+      _sttReadingStandby = true;
+      _sttEvidenceTrackingState = SttEvidenceTrackingState.recovering;
+      _addTrackDebug(
+        engineTag: engineTag,
+        decision: SttMovementDecision(
+          action: SttMovementAction.hold,
+          nextState: _sttEvidenceTrackingState,
+          targetIndex: _currentState.confirmedWordIndex,
+          label: 'TRACK_HOLD',
+          reason: 'standby_lock',
+          thresholdLabel: 'none',
+          evidenceScore: 0,
+          neededScore: 0,
+        ),
+        alignment: aligned,
+        transcript: _accumulatedTranscript,
+      );
+      return;
+    }
+
+    if (aligned.shouldAdvance &&
+        aligned.confirmedWordIndex > _currentState.confirmedWordIndex) {
+      _handleMovementCandidate(
+        aligned: aligned,
+        script: script,
+        policy: policy,
+        maxSkipTargetIndex: maxSkipTargetIndex,
+        transcript: _accumulatedTranscript,
+        engineTag: engineTag,
+      );
+      return;
+    }
+
+    _handleNoMovementCandidate(
+      aligned: aligned,
+      script: script,
+      policy: policy,
+      strictBulletMode: strictBulletMode,
+      transcript: _accumulatedTranscript,
+      spokenWordCount: buffer.spokenWords.length,
+      freshWords: buffer.freshWords,
+      engineTag: engineTag,
+    );
+  }
+
+  bool _handleVoiceCommand(String rawWords) {
+    final words = rawWords.toLowerCase();
+    try {
+      final settings = ref.read(settingsProvider);
+      if (words.contains('stop prompt') ||
+          words.contains('\u05E2\u05E6\u05D5\u05E8') ||
+          words.contains('\u05E2\u05E6\u05D9\u05E8\u05D4')) {
+        _addDebugLog('VOICE COMMAND: STOP');
+        ref.read(settingsProvider.notifier).setScrollSpeed(0);
+        return true;
+      }
+      if (words.contains('start prompt') ||
+          words.contains('\u05D1\u05D5\u05D0')) {
+        _addDebugLog('VOICE COMMAND: START');
+        if (settings.scrollSpeed == 0) {
+          ref.read(settingsProvider.notifier).setScrollSpeed(100);
+        }
+        return true;
+      }
+      if (words.contains('speed up') || words.contains('\u05DE\u05D4\u05E8')) {
+        _addDebugLog('VOICE COMMAND: FASTER');
+        ref
+            .read(settingsProvider.notifier)
+            .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
+        return true;
+      }
+      if (words.contains('slow down') || words.contains('\u05DC\u05D0\u05D8')) {
+        _addDebugLog('VOICE COMMAND: SLOWER');
+        ref
+            .read(settingsProvider.notifier)
+            .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
+        return true;
+      }
+    } catch (error, stack) {
+      LightweightDiagnostics.instance.recordError(
+        error,
+        stack,
+        source: 'teleprompterProvider.voiceCommandSettings',
+      );
+    }
+    return false;
+  }
+
+  AlignmentResult _bestAlignmentForTranscript({
+    required Script script,
+    required String transcript,
+    required SttRecognitionPolicy policy,
+    required bool strictBulletMode,
+    required int? maxSkipTargetIndex,
+  }) {
+    final windows = _recentTranscriptWindows(transcript);
+    final alignmentWindows = windows.isEmpty ? [transcript] : windows;
+
+    AlignmentResult align(String transcriptWindow) => WordAligner.align(
           script: script.words,
           transcript: transcriptWindow,
           lastConfirmedIndex: _currentState.confirmedWordIndex,
@@ -72,500 +148,219 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
           maxSkipTargetIndex: maxSkipTargetIndex,
           strictBulletMode: strictBulletMode,
           policy: policy,
-          readingStandby: _sttReadingStandby,
+          readingStandby: _sttReadingStandby || _lockedOn,
         );
 
-    var aligned = alignWindow(alignmentTranscript);
-    if (!aligned.shouldAdvance &&
-        !aligned.shouldEnterStandby &&
-        alignmentWindows.length > 1) {
-      for (var i = 1; i < alignmentWindows.length; i++) {
-        final candidateTranscript = alignmentWindows[i];
-        final candidate = alignWindow(candidateTranscript);
-        if (candidate.shouldAdvance &&
-            candidate.confirmedWordIndex > _currentState.confirmedWordIndex) {
-          alignmentTranscript = candidateTranscript;
-          aligned = candidate.copyWith(
-            debugInfo:
-                '${candidate.debugInfo} | rollingWindow=${i + 1}/${alignmentWindows.length}',
-          );
-          break;
-        }
-      }
-    }
-
-    final currentIdx = _currentState.confirmedWordIndex;
-    final debugHeard =
-        TeleprompterNotifier.debugTranscriptSnippet(alignmentTranscript);
-    final nextExpected =
-        WordAligner.debugNextExpected(script.words, currentIdx);
-    final engineTag = _useWhisper ? '[Whisper]' : '[Speech]';
-
-    final pendingStart = _pendingStartEvidenceContinuation(
-      script: script,
-      transcript: alignmentTranscript,
-      policy: policy,
-      strictBulletMode: strictBulletMode,
-    );
-    if (pendingStart != null) {
-      _handlePendingStartEvidenceCandidate(
-        candidate: pendingStart,
-        script: script,
-        policy: policy,
-        alignmentTranscript: alignmentTranscript,
-        engineTag: engineTag,
+    var best = align(alignmentWindows.first);
+    for (var i = 1; i < alignmentWindows.length; i++) {
+      final candidate = align(alignmentWindows[i]);
+      if (!_alignmentIsBetter(candidate, best)) continue;
+      best = candidate.copyWith(
+        debugInfo:
+            '${candidate.debugInfo} | window=${i + 1}/${alignmentWindows.length}',
       );
-      return;
     }
-
-    if (aligned.shouldEnterStandby) {
-      _sttReadingStandby = true;
-      _sttEvidenceTrackingState = SttEvidenceTrackingState.recovering;
-      _noProgressCount = 0;
-      _resetStaleNoProgressTracking();
-      _resetAppleRecognitionQuality();
-      _addDebugLog(
-          '$engineTag STANDBY LOCK | ${aligned.debugInfo} | heard: "$debugHeard"');
-      LightweightDiagnostics.instance.record(
-        'stt',
-        'standby lock',
-        data: {
-          'heard': alignmentTranscript,
-          'position': _currentState.confirmedWordIndex,
-          'confidence': aligned.confidence,
-        },
-      );
-      return;
-    }
-
-    if (aligned.shouldAdvance &&
-        aligned.confirmedWordIndex > _currentState.confirmedWordIndex) {
-      _handleAlignedSttCandidate(
-        aligned: aligned,
-        script: script,
-        policy: policy,
-        maxSkipTargetIndex: maxSkipTargetIndex,
-        alignmentTranscript: alignmentTranscript,
-        debugHeard: debugHeard,
-        engineTag: engineTag,
-      );
-      return;
-    }
-
-    final improvising = TeleprompterNotifier.shouldUseImprovisationNoMatch(
-      strictBulletMode: strictBulletMode,
-      alignedIndex: aligned.confirmedWordIndex,
-      currentIndex: _currentState.confirmedWordIndex,
-    );
-    if (!strictBulletMode) {
-      _sttReadingStandby = false;
-    }
-
-    final sequential = _consumeSequentialSttStreak(
-      script: script,
-      transcript: alignmentTranscript,
-      policy: policy,
-      strictBulletMode: strictBulletMode,
-    );
-    if (sequential != null) {
-      if (sequential.targetIndex != null &&
-          sequential.targetIndex! > _currentState.confirmedWordIndex) {
-        _handleSequentialSttCandidate(
-          sequential: sequential,
-          script: script,
-          policy: policy,
-          alignmentTranscript: alignmentTranscript,
-          engineTag: engineTag,
-        );
-        return;
-      }
-
-      _noProgressCount = 0;
-      _resetStaleNoProgressTracking();
-      _resetAppleRecognitionQuality();
-      _sttReadingStandby = true;
-      _addDebugLog('$engineTag SEQUENTIAL HOLD | ${sequential.debugInfo}');
-      return;
-    }
-
-    final noMatchGate = _evaluateSttNoMatchGate(
-      transcript: alignmentTranscript,
-      alignment: aligned,
-      script: script,
-      policy: policy,
-      strictBulletMode: strictBulletMode,
-    );
-    _applyGateState(noMatchGate);
-    _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
-      currentCount: _noProgressCount,
-      improvising: improvising || noMatchGate.shouldReset,
-      visibleAssistThreshold:
-          TeleprompterNotifier._visibleLocaleAssistAfterWaits,
-    );
-    if (improvising || noMatchGate.shouldReset) {
-      _addDebugLog(
-          '$engineTag ${noMatchGate.debugSummary} | heard: "$debugHeard" | visible relock waiting');
-      LightweightDiagnostics.instance.record(
-        'stt',
-        'gate no match ${noMatchGate.action.name}',
-        data: {
-          'heard': alignmentTranscript,
-          'position': currentIdx,
-          'reason': noMatchGate.reason,
-        },
-      );
-    } else {
-      _addDebugLog(
-          '$engineTag WAIT #$_noProgressCount | heard: "$debugHeard" | next: "$nextExpected"');
-      LightweightDiagnostics.instance.record(
-        'stt',
-        'waiting',
-        data: {
-          'heard': alignmentTranscript,
-          'next': nextExpected,
-          'position': currentIdx,
-          'stuckCount': _noProgressCount,
-        },
-      );
-      _checkAndSwitchLocale();
-    }
-
-    final relockTranscript = _accumulatedTranscript.trim().isEmpty
-        ? alignmentTranscript
-        : _accumulatedTranscript;
-    final relockTarget =
-        _relockTargetFromTranscript(script, relockTranscript, policy);
-    if (relockTarget != null &&
-        relockTarget > _currentState.confirmedWordIndex) {
-      _handleRelockSttCandidate(
-        relockTarget: relockTarget,
-        script: script,
-        policy: policy,
-        relockTranscript: relockTranscript,
-        engineTag: engineTag,
-      );
-      return;
-    }
-
-    if (_handlePoorAppleRecognitionIfNeeded(
-      script: script,
-      transcript: alignmentTranscript,
-    )) {
-      return;
-    }
-
-    if (_maybeAssistVisibleLocale(script, policy, alignmentTranscript)) {
-      return;
-    }
+    return best;
   }
 
-  void _handleAlignedSttCandidate({
+  bool _alignmentIsBetter(AlignmentResult candidate, AlignmentResult current) {
+    if (candidate.shouldAdvance && !current.shouldAdvance) return true;
+    if (!candidate.shouldAdvance || !current.shouldAdvance) return false;
+    if (candidate.confirmedWordIndex != current.confirmedWordIndex) {
+      return candidate.confirmedWordIndex > current.confirmedWordIndex;
+    }
+    return candidate.confidence > current.confidence;
+  }
+
+  void _handleMovementCandidate({
     required AlignmentResult aligned,
     required Script script,
     required SttRecognitionPolicy policy,
     required int? maxSkipTargetIndex,
-    required String alignmentTranscript,
-    required String debugHeard,
+    required String transcript,
     required String engineTag,
   }) {
-    final advanceFrom = _currentState.confirmedWordIndex;
-    final advanceGuardFrom = _currentSttAdvanceGuardIndex(advanceFrom);
-    if (aligned.confirmedWordIndex <= advanceGuardFrom) return;
+    final currentIndex = _currentState.confirmedWordIndex;
+    final guardIndex = _currentSttAdvanceGuardIndex(currentIndex);
     final visibleSkipTargetTrusted =
         TeleprompterNotifier.isTrustedVisibleSkipTarget(
       alignedIndex: aligned.confirmedWordIndex,
       visibleWordStart: _visibleWordStart,
       visibleWordEnd: _visibleWordEnd,
     );
-    final gateDecision = _evaluateSttGate(
-      candidate: SttEvidenceGateCandidate.fromAlignment(aligned),
+    final decision = _movementPolicy.evaluateCandidate(
+      alignment: aligned,
       policy: policy,
-      currentIndex: advanceFrom,
-      advanceGuardIndex: advanceGuardFrom,
+      trackingState: _sttEvidenceTrackingState,
+      currentIndex: currentIndex,
+      advanceGuardIndex: guardIndex,
       visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+      maxLocalAdvanceWithoutWait:
+          TeleprompterNotifier._maxLocalSttJumpWithoutWait,
     );
-    if (!gateDecision.shouldAdvance) {
-      _rememberPendingStartEvidence(
-        decision: gateDecision,
-        candidate: SttEvidenceGateCandidate.fromAlignment(aligned),
-        currentIndex: advanceFrom,
+
+    if (!decision.shouldAdvance) {
+      _applyMovementHoldOrReset(
+        decision: decision,
+        aligned: aligned,
+        transcript: transcript,
+        engineTag: engineTag,
       );
-      _applyGateState(gateDecision);
-      _fluidAdvanceTimer?.cancel();
-      _noProgressCount = TeleprompterNotifier.nextNoProgressCount(
-        currentCount: _noProgressCount,
-        improvising: gateDecision.shouldReset,
-        visibleAssistThreshold:
-            TeleprompterNotifier._visibleLocaleAssistAfterWaits,
-      );
-      _addDebugLog(
-        '$engineTag ${gateDecision.debugSummary} | ${aligned.debugInfo} | heard: "$debugHeard"',
-      );
-      LightweightDiagnostics.instance.record(
-        'stt',
-        'gate ${gateDecision.action.name}',
-        data: {
-          'from': advanceFrom,
-          'aligned': aligned.confirmedWordIndex,
-          'state': _sttEvidenceTrackingState.name,
-          'reason': gateDecision.reason,
-          'visibleStart': _visibleWordStart,
-          'visibleEnd': _visibleWordEnd,
-          'heard': alignmentTranscript,
-        },
-      );
+      if (_handlePoorAppleRecognitionIfNeeded(
+        script: script,
+        transcript: transcript,
+      )) {
+        return;
+      }
+      _maybeAssistVisibleLocale(script, policy, transcript);
       return;
     }
 
-    _applyGateState(gateDecision);
-    _sttReadingStandby = true;
-    _noProgressCount = 0;
-    _resetStaleNoProgressTracking();
-    _resetAppleRecognitionQuality();
-    _resetVisibleLocaleAssist();
     final target = TeleprompterNotifier.resolveAdvanceTarget(
-      currentIndex: advanceFrom,
+      currentIndex: currentIndex,
       alignedIndex: aligned.confirmedWordIndex,
       visibleMaxSkipTargetIndex:
           visibleSkipTargetTrusted ? maxSkipTargetIndex : null,
     );
-    final advancedWord =
-        target < script.words.length ? script.words[target].raw : '?';
-    final alignReason = aligned.debugInfo.startsWith('NAME_ANCHOR') ||
-            SttRecognitionPolicyService.isLocalStructuralAlignment(
-              aligned.debugInfo,
-            )
-        ? ' | ${aligned.debugInfo}'
-        : '';
-    _addDebugLog(
-        '$engineTag ${gateDecision.debugSummary} -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)})$alignReason | heard: "$debugHeard"');
+    _sttEvidenceTrackingState = decision.nextState;
+    _lockedOn = true;
+    _sttReadingStandby = true;
+    _noProgressCount = 0;
+    _resetStaleNoProgressTracking();
+    _resetAppleRecognitionQuality();
+    _resetVisibleLocaleAssist();
+
+    _addTrackDebug(
+      engineTag: engineTag,
+      decision: decision,
+      alignment: aligned.copyWith(confirmedWordIndex: target),
+      transcript: transcript,
+    );
     LightweightDiagnostics.instance.record(
       'stt',
-      'advanced',
+      'track advanced',
       data: {
-        'from': _currentState.confirmedWordIndex,
+        'from': currentIndex,
         'to': target,
-        'word': advancedWord,
-        'confidence': aligned.confidence,
-        'heard': alignmentTranscript,
+        'kind': aligned.kind.name,
+        'family': aligned.thresholdFamily.name,
       },
     );
-
+    _rememberPostAdvanceApplePartial(transcript, target);
     _applySttAdvanceTarget(target, script);
     _syncLocaleForPosition(script, target + 1, reason: 'advance');
   }
 
-  void _handleSequentialSttCandidate({
-    required _SequentialSttProgress sequential,
+  void _handleNoMovementCandidate({
+    required AlignmentResult aligned,
     required Script script,
     required SttRecognitionPolicy policy,
-    required String alignmentTranscript,
+    required bool strictBulletMode,
+    required String transcript,
+    required int spokenWordCount,
+    required List<String> freshWords,
     required String engineTag,
   }) {
-    final advanceFrom = _currentState.confirmedWordIndex;
-    final target = sequential.targetIndex!;
-    final advanceGuardFrom = _currentSttAdvanceGuardIndex(advanceFrom);
-    final visibleSkipTargetTrusted =
-        TeleprompterNotifier.isTrustedVisibleSkipTarget(
-      alignedIndex: target,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: _visibleWordEnd,
-    );
-    final gateDecision = _evaluateSttGate(
-      candidate: _sequentialGateCandidate(sequential),
+    final key = _noProgressTranscriptKey(transcript);
+    final repeatedTranscript =
+        key.isNotEmpty && key == _lastNoProgressTranscriptKey;
+    final preserveSlowContext = WordAligner.shouldPreserveSlowContext(
+      script: script.words,
+      transcript: transcript,
+      lastConfirmedIndex: _currentState.confirmedWordIndex,
       policy: policy,
-      currentIndex: advanceFrom,
-      advanceGuardIndex: advanceGuardFrom,
-      visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+      strictBulletMode: strictBulletMode,
     );
-    if (!gateDecision.shouldAdvance) {
-      _applyGateState(gateDecision);
-      _addDebugLog(
-        '$engineTag ${gateDecision.debugSummary} | SEQUENTIAL ${sequential.debugInfo}',
+    var decision = _movementPolicy.evaluateNoCandidate(
+      transcript: transcript,
+      alignment: aligned,
+      trackingState: _sttEvidenceTrackingState,
+      preserveSlowContext: preserveSlowContext,
+      repeatedTranscript: repeatedTranscript,
+    );
+
+    if (decision.shouldReset &&
+        policy.safetyRecovery.evidenceScore(freshWords) <
+            policy.safetyRecovery.smallWords) {
+      decision = SttMovementDecision(
+        action: SttMovementAction.hold,
+        nextState: _sttEvidenceTrackingState,
+        targetIndex: decision.targetIndex,
+        label: 'TRACK_HOLD',
+        reason: 'off_script_below_safety_threshold',
+        thresholdLabel: 'safetyRecovery',
+        evidenceScore: policy.safetyRecovery.evidenceScore(freshWords),
+        neededScore: policy.safetyRecovery.smallWords.toDouble(),
       );
-      LightweightDiagnostics.instance.record(
-        'stt',
-        'sequential gate ${gateDecision.action.name}',
-        data: {
-          'to': target,
-          'heard': alignmentTranscript,
-          'debug': sequential.debugInfo,
-          'reason': gateDecision.reason,
-        },
-      );
+    }
+
+    _applyMovementHoldOrReset(
+      decision: decision,
+      aligned: aligned,
+      transcript: transcript,
+      engineTag: engineTag,
+      spokenWordCount: spokenWordCount,
+    );
+    if (_handlePoorAppleRecognitionIfNeeded(
+        script: script, transcript: transcript)) {
       return;
     }
-    final advancedWord =
-        target < script.words.length ? script.words[target].raw : '?';
-    _applyGateState(gateDecision);
-    _fluidAdvanceTimer?.cancel();
-    _noProgressCount = 0;
-    _resetStaleNoProgressTracking();
-    _resetAppleRecognitionQuality();
-    _sttReadingStandby = true;
-    _resetVisibleLocaleAssist();
-    _addDebugLog(
-      '$engineTag ${gateDecision.debugSummary} -> #$target "$advancedWord" | SEQUENTIAL ${sequential.debugInfo}',
-    );
-    LightweightDiagnostics.instance.record(
-      'stt',
-      'sequential advanced',
-      data: {
-        'to': target,
-        'word': advancedWord,
-        'heard': alignmentTranscript,
-        'debug': sequential.debugInfo,
-      },
-    );
-    _applySttAdvanceTarget(target, script);
-    _syncLocaleForPosition(script, target + 1, reason: 'sequential');
+    _maybeAssistVisibleLocale(script, policy, transcript);
   }
 
-  void _handlePendingStartEvidenceCandidate({
-    required SttEvidenceGateCandidate candidate,
-    required Script script,
-    required SttRecognitionPolicy policy,
-    required String alignmentTranscript,
+  void _applyMovementHoldOrReset({
+    required SttMovementDecision decision,
+    required AlignmentResult aligned,
+    required String transcript,
     required String engineTag,
+    int? spokenWordCount,
   }) {
-    final advanceFrom = _currentState.confirmedWordIndex;
-    final advanceGuardFrom = _currentSttAdvanceGuardIndex(advanceFrom);
-    if (candidate.targetIndex <= advanceGuardFrom) return;
-    final visibleSkipTargetTrusted =
-        TeleprompterNotifier.isTrustedVisibleSkipTarget(
-      alignedIndex: candidate.targetIndex,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: _visibleWordEnd,
-    );
-    final gateDecision = _evaluateSttGate(
-      candidate: candidate,
-      policy: policy,
-      currentIndex: advanceFrom,
-      advanceGuardIndex: advanceGuardFrom,
-      visibleSkipTargetTrusted: visibleSkipTargetTrusted,
-    );
-    final debugHeard =
-        TeleprompterNotifier.debugTranscriptSnippet(alignmentTranscript);
-    if (!gateDecision.shouldAdvance) {
-      _rememberPendingStartEvidence(
-        decision: gateDecision,
-        candidate: candidate,
-        currentIndex: advanceFrom,
-      );
-      _applyGateState(gateDecision);
-      _addDebugLog(
-        '$engineTag ${gateDecision.debugSummary} | ${candidate.debugInfo} | heard: "$debugHeard"',
-      );
-      return;
+    if (decision.shouldReset) {
+      _lockedOn = false;
+      _sttReadingStandby = false;
+      _sttEvidenceTrackingState = decision.nextState;
+      if (spokenWordCount != null) _transcriptFloor = spokenWordCount;
+      _noProgressCount = 0;
+      _resetPostAdvancePartialGuard();
+    } else {
+      _sttEvidenceTrackingState = decision.nextState;
+      if (!_lockedOn) _sttReadingStandby = false;
+      if (!_noProgressTranscriptRepeated(transcript)) {
+        _noProgressCount++;
+      }
     }
-
-    _applyGateState(gateDecision);
-    _sttReadingStandby = true;
-    _noProgressCount = 0;
-    _resetStaleNoProgressTracking();
-    _resetAppleRecognitionQuality();
-    _resetVisibleLocaleAssist();
-    final target = TeleprompterNotifier.resolveAdvanceTarget(
-      currentIndex: advanceFrom,
-      alignedIndex: candidate.targetIndex,
-      visibleMaxSkipTargetIndex:
-          visibleSkipTargetTrusted ? _visibleWordEnd : null,
+    _addTrackDebug(
+      engineTag: engineTag,
+      decision: decision,
+      alignment: aligned,
+      transcript: transcript,
     );
-    final advancedWord =
-        target < script.words.length ? script.words[target].raw : '?';
-    _addDebugLog(
-      '$engineTag ${gateDecision.debugSummary} -> #$target "$advancedWord" '
-      '| CONTINUED_START ${candidate.debugInfo} | heard: "$debugHeard"',
-    );
-    LightweightDiagnostics.instance.record(
-      'stt',
-      'continued start advanced',
-      data: {
-        'from': advanceFrom,
-        'to': target,
-        'heard': alignmentTranscript,
-        'debug': candidate.debugInfo,
-      },
-    );
-    _applySttAdvanceTarget(target, script);
-    _syncLocaleForPosition(script, target + 1, reason: 'continued start');
   }
 
-  void _handleRelockSttCandidate({
-    required int relockTarget,
-    required Script script,
-    required SttRecognitionPolicy policy,
-    required String relockTranscript,
+  bool _noProgressTranscriptRepeated(String transcript) {
+    final key = _noProgressTranscriptKey(transcript);
+    return key.isNotEmpty && key == _lastNoProgressTranscriptKey;
+  }
+
+  void _addTrackDebug({
     required String engineTag,
+    required SttMovementDecision decision,
+    required AlignmentResult alignment,
+    required String transcript,
   }) {
-    final relockFrom = _currentState.confirmedWordIndex;
-    final relockGuardFrom = _currentSttAdvanceGuardIndex(relockFrom);
-    if (relockTarget <= relockGuardFrom) return;
-    final relockVisibleTrusted =
-        TeleprompterNotifier.isTrustedVisibleSkipTarget(
-      alignedIndex: relockTarget,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: _visibleWordEnd,
+    final heard = TeleprompterNotifier.debugTranscriptSnippet(transcript);
+    final next = WordAligner.debugNextExpected(
+      _currentScript?.words ?? const [],
+      _currentState.confirmedWordIndex,
     );
-    final relockGateDecision = _evaluateSttGate(
-      candidate: _relockGateCandidate(
-        targetIndex: relockTarget,
-        transcript: relockTranscript,
-        policy: policy,
-      ),
-      policy: policy,
-      currentIndex: relockFrom,
-      advanceGuardIndex: relockGuardFrom,
-      visibleSkipTargetTrusted: relockVisibleTrusted,
-    );
-    if (!relockGateDecision.shouldAdvance) {
-      _applyGateState(relockGateDecision);
-      _fluidAdvanceTimer?.cancel();
-      _resetSequentialSttStreak();
-      final relockJump = relockTarget - relockGuardFrom;
-      final debugRelockHeard =
-          TeleprompterNotifier.debugTranscriptSnippet(relockTranscript);
-      _addDebugLog(
-        '$engineTag ${relockGateDecision.debugSummary} | delayed ${_lastRelockScope.toUpperCase()} relock '
-        '+$relockJump ->$relockTarget | heard: "$debugRelockHeard"',
-      );
-      LightweightDiagnostics.instance.record(
-        'stt',
-        'relock gate ${relockGateDecision.action.name}',
-        data: {
-          'from': relockFrom,
-          'to': relockTarget,
-          'jump': relockJump,
-          'scope': _lastRelockScope,
-          'heard': relockTranscript,
-          'reason': relockGateDecision.reason,
-        },
-      );
-      return;
-    }
-    _applyGateState(relockGateDecision);
-    final relockedWord = script.words[relockTarget].raw;
-    final debugRelockHeard =
-        TeleprompterNotifier.debugTranscriptSnippet(relockTranscript);
-    _addDebugLog(
-      '$engineTag ${relockGateDecision.debugSummary} | RELOCK ${_lastRelockScope.toUpperCase()} -> #$relockTarget "$relockedWord" | heard: "$debugRelockHeard"',
-    );
-    LightweightDiagnostics.instance.record(
-      'stt',
-      'relocked',
-      data: {
-        'from': _currentState.confirmedWordIndex,
-        'to': relockTarget,
-        'word': relockedWord,
-        'scope': _lastRelockScope,
-        'heard': relockTranscript,
-      },
-    );
-    _noProgressCount = 0;
-    _resetStaleNoProgressTracking();
-    _resetAppleRecognitionQuality();
-    _sttReadingStandby = true;
-    _applySttAdvanceTarget(relockTarget, script);
-    _syncLocaleForPosition(script, relockTarget + 1, reason: 'relock');
+    final details = <String>[
+      decision.debugSummary,
+      alignment.kind.name,
+      if (alignment.confidence > 0)
+        'conf=${alignment.confidence.toStringAsFixed(2)}',
+      if (heard.isNotEmpty) 'heard="$heard"',
+      if (!decision.shouldAdvance) 'next="$next"',
+    ].join(' | ');
+    _addDebugLog('$engineTag $details');
   }
 }

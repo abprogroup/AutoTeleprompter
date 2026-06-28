@@ -1,5 +1,5 @@
-name: Build macOS App (v5.0.8)
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.8+35' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+name: Build macOS App (v5.0.9)
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.9+36' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -14,9 +14,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.8+35'
+        description: 'Flutter app version, for example 5.0.9+36'
         required: true
-        default: '5.0.8+35'
+        default: '5.0.9+36'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false
@@ -71,10 +71,10 @@ jobs:
           esac
           appVersion="${{ github.event.inputs.app_version }}"
           if [ -z "$appVersion" ]; then
-            appVersion="5.0.8+35"
+            appVersion="5.0.9+36"
           fi
           if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
-            echo "app_version must look like 5.0.8+35." >&2
+            echo "app_version must look like 5.0.9+36." >&2
             exit 1
           fi
           versionName="${appVersion%%+*}"
@@ -315,6 +315,12 @@ jobs:
           evidence gate. Sequential tracking, heading/body recovery, visible
           skips, and delayed relocks now all must satisfy the user's saved STT
           profile thresholds before the prompter moves.
+          Build 36 replaces the competing Mac STT movement paths with a single
+          iOS-style tracking pipeline. Recent transcript tails, heading/body
+          recovery, slow-reading pauses, visible skips, and Apple Speech
+          stability safeguards now feed one MovementPolicy so valid local
+          reading can continue smoothly while off-script speech and unsafe
+          jumps stay blocked by the user's saved STT profile.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -362,7 +368,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.8 adds the guided setup walkthrough, Pro-gated Bookmarks suite, empty-script Present protection, improved readability surfaces, recording countdown sound cues, listening meter control, tooltip polish, speech-control setup defaults, safer fast-reading STT jump handling, resilient Apple STT recovery, duplicate Present route protection, corrected Present word spacing, top-pinned listening meter placement, improved low-volume next-word STT progression, build 30 stale Apple Speech callback recovery, build 31 Apple STT reliability mode for noisy rooms/far speakers without overriding saved speech-control profile thresholds, build 32 reduced Apple Speech blackout windows by treating retry bursts as quality/coaching signals, avoiding poor-recognition restart loops, allowing mic preflight from any visible line, and adding visible-anchor relocking for imperfect proper-name recognition while preserving large-jump protection, build 33 adds mandatory production credential preflight so published macOS releases cannot ship without the Supabase backend, feedback route, cloud credentials, release token, and update manifest URL, and build 35 centralizes STT movement behind a profile-locked evidence gate so sequential tracking, heading/body recovery, visible skips, and delayed relocks must satisfy saved STT profile thresholds before moving.",
+              "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 36's single iOS-style STT tracking pipeline for macOS. Recent transcript tails, heading/body recovery, slow-reading pauses, visible skips, and Apple Speech stability safeguards now feed one MovementPolicy so valid local reading can continue smoothly while off-script speech and unsafe jumps stay blocked by the user's saved STT profile.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

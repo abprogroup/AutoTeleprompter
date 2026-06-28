@@ -181,11 +181,15 @@ extension _ContentCreatorFeed on _ContentCreatorScreenState {
     final transparentBg =
         !audioOnly && feedMode == AppSettings.contentCreatorFeedFull;
 
+    // Pad the top so the FIRST word starts on the reading line (present-mode
+    // behaviour); generous bottom so the LAST word can scroll up to it too.
+    final screenH = MediaQuery.of(context).size.height;
+    final lead = settings.scrollLead.clamp(0.0, 1.0).toDouble();
     final scroll = SingleChildScrollView(
       controller: _scrollController,
       padding: EdgeInsets.only(
-        top: 40,
-        bottom: MediaQuery.of(context).size.height * 0.3,
+        top: screenH * lead,
+        bottom: screenH * (1 - lead) + 120,
         left: 20,
         right: 20,
       ),

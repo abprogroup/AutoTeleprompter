@@ -1,5 +1,5 @@
 name: Build iOS IPA (v5.0.7)
-run-name: iOS ${{ github.event.inputs.app_version || '5.0.7+49' }} ${{ github.event.inputs.release_channel || 'stable' }} IPA run ${{ github.run_number }} - manual dispatch
+run-name: iOS ${{ github.event.inputs.app_version || '5.0.7+50' }} ${{ github.event.inputs.release_channel || 'stable' }} IPA run ${{ github.run_number }} - manual dispatch
 
 on:
   workflow_dispatch:
@@ -13,9 +13,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.7+49'
+        description: 'Flutter app version, for example 5.0.7+50'
         required: true
-        default: '5.0.7+49'
+        default: '5.0.7+50'
 
 jobs:
   build:

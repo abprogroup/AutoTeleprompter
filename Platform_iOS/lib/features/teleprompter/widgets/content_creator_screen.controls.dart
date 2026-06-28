@@ -44,26 +44,47 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _creatorBarIcon(Icons.close, 'Back to editor', _exitContentCreator),
-          // Separate STT button only when record is NOT linked to speech.
-          // Always amber so it reads clearly as the speech control (like
-          // present mode).
-          if (!speechLinked)
-            _creatorBarIcon(
-              tState.isListening || tState.isStarting
-                  ? Icons.mic
-                  : Icons.mic_none_outlined,
-              tState.isListening || tState.isStarting
-                  ? 'Stop speech'
-                  : 'Start speech',
-              _toggleSpeechSession,
-              key: _creatorSpeechKey,
-              color: const Color(0xFFFFBF00),
-            ),
+          // Separate, prominent STT button only when record is NOT linked to
+          // speech — shows starting (hourglass) / listening (stop) clearly.
+          if (!speechLinked) _buildCreatorSpeechButton(tState),
           _buildCreatorRecordButton(audioOnly, speechLinked),
           _creatorBarIcon(Icons.tune, 'Prompter settings', _showPrompterSettings,
               key: _creatorSettingsKey),
           _creatorBarIcon(Icons.replay, 'Restart script', _resetCreatorPosition),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCreatorSpeechButton(dynamic tState) {
+    final starting = tState.isStarting == true;
+    final active = tState.isListening == true;
+    final icon = starting
+        ? Icons.hourglass_top_rounded
+        : (active ? Icons.stop : Icons.mic);
+    final bg = active
+        ? Colors.red
+        : (starting
+            ? const Color(0xFFFFBF00).withValues(alpha: 0.72)
+            : const Color(0xFFFFBF00));
+    final tooltip = starting
+        ? 'Starting speech…'
+        : (active ? 'Stop speech' : 'Start speech');
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        key: _creatorSpeechKey,
+        onTap: starting ? null : _toggleSpeechSession,
+        child: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: bg),
+          child: Icon(
+            icon,
+            color: active ? Colors.white : Colors.black,
+            size: 24,
+          ),
+        ),
       ),
     );
   }

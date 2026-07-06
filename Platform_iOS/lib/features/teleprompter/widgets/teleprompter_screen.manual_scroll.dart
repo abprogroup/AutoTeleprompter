@@ -308,16 +308,20 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final diff = _scrollTarget - current;
 
     // Close enough — snap and stop
-    if (diff.abs() < 0.5) {
+    if (diff.abs() < 0.2) {
       _scrollController.jumpTo(_scrollTarget);
       timer.cancel();
       _smoothScrollActive = false;
       return;
     }
 
-    // Lerp factor: 0.12 gives smooth ~8-frame glide.
-    // Larger = snappier, smaller = silkier.
-    final next = current + diff * 0.12;
+    // Gentle glide matching the macOS feel: a soft lerp, capped to a few px per
+    // frame so a multi-word advance eases in instead of snapping the script
+    // down, with a small floor so it always finishes.
+    var step = diff * 0.035;
+    step = step.clamp(-8.0, 8.0).toDouble();
+    if (step.abs() < 0.25) step = diff.isNegative ? -0.25 : 0.25;
+    final next = current + step;
     _scrollController
         .jumpTo(next.clamp(0.0, _scrollController.position.maxScrollExtent));
   }

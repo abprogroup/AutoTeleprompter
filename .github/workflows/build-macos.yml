@@ -336,6 +336,18 @@ jobs:
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
+            editArgs=(
+              release edit "$tag"
+              --repo "$repo"
+              --title "${{ steps.release.outputs.release_title }}"
+              --notes-file "$notesFile"
+            )
+            if [ "${{ steps.release.outputs.release_channel }}" = "beta" ]; then
+              editArgs+=(--prerelease)
+            else
+              editArgs+=(--latest)
+            fi
+            gh "${editArgs[@]}"
           else
             gh release create "$tag" "$asset" \
               --repo "$repo" \

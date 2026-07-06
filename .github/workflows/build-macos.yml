@@ -1,5 +1,5 @@
 name: Build macOS App (v5.0.9)
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.9+37' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.9+38' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -14,9 +14,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.9+37'
+        description: 'Flutter app version, for example 5.0.9+38'
         required: true
-        default: '5.0.9+37'
+        default: '5.0.9+38'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false
@@ -71,10 +71,10 @@ jobs:
           esac
           appVersion="${{ github.event.inputs.app_version }}"
           if [ -z "$appVersion" ]; then
-            appVersion="5.0.9+37"
+            appVersion="5.0.9+38"
           fi
           if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
-            echo "app_version must look like 5.0.9+37." >&2
+            echo "app_version must look like 5.0.9+38." >&2
             exit 1
           fi
           versionName="${appVersion%%+*}"
@@ -328,6 +328,11 @@ jobs:
           also accumulates fragmented Apple partials so a configured visible
           skip can recover after a misheard word without relaxing false-jump
           protection.
+          Build 38 seals the sentence-recovery targeting fix: Mac recovery now
+          follows STT_SENTENCE_RECOVERY_SPEC by measuring coverage from the
+          current reading position, matching the iOS behavior, so repeated
+          names or phrases farther down the visible text cannot steal focus
+          from the closer phrase the presenter is actually reading.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -375,7 +380,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 37's STT stability pass for macOS. The iOS-style MovementPolicy pipeline remains the single authority for movement, fragmented visible-skip partials can accumulate across Apple callbacks, and transient Apple Speech paused statuses no longer interrupt a live reading session or force reconnect UI while the native wrapper returns to listening.",
+              "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 38's STT seal pass for macOS. The iOS-style MovementPolicy pipeline remains the single authority for movement, fragmented visible-skip partials can accumulate across Apple callbacks, transient Apple Speech paused statuses no longer interrupt a live reading session, and sentence recovery now follows STT_SENTENCE_RECOVERY_SPEC by measuring coverage from the current reading position so repeated visible names or phrases cannot steal focus from the closer phrase being read.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

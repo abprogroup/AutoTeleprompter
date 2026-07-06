@@ -1,5 +1,5 @@
 name: Build macOS App (v5.0.9)
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.9+36' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+run-name: macOS ${{ github.event.inputs.app_version || '5.0.9+37' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -14,9 +14,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.9+36'
+        description: 'Flutter app version, for example 5.0.9+37'
         required: true
-        default: '5.0.9+36'
+        default: '5.0.9+37'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false
@@ -71,10 +71,10 @@ jobs:
           esac
           appVersion="${{ github.event.inputs.app_version }}"
           if [ -z "$appVersion" ]; then
-            appVersion="5.0.9+36"
+            appVersion="5.0.9+37"
           fi
           if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
-            echo "app_version must look like 5.0.9+36." >&2
+            echo "app_version must look like 5.0.9+37." >&2
             exit 1
           fi
           versionName="${appVersion%%+*}"
@@ -321,6 +321,13 @@ jobs:
           stability safeguards now feed one MovementPolicy so valid local
           reading can continue smoothly while off-script speech and unsafe
           jumps stay blocked by the user's saved STT profile.
+          Build 37 keeps that pipeline and fixes the mid-reading Apple Speech
+          pause path: transient Apple `paused` status no longer marks the
+          session as engine-dropped or forces reconnect UI while the native
+          speech wrapper is already returning to listening. Visible-skip rescue
+          also accumulates fragmented Apple partials so a configured visible
+          skip can recover after a misheard word without relaxing false-jump
+          protection.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -368,7 +375,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 36's single iOS-style STT tracking pipeline for macOS. Recent transcript tails, heading/body recovery, slow-reading pauses, visible skips, and Apple Speech stability safeguards now feed one MovementPolicy so valid local reading can continue smoothly while off-script speech and unsafe jumps stay blocked by the user's saved STT profile.",
+              "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 37's STT stability pass for macOS. The iOS-style MovementPolicy pipeline remains the single authority for movement, fragmented visible-skip partials can accumulate across Apple callbacks, and transient Apple Speech paused statuses no longer interrupt a live reading session or force reconnect UI while the native wrapper returns to listening.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

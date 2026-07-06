@@ -106,16 +106,22 @@ extension TeleprompterNotifierSttCallbacks on TeleprompterNotifier {
       _startingSession = false;
       _addDebugLog('[$platform] STATUS: $status');
       if (platform == 'Apple' && status == SpeechStatus.paused) {
-        _resetSpeechActivityMeter();
+        _markNativeSpeechCallback(DateTime.now());
         _safeSetState((s) => s.copyWith(
-              isListening: false,
-              isStarting: true,
-              soundLevel: 0.0,
-              sttHealth: AppleSttHealth.engineDropped.name,
+              isListening: true,
+              isStarting: false,
+              sttHealth: s.sttHealth == AppleSttHealth.engineDropped.name
+                  ? AppleSttHealth.healthy.name
+                  : s.sttHealth,
               sttQualityMessage:
-                  'Apple Speech paused the listener. Reconnecting microphone input...',
-              sttRecognitionQuality: 0.0,
-              statusMessage: 'Reconnecting speech recognition...',
+                  s.sttHealth == AppleSttHealth.engineDropped.name
+                      ? ''
+                      : s.sttQualityMessage,
+              sttRecognitionQuality:
+                  s.sttHealth == AppleSttHealth.engineDropped.name
+                      ? 0.75
+                      : s.sttRecognitionQuality,
+              statusMessage: '',
               hasError: false,
             ));
         return;

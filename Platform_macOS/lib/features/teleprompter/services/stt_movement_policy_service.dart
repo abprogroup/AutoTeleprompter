@@ -86,13 +86,14 @@ class SttMovementPolicyService {
       maxLocalAdvanceWithoutWait: maxLocalAdvanceWithoutWait,
     );
 
-    final visibleFamily = family == SttThresholdFamily.visibleSkip ||
-        alignment.kind == SttAlignmentKind.visiblePhrase ||
-        alignment.kind == SttAlignmentKind.sentenceRecovery;
-    final unsafeVisibleJump = visibleSkipTargetTrusted &&
+    final requiresVisibleThreshold = visibleSkipTargetTrusted &&
         jump > maxLocalAdvanceWithoutWait &&
         !structuralLocal &&
-        !visibleFamily;
+        !localContinuation;
+    final visibleFamily = requiresVisibleThreshold ||
+        family == SttThresholdFamily.visibleSkip ||
+        alignment.kind == SttAlignmentKind.visiblePhrase ||
+        alignment.kind == SttAlignmentKind.sentenceRecovery;
     final unsafeOffscreenJump = !visibleSkipTargetTrusted &&
         jump > maxLocalAdvanceWithoutWait &&
         !structuralLocal &&
@@ -118,14 +119,6 @@ class SttMovementPolicyService {
           reason: 'visible_target_untrusted',
         );
       }
-    } else if (unsafeVisibleJump) {
-      return _decision(
-        action: SttMovementAction.block,
-        nextState: SttEvidenceTrackingState.offScript,
-        targetIndex: target,
-        label: 'TRACK_BLOCK_VISIBLE',
-        reason: 'visible_requires_visible_threshold',
-      );
     } else if (unsafeOffscreenJump) {
       return _decision(
         action: SttMovementAction.block,

@@ -10,6 +10,7 @@ import '../services/stt_movement_policy_service.dart';
 import '../services/stt_recognition_policy_service.dart';
 import '../services/stt_transcript_buffer_service.dart';
 import '../services/stt_tracking_state.dart';
+import '../services/stt_visible_skip_context_service.dart';
 import '../services/teleprompter_locale_resolver.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
@@ -25,7 +26,7 @@ part 'teleprompter_provider.relock.dart';
 part 'teleprompter_provider.session_watchdog.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
 part 'teleprompter_provider.apple_quality.dart';
-part 'teleprompter_provider.stt_gate.dart';
+part 'teleprompter_provider.stt_tracking.dart';
 part 'teleprompter_provider.stt_result.dart';
 part 'teleprompter_provider.registration.dart';
 part 'teleprompter_provider.transcript_refresh.dart';
@@ -77,6 +78,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   bool _sttReadingStandby = false;
   bool _lockedOn = false;
   int _transcriptFloor = 0;
+  int? _pendingStartEvidenceTargetIndex;
+  String _pendingVisibleSkipTranscript = '';
+  int? _pendingVisibleSkipOriginIndex;
+  int? _pendingVisibleSkipStartIndex;
+  int? _pendingVisibleSkipEndIndex;
   SttEvidenceTrackingState _sttEvidenceTrackingState =
       SttEvidenceTrackingState.locked;
   Timer? _speechActivityMeterTimer;
@@ -109,8 +115,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sttReadingStandby = false;
     _lockedOn = false;
     if (clearTranscriptFloor) _transcriptFloor = 0;
+    _pendingStartEvidenceTargetIndex = null;
+    _clearPendingVisibleSkipEvidence();
     _sttEvidenceTrackingState = SttEvidenceTrackingState.locked;
-    _resetSttEvidenceGate();
+    _resetSttTrackingState();
     _resetStaleNoProgressTracking();
     _resetPostAdvancePartialGuard();
   }

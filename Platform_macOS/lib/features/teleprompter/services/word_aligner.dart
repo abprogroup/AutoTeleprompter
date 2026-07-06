@@ -454,6 +454,7 @@ class WordAligner {
       searchStart: searchStart,
       lastConfirmedIndex: lastConfirmedIndex,
       strictBulletMode: policyBulletMode,
+      startAdvanceThreshold: effectivePolicy.startAdvance,
     );
     if (headingSkip != null) return headingSkip;
     final tailNext = _confirmedTailNextWordMatch(

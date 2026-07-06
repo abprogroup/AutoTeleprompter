@@ -3,6 +3,7 @@ part of 'teleprompter_provider.dart';
 extension TeleprompterNotifierSttResult on TeleprompterNotifier {
   static const _transcriptBuffer = SttTranscriptBufferService();
   static const _movementPolicy = SttMovementPolicyService();
+  static const _visibleSkipContext = SttVisibleSkipContextService();
 
   void _handleSttResult(SpeechResult result) {
     if (_currentScript == null || _disposed) return;
@@ -69,6 +70,7 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
         policy: policy,
         maxSkipTargetIndex: maxSkipTargetIndex,
         transcript: _accumulatedTranscript,
+        spokenWordCount: buffer.spokenWords.length,
         engineTag: engineTag,
       );
       return;
@@ -79,6 +81,7 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
       script: script,
       policy: policy,
       strictBulletMode: strictBulletMode,
+      maxSkipTargetIndex: maxSkipTargetIndex,
       transcript: _accumulatedTranscript,
       spokenWordCount: buffer.spokenWords.length,
       freshWords: buffer.freshWords,
@@ -138,6 +141,7 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
   }) {
     final windows = _recentTranscriptWindows(transcript);
     final alignmentWindows = windows.isEmpty ? [transcript] : windows;
+    final pendingStartTarget = _pendingStartEvidenceTargetIndex;
 
     AlignmentResult align(String transcriptWindow) => WordAligner.align(
           script: script.words,
@@ -151,13 +155,40 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
           readingStandby: _sttReadingStandby || _lockedOn,
         );
 
+    AlignmentResult? continuePendingStart(String transcriptWindow) {
+      if (pendingStartTarget == null ||
+          pendingStartTarget <= _currentState.confirmedWordIndex) {
+        return null;
+      }
+      return WordAligner.continuePendingStartEvidence(
+        script: script.words,
+        transcript: transcriptWindow,
+        pendingTargetIndex: pendingStartTarget,
+        strictBulletMode: strictBulletMode,
+      );
+    }
+
     var best = align(alignmentWindows.first);
+    final firstPending = continuePendingStart(alignmentWindows.first);
+    if (firstPending != null && _alignmentIsBetter(firstPending, best)) {
+      best = firstPending;
+    }
     for (var i = 1; i < alignmentWindows.length; i++) {
       final candidate = align(alignmentWindows[i]);
-      if (!_alignmentIsBetter(candidate, best)) continue;
-      best = candidate.copyWith(
+      if (_alignmentIsBetter(candidate, best)) {
+        best = candidate.copyWith(
+          debugInfo:
+              '${candidate.debugInfo} | window=${i + 1}/${alignmentWindows.length}',
+        );
+      }
+      final pendingCandidate = continuePendingStart(alignmentWindows[i]);
+      if (pendingCandidate == null ||
+          !_alignmentIsBetter(pendingCandidate, best)) {
+        continue;
+      }
+      best = pendingCandidate.copyWith(
         debugInfo:
-            '${candidate.debugInfo} | window=${i + 1}/${alignmentWindows.length}',
+            '${pendingCandidate.debugInfo} | window=${i + 1}/${alignmentWindows.length}',
       );
     }
     return best;
@@ -178,15 +209,17 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
     required SttRecognitionPolicy policy,
     required int? maxSkipTargetIndex,
     required String transcript,
+    required int spokenWordCount,
     required String engineTag,
   }) {
     final currentIndex = _currentState.confirmedWordIndex;
+    final previousTrackingState = _sttEvidenceTrackingState;
     final guardIndex = _currentSttAdvanceGuardIndex(currentIndex);
     final visibleSkipTargetTrusted =
         TeleprompterNotifier.isTrustedVisibleSkipTarget(
       alignedIndex: aligned.confirmedWordIndex,
       visibleWordStart: _visibleWordStart,
-      visibleWordEnd: _visibleWordEnd,
+      visibleWordEnd: maxSkipTargetIndex ?? _visibleWordEnd,
     );
     final decision = _movementPolicy.evaluateCandidate(
       alignment: aligned,
@@ -200,6 +233,22 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
     );
 
     if (!decision.shouldAdvance) {
+      if (_maybeAdvancePendingVisibleSkip(
+        script: script,
+        policy: policy,
+        strictBulletMode: false,
+        maxSkipTargetIndex: maxSkipTargetIndex,
+        transcript: transcript,
+        spokenWordCount: spokenWordCount,
+        engineTag: engineTag,
+      )) {
+        return;
+      }
+      _rememberVisibleSkipEvidenceIfNeeded(
+        decision: decision,
+        transcript: transcript,
+        currentIndex: currentIndex,
+      );
       _applyMovementHoldOrReset(
         decision: decision,
         aligned: aligned,
@@ -216,15 +265,46 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
       return;
     }
 
+    _applyMovementAdvance(
+      decision: decision,
+      aligned: aligned,
+      script: script,
+      maxSkipTargetIndex: maxSkipTargetIndex,
+      transcript: transcript,
+      spokenWordCount: spokenWordCount,
+      engineTag: engineTag,
+      previousTrackingState: previousTrackingState,
+      visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+    );
+  }
+
+  void _applyMovementAdvance({
+    required SttMovementDecision decision,
+    required AlignmentResult aligned,
+    required Script script,
+    required int? maxSkipTargetIndex,
+    required String transcript,
+    required int spokenWordCount,
+    required String engineTag,
+    required SttEvidenceTrackingState previousTrackingState,
+    required bool visibleSkipTargetTrusted,
+  }) {
+    final currentIndex = _currentState.confirmedWordIndex;
     final target = TeleprompterNotifier.resolveAdvanceTarget(
       currentIndex: currentIndex,
       alignedIndex: aligned.confirmedWordIndex,
       visibleMaxSkipTargetIndex:
           visibleSkipTargetTrusted ? maxSkipTargetIndex : null,
     );
+    _pendingStartEvidenceTargetIndex = null;
+    _clearPendingVisibleSkipEvidence();
     _sttEvidenceTrackingState = decision.nextState;
     _lockedOn = true;
     _sttReadingStandby = true;
+    if (previousTrackingState == SttEvidenceTrackingState.locked ||
+        previousTrackingState == SttEvidenceTrackingState.offScript) {
+      _transcriptFloor = spokenWordCount;
+    }
     _noProgressCount = 0;
     _resetStaleNoProgressTracking();
     _resetAppleRecognitionQuality();
@@ -256,6 +336,7 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
     required Script script,
     required SttRecognitionPolicy policy,
     required bool strictBulletMode,
+    required int? maxSkipTargetIndex,
     required String transcript,
     required int spokenWordCount,
     required List<String> freshWords,
@@ -279,7 +360,66 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
       repeatedTranscript: repeatedTranscript,
     );
 
-    if (decision.shouldReset &&
+    if (_maybeAdvancePendingVisibleSkip(
+      script: script,
+      policy: policy,
+      strictBulletMode: strictBulletMode,
+      maxSkipTargetIndex: maxSkipTargetIndex,
+      transcript: transcript,
+      spokenWordCount: spokenWordCount,
+      engineTag: engineTag,
+    )) {
+      return;
+    }
+
+    if (decision.shouldReset && _pendingStartEvidenceTargetIndex != null) {
+      decision = SttMovementDecision(
+        action: SttMovementAction.hold,
+        nextState: _sttEvidenceTrackingState,
+        targetIndex: _pendingStartEvidenceTargetIndex!,
+        label: 'TRACK_HOLD',
+        reason: 'pending_start_waiting',
+        thresholdLabel: 'startAdvance',
+        evidenceScore: policy.safetyRecovery.evidenceScore(freshWords),
+        neededScore: policy.startAdvance.smallWords.toDouble(),
+      );
+    } else if (decision.shouldReset &&
+        _shouldHoldPostAdvanceAppleContext(transcript, script)) {
+      decision = SttMovementDecision(
+        action: SttMovementAction.hold,
+        nextState: SttEvidenceTrackingState.tracking,
+        targetIndex: _currentState.confirmedWordIndex,
+        label: 'TRACK_HOLD',
+        reason: 'post_advance_context_waiting',
+        thresholdLabel: 'tracking-context',
+        evidenceScore: 0,
+        neededScore: 0,
+      );
+    } else if (decision.shouldReset &&
+        _visibleSkipContext.shouldPreserve(
+          script: script.words,
+          transcript: transcript,
+          lastConfirmedIndex: _currentState.confirmedWordIndex,
+          visibleSkipStartIndex: _visibleWordStart,
+          maxSkipTargetIndex: maxSkipTargetIndex,
+          policy: policy,
+          strictBulletMode: strictBulletMode,
+        )) {
+      _rememberPendingVisibleSkipTranscript(
+        transcript: transcript,
+        currentIndex: _currentState.confirmedWordIndex,
+      );
+      decision = SttMovementDecision(
+        action: SttMovementAction.hold,
+        nextState: _sttEvidenceTrackingState,
+        targetIndex: _currentState.confirmedWordIndex,
+        label: 'TRACK_HOLD',
+        reason: 'visible_skip_evidence_waiting',
+        thresholdLabel: 'visibleSkip',
+        evidenceScore: policy.visibleSkip.evidenceScore(freshWords),
+        neededScore: policy.visibleSkip.smallWords.toDouble(),
+      );
+    } else if (decision.shouldReset &&
         policy.safetyRecovery.evidenceScore(freshWords) <
             policy.safetyRecovery.smallWords) {
       decision = SttMovementDecision(
@@ -292,6 +432,8 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
         evidenceScore: policy.safetyRecovery.evidenceScore(freshWords),
         neededScore: policy.safetyRecovery.smallWords.toDouble(),
       );
+    } else if (decision.shouldReset) {
+      _clearPendingVisibleSkipEvidence();
     }
 
     _applyMovementHoldOrReset(
@@ -315,11 +457,14 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
     required String engineTag,
     int? spokenWordCount,
   }) {
+    _rememberPendingStartEvidenceIfNeeded(decision, aligned);
     if (decision.shouldReset) {
       _lockedOn = false;
       _sttReadingStandby = false;
       _sttEvidenceTrackingState = decision.nextState;
       if (spokenWordCount != null) _transcriptFloor = spokenWordCount;
+      _pendingStartEvidenceTargetIndex = null;
+      _clearPendingVisibleSkipEvidence();
       _noProgressCount = 0;
       _resetPostAdvancePartialGuard();
     } else {
@@ -335,6 +480,21 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
       alignment: aligned,
       transcript: transcript,
     );
+  }
+
+  void _rememberPendingStartEvidenceIfNeeded(
+    SttMovementDecision decision,
+    AlignmentResult alignment,
+  ) {
+    if (decision.action != SttMovementAction.hold ||
+        decision.thresholdLabel != 'startAdvance' ||
+        !alignment.shouldAdvance ||
+        decision.evidenceScore <= 0 ||
+        decision.targetIndex <= _currentState.confirmedWordIndex ||
+        alignment.debugInfo.startsWith('CONTINUED_START')) {
+      return;
+    }
+    _pendingStartEvidenceTargetIndex ??= decision.targetIndex;
   }
 
   bool _noProgressTranscriptRepeated(String transcript) {
@@ -362,5 +522,118 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
       if (!decision.shouldAdvance) 'next="$next"',
     ].join(' | ');
     _addDebugLog('$engineTag $details');
+  }
+
+  bool _maybeAdvancePendingVisibleSkip({
+    required Script script,
+    required SttRecognitionPolicy policy,
+    required bool strictBulletMode,
+    required int? maxSkipTargetIndex,
+    required String transcript,
+    required int spokenWordCount,
+    required String engineTag,
+  }) {
+    final pending = _pendingVisibleSkipTranscript;
+    if (pending.trim().isEmpty || maxSkipTargetIndex == null) return false;
+    if (_pendingVisibleSkipOriginIndex != _currentState.confirmedWordIndex ||
+        _pendingVisibleSkipStartIndex != _visibleWordStart ||
+        _pendingVisibleSkipEndIndex != maxSkipTargetIndex) {
+      _clearPendingVisibleSkipEvidence();
+      return false;
+    }
+    final mergedTranscript = _visibleSkipContext.mergePendingTranscript(
+      pendingTranscript: pending,
+      transcript: transcript,
+    );
+    final rescue = _visibleSkipContext.rescueAlignment(
+      script: script.words,
+      pendingTranscript: pending,
+      transcript: transcript,
+      lastConfirmedIndex: _currentState.confirmedWordIndex,
+      visibleSkipStartIndex: _visibleWordStart,
+      maxSkipTargetIndex: maxSkipTargetIndex,
+      policy: policy,
+      strictBulletMode: strictBulletMode,
+    );
+    if (rescue == null) {
+      _rememberPendingVisibleSkipTranscript(
+        transcript: transcript,
+        currentIndex: _currentState.confirmedWordIndex,
+      );
+      return false;
+    }
+    final visibleSkipTargetTrusted =
+        TeleprompterNotifier.isTrustedVisibleSkipTarget(
+      alignedIndex: rescue.confirmedWordIndex,
+      visibleWordStart: _visibleWordStart,
+      visibleWordEnd: maxSkipTargetIndex,
+    );
+    final decision = _movementPolicy.evaluateCandidate(
+      alignment: rescue,
+      policy: policy,
+      trackingState: _sttEvidenceTrackingState,
+      currentIndex: _currentState.confirmedWordIndex,
+      advanceGuardIndex: _currentSttAdvanceGuardIndex(
+        _currentState.confirmedWordIndex,
+      ),
+      visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+      maxLocalAdvanceWithoutWait:
+          TeleprompterNotifier._maxLocalSttJumpWithoutWait,
+    );
+    if (!decision.shouldAdvance) {
+      _rememberPendingVisibleSkipTranscript(
+        transcript: transcript,
+        currentIndex: _currentState.confirmedWordIndex,
+      );
+      return false;
+    }
+    _applyMovementAdvance(
+      decision: decision,
+      aligned: rescue,
+      script: script,
+      maxSkipTargetIndex: maxSkipTargetIndex,
+      transcript: mergedTranscript,
+      spokenWordCount: spokenWordCount,
+      engineTag: engineTag,
+      previousTrackingState: _sttEvidenceTrackingState,
+      visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+    );
+    return true;
+  }
+
+  void _rememberVisibleSkipEvidenceIfNeeded({
+    required SttMovementDecision decision,
+    required String transcript,
+    required int currentIndex,
+  }) {
+    if (decision.thresholdLabel != 'visibleSkip' ||
+        decision.evidenceScore <= 0) {
+      return;
+    }
+    _rememberPendingVisibleSkipTranscript(
+      transcript: transcript,
+      currentIndex: currentIndex,
+    );
+  }
+
+  void _rememberPendingVisibleSkipTranscript({
+    required String transcript,
+    required int currentIndex,
+  }) {
+    if (transcript.trim().isEmpty || _visibleWordStart == null) return;
+    _pendingVisibleSkipOriginIndex = currentIndex;
+    _pendingVisibleSkipStartIndex = _visibleWordStart;
+    _pendingVisibleSkipEndIndex = _visibleWordEnd;
+    _pendingVisibleSkipTranscript = _visibleSkipContext.mergePendingTranscript(
+      pendingTranscript: _pendingVisibleSkipTranscript,
+      transcript: transcript,
+    );
+  }
+
+  void _clearPendingVisibleSkipEvidence() {
+    _pendingVisibleSkipTranscript = '';
+    _pendingVisibleSkipOriginIndex = null;
+    _pendingVisibleSkipStartIndex = null;
+    _pendingVisibleSkipEndIndex = null;
   }
 }

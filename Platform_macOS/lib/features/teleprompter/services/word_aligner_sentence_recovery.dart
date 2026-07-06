@@ -98,7 +98,14 @@ AlignmentResult? _sentenceRecoveryMatch({
 
     if (lastMatch < candidateStart || matched < minRecoveryWords) continue;
     if (!recoveryThreshold.passes(matchedWords)) continue;
-    final ratio = speakableSpan > 0 ? matched / speakableSpan : 0.0;
+    // STT_SENTENCE_RECOVERY_SPEC: anchor coverage at searchStart (the current
+    // reading position), NOT at this candidate's own start. A forward jump must
+    // therefore also cover the intervening script words, so a tightly-matched
+    // REPEAT of a phrase further down the visible span (e.g. a second
+    // "Mr. Haim Bibas") can no longer win over staying local. Matches the iOS
+    // aligner (word_aligner.dart: matched / (lastMatch - searchStart + 1)).
+    final coverageSpan = lastMatch - searchStart + 1;
+    final ratio = coverageSpan > 0 ? matched / coverageSpan : 0.0;
     if (ratio < recoveryRatio) continue;
     final average = score / matched;
     final distancePenalty =

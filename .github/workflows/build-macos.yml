@@ -289,50 +289,55 @@ jobs:
           cat > "$notesFile" <<'EOF'
           AutoTeleprompter macOS ${{ steps.release.outputs.app_version }}.
 
-          Includes the premium feedback update for Mac: a versioned guided
-          walkthrough with stable spotlights, Pro-gated Bookmarks suite,
-          empty-script Present protection, improved Present/Content Creator
-          readability, recording countdown sound cues, listening meter control,
-          tooltip polish, speech-control setup defaults, safer fast-reading
-          STT jump handling, resilient Apple STT recovery, duplicate Present
-          route protection, and corrected Present word spacing.
-          This build also pins the listening meter near the top of the
-          presentation, improves low-volume next-word STT progression without
-          relaxing large skip protection, detects stale Apple Speech audio
-          callbacks, and adds build 31 Apple STT reliability mode so noisy
-          rooms and far speakers are coached without overriding the user's
-          saved speech-control profile thresholds.
-          Build 32 reduces Apple Speech blackout windows by treating retry
-          bursts as quality/coaching signals instead of restart triggers, avoids
-          poor-recognition restart loops, allows mic preflight from any visible
-          line, and adds visible-anchor relocking for imperfect proper-name
-          recognition while keeping large-jump protection intact.
-          Build 33 adds a mandatory production credential preflight so macOS
-          releases cannot publish unless the Supabase backend, feedback route,
-          cloud credentials, release token, and update manifest URL are all
-          present before the app is compiled.
-          Build 35 replaces direct STT movement paths with one profile-locked
-          evidence gate. Sequential tracking, heading/body recovery, visible
-          skips, and delayed relocks now all must satisfy the user's saved STT
-          profile thresholds before the prompter moves.
-          Build 36 replaces the competing Mac STT movement paths with a single
-          iOS-style tracking pipeline. Recent transcript tails, heading/body
-          recovery, slow-reading pauses, visible skips, and Apple Speech
-          stability safeguards now feed one MovementPolicy so valid local
-          reading can continue smoothly while off-script speech and unsafe
-          jumps stay blocked by the user's saved STT profile.
-          Build 37 keeps that pipeline and fixes the mid-reading Apple Speech
-          pause path: transient Apple `paused` status no longer marks the
-          session as engine-dropped or forces reconnect UI while the native
-          speech wrapper is already returning to listening. Visible-skip rescue
-          also accumulates fragmented Apple partials so a configured visible
-          skip can recover after a misheard word without relaxing false-jump
-          protection.
-          Build 38 seals the sentence-recovery targeting fix: Mac recovery now
-          follows STT_SENTENCE_RECOVERY_SPEC by measuring coverage from the
-          current reading position, matching the iOS behavior, so repeated
-          names or phrases farther down the visible text cannot steal focus
-          from the closer phrase the presenter is actually reading.
+          This is the Mac premium feedback and speech-control reliability
+          update. It keeps the guided, polished Mac experience from 5.0.8 and
+          seals the 5.0.9 speech-control tracking work so presenters can read
+          more naturally, recover from imperfect recognition, and avoid unsafe
+          jumps during live use.
+
+          Highlights:
+          - Adds a versioned guided setup walkthrough with stable spotlight
+            anchors, a temporary sample script, and clear setup questions for
+            speech-control and creator defaults.
+          - Makes Bookmarks a Pro suite with locked discovery for free users,
+            while preserving existing bookmark markers and metadata.
+          - Protects Present mode from empty-script dead ends and duplicate
+            Present sessions.
+          - Improves Present and Content Creator readability with stronger
+            live-text surfaces, clearer bottom controls, and corrected Present
+            word spacing.
+          - Adds recording countdown sound cues for video and audio-only
+            recording.
+          - Adds a user-facing listening meter so presenters can confirm the
+            selected microphone is receiving signal without opening full debug.
+          - Improves hover tooltips and familiar undo/redo icons across the Mac
+            editor and tool suites.
+
+          Speech-control improvements:
+          - Uses one profile-based tracking policy for normal reading, slow
+            reading, heading/body recovery, visible skips, and Apple Speech
+            recovery.
+          - Keeps the user's saved STT profile thresholds as the source of
+            truth for when text should start, recover, or visibly skip.
+          - Allows valid local reading to continue word-by-word after the
+            initial lock, including after short pauses.
+          - Improves visible-skip recovery after a misheard word without
+            relaxing false-jump protection.
+          - Blocks unsafe far jumps caused by noise, improvisation, repeated
+            names, or one lucky future-word match.
+          - Handles Apple Speech retry bursts, stale callbacks, and temporary
+            pauses more gracefully so the session stays active whenever the
+            speech engine is still usable.
+          - Keeps microphone quality feedback as coaching only; valid phrase
+            matches are not blocked just because the input is quiet.
+
+          Release integrity:
+          - Published as a full backend-connected Mac build with production
+            credential preflight enabled.
+          - The stable update manifest points existing Mac users to this
+            release as ${{ steps.release.outputs.app_version }}.
+          - Existing scripts, recents, bookmarks, settings, Pro state, and
+            cloud/account data are preserved.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -392,7 +397,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 38's STT seal pass for macOS. The iOS-style MovementPolicy pipeline remains the single authority for movement, fragmented visible-skip partials can accumulate across Apple callbacks, transient Apple Speech paused statuses no longer interrupt a live reading session, and sentence recovery now follows STT_SENTENCE_RECOVERY_SPEC by measuring coverage from the current reading position so repeated visible names or phrases cannot steal focus from the closer phrase being read.",
+              "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 38's speech-control seal pass for macOS. The iOS-style tracking pipeline remains the single authority for movement, fragmented visible-skip partials can accumulate across Apple callbacks, transient Apple Speech paused statuses no longer interrupt a live reading session, and sentence recovery now measures from the current reading position so repeated visible names or phrases cannot steal focus from the closer phrase being read.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

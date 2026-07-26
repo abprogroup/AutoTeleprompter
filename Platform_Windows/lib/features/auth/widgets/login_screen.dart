@@ -276,7 +276,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 controller: _licenseCtrl,
                 label: credentialLabel,
                 icon: Icons.vpn_key_outlined,
-                isObscure: true,
+                // Verification codes are short-lived values the user must be
+                // able to read while transcribing. Only real passwords (and
+                // the legacy license-key flow) should be masked.
+                isObscure: !backendMode || _passwordMode,
                 showVisibilityToggle: backendMode && _passwordMode,
               ),
               if (backendMode) ...[

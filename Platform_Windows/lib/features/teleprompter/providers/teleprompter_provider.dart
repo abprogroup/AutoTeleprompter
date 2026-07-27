@@ -5,8 +5,11 @@ import '../services/debug_log_formatter.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
+import '../services/stt_movement_policy_service.dart';
 import '../services/stt_recognition_policy_service.dart';
-import '../services/stt_visible_relock_service.dart';
+import '../services/stt_transcript_buffer_service.dart';
+import '../services/stt_tracking_state.dart';
+import '../services/stt_visible_skip_context_service.dart';
 import '../services/teleprompter_locale_resolver.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
@@ -18,6 +21,7 @@ import '../../../core/extensions/string_extensions.dart';
 
 import '../../../platform/stt/stt_service_factory.dart';
 part 'teleprompter_provider.heartbeat.dart';
+part 'teleprompter_provider.locale.dart';
 part 'teleprompter_provider.relock.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
 part 'teleprompter_provider.stt.dart';
@@ -54,13 +58,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   bool _sttReadingStandby = false;
   bool _activeSttCanSwitchLocale = true;
   String _activeSttEngineLabel = 'Browser Online';
-  String _lastRelockScope = 'none';
-  int? _sequentialSttBaseIndex;
-  int? _sequentialSttEndIndex;
-  double _sequentialSttEvidence = 0.0;
-  bool _sequentialSttUnlocked = false;
-  String? _sequentialSttLastToken;
-  DateTime? _sequentialSttLastTokenAt;
+  bool _lockedOn = false;
+  int _transcriptFloor = 0;
+  int? _pendingStartEvidenceTargetIndex;
+  String _pendingVisibleSkipTranscript = '';
+  int? _pendingVisibleSkipOriginIndex;
+  int? _pendingVisibleSkipStartIndex;
+  int? _pendingVisibleSkipEndIndex;
+  SttEvidenceTrackingState _sttEvidenceTrackingState =
+      SttEvidenceTrackingState.locked;
+  String? _lastNoProgressTranscriptKey;
+  int _staleNoProgressTranscriptCount = 0;
   DateTime? _lastBrowserHeartbeatAt;
   DateTime? _lastRecoverableSttErrorAt;
   int _recoverableSttErrorCount = 0;
@@ -69,16 +77,55 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
   // STT tuning
   static const int _maxAdvancePerUpdate = 30;
+  static const int _maxLocalSttJumpWithoutWait = 2;
   static const int _visibleLocaleAssistAfterWaits = 2;
   static const int _sttLiveAlignmentWindowWords = 10;
   static const int _sttAlignmentWindowWords = 18;
   static const int _sttRelockTranscriptMaxWords = 96;
-  static const int _stuckRelockAfterWaits = 10;
-  static const int _relaxedVisibleRelockAfterWaits = 24;
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
       Duration(milliseconds: 5000);
+
+  void _resetSttTrackingContext({bool clearTranscriptFloor = true}) {
+    _accumulatedTranscript = '';
+    _noProgressCount = 0;
+    _sttReadingStandby = false;
+    _lockedOn = false;
+    if (clearTranscriptFloor) _transcriptFloor = 0;
+    _pendingStartEvidenceTargetIndex = null;
+    _clearPendingVisibleSkipEvidence();
+    _sttEvidenceTrackingState = SttEvidenceTrackingState.locked;
+    _resetStaleNoProgressTracking();
+  }
+
+  void _resetStaleNoProgressTracking() {
+    _lastNoProgressTranscriptKey = null;
+    _staleNoProgressTranscriptCount = 0;
+  }
+
+  void _clearPendingVisibleSkipEvidence() {
+    _pendingVisibleSkipTranscript = '';
+    _pendingVisibleSkipOriginIndex = null;
+    _pendingVisibleSkipStartIndex = null;
+    _pendingVisibleSkipEndIndex = null;
+  }
+
+  int _currentSttAdvanceGuardIndex(int confirmedIndex) =>
+      _fluidAdvanceTimer?.isActive == true && _fluidTarget > confirmedIndex
+          ? _fluidTarget
+          : confirmedIndex;
+
+  String _noProgressTranscriptKey(String transcript) {
+    final words = transcript
+        .split(RegExp(r'\s+'))
+        .map((word) => word.trim().normalizeForMatching())
+        .where((word) => word.isNotEmpty)
+        .toList(growable: false);
+    if (words.isEmpty) return '';
+    final start = words.length > 8 ? words.length - 8 : 0;
+    return words.sublist(start).join(' ');
+  }
 
   @override
   TeleprompterState build() {
@@ -376,10 +423,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _currentScript!.sessionId.isNotEmpty &&
         _currentScript!.sessionId == script.sessionId;
     _currentScript = script;
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
-    _sttReadingStandby = false;
-    _resetSequentialSttStreak();
+    _resetSttTrackingContext();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
     _silentWarningFired = false;
@@ -575,10 +619,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _startingSession = false;
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
-    _sttReadingStandby = false;
-    _resetSequentialSttStreak();
+    _resetSttTrackingContext();
     _lastVolLog = null;
     _scriptLanguageLocale = null;
     _activeLocale = null;
@@ -617,10 +658,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   void resetPosition() {
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
-    _sttReadingStandby = false;
-    _resetSequentialSttStreak();
+    _resetSttTrackingContext();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('POSITION RESET -> 0');
@@ -636,10 +674,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final activeScript = _currentScript;
     if (_disposed || activeScript == null || activeScript.words.isEmpty) return;
     final target = index.clamp(0, activeScript.words.length - 1);
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
-    _sttReadingStandby = false;
-    _resetSequentialSttStreak();
+    _resetSttTrackingContext();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(

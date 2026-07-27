@@ -220,6 +220,41 @@ bool _isNameBridgeTitle(String normalized) {
 
 bool _endsSentence(String raw) => RegExp(r'''[.!?]["')\]]*$''').hasMatch(raw);
 
+AlignmentResult? _pendingSingleWordContinuation({
+  required List<ScriptWord> script,
+  required List<String> transcriptWords,
+  required int searchStart,
+  required int pendingTargetIndex,
+  required bool strictBulletMode,
+}) {
+  if (transcriptWords.length != 1 ||
+      searchStart >= script.length ||
+      script[searchStart].isNewline ||
+      _isUnspeakable(script[searchStart])) {
+    return null;
+  }
+  final word = script[searchStart];
+  final threshold = strictBulletMode
+      ? WordAligner._strictPhraseThreshold
+      : (word.isRtl ? 0.70 : 0.82);
+  final sim =
+      _wordSimilarity(transcriptWords.single, word.normalized, word.isRtl);
+  if (sim < threshold) return null;
+  return AlignmentResult(
+    searchStart,
+    sim,
+    'CONTINUED_START_WORD@$searchStart: "${transcriptWords.single}" ~ '
+    '"${word.normalized}" = ${sim.toStringAsFixed(2)}',
+    SttAlignmentDecision.advance,
+    SttAlignmentKind.confirmedTailBridge,
+    SttThresholdFamily.startAdvance,
+    [searchStart],
+    [word.normalized],
+    searchStart,
+    searchStart,
+  );
+}
+
 bool _isLikelyProperNameWord(ScriptWord word) {
   if (word.isNewline || word.normalized.length < 2) return false;
   if (_isNameAnchorStopWord(word.normalized)) return false;

@@ -82,7 +82,12 @@ extension _ScriptEditorChromeParts on _ScriptEditorScreenState {
                 child: SizedBox(
                   height: actionHeight,
                   child: ElevatedButton.icon(
-                    onPressed: _startPresenting,
+                    key: _walkthroughPresentKey,
+                    onPressed: () => _startPresenting(
+                      continueWalkthrough: _walkthroughSampleGuideVisible &&
+                          _walkthroughSampleGuideStep ==
+                              _editorSampleWalkthroughSteps.length - 1,
+                    ),
                     icon:
                         const Icon(Icons.play_circle_filled_rounded, size: 22),
                     label: const Text(

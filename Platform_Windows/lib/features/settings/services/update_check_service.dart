@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/app_settings.dart';
+import 'settings_error_sanitizer.dart';
 
 const autoTeleprompterAppVersion = String.fromEnvironment(
   'APP_VERSION',
@@ -94,7 +95,7 @@ class UpdateCheckService {
         status: UpdateCheckStatus.failed,
         channel: normalizedChannel,
         currentVersion: autoTeleprompterAppVersion,
-        message: 'Update check failed: $error',
+        message: 'Update check failed: ${sanitizeSettingsErrorForUser(error)}',
       );
     }
   }

@@ -25,6 +25,7 @@ import '../providers/script_provider.dart';
 import '../../../core/services/runtime_file_storage.dart';
 import '../../../core/security/encrypted_file_store.dart';
 import '../../../core/security/secure_script_store.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
@@ -83,6 +84,7 @@ part 'script_editor_screen.keyboard_horizontal.dart';
 part 'script_editor_screen.keyboard_horizontal_route.dart';
 part 'script_editor_screen.keyboard_bookmark_helpers.dart';
 part 'script_editor_screen.keyboard_focus.dart';
+part 'script_editor_screen.walkthrough.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // -- Switchboard Orchestrator --------------------------------------------------
@@ -118,10 +120,12 @@ class _RedoIntent extends Intent {
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
+  final bool showWalkthroughSampleGuide;
   const ScriptEditorScreen({
     super.key,
     this.shouldAutoLoad = false,
     this.pendingFile,
+    this.showWalkthroughSampleGuide = false,
   });
 
   @override
@@ -161,6 +165,12 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final List<GlobalKey> _blockKeys = [];
   final ScrollController _editorScrollController = ScrollController();
   final GlobalKey _editorArrowTraceBoundaryKey = GlobalKey();
+  bool _walkthroughSampleGuideVisible = false;
+  int _walkthroughSampleGuideStep = 0;
+  final GlobalKey _walkthroughRenameKey = GlobalKey();
+  final GlobalKey _walkthroughSaveKey = GlobalKey();
+  final GlobalKey _walkthroughBookmarksKey = GlobalKey();
+  final GlobalKey _walkthroughPresentKey = GlobalKey();
   double? _editorScrollOffsetBeforeWindowHide;
   int _editorModeReturnRestoreToken = 0;
   String _currentTitle = 'New Project';
@@ -305,6 +315,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void initState() {
     super.initState();
+    _walkthroughSampleGuideVisible = widget.showWalkthroughSampleGuide;
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onGlobalArrowKey);
     _startAutoSave();

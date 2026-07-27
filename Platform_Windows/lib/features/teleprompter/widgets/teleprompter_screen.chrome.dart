@@ -69,6 +69,7 @@ extension _TeleprompterChromeParts on _TeleprompterScreenState {
                     },
                     onEditCurrentPosition: _editCurrentPresenterPosition,
                     onSettings: _showSettings,
+                    settingsKey: _presenterSettingsButtonKey,
                     onAddBookmark: _addPresenterBookmark,
                     onRemoveBookmark: _deletePresenterBookmarkAtCurrentPosition,
                     onPreviousBookmark: () => _jumpPresenterBookmark(-1),

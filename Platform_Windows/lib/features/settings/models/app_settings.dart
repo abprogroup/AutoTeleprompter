@@ -149,6 +149,7 @@ class AppSettings {
   final bool cloudAutoSyncOnSave;
   final bool syncDeletedScriptsFolder;
   final bool recordingAutoBackup;
+  final String windowsOnboardingVersionSeen;
 
   const AppSettings({
     this.fontSize = 20.0,
@@ -226,6 +227,7 @@ class AppSettings {
     this.cloudAutoSyncOnSave = true,
     this.syncDeletedScriptsFolder = false,
     this.recordingAutoBackup = false,
+    this.windowsOnboardingVersionSeen = '',
   });
 
   AppSettings copyWith({
@@ -304,6 +306,7 @@ class AppSettings {
     bool? cloudAutoSyncOnSave,
     bool? syncDeletedScriptsFolder,
     bool? recordingAutoBackup,
+    String? windowsOnboardingVersionSeen,
   }) {
     return AppSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -418,6 +421,8 @@ class AppSettings {
       syncDeletedScriptsFolder:
           syncDeletedScriptsFolder ?? this.syncDeletedScriptsFolder,
       recordingAutoBackup: recordingAutoBackup ?? this.recordingAutoBackup,
+      windowsOnboardingVersionSeen:
+          windowsOnboardingVersionSeen ?? this.windowsOnboardingVersionSeen,
     );
   }
 }

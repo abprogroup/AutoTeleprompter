@@ -19,6 +19,7 @@ import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/settings_error_sanitizer.dart';
 import '../services/update_check_service.dart';
 import '../services/update_download_service.dart';
 import '../services/update_install_service.dart';
@@ -138,6 +139,22 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
   List<Widget> _generalTab(AppSettings settings) {
     return [
+      const _SectionHeader(title: 'GUIDED SETUP'),
+      const SizedBox(height: 8),
+      _SettingsActionsTile(
+        icon: Icons.auto_awesome_motion_outlined,
+        title: 'Replay walkthrough',
+        subtitle: 'Open the guided lobby tour, sample script, and Present '
+            'setup again',
+        actions: [
+          _SettingsAction(
+            icon: Icons.play_circle_outline_rounded,
+            label: 'Replay',
+            onPressed: _replayWindowsWalkthrough,
+          ),
+        ],
+      ),
+      const SizedBox(height: 22),
       const _SectionHeader(title: 'IMPORT DEFAULTS'),
       const SizedBox(height: 8),
       _SettingsChoiceTile<String>(
@@ -284,6 +301,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         onChanged: (_) => ref.read(settingsProvider.notifier).toggleDebugMode(),
       ),
     ];
+  }
+
+  Future<void> _replayWindowsWalkthrough() async {
+    await ref
+        .read(settingsProvider.notifier)
+        .setWindowsOnboardingVersionSeen('');
+    if (!mounted) return;
+    Navigator.of(context).maybePop();
   }
 
   String _recordingFolderLabel(AppSettings settings) {

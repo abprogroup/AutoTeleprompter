@@ -295,6 +295,8 @@ class SettingsNotifier extends Notifier<AppSettings>
       syncDeletedScriptsFolder:
           prefs.getBool(_syncDeletedScriptsFolderKey) ?? false,
       recordingAutoBackup: prefs.getBool(_recordingAutoBackupKey) ?? false,
+      windowsOnboardingVersionSeen:
+          prefs.getString(_windowsOnboardingVersionSeenKey) ?? '',
     );
   }
 

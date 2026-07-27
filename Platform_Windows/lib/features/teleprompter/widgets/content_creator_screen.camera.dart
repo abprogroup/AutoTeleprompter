@@ -454,11 +454,13 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
         if (!mounted) return;
         if (!_recordStartInFlight) return;
         _updateContentCreatorState(() => _countdown = i);
+        await _playRecordingCountdownTick();
         await Future.delayed(const Duration(seconds: 1));
       }
       if (!mounted) return;
       if (!_recordStartInFlight) return;
       _updateContentCreatorState(() => _countdown = 0);
+      await _playRecordingStartCue();
 
       if (!mounted || !_recordStartInFlight) return;
       try {
@@ -555,10 +557,12 @@ extension _ContentCreatorCamera on _ContentCreatorScreenState {
     for (int i = 3; i > 0; i--) {
       if (!mounted || !_recordStartInFlight) return;
       _updateContentCreatorState(() => _countdown = i);
+      await _playRecordingCountdownTick();
       await Future.delayed(const Duration(seconds: 1));
     }
     if (!mounted || !_recordStartInFlight) return;
     _updateContentCreatorState(() => _countdown = 0);
+    await _playRecordingStartCue();
 
     try {
       final directory = Directory(await _effectiveRecordingFolderPath());

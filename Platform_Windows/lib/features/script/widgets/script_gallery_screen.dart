@@ -9,12 +9,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'script_editor_screen.dart';
 import '../../../core/security/secure_script_store.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/services/deleted_scripts_service.dart';
+import '../../settings/services/settings_error_sanitizer.dart';
 import '../../settings/services/update_check_service.dart';
 import '../../settings/services/update_download_service.dart';
 import '../../settings/services/update_install_service.dart';
@@ -31,6 +33,7 @@ part 'script_gallery_screen.history_sheet.dart';
 part 'script_gallery_screen.premium_hub.dart';
 part 'script_gallery_screen.recent_item.dart';
 part 'script_gallery_screen.widgets.dart';
+part 'script_gallery_screen.onboarding.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {
   final Duration initialInputShieldDuration;
@@ -51,6 +54,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   Timer? _inputShieldTimer;
   bool _inputShielded = false;
   bool _recentSelectionMode = false;
+  bool _windowsOnboardingVisible = false;
+  bool _windowsOnboardingScheduled = false;
+  int _windowsOnboardingStep = 0;
+  final GlobalKey _walkthroughScriptActionsKey = GlobalKey();
+  final GlobalKey _walkthroughRecentsKey = GlobalKey();
   final Set<String> _selectedRecentKeys = <String>{};
 
   @override
@@ -71,6 +79,10 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   void dispose() {
     _inputShieldTimer?.cancel();
     super.dispose();
+  }
+
+  void _setGalleryState(VoidCallback fn) {
+    if (mounted) setState(fn);
   }
 
   @override
@@ -96,6 +108,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
         );
     final remoteSettingsAction = Platform.isWindows ? openRemoteSettings : null;
     final visibleRecents = _dedupedRecentMetadata(settings.recentScripts);
+    _scheduleWindowsOnboardingIfNeeded(settings);
 
     return AbsorbPointer(
       absorbing: _inputShielded,
@@ -173,250 +186,288 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
             const SizedBox(width: 4),
           ],
         ),
-        body: SingleChildScrollView(
-          physics: const ClampingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final displayName =
-                      auth.isSignedIn ? settings.displayName : 'Guest';
-                  final welcomeTitle = 'Welcome Back, $displayName.';
-                  final welcome = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        welcomeTitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Ready for your next broadcast?',
-                        style: TextStyle(color: Colors.white54, fontSize: 15),
-                      ),
-                    ],
-                  );
-                  final pro = _ProDashboard(
-                    auth: auth,
-                    compact: true,
-                    onTap: openPremiumHub,
-                    onOpenRemote: remoteSettingsAction,
-                    onOpenCloud: openCloudSettings,
-                    onLockedFeature: openPremiumHub,
-                  );
-                  final titlePainter = TextPainter(
-                    text: TextSpan(
-                      text: welcomeTitle,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    maxLines: 1,
-                    textDirection: TextDirection.ltr,
-                  )..layout();
-                  final shouldStack =
-                      constraints.maxWidth < titlePainter.width + 18 + 465;
-                  if (shouldStack) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        welcome,
-                        const SizedBox(height: 12),
-                        pro,
-                      ],
-                    );
-                  }
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(flex: 6, child: welcome),
-                      const SizedBox(width: 18),
-                      Expanded(flex: 7, child: pro),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
-              _GalleryActionCard(
-                title: 'New Script',
-                subtitle: 'Start with a blank canvas',
-                icon: Icons.add_rounded,
-                color: const Color(0xFFFFBF00),
-                onTap: () {
-                  LightweightDiagnostics.instance.record(
-                    'gallery',
-                    'new script action opened',
-                  );
-                  _showNewScriptDialog(context);
-                },
-              ),
-              const SizedBox(height: 12),
-              _GalleryActionCard(
-                title: 'Load Script',
-                subtitle: 'Import from ${PlatformFileImport.formatsLabel}',
-                icon: Icons.file_open_outlined,
-                color: Colors.white,
-                onTap: () {
-                  LightweightDiagnostics.instance.record(
-                    'gallery',
-                    'load script action opened',
-                  );
-                  // v3.9.5.59: Sovereign Fluid Transition
-                  // Immediately navigate to the editor shell; the editor will handle
-                  // triggering the file picker over its amber loading screen,
-                  // eliminating home-to-home flicker.
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            const ScriptEditorScreen(shouldAutoLoad: true)),
-                  );
-                },
-              ),
-              const SizedBox(height: 38),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        body: Stack(
+          children: [
+            SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Recent Activity',
-                      style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold)),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (visibleRecents.isNotEmpty)
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _recentSelectionMode = !_recentSelectionMode;
-                              _selectedRecentKeys.clear();
-                            });
-                          },
-                          child: Text(
-                            _recentSelectionMode ? 'cancel' : 'select',
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final displayName =
+                          auth.isSignedIn ? settings.displayName : 'Guest';
+                      final welcomeTitle = 'Welcome Back, $displayName.';
+                      final welcome = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            welcomeTitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              color: Color(0xFFFFBF00),
-                              fontSize: 13,
+                              color: Colors.white,
+                              fontSize: 26,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Ready for your next broadcast?',
+                            style:
+                                TextStyle(color: Colors.white54, fontSize: 15),
+                          ),
+                        ],
+                      );
+                      final pro = _ProDashboard(
+                        auth: auth,
+                        compact: true,
+                        onTap: openPremiumHub,
+                        onOpenRemote: remoteSettingsAction,
+                        onOpenCloud: openCloudSettings,
+                        onLockedFeature: openPremiumHub,
+                      );
+                      final titlePainter = TextPainter(
+                        text: TextSpan(
+                          text: welcomeTitle,
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      if (_recentSelectionMode && visibleRecents.isNotEmpty)
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _selectedRecentKeys
-                                ..clear()
-                                ..addAll(visibleRecents.take(3).map((item) {
-                                  final meta = Map<String, dynamic>.from(
-                                    jsonDecode(item),
-                                  );
-                                  return _recentGallerySelectionKey(meta);
-                                }));
-                            });
+                        maxLines: 1,
+                        textDirection: TextDirection.ltr,
+                      )..layout();
+                      final shouldStack =
+                          constraints.maxWidth < titlePainter.width + 18 + 465;
+                      if (shouldStack) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            welcome,
+                            const SizedBox(height: 12),
+                            pro,
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(flex: 6, child: welcome),
+                          const SizedBox(width: 18),
+                          Expanded(flex: 7, child: pro),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  KeyedSubtree(
+                    key: _walkthroughScriptActionsKey,
+                    child: Column(
+                      children: [
+                        _GalleryActionCard(
+                          title: 'New Script',
+                          subtitle: 'Start with a blank canvas',
+                          icon: Icons.add_rounded,
+                          color: const Color(0xFFFFBF00),
+                          onTap: () {
+                            LightweightDiagnostics.instance.record(
+                              'gallery',
+                              'new script action opened',
+                            );
+                            _showNewScriptDialog(context);
                           },
-                          child: const Text(
-                            'select all',
-                            style: TextStyle(
-                              color: Color(0xFFFFBF00),
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
                         ),
-                      if (_recentSelectionMode &&
-                          _selectedRecentKeys.isNotEmpty)
-                        TextButton(
-                          onPressed: () {
-                            setState(() => _selectedRecentKeys.clear());
-                          },
-                          child: const Text(
-                            'clear all',
-                            style: TextStyle(
-                              color: Color(0xFFFFBF00),
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      if (_recentSelectionMode &&
-                          _selectedRecentKeys.isNotEmpty)
-                        TextButton(
-                          onPressed: () =>
-                              _deleteSelectedRecentScripts(visibleRecents),
-                          child: Text(
-                            'delete ${_selectedRecentKeys.length}',
-                            style: const TextStyle(
-                              color: Colors.redAccent,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      if (visibleRecents.length > 3)
-                        TextButton(
-                          onPressed: () {
-                            showModalBottomSheet(
-                              context: context,
-                              backgroundColor: const Color(0xFF0A0A0A),
-                              isScrollControlled: true,
-                              builder: (_) => const _FullHistorySheet(),
+                        const SizedBox(height: 12),
+                        _GalleryActionCard(
+                          title: 'Load Script',
+                          subtitle:
+                              'Import from ${PlatformFileImport.formatsLabel}',
+                          icon: Icons.file_open_outlined,
+                          color: Colors.white,
+                          onTap: () {
+                            LightweightDiagnostics.instance.record(
+                              'gallery',
+                              'load script action opened',
+                            );
+                            // v3.9.5.59: Sovereign Fluid Transition
+                            // Immediately navigate to the editor shell; the editor will handle
+                            // triggering the file picker over its amber loading screen,
+                            // eliminating home-to-home flicker.
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const ScriptEditorScreen(
+                                      shouldAutoLoad: true)),
                             );
                           },
-                          child: const Text('show more',
-                              style: TextStyle(
-                                  color: Color(0xFFFFBF00),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold)),
                         ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: 38),
+                  KeyedSubtree(
+                    key: _walkthroughRecentsKey,
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Recent Activity',
+                                style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold)),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (visibleRecents.isNotEmpty)
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _recentSelectionMode =
+                                            !_recentSelectionMode;
+                                        _selectedRecentKeys.clear();
+                                      });
+                                    },
+                                    child: Text(
+                                      _recentSelectionMode
+                                          ? 'cancel'
+                                          : 'select',
+                                      style: const TextStyle(
+                                        color: Color(0xFFFFBF00),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                if (_recentSelectionMode &&
+                                    visibleRecents.isNotEmpty)
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedRecentKeys
+                                          ..clear()
+                                          ..addAll(visibleRecents
+                                              .take(3)
+                                              .map((item) {
+                                            final meta =
+                                                Map<String, dynamic>.from(
+                                              jsonDecode(item),
+                                            );
+                                            return _recentGallerySelectionKey(
+                                                meta);
+                                          }));
+                                      });
+                                    },
+                                    child: const Text(
+                                      'select all',
+                                      style: TextStyle(
+                                        color: Color(0xFFFFBF00),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                if (_recentSelectionMode &&
+                                    _selectedRecentKeys.isNotEmpty)
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(
+                                          () => _selectedRecentKeys.clear());
+                                    },
+                                    child: const Text(
+                                      'clear all',
+                                      style: TextStyle(
+                                        color: Color(0xFFFFBF00),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                if (_recentSelectionMode &&
+                                    _selectedRecentKeys.isNotEmpty)
+                                  TextButton(
+                                    onPressed: () =>
+                                        _deleteSelectedRecentScripts(
+                                            visibleRecents),
+                                    child: Text(
+                                      'delete ${_selectedRecentKeys.length}',
+                                      style: const TextStyle(
+                                        color: Colors.redAccent,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                if (visibleRecents.length > 3)
+                                  TextButton(
+                                    onPressed: () {
+                                      showModalBottomSheet(
+                                        context: context,
+                                        backgroundColor:
+                                            const Color(0xFF0A0A0A),
+                                        isScrollControlled: true,
+                                        builder: (_) =>
+                                            const _FullHistorySheet(),
+                                      );
+                                    },
+                                    child: const Text('show more',
+                                        style: TextStyle(
+                                            color: Color(0xFFFFBF00),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold)),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Column(
+                          children: visibleRecents.isEmpty
+                              ? [const _EmptyStatePlaceholder()]
+                              : visibleRecents.take(3).map((metaJson) {
+                                  final meta = Map<String, dynamic>.from(
+                                      jsonDecode(metaJson));
+                                  final selectionKey =
+                                      _recentGallerySelectionKey(meta);
+                                  return _ScriptListItem(
+                                    title: meta['title'] ?? 'Untitled Script',
+                                    date: meta['date'] ?? 'Imported',
+                                    type: meta['type'] ?? 'FILE',
+                                    fullText: meta['fullText'] ?? '',
+                                    snippet: meta['snippet'],
+                                    sessionId: meta['sessionId'],
+                                    secureRecordId:
+                                        meta[SecureScriptStore.recordIdKey],
+                                    sourcePath: meta['sourcePath'],
+                                    selectionMode: _recentSelectionMode,
+                                    selected: _selectedRecentKeys
+                                        .contains(selectionKey),
+                                    onSelectionChanged: (selected) {
+                                      setState(() {
+                                        if (selected) {
+                                          _selectedRecentKeys.add(selectionKey);
+                                        } else {
+                                          _selectedRecentKeys
+                                              .remove(selectionKey);
+                                        }
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _DeletedScriptsSection(enabled: hasProAccess),
                 ],
               ),
-              const SizedBox(height: 12),
-              Column(
-                children: visibleRecents.isEmpty
-                    ? [const _EmptyStatePlaceholder()]
-                    : visibleRecents.take(3).map((metaJson) {
-                        final meta =
-                            Map<String, dynamic>.from(jsonDecode(metaJson));
-                        final selectionKey = _recentGallerySelectionKey(meta);
-                        return _ScriptListItem(
-                          title: meta['title'] ?? 'Untitled Script',
-                          date: meta['date'] ?? 'Imported',
-                          type: meta['type'] ?? 'FILE',
-                          fullText: meta['fullText'] ?? '',
-                          snippet: meta['snippet'],
-                          sessionId: meta['sessionId'],
-                          secureRecordId: meta[SecureScriptStore.recordIdKey],
-                          sourcePath: meta['sourcePath'],
-                          selectionMode: _recentSelectionMode,
-                          selected: _selectedRecentKeys.contains(selectionKey),
-                          onSelectionChanged: (selected) {
-                            setState(() {
-                              if (selected) {
-                                _selectedRecentKeys.add(selectionKey);
-                              } else {
-                                _selectedRecentKeys.remove(selectionKey);
-                              }
-                            });
-                          },
-                        );
-                      }).toList(),
-              ),
-              _DeletedScriptsSection(enabled: hasProAccess),
-            ],
-          ),
+            ),
+            if (_windowsOnboardingVisible)
+              _buildWindowsOnboardingOverlay(settings, hasProAccess),
+          ],
         ),
       ),
     );
@@ -653,7 +704,11 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update install failed: $error')),
+        SnackBar(
+          content: Text(
+            'Update install failed: ${sanitizeSettingsErrorForUser(error)}',
+          ),
+        ),
       );
     }
   }

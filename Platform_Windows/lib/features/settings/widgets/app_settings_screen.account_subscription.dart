@@ -88,7 +88,8 @@ extension _AccountSubscriptionSettings on _AppSettingsScreenState {
         await Process.start('xdg-open', [uri.toString()]);
       }
     } catch (error) {
-      _showAccountSnack('Could not open subscription portal: $error');
+      final message = sanitizeSettingsErrorForUser(error);
+      _showAccountSnack('Could not open subscription portal: $message');
     }
   }
 }

@@ -177,7 +177,11 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update install failed: $error')),
+        SnackBar(
+          content: Text(
+            'Update install failed: ${sanitizeSettingsErrorForUser(error)}',
+          ),
+        ),
       );
     } finally {
       _setDownloadingUpdate(false);

@@ -297,11 +297,16 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      child: _buildPresenterControlsOverlay(
-                        settings: settings,
-                        tState: tState,
+                      child: KeyedSubtree(
+                        key: _presenterControlsKey,
+                        child: _buildPresenterControlsOverlay(
+                          settings: settings,
+                          tState: tState,
+                        ),
                       ),
                     ),
+                    if (_presenterWalkthroughVisible)
+                      _buildPresenterWalkthroughOverlay(),
                   ],
                 ),
               ),

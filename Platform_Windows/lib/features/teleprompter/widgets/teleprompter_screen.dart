@@ -25,6 +25,7 @@ import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../../core/widgets/global_color_picker.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../core/window/presenter_fullscreen_service.dart';
@@ -50,6 +51,7 @@ part 'teleprompter_screen.control_bar.dart';
 part 'teleprompter_screen.settings_panel.dart';
 part 'teleprompter_screen.speech_settings.dart';
 part 'teleprompter_screen.settings_widgets.dart';
+part 'teleprompter_screen.walkthrough.dart';
 
 // Regex to strip any unprocessed markup tags that somehow leaked into word.raw
 final _tagStripRe = RegExp(
@@ -60,7 +62,9 @@ class _PresentationSearchIntent extends Intent {
 }
 
 class TeleprompterScreen extends ConsumerStatefulWidget {
-  const TeleprompterScreen({super.key});
+  final bool showWalkthroughGuide;
+
+  const TeleprompterScreen({super.key, this.showWalkthroughGuide = false});
 
   @override
   ConsumerState<TeleprompterScreen> createState() => _TeleprompterScreenState();
@@ -70,6 +74,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _presenterContentKey = GlobalKey();
   final GlobalKey _presenterReadingLineKey = GlobalKey();
+  final GlobalKey _presenterControlsKey = GlobalKey();
+  final GlobalKey _presenterSettingsButtonKey = GlobalKey();
+  bool _presenterWalkthroughVisible = false;
+  int _presenterWalkthroughStep = 0;
+  int _presenterSttQuestionIndex = 0;
+  bool _presenterSttGuideDefaultsApplied = false;
   final List<GlobalKey> _wordKeys = [];
   bool _controlsVisible = true;
   bool _debugConsoleMinimized = false;
@@ -121,6 +131,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   @override
   void initState() {
     super.initState();
+    _presenterWalkthroughVisible = widget.showWalkthroughGuide;
     HardwareKeyboard.instance.addHandler(_handlePresentationKey);
     WakelockPlus.enable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);

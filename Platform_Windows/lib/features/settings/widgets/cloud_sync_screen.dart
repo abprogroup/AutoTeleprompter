@@ -13,6 +13,7 @@ import '../../script/models/script.dart';
 import '../../script/providers/script_provider.dart';
 import '../../script/services/script_bookmark_service.dart';
 import '../../script/services/script_project_codec.dart';
+import '../services/settings_error_sanitizer.dart';
 import '../providers/settings_provider.dart';
 import '../services/cloud_app_folder_sync_service.dart';
 import '../services/cloud_connection_store.dart';
@@ -315,8 +316,9 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   }
 
   String _shortError(Object error) {
-    var compact = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-    compact = compact.replaceFirst(RegExp(r'^(Bad state|Exception):\s*'), '');
+    final compact = sanitizeSettingsErrorForUser(error)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
     if (compact.length <= 220) return compact;
     return '${compact.substring(0, 220)}...';
   }

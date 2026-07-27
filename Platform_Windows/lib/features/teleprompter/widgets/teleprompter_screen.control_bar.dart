@@ -14,6 +14,7 @@ class _ControlBar extends ConsumerWidget {
   final VoidCallback onBack;
   final VoidCallback onEditCurrentPosition;
   final VoidCallback onSettings;
+  final Key? settingsKey;
   final VoidCallback onAddBookmark;
   final VoidCallback onRemoveBookmark;
   final VoidCallback onPreviousBookmark;
@@ -37,6 +38,7 @@ class _ControlBar extends ConsumerWidget {
     required this.onBack,
     required this.onEditCurrentPosition,
     required this.onSettings,
+    this.settingsKey,
     required this.onAddBookmark,
     required this.onRemoveBookmark,
     required this.onPreviousBookmark,
@@ -147,6 +149,7 @@ class _ControlBar extends ConsumerWidget {
               tooltip: 'Remove bookmark',
             ),
             IconButton(
+              key: settingsKey,
               icon: const Icon(Icons.tune, color: Colors.white70),
               onPressed: onSettings,
               tooltip: 'Presenter settings',

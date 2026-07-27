@@ -315,6 +315,13 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setBool(_recordingAutoBackupKey, enabled);
   }
 
+  Future<void> setWindowsOnboardingVersionSeen(String version) async {
+    final normalized = version.trim();
+    state = state.copyWith(windowsOnboardingVersionSeen: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_windowsOnboardingVersionSeenKey, normalized);
+  }
+
   Future<void> setDisplayName(String name) async {
     final normalized = name.trim();
     if (normalized.isEmpty) return;

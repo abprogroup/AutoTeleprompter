@@ -179,6 +179,7 @@ class SettingsNotifier extends Notifier<AppSettings>
       pastWordOpacity:
           _normalizePastWordOpacity(prefs.getDouble(_pastWordOpacityKey)),
       debugMode: prefs.getBool(_debugModeKey) ?? false,
+      showSoundLevelMeter: prefs.getBool(_showSoundLevelMeterKey) ?? false,
       videoResolution:
           _normalizeVideoResolution(prefs.getString(_videoResolutionKey)),
       recentScripts: migratedRecents,
@@ -217,6 +218,8 @@ class SettingsNotifier extends Notifier<AppSettings>
       sttManualVisibleSkipSmallWords: manualVisibleSmall,
       sttManualVisibleSkipBigWords: manualVisibleBig,
       sttManualBigWordMinLetters: manualBigWordMinLetters,
+      sttReliabilityMode:
+          _normalizeSttReliabilityMode(prefs.getString(_sttReliabilityModeKey)),
       defaultCameraDeviceName:
           prefs.getString(_defaultCameraDeviceNameKey) ?? '',
       contentCreatorCameraSourceMode: _normalizeContentCreatorCameraSource(

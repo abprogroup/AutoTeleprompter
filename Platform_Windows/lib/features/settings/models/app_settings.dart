@@ -2,6 +2,8 @@ class AppSettings {
   static const String sttEngineAuto = 'windows_auto';
   static const String sttEngineWindowsOffline = 'windows_offline';
   static const String sttEngineBrowserOnline = 'browser_online';
+  static const String sttReliabilityStandard = 'standard';
+  static const String sttReliabilityNoisyRoom = 'noisyRoom';
   static const String importColorModePrompter = 'prompter_contrast';
   static const String importColorModeDocument = 'document_original';
   static const String updateChannelStable = 'stable';
@@ -66,6 +68,16 @@ class AppSettings {
     }
   }
 
+  static String normalizeSttReliabilityMode(String? mode) {
+    switch (mode) {
+      case sttReliabilityStandard:
+      case sttReliabilityNoisyRoom:
+        return mode!;
+      default:
+        return sttReliabilityStandard;
+    }
+  }
+
   final double fontSize;
   final String languageMode; // 'auto', 'he', 'en'
   final double scrollLead; // 0.2-0.5, viewport ratio for reading line
@@ -86,6 +98,7 @@ class AppSettings {
   final int futureWordColor; // ARGB int, default white
   final double pastWordOpacity; // 0.05-1.0
   final bool debugMode; // technical mode for STT logs
+  final bool showSoundLevelMeter;
   final String videoResolution; // '480p', '720p', '1080p'
   final List<String> recentScripts; // JSON strings of script metadata
   final String displayName; // User's name
@@ -122,6 +135,7 @@ class AppSettings {
   final int sttManualVisibleSkipSmallWords; // 0 = Off
   final int sttManualVisibleSkipBigWords; // 0 = Off
   final int sttManualBigWordMinLetters;
+  final String sttReliabilityMode;
   final String defaultCameraDeviceName;
   final String contentCreatorCameraSourceMode;
   final String contentCreatorLayoutPreset;
@@ -172,6 +186,7 @@ class AppSettings {
     this.futureWordColor = 0xFFFFFFFF,
     this.pastWordOpacity = 0.3,
     this.debugMode = false,
+    this.showSoundLevelMeter = false,
     this.videoResolution = '720p',
     this.recentScripts = const [],
     this.displayName = 'Guest',
@@ -200,6 +215,7 @@ class AppSettings {
     this.sttManualVisibleSkipSmallWords = 0,
     this.sttManualVisibleSkipBigWords = 0,
     this.sttManualBigWordMinLetters = 5,
+    this.sttReliabilityMode = sttReliabilityStandard,
     this.defaultCameraDeviceName = '',
     this.contentCreatorCameraSourceMode = contentCreatorSourceNative,
     this.contentCreatorLayoutPreset = contentCreatorLayoutReading,
@@ -251,6 +267,7 @@ class AppSettings {
     int? futureWordColor,
     double? pastWordOpacity,
     bool? debugMode,
+    bool? showSoundLevelMeter,
     String? videoResolution,
     List<String>? recentScripts,
     String? displayName,
@@ -279,6 +296,7 @@ class AppSettings {
     int? sttManualVisibleSkipSmallWords,
     int? sttManualVisibleSkipBigWords,
     int? sttManualBigWordMinLetters,
+    String? sttReliabilityMode,
     String? defaultCameraDeviceName,
     String? contentCreatorCameraSourceMode,
     String? contentCreatorLayoutPreset,
@@ -329,6 +347,7 @@ class AppSettings {
       futureWordColor: futureWordColor ?? this.futureWordColor,
       pastWordOpacity: pastWordOpacity ?? this.pastWordOpacity,
       debugMode: debugMode ?? this.debugMode,
+      showSoundLevelMeter: showSoundLevelMeter ?? this.showSoundLevelMeter,
       videoResolution: videoResolution ?? this.videoResolution,
       recentScripts: recentScripts ?? this.recentScripts,
       displayName: displayName ?? this.displayName,
@@ -372,6 +391,7 @@ class AppSettings {
           sttManualVisibleSkipBigWords ?? this.sttManualVisibleSkipBigWords,
       sttManualBigWordMinLetters:
           sttManualBigWordMinLetters ?? this.sttManualBigWordMinLetters,
+      sttReliabilityMode: sttReliabilityMode ?? this.sttReliabilityMode,
       defaultCameraDeviceName:
           defaultCameraDeviceName ?? this.defaultCameraDeviceName,
       contentCreatorCameraSourceMode:

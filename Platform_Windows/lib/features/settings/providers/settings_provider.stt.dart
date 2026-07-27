@@ -34,6 +34,34 @@ mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
   }
 
   Future<void> setSttVisibleSkipEnabled(bool enabled) async {
+    if (state.sttManualProfileEnabled) {
+      final nextSmall = enabled
+          ? (state.sttManualVisibleSkipSmallWords <= 0
+              ? 4
+              : state.sttManualVisibleSkipSmallWords)
+          : 0;
+      final nextBig = enabled
+          ? (state.sttManualVisibleSkipBigWords <= 0
+              ? 3
+              : state.sttManualVisibleSkipBigWords)
+          : 0;
+      state = state.copyWith(
+        sttVisibleSkipEnabled: enabled,
+        sttManualVisibleSkipSmallWords: nextSmall,
+        sttManualVisibleSkipBigWords: nextBig,
+        sttHardVisibleSkipEnabled:
+            enabled ? state.sttHardVisibleSkipEnabled : false,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_sttVisibleSkipEnabledKey, enabled);
+      await prefs.setInt(_sttManualVisibleSkipSmallWordsKey, nextSmall);
+      await prefs.setInt(_sttManualVisibleSkipBigWordsKey, nextBig);
+      if (!enabled) {
+        await prefs.setBool(_sttHardVisibleSkipEnabledKey, false);
+      }
+      return;
+    }
+
     state = state.copyWith(
       sttVisibleSkipEnabled: enabled,
       sttHardVisibleSkipEnabled:
@@ -130,5 +158,12 @@ mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
     state = state.copyWith(sttManualBigWordMinLetters: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_sttManualBigWordMinLettersKey, clamped);
+  }
+
+  Future<void> setSttReliabilityMode(String mode) async {
+    final normalized = _normalizeSttReliabilityMode(mode);
+    state = state.copyWith(sttReliabilityMode: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sttReliabilityModeKey, normalized);
   }
 }

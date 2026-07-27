@@ -8,6 +8,10 @@ String _normalizeLanguageMode(String? mode) {
   return AppSettings.normalizeLanguageMode(mode);
 }
 
+String _normalizeSttReliabilityMode(String? mode) {
+  return AppSettings.normalizeSttReliabilityMode(mode);
+}
+
 String _normalizeScrollMode(String? mode) {
   switch (mode) {
     case 'auto':

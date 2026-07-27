@@ -44,6 +44,23 @@ class _WindowsSpeechSettingsSection extends ConsumerWidget {
                 .setSttInputDevice('', 'System default microphone');
           },
         ),
+        const SizedBox(height: 12),
+        _SwitchRow(
+          icon: Icons.graphic_eq_rounded,
+          title: 'Show Mic Signal Meter',
+          subtitle: settings.showSoundLevelMeter
+              ? 'Shows microphone input level during speech-control sessions.'
+              : 'Show mic signal separately from recognition quality.',
+          value: settings.showSoundLevelMeter,
+          accentColor: Color(settings.currentWordColor),
+          onChanged: notifier.setShowSoundLevelMeter,
+        ),
+        const SizedBox(height: 12),
+        _ReliabilityModeSelector(
+          mode: settings.sttReliabilityMode,
+          accentColor: Color(settings.currentWordColor),
+          onChanged: notifier.setSttReliabilityMode,
+        ),
         const SizedBox(height: 16),
         _SwitchRow(
           icon: Icons.tune_outlined,

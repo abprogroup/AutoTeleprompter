@@ -125,6 +125,12 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setBool(_debugModeKey, newVal);
   }
 
+  Future<void> setShowSoundLevelMeter(bool enabled) async {
+    state = state.copyWith(showSoundLevelMeter: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showSoundLevelMeterKey, enabled);
+  }
+
   Future<void> setVideoResolution(String resolution) async {
     final normalized = _normalizeVideoResolution(resolution);
     state = state.copyWith(videoResolution: normalized);

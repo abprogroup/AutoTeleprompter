@@ -68,9 +68,8 @@ class SttRecognitionPolicyService {
         i--) {
       final sentenceWords = _transcriptWords(sentenceParts[i]);
       if (sentenceWords.isEmpty) continue;
-      final start = sentenceWords.length > safeLong
-          ? sentenceWords.length - safeLong
-          : 0;
+      final start =
+          sentenceWords.length > safeLong ? sentenceWords.length - safeLong : 0;
       addWords(sentenceWords.sublist(start));
     }
 
@@ -154,11 +153,15 @@ class SttRecognitionPolicyService {
   static SttRecognitionPolicy recognitionPolicyForSettings(
     AppSettings settings,
   ) {
+    final noisyRoom =
+        settings.sttReliabilityMode == AppSettings.sttReliabilityNoisyRoom;
     if (settings.sttManualProfileEnabled) {
       final manualVisibleSmall = settings.sttManualVisibleSkipSmallWords;
       final manualVisibleBig = settings.sttManualVisibleSkipBigWords;
-      final manualVisibleEnabled =
+      final manualVisibleThresholdsEnabled =
           manualVisibleSmall > 0 && manualVisibleBig > 0;
+      final manualVisibleEnabled =
+          settings.sttVisibleSkipEnabled && manualVisibleThresholdsEnabled;
       final bigWordMinLetters = settings.sttManualBigWordMinLetters;
       return SttRecognitionPolicy(
         bulletMode: false,
@@ -175,8 +178,16 @@ class SttRecognitionPolicyService {
           bigWordMinLetters,
         ),
         visibleSkip: SttEvidenceThreshold(
-          manualVisibleEnabled ? manualVisibleSmall : 4,
-          manualVisibleEnabled ? manualVisibleBig : 3,
+          manualVisibleEnabled
+              ? (noisyRoom
+                  ? manualVisibleSmall.clamp(5, 8).toInt()
+                  : manualVisibleSmall)
+              : (noisyRoom ? 5 : 4),
+          manualVisibleEnabled
+              ? (noisyRoom
+                  ? manualVisibleBig.clamp(4, 8).toInt()
+                  : manualVisibleBig)
+              : (noisyRoom ? 4 : 3),
           bigWordMinLetters,
         ),
       );
@@ -186,8 +197,8 @@ class SttRecognitionPolicyService {
     return SttRecognitionPolicy(
       bulletMode: settings.sttStrictBulletMode,
       visibleSkipEnabled: visibleSkipEnabled,
-      hardVisibleSkipEnabled:
-          visibleSkipEnabled && settings.sttHardVisibleSkipEnabled,
+      hardVisibleSkipEnabled: visibleSkipEnabled &&
+          (settings.sttHardVisibleSkipEnabled || noisyRoom),
     );
   }
 

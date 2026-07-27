@@ -190,6 +190,130 @@ class _SwitchRow extends StatelessWidget {
   }
 }
 
+class _ReliabilityModeSelector extends StatelessWidget {
+  final String mode;
+  final Color accentColor;
+  final ValueChanged<String> onChanged;
+
+  const _ReliabilityModeSelector({
+    required this.mode,
+    required this.accentColor,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = AppSettings.normalizeSttReliabilityMode(mode);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.hearing_rounded, color: accentColor, size: 19),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Speech Reliability',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Noisy room waits longer, avoids restart loops, and requires stronger jump evidence.',
+                      style: TextStyle(color: Colors.white38, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _ReliabilityModeButton(
+                  label: 'Standard',
+                  selected: normalized == AppSettings.sttReliabilityStandard,
+                  accentColor: accentColor,
+                  onTap: () => onChanged(AppSettings.sttReliabilityStandard),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ReliabilityModeButton(
+                  label: 'Noisy room',
+                  selected: normalized == AppSettings.sttReliabilityNoisyRoom,
+                  accentColor: accentColor,
+                  onTap: () => onChanged(AppSettings.sttReliabilityNoisyRoom),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReliabilityModeButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color accentColor;
+  final VoidCallback onTap;
+
+  const _ReliabilityModeButton({
+    required this.label,
+    required this.selected,
+    required this.accentColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: selected ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? accentColor.withValues(alpha: 0.18)
+              : Colors.black.withValues(alpha: 0.28),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color:
+                selected ? accentColor.withValues(alpha: 0.68) : Colors.white12,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? accentColor : Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SttThresholdPairSliders extends StatelessWidget {
   final String title;
   final String subtitle;

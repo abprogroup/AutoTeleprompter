@@ -33,6 +33,17 @@ double _wordSimilarity(String spoken, String scriptWord, bool isRtl) {
 
   double sim = spoken.similarity(scriptWord);
 
+  if (sim < 0.80 && spoken.length >= 3 && scriptWord.length >= 3) {
+    if (spoken.contains(scriptWord) || scriptWord.contains(spoken)) {
+      final shorter =
+          spoken.length < scriptWord.length ? spoken.length : scriptWord.length;
+      final longer =
+          spoken.length > scriptWord.length ? spoken.length : scriptWord.length;
+      final subSim = 0.70 * (shorter / longer) + 0.25;
+      if (subSim > sim) sim = subSim;
+    }
+  }
+
   if (isRtl && sim < 0.75) {
     final ss = scriptWord.stripHebrewPrefixes();
     final ls = spoken.stripHebrewPrefixes();
@@ -57,9 +68,8 @@ double _wordSimilarity(String spoken, String scriptWord, bool isRtl) {
 
     if (sim < 0.60 && ls.length >= 3 && ss.length >= 3) {
       if (ls.contains(ss) || ss.contains(ls)) {
-        final overlapRatio =
-            (ls.length < ss.length ? ls.length : ss.length) /
-                (ls.length > ss.length ? ls.length : ss.length);
+        final overlapRatio = (ls.length < ss.length ? ls.length : ss.length) /
+            (ls.length > ss.length ? ls.length : ss.length);
         final subSim = 0.70 * overlapRatio + 0.20;
         if (subSim > sim) sim = subSim;
       }

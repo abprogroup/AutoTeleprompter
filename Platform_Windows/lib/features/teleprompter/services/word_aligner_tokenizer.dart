@@ -29,7 +29,7 @@ class _WordAlignerTokenizer {
         ));
       } else {
         final parsed = _parseMarkup(line);
-        final lineSkipsSpeech = _isProductionCueLine(line);
+        final lineIsOptionalCue = _isProductionCueLine(line);
         var visiblePartIndex = 0;
 
         for (final token in parsed) {
@@ -47,10 +47,9 @@ class _WordAlignerTokenizer {
                     r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr)(?:=[^\]]+)?\]|\*\*'),
                 '');
             final isRtl = cleanPart.isHebrew;
-            final skipSpeech = lineSkipsSpeech ||
+            final optionalCue = lineIsOptionalCue ||
                 _isLeadingSpeakerLabel(cleanPart, visiblePartIndex);
-            final normalized =
-                skipSpeech ? '' : cleanPart.normalizeForMatching();
+            final normalized = cleanPart.normalizeForMatching();
             if (normalized.isEmpty &&
                 _isStandaloneNeutralPunctuation(cleanPart)) {
               continue;
@@ -70,6 +69,7 @@ class _WordAlignerTokenizer {
               isParagraphRtl: token.isParagraphRtl,
               highlight: token.highlight,
               textColor: token.textColor,
+              isOptionalCue: optionalCue,
             ));
           }
         }
@@ -97,6 +97,7 @@ class _WordAlignerTokenizer {
             ' ')
         .trim();
     if (visible.isEmpty) return false;
+    if (_isBracketedProductionCue(visible)) return true;
 
     final parts = _mergeStandaloneNeutralParts(visible.split(RegExp(r'\s+')));
     final normalized = parts
@@ -119,6 +120,41 @@ class _WordAlignerTokenizer {
     return false;
   }
 
+  static bool _isBracketedProductionCue(String visible) {
+    final trimmed = _stripCuePrefix(visible.trim());
+    if (trimmed.isEmpty) return false;
+
+    final bracketed =
+        RegExp(r'^(?:[\[\(][^\]\)]+[\]\)]\s*)+$').hasMatch(trimmed);
+    if (!bracketed) return false;
+
+    final letters = RegExp(r'[A-Za-z]').allMatches(trimmed).length;
+    final lowercase = RegExp(r'[a-z]').hasMatch(trimmed);
+    final content = trimmed
+        .replaceAll(RegExp(r'[\[\]\(\)]'), ' ')
+        .trim()
+        .normalizeForMatching();
+    if (content.isEmpty) return false;
+    final words = content.split(RegExp(r'\s+'));
+    if (words.length > 14) return false;
+
+    if (letters > 0 && !lowercase) return true;
+    return words.any(_bracketedCueMarkers.contains);
+  }
+
+  static String _stripCuePrefix(String visible) {
+    var current = visible;
+    while (current.isNotEmpty) {
+      final stripped = current.replaceFirst(
+        RegExp(r'^\s*(?:[\u00bb>]|[-\u2010-\u2015]+|[\u2022\u25aa\u25cf])\s*'),
+        '',
+      );
+      if (stripped == current) return current;
+      current = stripped;
+    }
+    return current;
+  }
+
   static bool _isLeadingSpeakerLabel(String text, int visiblePartIndex) {
     if (visiblePartIndex != 0) return false;
     final trimmed = text.trim();
@@ -135,6 +171,23 @@ class _WordAlignerTokenizer {
     'sot',
     'vo',
     'cg',
+  };
+
+  static const Set<String> _bracketedCueMarkers = {
+    'applause',
+    'beat',
+    'broll',
+    'camera',
+    'cam',
+    'cue',
+    'cut',
+    'graphic',
+    'hold',
+    'look',
+    'music',
+    'pause',
+    'shot',
+    'smile',
   };
 
   static List<String> _mergeStandaloneNeutralParts(Iterable<String> parts) {

@@ -84,11 +84,9 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         if (candidate.shouldAdvance &&
             candidate.confirmedWordIndex > _currentState.confirmedWordIndex) {
           alignmentTranscript = candidateTranscript;
-          aligned = AlignmentResult(
-            candidate.confirmedWordIndex,
-            candidate.confidence,
-            '${candidate.debugInfo} | rollingWindow=${i + 1}/${alignmentWindows.length}',
-            candidate.decision,
+          aligned = candidate.copyWith(
+            debugInfo:
+                '${candidate.debugInfo} | rollingWindow=${i + 1}/${alignmentWindows.length}',
           );
           break;
         }
@@ -133,7 +131,17 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         visibleWordEnd: _visibleWordEnd,
       );
       final rawJump = aligned.confirmedWordIndex - advanceFrom;
-      if (!visibleSkipTargetTrusted && rawJump > 5) {
+      // Bounded, pre-vetted moves (a skipped heading, a bridge across a
+      // repeated/misheard word or short name) already carry their own
+      // internal precision safeguards, so they should not get stuck behind
+      // the generic off-screen-jump wait meant for ordinary visible-skip
+      // targets.
+      final isStructuralLocal =
+          aligned.kind == SttAlignmentKind.headingPrefixSkip ||
+              aligned.kind == SttAlignmentKind.confirmedTailBridge ||
+              aligned.kind == SttAlignmentKind.nameRunBodyBridge ||
+              aligned.kind == SttAlignmentKind.sentenceRecovery;
+      if (!isStructuralLocal && !visibleSkipTargetTrusted && rawJump > 5) {
         _fluidAdvanceTimer?.cancel();
         if (!strictBulletMode) {
           _sttReadingStandby = false;
@@ -174,7 +182,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       final advancedWord =
           target < script.words.length ? script.words[target].raw : '?';
       _addDebugLog(
-          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "$alignmentTranscript"');
+          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}, ${aligned.kind.name}) | heard: "$alignmentTranscript"');
       LightweightDiagnostics.instance.record(
         'stt',
         'advanced',

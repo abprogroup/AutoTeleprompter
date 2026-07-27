@@ -14,6 +14,7 @@ class ScriptWord {
   final bool? isParagraphRtl; // manual direction override
   final Color? highlight; // background highlight: yellow, red, green
   final Color? textColor; // text color override: yellow, red, green
+  final bool isOptionalCue; // stage/camera cue: speakable, but skippable
 
   const ScriptWord({
     required this.raw,
@@ -29,6 +30,7 @@ class ScriptWord {
     this.isParagraphRtl, // If null, auto-detect from isRtl
     this.highlight,
     this.textColor,
+    this.isOptionalCue = false,
   });
 
   bool get effectiveRtl => isParagraphRtl ?? isRtl;

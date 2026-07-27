@@ -52,6 +52,7 @@ class _ControlBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    final hasBookmarkAccess = ref.watch(authProvider).hasPremiumAccess;
     // Forward scroll is active when scrolling but NOT backward
     final isActive = isManualMode
         ? (isManualScrolling && settings.scrollSpeed != 0)
@@ -64,6 +65,26 @@ class _ControlBar extends ConsumerWidget {
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
       unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(clamped));
       onFontSizeChanged(clamped);
+    }
+
+    void showLockedBookmarks() {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Bookmarks are included with Pro.'),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'Connect',
+            onPressed: () {
+              messenger.hideCurrentSnackBar();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            },
+          ),
+        ),
+      );
     }
 
     return Container(
@@ -90,9 +111,17 @@ class _ControlBar extends ConsumerWidget {
               tooltip: 'Edit current position',
             ),
             IconButton(
-              icon: const Icon(Icons.skip_previous, color: Colors.white70),
-              onPressed: onPreviousBookmark,
-              tooltip: 'Previous bookmark',
+              icon: Icon(
+                hasBookmarkAccess
+                    ? Icons.skip_previous_rounded
+                    : Icons.lock_outline_rounded,
+                color: hasBookmarkAccess ? Colors.white70 : Colors.white38,
+              ),
+              onPressed:
+                  hasBookmarkAccess ? onPreviousBookmark : showLockedBookmarks,
+              tooltip: hasBookmarkAccess
+                  ? 'Previous bookmark'
+                  : 'Bookmarks are included with Pro',
             ),
             IconButton(
               icon: const Text('A',
@@ -137,16 +166,31 @@ class _ControlBar extends ConsumerWidget {
               tooltip: 'Larger font',
             ),
             IconButton(
-              icon: const Icon(Icons.bookmark_add_outlined,
-                  color: Colors.white70),
-              onPressed: onAddBookmark,
-              tooltip: 'Add bookmark',
+              icon: Icon(
+                hasBookmarkAccess
+                    ? Icons.bookmark_add_outlined
+                    : Icons.lock_outline_rounded,
+                color: hasBookmarkAccess ? Colors.white70 : Colors.white38,
+              ),
+              onPressed:
+                  hasBookmarkAccess ? onAddBookmark : showLockedBookmarks,
+              tooltip: hasBookmarkAccess
+                  ? 'Add bookmark'
+                  : 'Bookmarks are included with Pro',
             ),
             IconButton(
-              icon: const Icon(Icons.bookmark_remove_outlined,
-                  color: Colors.white70),
-              onPressed: isListening || isStarting ? null : onRemoveBookmark,
-              tooltip: 'Remove bookmark',
+              icon: Icon(
+                hasBookmarkAccess
+                    ? Icons.bookmark_remove_outlined
+                    : Icons.lock_outline_rounded,
+                color: hasBookmarkAccess ? Colors.white70 : Colors.white38,
+              ),
+              onPressed: !hasBookmarkAccess
+                  ? showLockedBookmarks
+                  : (isListening || isStarting ? null : onRemoveBookmark),
+              tooltip: hasBookmarkAccess
+                  ? 'Remove bookmark'
+                  : 'Bookmarks are included with Pro',
             ),
             IconButton(
               key: settingsKey,
@@ -163,9 +207,17 @@ class _ControlBar extends ConsumerWidget {
               tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
             ),
             IconButton(
-              icon: const Icon(Icons.skip_next, color: Colors.white70),
-              onPressed: onNextBookmark,
-              tooltip: 'Next bookmark',
+              icon: Icon(
+                hasBookmarkAccess
+                    ? Icons.skip_next_rounded
+                    : Icons.lock_outline_rounded,
+                color: hasBookmarkAccess ? Colors.white70 : Colors.white38,
+              ),
+              onPressed:
+                  hasBookmarkAccess ? onNextBookmark : showLockedBookmarks,
+              tooltip: hasBookmarkAccess
+                  ? 'Next bookmark'
+                  : 'Bookmarks are included with Pro',
             ),
             IconButton(
               icon: const Icon(Icons.replay, color: Colors.white70),

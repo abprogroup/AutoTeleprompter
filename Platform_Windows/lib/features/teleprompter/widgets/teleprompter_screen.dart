@@ -24,6 +24,8 @@ import '../../script/services/highlight_band_painter.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/widgets/login_screen.dart';
 import '../../../core/widgets/global_color_picker.dart';
 import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';

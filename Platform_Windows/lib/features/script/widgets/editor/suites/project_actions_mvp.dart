@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 // v4.0: Stable Release — Record and Settings buttons hidden (premium features)
 class ProjectActionsSuite extends StatelessWidget {
   final VoidCallback onBack, onPresent, onClear, onSave, onImport, onRename;
-  final VoidCallback onAddBookmark, onRemoveBookmark;
-  final VoidCallback onPreviousBookmark, onNextBookmark;
   final VoidCallback? onSearch, onSettings, onRecord;
-  final Key? saveKey, renameKey, bookmarksClusterKey;
+  final Key? saveKey, renameKey;
   final String title;
 
   const ProjectActionsSuite({
@@ -17,17 +15,12 @@ class ProjectActionsSuite extends StatelessWidget {
     required this.onSave,
     required this.onImport,
     required this.onRename,
-    required this.onAddBookmark,
-    required this.onRemoveBookmark,
-    required this.onPreviousBookmark,
-    required this.onNextBookmark,
     required this.title,
     this.onSearch,
     this.onSettings,
     this.onRecord,
     this.saveKey,
     this.renameKey,
-    this.bookmarksClusterKey,
   });
 
   @override
@@ -63,24 +56,6 @@ class ProjectActionsSuite extends StatelessWidget {
                   icon: const Icon(Icons.videocam_outlined),
                   tooltip: 'Content Creator',
                   onPressed: onRecord),
-            Row(
-              key: bookmarksClusterKey,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                    icon: const Icon(Icons.bookmark_add_outlined),
-                    onPressed: onAddBookmark),
-                IconButton(
-                    icon: const Icon(Icons.bookmark_remove_outlined),
-                    onPressed: onRemoveBookmark),
-                IconButton(
-                    icon: const Icon(Icons.skip_previous),
-                    onPressed: onPreviousBookmark),
-                IconButton(
-                    icon: const Icon(Icons.skip_next),
-                    onPressed: onNextBookmark),
-              ],
-            ),
           ],
         ),
         const SizedBox(height: 8),

@@ -23,6 +23,8 @@ import '../../script/services/script_color_inversion_service.dart';
 import '../services/wav_audio_recorder_service.dart';
 import '../providers/teleprompter_provider.dart';
 import '../services/approximate_spoken_search_service.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/widgets/login_screen.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../feedback/widgets/feedback_report_screen.dart';
 import '../../../core/window/presenter_fullscreen_service.dart';

@@ -1,6 +1,33 @@
 part of 'teleprompter_screen.dart';
 
 extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
+  bool get _hasPresenterBookmarkAccess {
+    return ref.read(authProvider).hasPremiumAccess;
+  }
+
+  Future<bool> _ensurePresenterBookmarkAccess() async {
+    if (_hasPresenterBookmarkAccess) return true;
+    if (!mounted) return false;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Bookmarks are included with Pro.'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Connect',
+          onPressed: () {
+            messenger.hideCurrentSnackBar();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+          },
+        ),
+      ),
+    );
+    return false;
+  }
+
   /// Shows a compact banner asking whether to continue from the last reading
   /// position or restart from the beginning.  Appears on re-entry when the
   /// confirmedWordIndex is > 0 (i.e. the user left mid-script last time).
@@ -138,6 +165,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
   }
 
   Future<void> _addPresenterBookmark() async {
+    if (!await _ensurePresenterBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
@@ -169,6 +197,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
   }
 
   Future<void> _jumpPresenterBookmark(int direction) async {
+    if (!await _ensurePresenterBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     final sttState = ref.read(teleprompterProvider);
@@ -210,6 +239,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
   }
 
   Future<void> _tapPresenterBookmarkMarker(int wordIndex) async {
+    if (!await _ensurePresenterBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
@@ -242,6 +272,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
   }
 
   Future<void> _deletePresenterBookmark(int wordIndex) async {
+    if (!await _ensurePresenterBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null) return;
     final before = _bookmarks.length;
@@ -263,6 +294,7 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
   }
 
   Future<void> _deletePresenterBookmarkAtCurrentPosition() async {
+    if (!await _ensurePresenterBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);

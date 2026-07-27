@@ -32,6 +32,7 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
     });
 
     final settings = ref.watch(settingsProvider);
+    final hasPremiumAccess = _watchEditorPremiumAccess();
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
     return _withEditorHistoryShortcuts(
       Stack(
@@ -62,14 +63,8 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                   );
                 },
                 onRecord: null,
-                onAddBookmark: _addEditorBookmark,
-                onRemoveBookmark: () =>
-                    unawaited(_deleteEditorBookmarkAtCurrentPosition()),
-                onPreviousBookmark: () => _jumpEditorBookmark(-1),
-                onNextBookmark: () => _jumpEditorBookmark(1),
                 saveKey: _walkthroughSaveKey,
                 renameKey: _walkthroughRenameKey,
-                bookmarksClusterKey: _walkthroughBookmarksKey,
               ),
             ),
             bottomNavigationBar: _buildBottomActions(
@@ -295,8 +290,20 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                   lastHighlightColor: _lastChosenHighlightColor,
                                   onUndo: _undo,
                                   onRedo: _redo,
+                                  onAddBookmark: _addEditorBookmark,
+                                  onRemoveBookmark: () => unawaited(
+                                    _deleteEditorBookmarkAtCurrentPosition(),
+                                  ),
+                                  onPreviousBookmark: () =>
+                                      _jumpEditorBookmark(-1),
+                                  onNextBookmark: () => _jumpEditorBookmark(1),
+                                  onLockedBookmarks: () => unawaited(
+                                    _ensureEditorPremiumAccess('Bookmarks'),
+                                  ),
                                   canUndo: _historyIndex > 0,
                                   canRedo: _historyIndex < _history.length - 1,
+                                  bookmarksEnabled: hasPremiumAccess,
+                                  bookmarksSuiteKey: _walkthroughBookmarksKey,
                                   history: _history,
                                   historyIndex: _historyIndex,
                                   onHistorySelected: (idx) =>

@@ -37,7 +37,7 @@ final List<_EditorWalkthroughStep> _editorSampleWalkthroughSteps = [
     icon: Icons.bookmarks_rounded,
     title: 'Bookmarks live here',
     body:
-        'Bookmarks are in the top toolbar: add, remove, and jump between markers right next to Save.',
+        'Bookmarks are in the lower edit/styling toolbar. Free users see the locked suite; Pro users can add, remove, and jump between markers.',
   ),
   const _EditorWalkthroughStep(
     icon: Icons.play_circle_fill_rounded,

@@ -137,6 +137,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
   }
 
   Future<void> _addContentBookmark() async {
+    if (!await _ensureContentBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
@@ -161,6 +162,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
   }
 
   Future<void> _deleteContentBookmarkAtCurrentPosition() async {
+    if (!await _ensureContentBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
@@ -180,6 +182,7 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
   }
 
   Future<void> _jumpContentBookmark(int direction) async {
+    if (!await _ensureContentBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
@@ -210,6 +213,29 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return 0;
     return _activeWordIndex.clamp(0, script.words.length - 1).toInt();
+  }
+
+  Future<bool> _ensureContentBookmarkAccess() async {
+    if (ref.read(authProvider).hasPremiumAccess) return true;
+    if (!mounted) return false;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Bookmarks are included with Pro.'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Connect',
+          onPressed: () {
+            messenger.hideCurrentSnackBar();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+          },
+        ),
+      ),
+    );
+    return false;
   }
 
   void _resetContentPosition() {

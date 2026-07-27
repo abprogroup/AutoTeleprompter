@@ -80,6 +80,9 @@ class _EditorBlock extends StatelessWidget {
     final editorTextStyle = TextStyle(
       color: Color(settings.futureWordColor),
       fontSize: settings.fontSize,
+      fontFamily: settings.fontFamily.trim().isEmpty
+          ? 'Inter'
+          : settings.fontFamily.trim(),
       height: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,
       wordSpacing: settings.wordSpacing,

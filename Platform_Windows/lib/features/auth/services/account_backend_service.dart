@@ -162,10 +162,7 @@ class AccountBackendService {
     _requireConfigured();
     await _putJson(
       _config.authUri('user'),
-      {
-        'password': password,
-        'data': {'saved_password': password}
-      },
+      {'password': password},
       bearerToken: accessToken,
     );
   }

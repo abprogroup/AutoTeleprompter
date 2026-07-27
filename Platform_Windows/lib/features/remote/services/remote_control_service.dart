@@ -192,7 +192,9 @@ class RemoteControlService extends ChangeNotifier {
       _notifyChanged();
     } catch (error, stack) {
       if (kDebugMode) {
-        debugPrint('Remote profiles could not load: $error\n$stack');
+        final safeError = debugSanitizeTextForTests(error.toString());
+        final safeStack = debugSanitizeTextForTests(stack.toString());
+        debugPrint('Remote profiles could not load: $safeError\n$safeStack');
       }
     }
   }
@@ -293,7 +295,7 @@ class RemoteControlService extends ChangeNotifier {
     });
 
     final pipeline = kDebugMode
-        ? const Pipeline().addMiddleware(logRequests())
+        ? const Pipeline().addMiddleware(_sanitizedLogRequests())
         : const Pipeline();
     final handler = pipeline.addHandler(router.call);
 
@@ -535,6 +537,79 @@ class RemoteControlService extends ChangeNotifier {
   bool _isSessionExpired(_RemoteControllerProfileState profile) {
     final expiresAt = profile.sessionTokenExpiresAt;
     return expiresAt == null || !_clock().isBefore(expiresAt);
+  }
+
+  static Middleware _sanitizedLogRequests() {
+    return (Handler innerHandler) {
+      return (Request request) async {
+        final started = DateTime.now();
+        try {
+          final response = await Future<Response>.sync(
+            () => innerHandler(request),
+          );
+          _debugLogRequest(request, response.statusCode, started);
+          return response;
+        } catch (_) {
+          _debugLogRequest(request, 500, started);
+          rethrow;
+        }
+      };
+    };
+  }
+
+  @visibleForTesting
+  static String debugSanitizeRequestTargetForTests(String target) {
+    return debugSanitizeTextForTests(target);
+  }
+
+  @visibleForTesting
+  static String debugSanitizeTextForTests(String text) {
+    var sanitized = text.replaceAllMapped(
+      RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+      (_) => 'Bearer <redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'([?&](?:pin|token|access_token|refresh_token|client_secret|password)=)'
+        r'[^&\s]+',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'''\b(access_token|refresh_token|client_secret|password|apikey|api_key|authorization|pin|token)\s*[:=]\s*["']?[^"',}&\s]+''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}=<redacted>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(
+        r'(/Users/|/private/var/|/var/folders/)[^\s,;)\]}]+',
+        caseSensitive: false,
+      ),
+      '<local-path>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'[A-Z]:\\Users\\[^ \t\r\n,;)\]}]+', caseSensitive: false),
+      '<local-path>',
+    );
+    return sanitized;
+  }
+
+  static void _debugLogRequest(
+    Request request,
+    int statusCode,
+    DateTime started,
+  ) {
+    final elapsed = DateTime.now().difference(started);
+    final target = request.url.toString();
+    final path = target.isEmpty ? '/' : '/$target';
+    final safePath = debugSanitizeRequestTargetForTests(path);
+    debugPrint(
+      '${DateTime.now().toIso8601String()}  $elapsed ${request.method}'
+      '     [$statusCode] $safePath',
+    );
   }
 
   _RemoteControllerProfileState? _profileForPin(String pin) {

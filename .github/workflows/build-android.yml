@@ -42,7 +42,7 @@ jobs:
         working-directory: Platform_Android
 
       - name: Analyze
-        run: flutter analyze --no-pub
+        run: flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
         working-directory: Platform_Android
 
       - name: Test

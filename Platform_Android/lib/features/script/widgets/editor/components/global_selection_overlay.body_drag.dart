@@ -1,4 +1,4 @@
-﻿part of 'global_selection_overlay.dart';
+part of 'global_selection_overlay.dart';
 
 extension _GlobalSelectionOverlayBodyDragParts on GlobalSelectionOverlayState {
   /// Returns the block index whose render box contains [globalPos], or null.
@@ -275,5 +275,4 @@ extension _GlobalSelectionOverlayBodyDragParts on GlobalSelectionOverlayState {
       }
     }
   }
-
 }

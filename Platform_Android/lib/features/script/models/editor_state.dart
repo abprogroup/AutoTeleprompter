@@ -31,32 +31,33 @@ class EditorState {
   });
 
   Map<String, dynamic> toJson() => {
-    'text': text,
-    'timestamp': timestamp.toIso8601String(),
-    'description': description,
-    'fontSize': fontSize,
-    'fontFamily': fontFamily,
-    'lineSpacing': lineSpacing,
-    'letterSpacing': letterSpacing,
-    'wordSpacing': wordSpacing,
-    'scriptBgColor': scriptBgColor,
-    'currentWordColor': currentWordColor,
-    'futureWordColor': futureWordColor,
-    'textAlign': textAlign,
-  };
+        'text': text,
+        'timestamp': timestamp.toIso8601String(),
+        'description': description,
+        'fontSize': fontSize,
+        'fontFamily': fontFamily,
+        'lineSpacing': lineSpacing,
+        'letterSpacing': letterSpacing,
+        'wordSpacing': wordSpacing,
+        'scriptBgColor': scriptBgColor,
+        'currentWordColor': currentWordColor,
+        'futureWordColor': futureWordColor,
+        'textAlign': textAlign,
+      };
 
   factory EditorState.fromJson(Map<String, dynamic> json) => EditorState(
-    text: json['text'] as String,
-    timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
-    description: json['description'] as String? ?? 'Edit',
-    fontSize: (json['fontSize'] as num?)?.toDouble() ?? 40.0,
-    fontFamily: json['fontFamily'] as String? ?? 'Inter',
-    lineSpacing: (json['lineSpacing'] as num?)?.toDouble() ?? 1.0,
-    letterSpacing: (json['letterSpacing'] as num?)?.toDouble() ?? 0.0,
-    wordSpacing: (json['wordSpacing'] as num?)?.toDouble() ?? 0.0,
-    scriptBgColor: json['scriptBgColor'] as int? ?? 0xFF000000,
-    currentWordColor: json['currentWordColor'] as int? ?? 0xFFFFBF00,
-    futureWordColor: json['futureWordColor'] as int? ?? 0xFFFFFFFF,
-    textAlign: json['textAlign'] as String? ?? 'center',
-  );
+        text: json['text'] as String,
+        timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+            DateTime.now(),
+        description: json['description'] as String? ?? 'Edit',
+        fontSize: (json['fontSize'] as num?)?.toDouble() ?? 40.0,
+        fontFamily: json['fontFamily'] as String? ?? 'Inter',
+        lineSpacing: (json['lineSpacing'] as num?)?.toDouble() ?? 1.0,
+        letterSpacing: (json['letterSpacing'] as num?)?.toDouble() ?? 0.0,
+        wordSpacing: (json['wordSpacing'] as num?)?.toDouble() ?? 0.0,
+        scriptBgColor: json['scriptBgColor'] as int? ?? 0xFF000000,
+        currentWordColor: json['currentWordColor'] as int? ?? 0xFFFFBF00,
+        futureWordColor: json['futureWordColor'] as int? ?? 0xFFFFFFFF,
+        textAlign: json['textAlign'] as String? ?? 'center',
+      );
 }

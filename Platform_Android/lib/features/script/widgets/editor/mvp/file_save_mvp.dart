@@ -116,9 +116,7 @@ class FileSaveMvp {
 
   /// Strip unsafe filesystem characters and any prior extension from the title.
   static String _sanitizeTitle(String title, String format) {
-    return title
-        .replaceAll(RegExp(r'[/\\:*?"<>|]'), '_')
-        .replaceAll(
+    return title.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_').replaceAll(
           RegExp(r'\.(txt|pdf|docx|rtf|doc|pages|rtf)$', caseSensitive: false),
           '',
         );
@@ -126,7 +124,8 @@ class FileSaveMvp {
 
   /// Attempt to rename the file to add the correct extension.
   /// Returns true if successful, false if the path is a content URI or rename fails.
-  static Future<bool> _tryEnforceExtension(String savedPath, String format) async {
+  static Future<bool> _tryEnforceExtension(
+      String savedPath, String format) async {
     try {
       // Content URIs (content://...) cannot be renamed via dart:io
       if (savedPath.startsWith('content://')) return false;

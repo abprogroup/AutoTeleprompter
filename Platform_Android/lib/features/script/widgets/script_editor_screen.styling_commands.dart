@@ -390,6 +390,149 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
     _applyInlineCmd('bg', '[bg=#$cleanHex]', '[/bg]', 'Highlight Color');
   }
 
+  bool _hasActiveTextSelection() {
+    if (_isGlobalSelection) return true;
+    if (_overlayKey.currentState?.hasSelection ?? false) return true;
+    for (final c in _controllers) {
+      final external = c.externalSelection;
+      if (external != null && external.isValid && !external.isCollapsed) {
+        return true;
+      }
+    }
+    final active = _activeController;
+    return active != null &&
+        active.selection.isValid &&
+        !active.selection.isCollapsed;
+  }
+
+  String _rgbHex(int argb) =>
+      (argb & 0x00FFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
+
+  /// Inverts colors either within the active selection (swaps each run's
+  /// text/highlight colors) or, with no selection, across the whole script
+  /// (swaps the script background and future-word colors, plus every
+  /// explicit color/highlight tag). Ported from Windows'
+  /// `handleInvertColors`, adapted to Android's own selection/history
+  /// primitives (`_styleTargets`, `_isGlobalSelection`, `_saveHistory`/
+  /// `_isSuiteDirty`) instead of Windows' `_setEditorState`/
+  /// `_recordSuiteHistoryChange`.
+  Future<void> handleInvertColors() async {
+    _restoreSelectionIfNeeded();
+    final settings = ref.read(settingsProvider);
+    if (_hasActiveTextSelection()) {
+      setState(() => _isCommandExecuting = true);
+      final inSuite = _activeSuite != EditorSuite.none;
+      if (inSuite) _trackSuiteSection('Invert Colors');
+      var changed = false;
+      final wasGlobalSelection = _isGlobalSelection;
+      final hasOverlay = _overlayKey.currentState?.hasSelection ?? false;
+      final targets = <MarkupController>[];
+
+      if (wasGlobalSelection) {
+        _isGlobalSelection = false;
+        for (final c in _controllers) {
+          if (c.text.isEmpty) continue;
+          c.externalSelection =
+              TextSelection(baseOffset: 0, extentOffset: c.text.length);
+          c.externalVisibleSelection = TextSelection(
+            baseOffset: 0,
+            extentOffset: MarkupDecorationParser.visibleText(c.text).length,
+          );
+          targets.add(c);
+        }
+      } else {
+        targets.addAll(_styleTargets());
+      }
+
+      for (final c in targets) {
+        if (c.text.isEmpty) continue;
+        final selection = (c.externalSelection != null &&
+                c.externalSelection!.isValid &&
+                !c.externalSelection!.isCollapsed)
+            ? c.externalSelection!
+            : c.selection;
+        if (!selection.isValid || selection.isCollapsed) continue;
+        final nextValue =
+            EditorColorInversionOperation.applySelectionColorInvert(
+          text: c.text,
+          selection: selection,
+          defaultTextColor: _rgbHex(settings.futureWordColor),
+          scriptBackgroundColor: _rgbHex(settings.scriptBgColor),
+        );
+        if (nextValue.text == c.text) continue;
+        c.value = nextValue;
+        if (nextValue.selection.isValid && !nextValue.selection.isCollapsed) {
+          c.externalSelection = nextValue.selection;
+          c.externalVisibleSelection =
+              MarkupDecorationParser.rawToVisibleSelection(
+            c.text,
+            nextValue.selection,
+          );
+        }
+        c.refresh();
+        changed = true;
+      }
+
+      if (wasGlobalSelection) {
+        _isGlobalSelection = true;
+        _resyncGlobalSelection();
+      } else if (hasOverlay) {
+        _overlayKey.currentState
+            ?.syncOffsetsFromExternalSelection(_controllers);
+      }
+
+      if (changed) {
+        if (inSuite) {
+          _isSuiteDirty = true;
+        } else {
+          _saveHistory(description: 'Invert Colors');
+        }
+      }
+      _onSelectionChanged();
+      setState(() => _isCommandExecuting = false);
+      return;
+    }
+
+    final oldBackground = settings.scriptBgColor;
+    final oldFutureText = settings.futureWordColor;
+    final nextBackground = oldFutureText;
+    final nextFutureText = oldBackground;
+    var changedMarkup = false;
+    setState(() => _isCommandExecuting = true);
+    for (final c in _controllers) {
+      if (c.text.isEmpty) continue;
+      final nextValue =
+          EditorColorInversionOperation.applyWholeScriptHighlightColorInvert(
+        text: c.text,
+        defaultTextColor: _rgbHex(settings.futureWordColor),
+        scriptBackgroundColor: _rgbHex(settings.scriptBgColor),
+      );
+      if (nextValue.text == c.text) continue;
+      c.value = nextValue;
+      c.refresh();
+      changedMarkup = true;
+    }
+    final notifier = ref.read(settingsProvider.notifier);
+    await notifier.setScriptBgColor(nextBackground);
+    await notifier.setFutureWordColor(nextFutureText);
+    if (changedMarkup) {
+      await notifier.setShowUpcomingWordColor(false);
+    } else {
+      await notifier.setShowUpcomingWordColor(true);
+    }
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          scriptBgColor: nextBackground,
+          futureWordColor: nextFutureText,
+        );
+    if (_activeSuite == EditorSuite.none) {
+      _saveHistory(description: 'Invert Colors');
+    } else {
+      _isSuiteDirty = true;
+    }
+    _onSelectionChanged();
+    setState(() => _isCommandExecuting = false);
+  }
+
   /// Remove all tags of a given family from the selection (used when "none" color is chosen).
   void _removeInlineTags(String family, String close) {
     setState(() => _isCommandExecuting = true);

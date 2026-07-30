@@ -61,12 +61,10 @@ class _V3SplashScreenState extends ConsumerState<V3SplashScreen> {
                 size: 64,
               ),
             )
-            .animate()
-            .scale(duration: 800.ms, curve: Curves.elasticOut)
-            .shimmer(delay: 1.seconds, duration: 1.5.seconds),
-            
+                .animate()
+                .scale(duration: 800.ms, curve: Curves.elasticOut)
+                .shimmer(delay: 1.seconds, duration: 1.5.seconds),
             const SizedBox(height: 32),
-            
             Text(
               'AUTOTELEPROMPTER',
               style: GoogleFonts.inter(
@@ -75,10 +73,7 @@ class _V3SplashScreenState extends ConsumerState<V3SplashScreen> {
                 fontWeight: FontWeight.w900,
                 letterSpacing: 3,
               ),
-            )
-            .animate()
-            .fadeIn(delay: 400.ms)
-            .slideY(begin: 0.2, end: 0),
+            ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2, end: 0),
           ],
         ),
       ),

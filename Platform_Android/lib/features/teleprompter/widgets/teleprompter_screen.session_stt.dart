@@ -6,6 +6,17 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     _remoteCmdSub = ref.read(remoteControlProvider).onCommand.listen((cmd) {
       if (!mounted) return;
       final settings = ref.read(settingsProvider);
+      if (cmd.startsWith('SET_SPEED:')) {
+        final speed = double.tryParse(cmd.substring('SET_SPEED:'.length));
+        if (speed != null && settings.scrollMode == 'manual') {
+          unawaited(
+            ref
+                .read(settingsProvider.notifier)
+                .setScrollSpeed(speed.clamp(-300.0, 300.0).toDouble()),
+          );
+        }
+        return;
+      }
 
       switch (cmd) {
         case 'TOGGLE':
@@ -42,8 +53,56 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         case 'MODE_MANUAL':
           ref.read(settingsProvider.notifier).setScrollMode('manual');
           break;
+        case 'BOOKMARK_ADD':
+          unawaited(_addPresenterBookmark());
+          break;
+        case 'BOOKMARK_REMOVE':
+          final tState = ref.read(teleprompterProvider);
+          if (!tState.isListening && !tState.isStarting) {
+            unawaited(_deletePresenterBookmarkAtCurrentPosition());
+          }
+          break;
+        case 'BOOKMARK_PREVIOUS':
+          unawaited(_jumpPresenterBookmark(-1));
+          break;
+        case 'BOOKMARK_NEXT':
+          unawaited(_jumpPresenterBookmark(1));
+          break;
+        case 'INVERT_COLORS':
+          unawaited(_togglePresenterColorInversion());
+          break;
       }
     });
+  }
+
+  Future<void> _togglePresenterColorInversion() async {
+    final settings = ref.read(settingsProvider);
+    final nextBackground =
+        ScriptColorInversionService.nextBackgroundColor(settings);
+    final nextFutureText =
+        ScriptColorInversionService.futureTextColorForBackground(
+      nextBackground,
+    );
+
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    await settingsNotifier.setScriptBgColor(nextBackground);
+    await settingsNotifier.setFutureWordColor(nextFutureText);
+    await settingsNotifier.setShowUpcomingWordColor(true);
+    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+          scriptBgColor: nextBackground,
+          futureWordColor: nextFutureText,
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          Color(nextBackground).computeLuminance() > 0.5
+              ? 'Script colors inverted: light background'
+              : 'Script colors inverted: dark background',
+        ),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   bool _handlePresentationKey(KeyEvent event) {

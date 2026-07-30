@@ -7,7 +7,15 @@ class PlatformFileImport {
 
   /// File extensions the app can import on Android.
   static const List<String> supportedExtensions = [
-    'rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text',
+    'rtf',
+    'pdf',
+    'docx',
+    'doc',
+    'odt',
+    'txt',
+    'md',
+    'log',
+    'text',
   ];
 
   /// Human-readable formats string shown in the "not supported" error dialog.

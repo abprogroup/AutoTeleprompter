@@ -9,11 +9,11 @@ part of 'teleprompter_provider.dart';
 extension TeleprompterVisibleSkipAssist on TeleprompterNotifier {
   bool _maybeAssistVisibleLocale(
     Script script,
-    AppSettings settings,
+    SttRecognitionPolicy policy,
     String heard,
   ) {
     if (_disposed || _sessionStopped) return false;
-    if (!settings.sttVisibleSkipEnabled || heard.trim().isEmpty) return false;
+    if (!policy.visibleSkipEnabled || heard.trim().isEmpty) return false;
     if (_visibleWordStart == null || _visibleWordEnd == null) return false;
     if (_visibleLocaleAssistPinActive()) return false;
     if (_sectionLocales.length != script.words.length) {
@@ -196,20 +196,6 @@ extension TeleprompterVisibleSkipAssist on TeleprompterNotifier {
     _sectionLocales = mapped;
   }
 
-  int _effectiveSkipThreshold() {
-    if (_sectionLocales.isEmpty)
-      return TeleprompterNotifier._googleSkipAfterStuck;
-    final currentIdx = state.confirmedWordIndex;
-    for (var lookahead = 1; lookahead <= 2; lookahead++) {
-      final checkIdx = currentIdx + lookahead;
-      if (checkIdx < _sectionLocales.length &&
-          _sectionLocales[checkIdx] != _activeLocale) {
-        return 5;
-      }
-    }
-    return TeleprompterNotifier._googleSkipAfterStuck;
-  }
-
   void _checkAndSwitchLocale() {
     if (_disposed || _sessionStopped) return;
     if (_visibleLocaleAssistPinActive()) return;
@@ -243,21 +229,11 @@ extension TeleprompterVisibleSkipAssist on TeleprompterNotifier {
     final previous = _activeLocale ?? _scriptLanguageLocale ?? '?';
     _activeLocale = locale;
     _scriptLanguageLocale = locale;
-    _accumulatedTranscript = '';
+    _resetSttTrackingContext();
     final engineName = _sttService.platformName.toUpperCase();
     _addDebugLog('STT LOCALE [$engineName]: $previous -> $locale ($reason)');
     _safeSetState((s) => s.copyWith(isStarting: true, soundLevel: 0.0));
     _sttService.setLocale(locale);
     return true;
-  }
-
-  /// Find the next non-newline word index after [from]
-  int? _nextRealWord(int from, Script script) {
-    for (int i = from + 1; i < script.words.length; i++) {
-      if (!script.words[i].isNewline && script.words[i].normalized.isNotEmpty) {
-        return i;
-      }
-    }
-    return null;
   }
 }

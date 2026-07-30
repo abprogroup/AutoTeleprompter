@@ -107,6 +107,24 @@ List<String> _localesFor(List<ScriptWord> words) {
   return [for (final word in words) word.isRtl ? 'he_IL' : 'en_US'];
 }
 
+// The ported (2026-07-29) evidence-gated aligner requires callers to supply
+// an `SttRecognitionPolicy` tuned to how much spoken evidence should unlock a
+// visible-skip jump - production code derives this from movement/recognition
+// policy services (see `android_parity_gaps.md` #22). These fixed 3-word
+// Hebrew test phrases (one word only 3 letters) fall just under the
+// *default* `SttRecognitionPolicy.legacy()` visibleSkip threshold of 4,
+// while their English counterparts (all words >=5 letters) clear it -
+// exposing the new evidence-weighting by letter count, not a language bug.
+// Matches Windows' own `word_aligner_mac_parity_test.dart` convention of
+// always passing an explicit policy for evidence-sensitive scenarios rather
+// than relying on the bare default.
+const _visibleSkipTestPolicy = SttRecognitionPolicy(
+  bulletMode: false,
+  visibleSkipEnabled: true,
+  hardVisibleSkipEnabled: false,
+  visibleSkip: SttEvidenceThreshold(3),
+);
+
 void main() {
   group('Android visible STT skip', () {
     test('finds English phrase after visible Hebrew section', () {
@@ -116,6 +134,7 @@ void main() {
         transcript: 'returning english section',
         lastConfirmedIndex: 0,
         maxSkipTargetIndex: script.length - 1,
+        policy: _visibleSkipTestPolicy,
       );
 
       expect(result.confirmedWordIndex, script.length - 1);
@@ -129,6 +148,7 @@ void main() {
         transcript: '$_hReturn $_hSection $_hNext',
         lastConfirmedIndex: 0,
         maxSkipTargetIndex: script.length - 1,
+        policy: _visibleSkipTestPolicy,
       );
 
       expect(result.confirmedWordIndex, script.length - 1);
@@ -142,6 +162,7 @@ void main() {
         transcript: '$_hReturn $_hSection $_hNext',
         lastConfirmedIndex: 0,
         maxSkipTargetIndex: script.length - 1,
+        policy: _visibleSkipTestPolicy,
       );
 
       expect(result.confirmedWordIndex, script.length - 1);
@@ -154,6 +175,7 @@ void main() {
         transcript: 'returning english section',
         lastConfirmedIndex: 0,
         maxSkipTargetIndex: script.length - 1,
+        policy: _visibleSkipTestPolicy,
       );
 
       expect(result.confirmedWordIndex, script.length - 1);

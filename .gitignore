@@ -31,6 +31,13 @@ _agent/
 .vscode/
 AutoTeleprompter_AGENT_*
 
+# Retired folder (2026-07-28) - contents merged into _agent/rules/ and the
+# real .claude/.gitignore/.gitattributes. Guard against it being recreated.
+Project_Config_and_Rules/
+
+# Old-machine conversation transcript backups now live in
+# backups/Conversation Archive/, already covered by the backups/ rule above.
+
 # NEVER TRACK LOCAL HISTORY OR EXPERIMENT ARCHIVES
 readable_history/
 _v5_archive/
@@ -73,6 +80,7 @@ supabase/.temp/
 TeleSmart/
 releases/
 releases/v*/
+build-symbols/
 
 # Local credentials, provider secrets, and private build inputs.
 .env

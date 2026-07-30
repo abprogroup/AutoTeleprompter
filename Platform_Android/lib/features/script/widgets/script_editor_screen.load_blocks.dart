@@ -36,7 +36,10 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
       if (existingMeta != null) {
         final decoded = jsonDecode(existingMeta);
-        final String existingContent = decoded['fullText'] ?? '';
+        final secureData = await SecureScriptStore().readFromMetadata(
+          Map<String, dynamic>.from(decoded),
+        );
+        final String existingContent = secureData?.text ?? '';
         final String sessionId = decoded['sessionId'];
         final String type = decoded['type'] ?? 'TXT';
 
@@ -44,7 +47,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           finalContent = existingContent;
           finalType = type;
           finalSessionId = sessionId;
-          finalHistoryJson = decoded['historyJson'];
+          finalHistoryJson = secureData?.historyJson;
         } else {
           if (!mounted) return;
           final choice = await showDialog<String>(
@@ -99,7 +102,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             finalContent = existingContent;
             finalType = type;
             finalSessionId = sessionId;
-            finalHistoryJson = decoded['historyJson'];
+            finalHistoryJson = secureData?.historyJson;
           } else {
             if (mounted) Navigator.pop(context);
             return;
@@ -236,6 +239,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           // (their externalSelection values must not be overwritten here).
           final overlayActive = _overlayKey.currentState?.hasSelection ?? false;
           if (!_isGlobalSelection &&
+              !_editorToolbarFocusGuard &&
               !overlayActive &&
               !controller.isGlobalSelected &&
               !controller.selection.isCollapsed) {
@@ -370,6 +374,9 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     if (!mounted) return;
     final controller = _activeController;
     if (controller != null) {
+      if (_editorToolbarFocusGuard && !_isCommandExecuting) {
+        return;
+      }
       // v3.9.5.1: Synchronize selection with status broadcast logic
       // Only reset Global Selection if a manual PARTIAL selection occurs.
       // If the selection is collapsed (cursor) or spans the whole block, keep the flag.

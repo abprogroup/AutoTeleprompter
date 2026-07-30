@@ -7,10 +7,12 @@ import 'features/feedback/services/lightweight_diagnostics.dart';
 import 'app.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  _installDiagnostics();
   runZonedGuarded(
-    () => runApp(const ProviderScope(child: AutoTeleprompterApp())),
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
+      _installDiagnostics();
+      runApp(const ProviderScope(child: AutoTeleprompterApp()));
+    },
     (error, stackTrace) {
       LightweightDiagnostics.instance.recordError(
         error,

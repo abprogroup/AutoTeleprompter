@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/security/encrypted_file_store.dart';
+import '../../auth/services/account_backend_config.dart';
+import '../../auth/services/account_backend_service.dart';
+import 'lightweight_diagnostics.dart';
 
 const feedbackEndpoint = String.fromEnvironment('FEEDBACK_ENDPOINT');
 
@@ -12,12 +16,14 @@ class FeedbackSendResult {
   final bool queued;
   final String reportId;
   final String message;
+  final String? failureClass;
 
   const FeedbackSendResult({
     required this.sent,
     required this.queued,
     required this.reportId,
     required this.message,
+    this.failureClass,
   });
 }
 
@@ -37,20 +43,33 @@ class FeedbackReportService {
   static const int inlinePayloadThresholdBytes = 48 * 1024;
   static const int maxPendingReports = 3;
   static const int maxRedirects = 5;
+  static const Duration defaultRequestTimeout = Duration(seconds: 20);
 
   FeedbackReportService({
     HttpClient? client,
     Future<Directory> Function()? outboxDirectory,
     String endpoint = feedbackEndpoint,
+    AccountBackendConfig accountBackendConfig = const AccountBackendConfig(),
+    AccountBackendService? accountBackendService,
+    this.requestTimeout = defaultRequestTimeout,
   })  : _client = client ?? HttpClient(),
         _outboxDirectory = outboxDirectory,
-        _endpoint = endpoint,
+        _endpoint = _sanitizeEndpoint(endpoint),
+        _accountBackendConfig = accountBackendConfig,
+        _accountBackendService = accountBackendService ??
+            AccountBackendService(config: accountBackendConfig),
         _encryptedStore = EncryptedFileStore(baseDirectory: outboxDirectory);
 
   final HttpClient _client;
   final Future<Directory> Function()? _outboxDirectory;
   final String _endpoint;
+  final AccountBackendConfig _accountBackendConfig;
+  final AccountBackendService _accountBackendService;
+  final Duration requestTimeout;
   final EncryptedFileStore _encryptedStore;
+
+  static String _sanitizeEndpoint(String endpoint) =>
+      endpoint.replaceAll(RegExp(r'[\r\n]'), '').trim();
 
   Future<FeedbackSendResult> submit(Map<String, Object?> report) async {
     final reportId = report['reportId']?.toString() ?? _newReportId();
@@ -115,12 +134,43 @@ class FeedbackReportService {
     String payload, {
     required bool queueOnFailure,
   }) async {
+    if (_accountBackendConfig.isConfigured) {
+      try {
+        await _accountBackendService
+            .submitFeedbackPayload(payload)
+            .timeout(requestTimeout);
+        return FeedbackSendResult(
+          sent: true,
+          queued: false,
+          reportId: reportId,
+          message: 'Feedback sent. Report ID: $reportId',
+        );
+      } catch (error) {
+        if (queueOnFailure) await _queueReport(reportId, payload);
+        final failureClass = _transportFailureClass(error);
+        _recordFailure(failureClass, reportId, {
+          'errorType': error.runtimeType.toString(),
+          'error': error.toString(),
+          'transport': 'accountBackend',
+        });
+        return FeedbackSendResult(
+          sent: false,
+          queued: queueOnFailure,
+          reportId: reportId,
+          failureClass: failureClass,
+          message: 'Could not send feedback through the account backend.'
+              '${queueOnFailure ? " Report saved locally." : ""}',
+        );
+      }
+    }
+
     if (_endpoint.trim().isEmpty) {
       if (queueOnFailure) await _queueReport(reportId, payload);
       return FeedbackSendResult(
         sent: false,
         queued: queueOnFailure,
         reportId: reportId,
+        failureClass: 'endpointMissing',
         message: queueOnFailure
             ? 'Feedback service is not configured. Report saved locally.'
             : 'Feedback service is not configured yet.',
@@ -129,13 +179,26 @@ class FeedbackReportService {
 
     try {
       final uri = _feedbackUri(_endpoint);
+      if (!_isAllowedFeedbackUri(uri)) {
+        if (queueOnFailure) await _queueReport(reportId, payload);
+        _recordFailure('endpointRejected', reportId,
+            {'scheme': uri.scheme, 'host': uri.host});
+        return FeedbackSendResult(
+          sent: false,
+          queued: queueOnFailure,
+          reportId: reportId,
+          failureClass: 'endpointRejected',
+          message: 'Feedback service endpoint must use HTTPS.'
+              '${queueOnFailure ? " Report saved locally." : ""}',
+        );
+      }
       final bytes = utf8.encode(payload);
       final response = await _sendWithRedirects(
         uri: uri,
         reportId: reportId,
         body: bytes,
         gzipped: false,
-      );
+      ).timeout(requestTimeout);
       if (response.isAccepted) {
         return FeedbackSendResult(
           sent: true,
@@ -148,10 +211,15 @@ class FeedbackReportService {
       }
       if (queueOnFailure) await _queueReport(reportId, payload);
       final serverMessage = response.serverMessage;
+      _recordFailure('serverRejected', reportId, {
+        'statusCode': response.statusCode,
+        if (serverMessage != null) 'serverMessage': serverMessage,
+      });
       return FeedbackSendResult(
         sent: false,
         queued: queueOnFailure,
         reportId: reportId,
+        failureClass: 'serverRejected',
         message: (serverMessage == null
                 ? 'Server returned ${response.statusCode}.'
                 : 'Feedback service rejected the report: $serverMessage.') +
@@ -159,14 +227,48 @@ class FeedbackReportService {
       );
     } catch (error) {
       if (queueOnFailure) await _queueReport(reportId, payload);
+      final failureClass = _transportFailureClass(error);
+      _recordFailure(failureClass, reportId, {
+        'errorType': error.runtimeType.toString(),
+        'error': error.toString(),
+      });
       return FeedbackSendResult(
         sent: false,
         queued: queueOnFailure,
         reportId: reportId,
+        failureClass: failureClass,
         message: 'Could not send feedback.'
             '${queueOnFailure ? " Report saved locally." : ""}',
       );
     }
+  }
+
+  bool _isAllowedFeedbackUri(Uri uri) {
+    if (uri.scheme == 'https') return true;
+    if (uri.scheme != 'http') return false;
+    final host = uri.host.toLowerCase();
+    return host == 'localhost' || host == '127.0.0.1' || host == '::1';
+  }
+
+  String _transportFailureClass(Object error) {
+    if (error is TimeoutException) return 'timeout';
+    if (error is HandshakeException) return 'tlsHandshake';
+    if (error is SocketException) return 'networkSocket';
+    if (error is HttpException) return 'httpTransport';
+    if (error is FormatException) return 'badEndpointFormat';
+    return 'transportError';
+  }
+
+  void _recordFailure(
+    String failureClass,
+    String reportId,
+    Map<String, Object?> data,
+  ) {
+    LightweightDiagnostics.instance.record(
+      'feedback',
+      'feedback $failureClass',
+      data: {'reportId': reportId, ...data},
+    );
   }
 
   Future<_FeedbackHttpResponse> _sendWithRedirects({
@@ -239,6 +341,8 @@ class FeedbackReportService {
     final dir = await _ensureOutboxDirectory();
     final files = _pendingFiles(dir);
     var sent = 0;
+    String? lastFailureClass;
+    String? lastFailureMessage;
     for (final file in files) {
       try {
         final payload = await _readPendingPayload(file);
@@ -251,23 +355,44 @@ class FeedbackReportService {
         if (result.sent) {
           await file.delete();
           sent++;
+        } else {
+          lastFailureClass = result.failureClass;
+          lastFailureMessage = result.message;
         }
-      } catch (_) {}
+      } catch (error) {
+        lastFailureClass = 'retryReadOrSendFailed';
+        lastFailureMessage = error.toString();
+        _recordFailure('retryReadOrSendFailed', _reportIdFromFile(file),
+            {'error': error.toString()});
+      }
     }
     final remaining = await pendingReportCount();
+    final failure = lastFailureMessage;
+    final failureSuffix = failure == null
+        ? ''
+        : ' Last failure: ${_compactFailureMessage(failure)}';
     return FeedbackOutboxRetryResult(
       sent: sent,
       remaining: remaining,
       message: sent == 0
           ? 'No pending reports were sent. $remaining still saved locally.'
-          : 'Sent $sent pending report(s). $remaining still saved locally.',
+              '$failureSuffix'
+          : 'Sent $sent pending report(s). $remaining still saved locally.'
+              '$failureSuffix',
     );
+  }
+
+  String _compactFailureMessage(String value) {
+    final compact = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= 180) return compact;
+    return '${compact.substring(0, 177)}...';
   }
 
   Future<void> _queueReport(String reportId, String payload) async {
     final dir = await _ensureOutboxDirectory();
+    final safeReportId = _safeReportId(reportId);
     final file = File(
-      '${dir.path}${Platform.pathSeparator}$reportId.json.gz.atpe',
+      '${dir.path}${Platform.pathSeparator}$safeReportId.json.gz.atpe',
     );
     final encrypted = await _encryptedStore.protectToEnvelopeAsync(
       gzip.encode(utf8.encode(payload)),
@@ -278,13 +403,26 @@ class FeedbackReportService {
     await _enforceOutboxLimit(dir);
   }
 
+  String _safeReportId(String reportId) {
+    final safe = reportId
+        .replaceAll(RegExp(r'[^A-Za-z0-9_.-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^[_\.-]+|[_\.-]+$'), '');
+    if (safe.isEmpty) return _newReportId();
+    return safe.length > 90 ? safe.substring(0, 90) : safe;
+  }
+
   Future<void> _enforceOutboxLimit(Directory dir) async {
     final files = _pendingFiles(dir)
       ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
     for (final file in files.skip(maxPendingReports)) {
       try {
         await file.delete();
-      } catch (_) {}
+      } catch (error) {
+        _recordFailure('outboxLimitDeleteFailed', _reportIdFromFile(file), {
+          'error': error.toString(),
+        });
+      }
     }
   }
 

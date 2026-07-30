@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Grants the system package installer temporary read access to a downloaded
+  update APK. Path must match UpdateDownloadService's `_updatesDirectory()`
+  (Dart's getTemporaryDirectory() -> Android's cache dir -> "app_updates"
+  subfolder).
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="app_updates" path="app_updates/" />
+</paths>

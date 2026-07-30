@@ -32,7 +32,7 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
     _showControls();
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: const Color(0xF01A1A1A),
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       isScrollControlled: true,

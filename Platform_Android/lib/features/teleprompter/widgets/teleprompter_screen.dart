@@ -6,13 +6,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../models/alignment_result.dart';
 import '../providers/teleprompter_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../script/providers/script_provider.dart';
+import '../../script/services/script_color_inversion_service.dart';
 import '../../script/models/script.dart';
 import '../../script/services/script_bookmark_service.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../script/models/script_word.dart';
 import '../../../core/widgets/global_color_picker.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../remote/services/remote_control_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
@@ -27,6 +31,8 @@ part 'teleprompter_screen.audio_debug_widgets.dart';
 part 'teleprompter_screen.control_bar.dart';
 part 'teleprompter_screen.settings_panel.dart';
 part 'teleprompter_screen.settings_widgets.dart';
+part 'teleprompter_screen.speech_settings.dart';
+part 'teleprompter_screen.walkthrough.dart';
 
 // Regex to strip any unprocessed markup tags that somehow leaked into word.raw
 final _tagStripRe = RegExp(
@@ -37,7 +43,9 @@ class _PresentationSearchIntent extends Intent {
 }
 
 class TeleprompterScreen extends ConsumerStatefulWidget {
-  const TeleprompterScreen({super.key});
+  final bool showWalkthroughGuide;
+
+  const TeleprompterScreen({super.key, this.showWalkthroughGuide = false});
 
   @override
   ConsumerState<TeleprompterScreen> createState() => _TeleprompterScreenState();
@@ -74,6 +82,18 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   List<ScriptBookmark> _bookmarks = const [];
   bool _visibleWindowSyncScheduled = false;
   DateTime? _lastVisibleWindowSync;
+  String? _lastPublishedRemoteScrollMode;
+  double? _lastPublishedRemoteScrollSpeed;
+  bool? _lastPublishedRemoteScriptActive;
+  bool? _lastPublishedRemoteSessionActive;
+  bool? _lastPublishedRemoteIsStarting;
+  final GlobalKey _presenterSttKey = GlobalKey();
+  final GlobalKey _presenterSettingsButtonKey = GlobalKey();
+  final GlobalKey _presenterBookmarksKey = GlobalKey();
+  final GlobalKey _presenterResetKey = GlobalKey();
+  bool _presenterWalkthroughVisible = false;
+  int _presenterWalkthroughStep = 0;
+  bool _presenterWalkthroughEligibilityChecked = false;
 
   @override
   void initState() {
@@ -85,6 +105,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initRemoteListener();
+        if (widget.showWalkthroughGuide) {
+          setState(() {
+            _presenterWalkthroughVisible = true;
+            _presenterWalkthroughStep = 0;
+          });
+        }
         ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage),
             (prev, next) {
           if (next != null && next.isNotEmpty && mounted)
@@ -119,6 +145,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _wordTrackTimer?.cancel();
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
+    ref.read(remoteControlProvider).publishPresenterState(
+          scriptActive: false,
+          sessionActive: false,
+          isStarting: false,
+          scrollMode: 'auto',
+          scrollSpeed: 0,
+        );
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
     super.dispose();

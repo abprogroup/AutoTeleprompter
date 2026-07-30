@@ -38,16 +38,79 @@ jobs:
 
       - name: Verify Android v5.0.0 metadata
         run: |
-          grep -Fxq 'version: 5.0.0+1' pubspec.yaml
+          grep -Fxq 'version: 5.0.0+2' pubspec.yaml
+        working-directory: Platform_Android
+
+      - name: Analyze
+        run: flutter analyze --no-pub
+        working-directory: Platform_Android
+
+      - name: Test
+        run: flutter test --no-pub
+        working-directory: Platform_Android
+
+      - name: Enforce 800-line file cap
+        run: |
+          over_limit=""
+          while IFS= read -r -d '' file; do
+            lines=$(wc -l < "$file")
+            if [ "$lines" -gt 800 ]; then
+              echo "$file: $lines lines"
+              over_limit="yes"
+            fi
+          done < <(find lib -name '*.dart' -print0)
+          if [ -n "$over_limit" ]; then
+            echo "One or more Dart files exceed the 800-line cap (see above). Split into part files before merging."
+            exit 1
+          fi
         working-directory: Platform_Android
 
       - name: Build Android APK (Release, split ABI)
         run: |
           endpoint="$(python3 ../.github/scripts/sanitize_feedback_endpoint.py "$FEEDBACK_ENDPOINT")"
-          flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi "--dart-define=APP_VERSION=5.0.0+1" "--dart-define=FEEDBACK_ENDPOINT=$endpoint"
+
+          # Account backend (Supabase) is enabled only when both secrets are
+          # present, matching Windows/iOS. Falls back cleanly (disabled) when
+          # they are not yet configured for this repo.
+          supabase_url="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n')"
+          supabase_anon_key="$(printf '%s' "$SUPABASE_ANON_KEY" | tr -d '\r\n')"
+          if [ -n "$supabase_url" ] && [ -n "$supabase_anon_key" ]; then
+            account_backend_enabled="true"
+            admin_email=""
+            admin_code_hash=""
+          else
+            account_backend_enabled="false"
+            supabase_url=""
+            supabase_anon_key=""
+            admin_email="$(printf '%s' "$AUTOTELEPROMPTER_ADMIN_EMAIL" | tr -d '\r\n')"
+            admin_code_hash="$(printf '%s' "$AUTOTELEPROMPTER_ADMIN_CODE_SHA256" | tr -d '[:space:]' | tr 'A-Z' 'a-z')"
+          fi
+
+          update_manifest_url="$(printf '%s' "$UPDATE_MANIFEST_URL_SECRET" | tr -d '\r\n')"
+          if [ -z "$update_manifest_url" ]; then
+            update_manifest_url="$(printf '%s' "$UPDATE_MANIFEST_URL_VAR" | tr -d '\r\n')"
+          fi
+
+          flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi \
+            "--dart-define=APP_VERSION=5.0.0+2" \
+            "--dart-define=FEEDBACK_ENDPOINT=$endpoint" \
+            "--dart-define=ACCOUNT_BACKEND_ENABLED=$account_backend_enabled" \
+            "--dart-define=SUPABASE_URL=$supabase_url" \
+            "--dart-define=SUPABASE_ANON_KEY=$supabase_anon_key" \
+            "--dart-define=AUTOTELEPROMPTER_ADMIN_EMAIL=$admin_email" \
+            "--dart-define=AUTOTELEPROMPTER_ADMIN_CODE_SHA256=$admin_code_hash" \
+            "--dart-define=UPDATE_MANIFEST_URL=$update_manifest_url" \
+            "--dart-define=ACCOUNT_MANAGE_SUBSCRIPTION_URL=$ACCOUNT_MANAGE_SUBSCRIPTION_URL"
         working-directory: Platform_Android
         env:
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          AUTOTELEPROMPTER_ADMIN_EMAIL: ${{ secrets.AUTOTELEPROMPTER_ADMIN_EMAIL }}
+          AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
+          UPDATE_MANIFEST_URL_SECRET: ${{ secrets.UPDATE_MANIFEST_URL }}
+          UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
+          ACCOUNT_MANAGE_SUBSCRIPTION_URL: ${{ vars.ACCOUNT_MANAGE_SUBSCRIPTION_URL }}
 
       - name: Rename Android APKs
         run: |

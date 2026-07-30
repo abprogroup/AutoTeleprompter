@@ -2,7 +2,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/speech_service.dart';
+import '../services/stt_movement_policy_service.dart';
+import '../services/stt_recognition_policy_service.dart';
+import '../services/stt_transcript_buffer_service.dart';
+import '../services/stt_tracking_state.dart';
+import '../services/stt_visible_skip_context_service.dart';
 import '../services/word_aligner.dart';
 import '../../script/models/script.dart';
 import '../../script/models/script_word.dart';
@@ -13,6 +19,7 @@ import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../platform/stt/stt_service_factory.dart';
 
 part 'teleprompter_provider.visible_skip.dart';
+part 'teleprompter_provider.stt.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final AbstractSttService _sttService;
@@ -40,14 +47,69 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _visibleLocaleAssistPinnedLocale;
   String? _pendingVisibleLocaleAssistLocale;
 
-  // Tuning: how patient we are before force-skipping.
-  static const int _googleSkipAfterStuck = 45;
+  // Movement-policy tracking state (evidence-gated advance/hold/reset).
+  bool _sttReadingStandby = false;
+  bool _lockedOn = false;
+  int _transcriptFloor = 0;
+  int? _pendingStartEvidenceTargetIndex;
+  String _pendingVisibleSkipTranscript = '';
+  int? _pendingVisibleSkipOriginIndex;
+  int? _pendingVisibleSkipStartIndex;
+  int? _pendingVisibleSkipEndIndex;
+  SttEvidenceTrackingState _sttEvidenceTrackingState =
+      SttEvidenceTrackingState.locked;
+  String? _lastNoProgressTranscriptKey;
+  int _staleNoProgressTranscriptCount = 0;
+
   static const int _maxAdvancePerUpdate = 30;
+  static const int _maxLocalSttJumpWithoutWait = 2;
+  static const int _sttLiveAlignmentWindowWords = 10;
+  static const int _sttAlignmentWindowWords = 18;
   static const int _visibleLocaleAssistAfterWaits = 1;
   static const Duration _visibleLocaleAssistCooldown =
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
       Duration(milliseconds: 3000);
+
+  void _resetSttTrackingContext({bool clearTranscriptFloor = true}) {
+    _accumulatedTranscript = '';
+    _noProgressCount = 0;
+    _sttReadingStandby = false;
+    _lockedOn = false;
+    if (clearTranscriptFloor) _transcriptFloor = 0;
+    _pendingStartEvidenceTargetIndex = null;
+    _clearPendingVisibleSkipEvidence();
+    _sttEvidenceTrackingState = SttEvidenceTrackingState.locked;
+    _resetStaleNoProgressTracking();
+  }
+
+  void _resetStaleNoProgressTracking() {
+    _lastNoProgressTranscriptKey = null;
+    _staleNoProgressTranscriptCount = 0;
+  }
+
+  void _clearPendingVisibleSkipEvidence() {
+    _pendingVisibleSkipTranscript = '';
+    _pendingVisibleSkipOriginIndex = null;
+    _pendingVisibleSkipStartIndex = null;
+    _pendingVisibleSkipEndIndex = null;
+  }
+
+  int _currentSttAdvanceGuardIndex(int confirmedIndex) =>
+      _fluidAdvanceTimer?.isActive == true && _fluidTarget > confirmedIndex
+          ? _fluidTarget
+          : confirmedIndex;
+
+  String _noProgressTranscriptKey(String transcript) {
+    final words = transcript
+        .split(RegExp(r'\s+'))
+        .map((word) => word.trim().normalizeForMatching())
+        .where((word) => word.isNotEmpty)
+        .toList(growable: false);
+    if (words.isEmpty) return '';
+    final start = words.length > 8 ? words.length - 8 : 0;
+    return words.sublist(start).join(' ');
+  }
 
   @override
   TeleprompterState build() {
@@ -98,121 +160,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final logs = [...state.debugLogs, entry];
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
     _safeSetState((s) => s.copyWith(debugLogs: logs));
-  }
-
-  /// Common handler for Android STT results.
-  void _handleSttResult(SpeechResult result) {
-    if (_currentScript == null || _disposed) return;
-    _safeSetState((s) => s.copyWith(isStarting: false));
-
-    final words = result.words.toLowerCase();
-    try {
-      final settings = ref.read(settingsProvider);
-
-      // Voice Commands
-      if (words.contains('stop prompt') ||
-          words.contains('עצור') ||
-          words.contains('עצירה')) {
-        _addDebugLog('[VOICE] COMMAND: STOP');
-        ref.read(settingsProvider.notifier).setScrollSpeed(0);
-        return;
-      } else if (words.contains('start prompt') || words.contains('בוא')) {
-        _addDebugLog('[VOICE] COMMAND: START');
-        if (settings.scrollSpeed == 0)
-          ref.read(settingsProvider.notifier).setScrollSpeed(100);
-        return;
-      } else if (words.contains('speed up') || words.contains('מהר')) {
-        _addDebugLog('[VOICE] COMMAND: FASTER');
-        ref
-            .read(settingsProvider.notifier)
-            .setScrollSpeed((settings.scrollSpeed + 25).clamp(-300, 300));
-        return;
-      } else if (words.contains('slow down') || words.contains('לאט')) {
-        _addDebugLog('[VOICE] COMMAND: SLOWER');
-        ref
-            .read(settingsProvider.notifier)
-            .setScrollSpeed((settings.scrollSpeed - 25).clamp(-300, 300));
-        return;
-      }
-    } catch (_) {}
-
-    _accumulatedTranscript = result.words;
-    final script = _currentScript!;
-    final settings = ref.read(settingsProvider);
-    final maxSkipTargetIndex =
-        settings.sttVisibleSkipEnabled && _visibleWordStart != null
-            ? _visibleWordEnd
-            : null;
-
-    final aligned = WordAligner.align(
-      script: script.words,
-      transcript: _accumulatedTranscript,
-      lastConfirmedIndex: state.confirmedWordIndex,
-      maxSkipTargetIndex: maxSkipTargetIndex,
-    );
-
-    final currentIdx = state.confirmedWordIndex;
-    final nextExpected = (currentIdx + 1 < script.words.length)
-        ? script.words
-            .skip(currentIdx + 1)
-            .where((w) => !w.isNewline)
-            .take(3)
-            .map((w) => w.raw)
-            .join(' ')
-        : '<END>';
-
-    const engineTag = '[STT]';
-    final skipThreshold = _effectiveSkipThreshold();
-    if (aligned.confirmedWordIndex > state.confirmedWordIndex) {
-      _noProgressCount = 0;
-      _resetVisibleLocaleAssist();
-      final visibleSkipTargetTrusted = maxSkipTargetIndex != null &&
-          aligned.confirmedWordIndex <= maxSkipTargetIndex;
-      final target = resolveAdvanceTarget(
-        currentIndex: state.confirmedWordIndex,
-        alignedIndex: aligned.confirmedWordIndex,
-        visibleMaxSkipTargetIndex: maxSkipTargetIndex,
-      );
-      final advancedWord =
-          target < script.words.length ? script.words[target].raw : '?';
-      _addDebugLog(
-          '$engineTag ADVANCE -> #$target "$advancedWord" (conf=${aligned.confidence.toStringAsFixed(2)}) | heard: "${result.words}"');
-
-      // Fluid advancement: if jumping more than 3 words, animate
-      // through intermediate words so the user's eye can follow.
-      final jump = target - state.confirmedWordIndex;
-      if (visibleSkipTargetTrusted || jump <= 3) {
-        // Small jumps and trusted visible-skip targets are instant.
-        _fluidAdvanceTimer?.cancel();
-        _safeSetState((s) => s.copyWith(confirmedWordIndex: target));
-      } else {
-        // Large jump - advance word by word with short delays.
-        _startFluidAdvance(target, script);
-      }
-      _syncLocaleForPosition(script, target + 1, reason: 'advance');
-    } else {
-      _noProgressCount++;
-      _addDebugLog(
-          '$engineTag WAIT #$_noProgressCount/$skipThreshold | heard: "${result.words}" | next: "$nextExpected"');
-      _checkAndSwitchLocale();
-
-      if (_maybeAssistVisibleLocale(script, settings, result.words)) {
-        return;
-      }
-
-      if (_noProgressCount >= skipThreshold) {
-        _noProgressCount = 0;
-        final next = _nextRealWord(state.confirmedWordIndex, script);
-        if (next != null) {
-          final skippedWord = script.words[next].raw;
-          _addDebugLog(
-              '[STT] FORCE SKIP -> #$next "$skippedWord" (stuck too long)');
-          _resetVisibleLocaleAssist();
-          _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
-          _syncLocaleForPosition(script, next + 1, reason: 'force skip');
-        }
-      }
-    }
   }
 
   void _setupSttCallbacks() {
@@ -336,6 +283,43 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         .toInt();
   }
 
+  static List<String> liveTranscriptWindowsForAlignment(
+    String transcript, {
+    int shortWindowWords = _sttLiveAlignmentWindowWords,
+    int longWindowWords = _sttAlignmentWindowWords,
+    int maxWindows = 8,
+  }) =>
+      SttRecognitionPolicyService.liveTranscriptWindowsForAlignment(
+        transcript,
+        shortWindowWords: shortWindowWords,
+        longWindowWords: longWindowWords,
+        maxWindows: maxWindows,
+      );
+
+  static int? resolveVisibleSkipTarget({
+    required bool visibleSkipEnabled,
+    required bool strictBulletMode,
+    required int? visibleWordStart,
+    required int? visibleWordEnd,
+  }) {
+    if (!visibleSkipEnabled) return null;
+    if (visibleWordStart == null) return null;
+    return visibleWordEnd;
+  }
+
+  static bool isTrustedVisibleSkipTarget({
+    required int alignedIndex,
+    required int? visibleWordStart,
+    required int? visibleWordEnd,
+  }) {
+    if (visibleWordStart == null || visibleWordEnd == null) return false;
+    final start =
+        visibleWordStart <= visibleWordEnd ? visibleWordStart : visibleWordEnd;
+    final end =
+        visibleWordStart <= visibleWordEnd ? visibleWordEnd : visibleWordStart;
+    return alignedIndex >= start && alignedIndex <= end;
+  }
+
   static bool visibleTranscriptPlausiblyMatchesLocale({
     required List<ScriptWord> words,
     required List<String> sectionLocales,
@@ -414,39 +398,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     'you',
   };
 
-  /// Animate word advancement from current position to [target],
-  /// advancing one word every ~80ms so the eye can follow.
-  void _startFluidAdvance(int target, Script script) {
-    _fluidAdvanceTimer?.cancel();
-    _fluidTarget = target;
-
-    _fluidAdvanceTimer =
-        Timer.periodic(const Duration(milliseconds: 80), (timer) {
-      if (_disposed || _sessionStopped) {
-        timer.cancel();
-        return;
-      }
-      final current = state.confirmedWordIndex;
-
-      // If a newer result pushed the target further, follow it
-      final effectiveTarget = _fluidTarget;
-
-      if (current >= effectiveTarget) {
-        timer.cancel();
-        return;
-      }
-
-      // Advance to next non-newline word
-      int next = current + 1;
-      while (next < script.words.length && script.words[next].isNewline) {
-        next++;
-      }
-      if (next > effectiveTarget) next = effectiveTarget;
-
-      _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
-    });
-  }
-
   Future<void> startSession(Script script) async {
     final pendingStop = _stopInFlight;
     if (pendingStop != null) await pendingStop;
@@ -462,8 +413,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _currentScript!.sessionId.isNotEmpty &&
         _currentScript!.sessionId == script.sessionId;
     _currentScript = script;
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
+    _resetSttTrackingContext();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
     _silentWarningFired = false;
@@ -609,8 +559,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _startingSession = false;
     _heartbeatTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
+    _resetSttTrackingContext();
     _lastVolLog = null;
     _scriptLanguageLocale = null;
     _activeLocale = null;
@@ -643,8 +592,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   void resetPosition() {
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
+    _resetSttTrackingContext();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('[STT] POSITION RESET -> 0');
@@ -659,8 +607,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final activeScript = _currentScript;
     if (_disposed || activeScript == null || activeScript.words.isEmpty) return;
     final target = index.clamp(0, activeScript.words.length - 1);
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
+    _resetSttTrackingContext();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(

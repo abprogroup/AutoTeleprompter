@@ -47,7 +47,12 @@ class LightweightDiagnostics {
     _prune();
   }
 
-  void recordError(Object error, StackTrace? stackTrace, {String? source}) {
+  void recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    String? source,
+    Map<String, Object?> data = const {},
+  }) {
     _lastError = error;
     _lastStackTrace = stackTrace;
     record(
@@ -57,6 +62,7 @@ class LightweightDiagnostics {
         if (source != null) 'source': source,
         if (stackTrace != null)
           'stackTrace': _trim(stackTrace.toString(), 8000),
+        ...data,
       },
     );
   }

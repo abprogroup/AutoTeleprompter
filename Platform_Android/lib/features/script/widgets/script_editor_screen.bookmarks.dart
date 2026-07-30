@@ -479,6 +479,25 @@ extension _ScriptEditorBookmarkParts on _ScriptEditorScreenState {
     );
   }
 
+  /// Place the caret at an arbitrary block/offset (used by "Edit at current
+  /// position" coming back from present/creator modes).
+  void _focusEditorPosition(int block, int offset) {
+    if (block < 0 || block >= _controllers.length) return;
+    final controller = _controllers[block];
+    final safeOffset = offset.clamp(0, controller.text.length).toInt();
+    _clearRecognizedBlockRange('edit-at-position');
+    _overlayKey.currentState?.clearSelection();
+    for (final c in _controllers) {
+      c.externalSelection = null;
+      c.isGlobalSelected = false;
+    }
+    controller.selection = TextSelection.collapsed(offset: safeOffset);
+    _lastFocusedController = controller;
+    setState(() => _isGlobalSelection = false);
+    _focusNodes[block].requestFocus();
+    _scrollEditorBlockIntoView(block, alignment: 0.28);
+  }
+
   bool _hasBookmarkInEditorBlock(int block) {
     if (block < 0 || block >= _controllers.length) return false;
     return _controllers[block].text.contains(_bookmarkSign);

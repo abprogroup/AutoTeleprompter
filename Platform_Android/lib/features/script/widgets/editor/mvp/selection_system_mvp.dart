@@ -52,7 +52,8 @@ class SelectionSystemMvp {
 
     for (final c in controllers) {
       c.isGlobalSelected = true;
-      c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+      c.externalSelection =
+          TextSelection(baseOffset: 0, extentOffset: c.text.length);
     }
 
     setCommandExecuting(false);
@@ -169,7 +170,8 @@ class SelectionSystemMvp {
   }) {
     for (final c in controllers) {
       c.isGlobalSelected = true;
-      c.externalSelection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+      c.externalSelection =
+          TextSelection(baseOffset: 0, extentOffset: c.text.length);
       // Keep native selection synced so platform toolbar stays available
       if (c.text.isNotEmpty) {
         c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
@@ -217,7 +219,8 @@ class SelectionSystemMvp {
         htmlBuf.write(StylingService.markupToHtml(slice));
       }
       if (plainBuf.isEmpty) return;
-      RichClipboard.setHtml(plain: plainBuf.toString(), html: htmlBuf.toString());
+      RichClipboard.setHtml(
+          plain: plainBuf.toString(), html: htmlBuf.toString());
       return;
     }
 
@@ -254,7 +257,9 @@ class SelectionSystemMvp {
     if (isGlobalSelection || hasOverlay) {
       setCommandExecuting(true);
       if (isGlobalSelection) {
-        for (final c in controllers) { c.text = ''; }
+        for (final c in controllers) {
+          c.text = '';
+        }
       } else {
         for (final c in controllers) {
           final sel = c.externalSelection;

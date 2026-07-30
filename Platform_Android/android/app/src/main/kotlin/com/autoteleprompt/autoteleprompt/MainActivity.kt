@@ -10,6 +10,8 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
+import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -321,6 +323,34 @@ class MainActivity: FlutterActivity() {
                         result.success(candidates)
                     } catch (_: Exception) {
                         result.success(emptyList<Map<String, String>>())
+                    }
+                }
+                "installApk" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrBlank()) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val apkFile = File(path)
+                        if (!apkFile.exists()) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                        val apkUri = FileProvider.getUriForFile(
+                            this,
+                            "$packageName.fileprovider",
+                            apkFile
+                        )
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(apkUri, "application/vnd.android.package-archive")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("install_apk_failed", e.message, null)
                     }
                 }
                 else -> result.notImplemented()

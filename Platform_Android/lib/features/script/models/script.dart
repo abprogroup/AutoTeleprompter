@@ -7,9 +7,11 @@ class Script {
   final List<ScriptWord> words;
   final bool isRtl;
   final String sourceType; // 'TEMP', 'RTF', 'PDF', 'TXT', etc.
-  final String sessionId;   // Unique session key for Deep Memory style recovery
+  final String?
+      sourcePath; // Original imported file path, for re-import identity matching
+  final String sessionId; // Unique session key for Deep Memory style recovery
   final String? historyJson; // Persisted Undo/Redo stack for v3.5.4
-  final int historyIndex;     // v3.8 persistence
+  final int historyIndex; // v3.8 persistence
 
   // v3.9.5.46: Absolute Metadata Parity
   final double fontSize;
@@ -29,6 +31,7 @@ class Script {
     required this.words,
     required this.isRtl,
     this.sourceType = 'TEMP',
+    this.sourcePath,
     required this.sessionId,
     this.historyJson,
     this.historyIndex = -1,
@@ -44,11 +47,12 @@ class Script {
   });
 
   Script copyWith({
-    String? title, 
-    String? rawText, 
-    List<ScriptWord>? words, 
-    bool? isRtl, 
-    String? sourceType, 
+    String? title,
+    String? rawText,
+    List<ScriptWord>? words,
+    bool? isRtl,
+    String? sourceType,
+    String? sourcePath,
     String? sessionId,
     String? historyJson,
     int? historyIndex,
@@ -69,6 +73,7 @@ class Script {
       words: words ?? this.words,
       isRtl: isRtl ?? this.isRtl,
       sourceType: sourceType ?? this.sourceType,
+      sourcePath: sourcePath ?? this.sourcePath,
       sessionId: sessionId ?? this.sessionId,
       historyJson: historyJson ?? this.historyJson,
       historyIndex: historyIndex ?? this.historyIndex,

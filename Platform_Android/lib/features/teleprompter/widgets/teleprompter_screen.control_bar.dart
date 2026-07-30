@@ -18,6 +18,10 @@ class _ControlBar extends ConsumerWidget {
   final VoidCallback onPreviousBookmark;
   final VoidCallback onNextBookmark;
   final VoidCallback onSearch;
+  final GlobalKey? settingsKey;
+  final GlobalKey? sttKey;
+  final GlobalKey? bookmarksKey;
+  final GlobalKey? resetKey;
 
   const _ControlBar({
     required this.isListening,
@@ -37,6 +41,10 @@ class _ControlBar extends ConsumerWidget {
     required this.onPreviousBookmark,
     required this.onNextBookmark,
     required this.onSearch,
+    this.settingsKey,
+    this.sttKey,
+    this.bookmarksKey,
+    this.resetKey,
   });
 
   @override
@@ -47,6 +55,11 @@ class _ControlBar extends ConsumerWidget {
         ? (isManualScrolling && settings.scrollSpeed != 0)
         : isListening;
     final isBooting = !isManualMode && isStarting;
+    final bookmarksEnabled = ref.watch(authProvider).hasPremiumAccess;
+    final bookmarkIconColor =
+        bookmarksEnabled ? Colors.white70 : Colors.white24;
+    final bookmarkTooltip =
+        bookmarksEnabled ? null : 'Bookmarks are included with Pro';
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
       unawaited(ref.read(settingsProvider.notifier).setFontSize(clamped));
@@ -66,7 +79,7 @@ class _ControlBar extends ConsumerWidget {
           colors: [
             Colors.black.withOpacity(0.98),
             Colors.black.withOpacity(0.88),
-            Colors.black.withOpacity(0.36),
+            Colors.black.withOpacity(0.82),
           ],
           stops: const [0.0, 0.62, 1.0],
         ),
@@ -83,27 +96,35 @@ class _ControlBar extends ConsumerWidget {
                   onPressed: onBack,
                   tooltip: 'Back',
                 ),
-                IconButton(
-                  icon: const Icon(Icons.skip_previous, color: Colors.white70),
-                  onPressed: onPreviousBookmark,
-                  tooltip: 'Previous bookmark',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.bookmark_add_outlined,
-                      color: Colors.white70),
-                  onPressed: onAddBookmark,
-                  tooltip: 'Add bookmark',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.bookmark_remove_outlined,
-                      color: Colors.white70),
-                  onPressed: onRemoveBookmark,
-                  tooltip: 'Remove bookmark',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.skip_next, color: Colors.white70),
-                  onPressed: onNextBookmark,
-                  tooltip: 'Next bookmark',
+                KeyedSubtree(
+                  key: bookmarksKey,
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon:
+                            Icon(Icons.skip_previous, color: bookmarkIconColor),
+                        onPressed: onPreviousBookmark,
+                        tooltip: bookmarkTooltip ?? 'Previous bookmark',
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.bookmark_add_outlined,
+                            color: bookmarkIconColor),
+                        onPressed: onAddBookmark,
+                        tooltip: bookmarkTooltip ?? 'Add bookmark',
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.bookmark_remove_outlined,
+                            color: bookmarkIconColor),
+                        onPressed: onRemoveBookmark,
+                        tooltip: bookmarkTooltip ?? 'Remove bookmark',
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.skip_next, color: bookmarkIconColor),
+                        onPressed: onNextBookmark,
+                        tooltip: bookmarkTooltip ?? 'Next bookmark',
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.search, color: Colors.white70),
@@ -116,13 +137,16 @@ class _ControlBar extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.tune, color: Colors.white70),
-                  onPressed: () {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    onSettings();
-                  },
-                  tooltip: 'Settings',
+                KeyedSubtree(
+                  key: settingsKey,
+                  child: IconButton(
+                    icon: const Icon(Icons.tune, color: Colors.white70),
+                    onPressed: () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      onSettings();
+                    },
+                    tooltip: 'Settings',
+                  ),
                 ),
                 IconButton(
                   icon: const Text('A',
@@ -134,6 +158,7 @@ class _ControlBar extends ConsumerWidget {
                   tooltip: 'Smaller font',
                 ),
                 GestureDetector(
+                  key: sttKey,
                   onTap: isBooting ? null : (isActive ? onStop : onStart),
                   child: Container(
                     width: 64,
@@ -168,6 +193,7 @@ class _ControlBar extends ConsumerWidget {
                   tooltip: 'Larger font',
                 ),
                 IconButton(
+                  key: resetKey,
                   icon: const Icon(Icons.replay, color: Colors.white70),
                   onPressed: onReset,
                   tooltip: 'Restart',

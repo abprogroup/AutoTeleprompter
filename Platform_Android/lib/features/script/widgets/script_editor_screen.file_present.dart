@@ -247,7 +247,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     });
   }
 
-  void _startPresenting() async {
+  void _startPresenting({bool continueWalkthrough = false}) async {
+    final editorSnapshot = _captureEditorModeReturnSnapshot();
+    _suspendEditorFocusForReaderMode();
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
     try {
       final settings = ref.read(settingsProvider);
@@ -270,13 +272,76 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           );
     } catch (_) {}
     if (mounted) {
-      await Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const TeleprompterScreen()));
+      await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) =>
+              TeleprompterScreen(showWalkthroughGuide: continueWalkthrough)));
       if (mounted) {
         await _loadBookmarksForCurrentScript(force: true);
         await _reconcileEditorBookmarkSignsFromMetadata(recordHistory: false);
+        _restoreEditorModeReturnSnapshot(editorSnapshot);
         _onSelectionChanged();
       }
     }
+  }
+
+  void _startContentCreator() {
+    unawaited(_openContentCreator());
+  }
+
+  void _startAudioOnlyContentCreator() {
+    unawaited(_openContentCreator(audioOnly: true));
+  }
+
+  Future<void> _openContentCreator({bool audioOnly = false}) async {
+    final featureName = audioOnly ? 'Audio-only recording' : 'Content Creator';
+    if (!await _ensureEditorPremiumAccess(featureName)) return;
+    final editorSnapshot = _captureEditorModeReturnSnapshot();
+    _suspendEditorFocusForReaderMode();
+    LightweightDiagnostics.instance.record(
+      'editor',
+      audioOnly ? 'audio-only creator opened' : 'content creator opened',
+      data: {
+        'title': _currentTitle,
+        'sessionId': _currentSessionId,
+        'blockCount': _controllers.length,
+        'audioOnly': audioOnly,
+      },
+    );
+    try {
+      final settings = ref.read(settingsProvider);
+      await ref
+          .read(settingsProvider.notifier)
+          .setContentCreatorRecordingFormat(
+            audioOnly
+                ? AppSettings.contentCreatorRecordingFormatAudio
+                : AppSettings.contentCreatorRecordingFormatMp4,
+          );
+      ref.read(scriptProvider.notifier).loadText(
+            _getRefinedFullTextWithoutBookmarkSigns(),
+            title: _currentTitle,
+            sourceType: _sourceType,
+            sessionId: _currentSessionId,
+            historyIndex: _historyIndex,
+            historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
+            fontSize: settings.fontSize,
+            fontFamily: settings.fontFamily,
+            lineSpacing: settings.lineSpacing,
+            letterSpacing: settings.letterSpacing,
+            wordSpacing: settings.wordSpacing,
+            textAlign: settings.textAlign,
+            scriptBgColor: settings.scriptBgColor,
+            currentWordColor: settings.currentWordColor,
+            futureWordColor: settings.futureWordColor,
+          );
+    } catch (_) {}
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ContentCreatorScreen(audioOnlyEntry: audioOnly),
+      ),
+    );
+    if (!mounted) return;
+    _restoreEditorModeReturnSnapshot(editorSnapshot);
+    _onSelectionChanged();
   }
 }

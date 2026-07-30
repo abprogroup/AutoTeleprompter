@@ -189,10 +189,12 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                     textColor =
                         base.withValues(alpha: gradOpacity.clamp(0.0, 1.0));
                   } else {
-                    // Toggle ON: uniform override color. Toggle OFF: use per-word markup color.
+                    // Toggle ON: uniform override color. Toggle OFF: use per-word markup
+                    // color, falling back to futureWordColor (not a hardcoded white,
+                    // which would go invisible against a light script background).
                     textColor = settings.showUpcomingWordColor
                         ? Color(settings.futureWordColor)
-                        : (word.textColor ?? const Color(0xFFFFFFFF));
+                        : (word.textColor ?? Color(settings.futureWordColor));
                   }
 
                   // Use Container padding instead of trailing space for word gaps.

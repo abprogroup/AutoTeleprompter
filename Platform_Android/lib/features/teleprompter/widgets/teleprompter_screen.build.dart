@@ -5,6 +5,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final script = ref.watch(scriptProvider);
     final tState = ref.watch(teleprompterProvider);
     final settings = ref.watch(settingsProvider);
+    _maybeShowPresenterWalkthrough(settings, tState);
+    _publishPresenterStateIfChanged(script, tState, settings);
     if (script != null) {
       while (_wordKeys.length < script.words.length) {
         _wordKeys.add(GlobalKey());
@@ -171,10 +173,12 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         : settings.pastWordOpacity;
                     textColor = base.withOpacity(gradOpacity.clamp(0.0, 1.0));
                   } else {
-                    // Toggle ON: uniform override color. Toggle OFF: use per-word markup color.
+                    // Toggle ON: uniform override color. Toggle OFF: use per-word markup
+                    // color, falling back to futureWordColor (not a hardcoded white,
+                    // which would go invisible against a light script background).
                     textColor = settings.showUpcomingWordColor
                         ? Color(settings.futureWordColor)
-                        : (word.textColor ?? Color(0xFFFFFFFF));
+                        : (word.textColor ?? Color(settings.futureWordColor));
                   }
 
                   // Use Container padding instead of trailing space for word gaps.
@@ -345,18 +349,23 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       left: 12,
                       right: 12,
                       bottom: soundLevelBottom,
-                      child: Opacity(
-                        opacity: settings.debugMode ? 1.0 : 0.0,
-                        child: IgnorePointer(
-                          ignoring: !settings.debugMode,
-                          child: _SoundLevelBar(
-                            level: tState.soundLevel,
-                            isListening: tState.isListening,
-                            isStarting: tState.isStarting,
-                            accentColor: Color(settings.currentWordColor),
+                      child: Builder(builder: (context) {
+                        final showMeter = settings.debugMode ||
+                            (settings.showSoundLevelMeter &&
+                                (tState.isListening || tState.isStarting));
+                        return Opacity(
+                          opacity: showMeter ? 1.0 : 0.0,
+                          child: IgnorePointer(
+                            ignoring: !showMeter,
+                            child: _SoundLevelBar(
+                              level: tState.soundLevel,
+                              isListening: tState.isListening,
+                              isStarting: tState.isStarting,
+                              accentColor: Color(settings.currentWordColor),
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      }),
                     ),
                     if (tState.isStarting && !tState.hasError)
                       Positioned(
@@ -602,16 +611,25 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                       child: Center(child: _buildPresenterSearchToolbar()),
                     ),
 
-                    // Controls overlay — control bar + speed slider stacked at bottom
+                    // Controls overlay — control bar + speed slider stacked at bottom.
+                    // Only the idle-hide timer should ever fade this out, and only
+                    // while STT is actually running — not while merely sitting idle
+                    // (including during the walkthrough, which never starts STT).
                     Positioned(
                       bottom: 0,
                       left: 0,
                       right: 0,
                       child: AnimatedOpacity(
-                        opacity: _controlsVisible ? 1.0 : 0.0,
+                        opacity: (_controlsVisible ||
+                                _presenterWalkthroughVisible ||
+                                !tState.isListening)
+                            ? 1.0
+                            : 0.0,
                         duration: const Duration(milliseconds: 400),
                         child: IgnorePointer(
-                          ignoring: !_controlsVisible,
+                          ignoring: !(_controlsVisible ||
+                              _presenterWalkthroughVisible ||
+                              !tState.isListening),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -693,12 +711,18 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                     _jumpPresenterBookmark(-1),
                                 onNextBookmark: () => _jumpPresenterBookmark(1),
                                 onSearch: _showSearchDialog,
+                                sttKey: _presenterSttKey,
+                                settingsKey: _presenterSettingsButtonKey,
+                                bookmarksKey: _presenterBookmarksKey,
+                                resetKey: _presenterResetKey,
                               ),
                             ],
                           ),
                         ),
                       ),
                     ),
+                    if (_presenterWalkthroughVisible)
+                      _buildPresenterWalkthroughOverlay(),
                   ],
                 ),
               ),
@@ -707,6 +731,38 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         ),
       ),
     );
+  }
+
+  void _publishPresenterStateIfChanged(
+    Script? script,
+    TeleprompterState tState,
+    AppSettings settings,
+  ) {
+    final scriptActive = script != null && !script.isEmpty;
+    final sessionActive =
+        tState.isListening || tState.isStarting || _manualScrolling;
+    final isStarting = tState.isStarting;
+    final mode = settings.scrollMode == 'manual' ? 'manual' : 'auto';
+    final speed = settings.scrollSpeed.clamp(-300.0, 300.0).toDouble();
+    if (_lastPublishedRemoteScriptActive == scriptActive &&
+        _lastPublishedRemoteSessionActive == sessionActive &&
+        _lastPublishedRemoteIsStarting == isStarting &&
+        _lastPublishedRemoteScrollMode == mode &&
+        _lastPublishedRemoteScrollSpeed == speed) {
+      return;
+    }
+    _lastPublishedRemoteScriptActive = scriptActive;
+    _lastPublishedRemoteSessionActive = sessionActive;
+    _lastPublishedRemoteIsStarting = isStarting;
+    _lastPublishedRemoteScrollMode = mode;
+    _lastPublishedRemoteScrollSpeed = speed;
+    ref.read(remoteControlProvider).publishPresenterState(
+          scriptActive: scriptActive,
+          sessionActive: sessionActive,
+          isStarting: isStarting,
+          scrollMode: mode,
+          scrollSpeed: speed,
+        );
   }
 
   TextAlign _toTextAlign(

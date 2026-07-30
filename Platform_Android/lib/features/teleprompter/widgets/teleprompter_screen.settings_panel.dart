@@ -1,5 +1,11 @@
 part of 'teleprompter_screen.dart';
 
+const _presenterSectionStyle = TextStyle(
+  color: Colors.white,
+  fontSize: 16,
+  fontWeight: FontWeight.w600,
+);
+
 class TeleprompterSettingsPanel extends ConsumerWidget {
   const TeleprompterSettingsPanel({super.key});
 
@@ -98,15 +104,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          _SwitchRow(
-            icon: Icons.visibility_outlined,
-            title: 'Allow visible text skip',
-            subtitle:
-                'Off by default. When on, STT may jump only to text currently visible on screen.',
-            value: settings.sttVisibleSkipEnabled,
-            accentColor: Color(settings.currentWordColor),
-            onChanged: notifier.setSttVisibleSkipEnabled,
-          ),
+          const _AndroidSpeechSettingsSection(),
           const SizedBox(height: 16),
 
           if (settings.scrollMode == 'manual') ...[
@@ -165,7 +163,34 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
 
-          const Text('Layout & Typography', style: sectionStyle),
+          Row(children: [
+            const Text('Layout & Typography', style: sectionStyle),
+            const Spacer(),
+            Tooltip(
+              message: 'Reset font size, spacing, and reading line position',
+              child: TextButton.icon(
+                onPressed: () {
+                  unawaited(notifier.setFontSize(20.0));
+                  unawaited(notifier.setLineSpacing(1.2));
+                  unawaited(notifier.setWordSpacing(0.0));
+                  unawaited(notifier.setLetterSpacing(0.0));
+                  unawaited(notifier.setScrollLead(0.32));
+                  unawaited(
+                    ref.read(scriptProvider.notifier).updateStyleMetadata(
+                          fontSize: 20.0,
+                          lineSpacing: 1.2,
+                          wordSpacing: 0.0,
+                          letterSpacing: 0.0,
+                        ),
+                  );
+                },
+                icon: const Icon(Icons.restart_alt_rounded,
+                    size: 18, color: Colors.white70),
+                label: const Text('Reset',
+                    style: TextStyle(color: Colors.white70)),
+              ),
+            ),
+          ]),
           const SizedBox(height: 14),
 
           // Professional: Broadcast Profiles
@@ -274,7 +299,37 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           const SizedBox(height: 8),
 
           // ── Colors ─────────────────────────────────────────────────────────
-          const Text('Colors', style: sectionStyle),
+          Row(children: [
+            const Text('Colors', style: sectionStyle),
+            const Spacer(),
+            Tooltip(
+              message: 'Invert script colors',
+              child: IconButton(
+                onPressed: () {
+                  final nextBackground =
+                      ScriptColorInversionService.nextBackgroundColor(settings);
+                  final nextFutureText =
+                      ScriptColorInversionService.futureTextColorForBackground(
+                          nextBackground);
+                  unawaited(notifier.setScriptBgColor(nextBackground));
+                  unawaited(notifier.setFutureWordColor(nextFutureText));
+                  unawaited(notifier.setShowUpcomingWordColor(true));
+                  unawaited(
+                    ref.read(scriptProvider.notifier).updateStyleMetadata(
+                          scriptBgColor: nextBackground,
+                          futureWordColor: nextFutureText,
+                        ),
+                  );
+                },
+                icon: const Icon(Icons.invert_colors, color: Color(0xFFFFBF00)),
+                style: IconButton.styleFrom(
+                  side: const BorderSide(color: Colors.white24),
+                  backgroundColor: const Color(0xFF2A2A2A),
+                  fixedSize: const Size(40, 40),
+                ),
+              ),
+            ),
+          ]),
           const SizedBox(height: 14),
 
           const Text('Script Background', style: labelStyle),

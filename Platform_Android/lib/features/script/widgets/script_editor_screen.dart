@@ -10,7 +10,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/security/secure_script_store.dart';
 import '../../../core/widgets/global_color_picker.dart';
+import '../../../core/widgets/stable_walkthrough_overlay.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/widgets/login_screen.dart';
 import '../models/script.dart';
 import '../models/cursor_style.dart';
 import '../models/editor_state.dart';
@@ -24,10 +28,13 @@ import './editor/markup_controller.dart';
 import './editor/components/global_selection_overlay.dart';
 import './editor/components/ghost_selection_controls.dart';
 import '../providers/script_provider.dart';
+import '../providers/pending_editor_cursor_provider.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
+import '../../teleprompter/widgets/content_creator_screen.dart';
 import '../../teleprompter/providers/teleprompter_provider.dart';
+import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/styling_service.dart';
 import '../services/script_bookmark_service.dart';
 import '../../../core/services/rich_clipboard.dart';
@@ -36,6 +43,7 @@ import '../services/rtf_service.dart';
 import '../services/pages_service.dart';
 import '../services/markup_export_service.dart';
 import '../services/markup_decoration_service.dart';
+import '../services/editor_color_inversion_operation.dart';
 import '../services/editor_text_geometry_service.dart';
 import '../../teleprompter/services/word_aligner.dart';
 import '../models/script_word.dart';
@@ -65,6 +73,10 @@ part 'script_editor_screen.keyboard_horizontal.dart';
 part 'script_editor_screen.keyboard_focus.dart';
 part 'script_editor_screen.selection_trace_stub.dart';
 part 'script_editor_screen.arrow_trace_stub.dart';
+part 'script_editor_screen.mode_return.dart';
+part 'script_editor_screen.toolbar_selection_guard.dart';
+part 'script_editor_screen.premium_gate.dart';
+part 'script_editor_screen.walkthrough.dart';
 
 // v3.9.5.59: Absolute Atomic Coordinator
 // â”€â”€ Switchboard Orchestrator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -113,8 +125,12 @@ class _RedoIntent extends Intent {
 class ScriptEditorScreen extends ConsumerStatefulWidget {
   final bool shouldAutoLoad;
   final File? pendingFile;
+  final bool showWalkthroughSampleGuide;
   const ScriptEditorScreen(
-      {super.key, this.shouldAutoLoad = false, this.pendingFile});
+      {super.key,
+      this.shouldAutoLoad = false,
+      this.pendingFile,
+      this.showWalkthroughSampleGuide = false});
 
   @override
   ConsumerState<ScriptEditorScreen> createState() => _ScriptEditorScreenState();
@@ -183,6 +199,9 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   String? _suppressDuplicateArrowEventSignature;
   String? _handledShiftSelectionEventSignature;
   int _keyboardFocusRepairToken = 0;
+  int _editorModeReturnRestoreToken = 0;
+  bool _editorToolbarFocusGuard = false;
+  Timer? _editorToolbarFocusGuardTimer;
   double? _verticalArrowPreferredX;
   SelectionEndpoint? _shiftSelectionAnchor;
   SelectionEndpoint? _shiftSelectionFocus;
@@ -212,6 +231,13 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isLoading = false;
   bool _isPendingLoad = false;
   EditorSuite _activeSuite = EditorSuite.none;
+  bool _walkthroughSampleGuideVisible = false;
+  int _walkthroughSampleGuideStep = 0;
+  final GlobalKey _walkthroughEditorViewportKey = GlobalKey();
+  final GlobalKey _walkthroughRenameKey = GlobalKey();
+  final GlobalKey _walkthroughSaveKey = GlobalKey();
+  final GlobalKey _walkthroughBookmarksKey = GlobalKey();
+  final GlobalKey _walkthroughPresentKey = GlobalKey();
   bool _keyboardDismissedForSelection = false;
   Timer? _historyTimer, _recentTimer, _autoSaveTimer, _clipboardGuardTimer;
   Timer?
@@ -253,6 +279,11 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
       _isInit = true;
       _isPendingLoad = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _importFile());
+    }
+    if (widget.showWalkthroughSampleGuide) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scheduleSampleWalkthroughStart(),
+      );
     }
   }
 

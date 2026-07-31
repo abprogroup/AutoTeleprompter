@@ -170,6 +170,25 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                           ),
                         ),
                       ),
+                    // User-facing mic signal meter. The debug console below
+                    // already shows its own embedded sound bar when debug
+                    // mode is on, so this standalone one only needs to cover
+                    // the non-debug case - otherwise both would render at
+                    // once.
+                    if (!settings.debugMode &&
+                        settings.showSoundLevelMeter &&
+                        (tState.isListening || tState.isStarting))
+                      Positioned(
+                        left: 12,
+                        right: 12,
+                        bottom: 12.0,
+                        child: _SoundLevelBar(
+                          level: tState.soundLevel,
+                          isListening: tState.isListening,
+                          isStarting: tState.isStarting,
+                          accentColor: Color(settings.currentWordColor),
+                        ),
+                      ),
                     if (settings.debugMode)
                       _buildPresenterDebugConsole(
                         context,

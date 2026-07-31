@@ -205,7 +205,11 @@ class SpeechService {
     }
     onDiagnostic?.call(_isInitialized
         ? '[STT] init OK'
-        : '[STT] init FAILED - check Windows Settings > Privacy & security > Microphone, and Time & Language > Speech');
+        : '[STT] init FAILED - this PC has no speech recognition language installed. '
+            'Fix: Settings > Time & Language > Language & region > click the '
+            '... next to your language > Language options > Speech recognition '
+            '> Download. (Not the same as Voices/Text-to-speech.) Falling back '
+            'to slower browser-based recognition until this is installed.');
     return _isInitialized;
   }
 

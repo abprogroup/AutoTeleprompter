@@ -1,4 +1,4 @@
-name: Build Windows EXE (v5.1.2)
+name: Build Windows EXE (v5.1.2) - SEALED
 run-name: Windows ${{ github.event.inputs.app_version || '5.1.2+59' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
 
 env:

@@ -1,4 +1,4 @@
-name: Build macOS App (v5.0.9)
+name: Build macOS App (v5.0.9) - SEALED
 run-name: macOS ${{ github.event.inputs.app_version || '5.0.9+38' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 

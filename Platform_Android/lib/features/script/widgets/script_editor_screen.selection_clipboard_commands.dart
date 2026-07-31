@@ -88,10 +88,12 @@ extension _ScriptEditorSelectionClipboardCommandParts
       }
     }
     if (plainBuf.isEmpty) return;
+    final plain = plainBuf.toString();
     RichClipboard.setHtml(
-      plain: plainBuf.toString(),
+      plain: plain,
       html: htmlBuf.toString(),
     );
+    _startClipboardGuard(plain);
   }
 
   bool _consumeNativePlainBlockPasteIfNeeded(
@@ -383,9 +385,11 @@ extension _ScriptEditorSelectionClipboardCommandParts
           'native:${controller.selection.start}-${controller.selection.end}',
     );
     _setBlockClipboard([slice]);
+    final plain = StylingService.stripTags(slice);
     RichClipboard.setHtml(
-      plain: StylingService.stripTags(slice),
+      plain: plain,
       html: StylingService.markupToHtml(slice),
     );
+    _startClipboardGuard(plain);
   }
 }

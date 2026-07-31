@@ -247,7 +247,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       final settings = ref.read(settingsProvider);
       if (head.text == currentText &&
           head.fontSize == settings.fontSize &&
-          head.fontFamily == (settings.fontFamily ?? 'Inter') &&
+          head.fontFamily == settings.fontFamily &&
           head.lineSpacing == settings.lineSpacing &&
           head.letterSpacing == settings.letterSpacing &&
           head.wordSpacing == settings.wordSpacing) {
@@ -261,7 +261,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       timestamp: DateTime.now(),
       description: description,
       fontSize: settings.fontSize,
-      fontFamily: settings.fontFamily ?? 'Inter',
+      fontFamily: settings.fontFamily,
       lineSpacing: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,
       wordSpacing: settings.wordSpacing,
@@ -274,7 +274,9 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       if (_historyIndex < _history.length - 1)
         _history.removeRange(_historyIndex + 1, _history.length);
       _history.add(state);
-      if (_history.length > 50) _history.removeAt(0);
+      if (_history.length > _ScriptEditorScreenState._maxHistory) {
+        _history.removeAt(0);
+      }
       _historyIndex = _history.length - 1;
     });
     _scheduleRecentUpdate();

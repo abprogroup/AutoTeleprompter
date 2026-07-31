@@ -87,7 +87,6 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     final settingsNotifier = ref.read(settingsProvider.notifier);
     await settingsNotifier.setScriptBgColor(nextBackground);
     await settingsNotifier.setFutureWordColor(nextFutureText);
-    await settingsNotifier.setShowUpcomingWordColor(true);
     await ref.read(scriptProvider.notifier).updateStyleMetadata(
           scriptBgColor: nextBackground,
           futureWordColor: nextFutureText,
@@ -165,7 +164,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$languageName is not available for offline speech recognition on this device.',
+              '$languageName is not available for on-device (offline) speech recognition on this phone.',
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
             const SizedBox(height: 16),
@@ -175,7 +174,7 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'An internet connection (WiFi or mobile data) is required for this language.',
+                    'An internet connection (WiFi or mobile data) may help if this device falls back to online recognition.',
                     style: TextStyle(
                         color: Color(0xFFFFBF00),
                         fontSize: 13,
@@ -195,14 +194,18 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
             const SizedBox(height: 8),
             const Text(
               '1. Connect to WiFi or enable mobile data\n\n'
-              '2. Confirm macOS microphone and speech-recognition permissions\n\n'
-              '3. Restart the teleprompter session',
+              '2. Check Settings > System > Languages & input > On-device speech '
+              'recognition and confirm this language is downloaded\n\n'
+              '3. Confirm microphone and speech-recognition permissions for this app\n\n'
+              '4. Restart the teleprompter session',
               style:
                   TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 12),
             const Text(
-              'Note: some languages may require an internet connection or may not be available on this macOS device.',
+              'Note: some manufacturers restrict which offline languages can be '
+              'installed, or route speech recognition through their own app '
+              'instead of stock Android settings.',
               style: TextStyle(
                   color: Colors.white38,
                   fontSize: 11,

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'script_editor_screen.dart';
@@ -70,7 +69,8 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
-        toolbarHeight: 80,
+        toolbarHeight: 56,
+        titleSpacing: 16,
         title: GestureDetector(
           onTap: () async {
             setState(() => _logoTaps++);
@@ -98,41 +98,53 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [
-          _PremiumShortcutIcon(
-            enabled: hasProAccess,
-            tooltip: 'Local Remote Control',
-            lockedTooltip: 'Connect a Pro account to use Remote Control',
-            icon: Icons.wifi_tethering_rounded,
-            onPressed: openRemoteSettings,
-            onLockedPressed: openSignIn,
-          ),
-          _PremiumShortcutIcon(
-            enabled: hasProAccess,
-            tooltip: 'Cloud Storage',
-            lockedTooltip: 'Connect a Pro account to use online Cloud',
-            icon: Icons.cloud_outlined,
-            onPressed: openCloudSettings,
-            onLockedPressed: openSignIn,
-          ),
-          IconButton(
-            tooltip: 'Send beta feedback',
-            icon: const Icon(Icons.bug_report_outlined, color: Colors.white54),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const FeedbackReportScreen()),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Padding(
+            padding: const EdgeInsets.only(right: 4, bottom: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _PremiumShortcutIcon(
+                  enabled: hasProAccess,
+                  tooltip: 'Local Remote Control',
+                  lockedTooltip: 'Connect a Pro account to use Remote Control',
+                  icon: Icons.wifi_tethering_rounded,
+                  onPressed: openRemoteSettings,
+                  onLockedPressed: openSignIn,
+                ),
+                _PremiumShortcutIcon(
+                  enabled: hasProAccess,
+                  tooltip: 'Cloud Storage',
+                  lockedTooltip: 'Connect a Pro account to use online Cloud',
+                  icon: Icons.cloud_outlined,
+                  onPressed: openCloudSettings,
+                  onLockedPressed: openSignIn,
+                ),
+                IconButton(
+                  tooltip: 'Send beta feedback',
+                  icon: const Icon(Icons.bug_report_outlined,
+                      color: Colors.white54),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const FeedbackReportScreen()),
+                  ),
+                ),
+                IconButton(
+                  icon:
+                      const Icon(Icons.settings_outlined, color: Colors.white54),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+                  ),
+                ),
+                _AccountMenuButton(auth: auth),
+                const SizedBox(width: 4),
+              ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Colors.white54),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
-            ),
-          ),
-          _AccountMenuButton(auth: auth),
-          const SizedBox(width: 4),
-        ],
+        ),
       ),
       body: Stack(
         children: [
@@ -303,7 +315,6 @@ class _FullHistorySheet extends ConsumerWidget {
   const _FullHistorySheet();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scripts = ref.watch(settingsProvider).recentScripts;
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       padding: const EdgeInsets.all(24),
@@ -369,9 +380,9 @@ class _GalleryActionCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
         ),
         child: Row(
           children: [
@@ -453,8 +464,8 @@ class _ScriptListItem extends ConsumerWidget {
         break;
       case 'TEMP':
         labelColor = const Color(0xFF64B5F6);
-        labelBgColor = labelColor.withOpacity(0.15);
-        labelBorderColor = labelColor.withOpacity(0.3);
+        labelBgColor = labelColor.withValues(alpha: 0.15);
+        labelBorderColor = labelColor.withValues(alpha: 0.3);
         break;
       case 'RTF':
       case 'DOCX':
@@ -462,13 +473,13 @@ class _ScriptListItem extends ConsumerWidget {
       case 'ODT':
       case 'PAGES':
         labelColor = const Color(0xFF81C784); // Greenish for documents
-        labelBgColor = labelColor.withOpacity(0.15);
-        labelBorderColor = labelColor.withOpacity(0.3);
+        labelBgColor = labelColor.withValues(alpha: 0.15);
+        labelBorderColor = labelColor.withValues(alpha: 0.3);
         break;
       case 'PDF':
         labelColor = const Color(0xFFE57373); // Reddish for PDF
-        labelBgColor = labelColor.withOpacity(0.15);
-        labelBorderColor = labelColor.withOpacity(0.3);
+        labelBgColor = labelColor.withValues(alpha: 0.15);
+        labelBorderColor = labelColor.withValues(alpha: 0.3);
         break;
       case 'TXT':
       case 'MD':
@@ -479,8 +490,8 @@ class _ScriptListItem extends ConsumerWidget {
         break;
       default:
         labelColor = const Color(0xFFCE93D8); // Purple for others
-        labelBgColor = labelColor.withOpacity(0.15);
-        labelBorderColor = labelColor.withOpacity(0.3);
+        labelBgColor = labelColor.withValues(alpha: 0.15);
+        labelBorderColor = labelColor.withValues(alpha: 0.3);
     }
 
     final previewKey = [
@@ -500,7 +511,7 @@ class _ScriptListItem extends ConsumerWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         clipBehavior: Clip.antiAlias,
         child: Row(
@@ -676,7 +687,7 @@ class _ScriptListItem extends ConsumerWidget {
 }
 
 class _AutoSaveCard extends StatefulWidget {
-  const _AutoSaveCard({super.key});
+  const _AutoSaveCard();
   @override
   State<_AutoSaveCard> createState() => _AutoSaveCardState();
 }
@@ -708,9 +719,9 @@ class _AutoSaveCardState extends State<_AutoSaveCard> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.1),
+        color: Colors.blue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,17 +1,14 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/security/secure_script_store.dart';
-import '../../../core/widgets/global_color_picker.dart';
 import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
@@ -19,7 +16,6 @@ import '../models/script.dart';
 import '../models/cursor_style.dart';
 import '../models/editor_state.dart';
 import './editor/editor_dialogs.dart';
-import './editor/lobby_settings_panel.dart';
 import './editor/suites/project_actions_mvp.dart';
 import './editor/suites/formatting_toolbar_mvp.dart';
 import './editor/components/editor_primitives.dart';
@@ -33,7 +29,6 @@ import '../../../core/extensions/string_extensions.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../../teleprompter/widgets/content_creator_screen.dart';
-import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/styling_service.dart';
 import '../services/script_bookmark_service.dart';
@@ -106,14 +101,6 @@ class _SearchIntent extends Intent {
   const _SearchIntent();
 }
 
-class _MoveLeftIntent extends Intent {
-  const _MoveLeftIntent();
-}
-
-class _MoveRightIntent extends Intent {
-  const _MoveRightIntent();
-}
-
 class _UndoIntent extends Intent {
   const _UndoIntent();
 }
@@ -143,7 +130,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   // Dummy node for HardwareKeyboard â†’ _handleEditorArrowKey bridge
   // (_handleEditorArrowKey never uses the node parameter).
   static final _arrowKeyDummyNode = FocusNode();
-  static const String _keyboardBookmarkSign = '\u00BB';
   // â”€â”€ Mixin Implementation for StylingLogicMixin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   List<MarkupController> get controllers => _controllers;
@@ -171,8 +157,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final ScrollController _editorScrollController = ScrollController();
   double? _editorScrollOffsetBeforeWindowHide;
   String _currentTitle = 'New Project';
-
-  TextSelection? _lastSelection;
 
   /// Preserved non-collapsed selection â€” survives focus loss from dialogs.
   /// Updated only when the selection is non-collapsed, so opening a dialog
@@ -243,6 +227,8 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   Timer?
       _settingsDebounceTimer; // v4.1.4: time-only debounce for slider changes
   Timer? _mobileSelectionRefreshTimer;
+  Timer? _selectionArmTimer;
+  Offset? _selectionArmPointerDownPos;
 
   // v3.9.6: Professional History Bulking
   int _typingCharCount = 0; // chars typed since last history commit
@@ -452,6 +438,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onGlobalArrowKey);
     _mobileSelectionRefreshTimer?.cancel();
+    _selectionArmTimer?.cancel();
     _blockClipboardTimer?.cancel();
     _clipboardGuardTimer?.cancel();
     _historyTimer?.cancel();

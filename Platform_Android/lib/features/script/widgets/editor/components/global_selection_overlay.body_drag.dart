@@ -43,6 +43,7 @@ extension _GlobalSelectionOverlayBodyDragParts on GlobalSelectionOverlayState {
     _candidateBlock = _blockAtPosition(globalPos);
     _candidateOffset = null;
     _bodyDragActive = false;
+    _selectionGestureArmed = false;
     if (_candidateBlock != null) {
       final renderObj =
           widget.blockKeys[_candidateBlock!].currentContext?.findRenderObject();
@@ -70,6 +71,16 @@ extension _GlobalSelectionOverlayBodyDragParts on GlobalSelectionOverlayState {
       final emptyToBlock = _candidateBlock == null && currentBlock != null;
       final edgeDrag = _shouldStartBodyEdgeDrag(globalPos);
       if (!crossed && !emptyToBlock && !edgeDrag) return;
+
+      // A plain drag (no preceding long-press) should scroll the editor, not
+      // select text. Only let this cross-block drag turn into a selection if
+      // it was armed by a long-press hold, or if the block it started in
+      // already has a native partial selection (from a double-tap
+      // word-select being extended by drag).
+      final nativeSelectionActive = _candidateBlock != null &&
+          widget.controllers[_candidateBlock!].selection.isValid &&
+          !widget.controllers[_candidateBlock!].selection.isCollapsed;
+      if (!_selectionGestureArmed && !nativeSelectionActive) return;
 
       _bodyDragActive = true;
       _enterRefineMode();

@@ -136,7 +136,6 @@ class EditorColorInversionOperation {
     required String defaultTextColor,
     required String scriptBackgroundColor,
   }) {
-    final defaultText = _normalizeHex(defaultTextColor);
     final scriptBg = _normalizeHex(scriptBackgroundColor);
     final buffer = StringBuffer();
     String? sourceTextColor;
@@ -175,9 +174,10 @@ class EditorColorInversionOperation {
       String? nextTextColor;
       String? nextBackgroundColor;
       if (oldBackground != null) {
-        // Highlighted run: swap text color <-> highlight color.
+        // Highlighted run: the highlight disappears and the text itself
+        // takes on the highlight's old color - no background tag survives.
         nextTextColor = oldBackground;
-        nextBackgroundColor = sourceTextColor ?? defaultText;
+        nextBackgroundColor = null;
         changed = true;
       } else if (sourceTextColor != null) {
         // Explicitly-colored text with no highlight: invert text <-> background

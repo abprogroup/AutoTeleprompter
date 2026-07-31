@@ -42,8 +42,14 @@ class NativeSpeechService {
         if (status == 'listening') {
           onStatusChange?.call(SpeechStatus.listening);
         } else if (status == 'error') {
+          // The native recognizer only sends status=error for genuinely
+          // fatal failures (recoverable ones are retried silently in
+          // Kotlin) - mark ourselves inactive so isListening stops
+          // reporting true after the engine has actually stopped.
+          _isActive = false;
           onStatusChange?.call(SpeechStatus.error);
         } else {
+          _isActive = false;
           onStatusChange?.call(SpeechStatus.idle);
         }
         break;

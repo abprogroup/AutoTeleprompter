@@ -87,7 +87,6 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     final settingsNotifier = ref.read(settingsProvider.notifier);
     await settingsNotifier.setScriptBgColor(nextBackground);
     await settingsNotifier.setFutureWordColor(nextFutureText);
-    await settingsNotifier.setShowUpcomingWordColor(true);
     await ref.read(scriptProvider.notifier).updateStyleMetadata(
           scriptBgColor: nextBackground,
           futureWordColor: nextFutureText,

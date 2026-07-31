@@ -255,7 +255,6 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         if (_isLoading) return;
         if (controller.text == lastText) {
           if (node.hasFocus) {
-            _lastSelection = controller.selection;
             if (!controller.selection.isCollapsed) {
               _preservedSelection = controller.selection;
             }
@@ -333,17 +332,6 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     if (text.isEmpty) {
       Future.delayed(Duration.zero, () => _focusNodes[index].requestFocus());
     }
-  }
-
-  void _removeBlock(int index) {
-    if (_controllers.length <= 1) return;
-    setState(() {
-      _controllers[index].dispose();
-      _focusNodes[index].dispose();
-      _controllers.removeAt(index);
-      _focusNodes.removeAt(index);
-      _blockKeys.removeAt(index);
-    });
   }
 
   void _loadText(String text) {
@@ -524,7 +512,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     return found;
   }
 
-  bool _detectStyleAtCursor(String open, String close, {int? offset}) {
+  bool _detectStyleAtCursor(String open, String close) {
     final controller = _activeController;
     if (controller == null) return false;
     final text = controller.text;

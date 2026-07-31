@@ -6,10 +6,16 @@ import android.content.ContentUris
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.core.content.FileProvider
 import java.io.File
 import io.flutter.embedding.android.FlutterActivity
@@ -18,14 +24,35 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
     private val androidFilesChannel = "autoteleprompter/android_files"
+    private val sttChannel = "autoteleprompter/stt"
     private val exportFolderRequestCode = 41013
     private val exportFileRequestCode = 41014
     private var pendingExportFolderResult: MethodChannel.Result? = null
     private var pendingExportFileResult: MethodChannel.Result? = null
     private val appExportRelativePath = "${Environment.DIRECTORY_DOCUMENTS}/AutoTeleprompter/"
 
+    private var sttMethodChannel: MethodChannel? = null
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var sttLocale: String? = null
+    private var sttLanguageRetried = false
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        sttMethodChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            sttChannel
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isAvailable" -> handleSttIsAvailable(result)
+                    "start" -> handleSttStart(call.argument<String>("locale"), result)
+                    "stop" -> handleSttStop(result)
+                    else -> result.notImplemented()
+                }
+            }
+        }
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             androidFilesChannel
@@ -355,6 +382,196 @@ class MainActivity: FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    // On-device speech recognition (API 31+). Some OEMs (ColorOS/MIUI/OneUI)
+    // restrict Google's speech-recognition-hosting app to foreground-only
+    // microphone access, which makes the standard speech_to_text plugin fail
+    // with error_permission even though this app's own RECORD_AUDIO grant is
+    // fine. SpeechRecognizer.createOnDeviceSpeechRecognizer() runs recognition
+    // in-process using this app's own permission, bypassing that restriction.
+    private fun handleSttIsAvailable(result: MethodChannel.Result) {
+        val apiLevel = Build.VERSION.SDK_INT
+        if (apiLevel < Build.VERSION_CODES.S) {
+            result.success(mapOf("available" to false, "onDevice" to false, "apiLevel" to apiLevel))
+            return
+        }
+        val onDevice = try {
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        } catch (_: Throwable) {
+            false
+        }
+        result.success(mapOf("available" to onDevice, "onDevice" to onDevice, "apiLevel" to apiLevel))
+    }
+
+    private fun handleSttStart(locale: String?, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            result.success(
+                mapOf(
+                    "success" to false,
+                    "message" to "On-device speech recognition requires Android 12+"
+                )
+            )
+            return
+        }
+        sttLocale = locale
+        sttLanguageRetried = false
+        Handler(Looper.getMainLooper()).post {
+            try {
+                destroySpeechRecognizer()
+                val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+                speechRecognizer = recognizer
+                recognizer.setRecognitionListener(createSttRecognitionListener())
+                recognizer.startListening(buildSttRecognizerIntent(locale))
+                result.success(mapOf("success" to true))
+            } catch (e: Exception) {
+                speechRecognizer = null
+                result.success(
+                    mapOf(
+                        "success" to false,
+                        "message" to (e.message ?: "Native STT failed to start")
+                    )
+                )
+            }
+        }
+    }
+
+    private fun handleSttStop(result: MethodChannel.Result) {
+        Handler(Looper.getMainLooper()).post {
+            destroySpeechRecognizer()
+            result.success(null)
+        }
+    }
+
+    private fun buildSttRecognizerIntent(locale: String?): Intent {
+        return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+            if (!locale.isNullOrBlank()) {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.replace('_', '-'))
+            }
+        }
+    }
+
+    private fun destroySpeechRecognizer() {
+        try {
+            speechRecognizer?.stopListening()
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {
+            // Recognizer may already be in a torn-down state; nothing to do.
+        }
+        speechRecognizer = null
+    }
+
+    private fun restartSttListening(recognizer: SpeechRecognizer) {
+        Handler(Looper.getMainLooper()).postDelayed({
+            val current = speechRecognizer
+            if (current == null || current !== recognizer) return@postDelayed
+            try {
+                recognizer.startListening(buildSttRecognizerIntent(sttLocale))
+            } catch (_: Exception) {
+                // If the recognizer is unusable, the next explicit start() call
+                // from Dart will recreate it.
+            }
+        }, 150)
+    }
+
+    private fun emitSttResult(bundle: Bundle?, isFinal: Boolean) {
+        val matches = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+        val words = matches?.firstOrNull()
+        if (!words.isNullOrEmpty()) {
+            sttMethodChannel?.invokeMethod("onResult", mapOf("words" to words, "isFinal" to isFinal))
+        }
+    }
+
+    private fun sttErrorName(error: Int): String {
+        // The numeric code is always appended so an unmapped/unexpected value
+        // is still exactly identifiable from the in-app debug log alone,
+        // without needing adb. Named cases cover every SpeechRecognizer
+        // ERROR_* constant available at compileSdk 34 (API 21-34).
+        val name = when (error) {
+            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "error_network_timeout"
+            SpeechRecognizer.ERROR_NETWORK -> "error_network"
+            SpeechRecognizer.ERROR_AUDIO -> "error_audio"
+            SpeechRecognizer.ERROR_SERVER -> "error_server"
+            SpeechRecognizer.ERROR_CLIENT -> "error_client"
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "error_speech_timeout"
+            SpeechRecognizer.ERROR_NO_MATCH -> "error_no_match"
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "error_recognizer_busy"
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "error_insufficient_permissions"
+            SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "error_too_many_requests"
+            SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "error_server_disconnected"
+            SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "error_language_not_supported"
+            SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "error_language_unavailable"
+            else -> "error_unknown"
+        }
+        return "$name($error)"
+    }
+
+    private fun createSttRecognitionListener(): RecognitionListener {
+        return object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                sttMethodChannel?.invokeMethod("onStatus", "listening")
+            }
+
+            override fun onBeginningOfSpeech() {}
+
+            override fun onRmsChanged(rmsdB: Float) {}
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {}
+
+            override fun onError(error: Int) {
+                val recognizer = speechRecognizer
+                // Silence/no-speech timeouts and transient recognizer/network
+                // hiccups are expected during normal pauses in dictation — the
+                // speech_to_text plugin handles these the same way, by quietly
+                // restarting rather than surfacing them as user-facing errors.
+                val recoverable = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                    error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                    error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                    error == SpeechRecognizer.ERROR_NETWORK ||
+                    error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
+                    error == SpeechRecognizer.ERROR_SERVER
+                if (recoverable && recognizer != null) {
+                    restartSttListening(recognizer)
+                    return
+                }
+                // The requested language's on-device model may be missing even
+                // though a different one (e.g. the device's own default locale)
+                // is installed. Try once with no explicit locale before giving
+                // up - mirrors SpeechService's own language-retry behavior.
+                val languageIssue = error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+                    error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE
+                if (languageIssue && recognizer != null && !sttLanguageRetried) {
+                    sttLanguageRetried = true
+                    try {
+                        recognizer.startListening(buildSttRecognizerIntent(null))
+                        return
+                    } catch (_: Exception) {
+                        // Fall through to normal fatal reporting below.
+                    }
+                }
+                sttMethodChannel?.invokeMethod("onError", sttErrorName(error))
+                sttMethodChannel?.invokeMethod("onStatus", "error")
+                destroySpeechRecognizer()
+            }
+
+            override fun onResults(results: Bundle?) {
+                emitSttResult(results, isFinal = true)
+                val recognizer = speechRecognizer
+                if (recognizer != null) restartSttListening(recognizer)
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                emitSttResult(partialResults, isFinal = false)
+            }
+
+            override fun onEvent(eventType: Int, params: Bundle?) {}
         }
     }
 

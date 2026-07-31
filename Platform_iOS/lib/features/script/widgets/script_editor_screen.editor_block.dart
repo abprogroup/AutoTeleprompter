@@ -93,7 +93,7 @@ class _EditorBlock extends StatelessWidget {
     final maxFontSize = _getMaxFontSize(controller.text, settings.fontSize);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
     final editorTextStyle = TextStyle(
-      color: Colors.white,
+      color: Color(settings.futureWordColor),
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,

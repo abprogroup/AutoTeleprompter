@@ -12,7 +12,7 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
-    final tState = ref.watch(teleprompterProvider);
+    ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
@@ -313,7 +313,6 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                           nextBackground);
                   unawaited(notifier.setScriptBgColor(nextBackground));
                   unawaited(notifier.setFutureWordColor(nextFutureText));
-                  unawaited(notifier.setShowUpcomingWordColor(true));
                   unawaited(
                     ref.read(scriptProvider.notifier).updateStyleMetadata(
                           scriptBgColor: nextBackground,

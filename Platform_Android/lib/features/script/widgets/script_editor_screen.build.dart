@@ -1,6 +1,30 @@
 part of 'script_editor_screen.dart';
 
 extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
+  static const double _selectionArmSlop = 12.0;
+
+  /// Starts a long-press hold timer at the touch-down point. If the pointer
+  /// stays within [_selectionArmSlop] pixels until the timer fires, the
+  /// overlay's cross-block selection is armed so the NEXT drag movement
+  /// starts/extends a selection instead of just scrolling. A plain drag that
+  /// never holds still long enough never arms selection, so it scrolls.
+  void _armSelectionAfterLongPress(Offset pointerDownPos) {
+    _selectionArmTimer?.cancel();
+    _selectionArmPointerDownPos = pointerDownPos;
+    _selectionArmTimer = Timer(const Duration(milliseconds: 450), () {
+      _overlayKey.currentState?.armSelectionGesture();
+    });
+  }
+
+  void _cancelSelectionArmTimerIfMoved(Offset pointerPos) {
+    final origin = _selectionArmPointerDownPos;
+    if (origin == null || _selectionArmTimer == null) return;
+    if ((pointerPos - origin).distance > _selectionArmSlop) {
+      _selectionArmTimer?.cancel();
+      _selectionArmTimer = null;
+    }
+  }
+
   Widget _buildBottomActions({bool keyboardVisible = false}) {
     const proColor = Color(0xFFFFBF00);
     const lockedColor = Color(0xFF5F5F5F);
@@ -98,7 +122,8 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       elevation: 12,
-                      shadowColor: const Color(0xFFFFBF00).withOpacity(0.5),
+                      shadowColor:
+                          const Color(0xFFFFBF00).withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -200,6 +225,7 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                     return;
                   }
                   overlay?.startDragging(event.position);
+                  _armSelectionAfterLongPress(event.position);
                 }
               },
               onPointerMove: (event) {
@@ -209,10 +235,13 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                     overlay?.updateActiveHandlePointer(event.position);
                     return;
                   }
+                  _cancelSelectionArmTimerIfMoved(event.position);
                   overlay?.updateDragging(event.position);
                 }
               },
               onPointerUp: (_) {
+                _selectionArmTimer?.cancel();
+                _selectionArmTimer = null;
                 _overlayKey.currentState?.endDragging();
                 // After any gesture ends, promote a native single-block partial
                 // selection to overlay handles. Doing this on pointer-up (not in the
@@ -224,6 +253,8 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                 });
               },
               onPointerCancel: (_) {
+                _selectionArmTimer?.cancel();
+                _selectionArmTimer = null;
                 _overlayKey.currentState?.endDragging();
               },
               behavior: HitTestBehavior.translucent,
@@ -370,8 +401,6 @@ extension _ScriptEditorScreenBuildParts on _ScriptEditorScreenState {
                                       } else if (sel.isValid &&
                                           sel.isCollapsed) {
                                         // Check if cursor is at end of line/paragraph â†’ Baseline Mode: clear whole script
-                                        final plainText =
-                                            text.replaceAll(tagPattern, '');
                                         final cursorInPlain =
                                             sel.start >= text.length ||
                                                 text

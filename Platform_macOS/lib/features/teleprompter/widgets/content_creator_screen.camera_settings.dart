@@ -219,7 +219,6 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
     final scriptNotifier = ref.read(scriptProvider.notifier);
     await settingsNotifier.setScriptBgColor(nextBackground);
     await settingsNotifier.setFutureWordColor(nextFutureText);
-    await settingsNotifier.setShowUpcomingWordColor(true);
     await scriptNotifier.updateStyleMetadata(
       scriptBgColor: nextBackground,
       futureWordColor: nextFutureText,

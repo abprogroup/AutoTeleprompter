@@ -32,6 +32,7 @@ enum AppSettingsTab {
   general,
   account,
   remote,
+  cloud,
 }
 
 extension AppSettingsTabIndex on AppSettingsTab {
@@ -100,6 +101,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               Tab(icon: Icon(Icons.tune_rounded), text: 'General'),
               Tab(icon: Icon(Icons.person_outline), text: 'Account'),
               Tab(icon: Icon(Icons.settings_remote_outlined), text: 'Remote'),
+              Tab(icon: Icon(Icons.cloud_outlined), text: 'Cloud'),
             ],
           ),
         ),
@@ -108,6 +110,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             _settingsList(_generalTab(settings, auth)),
             _settingsList(_accountTab(settings, auth)),
             _settingsList(_remoteTab(remote)),
+            const CloudSyncScreen(embedded: true),
           ],
         ),
       ),
@@ -135,18 +138,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       const _SectionHeader(title: 'LOCAL BACKUP'),
       const SizedBox(height: 8),
       ..._localBackupSection(settings),
-      const SizedBox(height: 22),
-      const _SectionHeader(title: 'CLOUD SYNC'),
-      const SizedBox(height: 8),
-      _SettingsTile(
-        icon: Icons.cloud_sync_outlined,
-        title: 'Personal Cloud Storage',
-        subtitle: 'Connect Google Drive or Dropbox to sync scripts online',
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const CloudSyncScreen()),
-        ),
-      ),
       const SizedBox(height: 22),
       const _SectionHeader(title: 'UPDATES'),
       const SizedBox(height: 8),
@@ -390,7 +381,7 @@ class _SettingsTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           ),
           child: Row(
             children: [

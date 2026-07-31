@@ -297,9 +297,11 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
           : settings.pastWordOpacity;
       baseColor = base.withValues(alpha: opacity.clamp(0.0, 1.0));
     } else {
+      // Toggle OFF falls back to futureWordColor (not a hardcoded white, which
+      // would go invisible against a light script background).
       baseColor = settings.showUpcomingWordColor
           ? Color(settings.futureWordColor)
-          : (word.textColor ?? const Color(0xFFFFFFFF));
+          : (word.textColor ?? Color(settings.futureWordColor));
     }
     return ScriptColorInversionService.presenterTextColor(
       word: word,

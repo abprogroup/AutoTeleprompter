@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import '../markup_controller.dart';
 import '../../../services/editor_text_geometry_service.dart';
 import '../../../services/markup_decoration_service.dart';
@@ -269,6 +268,13 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Offset? _latestBodyDragGlobal;
   Timer? _bodyAutoScrollTimer;
 
+  // A plain drag across the editor should scroll, not select. Cross-block
+  // selection only activates once this is armed by a long-press hold at the
+  // touch-down point (see _armSelectionAfterLongPress in
+  // script_editor_screen.build.dart), or when the starting block already has
+  // a native partial selection (from a double-tap word-select being dragged).
+  bool _selectionGestureArmed = false;
+
   /// True when every block is wholly selected (post Select All, pre refine).
   bool get _isWholeScriptSelected =>
       widget.controllers.isNotEmpty &&
@@ -501,8 +507,12 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
     widget.onSelectionChanged();
   }
 
-  int? _blockAtPosition(Offset globalPos) =>
-      _GlobalSelectionOverlayBodyDragParts(this)._blockAtPosition(globalPos);
+  /// Called after the body Listener detects a long-press hold with minimal
+  /// movement, arming the NEXT drag update to start/extend a cross-block
+  /// selection instead of being ignored in favor of scrolling.
+  void armSelectionGesture() {
+    _selectionGestureArmed = true;
+  }
 
   void startDragging(Offset globalPos) =>
       _GlobalSelectionOverlayBodyDragParts(this).startDragging(globalPos);
@@ -523,10 +533,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   void refreshPositions() =>
       _GlobalSelectionOverlayRenderingParts(this).refreshPositions();
 
-  Offset? _getPositionInStack(int blockIndex, int offset) =>
-      _GlobalSelectionOverlayRenderingParts(this)
-          ._getPositionInStack(blockIndex, offset, endpointA: true);
-
   Offset _handleVisualCenter(Offset caret, bool endpointA) =>
       _GlobalSelectionOverlayRenderingParts(this)
           ._handleVisualCenter(caret, endpointA);
@@ -537,10 +543,6 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
 
   void _updateBlockHighlights() =>
       _GlobalSelectionOverlayRenderingParts(this)._updateBlockHighlights();
-
-  bool? _nearestHandleForPointer(Offset globalPos, {required bool fallback}) =>
-      _GlobalSelectionOverlayRenderingParts(this)
-          ._nearestHandleForPointer(globalPos, fallback: fallback);
 
   void _enterRefineMode() =>
       _GlobalSelectionOverlayRenderingParts(this)._enterRefineMode();

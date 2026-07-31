@@ -1,5 +1,5 @@
-name: Build Windows EXE (v5.1.2) - SEALED
-run-name: Windows ${{ github.event.inputs.app_version || '5.1.2+59' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
+name: Build Windows EXE (v5.1.2)
+run-name: Windows ${{ github.event.inputs.app_version || '5.1.2+60' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -17,9 +17,9 @@ on:
           - beta
           - internal
       app_version:
-        description: 'Flutter app version, for example 5.1.2+59'
+        description: 'Flutter app version, for example 5.1.2+60'
         required: true
-        default: '5.1.2+59'
+        default: '5.1.2+60'
         type: string
       release_label:
         description: 'Human label such as Beta 1 or Stable'
@@ -57,11 +57,11 @@ jobs:
 
           $appVersion = "${{ github.event.inputs.app_version }}"
           if ([string]::IsNullOrWhiteSpace($appVersion)) {
-            $appVersion = "5.1.2+59"
+            $appVersion = "5.1.2+60"
           }
           $appVersion = $appVersion.Trim()
           if ($appVersion -notmatch '^\d+\.\d+\.\d+\+\d+$') {
-            throw "app_version must look like 5.1.2+59."
+            throw "app_version must look like 5.1.2+60."
           }
           $versionName = ($appVersion -split '\+', 2)[0]
 

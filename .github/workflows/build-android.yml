@@ -38,7 +38,7 @@ jobs:
 
       - name: Verify Android v5.0.0 metadata
         run: |
-          grep -Fxq 'version: 5.0.0+2' pubspec.yaml
+          grep -Fxq 'version: 5.0.0+3' pubspec.yaml
         working-directory: Platform_Android
 
       - name: Analyze
@@ -92,7 +92,7 @@ jobs:
           fi
 
           flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi \
-            "--dart-define=APP_VERSION=5.0.0+2" \
+            "--dart-define=APP_VERSION=5.0.0+3" \
             "--dart-define=FEEDBACK_ENDPOINT=$endpoint" \
             "--dart-define=ACCOUNT_BACKEND_ENABLED=$account_backend_enabled" \
             "--dart-define=SUPABASE_URL=$supabase_url" \

@@ -208,20 +208,23 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _safeSetState((s) => s.copyWith(debugLogs: logs));
   }
 
-  static bool _isEnglishLocale(String locale) =>
-      SttRecognitionPolicyService.isEnglishLocale(locale);
-
-  static bool shouldUseWindowsOfflineSpeech({
-    required AppSettings settings,
-    required String initialLocale,
-    required List<String> sectionLocales,
-  }) {
+  // Windows.Media.SpeechRecognition (the engine speech_to_text_windows wraps
+  // for this "Windows Offline" path) requires MSIX package identity per
+  // Microsoft's own docs - "packaged or packaged with external location.
+  // Unpackaged apps cannot use these APIs." This app ships as a plain
+  // unpackaged .exe, so this path can never receive audio: it initializes
+  // successfully (the object can be constructed without package identity)
+  // and reports "listening", but the actual capture pipeline silently gets
+  // nothing, every time, on every machine, regardless of language pack,
+  // locale, or microphone setup. That is a permanent architectural
+  // constraint, not an occasional failure worth detecting-and-recovering
+  // from at runtime - so "auto" must never route here. Only the explicit
+  // engine override below still allows it, for local testing if this app
+  // is ever built as an MSIX/packaged-with-external-location package. Do
+  // not re-enable the "auto" default without that packaging change.
+  static bool shouldUseWindowsOfflineSpeech(AppSettings settings) {
     final engine = AppSettings.normalizeSttEngine(settings.sttEngine);
-    if (engine == AppSettings.sttEngineWindowsOffline) return true;
-    if (engine != AppSettings.sttEngineAuto) return false;
-    return _isEnglishLocale(initialLocale) &&
-        sectionLocales.isNotEmpty &&
-        sectionLocales.every(_isEnglishLocale);
+    return engine == AppSettings.sttEngineWindowsOffline;
   }
 
   static List<String> rollingTranscriptWindowsForAlignment(
@@ -478,7 +481,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _lastRecoverableSttErrorAt = null;
       _recoverableSttErrorCount = 0;
       _sttRecoveryInFlight = false;
-      _sttService = _resolveWindowsSpeechService(settings, localeId);
+      _sttService = _resolveWindowsSpeechService(settings);
       await (_sttService == _browserSttService
           ? _desktopSttService.stop()
           : _browserSttService.stop());

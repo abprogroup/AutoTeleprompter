@@ -1,5 +1,94 @@
 part of 'word_aligner.dart';
 
+/// Walks forward from an already-confirmed match, consuming as many more
+/// consecutive already-heard words as keep matching consecutive script
+/// words - so a burst the user already said in one breath (e.g. "a real
+/// name" right after "script") gets consumed in a single step instead of
+/// throttling to one confirmed word per STT round-trip. [anchorTranscriptPos]
+/// is the transcript index of [candidateIndex]'s own match.
+int _extendConsecutiveRun({
+  required List<ScriptWord> script,
+  required List<String> transcriptWords,
+  required int anchorTranscriptPos,
+  required int candidateIndex,
+  required bool strictBulletMode,
+  int maxExtension = 6,
+}) {
+  var extendedIndex = candidateIndex;
+  var transcriptPos = anchorTranscriptPos + 1;
+  var scriptPos = candidateIndex + 1;
+  var extensions = 0;
+  while (transcriptPos < transcriptWords.length &&
+      scriptPos < script.length &&
+      extensions < maxExtension) {
+    final word = script[scriptPos];
+    if (word.isNewline || _isUnspeakable(word) || word.isOptionalCue) {
+      scriptPos++;
+      continue;
+    }
+    final threshold = strictBulletMode
+        ? WordAligner._strictPhraseThreshold
+        : (word.isRtl ? 0.45 : 0.55);
+    final sim =
+        _wordSimilarity(transcriptWords[transcriptPos], word.normalized, word.isRtl);
+    if (sim < threshold) break;
+    extendedIndex = scriptPos;
+    transcriptPos++;
+    scriptPos++;
+    extensions++;
+  }
+  return extendedIndex;
+}
+
+/// Same as [_extendConsecutiveRun], but for callers (like STEP 1's
+/// next-word check) that only know [candidateIndex] matched *somewhere* in
+/// the transcript, not exactly where - finds the most recent occurrence
+/// first, then extends from there.
+int _extendFromLatestMatch({
+  required List<ScriptWord> script,
+  required List<String> transcriptWords,
+  required int candidateIndex,
+  required bool strictBulletMode,
+  int maxExtension = 6,
+}) {
+  if (candidateIndex >= script.length) return candidateIndex;
+  final anchorWord = script[candidateIndex];
+  final anchorThreshold = strictBulletMode
+      ? WordAligner._strictPhraseThreshold
+      : (anchorWord.isRtl ? 0.45 : 0.55);
+  var anchorPos = -1;
+  for (var i = transcriptWords.length - 1; i >= 0; i--) {
+    final sim =
+        _wordSimilarity(transcriptWords[i], anchorWord.normalized, anchorWord.isRtl);
+    if (sim >= anchorThreshold) {
+      anchorPos = i;
+      break;
+    }
+  }
+  if (anchorPos < 0) return candidateIndex;
+  return _extendConsecutiveRun(
+    script: script,
+    transcriptWords: transcriptWords,
+    anchorTranscriptPos: anchorPos,
+    candidateIndex: candidateIndex,
+    strictBulletMode: strictBulletMode,
+    maxExtension: maxExtension,
+  );
+}
+
+/// The script indices from [start] to [end] inclusive, skipping newlines
+/// and unspeakable tokens - used to build evidenceWords/matchedScriptIndices
+/// for an extended consecutive-run match.
+List<int> _speakableRunIndices(List<ScriptWord> script, int start, int end) {
+  final indices = <int>[];
+  for (var i = start; i <= end; i++) {
+    if (i < 0 || i >= script.length) continue;
+    if (script[i].isNewline || _isUnspeakable(script[i])) continue;
+    indices.add(i);
+  }
+  return indices;
+}
+
 AlignmentResult? _confirmedTailBridgeMatch({
   required List<ScriptWord> script,
   required List<String> transcriptWords,
@@ -108,18 +197,27 @@ AlignmentResult? _confirmedTailNextWordMatch({
         : (next.isRtl ? 0.70 : 0.82);
     if (anchorScore < anchorThreshold || nextScore < nextThreshold) continue;
     final confidence = (anchorScore + nextScore) / 2;
+    final extendedIndex = _extendConsecutiveRun(
+      script: script,
+      transcriptWords: transcriptWords,
+      anchorTranscriptPos: i + 1,
+      candidateIndex: searchStart,
+      strictBulletMode: strictBulletMode,
+    );
+    final matched = _speakableRunIndices(script, searchStart, extendedIndex);
     return AlignmentResult(
-      searchStart,
+      extendedIndex,
       confidence,
-      'CONFIRMED_TAIL_NEXT@$lastConfirmedIndex: end=$searchStart '
-      'score=${confidence.toStringAsFixed(2)}',
+      'CONFIRMED_TAIL_NEXT@$lastConfirmedIndex: end=$extendedIndex '
+      'score=${confidence.toStringAsFixed(2)}'
+      '${extendedIndex > searchStart ? ' streak=${matched.length}' : ''}',
       SttAlignmentDecision.advance,
       SttAlignmentKind.nextWord,
       SttThresholdFamily.safetyRecovery,
-      [lastConfirmedIndex, searchStart],
-      [next.normalized],
+      [lastConfirmedIndex, ...matched],
+      matched.map((idx) => script[idx].normalized).toList(growable: false),
       lastConfirmedIndex,
-      searchStart,
+      extendedIndex,
     );
   }
 

@@ -562,17 +562,30 @@ class WordAligner {
       if (sim < nextThreshold) return null;
       final skippedCue =
           candidateIndex != searchStart ? ' optionalCueSkip' : '';
+      // Consume any more already-heard words in a clean run right away,
+      // instead of throttling to one confirmed word per STT round-trip -
+      // the transcript may already contain a whole streak (e.g. "a real
+      // name" right after "script") that a single-word match would
+      // otherwise leave stranded until (if ever) another STT result arrives.
+      final extendedIndex = _extendFromLatestMatch(
+        script: script,
+        transcriptWords: transcriptWords,
+        candidateIndex: candidateIndex,
+        strictBulletMode: policyBulletMode,
+      );
+      final matched = _speakableRunIndices(script, candidateIndex, extendedIndex);
       return AlignmentResult(
-        candidateIndex,
+        extendedIndex,
         sim,
-        'NEXT_WORD$skippedCue: "$lastSpoken" ~ "$nextWord" = ${sim.toStringAsFixed(2)}',
+        'NEXT_WORD$skippedCue: "$lastSpoken" ~ "$nextWord" = ${sim.toStringAsFixed(2)}'
+        '${extendedIndex > candidateIndex ? ' streak=${matched.length}' : ''}',
         SttAlignmentDecision.advance,
         SttAlignmentKind.nextWord,
         SttThresholdFamily.startAdvance,
-        [candidateIndex],
-        [nextWord],
+        matched,
+        matched.map((idx) => script[idx].normalized).toList(growable: false),
         candidateIndex,
-        candidateIndex,
+        extendedIndex,
       );
     }
 

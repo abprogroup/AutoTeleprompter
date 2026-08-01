@@ -31,6 +31,8 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
       strictBulletMode: false,
       visibleWordStart: _visibleWordStart,
       visibleWordEnd: _visibleWordEnd,
+      scriptWordCount: script.words.length,
+      sustainedStuck: _isSustainedlyStuck,
     );
     final aligned = _bestAlignmentForTranscript(
       script: script,
@@ -299,6 +301,7 @@ extension TeleprompterNotifierSttResult on TeleprompterNotifier {
     _pendingStartEvidenceTargetIndex = null;
     _clearPendingVisibleSkipEvidence();
     _sttEvidenceTrackingState = decision.nextState;
+    _lastConfirmedAdvanceAt = DateTime.now();
     _lockedOn = true;
     _sttReadingStandby = true;
     if (previousTrackingState == SttEvidenceTrackingState.locked ||

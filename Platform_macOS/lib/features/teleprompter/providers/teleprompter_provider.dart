@@ -85,6 +85,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int? _pendingVisibleSkipEndIndex;
   SttEvidenceTrackingState _sttEvidenceTrackingState =
       SttEvidenceTrackingState.locked;
+  DateTime? _lastConfirmedAdvanceAt;
   Timer? _speechActivityMeterTimer;
   int _speechActivityMeterToken = 0;
   bool _stateFailureDiagnosticRecorded = false;
@@ -108,6 +109,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       Duration(milliseconds: 900);
   static const Duration _visibleLocaleAssistPinDuration =
       Duration(milliseconds: 5000);
+  // How long the tracker can go without an advance before we trust it's
+  // genuinely fallen behind (not just a normal pause between sentences) and
+  // widen the visible-skip recovery window beyond the rendered viewport.
+  static const Duration _sustainedStuckThreshold = Duration(seconds: 6);
+  // Bounded widening applied to the visible-skip search/trust window once
+  // sustained-stuck - not unlimited, so a coincidental phrase match still
+  // can't jump arbitrarily far ahead.
+  static const int _stuckRecoveryLookaheadWords = 40;
 
   void _resetSttTrackingContext({bool clearTranscriptFloor = true}) {
     _accumulatedTranscript = '';
@@ -118,9 +127,23 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _pendingStartEvidenceTargetIndex = null;
     _clearPendingVisibleSkipEvidence();
     _sttEvidenceTrackingState = SttEvidenceTrackingState.locked;
+    _lastConfirmedAdvanceAt = null;
     _resetSttTrackingState();
     _resetStaleNoProgressTracking();
     _resetPostAdvancePartialGuard();
+  }
+
+  /// True once the tracker has gone long enough without an advance, while
+  /// genuinely behind (not just locked at the very start), that the
+  /// visible-skip recovery window should widen beyond the rendered viewport.
+  bool get _isSustainedlyStuck {
+    if (_sttEvidenceTrackingState != SttEvidenceTrackingState.recovering &&
+        _sttEvidenceTrackingState != SttEvidenceTrackingState.offScript) {
+      return false;
+    }
+    final since = _lastConfirmedAdvanceAt ?? _sessionStartTime;
+    if (since == null) return false;
+    return DateTime.now().difference(since) >= _sustainedStuckThreshold;
   }
 
   @override
@@ -366,10 +389,22 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     required bool strictBulletMode,
     required int? visibleWordStart,
     required int? visibleWordEnd,
+    int? scriptWordCount,
+    bool sustainedStuck = false,
   }) {
     if (!visibleSkipEnabled) return null;
     if (visibleWordStart == null) return null;
-    return visibleWordEnd;
+    if (visibleWordEnd == null) return null;
+    if (!sustainedStuck || scriptWordCount == null) return visibleWordEnd;
+    // Genuinely fallen behind what's rendered on screen - widen the search
+    // and trust window by a bounded amount so recovery can reach the user's
+    // actual position instead of being capped at the (stale) viewport. Still
+    // bounded, and still gated by the same visibleSkip evidence threshold -
+    // this only affects how FAR a trusted match may be found, not how much
+    // evidence is required to trust it.
+    return (visibleWordEnd + _stuckRecoveryLookaheadWords)
+        .clamp(visibleWordEnd, scriptWordCount - 1)
+        .toInt();
   }
 
   static bool isTrustedVisibleSkipTarget({

@@ -464,14 +464,35 @@ class WordAligner {
       lastConfirmedIndex: lastConfirmedIndex,
       strictBulletMode: policyBulletMode,
     );
-    if (tailNext != null) return tailNext;
+    // A match this early is only safe to trust immediately once already
+    // tracking/recovering (a single confirmed word/short phrase is
+    // legitimate real-time evidence there - the movement policy's
+    // clean-tracking fast path relies on exactly that). At the very start
+    // of a session, before any word has ever been confirmed, evidence needs
+    // to actually clear the stricter startAdvance threshold on its own
+    // merits; a short match (e.g. one script word repeated back, or a
+    // 2-word phrase) mathematically can't. If it doesn't, hold it as a
+    // fallback and keep looking for richer multi-word evidence (STEP 2/3)
+    // that may already be sitting in what's been heard, rather than
+    // accepting the first thin match found and starving it.
+    bool admitNow(AlignmentResult candidate) =>
+        activeStandby || localThreshold.passes(candidate.evidenceWords);
+
+    AlignmentResult? fastSingleWordMatch;
+    if (tailNext != null) {
+      if (admitNow(tailNext)) return tailNext;
+      fastSingleWordMatch = tailNext;
+    }
     final tailBridge = _confirmedTailBridgeMatch(
       script: script,
       transcriptWords: transcriptWords,
       lastConfirmedIndex: lastConfirmedIndex,
       strictBulletMode: policyBulletMode,
     );
-    if (tailBridge != null) return tailBridge;
+    if (tailBridge != null) {
+      if (admitNow(tailBridge)) return tailBridge;
+      fastSingleWordMatch ??= tailBridge;
+    }
     final nameBridge = _properNameRunBridgeMatch(
       script: script,
       transcriptWords: transcriptWords,
@@ -481,7 +502,13 @@ class WordAligner {
     );
     if (nameBridge != null) return nameBridge;
 
-    if (!transcriptPassesLocal &&
+    // A held fastSingleWordMatch is a real, already-earned match (just thin
+    // on evidence) - skip the standby/wait branch below entirely rather
+    // than discarding it, and let it fall through to the STEP 2/3 search
+    // (and the fallback return at the end) so it either gets replaced by
+    // something richer or ultimately still wins, same as it always did.
+    if (fastSingleWordMatch == null &&
+        !transcriptPassesLocal &&
         !(visibleSkipEnabled && transcriptPassesVisible)) {
       if (!activeStandby) {
         final standbyMatch = _nearbyPhrasePriorityMatch(
@@ -536,26 +563,50 @@ class WordAligner {
       if (sim < nextThreshold) return null;
       final skippedCue =
           candidateIndex != searchStart ? ' optionalCueSkip' : '';
+      // Consume any more already-heard words in a clean run right away,
+      // instead of throttling to one confirmed word per STT round-trip -
+      // the transcript may already contain a whole streak (e.g. "a real
+      // name" right after "script") that a single-word match would
+      // otherwise leave stranded until (if ever) another STT result arrives.
+      final extendedIndex = _extendFromLatestMatch(
+        script: script,
+        transcriptWords: transcriptWords,
+        candidateIndex: candidateIndex,
+        strictBulletMode: policyBulletMode,
+      );
+      final matched = _speakableRunIndices(script, candidateIndex, extendedIndex);
       return AlignmentResult(
-        candidateIndex,
+        extendedIndex,
         sim,
-        'NEXT_WORD$skippedCue: "$lastSpoken" ~ "$nextWord" = ${sim.toStringAsFixed(2)}',
+        'NEXT_WORD$skippedCue: "$lastSpoken" ~ "$nextWord" = ${sim.toStringAsFixed(2)}'
+        '${extendedIndex > candidateIndex ? ' streak=${matched.length}' : ''}',
         SttAlignmentDecision.advance,
         SttAlignmentKind.nextWord,
         SttThresholdFamily.startAdvance,
-        [candidateIndex],
-        [nextWord],
+        matched,
+        matched.map((idx) => script[idx].normalized).toList(growable: false),
         candidateIndex,
-        candidateIndex,
+        extendedIndex,
       );
     }
 
-    final directNext = nextWordPriority(searchStart);
-    if (directNext != null) return directNext;
-    if (script[searchStart].isOptionalCue) {
-      final requiredStart = nextRequiredSpeakableIndex(script, searchStart + 1);
-      final requiredNext = nextWordPriority(requiredStart);
-      if (requiredNext != null) return requiredNext;
+    // Same fallback gate as tailNext/tailBridge above - STEP 1's match is
+    // also a single-word evidence list.
+    if (fastSingleWordMatch == null) {
+      final directNext = nextWordPriority(searchStart);
+      if (directNext != null) {
+        if (admitNow(directNext)) return directNext;
+        fastSingleWordMatch = directNext;
+      }
+      if (fastSingleWordMatch == null && script[searchStart].isOptionalCue) {
+        final requiredStart =
+            nextRequiredSpeakableIndex(script, searchStart + 1);
+        final requiredNext = nextWordPriority(requiredStart);
+        if (requiredNext != null) {
+          if (admitNow(requiredNext)) return requiredNext;
+          fastSingleWordMatch = requiredNext;
+        }
+      }
     }
 
     // -- STEP 2: NEARBY SINGLE-WORD SCAN -------------------------------------
@@ -779,6 +830,11 @@ class WordAligner {
         bestSeqEndIdx,
       );
     }
+
+    // Nothing richer materialized below - fall back to the fast single-word
+    // match found at the very start, same result it always returned here,
+    // just no longer preventing STEP 2/3 from being tried first.
+    if (fastSingleWordMatch != null) return fastSingleWordMatch;
 
     // -- NO MATCH ------------------------------------------------------------
     // The spoken word didn't match anything in our window. This is normal

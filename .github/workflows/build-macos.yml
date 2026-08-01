@@ -1,5 +1,5 @@
-name: Build macOS App (v5.0.9) - SEALED
-run-name: macOS ${{ github.event.inputs.app_version || '5.0.9+38' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
+name: Build macOS App (v5.1.0)
+run-name: macOS ${{ github.event.inputs.app_version || '5.1.0+39' }} ${{ github.event.inputs.release_channel || 'stable' }} run ${{ github.run_number }} - manual dispatch
 
 
 on:
@@ -14,9 +14,9 @@ on:
           - stable
           - beta
       app_version:
-        description: 'Flutter app version, for example 5.0.9+38'
+        description: 'Flutter app version, for example 5.1.0+39'
         required: true
-        default: '5.0.9+38'
+        default: '5.1.0+39'
       release_number:
         description: 'Beta sequence number; leave blank for stable'
         required: false
@@ -71,10 +71,10 @@ jobs:
           esac
           appVersion="${{ github.event.inputs.app_version }}"
           if [ -z "$appVersion" ]; then
-            appVersion="5.0.9+38"
+            appVersion="5.1.0+39"
           fi
           if [[ ! "$appVersion" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
-            echo "app_version must look like 5.0.9+38." >&2
+            echo "app_version must look like 5.1.0+39." >&2
             exit 1
           fi
           versionName="${appVersion%%+*}"
@@ -287,57 +287,35 @@ jobs:
           asset="Platform_macOS/build/macos/Build/Products/Release/${{ steps.release.outputs.asset_name }}"
           notesFile="$RUNNER_TEMP/macos-release-notes.md"
           cat > "$notesFile" <<'EOF'
-          AutoTeleprompter macOS ${{ steps.release.outputs.app_version }}.
+          AutoTeleprompter macOS ${{ steps.release.outputs.app_version }} (BETA - pending real-device QA).
 
-          This is the Mac premium feedback and speech-control reliability
-          update. It keeps the guided, polished Mac experience from 5.0.8 and
-          seals the 5.0.9 speech-control tracking work so presenters can read
-          more naturally, recover from imperfect recognition, and avoid unsafe
-          jumps during live use.
+          This is a testing build, not a public stable release. It ports
+          three real STT word-alignment fixes from the same day's Windows
+          work, adapted to macOS's own existing code and tuning rather than
+          copied verbatim - see
+          _agent/mvp/Platform_macOS/stt_mvp.md's 2026-08-01 section and
+          Plans/Platform Differences.md's matching parity audit entry for
+          the full writeup.
 
-          Highlights:
-          - Adds a versioned guided setup walkthrough with stable spotlight
-            anchors, a temporary sample script, and clear setup questions for
-            speech-control and creator defaults.
-          - Makes Bookmarks a Pro suite with locked discovery for free users,
-            while preserving existing bookmark markers and metadata.
-          - Protects Present mode from empty-script dead ends and duplicate
-            Present sessions.
-          - Improves Present and Content Creator readability with stronger
-            live-text surfaces, clearer bottom controls, and corrected Present
-            word spacing.
-          - Adds recording countdown sound cues for video and audio-only
-            recording.
-          - Adds a user-facing listening meter so presenters can confirm the
-            selected microphone is receiving signal without opening full debug.
-          - Improves hover tooltips and familiar undo/redo icons across the Mac
-            editor and tool suites.
+          What changed:
+          - Evidence starvation: a cheap single-word match used to return
+            immediately at session start, before richer multi-word evidence
+            already present in what was heard ever got a chance to run.
+          - Visible-skip deadlock: recovery after falling behind was
+            permanently capped at the rendered viewport, which only scrolls
+            once the tracker advances - now widens (bounded, same evidence
+            threshold) once genuinely stuck.
+          - Streak throttling: a confirmed match only ever consumed one word
+            per STT update even when more consecutive words were already in
+            the same heard transcript.
 
-          Speech-control improvements:
-          - Uses one profile-based tracking policy for normal reading, slow
-            reading, heading/body recovery, visible skips, and Apple Speech
-            recovery.
-          - Keeps the user's saved STT profile thresholds as the source of
-            truth for when text should start, recover, or visibly skip.
-          - Allows valid local reading to continue word-by-word after the
-            initial lock, including after short pauses.
-          - Improves visible-skip recovery after a misheard word without
-            relaxing false-jump protection.
-          - Blocks unsafe far jumps caused by noise, improvisation, repeated
-            names, or one lucky future-word match.
-          - Handles Apple Speech retry bursts, stale callbacks, and temporary
-            pauses more gracefully so the session stays active whenever the
-            speech engine is still usable.
-          - Keeps microphone quality feedback as coaching only; valid phrase
-            matches are not blocked just because the input is quiet.
-
-          Release integrity:
-          - Published as a full backend-connected Mac build with production
-            credential preflight enabled.
-          - The stable update manifest points existing Mac users to this
-            release as ${{ steps.release.outputs.app_version }}.
-          - Existing scripts, recents, bookmarks, settings, Pro state, and
-            cloud/account data are preserved.
+          Verification so far:
+          - flutter analyze clean; macOS's full existing test suite (106
+            tests) passes with no regression; 13 new ported tests pass.
+          - NOT yet verified on real macOS hardware / a live recording
+            session - this build exists specifically to make that testing
+            possible. Do not treat this as sealed or auto-update existing
+            users to it.
           EOF
           if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --repo "$repo" --clobber
@@ -397,7 +375,7 @@ jobs:
               "version": "${{ steps.release.outputs.app_version }}",
               "platform": "macos",
               "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
-              "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 38's speech-control seal pass for macOS. The iOS-style tracking pipeline remains the single authority for movement, fragmented visible-skip partials can accumulate across Apple callbacks, transient Apple Speech paused statuses no longer interrupt a live reading session, and sentence recovery now measures from the current reading position so repeated visible names or phrases cannot steal focus from the closer phrase being read.",
+              "notes": "BETA, pending real-device QA - not for general auto-update. Ports three Windows STT word-alignment fixes (evidence starvation at session start, visible-skip recovery deadlock, one-word-per-update streak throttling) to macOS's own code and tuning. See stt_mvp.md's 2026-08-01 section for details.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()

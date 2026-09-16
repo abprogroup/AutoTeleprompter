@@ -11,6 +11,7 @@ import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../../core/security/secure_script_store.dart';
 import '../../../features/teleprompter/services/word_aligner.dart';
+import '../../../platform/file_import/legacy_word_doc_import.dart';
 
 part 'script_provider.docx.dart';
 part 'script_provider.docx_numbering.dart';
@@ -511,13 +512,14 @@ class ScriptNotifier extends Notifier<Script?> {
           // Non-RTF content in a .rtf file (e.g. saved before the fix) - treat as UTF-8
           final raw = utf8.decode(rawBytes, allowMalformed: true);
           result = ParsedFile(raw.trim());
+        } else if (LegacyWordDocImport.hasOleSignature(rawBytes)) {
+          result = ParsedFile(await LegacyWordDocImport.extractText(file));
         } else {
-          // Legacy .doc binary files - strip non-printable bytes
-          final content = String.fromCharCodes(
-            rawBytes.where(
-                (b) => (b >= 0x20 && b < 0x7F) || b == 0x0A || b == 0x0D),
-          ).replaceAll(RegExp(r'[ \t]{3,}'), '  ').trim();
-          result = ParsedFile(content);
+          result = ParsedFile(
+            '',
+            errorMessage: 'This is not a valid legacy Word DOC file. '
+                'Please save it as DOCX and try again.',
+          );
         }
       } else {
         result = ParsedFile(utf8.decode(rawBytes, allowMalformed: true));

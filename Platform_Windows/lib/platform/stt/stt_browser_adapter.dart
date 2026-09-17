@@ -1,24 +1,26 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show HttpServer;
+import 'dart:math';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'abstract_stt_service.dart';
+import 'stt_browser_lifecycle.dart';
 import '../../features/teleprompter/services/speech_service.dart';
 
 part 'stt_browser_adapter.page.dart';
 
-/// Windows STT via Web Speech API running inside the embedded WebView2.
+/// Windows STT via Web Speech API running in an approved Chromium host.
 ///
 /// Serves a local HTML page that runs SpeechRecognition and sends results
-/// back via WebSocket. The page is loaded directly by the WebviewController
-/// so no external browser is involved.
+/// back via WebSocket. The normal host is the embedded WebView2; an explicit
+/// compatibility mode may load the same authenticated loopback page in Edge.
 ///
-/// Microphone access is handled by the current WebView2 profile. This adapter
-/// only owns the local session server and rejects stale browser events.
+/// Microphone access is handled by the selected browser host's dedicated
+/// profile. This adapter only owns the local server and rejects stale events.
 class SttBrowserAdapter extends AbstractSttService {
   static const int _defaultPort = 8082;
   static const int _maxFallbackPort = 8092;
@@ -26,11 +28,14 @@ class SttBrowserAdapter extends AbstractSttService {
     'content-type': 'text/html; charset=utf-8',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'cross-origin-resource-policy': 'same-origin',
   };
   static const Map<String, String> _textHeaders = {
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
   };
+  static final Random _secureRandom = Random.secure();
 
   HttpServer? _server;
   WebSocketChannel? _wsClient;
@@ -40,16 +45,21 @@ class SttBrowserAdapter extends AbstractSttService {
   String? _selectedAudioInputDeviceId;
   String _selectedAudioInputDeviceLabel = 'System default microphone';
   List<SttAudioInputDevice> _audioInputDevices = const [];
-  int _sessionId = 0;
+  int _sessionSequence = 0;
+  String _sessionToken = '';
   int _port = _defaultPort;
+  final Set<SttBrowserLifecyclePhase> _reportedLifecyclePhases = {};
 
   @override
   Future<SpeechStartResult> start({String? localeId}) async {
     _isActive = true;
     _everListened = false;
     _currentLocale = (localeId ?? 'en-US').replaceAll('_', '-');
-    _sessionId++;
-    final sessionId = _sessionId;
+    _sessionSequence++;
+    final sessionSequence = _sessionSequence;
+    _sessionToken = _createSessionToken();
+    final sessionToken = _sessionToken;
+    _reportedLifecyclePhases.clear();
 
     onDiagnostic
         ?.call('[Browser STT] Starting local server on port $_defaultPort...');
@@ -59,6 +69,9 @@ class SttBrowserAdapter extends AbstractSttService {
     final router = Router();
 
     router.get('/', (Request req) {
+      if (!_requestMatchesSession(req, sessionToken)) {
+        return Response.forbidden('invalid session', headers: _textHeaders);
+      }
       return Response.ok(
         _buildHtml(_currentLocale, _selectedAudioInputDeviceId),
         headers: _htmlHeaders,
@@ -66,18 +79,24 @@ class SttBrowserAdapter extends AbstractSttService {
     });
 
     router.get('/ws', (Request request) {
-      final requestedSession =
-          int.tryParse(request.url.queryParameters['session'] ?? '');
       if (!_isActive ||
-          requestedSession == null ||
-          requestedSession != sessionId ||
-          requestedSession != _sessionId) {
-        onDiagnostic?.call(
-            '[Browser STT] rejected stale WebView session=$requestedSession active=$_sessionId');
+          !_requestMatchesSession(request, sessionToken) ||
+          sessionSequence != _sessionSequence ||
+          sessionToken != _sessionToken ||
+          !_requestHasExpectedOrigin(request)) {
+        onDiagnostic
+            ?.call('[Browser STT] rejected invalid or stale browser session');
         return Response.forbidden('stale session', headers: _textHeaders);
       }
 
       return webSocketHandler((WebSocketChannel channel) {
+        if (!_matchesCurrentBrowserSession(
+          sessionSequence: sessionSequence,
+          sessionToken: sessionToken,
+        )) {
+          unawaited(channel.sink.close().then<void>((_) {}));
+          return;
+        }
         final previousClient = _wsClient;
         _wsClient = channel;
         if (previousClient != null && previousClient != channel) {
@@ -87,21 +106,34 @@ class SttBrowserAdapter extends AbstractSttService {
             _reportAdapterFailure(
               'closeStaleSocket',
               error,
-              'failed to close stale WebView socket',
+              'failed to close stale browser socket',
             );
           }
         }
-        onDiagnostic?.call('[Browser STT] WebView connected');
+        onDiagnostic?.call('[Browser STT] browser host connected');
 
         channel.stream.listen(
           (message) {
-            if (!_isActive || _sessionId != sessionId || _wsClient != channel) {
+            if (!_isActive ||
+                _sessionSequence != sessionSequence ||
+                _sessionToken != sessionToken ||
+                _wsClient != channel) {
               return;
             }
             try {
               final data =
                   jsonDecode(message as String) as Map<String, dynamic>;
               final type = data['type'] as String? ?? '';
+              final lifecycle =
+                  SttBrowserLifecycleEvent.fromBrowserMessage(data);
+              if (lifecycle != null) {
+                _handleBrowserLifecycleEvent(
+                  lifecycle,
+                  sessionSequence: sessionSequence,
+                  sessionToken: sessionToken,
+                  channel: channel,
+                );
+              }
               switch (type) {
                 case 'devices':
                   final rawDevices = data['devices'];
@@ -123,12 +155,7 @@ class SttBrowserAdapter extends AbstractSttService {
                   }
                   break;
                 case 'listening':
-                  if (!_everListened) {
-                    _everListened = true;
-                    onStatusChange?.call(SpeechStatus.listening);
-                    onDiagnostic?.call(
-                        '[Browser STT] Web Speech API active - speak now');
-                  }
+                  // Kept for compatibility with an already-loaded older page.
                   break;
                 case 'result':
                   final words = data['words'] as String? ?? '';
@@ -146,8 +173,9 @@ class SttBrowserAdapter extends AbstractSttService {
                   if (label.isNotEmpty) {
                     _selectedAudioInputDeviceLabel = label;
                   }
-                  onDiagnostic?.call(
-                      '[Browser STT] Input ready: $_selectedAudioInputDeviceLabel');
+                  onDiagnostic?.call('[Browser STT] Input ready');
+                  break;
+                case 'lifecycle':
                   break;
                 case 'watchdogRestart':
                   final reason = data['reason'] as String? ?? 'stale';
@@ -172,12 +200,13 @@ class SttBrowserAdapter extends AbstractSttService {
                   ));
                   break;
                 case 'error':
-                  final err = data['error'] as String? ?? 'unknown';
+                  final err = sanitizeSttBrowserErrorCode(data['error']);
+                  if (lifecycle != null) break;
                   onRuntimeHealth?.call(SttRuntimeHealth(
                     type: 'error',
                     listening: _everListened,
                     locale: _currentLocale,
-                    failures: err == 'network' ? 1 : 0,
+                    failures: 0,
                     error: err,
                   ));
                   if (err == 'input-device-missing') {
@@ -186,10 +215,6 @@ class SttBrowserAdapter extends AbstractSttService {
                   } else if (err == 'input-device-failed') {
                     onDiagnostic?.call(
                         '[Browser STT] Could not open selected microphone; using system default.');
-                  } else if (err == 'not-allowed') {
-                    onError?.call('Microphone blocked in WebView2.\n'
-                        'Open Windows microphone settings and allow microphone '
-                        'access for desktop apps.');
                   } else if (err != 'aborted' && err != 'no-speech') {
                     onDiagnostic?.call('[Browser STT] error: $err');
                   }
@@ -199,17 +224,28 @@ class SttBrowserAdapter extends AbstractSttService {
               _reportAdapterFailure(
                 'malformedMessage',
                 error,
-                'ignored malformed WebView message',
+                'ignored malformed browser message',
               );
             }
           },
           onDone: () {
-            final wasCurrentClient = _wsClient == channel;
+            final wasCurrentClient = _matchesCurrentBrowserSession(
+              sessionSequence: sessionSequence,
+              sessionToken: sessionToken,
+              channel: channel,
+            );
+            if (_isActive && wasCurrentClient) {
+              _emitBrowserLifecycle(
+                const SttBrowserLifecycleEvent(
+                  SttBrowserLifecyclePhase.disconnected,
+                ),
+              );
+            }
             if (wasCurrentClient) {
               _wsClient = null;
             }
             if (_isActive && wasCurrentClient) {
-              onDiagnostic?.call('[Browser STT] WebView disconnected');
+              onDiagnostic?.call('[Browser STT] browser host disconnected');
             }
           },
         );
@@ -227,8 +263,8 @@ class SttBrowserAdapter extends AbstractSttService {
       );
     }
 
-    onDiagnostic?.call(
-        '[Browser STT] WebView ready at http://localhost:$_port/?session=$_sessionId');
+    onDiagnostic?.call('[Browser STT] browser host ready on localhost:$_port '
+        '(session $sessionSequence)');
 
     return SpeechStartResult(
       success: true,
@@ -267,7 +303,7 @@ class SttBrowserAdapter extends AbstractSttService {
         : label.trim();
     onDiagnostic?.call(normalized == null
         ? '[Browser STT] Using system default microphone'
-        : '[Browser STT] Requested microphone: $_selectedAudioInputDeviceLabel');
+        : '[Browser STT] Requested configured microphone');
     try {
       _wsClient?.sink.add(jsonEncode({
         'type': 'setAudioInputDevice',
@@ -301,12 +337,13 @@ class SttBrowserAdapter extends AbstractSttService {
     final client = _wsClient;
     _wsClient = null;
     try {
+      client?.sink.add(jsonEncode({'type': 'close'}));
       client?.sink.close();
     } catch (error) {
       _reportAdapterFailure(
         'closeSocket',
         error,
-        'failed to close WebView socket',
+        'failed to close browser socket',
       );
     }
     try {
@@ -328,8 +365,58 @@ class SttBrowserAdapter extends AbstractSttService {
       listening: _isActive,
       locale: _currentLocale,
       failures: 1,
-      error: error.toString(),
+      error: 'adapter-failure:${error.runtimeType}',
     ));
+  }
+
+  bool _matchesCurrentBrowserSession({
+    required int sessionSequence,
+    required String sessionToken,
+    WebSocketChannel? channel,
+  }) {
+    return _isActive &&
+        sessionSequence == _sessionSequence &&
+        sessionToken == _sessionToken &&
+        (channel == null || _wsClient == channel);
+  }
+
+  void _handleBrowserLifecycleEvent(
+    SttBrowserLifecycleEvent event, {
+    required int sessionSequence,
+    required String sessionToken,
+    required WebSocketChannel channel,
+  }) {
+    if (!_matchesCurrentBrowserSession(
+      sessionSequence: sessionSequence,
+      sessionToken: sessionToken,
+      channel: channel,
+    )) {
+      return;
+    }
+
+    if (event.phase == SttBrowserLifecyclePhase.recognizerListening &&
+        !_everListened) {
+      _everListened = true;
+      onStatusChange?.call(SpeechStatus.listening);
+    }
+    final emitted = _emitBrowserLifecycle(event);
+    if (emitted && event.phase == SttBrowserLifecyclePhase.permissionDenied) {
+      onError?.call('Microphone blocked in the speech browser.\n'
+          'Open Windows microphone settings and allow microphone '
+          'access for desktop apps.');
+    }
+  }
+
+  bool _emitBrowserLifecycle(SttBrowserLifecycleEvent event) {
+    final repeatable = event.phase == SttBrowserLifecyclePhase.network;
+    if (!repeatable && !_reportedLifecyclePhases.add(event.phase)) return false;
+
+    onRuntimeHealth?.call(event.toRuntimeHealth(
+      locale: _currentLocale,
+      hasListened: _everListened,
+    ));
+    onDiagnostic?.call('[Browser STT] lifecycle ${event.phase.name}');
+    return true;
   }
 
   Future<HttpServer> _serveOnAvailablePort(Handler handler) async {
@@ -351,6 +438,28 @@ class SttBrowserAdapter extends AbstractSttService {
     throw lastError ?? StateError('No speech-to-text ports available');
   }
 
+  static String _createSessionToken() {
+    final bytes = List<int>.generate(
+      24,
+      (_) => _secureRandom.nextInt(256),
+      growable: false,
+    );
+    return base64UrlEncode(bytes).replaceAll('=', '');
+  }
+
+  bool _requestMatchesSession(Request request, String expectedToken) {
+    final requestedToken = request.url.queryParameters['session'] ?? '';
+    final requestedHost = request.requestedUri.host.toLowerCase();
+    return requestedHost == 'localhost' &&
+        requestedToken.isNotEmpty &&
+        requestedToken == expectedToken;
+  }
+
+  bool _requestHasExpectedOrigin(Request request) {
+    final origin = request.headers['origin'];
+    return origin == null || origin == 'http://localhost:$_port';
+  }
+
   @override
   Future<void> stop() async {
     _isActive = false;
@@ -364,8 +473,15 @@ class SttBrowserAdapter extends AbstractSttService {
   @override
   String get platformName => 'Browser Online';
 
-  /// URL loaded by the embedded WebviewController (the STT page itself).
+  /// URL loaded by the selected browser host (the STT page itself).
   @override
-  String? get sttWebViewUrl =>
-      _server != null ? 'http://localhost:$_port/?session=$_sessionId' : null;
+  String? get sttWebViewUrl => _server != null
+      ? Uri(
+          scheme: 'http',
+          host: 'localhost',
+          port: _port,
+          path: '/',
+          queryParameters: {'session': _sessionToken},
+        ).toString()
+      : null;
 }

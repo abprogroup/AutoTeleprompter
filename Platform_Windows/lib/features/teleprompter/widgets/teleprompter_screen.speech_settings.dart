@@ -9,6 +9,7 @@ class _WindowsSpeechSettingsSection extends ConsumerWidget {
     final tState = ref.watch(teleprompterProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final manualSttProfile = settings.sttManualProfileEnabled;
+    final sttEngineSelectorEnabled = !tState.isStarting && !tState.isListening;
     final visibleSkipControlsEnabled = !manualSttProfile;
     final hardSkipControlsEnabled =
         !manualSttProfile && settings.sttVisibleSkipEnabled;
@@ -18,6 +19,13 @@ class _WindowsSpeechSettingsSection extends ConsumerWidget {
       children: [
         const Text('Speech Input', style: _presenterSectionStyle),
         const SizedBox(height: 8),
+        WindowsSttEngineSelector(
+          value: settings.sttEngine,
+          enabled: sttEngineSelectorEnabled,
+          accentColor: Color(settings.currentWordColor),
+          onChanged: notifier.setSttEngine,
+        ),
+        const SizedBox(height: 12),
         _WindowsMicSelector(
           selectedDeviceId: settings.sttInputDeviceId,
           selectedLabel: settings.sttInputDeviceLabel,

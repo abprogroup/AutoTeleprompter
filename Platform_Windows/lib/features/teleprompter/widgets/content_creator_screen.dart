@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_windows/webview_windows.dart';
 import '../../../platform/permissions/platform_permissions.dart';
+import '../../../platform/stt/stt_webview2_compatibility.dart';
 import '../../../platform/webview2/webview2_runtime_config.dart';
 import '../models/alignment_result.dart';
 import '../services/content_camera_device_classifier.dart';
@@ -99,6 +100,8 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   Timer? _positionCommitTimer;
   WebviewController? _contentWebviewController;
   String? _loadedContentWebViewUrl;
+  String? _pendingContentWebViewUrl;
+  int _contentWebViewLoadGeneration = 0;
   int? _pendingPositionCommit;
   String? _bookmarkScopeKey;
   String? _bookmarkLoadingKey;
@@ -142,9 +145,10 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl),
           (prev, next) {
         if (next == null) {
-          _loadedContentWebViewUrl = null;
-        } else if (next != _loadedContentWebViewUrl) {
-          _loadContentSttWebView(next);
+          _clearContentSttWebView();
+        } else if (next != _loadedContentWebViewUrl &&
+            next != _pendingContentWebViewUrl) {
+          unawaited(_loadContentSttWebView(next));
         }
       });
       ref.listenManual(
@@ -160,7 +164,10 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         _updateContentCreatorState(() => _activeWordIndex = next);
         _scrollToContentWordIndex(next);
       });
-      _initContentWebViewController();
+      final initialWebViewUrl = ref.read(teleprompterProvider).sttWebViewUrl;
+      if (Platform.isWindows && initialWebViewUrl != null) {
+        unawaited(_loadContentSttWebView(initialWebViewUrl));
+      }
       final script = ref.read(scriptProvider);
       if (_contentFrameConfirmed && script != null) {
         _maybeShowContentResumePrompt(script);
@@ -210,7 +217,14 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         source: 'contentCreator.disposeVisibleWindow',
       );
     }
-    _contentWebviewController?.dispose();
+    _contentWebViewLoadGeneration++;
+    final contentWebviewController = _contentWebviewController;
+    _contentWebviewController = null;
+    if (contentWebviewController != null) {
+      unawaited(
+        _disposeContentSttWebViewController(contentWebviewController),
+      );
+    }
     _scrollController.removeListener(_handleContentScroll);
     _scrollController.dispose();
     super.dispose();

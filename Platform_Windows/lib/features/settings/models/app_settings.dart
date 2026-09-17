@@ -2,6 +2,13 @@ class AppSettings {
   static const String sttEngineAuto = 'windows_auto';
   static const String sttEngineWindowsOffline = 'windows_offline';
   static const String sttEngineBrowserOnline = 'browser_online';
+  static const String sttEngineBrowserExternalEdge = 'browser_external_edge';
+  static const String sttEngineBrowserSmartCompatibility =
+      'browser_smart_compatibility';
+  static const String sttEngineWhisperTiny = 'whisper_tiny';
+  static const String sttEngineWhisperBase = 'whisper_base';
+  static const String sttEngineWhisperSmall = 'whisper_small';
+  static const String sttEngineWhisperMedium = 'whisper_medium';
   static const String sttReliabilityStandard = 'standard';
   static const String sttReliabilityNoisyRoom = 'noisyRoom';
   static const String importColorModePrompter = 'prompter_contrast';
@@ -45,15 +52,22 @@ class AppSettings {
 
   static String normalizeSttEngine(String? engine) {
     switch (engine) {
-      case sttEngineAuto:
-      case sttEngineWindowsOffline:
       case sttEngineBrowserOnline:
+      case sttEngineBrowserExternalEdge:
+      case sttEngineBrowserSmartCompatibility:
+      case sttEngineWhisperTiny:
         return engine!;
+      case sttEngineWindowsOffline:
+      case sttEngineWhisperBase:
+      case sttEngineWhisperSmall:
+      case sttEngineWhisperMedium:
+        return sttEngineWhisperTiny;
+      case sttEngineAuto:
       case 'google':
       case null:
-        return sttEngineAuto;
+        return sttEngineBrowserSmartCompatibility;
       default:
-        return sttEngineAuto;
+        return sttEngineBrowserSmartCompatibility;
     }
   }
 
@@ -111,7 +125,8 @@ class AppSettings {
   final String fontFamily; // v3.9.5.46
   final bool
       showAlignmentOverride; // v3.9.8 toggle for presentation alignment override
-  final String sttEngine; // Windows: auto/offline/browser, legacy 'google'
+  final String
+      sttEngine; // Windows speech-host strategy; legacy values migrate.
   final bool allowScrollDuringActiveSession;
   final String manualScrollBarPlacement;
   final double
@@ -198,7 +213,7 @@ class AppSettings {
     this.showUpcomingWordColor = false,
     this.fontFamily = 'Inter',
     this.showAlignmentOverride = false,
-    this.sttEngine = sttEngineAuto,
+    this.sttEngine = sttEngineBrowserSmartCompatibility,
     this.allowScrollDuringActiveSession = false,
     this.manualScrollBarPlacement = manualScrollBarBottom,
     this.readFadeIntensity = 0.0,

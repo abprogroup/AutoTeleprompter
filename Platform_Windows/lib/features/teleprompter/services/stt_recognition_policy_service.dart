@@ -6,6 +6,20 @@ class SttRecognitionPolicyService {
       locale.toLowerCase().replaceAll('_', '-').startsWith('en-') ||
       locale.toLowerCase() == 'en';
 
+  /// Treats a browser adapter as listening only after its host handshake is
+  /// complete. The adapter becomes active when its loopback server starts,
+  /// which is earlier than microphone and recognizer readiness.
+  static bool heartbeatListeningState({
+    required bool serviceListening,
+    required bool browserServiceActive,
+    required bool browserHostReadinessComplete,
+    required bool browserHostTransitionInFlight,
+  }) {
+    if (!serviceListening) return false;
+    if (!browserServiceActive) return true;
+    return browserHostReadinessComplete && !browserHostTransitionInFlight;
+  }
+
   static List<String> _transcriptWords(String transcript) => transcript
       .trim()
       .split(RegExp(r'\s+'))

@@ -118,6 +118,10 @@ AutoTeleprompterAdmin.exe
 *.aab
 *.jar
 
+# Release builds fetch and verify the bundled offline STT model. Keep the
+# 77 MB generated asset out of Git history.
+Platform_Windows/assets/models/ggml-*.bin
+
 # Protocol Files
 CHANGELOG.md
 PROTOCOL.md

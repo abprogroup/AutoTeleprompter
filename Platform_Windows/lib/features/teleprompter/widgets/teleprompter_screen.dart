@@ -22,6 +22,7 @@ import '../../script/services/script_bookmark_service.dart';
 import '../../script/services/markup_decoration_service.dart';
 import '../../script/services/highlight_band_painter.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../settings/widgets/windows_stt_engine_selector.dart';
 import '../../script/models/script_word.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -33,6 +34,7 @@ import '../../remote/services/remote_control_service.dart';
 import '../../../core/window/presenter_fullscreen_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
+import '../../../platform/stt/stt_webview2_compatibility.dart';
 import '../../../platform/webview2/webview2_runtime_config.dart';
 import 'presenter_bookmark_marker_layer.dart';
 
@@ -102,6 +104,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   StreamSubscription? _remoteCmdSub;
   WebviewController? _webviewController;
   String? _loadedWebViewUrl;
+  String? _pendingWebViewUrl;
+  int _webViewLoadGeneration = 0;
   String _lastSearchQuery = '';
   bool _searchDialogOpen = false;
   bool _resumeDialogShown = false;
@@ -151,9 +155,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl),
             (prev, next) {
           if (next == null) {
-            _loadedWebViewUrl = null;
-          } else if (next != _loadedWebViewUrl) {
-            _loadSttWebView(next);
+            _clearSttWebView();
+          } else if (next != _loadedWebViewUrl && next != _pendingWebViewUrl) {
+            unawaited(_loadSttWebView(next));
           }
         });
         ref.listenManual(
@@ -162,7 +166,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           if (!mounted || !Platform.isWindows) return;
           _syncWindowsControlsForSpeech(next);
         });
-        if (Platform.isWindows) _initWebViewController();
+        final initialWebViewUrl = ref.read(teleprompterProvider).sttWebViewUrl;
+        if (Platform.isWindows && initialWebViewUrl != null) {
+          unawaited(_loadSttWebView(initialWebViewUrl));
+        }
         final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
         if (currentIndex > 0 && !_resumeDialogShown) {
           _resumeDialogShown = true;
@@ -202,7 +209,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         );
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
-    _webviewController?.dispose();
+    _webViewLoadGeneration++;
+    final webviewController = _webviewController;
+    _webviewController = null;
+    if (webviewController != null) {
+      unawaited(_disposeSttWebViewController(webviewController));
+    }
     super.dispose();
   }
 

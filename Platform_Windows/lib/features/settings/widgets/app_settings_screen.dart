@@ -24,6 +24,7 @@ import '../services/update_check_service.dart';
 import '../services/update_download_service.dart';
 import '../services/update_install_service.dart';
 import 'cloud_sync_screen.dart';
+import 'windows_stt_engine_selector.dart';
 
 part 'app_settings_screen.tiles.dart';
 part 'app_settings_screen.account_remote.dart';
@@ -31,6 +32,7 @@ part 'app_settings_screen.account_subscription.dart';
 part 'app_settings_screen.account_danger.dart';
 part 'app_settings_screen.remote_profiles.dart';
 part 'app_settings_screen.media_defaults.dart';
+part 'app_settings_screen.speech_input.dart';
 part 'app_settings_screen.updates.dart';
 
 enum AppSettingsTab {
@@ -243,29 +245,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       const SizedBox(height: 8),
       ..._updatesSection(settings),
       const SizedBox(height: 22),
-      const _SectionHeader(title: 'LANGUAGE'),
-      const SizedBox(height: 8),
-      _SettingsChoiceTile<String>(
-        icon: Icons.translate_outlined,
-        title: 'Speech recognition language',
-        subtitle: _languageModeDescription(settings.languageMode),
-        value: settings.languageMode,
-        choices: const [
-          _SettingsChoice(
-            label: 'Auto',
-            value: AppSettings.languageModeAuto,
-          ),
-          _SettingsChoice(
-            label: 'Hebrew',
-            value: AppSettings.languageModeHebrew,
-          ),
-          _SettingsChoice(
-            label: 'English',
-            value: AppSettings.languageModeEnglish,
-          ),
-        ],
-        onChanged: ref.read(settingsProvider.notifier).setLanguageMode,
-      ),
+      ..._languageAndSpeechSection(settings),
       const SizedBox(height: 22),
       const _SectionHeader(title: 'FEEDBACK'),
       const SizedBox(height: 8),
@@ -315,17 +295,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     return settings.contentCreatorRecordingFolder.isEmpty
         ? r'Videos\AutoTeleprompter'
         : settings.contentCreatorRecordingFolder;
-  }
-
-  String _languageModeDescription(String mode) {
-    switch (mode) {
-      case AppSettings.languageModeHebrew:
-        return 'Prefer Hebrew speech recognition when starting sessions';
-      case AppSettings.languageModeEnglish:
-        return 'Prefer English speech recognition when starting sessions';
-      default:
-        return 'Detect script language automatically when possible';
-    }
   }
 
   Future<String> _defaultRecordingFolderPath() async {

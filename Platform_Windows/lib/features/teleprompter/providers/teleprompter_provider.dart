@@ -19,7 +19,14 @@ import '../../remote/services/remote_control_service.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../core/extensions/string_extensions.dart';
 
+import '../../../platform/stt/stt_external_edge_launcher.dart';
+import '../../../platform/stt/stt_host_policy.dart';
+import '../../../platform/stt/stt_host_readiness.dart';
+import '../../../platform/stt/stt_host_transition_guard.dart';
 import '../../../platform/stt/stt_service_factory.dart';
+import '../../../platform/stt/stt_webview2_compatibility.dart';
+part 'teleprompter_provider.browser_host.dart';
+part 'teleprompter_provider.external_edge.dart';
 part 'teleprompter_provider.heartbeat.dart';
 part 'teleprompter_provider.locale.dart';
 part 'teleprompter_provider.relock.dart';
@@ -32,7 +39,20 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final AbstractSttService _desktopSttService;
   late final WhisperSpeechService _whisperService;
   late final RemoteControlService _remoteControlService;
+  late final WindowsSttExternalEdgeLauncher _externalEdgeLauncher;
   bool _useWhisper = false;
+  bool _useExternalEdgeSttHost = false;
+  bool _externalEdgeFailureInFlight = false;
+  Future<void>? _externalEdgeHostStopInFlight;
+  WindowsSttHostPolicy? _windowsSttHostPolicy;
+  SttHostReadinessStateMachine? _sttHostReadiness;
+  Timer? _sttHostReadinessTimer;
+  final SttHostTransitionGuard _sttHostTransitionGuard =
+      SttHostTransitionGuard();
+  bool get _sttHostTransitionInFlight => _sttHostTransitionGuard.isActive;
+  _PendingSttHostFailure? _pendingSttHostFailure;
+  final Set<SttHostReadinessPhase> _pendingSttHostReadinessPhases = {};
+  String? _observedWebView2RuntimeVersion;
   Script? _currentScript;
   String _accumulatedTranscript = '';
   bool _disposed = false;
@@ -73,7 +93,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   DateTime? _lastBrowserHeartbeatAt;
   DateTime? _lastRecoverableSttErrorAt;
   int _recoverableSttErrorCount = 0;
-  bool _sttRecoveryInFlight = false;
   bool _stateFailureDiagnosticRecorded = false;
 
   // STT tuning
@@ -83,10 +102,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const int _sttLiveAlignmentWindowWords = 10;
   static const int _sttAlignmentWindowWords = 18;
   static const int _sttRelockTranscriptMaxWords = 96;
-  static const Duration _visibleLocaleAssistCooldown =
-      Duration(milliseconds: 900);
-  static const Duration _visibleLocaleAssistPinDuration =
-      Duration(milliseconds: 5000);
+  static const Duration _visibleLocaleAssistCooldown = Duration(
+    milliseconds: 900,
+  );
+  static const Duration _visibleLocaleAssistPinDuration = Duration(
+    milliseconds: 5000,
+  );
   // How long the tracker can go without an advance before we trust it's
   // genuinely fallen behind (not just a normal pause between sentences) and
   // widen the visible-skip recovery window beyond the rendered viewport.
@@ -158,6 +179,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _desktopSttService = SttServiceFactory.createWindowsDesktop();
     _sttService = _browserSttService;
     _whisperService = WhisperSpeechService();
+    _externalEdgeLauncher = WindowsSttExternalEdgeLauncher();
+    _externalEdgeLauncher.onUnexpectedExit = _handleUnexpectedEdgeExit;
     _remoteControlService = ref.read(remoteControlProvider);
     _setupRemoteCallbacks();
     _setupSttCallbacks(_browserSttService);
@@ -166,7 +189,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
-      _browserSttService.stop();
+      _sttHostReadinessTimer?.cancel();
+      unawaited(_stopExternalEdgeHostServices());
       _desktopSttService.stop();
       _whisperService.stop();
       _remoteControlService.stop();
@@ -254,74 +278,67 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     String transcript, {
     int windowWords = _sttAlignmentWindowWords,
     int maxWindows = 6,
-  }) =>
-      SttRecognitionPolicyService.rollingTranscriptWindowsForAlignment(
-        transcript,
-        windowWords: windowWords,
-        maxWindows: maxWindows,
-      );
+  }) => SttRecognitionPolicyService.rollingTranscriptWindowsForAlignment(
+    transcript,
+    windowWords: windowWords,
+    maxWindows: maxWindows,
+  );
 
   static List<String> liveTranscriptWindowsForAlignment(
     String transcript, {
     int shortWindowWords = _sttLiveAlignmentWindowWords,
     int longWindowWords = _sttAlignmentWindowWords,
     int maxWindows = 8,
-  }) =>
-      SttRecognitionPolicyService.liveTranscriptWindowsForAlignment(
-        transcript,
-        shortWindowWords: shortWindowWords,
-        longWindowWords: longWindowWords,
-        maxWindows: maxWindows,
-      );
+  }) => SttRecognitionPolicyService.liveTranscriptWindowsForAlignment(
+    transcript,
+    shortWindowWords: shortWindowWords,
+    longWindowWords: longWindowWords,
+    maxWindows: maxWindows,
+  );
 
   static String capTranscriptForRelock(
     String transcript, {
     int maxWords = _sttRelockTranscriptMaxWords,
-  }) =>
-      SttRecognitionPolicyService.capTranscriptWords(
-        transcript,
-        maxWords: maxWords,
-      );
+  }) => SttRecognitionPolicyService.capTranscriptWords(
+    transcript,
+    maxWords: maxWords,
+  );
 
   /// Common handler for STT results - shared between Google and Whisper.
   static int resolveAdvanceTarget({
     required int currentIndex,
     required int alignedIndex,
     required int? visibleMaxSkipTargetIndex,
-  }) =>
-      SttRecognitionPolicyService.resolveAdvanceTarget(
-        currentIndex: currentIndex,
-        alignedIndex: alignedIndex,
-        visibleMaxSkipTargetIndex: visibleMaxSkipTargetIndex,
-        maxAdvancePerUpdate: _maxAdvancePerUpdate,
-      );
+  }) => SttRecognitionPolicyService.resolveAdvanceTarget(
+    currentIndex: currentIndex,
+    alignedIndex: alignedIndex,
+    visibleMaxSkipTargetIndex: visibleMaxSkipTargetIndex,
+    maxAdvancePerUpdate: _maxAdvancePerUpdate,
+  );
 
   static bool shouldForceSkipAfterNoProgress({
     required bool strictBulletMode,
     required int noProgressCount,
     required int skipThreshold,
-  }) =>
-      SttRecognitionPolicyService.shouldForceSkipAfterNoProgress(
-        strictBulletMode: strictBulletMode,
-        noProgressCount: noProgressCount,
-        skipThreshold: skipThreshold,
-      );
+  }) => SttRecognitionPolicyService.shouldForceSkipAfterNoProgress(
+    strictBulletMode: strictBulletMode,
+    noProgressCount: noProgressCount,
+    skipThreshold: skipThreshold,
+  );
 
   static bool shouldUseImprovisationNoMatch({
     required bool strictBulletMode,
     required int alignedIndex,
     required int currentIndex,
-  }) =>
-      SttRecognitionPolicyService.shouldUseImprovisationNoMatch(
-        strictBulletMode: strictBulletMode,
-        alignedIndex: alignedIndex,
-        currentIndex: currentIndex,
-      );
+  }) => SttRecognitionPolicyService.shouldUseImprovisationNoMatch(
+    strictBulletMode: strictBulletMode,
+    alignedIndex: alignedIndex,
+    currentIndex: currentIndex,
+  );
 
   static SttRecognitionPolicy recognitionPolicyForSettings(
     AppSettings settings,
-  ) =>
-      SttRecognitionPolicyService.recognitionPolicyForSettings(settings);
+  ) => SttRecognitionPolicyService.recognitionPolicyForSettings(settings);
 
   static int nextNoProgressCount({
     required int currentCount,
@@ -450,6 +467,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final pendingStop = _stopInFlight;
     if (pendingStop != null) await pendingStop;
     if (_disposed) return;
+    await _stopExternalEdgeHostServices();
+    if (_disposed) return;
 
     final token = ++_sessionToken;
     // Compare by sessionId rather than object identity. _startPresenting()
@@ -457,7 +476,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     // causing the resume position to reset to 0 on every re-entry. Using
     // sessionId (stable across editor edits of the same session) lets us
     // distinguish "re-entered same session" from "loaded a different script".
-    final sameScript = _currentScript != null &&
+    final sameScript =
+        _currentScript != null &&
         _currentScript!.sessionId.isNotEmpty &&
         _currentScript!.sessionId == script.sessionId;
     _currentScript = script;
@@ -471,24 +491,34 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _resetVisibleLocaleAssist();
     _precomputeSectionLocales(script);
     final settings = ref.read(settingsProvider);
-    final sttEngine = settings.sttEngine;
+    final sttEngine = AppSettings.normalizeSttEngine(settings.sttEngine);
     _useWhisper = sttEngine.startsWith('whisper');
+    _externalEdgeFailureInFlight = false;
+    if (!await _prepareWindowsSttHostPolicy(
+      sttEngine: sttEngine,
+      sessionToken: token,
+    )) {
+      return;
+    }
     final resumeIndex = sameScript ? state.confirmedWordIndex : 0;
     final startIndex = resumeIndex.clamp(
       0,
       script.words.isEmpty ? 0 : script.words.length - 1,
     );
     state = state.copyWith(
-        confirmedWordIndex: startIndex,
-        isListening: false,
-        isStarting: true,
-        hasError: false,
-        statusMessage: '',
-        debugLogs: [],
-        missingLanguage: null);
+      confirmedWordIndex: startIndex,
+      isListening: false,
+      isStarting: true,
+      hasError: false,
+      statusMessage: '',
+      debugLogs: [],
+      missingLanguage: null,
+      sttWebViewUrl: null,
+    );
 
     _addDebugLog(
-        'SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex');
+      'SESSION START | ${script.words.where((w) => !w.isNewline).length} words | pos=$startIndex',
+    );
     _addDebugLog(
       'STT SETTINGS: engine=${settings.sttEngine} language=${settings.languageMode}',
     );
@@ -515,8 +545,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _lastBrowserHeartbeatAt = null;
       _lastRecoverableSttErrorAt = null;
       _recoverableSttErrorCount = 0;
-      _sttRecoveryInFlight = false;
       _sttService = _resolveWindowsSpeechService(settings);
+      if (!_ensureExternalEdgeHostCanStart()) return;
       await (_sttService == _browserSttService
           ? _desktopSttService.stop()
           : _browserSttService.stop());
@@ -532,9 +562,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           realWords.where((w) => _explicitLocaleForWord(w) == 'he_IL').length;
       final ratio = realWords.isEmpty ? 0 : hebrewCount / realWords.length;
       _addDebugLog(
-          'LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew language words)');
+        'LANG: ${initialLocale == "he_IL" ? "Hebrew" : "English"} start (${(ratio * 100).round()}% Hebrew language words)',
+      );
       _addDebugLog(
-          'STT START LOCALE: $localeId | sections=${_sectionLocales.toSet().length}');
+        'STT START LOCALE: $localeId | sections=${_sectionLocales.toSet().length}',
+      );
     }
 
     _startSessionHeartbeat(script);
@@ -553,43 +585,21 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       final selectedMicLabel = settings.sttInputDeviceLabel.trim();
       _sttService.setAudioInputDevice(
         selectedMicId.isEmpty ? null : selectedMicId,
-        label: selectedMicLabel.isEmpty
-            ? 'System default microphone'
-            : selectedMicLabel,
+        label:
+            selectedMicLabel.isEmpty
+                ? 'System default microphone'
+                : selectedMicLabel,
       );
       _addDebugLog('[$platform] Starting STT locale=$localeId...');
-      _addDebugLog(selectedMicId.isEmpty
-          ? '[$platform] Microphone: system default input'
-          : '[$platform] Microphone: $selectedMicLabel');
+      _addDebugLog(
+        selectedMicId.isEmpty
+            ? '[$platform] Microphone: system default input'
+            : '[$platform] Microphone: $selectedMicLabel',
+      );
       var result = await _sttService.start(localeId: localeId);
       if (_disposed || _sessionStopped || token != _sessionToken) {
         await _sttService.stop();
         return;
-      }
-
-      if (!result.success &&
-          settings.sttEngine == AppSettings.sttEngineAuto &&
-          _sttService == _desktopSttService) {
-        _addDebugLog(
-          '[Windows built-in speech-to-text] unavailable for English, '
-          'falling back to Browser online speech-to-text.',
-        );
-        await _desktopSttService.stop();
-        _sttService = _browserSttService;
-        _activeSttCanSwitchLocale = true;
-        _activeSttEngineLabel = 'Browser online speech-to-text';
-        platform = _activeSttEngineLabel;
-        _sttService.setAudioInputDevice(
-          selectedMicId.isEmpty ? null : selectedMicId,
-          label: selectedMicLabel.isEmpty
-              ? 'System default microphone'
-              : selectedMicLabel,
-        );
-        result = await _sttService.start(localeId: localeId);
-        if (_disposed || _sessionStopped || token != _sessionToken) {
-          await _sttService.stop();
-          return;
-        }
       }
 
       if (!result.success) {
@@ -599,12 +609,29 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
           'STT start failed',
           data: {'platform': platform, 'message': result.message},
         );
-        _safeSetState((s) => s.copyWith(
+        if (_sttService == _browserSttService) {
+          await _handleBrowserHostFailure(
+            reasonCode: 'browser-server-start-failed',
+            quarantineRuntime: false,
+          );
+        } else {
+          _safeSetState(
+            (s) => s.copyWith(
               statusMessage: result.message ?? 'Speech recognition failed',
               hasError: true,
               isListening: false,
               isStarting: false,
-            ));
+            ),
+          );
+        }
+        return;
+      }
+
+      if (_sttService == _browserSttService) {
+        _startBrowserHostReadiness(sessionToken: token);
+      }
+
+      if (!await _activateConfiguredBrowserSttHost(sessionToken: token)) {
         return;
       }
 
@@ -620,17 +647,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         });
       }
 
-      // Expose WebView URL for the embedded browser STT (Windows only).
-      final webViewUrl = _sttService.sttWebViewUrl;
-      if (webViewUrl != null) {
-        _safeSetState((s) => s.copyWith(sttWebViewUrl: webViewUrl));
-      }
-
       if (result.languageMissing && result.missingLanguageName != null) {
         _addDebugLog(
-            '[$platform] LANG MISSING: ${result.missingLanguageName} - using ${result.actualLocale}');
+          '[$platform] LANG MISSING: ${result.missingLanguageName} - using ${result.actualLocale}',
+        );
         _safeSetState(
-            (s) => s.copyWith(missingLanguage: result.missingLanguageName));
+          (s) => s.copyWith(missingLanguage: result.missingLanguageName),
+        );
       } else {
         _addDebugLog('[$platform] STT using locale: ${result.actualLocale}');
         LightweightDiagnostics.instance.record(
@@ -656,6 +679,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     );
     _startingSession = false;
     _heartbeatTimer?.cancel();
+    _sttHostReadinessTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
     _resetSttTrackingContext();
     _lastVolLog = null;
@@ -668,7 +692,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
     // Stop all engines - Whisper may have been auto-started via fallback.
     final stopFuture = Future.wait([
-      _browserSttService.stop(),
+      _stopExternalEdgeHostServices(),
       _desktopSttService.stop(),
       _whisperService.stop(),
     ]);
@@ -677,6 +701,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       await _stopInFlight;
     } finally {
       _stopInFlight = null;
+      _useExternalEdgeSttHost = false;
+      _externalEdgeFailureInFlight = false;
+      _windowsSttHostPolicy = null;
+      _sttHostReadiness = null;
+      _sttHostTransitionGuard.invalidate();
+      _pendingSttHostFailure = null;
+      _pendingSttHostReadinessPhases.clear();
+      _observedWebView2RuntimeVersion = null;
     }
 
     if (!_disposed) {
@@ -716,7 +748,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(
-        'POSITION JUMP -> #$target "${activeScript.words[target].raw}"');
+      'POSITION JUMP -> #$target "${activeScript.words[target].raw}"',
+    );
     LightweightDiagnostics.instance.record(
       'position',
       'position jumped',
@@ -750,9 +783,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       label: normalizedLabel,
     );
     unawaited(refreshAudioInputDevices());
-    _addDebugLog(normalizedId.isEmpty
-        ? 'Microphone input set to system default'
-        : 'Microphone input set to $normalizedLabel');
+    _addDebugLog(
+      normalizedId.isEmpty
+          ? 'Microphone input set to system default'
+          : 'Microphone input set to $normalizedLabel',
+    );
   }
 
   void setVisibleWordWindow(int? startIndex, int? endIndex) {
@@ -767,4 +802,5 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
 final teleprompterProvider =
     NotifierProvider<TeleprompterNotifier, TeleprompterState>(
-        TeleprompterNotifier.new);
+      TeleprompterNotifier.new,
+    );

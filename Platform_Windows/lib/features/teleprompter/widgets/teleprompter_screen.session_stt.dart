@@ -174,35 +174,119 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     }
   }
 
-  Future<void> _initWebViewController() async {
-    try {
-      WebView2RuntimeConfig.configureForLocalSttDefaults();
-      final controller = WebviewController();
-      await controller.initialize();
+  Future<void> _loadSttWebView(String url) async {
+    if (!Platform.isWindows || !mounted) return;
+    final generation = ++_webViewLoadGeneration;
+    _pendingWebViewUrl = url;
+    WebView2RuntimeConfig.configureForLocalSttUrl(url);
+    final runtimeVersion = await _readWebViewRuntimeVersion();
+    if (!_isCurrentSttWebViewLoad(generation, url)) return;
+    WebviewController? controller = _webviewController;
+    var createdController = false;
 
-      if (mounted) _setTeleprompterState(() => _webviewController = controller);
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'presenter.webviewInit',
+    if (controller == null) {
+      try {
+        controller = WebviewController();
+        createdController = true;
+        await controller.initialize();
+      } catch (_) {
+        if (controller != null) {
+          await _disposeSttWebViewController(controller);
+        }
+        if (_isCurrentSttWebViewLoad(generation, url)) {
+          _pendingWebViewUrl = null;
+          ref.read(teleprompterProvider.notifier).reportEmbeddedSttHostFailure(
+                reasonCode: 'webview-init-failed',
+                runtimeVersion: runtimeVersion,
+              );
+        }
+        LightweightDiagnostics.instance.record(
+          'error',
+          'Embedded WebView2 initialization failed',
+          data: const {'source': 'presenter.webviewInit'},
+        );
+        return;
+      }
+
+      if (!_isCurrentSttWebViewLoad(generation, url)) {
+        await _disposeSttWebViewController(controller);
+        return;
+      }
+      _setTeleprompterState(() => _webviewController = controller);
+    }
+
+    try {
+      await controller.loadUrl(url);
+      if (!_isCurrentSttWebViewLoad(generation, url)) {
+        if (createdController && controller != _webviewController) {
+          await _disposeSttWebViewController(controller);
+        }
+        return;
+      }
+      _pendingWebViewUrl = null;
+      _loadedWebViewUrl = url;
+      ref
+          .read(teleprompterProvider.notifier)
+          .reportEmbeddedSttHostLoaded(runtimeVersion: runtimeVersion);
+    } catch (_) {
+      if (_isCurrentSttWebViewLoad(generation, url)) {
+        _pendingWebViewUrl = null;
+        _loadedWebViewUrl = null;
+        if (_webviewController == controller) {
+          _setTeleprompterState(() => _webviewController = null);
+        }
+        await _disposeSttWebViewController(controller);
+        if (_isCurrentSttWebViewLoad(generation, url)) {
+          ref.read(teleprompterProvider.notifier).reportEmbeddedSttHostFailure(
+                reasonCode: 'webview-load-failed',
+                runtimeVersion: runtimeVersion,
+              );
+        }
+      }
+      LightweightDiagnostics.instance.record(
+        'error',
+        'Embedded WebView2 navigation failed',
+        data: const {'source': 'presenter.webviewLoad'},
       );
     }
   }
 
-  Future<void> _loadSttWebView(String url) async {
-    WebView2RuntimeConfig.configureForLocalSttUrl(url);
-    _loadedWebViewUrl = url;
-    if (_webviewController == null) await _initWebViewController();
+  bool _isCurrentSttWebViewLoad(int generation, String url) {
+    return mounted &&
+        generation == _webViewLoadGeneration &&
+        ref.read(teleprompterProvider).sttWebViewUrl == url;
+  }
+
+  Future<String?> _readWebViewRuntimeVersion() async {
     try {
-      await _webviewController?.loadUrl(url);
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'presenter.webviewLoad',
+      final version = await WebviewController.getWebViewVersion().timeout(
+        const Duration(seconds: 3),
       );
+      return sanitizeWebView2RuntimeVersion(version);
+    } catch (_) {
+      return null;
     }
+  }
+
+  Future<void> _disposeSttWebViewController(
+    WebviewController controller,
+  ) async {
+    try {
+      await controller.dispose();
+    } catch (_) {
+      // Cleanup failures are intentionally ignored. They must not mask the
+      // bounded host lifecycle result or expose platform exception details.
+    }
+  }
+
+  void _clearSttWebView() {
+    _webViewLoadGeneration++;
+    _pendingWebViewUrl = null;
+    _loadedWebViewUrl = null;
+    final controller = _webviewController;
+    if (controller == null) return;
+    _setTeleprompterState(() => _webviewController = null);
+    unawaited(_disposeSttWebViewController(controller));
   }
 
   void _scheduleHideControls() {

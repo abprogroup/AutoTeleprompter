@@ -5,7 +5,13 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
     final platform = service.platformName;
 
     service.onResult = (result) {
-      if (_disposed || _sessionStopped || service != _sttService) return;
+      if (_disposed ||
+          _sessionStopped ||
+          _sttHostTransitionInFlight ||
+          _externalEdgeFailureInFlight ||
+          service != _sttService) {
+        return;
+      }
       _handleSttResult(result);
     };
 
@@ -13,6 +19,8 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
       if (_useWhisper ||
           _disposed ||
           _sessionStopped ||
+          _sttHostTransitionInFlight ||
+          _externalEdgeFailureInFlight ||
           service != _sttService) {
         return;
       }
@@ -58,25 +66,18 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
           service != _sttService) {
         return;
       }
-      if (health.type == 'heartbeat') {
-        _lastBrowserHeartbeatAt = DateTime.now();
-        if (health.failures <= 0) return;
-      }
-      if (health.error == 'network' || health.failures > 0) {
-        _lastRecoverableSttErrorAt = DateTime.now();
-        _recoverableSttErrorCount += health.failures <= 0 ? 1 : health.failures;
-        _addDebugLog(
-          '[${service.platformName}] health ${health.type}: '
-          'failures=$_recoverableSttErrorCount age=${health.ageMs}ms',
-        );
-      }
+      _handleBrowserHostRuntimeHealth(health);
     };
 
     service.onStatusChange = (status) {
       if (_useWhisper ||
           _disposed ||
           _sessionStopped ||
+          _externalEdgeFailureInFlight ||
           service != _sttService) {
+        return;
+      }
+      if (_sttHostTransitionInFlight && status != SpeechStatus.listening) {
         return;
       }
       if (_startingSession && status != SpeechStatus.listening) return;
@@ -99,6 +100,8 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
       if (_useWhisper ||
           _disposed ||
           _sessionStopped ||
+          _sttHostTransitionInFlight ||
+          _externalEdgeFailureInFlight ||
           service != _sttService) {
         return;
       }
@@ -111,7 +114,8 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
       if (error.contains('error_language')) return;
       final isFatal = error.contains('error_audio') ||
           error.contains('error_permission') ||
-          error.contains('not available');
+          error.contains('not available') ||
+          error.contains('Microphone blocked');
       _safeSetState((s) => s.copyWith(
             statusMessage: isFatal ? error : '',
             hasError: isFatal,
@@ -183,16 +187,12 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
     _whisperService.onError = (error) {
       if (_disposed || _sessionStopped) return;
       _addDebugLog('WHISPER ERROR: $error');
-      final isFatal =
-          error.contains('not available') || error.contains('init failed');
-      if (isFatal) {
-        _safeSetState((s) => s.copyWith(
-              statusMessage: error,
-              hasError: true,
-              isListening: false,
-              isStarting: false,
-            ));
-      }
+      _safeSetState((s) => s.copyWith(
+            statusMessage: error,
+            hasError: true,
+            isListening: false,
+            isStarting: false,
+          ));
     };
   }
 }

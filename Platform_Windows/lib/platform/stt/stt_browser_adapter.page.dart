@@ -4,6 +4,7 @@ extension SttBrowserAdapterPage on SttBrowserAdapter {
   String _buildHtml(String locale, String? selectedDeviceId) {
     final localeJson = jsonEncode(locale);
     final selectedDeviceJson = jsonEncode(selectedDeviceId ?? '');
+    final sessionTokenJson = jsonEncode(_sessionToken);
     return '''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -38,7 +39,10 @@ extension SttBrowserAdapterPage on SttBrowserAdapter {
 <div id="words">Ready for speech</div>
 <div id="err"></div>
 <script>
-const ws = new WebSocket('ws://localhost:$_port/ws?session=$_sessionId');
+const sessionToken = $sessionTokenJson;
+const ws = new WebSocket(
+  'ws://localhost:$_port/ws?session=' + encodeURIComponent(sessionToken)
+);
 const dot = document.getElementById('dot');
 const status = document.getElementById('status');
 const words = document.getElementById('words');
@@ -120,14 +124,19 @@ async function initVisualizer() {
 
     const source = audioContext.createMediaStreamSource(activeStream);
     source.connect(analyser);
-    await refreshDevices();
     const currentTrack = activeStream.getAudioTracks()[0];
     const trackLabel = currentTrack ? currentTrack.label : '';
+    sendLifecycle('microphoneReady');
     if (trackLabel) send({type: 'inputReady', label: trackLabel});
+    await refreshDevices();
     if (!animationId) draw();
   } catch (e) {
     console.error('Visualizer mic error:', e);
-    send({type: 'error', error: e.name === 'NotAllowedError' ? 'not-allowed' : 'input-device-failed'});
+    if(e.name === 'NotAllowedError' || e.name === 'SecurityError') {
+      sendLifecycle('permissionDenied');
+    } else {
+      send({type: 'error', error: 'input-device-failed'});
+    }
   }
 }
 
@@ -163,6 +172,7 @@ function draw() {
 }
 
 ws.onopen = async () => {
+  sendLifecycle('socketConnected');
   status.textContent = 'Mic Start...';
   await initVisualizer();
   ensureWatchdog();
@@ -179,6 +189,17 @@ ws.onclose = () => {
 };
 ws.onmessage = (e) => {
   const d = JSON.parse(e.data);
+  if(d.type === 'close') {
+    closedByHost = true;
+    if(restartTimer) clearTimeout(restartTimer);
+    if(watchdogTimer) clearInterval(watchdogTimer);
+    if(rec) rec.abort();
+    stopActiveStream();
+    status.textContent = 'Closed';
+    ws.close();
+    window.close();
+    return;
+  }
   if(d.type === 'setLocale' && d.locale !== currentLocale) {
     currentLocale = d.locale; consecutiveFails = 0; switchingLocale = true;
     status.textContent = 'Syncing ' + d.locale;
@@ -205,6 +226,7 @@ ws.onmessage = (e) => {
 };
 
 function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o));}
+function sendLifecycle(phase){send({type: 'lifecycle', phase: phase});}
 
 function scheduleRestart(delay, reason) {
   if(closedByHost || ws.readyState !== 1) return;
@@ -268,7 +290,7 @@ function startRec(locale) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
     err.textContent = 'Browser speech-to-text unavailable';
-    send({type: 'error', error: 'speech-api-unavailable'});
+    sendLifecycle('speechApiUnavailable');
     return;
   }
   rec = new SR();
@@ -276,8 +298,8 @@ function startRec(locale) {
   rec.onstart = () => {
     switchingLocale = false; consecutiveFails = 0; lastError = ''; lastStartAt = Date.now(); lastSpeechEventAt = lastStartAt; dot.classList.add('on');
     status.textContent = '[' + locale.toUpperCase() + '] Active';
-    // ALWAYS send listening to clear the UI's 'starting' state
-    send({type: 'listening'});
+    // Always signal recognizer readiness so the host can leave starting state.
+    sendLifecycle('recognizerListening');
     if (audioContext && audioContext.state === 'suspended') audioContext.resume();
   };
   rec.onresult = (e) => {
@@ -298,8 +320,14 @@ function startRec(locale) {
     if(e.error === 'aborted') return;
     lastSpeechEventAt = Date.now();
     lastError = e.error || '';
-    send({type: 'error', error: e.error});
-    if(e.error === 'not-allowed') {
+    if(e.error === 'network') {
+      sendLifecycle('network');
+    } else if(e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      sendLifecycle('permissionDenied');
+    } else {
+      send({type: 'error', error: e.error});
+    }
+    if(e.error === 'not-allowed' || e.error === 'service-not-allowed') {
       err.textContent = 'Mic Permission Denied';
       dot.classList.remove('on');
     }

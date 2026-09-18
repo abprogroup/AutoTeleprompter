@@ -1,5 +1,5 @@
-name: Build Windows EXE (v5.3.0)
-run-name: Windows ${{ github.event.inputs.app_version || '5.3.0+63' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
+name: Build Windows EXE (v5.2.1)
+run-name: Windows ${{ github.event.inputs.app_version || '5.2.1+63' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -17,9 +17,9 @@ on:
           - beta
           - internal
       app_version:
-        description: 'Flutter app version, for example 5.3.0+63'
+        description: 'Flutter app version, for example 5.2.1+63'
         required: true
-        default: '5.3.0+63'
+        default: '5.2.1+63'
         type: string
       release_label:
         description: 'Human label such as Beta 1 or Stable'
@@ -85,11 +85,11 @@ jobs:
 
           $appVersion = "${{ github.event.inputs.app_version }}"
           if ([string]::IsNullOrWhiteSpace($appVersion)) {
-            $appVersion = "5.3.0+63"
+            $appVersion = "5.2.1+63"
           }
           $appVersion = $appVersion.Trim()
           if ($appVersion -notmatch '^\d+\.\d+\.\d+\+\d+$') {
-            throw "app_version must look like 5.3.0+63."
+            throw "app_version must look like 5.2.1+63."
           }
           $versionName = ($appVersion -split '\+', 2)[0]
 
@@ -149,6 +149,26 @@ jobs:
           "manifest_tag=$manifestTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "manifest_asset=$manifestAsset" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "manifest_url=$manifestUrl" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Verify Windows Source Version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pubspecPath = "Platform_Windows\pubspec.yaml"
+          $versionLines = @(
+            Get-Content -LiteralPath $pubspecPath |
+              Where-Object { $_ -match '^version:\s*' }
+          )
+          if ($versionLines.Count -ne 1) {
+            throw "Expected exactly one top-level version entry in $pubspecPath."
+          }
+
+          $sourceVersion = ($versionLines[0] -replace '^version:\s*', '').Trim()
+          $workflowVersion = "${{ steps.release.outputs.app_version }}"
+          if ($sourceVersion -ne $workflowVersion) {
+            throw "Windows release version mismatch: pubspec has '$sourceVersion', workflow requested '$workflowVersion'."
+          }
+          Write-Host "Verified Windows release version $workflowVersion."
 
       - name: Preflight Required Release Credentials
         if: github.event_name == 'workflow_dispatch'
@@ -233,6 +253,50 @@ jobs:
         run: flutter pub get
         working-directory: Platform_Windows
 
+      - name: Verify Dependency Lockfile
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git diff --exit-code -- Platform_Windows/pubspec.lock
+          if ($LASTEXITCODE -ne 0) {
+            throw "flutter pub get changed Platform_Windows/pubspec.lock. Commit the intended lockfile before releasing."
+          }
+
+      - name: Analyze Windows Source
+        run: flutter analyze --no-pub
+        working-directory: Platform_Windows
+
+      - name: Test Windows STT Regressions
+        shell: pwsh
+        working-directory: Platform_Windows
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sttRegressionTests = @(
+            "test/platform/stt/stt_browser_adapter_security_test.dart"
+            "test/platform/stt/stt_browser_lifecycle_test.dart"
+            "test/platform/stt/stt_external_edge_launcher_test.dart"
+            "test/platform/stt/stt_host_event_journal_test.dart"
+            "test/platform/stt/stt_host_policy_test.dart"
+            "test/platform/stt/stt_host_readiness_test.dart"
+            "test/platform/stt/stt_host_transition_guard_test.dart"
+            "test/platform/stt/stt_webview2_compatibility_test.dart"
+            "test/settings/app_settings_stt_engine_test.dart"
+            "test/settings/settings_provider_stt_engine_test.dart"
+            "test/settings/windows_stt_engine_selector_test.dart"
+            "test/teleprompter/debug_log_formatter_health_test.dart"
+            "test/teleprompter/stt_recognition_policy_heartbeat_test.dart"
+            "test/teleprompter/stt_transcript_buffer_service_test.dart"
+            "test/teleprompter/teleprompter_external_edge_host_test.dart"
+            "test/teleprompter/whisper_audio_signal_test.dart"
+            "test/teleprompter/whisper_native_process_gate_test.dart"
+            "test/teleprompter/whisper_phrase_session_coordinator_test.dart"
+            "test/teleprompter/whisper_speech_service_native_test.dart"
+          )
+          & flutter test --no-pub --concurrency=1 @sttRegressionTests
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows STT regression tests failed."
+          }
+
       - name: Build Windows Archive
         shell: pwsh
         run: |
@@ -309,6 +373,24 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           UPDATE_MANIFEST_URL_SECRET: ${{ secrets.UPDATE_MANIFEST_URL }}
           UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
+
+      - name: Verify Windows Binary Version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $expectedVersion = "${{ steps.release.outputs.app_version }}"
+          $binaryPath = "Platform_Windows\build\windows\x64\runner\Release\autoteleprompter.exe"
+          if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
+            throw "Windows release binary was not produced at $binaryPath."
+          }
+
+          $versionInfo = (Get-Item -LiteralPath $binaryPath).VersionInfo
+          $fileVersion = ([string] $versionInfo.FileVersion).Trim()
+          $productVersion = ([string] $versionInfo.ProductVersion).Trim()
+          if ($fileVersion -ne $expectedVersion -or $productVersion -ne $expectedVersion) {
+            throw "Windows binary version mismatch: expected '$expectedVersion', FileVersion='$fileVersion', ProductVersion='$productVersion'."
+          }
+          Write-Host "Verified Windows binary FileVersion and ProductVersion as $expectedVersion."
 
       - name: Package Artifacts
         id: package

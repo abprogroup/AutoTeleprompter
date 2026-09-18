@@ -1,16 +1,21 @@
 part of 'stt_browser_adapter.dart';
 
 extension SttBrowserAdapterPage on SttBrowserAdapter {
-  String _buildHtml(String locale, String? selectedDeviceId) {
+  String _buildHtml(
+    String locale,
+    String? selectedDeviceId,
+    String selectedDeviceLabel,
+  ) {
     final localeJson = jsonEncode(locale);
     final selectedDeviceJson = jsonEncode(selectedDeviceId ?? '');
+    final selectedDeviceLabelJson = jsonEncode(selectedDeviceLabel);
     final sessionTokenJson = jsonEncode(_sessionToken);
     return '''<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>AutoTeleprompter - Pro Audio Console</title>
-<style>
+<style nonce="$_sessionToken">
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0A0A0A;color:#FFBF00;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
        display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -38,7 +43,7 @@ extension SttBrowserAdapterPage on SttBrowserAdapter {
 </div>
 <div id="words">Ready for speech</div>
 <div id="err"></div>
-<script>
+<script nonce="$_sessionToken">
 const sessionToken = $sessionTokenJson;
 const ws = new WebSocket(
   'ws://localhost:$_port/ws?session=' + encodeURIComponent(sessionToken)
@@ -52,7 +57,9 @@ const ctx = canvas.getContext('2d');
 let rec;
 let currentLocale = $localeJson;
 let selectedDeviceId = $selectedDeviceJson;
+let selectedDeviceLabel = $selectedDeviceLabelJson;
 let consecutiveFails = 0;
+let consecutiveNetworkFails = 0;
 let audioContext;
 let analyser;
 let dataArray;
@@ -63,18 +70,65 @@ let watchdogTimer;
 let lastError = '';
 let lastStartAt = 0;
 let lastResultAt = 0;
-let lastSpeechEventAt = 0;
 let lastHeartbeatAt = 0;
-let lastStaleRestartAt = 0;
+let lastLeaseRestartAt = 0;
+let speechActive = false;
+let speechActiveStartedAt = 0;
+let speechEvidenceUntil = 0;
 let switchingLocale = false;
 let switchingInput = false;
 let closedByHost = false;
+let recognitionGeneration = 0;
+let restartGeneration = 0;
+let restartSuppressed = false;
 
-function audioConstraints() {
-  if (selectedDeviceId) {
-    return { audio: { deviceId: { exact: selectedDeviceId } } };
+function audioConstraints(deviceId) {
+  if (deviceId) {
+    return { audio: { deviceId: { exact: deviceId } } };
   }
   return { audio: true };
+}
+
+function normalizeAudioInputLabel(value) {
+  if (typeof value !== 'string') return '';
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/\\s+/g, ' ')
+    .trim();
+}
+
+function isSystemDefaultInputLabel(value) {
+  const normalized = normalizeAudioInputLabel(value);
+  return !normalized ||
+    normalized === 'system default microphone' ||
+    normalized === 'default' ||
+    normalized === 'communications';
+}
+
+function findConfiguredAudioInput(inputs) {
+  if (selectedDeviceId) {
+    const idMatch = inputs.find(d => d.id === selectedDeviceId);
+    if (idMatch) return idMatch;
+  }
+
+  const wanted = normalizeAudioInputLabel(selectedDeviceLabel);
+  if (isSystemDefaultInputLabel(wanted)) return null;
+
+  const exactMatches = inputs.filter(
+    d => normalizeAudioInputLabel(d.label) === wanted
+  );
+  if (exactMatches.length === 1) return exactMatches[0];
+
+  // Browser profiles intentionally use different device IDs. Permit a label
+  // containment match only when it is unique and long enough to avoid picking
+  // a generic "Microphone" entry.
+  const partialMatches = inputs.filter(d => {
+    const candidate = normalizeAudioInputLabel(d.label);
+    return candidate.length >= 8 && wanted.length >= 8 &&
+      (candidate.includes(wanted) || wanted.includes(candidate));
+  });
+  return partialMatches.length === 1 ? partialMatches[0] : null;
 }
 
 async function refreshDevices() {
@@ -93,9 +147,62 @@ async function refreshDevices() {
   }
 }
 
+function stopStream(stream) {
+  if (!stream) return;
+  stream.getTracks().forEach(track => track.stop());
+}
+
+async function acquireConfiguredAudioStream() {
+  if (!selectedDeviceId && isSystemDefaultInputLabel(selectedDeviceLabel)) {
+    return navigator.mediaDevices.getUserMedia({ audio: true });
+  }
+
+  let directOpenError;
+  if (selectedDeviceId) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(
+        audioConstraints(selectedDeviceId)
+      );
+    } catch(e) {
+      if(e.name === 'NotAllowedError' || e.name === 'SecurityError') throw e;
+      directOpenError = e;
+    }
+  }
+
+  // A generic stream grants this browser profile access to device labels.
+  // That lets Edge/Chrome remap the WebView2 selection without trusting a
+  // profile-specific device ID.
+  const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const inputs = await refreshDevices();
+  const remapped = findConfiguredAudioInput(inputs);
+  if (remapped && remapped.id) {
+    try {
+      const remappedStream = await navigator.mediaDevices.getUserMedia(
+        audioConstraints(remapped.id)
+      );
+      stopStream(fallbackStream);
+      selectedDeviceId = remapped.id;
+      return remappedStream;
+    } catch(e) {
+      send({type: 'error', error: 'input-device-failed'});
+      selectedDeviceId = '';
+      return fallbackStream;
+    }
+  }
+
+  send({
+    type: 'error',
+    error: directOpenError && directOpenError.name === 'OverconstrainedError'
+      ? 'input-device-missing'
+      : 'input-device-failed'
+  });
+  selectedDeviceId = '';
+  return fallbackStream;
+}
+
 function stopActiveStream() {
   if (!activeStream) return;
-  activeStream.getTracks().forEach(track => track.stop());
+  stopStream(activeStream);
   activeStream = null;
 }
 
@@ -110,20 +217,16 @@ async function initVisualizer() {
     const bufferLength = analyser.frequencyBinCount;
     dataArray = new Uint8Array(bufferLength);
 
-    try {
-      activeStream = await navigator.mediaDevices.getUserMedia(audioConstraints());
-    } catch(e) {
-      if (selectedDeviceId) {
-        selectedDeviceId = '';
-        send({type: 'error', error: e.name === 'OverconstrainedError' ? 'input-device-missing' : 'input-device-failed'});
-        activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } else {
-        throw e;
-      }
-    }
+    activeStream = await acquireConfiguredAudioStream();
 
     const source = audioContext.createMediaStreamSource(activeStream);
     source.connect(analyser);
+    if (audioContext.state !== 'running') {
+      try { await audioContext.resume(); } catch(e) {}
+    }
+    if (audioContext.state !== 'running') {
+      send({type: 'meterUnavailable'});
+    }
     const currentTrack = activeStream.getAudioTracks()[0];
     const trackLabel = currentTrack ? currentTrack.label : '';
     sendLifecycle('microphoneReady');
@@ -164,8 +267,9 @@ function draw() {
   const avgVol = sum / dataArray.length / 255.0;
   // Boost the signal slightly so even quiet speech registers
   const normalizedVol = Math.min(1.0, avgVol * 2.5);
-  // Send every ~300ms to avoid flooding the websocket
-  if (!window.lastVolSend || Date.now() - window.lastVolSend > 300) {
+  // Metering is independent from recognition evidence: users must be able to
+  // verify their selected microphone even before Chromium detects speech.
+  if (!window.lastVolSend || Date.now() - window.lastVolSend > 100) {
      send({type: 'level', level: normalizedVol});
      window.lastVolSend = Date.now();
   }
@@ -180,39 +284,47 @@ ws.onopen = async () => {
 };
 ws.onclose = () => {
   closedByHost = true;
-  if(restartTimer) clearTimeout(restartTimer);
+  cancelScheduledRestart();
   if(watchdogTimer) clearInterval(watchdogTimer);
   status.textContent = 'Standby';
-  dot.classList.remove('on');
-  if(rec) rec.abort();
+  invalidateRecognition();
   stopActiveStream();
 };
 ws.onmessage = (e) => {
   const d = JSON.parse(e.data);
   if(d.type === 'close') {
     closedByHost = true;
-    if(restartTimer) clearTimeout(restartTimer);
+    cancelScheduledRestart();
     if(watchdogTimer) clearInterval(watchdogTimer);
-    if(rec) rec.abort();
+    invalidateRecognition();
     stopActiveStream();
     status.textContent = 'Closed';
-    ws.close();
-    window.close();
+    send({type: 'closeAck'});
+    setTimeout(() => {
+      ws.close();
+      window.close();
+    }, 0);
     return;
   }
   if(d.type === 'setLocale' && d.locale !== currentLocale) {
     currentLocale = d.locale; consecutiveFails = 0; switchingLocale = true;
+    restartSuppressed = false; lastError = '';
     status.textContent = 'Syncing ' + d.locale;
-    if(restartTimer) clearTimeout(restartTimer);
-    if(rec) rec.abort();
+    cancelScheduledRestart();
+    invalidateRecognition();
     scheduleRestart(80, 'locale-switch');
   }
   if(d.type === 'setAudioInputDevice') {
     selectedDeviceId = d.deviceId || '';
+    selectedDeviceLabel = d.label || 'System default microphone';
     switchingInput = true;
-    status.textContent = selectedDeviceId ? 'Switching input' : 'System input';
-    if(restartTimer) clearTimeout(restartTimer);
-    if(rec) rec.abort();
+    consecutiveFails = 0; restartSuppressed = false; lastError = '';
+    status.textContent =
+      selectedDeviceId || !isSystemDefaultInputLabel(selectedDeviceLabel)
+        ? 'Switching input'
+        : 'System input';
+    cancelScheduledRestart();
+    invalidateRecognition();
     initVisualizer().finally(() => {
       switchingInput = false;
       if(!closedByHost && ws.readyState === 1) {
@@ -228,13 +340,73 @@ ws.onmessage = (e) => {
 function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o));}
 function sendLifecycle(phase){send({type: 'lifecycle', phase: phase});}
 
+function isCurrentRecognition(recognizer, generation) {
+  return rec === recognizer && recognitionGeneration === generation;
+}
+
+function cancelScheduledRestart() {
+  restartGeneration++;
+  if(restartTimer) clearTimeout(restartTimer);
+  restartTimer = null;
+}
+
+function resetSpeechEvidence() {
+  speechActive = false;
+  speechActiveStartedAt = 0;
+  speechEvidenceUntil = 0;
+  send({type: 'speechReset'});
+  send({type: 'level', level: 0.0});
+}
+
+function invalidateRecognition() {
+  const recognizer = rec;
+  recognitionGeneration++;
+  rec = null;
+  resetSpeechEvidence();
+  dot.classList.remove('on');
+  if(recognizer) {
+    try { recognizer.abort(); } catch(e) {}
+  }
+}
+
+function isTerminalRecognitionError(errorCode) {
+  return errorCode === 'not-allowed' ||
+    errorCode === 'service-not-allowed' ||
+    errorCode === 'language-not-supported' ||
+    errorCode === 'audio-capture' ||
+    errorCode === 'bad-grammar';
+}
+
+function noteSpeechEvidence() {
+  speechEvidenceUntil = Math.max(speechEvidenceUntil, performance.now() + 4000);
+}
+
+function endSpeechActivity() {
+  const wasActive = speechActive;
+  speechActive = false;
+  speechActiveStartedAt = 0;
+  if(wasActive) {
+    speechEvidenceUntil = Math.max(
+      speechEvidenceUntil,
+      performance.now() + 4000
+    );
+    send({type: 'speechEnd'});
+    send({type: 'level', level: 0.0});
+  }
+}
+
 function scheduleRestart(delay, reason) {
-  if(closedByHost || ws.readyState !== 1) return;
+  if(closedByHost || restartSuppressed || ws.readyState !== 1) return;
   if(switchingLocale && reason !== 'locale-switch') return;
   if(switchingInput && reason !== 'input-switch') return;
-  if(restartTimer) clearTimeout(restartTimer);
+  cancelScheduledRestart();
+  const scheduledGeneration = restartGeneration;
   status.textContent = 'Restarting';
-  restartTimer = setTimeout(() => startRec(currentLocale), delay);
+  restartTimer = setTimeout(() => {
+    if(scheduledGeneration !== restartGeneration) return;
+    restartTimer = null;
+    startRec(currentLocale);
+  }, delay);
 }
 
 function restartDelay() {
@@ -242,6 +414,21 @@ function restartDelay() {
   if(lastError === 'network') return Math.min(900 + consecutiveFails * 350, 2600);
   if(consecutiveFails <= 2) return 240;
   return Math.min(300 * Math.pow(2, consecutiveFails - 2), 3000);
+}
+
+function startRecognitionWithSelectedInput(recognizer) {
+  const track = activeStream && activeStream.getAudioTracks
+    ? activeStream.getAudioTracks()[0]
+    : null;
+  if(track && track.readyState === 'live') {
+    try {
+      // Chromium 133+ can recognize the same MediaStreamTrack used by the
+      // meter. Older runtimes throw synchronously and safely fall back below.
+      recognizer.start(track);
+      return;
+    } catch(e) {}
+  }
+  recognizer.start();
 }
 
 function ensureWatchdog() {
@@ -257,96 +444,167 @@ function ensureWatchdog() {
         type: 'heartbeat',
         listening: dotOn,
         locale: currentLocale,
-        ageMs: lastSpeechEventAt > 0 ? now - lastSpeechEventAt : 0,
-        failures: consecutiveFails
+        ageMs: lastResultAt > 0 ? now - lastResultAt : 0,
+        failures: consecutiveNetworkFails
       });
     }
+    if(restartSuppressed) return;
     if(!rec) {
       scheduleRestart(120, 'watchdog-missing-rec');
       return;
     }
     if(!dotOn && lastStartAt > 0 && now - lastStartAt > 1800) {
+      invalidateRecognition();
       scheduleRestart(120, 'watchdog-idle');
       return;
     }
-    if(dotOn && lastSpeechEventAt > 0 && now - lastSpeechEventAt > 25000 &&
-       now - lastStaleRestartAt > 30000) {
-      lastStaleRestartAt = now;
+    if(speechActive && speechActiveStartedAt > 0 &&
+       now - speechActiveStartedAt > 120000) {
+      endSpeechActivity();
+    }
+    // Renew a recognizer that claims to stay active forever without using
+    // ordinary silence as a failure signal. Normal Chromium onend cycles reset
+    // lastStartAt long before this bounded lease expires.
+    if(dotOn && !speechActive && lastStartAt > 0 &&
+       now - lastStartAt > 900000 && now - lastLeaseRestartAt > 900000) {
+      lastLeaseRestartAt = now;
       send({
         type: 'watchdogRestart',
-        reason: 'stale-speech-events',
-        ageMs: now - lastSpeechEventAt,
-        failures: consecutiveFails
+        reason: 'recognizer-lease-renewal',
+        ageMs: now - lastStartAt,
+        failures: consecutiveNetworkFails
       });
-      try { rec.abort(); } catch(e) {}
-      scheduleRestart(250, 'watchdog-stale');
+      invalidateRecognition();
+      scheduleRestart(250, 'watchdog-lease-renewal');
     }
   }, 1000);
 }
 
 function startRec(locale) {
-  if(closedByHost || ws.readyState !== 1) return;
-  if(restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+  if(closedByHost || restartSuppressed || ws.readyState !== 1) return;
+  if(restartTimer) cancelScheduledRestart();
+  if(rec) invalidateRecognition();
+  switchingLocale = false;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
+    restartSuppressed = true;
     err.textContent = 'Browser speech-to-text unavailable';
     sendLifecycle('speechApiUnavailable');
     return;
   }
-  rec = new SR();
-  rec.lang = locale; rec.continuous = true; rec.interimResults = true;
-  rec.onstart = () => {
-    switchingLocale = false; consecutiveFails = 0; lastError = ''; lastStartAt = Date.now(); lastSpeechEventAt = lastStartAt; dot.classList.add('on');
+  const recognizer = new SR();
+  const generation = ++recognitionGeneration;
+  rec = recognizer;
+  lastStartAt = Date.now();
+  recognizer.lang = locale;
+  recognizer.continuous = true;
+  recognizer.interimResults = true;
+  recognizer.onstart = () => {
+    if(!isCurrentRecognition(recognizer, generation)) return;
+    lastError = ''; lastStartAt = Date.now(); resetSpeechEvidence();
+    dot.classList.add('on');
     status.textContent = '[' + locale.toUpperCase() + '] Active';
     // Always signal recognizer readiness so the host can leave starting state.
     sendLifecycle('recognizerListening');
     if (audioContext && audioContext.state === 'suspended') audioContext.resume();
   };
-  rec.onresult = (e) => {
-    consecutiveFails = 0; lastError = ''; lastResultAt = Date.now(); lastSpeechEventAt = lastResultAt;
+  recognizer.onresult = (e) => {
+    if(!isCurrentRecognition(recognizer, generation)) return;
+    const evidenceNow = performance.now();
+    if(!speechActive && evidenceNow > speechEvidenceUntil) return;
+    let acceptedResult = false;
     for(let i = e.resultIndex; i < e.results.length; i++){
       const t = e.results[i][0].transcript;
+      if(typeof t !== 'string' || t.trim().length === 0) continue;
       const f = e.results[i].isFinal;
       send({type: 'result', words: t, isFinal: f});
-      send({type: 'level', level: 0.65});
       words.textContent = t.length > 30 ? '...' + t.slice(-30) : t;
+      acceptedResult = true;
+    }
+    if(acceptedResult) {
+      consecutiveFails = 0;
+      consecutiveNetworkFails = 0;
+      lastError = '';
+      lastResultAt = Date.now();
     }
   };
-  rec.onaudiostart = () => { lastSpeechEventAt = Date.now(); };
-  rec.onsoundstart = () => { lastSpeechEventAt = Date.now(); };
-  rec.onspeechstart = () => { lastSpeechEventAt = Date.now(); send({type: 'level', level: 0.7}); };
-  rec.onspeechend = () => { lastSpeechEventAt = Date.now(); send({type: 'level', level: 0.1}); };
-  rec.onerror = (e) => {
+  recognizer.onspeechstart = () => {
+    if(!isCurrentRecognition(recognizer, generation)) return;
+    speechActive = true;
+    speechActiveStartedAt = Date.now();
+    noteSpeechEvidence();
+    send({type: 'speechStart'});
+  };
+  recognizer.onspeechend = () => {
+    if(!isCurrentRecognition(recognizer, generation)) return;
+    endSpeechActivity();
+  };
+  recognizer.onsoundend = () => {
+    if(!isCurrentRecognition(recognizer, generation)) return;
+    endSpeechActivity();
+  };
+  recognizer.onaudioend = () => {
+    if(!isCurrentRecognition(recognizer, generation)) return;
+    endSpeechActivity();
+  };
+  recognizer.onerror = (e) => {
+    if(!isCurrentRecognition(recognizer, generation)) return;
     if(e.error === 'aborted') return;
-    lastSpeechEventAt = Date.now();
+    resetSpeechEvidence();
     lastError = e.error || '';
+    if(isTerminalRecognitionError(lastError)) restartSuppressed = true;
     if(e.error === 'network') {
+      consecutiveFails++;
+      consecutiveNetworkFails++;
       sendLifecycle('network');
     } else if(e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      consecutiveFails++;
       sendLifecycle('permissionDenied');
     } else {
+      if(e.error === 'no-speech') {
+        consecutiveFails = 0;
+      } else {
+        consecutiveFails++;
+      }
       send({type: 'error', error: e.error});
     }
-    if(e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-      err.textContent = 'Mic Permission Denied';
+    if(restartSuppressed) {
+      err.textContent =
+        e.error === 'not-allowed' || e.error === 'service-not-allowed'
+          ? 'Mic Permission Denied'
+          : 'Speech recognition unavailable';
       dot.classList.remove('on');
     }
-    if(e.error !== 'no-speech') {
-      consecutiveFails++;
-    } else {
-      consecutiveFails = 0;
-    }
   };
-  rec.onend = () => {
+  recognizer.onend = () => {
+    if(!isCurrentRecognition(recognizer, generation)) return;
+    recognitionGeneration++;
+    rec = null;
+    resetSpeechEvidence();
     dot.classList.remove('on');
     if(closedByHost || ws.readyState !== 1) return;
+    if(restartSuppressed) return;
     if(switchingLocale) return;
     if(switchingInput) return;
     scheduleRestart(restartDelay(), 'recognition-ended');
   };
-  try{ rec.start(); } catch(ex){
-    lastError = 'start-failed'; consecutiveFails++;
-    if(!closedByHost && ws.readyState === 1) {
+  try{ startRecognitionWithSelectedInput(rec); } catch(ex){
+    if(!isCurrentRecognition(recognizer, generation)) return;
+    const errorName = ex && typeof ex.name === 'string' ? ex.name : '';
+    if(errorName === 'NotAllowedError' || errorName === 'SecurityError') {
+      lastError = 'not-allowed';
+      restartSuppressed = true;
+      sendLifecycle('permissionDenied');
+    } else if(errorName === 'NotSupportedError') {
+      lastError = 'speech-api-unavailable';
+      restartSuppressed = true;
+      sendLifecycle('speechApiUnavailable');
+    } else {
+      lastError = 'start-failed';
+      consecutiveFails++;
+    }
+    invalidateRecognition();
+    if(!closedByHost && !restartSuppressed && ws.readyState === 1) {
       scheduleRestart(restartDelay(), 'start-failed');
     }
   }

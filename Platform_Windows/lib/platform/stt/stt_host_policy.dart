@@ -9,19 +9,21 @@ const Set<String> knownIncompatibleWebView2SttVersions = {'153.0.4234.32'};
 enum WindowsSttHostMode {
   smart,
   embeddedOnly,
-  edgeOnly;
+  edgeOnly,
+  chromeOnly;
 
   /// Maps persisted settings without making this policy depend on UI models.
   static WindowsSttHostMode fromSetting(String? value) {
     return switch (value) {
       'browser_online' => WindowsSttHostMode.embeddedOnly,
       'browser_external_edge' => WindowsSttHostMode.edgeOnly,
+      'browser_external_chrome' => WindowsSttHostMode.chromeOnly,
       _ => WindowsSttHostMode.smart,
     };
   }
 }
 
-enum WindowsSttBrowserHost { embeddedWebView2, externalEdge }
+enum WindowsSttBrowserHost { embeddedWebView2, externalEdge, externalChrome }
 
 enum WindowsSttHostAction { retry, switchHost, stop, ignoreStaleFailure }
 
@@ -29,6 +31,7 @@ enum WindowsSttHostDecisionReason {
   embeddedRecovery,
   embeddedRecoveryExhausted,
   smartEdgeFailover,
+  smartChromeFailover,
   selectedHostFailed,
   staleHostFailure,
 }
@@ -49,8 +52,9 @@ class WindowsSttHostDecision {
 
 /// Session-scoped policy for choosing and recovering the Windows browser host.
 ///
-/// Smart mode can move from embedded WebView2 to external Edge once. It never
-/// moves back during that session, preventing host-bounce recovery loops.
+/// Smart mode moves only forward through embedded WebView2, external Edge, and
+/// external Chrome. It never revisits a host during the session, preventing
+/// host-bounce recovery loops before the caller's offline fallback.
 class WindowsSttHostPolicy {
   WindowsSttHostPolicy._({
     required this.mode,
@@ -61,7 +65,12 @@ class WindowsSttHostPolicy {
     required this.quarantineOperationTimeout,
   }) : _currentHost = initialHost,
        _quarantine = quarantine,
-       _smartFailoverUsed = initialHost == WindowsSttBrowserHost.externalEdge;
+       _smartEdgeAttempted =
+           mode == WindowsSttHostMode.smart &&
+           initialHost == WindowsSttBrowserHost.externalEdge,
+       _smartChromeAttempted =
+           mode == WindowsSttHostMode.smart &&
+           initialHost == WindowsSttBrowserHost.externalChrome;
 
   final WindowsSttHostMode mode;
   final String? exactWebView2RuntimeVersion;
@@ -71,11 +80,14 @@ class WindowsSttHostPolicy {
 
   WindowsSttBrowserHost _currentHost;
   int _embeddedRecoveriesUsed = 0;
-  bool _smartFailoverUsed;
+  bool _smartEdgeAttempted;
+  bool _smartChromeAttempted;
 
   WindowsSttBrowserHost get currentHost => _currentHost;
   int get embeddedRecoveriesUsed => _embeddedRecoveriesUsed;
-  bool get smartFailoverUsed => _smartFailoverUsed;
+  bool get smartFailoverUsed => _smartEdgeAttempted || _smartChromeAttempted;
+  bool get smartEdgeAttempted => _smartEdgeAttempted;
+  bool get smartChromeAttempted => _smartChromeAttempted;
 
   static Future<WindowsSttHostPolicy> resolve({
     required WindowsSttHostMode mode,
@@ -106,6 +118,7 @@ class WindowsSttHostPolicy {
     }
     final initialHost = switch (mode) {
       WindowsSttHostMode.edgeOnly => WindowsSttBrowserHost.externalEdge,
+      WindowsSttHostMode.chromeOnly => WindowsSttBrowserHost.externalChrome,
       WindowsSttHostMode.smart when runtimeQuarantined =>
         WindowsSttBrowserHost.externalEdge,
       _ => WindowsSttBrowserHost.embeddedWebView2,
@@ -152,12 +165,23 @@ class WindowsSttHostPolicy {
 
     if (mode == WindowsSttHostMode.smart &&
         failedHost == WindowsSttBrowserHost.embeddedWebView2 &&
-        !_smartFailoverUsed) {
-      _smartFailoverUsed = true;
+        !_smartEdgeAttempted) {
+      _smartEdgeAttempted = true;
       _currentHost = WindowsSttBrowserHost.externalEdge;
       return _decision(
         WindowsSttHostAction.switchHost,
         WindowsSttHostDecisionReason.smartEdgeFailover,
+      );
+    }
+
+    if (mode == WindowsSttHostMode.smart &&
+        failedHost == WindowsSttBrowserHost.externalEdge &&
+        !_smartChromeAttempted) {
+      _smartChromeAttempted = true;
+      _currentHost = WindowsSttBrowserHost.externalChrome;
+      return _decision(
+        WindowsSttHostAction.switchHost,
+        WindowsSttHostDecisionReason.smartChromeFailover,
       );
     }
 

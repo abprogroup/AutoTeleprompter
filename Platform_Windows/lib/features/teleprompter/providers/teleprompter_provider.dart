@@ -20,6 +20,7 @@ import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../core/extensions/string_extensions.dart';
 
 import '../../../platform/stt/stt_external_edge_launcher.dart';
+import '../../../platform/stt/stt_host_event_journal.dart';
 import '../../../platform/stt/stt_host_policy.dart';
 import '../../../platform/stt/stt_host_readiness.dart';
 import '../../../platform/stt/stt_host_transition_guard.dart';
@@ -30,6 +31,7 @@ part 'teleprompter_provider.external_edge.dart';
 part 'teleprompter_provider.heartbeat.dart';
 part 'teleprompter_provider.locale.dart';
 part 'teleprompter_provider.relock.dart';
+part 'teleprompter_provider.state_helpers.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
 part 'teleprompter_provider.stt.dart';
 
@@ -40,10 +42,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final WhisperSpeechService _whisperService;
   late final RemoteControlService _remoteControlService;
   late final WindowsSttExternalEdgeLauncher _externalEdgeLauncher;
+  late final WindowsSttExternalChromeLauncher _externalChromeLauncher;
   bool _useWhisper = false;
   bool _useExternalEdgeSttHost = false;
-  bool _externalEdgeFailureInFlight = false;
+  bool _useExternalChromeSttHost = false;
   Future<void>? _externalEdgeHostStopInFlight;
+  SttHostEventJournal? _sttHostEventJournal;
   WindowsSttHostPolicy? _windowsSttHostPolicy;
   SttHostReadinessStateMachine? _sttHostReadiness;
   Timer? _sttHostReadinessTimer;
@@ -63,10 +67,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _scriptLanguageLocale;
   String? _activeLocale;
   List<String> _sectionLocales = [];
-  DateTime? _lastVolLog;
   DateTime? _sessionStartTime;
-  bool _silentWarningFired = false;
+  String? _lastHeartbeatDebugState;
   Future<void>? _stopInFlight;
+  Future<void>? _startInFlight;
   int _sessionToken = 0;
   int? _visibleWordStart;
   int? _visibleWordEnd;
@@ -80,6 +84,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String _activeSttEngineLabel = 'Browser Online';
   bool _lockedOn = false;
   int _transcriptFloor = 0;
+  int _cumulativeTranscriptBaselineFloor = 0;
+  List<String> _cumulativeTranscriptBaselineWords = const <String>[];
+  List<String> _latestCumulativeTranscriptWords = const <String>[];
   int? _pendingStartEvidenceTargetIndex;
   String _pendingVisibleSkipTranscript = '';
   int? _pendingVisibleSkipOriginIndex;
@@ -91,6 +98,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   String? _lastNoProgressTranscriptKey;
   int _staleNoProgressTranscriptCount = 0;
   DateTime? _lastBrowserHeartbeatAt;
+  DateTime? _browserHostStartedAt;
   DateTime? _lastRecoverableSttErrorAt;
   int _recoverableSttErrorCount = 0;
   bool _stateFailureDiagnosticRecorded = false;
@@ -108,9 +116,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const Duration _visibleLocaleAssistPinDuration = Duration(
     milliseconds: 5000,
   );
-  // How long the tracker can go without an advance before we trust it's
-  // genuinely fallen behind (not just a normal pause between sentences) and
-  // widen the visible-skip recovery window beyond the rendered viewport.
+  // After a real stall, widen recovery beyond the rendered viewport.
   static const Duration _sustainedStuckThreshold = Duration(seconds: 6);
   // Bounded widening applied to the visible-skip search/trust window once
   // sustained-stuck - not unlimited, so a coincidental phrase match still
@@ -122,7 +128,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _noProgressCount = 0;
     _sttReadingStandby = false;
     _lockedOn = false;
-    if (clearTranscriptFloor) _transcriptFloor = 0;
+    if (clearTranscriptFloor) {
+      _transcriptFloor = 0;
+      _cumulativeTranscriptBaselineFloor = 0;
+      _cumulativeTranscriptBaselineWords = const <String>[];
+      _latestCumulativeTranscriptWords = const <String>[];
+    }
     _pendingStartEvidenceTargetIndex = null;
     _clearPendingVisibleSkipEvidence();
     _sttEvidenceTrackingState = SttEvidenceTrackingState.locked;
@@ -130,69 +141,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _resetStaleNoProgressTracking();
   }
 
-  /// True once the tracker has gone long enough without an advance, while
-  /// genuinely behind (not just locked at the very start), that the
-  /// visible-skip recovery window should widen beyond the rendered viewport.
-  bool get _isSustainedlyStuck {
-    if (_sttEvidenceTrackingState != SttEvidenceTrackingState.recovering &&
-        _sttEvidenceTrackingState != SttEvidenceTrackingState.offScript) {
-      return false;
-    }
-    final since = _lastConfirmedAdvanceAt ?? _sessionStartTime;
-    if (since == null) return false;
-    return DateTime.now().difference(since) >= _sustainedStuckThreshold;
-  }
-
-  void _resetStaleNoProgressTracking() {
-    _lastNoProgressTranscriptKey = null;
-    _staleNoProgressTranscriptCount = 0;
-  }
-
-  void _clearPendingVisibleSkipEvidence() {
-    _pendingVisibleSkipTranscript = '';
-    _pendingVisibleSkipOriginIndex = null;
-    _pendingVisibleSkipStartIndex = null;
-    _pendingVisibleSkipEndIndex = null;
-  }
-
-  int _currentSttAdvanceGuardIndex(int confirmedIndex) =>
-      _fluidAdvanceTimer?.isActive == true && _fluidTarget > confirmedIndex
-          ? _fluidTarget
-          : confirmedIndex;
-
-  String _noProgressTranscriptKey(String transcript) {
-    final words = transcript
-        .split(RegExp(r'\s+'))
-        .map((word) => word.trim().normalizeForMatching())
-        .where((word) => word.isNotEmpty)
-        .toList(growable: false);
-    if (words.isEmpty) return '';
-    final start = words.length > 8 ? words.length - 8 : 0;
-    return words.sublist(start).join(' ');
-  }
-
   @override
   TeleprompterState build() {
     _disposed = false;
     _stateFailureDiagnosticRecorded = false;
-    _browserSttService = SttServiceFactory.createWindowsBrowser();
-    _desktopSttService = SttServiceFactory.createWindowsDesktop();
-    _sttService = _browserSttService;
-    _whisperService = WhisperSpeechService();
-    _externalEdgeLauncher = WindowsSttExternalEdgeLauncher();
-    _externalEdgeLauncher.onUnexpectedExit = _handleUnexpectedEdgeExit;
-    _remoteControlService = ref.read(remoteControlProvider);
-    _setupRemoteCallbacks();
-    _setupSttCallbacks(_browserSttService);
-    _setupSttCallbacks(_desktopSttService);
-    _setupWhisperCallbacks();
+    _initializeSpeechServices();
     ref.onDispose(() {
       _disposed = true;
       _heartbeatTimer?.cancel();
       _sttHostReadinessTimer?.cancel();
       unawaited(_stopExternalEdgeHostServices());
       _desktopSttService.stop();
-      _whisperService.stop();
+      unawaited(_whisperService.dispose());
       _remoteControlService.stop();
     });
     return const TeleprompterState();
@@ -464,6 +424,21 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   Future<void> startSession(Script script) async {
+    final existingStart = _startInFlight;
+    if (existingStart != null) {
+      await existingStart;
+      return;
+    }
+    final start = _startSession(script);
+    _startInFlight = start;
+    try {
+      await start;
+    } finally {
+      if (identical(_startInFlight, start)) _startInFlight = null;
+    }
+  }
+
+  Future<void> _startSession(Script script) async {
     final pendingStop = _stopInFlight;
     if (pendingStop != null) await pendingStop;
     if (_disposed) return;
@@ -484,8 +459,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _resetSttTrackingContext();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
-    _silentWarningFired = false;
-    _lastVolLog = null;
+    _browserHostStartedAt = _sessionStartTime;
+    _lastHeartbeatDebugState = null;
     _visibleWordStart = null;
     _visibleWordEnd = null;
     _resetVisibleLocaleAssist();
@@ -493,7 +468,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final settings = ref.read(settingsProvider);
     final sttEngine = AppSettings.normalizeSttEngine(settings.sttEngine);
     _useWhisper = sttEngine.startsWith('whisper');
-    _externalEdgeFailureInFlight = false;
+    // A direct session restart or engine switch must never leave a previous
+    // microphone/native engine alive beside the selected engine.
+    if (_useWhisper) {
+      await Future.wait([_desktopSttService.stop(), _browserSttService.stop()]);
+    } else {
+      await _whisperService.stop();
+    }
+    if (_disposed || token != _sessionToken) return;
     if (!await _prepareWindowsSttHostPolicy(
       sttEngine: sttEngine,
       sessionToken: token,
@@ -547,9 +529,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _recoverableSttErrorCount = 0;
       _sttService = _resolveWindowsSpeechService(settings);
       if (!_ensureExternalEdgeHostCanStart()) return;
-      await (_sttService == _browserSttService
-          ? _desktopSttService.stop()
-          : _browserSttService.stop());
     }
 
     // v4.2: Detect starting locale focusing ONLY on the immediate first words.
@@ -569,10 +548,13 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       );
     }
 
-    _startSessionHeartbeat(script);
+    _startSessionHeartbeat();
 
     if (_useWhisper) {
       final model = whisperModelFromEngine(sttEngine);
+      _whisperService.setPreferredInputDeviceLabel(
+        settings.sttInputDeviceLabel,
+      );
       _addDebugLog('Starting Whisper STT ($sttEngine) offline...');
       await _whisperService.start(localeId: localeId, model: model);
       if (_disposed || _sessionStopped || token != _sessionToken) {
@@ -682,7 +664,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _sttHostReadinessTimer?.cancel();
     _fluidAdvanceTimer?.cancel();
     _resetSttTrackingContext();
-    _lastVolLog = null;
+    _lastHeartbeatDebugState = null;
     _scriptLanguageLocale = null;
     _activeLocale = null;
     _sectionLocales = [];
@@ -702,7 +684,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     } finally {
       _stopInFlight = null;
       _useExternalEdgeSttHost = false;
-      _externalEdgeFailureInFlight = false;
+      _useExternalChromeSttHost = false;
       _windowsSttHostPolicy = null;
       _sttHostReadiness = null;
       _sttHostTransitionGuard.invalidate();

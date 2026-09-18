@@ -1,7 +1,7 @@
 name: autoteleprompter
 description: Auto-scrolling teleprompter with speech recognition for Hebrew and English.
 publish_to: 'none'
-version: 5.3.0+63
+version: 5.2.1+63
 
 environment:
   sdk: '>=3.7.0 <4.0.0'
@@ -25,8 +25,8 @@ dependencies:
   wakelock_plus: 1.2.8
   ffi: ^2.1.4
   file_picker: ^8.1.2
-  record: ^6.1.2
-  whisper_ggml: ^2.6.0
+  record: 6.2.1
+  whisper_ggml: 2.6.0
 
   flutter_animate: ^4.5.0
   flutter_colorpicker: ^1.1.0

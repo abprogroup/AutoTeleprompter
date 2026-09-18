@@ -6,6 +6,7 @@ class WindowsSttEngineSelector extends StatelessWidget {
   static const Key smartChoiceKey = Key('windows-stt-engine-smart');
   static const Key inAppChoiceKey = Key('windows-stt-engine-in-app');
   static const Key edgeChoiceKey = Key('windows-stt-engine-edge');
+  static const Key chromeChoiceKey = Key('windows-stt-engine-chrome');
   static const Key offlineChoiceKey = Key('windows-stt-engine-offline');
 
   final String value;
@@ -30,6 +31,8 @@ class WindowsSttEngineSelector extends StatelessWidget {
       AppSettings.sttEngineBrowserOnline => AppSettings.sttEngineBrowserOnline,
       AppSettings.sttEngineBrowserExternalEdge =>
         AppSettings.sttEngineBrowserExternalEdge,
+      AppSettings.sttEngineBrowserExternalChrome =>
+        AppSettings.sttEngineBrowserExternalChrome,
       AppSettings.sttEngineWhisperTiny => AppSettings.sttEngineWhisperTiny,
       _ => AppSettings.sttEngineBrowserSmartCompatibility,
     };
@@ -88,13 +91,15 @@ class WindowsSttEngineSelector extends StatelessWidget {
                 _EngineChoiceChip(
                   key: smartChoiceKey,
                   label: 'Smart compatibility (recommended)',
-                  selected: selected ==
+                  selected:
+                      selected ==
                       AppSettings.sttEngineBrowserSmartCompatibility,
                   enabled: enabled,
                   accentColor: accentColor,
-                  onSelected: () => onChanged(
-                    AppSettings.sttEngineBrowserSmartCompatibility,
-                  ),
+                  onSelected:
+                      () => onChanged(
+                        AppSettings.sttEngineBrowserSmartCompatibility,
+                      ),
                 ),
                 _EngineChoiceChip(
                   key: inAppChoiceKey,
@@ -102,8 +107,8 @@ class WindowsSttEngineSelector extends StatelessWidget {
                   selected: selected == AppSettings.sttEngineBrowserOnline,
                   enabled: enabled,
                   accentColor: accentColor,
-                  onSelected: () =>
-                      onChanged(AppSettings.sttEngineBrowserOnline),
+                  onSelected:
+                      () => onChanged(AppSettings.sttEngineBrowserOnline),
                 ),
                 _EngineChoiceChip(
                   key: edgeChoiceKey,
@@ -112,8 +117,19 @@ class WindowsSttEngineSelector extends StatelessWidget {
                       selected == AppSettings.sttEngineBrowserExternalEdge,
                   enabled: enabled,
                   accentColor: accentColor,
-                  onSelected: () =>
-                      onChanged(AppSettings.sttEngineBrowserExternalEdge),
+                  onSelected:
+                      () => onChanged(AppSettings.sttEngineBrowserExternalEdge),
+                ),
+                _EngineChoiceChip(
+                  key: chromeChoiceKey,
+                  label: 'Google Chrome only',
+                  selected:
+                      selected == AppSettings.sttEngineBrowserExternalChrome,
+                  enabled: enabled,
+                  accentColor: accentColor,
+                  onSelected:
+                      () =>
+                          onChanged(AppSettings.sttEngineBrowserExternalChrome),
                 ),
                 _EngineChoiceChip(
                   key: offlineChoiceKey,
@@ -137,6 +153,8 @@ class WindowsSttEngineSelector extends StatelessWidget {
         return 'Always uses the in-app browser. Changes take effect on the next listening session.';
       case AppSettings.sttEngineBrowserExternalEdge:
         return 'Always uses Microsoft Edge. Changes take effect on the next listening session.';
+      case AppSettings.sttEngineBrowserExternalChrome:
+        return 'Always uses Google Chrome. Changes take effect on the next listening session.';
       case AppSettings.sttEngineWhisperTiny:
         return 'Runs fully on this computer with the bundled multilingual model. No browser speech service is used.';
       default:
@@ -171,9 +189,7 @@ class _EngineChoiceChip extends StatelessWidget {
       selectedColor: accentColor,
       backgroundColor: Colors.transparent,
       disabledColor: Colors.transparent,
-      side: BorderSide(
-        color: selected ? Colors.transparent : Colors.white54,
-      ),
+      side: BorderSide(color: selected ? Colors.transparent : Colors.white54),
       labelStyle: TextStyle(
         color: selected ? Colors.black : Colors.white70,
         fontWeight: selected ? FontWeight.w600 : FontWeight.w500,

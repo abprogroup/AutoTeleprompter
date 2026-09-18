@@ -3,6 +3,8 @@ class AppSettings {
   static const String sttEngineWindowsOffline = 'windows_offline';
   static const String sttEngineBrowserOnline = 'browser_online';
   static const String sttEngineBrowserExternalEdge = 'browser_external_edge';
+  static const String sttEngineBrowserExternalChrome =
+      'browser_external_chrome';
   static const String sttEngineBrowserSmartCompatibility =
       'browser_smart_compatibility';
   static const String sttEngineWhisperTiny = 'whisper_tiny';
@@ -54,6 +56,7 @@ class AppSettings {
     switch (engine) {
       case sttEngineBrowserOnline:
       case sttEngineBrowserExternalEdge:
+      case sttEngineBrowserExternalChrome:
       case sttEngineBrowserSmartCompatibility:
       case sttEngineWhisperTiny:
         return engine!;
@@ -124,25 +127,25 @@ class AppSettings {
   final bool showUpcomingWordColor; // v3.9.5 toggle (default off)
   final String fontFamily; // v3.9.5.46
   final bool
-      showAlignmentOverride; // v3.9.8 toggle for presentation alignment override
+  showAlignmentOverride; // v3.9.8 toggle for presentation alignment override
   final String
-      sttEngine; // Windows speech-host strategy; legacy values migrate.
+  sttEngine; // Windows speech-host strategy; legacy values migrate.
   final bool allowScrollDuringActiveSession;
   final String manualScrollBarPlacement;
   final double
-      readFadeIntensity; // v4.1: gradient fade for read text (0.0=off, 1.0=full)
+  readFadeIntensity; // v4.1: gradient fade for read text (0.0=off, 1.0=full)
   final String
-      sttInputDeviceId; // Windows: WebView2 audioinput deviceId, empty = system default
+  sttInputDeviceId; // Windows: WebView2 audioinput deviceId, empty = system default
   final String
-      sttInputDeviceLabel; // Windows: display label for the selected mic
+  sttInputDeviceLabel; // Windows: display label for the selected mic
   final bool
-      sttVisibleSkipEnabled; // Windows: allow STT to skip only to visible words
+  sttVisibleSkipEnabled; // Windows: allow STT to skip only to visible words
   final bool
-      sttStrictBulletMode; // Windows: stricter STT for bullet/header prompting
+  sttStrictBulletMode; // Windows: stricter STT for bullet/header prompting
   final bool
-      sttHardVisibleSkipEnabled; // Windows: stricter visible-skip confirmation
+  sttHardVisibleSkipEnabled; // Windows: stricter visible-skip confirmation
   final bool
-      sttManualProfileEnabled; // Windows: custom STT recognition thresholds
+  sttManualProfileEnabled; // Windows: custom STT recognition thresholds
   final int sttManualStartAdvanceSmallWords;
   final int sttManualStartAdvanceBigWords;
   final int sttManualSafetySmallWords;
@@ -392,7 +395,8 @@ class AppSettings {
           sttHardVisibleSkipEnabled ?? this.sttHardVisibleSkipEnabled,
       sttManualProfileEnabled:
           sttManualProfileEnabled ?? this.sttManualProfileEnabled,
-      sttManualStartAdvanceSmallWords: sttManualStartAdvanceSmallWords ??
+      sttManualStartAdvanceSmallWords:
+          sttManualStartAdvanceSmallWords ??
           this.sttManualStartAdvanceSmallWords,
       sttManualStartAdvanceBigWords:
           sttManualStartAdvanceBigWords ?? this.sttManualStartAdvanceBigWords,
@@ -431,7 +435,8 @@ class AppSettings {
           contentCreatorBubbleOffsetX ?? this.contentCreatorBubbleOffsetX,
       contentCreatorBubbleOffsetY:
           contentCreatorBubbleOffsetY ?? this.contentCreatorBubbleOffsetY,
-      contentCreatorVignetteIntensity: contentCreatorVignetteIntensity ??
+      contentCreatorVignetteIntensity:
+          contentCreatorVignetteIntensity ??
           this.contentCreatorVignetteIntensity,
       contentCreatorFeedBlur:
           contentCreatorFeedBlur ?? this.contentCreatorFeedBlur,
@@ -441,11 +446,12 @@ class AppSettings {
           contentCreatorRecordingFolder ?? this.contentCreatorRecordingFolder,
       contentCreatorRecordingFormat:
           contentCreatorRecordingFormat ?? this.contentCreatorRecordingFormat,
-      contentCreatorRecordingAudioMode: contentCreatorRecordingAudioMode ??
+      contentCreatorRecordingAudioMode:
+          contentCreatorRecordingAudioMode ??
           this.contentCreatorRecordingAudioMode,
       contentCreatorRecordingControlsSpeech:
           contentCreatorRecordingControlsSpeech ??
-              this.contentCreatorRecordingControlsSpeech,
+          this.contentCreatorRecordingControlsSpeech,
       importColorMode: importColorMode ?? this.importColorMode,
       reduceMotion: reduceMotion ?? this.reduceMotion,
       uiScale: uiScale ?? this.uiScale,

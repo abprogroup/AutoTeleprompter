@@ -42,7 +42,7 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    tState.isListening ? 'LISTENING' : 'IDLE',
+                    tState.isListening ? 'MIC READY' : 'IDLE',
                     style: TextStyle(
                       color:
                           tState.isListening ? Colors.greenAccent : Colors.red,
@@ -80,9 +80,10 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                   ),
                   const SizedBox(width: 4),
                   Tooltip(
-                    message: _debugConsolePinned
-                        ? 'Unpin debug output'
-                        : 'Pin debug output',
+                    message:
+                        _debugConsolePinned
+                            ? 'Unpin debug output'
+                            : 'Pin debug output',
                     child: IconButton(
                       icon: Icon(
                         _debugConsolePinned
@@ -92,16 +93,19 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                         size: 16,
                       ),
                       padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 24, minHeight: 28),
-                      onPressed: () =>
-                          _setPresenterDebugPinned(!_debugConsolePinned),
+                      constraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 28,
+                      ),
+                      onPressed:
+                          () => _setPresenterDebugPinned(!_debugConsolePinned),
                     ),
                   ),
                   Tooltip(
-                    message: expanded
-                        ? 'Minimize debug output'
-                        : 'Expand debug output',
+                    message:
+                        expanded
+                            ? 'Minimize debug output'
+                            : 'Expand debug output',
                     child: IconButton(
                       icon: Icon(
                         expanded
@@ -111,33 +115,46 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                         size: 18,
                       ),
                       padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 28, minHeight: 28),
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
                       onPressed: () => _setPresenterDebugExpanded(!expanded),
                     ),
                   ),
                   if (expanded)
                     IconButton(
-                      icon: const Icon(Icons.bug_report_outlined,
-                          color: Colors.orange, size: 16),
+                      icon: const Icon(
+                        Icons.bug_report_outlined,
+                        color: Colors.orange,
+                        size: 16,
+                      ),
                       tooltip: 'Send Feedback',
                       padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 28, minHeight: 28),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const FeedbackReportScreen(),
-                        ),
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
                       ),
+                      onPressed:
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const FeedbackReportScreen(),
+                            ),
+                          ),
                     ),
                   if (expanded)
                     IconButton(
-                      icon: const Icon(Icons.copy,
-                          color: Colors.orange, size: 16),
+                      icon: const Icon(
+                        Icons.copy,
+                        color: Colors.orange,
+                        size: 16,
+                      ),
                       padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 28, minHeight: 28),
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
                       onPressed: () {
                         final text = tState.debugLogs.reversed.join('\n');
                         Clipboard.setData(ClipboardData(text: text));
@@ -160,8 +177,10 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
               Expanded(
                 child: ListView.builder(
                   reverse: true,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   itemCount: tState.debugLogs.length,
                   itemBuilder: (context, idx) {
                     final log =

@@ -10,11 +10,42 @@ AutoTeleprompter_BACKUP_*
 /macos-baseline/
 /windows-baseline/
 
-# Tests and QA artifacts stay private in this workspace.
+# Tests and QA artifacts stay private unless explicitly allowlisted for CI.
 .tmp/
 **/.tmp/
 test/
 Platform_*/test/
+
+# Windows STT release regression suite (exact public CI allowlist).
+!/Platform_Windows/test/
+/Platform_Windows/test/*
+!/Platform_Windows/test/platform/
+/Platform_Windows/test/platform/*
+!/Platform_Windows/test/platform/stt/
+/Platform_Windows/test/platform/stt/*
+!/Platform_Windows/test/platform/stt/stt_browser_adapter_security_test.dart
+!/Platform_Windows/test/platform/stt/stt_browser_lifecycle_test.dart
+!/Platform_Windows/test/platform/stt/stt_external_edge_launcher_test.dart
+!/Platform_Windows/test/platform/stt/stt_host_event_journal_test.dart
+!/Platform_Windows/test/platform/stt/stt_host_policy_test.dart
+!/Platform_Windows/test/platform/stt/stt_host_readiness_test.dart
+!/Platform_Windows/test/platform/stt/stt_host_transition_guard_test.dart
+!/Platform_Windows/test/platform/stt/stt_webview2_compatibility_test.dart
+!/Platform_Windows/test/settings/
+/Platform_Windows/test/settings/*
+!/Platform_Windows/test/settings/app_settings_stt_engine_test.dart
+!/Platform_Windows/test/settings/settings_provider_stt_engine_test.dart
+!/Platform_Windows/test/settings/windows_stt_engine_selector_test.dart
+!/Platform_Windows/test/teleprompter/
+/Platform_Windows/test/teleprompter/*
+!/Platform_Windows/test/teleprompter/debug_log_formatter_health_test.dart
+!/Platform_Windows/test/teleprompter/stt_recognition_policy_heartbeat_test.dart
+!/Platform_Windows/test/teleprompter/stt_transcript_buffer_service_test.dart
+!/Platform_Windows/test/teleprompter/teleprompter_external_edge_host_test.dart
+!/Platform_Windows/test/teleprompter/whisper_audio_signal_test.dart
+!/Platform_Windows/test/teleprompter/whisper_native_process_gate_test.dart
+!/Platform_Windows/test/teleprompter/whisper_phrase_session_coordinator_test.dart
+!/Platform_Windows/test/teleprompter/whisper_speech_service_native_test.dart
 schemes/
 guidelines_and_planning/
 AutoTeleprompter_TEST_*

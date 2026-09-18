@@ -1,5 +1,46 @@
 import 'abstract_stt_service.dart';
 
+/// Accepts browser transcripts only while Chromium has reported actual speech
+/// or during a short grace period for a delayed final result.
+class SttSpeechEvidenceGate {
+  SttSpeechEvidenceGate({
+    Duration Function()? now,
+    this.trailingGrace = const Duration(seconds: 4),
+  }) : _now = now ?? _stopwatchNow {
+    if (now == null && !_clock.isRunning) _clock.start();
+  }
+
+  static final Stopwatch _clock = Stopwatch();
+  static Duration _stopwatchNow() => _clock.elapsed;
+
+  final Duration Function() _now;
+  final Duration trailingGrace;
+  bool _active = false;
+  Duration? _acceptUntil;
+
+  bool get acceptsResult {
+    if (_active) return true;
+    final acceptUntil = _acceptUntil;
+    return acceptUntil != null && _now() <= acceptUntil;
+  }
+
+  void speechStarted() {
+    _active = true;
+    _acceptUntil = null;
+  }
+
+  void speechEnded() {
+    if (!_active) return;
+    _active = false;
+    _acceptUntil = _now() + trailingGrace;
+  }
+
+  void reset() {
+    _active = false;
+    _acceptUntil = null;
+  }
+}
+
 /// Stable lifecycle phases emitted by the browser-hosted speech page.
 ///
 /// These values deliberately describe readiness and failure milestones without
@@ -70,9 +111,7 @@ class SttBrowserLifecycleEvent {
           SttBrowserLifecyclePhase.permissionDenied,
         );
       case 'network':
-        return const SttBrowserLifecycleEvent(
-          SttBrowserLifecyclePhase.network,
-        );
+        return const SttBrowserLifecycleEvent(SttBrowserLifecyclePhase.network);
       default:
         // Disconnects are server-owned and cannot be asserted by page input.
         return null;
@@ -91,9 +130,7 @@ class SttBrowserLifecycleEvent {
           SttBrowserLifecyclePhase.permissionDenied,
         );
       case 'network':
-        return const SttBrowserLifecycleEvent(
-          SttBrowserLifecyclePhase.network,
-        );
+        return const SttBrowserLifecycleEvent(SttBrowserLifecyclePhase.network);
       default:
         return null;
     }
@@ -107,8 +144,7 @@ class SttBrowserLifecycleEvent {
       SttBrowserLifecyclePhase.speechApiUnavailable ||
       SttBrowserLifecyclePhase.permissionDenied ||
       SttBrowserLifecyclePhase.disconnected ||
-      SttBrowserLifecyclePhase.network =>
-        1,
+      SttBrowserLifecyclePhase.network => 1,
       _ => 0,
     };
     final error = switch (phase) {
@@ -121,7 +157,8 @@ class SttBrowserLifecycleEvent {
 
     return SttRuntimeHealth(
       type: phase.name,
-      listening: phase == SttBrowserLifecyclePhase.recognizerListening ||
+      listening:
+          phase == SttBrowserLifecyclePhase.recognizerListening ||
           (phase == SttBrowserLifecyclePhase.network && hasListened),
       locale: locale,
       failures: failure,

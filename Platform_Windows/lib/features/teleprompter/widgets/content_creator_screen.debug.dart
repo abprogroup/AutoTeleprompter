@@ -111,10 +111,11 @@ extension _ContentCreatorDebug on _ContentCreatorScreenState {
   }) {
     final isActive = _isRecording || tState.isListening;
     final label =
-        _isRecording ? 'REC' : (tState.isListening ? 'LISTENING' : 'IDLE');
-    final icon = _isRecording
-        ? Icons.videocam
-        : (tState.isListening ? Icons.mic : Icons.mic_off);
+        _isRecording ? 'REC' : (tState.isListening ? 'MIC READY' : 'IDLE');
+    final icon =
+        _isRecording
+            ? Icons.videocam
+            : (tState.isListening ? Icons.mic : Icons.mic_off);
     final statusColor =
         isActive ? Colors.greenAccent : Colors.redAccent.shade100;
     return Container(
@@ -165,9 +166,10 @@ extension _ContentCreatorDebug on _ContentCreatorScreenState {
           ),
           const SizedBox(width: 4),
           Tooltip(
-            message: _contentDebugConsolePinned
-                ? 'Unpin debug output'
-                : 'Pin debug output',
+            message:
+                _contentDebugConsolePinned
+                    ? 'Unpin debug output'
+                    : 'Pin debug output',
             child: IconButton(
               icon: Icon(
                 _contentDebugConsolePinned
@@ -178,8 +180,8 @@ extension _ContentCreatorDebug on _ContentCreatorScreenState {
               ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 24, minHeight: 28),
-              onPressed: () =>
-                  _setContentDebugPinned(!_contentDebugConsolePinned),
+              onPressed:
+                  () => _setContentDebugPinned(!_contentDebugConsolePinned),
             ),
           ),
           Tooltip(
@@ -199,17 +201,21 @@ extension _ContentCreatorDebug on _ContentCreatorScreenState {
           ),
           if (expanded)
             IconButton(
-              icon: const Icon(Icons.bug_report_outlined,
-                  color: Colors.orange, size: 16),
+              icon: const Icon(
+                Icons.bug_report_outlined,
+                color: Colors.orange,
+                size: 16,
+              ),
               tooltip: 'Send Feedback',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const FeedbackReportScreen(),
-                ),
-              ),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FeedbackReportScreen(),
+                    ),
+                  ),
             ),
           if (expanded)
             IconButton(
@@ -244,10 +250,11 @@ extension _ContentCreatorDebug on _ContentCreatorScreenState {
     TeleprompterState tState,
     List<String> statusLines,
   ) {
-    final logs = [
-      ..._contentDebugLogs.reversed.map((log) => '[CONTENT] $log'),
-      ...tState.debugLogs.reversed,
-    ].take(80).toList();
+    final logs =
+        [
+          ..._contentDebugLogs.reversed.map((log) => '[CONTENT] $log'),
+          ...tState.debugLogs.reversed,
+        ].take(80).toList();
     return Expanded(
       child: ListView(
         reverse: true,

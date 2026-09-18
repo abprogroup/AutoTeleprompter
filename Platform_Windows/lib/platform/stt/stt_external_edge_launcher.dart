@@ -3,15 +3,15 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
-typedef ExternalEdgeProcessStarter = Future<ExternalEdgeProcess> Function(
-  String executable,
-  List<String> arguments,
-);
+typedef ExternalEdgeProcessStarter =
+    Future<ExternalEdgeProcess> Function(
+      String executable,
+      List<String> arguments,
+    );
 
 typedef ExternalEdgeFileExists = bool Function(String filePath);
-typedef ExternalEdgeEnsureDirectory = Future<void> Function(
-  String directoryPath,
-);
+typedef ExternalEdgeEnsureDirectory =
+    Future<void> Function(String directoryPath);
 typedef ExternalEdgeUnexpectedExit = void Function(int exitCode);
 
 abstract interface class ExternalEdgeProcess {
@@ -21,21 +21,21 @@ abstract interface class ExternalEdgeProcess {
 }
 
 class ExternalEdgeLaunchResult {
-  const ExternalEdgeLaunchResult({
-    required this.success,
-    this.message,
-  });
+  const ExternalEdgeLaunchResult({required this.success, this.message});
 
   final bool success;
   final String? message;
 }
 
-/// Launches the existing localhost STT page in a dedicated Microsoft Edge app.
+enum WindowsSttExternalBrowser { edge, chrome }
+
+/// Launches the existing localhost STT page in a dedicated Chromium app.
 ///
 /// This service is intentionally additive. It does not select the fallback or
 /// alter the embedded WebView2 path. The caller owns that policy decision.
-class WindowsSttExternalEdgeLauncher {
-  WindowsSttExternalEdgeLauncher({
+class WindowsSttExternalBrowserLauncher {
+  WindowsSttExternalBrowserLauncher({
+    required this.browser,
     Map<String, String>? environment,
     ExternalEdgeProcessStarter? processStarter,
     ExternalEdgeFileExists? fileExists,
@@ -44,19 +44,20 @@ class WindowsSttExternalEdgeLauncher {
     bool? isWindows,
     Duration stopTimeout = const Duration(seconds: 2),
     Duration forceStopTimeout = const Duration(seconds: 1),
-  })  : _environment = Map<String, String>.unmodifiable(
-          environment ?? Platform.environment,
-        ),
-        _processStarter = processStarter ?? _startProcess,
-        _fileExists = fileExists ?? _defaultFileExists,
-        _ensureDirectory = ensureDirectory ?? _defaultEnsureDirectory,
-        _isWindows = isWindows ?? Platform.isWindows,
-        _stopTimeout = stopTimeout,
-        _forceStopTimeout = forceStopTimeout;
+  }) : _environment = Map<String, String>.unmodifiable(
+         environment ?? Platform.environment,
+       ),
+       _processStarter = processStarter ?? _startProcess,
+       _fileExists = fileExists ?? _defaultFileExists,
+       _ensureDirectory = ensureDirectory ?? _defaultEnsureDirectory,
+       _isWindows = isWindows ?? Platform.isWindows,
+       _stopTimeout = stopTimeout,
+       _forceStopTimeout = forceStopTimeout;
 
   static const int _minimumPort = 8082;
   static const int _maximumPort = 8092;
 
+  final WindowsSttExternalBrowser browser;
   final Map<String, String> _environment;
   final ExternalEdgeProcessStarter _processStarter;
   final ExternalEdgeFileExists _fileExists;
@@ -65,21 +66,31 @@ class WindowsSttExternalEdgeLauncher {
   final Duration _stopTimeout;
   final Duration _forceStopTimeout;
 
-  /// Invoked only when the Edge process exits without a launcher-owned stop.
-  /// The exit code is safe to include in local diagnostics.
+  /// Retained for source compatibility with the original Edge launcher API.
+  ///
+  /// Chromium may return a short-lived bootstrap process and hand the app to
+  /// another process. Its exit is therefore not authoritative host failure and
+  /// is deliberately not reported here. Authenticated socket readiness and
+  /// disconnect events own host health.
   ExternalEdgeUnexpectedExit? onUnexpectedExit;
 
   ExternalEdgeProcess? _process;
   bool _launching = false;
   bool _stopRequested = false;
 
+  /// Whether this launcher owns an active launch lease.
+  ///
+  /// The lease remains active when Chromium's direct bootstrap PID exits. It
+  /// is cleared only by [stop], preventing duplicate browser trees while the
+  /// authenticated readiness layer determines whether the host is healthy.
   bool get isRunning => _launching || _process != null;
 
   Future<ExternalEdgeLaunchResult> launch(String url) async {
     if (!_isWindows) {
       return const ExternalEdgeLaunchResult(
         success: false,
-        message: 'The Microsoft Edge speech fallback is available on Windows.',
+        message:
+            'The external browser speech fallback is available on Windows.',
       );
     }
 
@@ -92,9 +103,9 @@ class WindowsSttExternalEdgeLauncher {
     }
 
     if (isRunning) {
-      return const ExternalEdgeLaunchResult(
+      return ExternalEdgeLaunchResult(
         success: true,
-        message: 'The Microsoft Edge speech fallback is already running.',
+        message: 'The $_browserName speech fallback is already running.',
       );
     }
 
@@ -109,11 +120,11 @@ class WindowsSttExternalEdgeLauncher {
         );
       }
 
-      final executable = _resolveEdgeExecutable();
+      final executable = _resolveExecutable();
       if (executable == null) {
-        return const ExternalEdgeLaunchResult(
+        return ExternalEdgeLaunchResult(
           success: false,
-          message: 'Microsoft Edge is not installed or could not be found.',
+          message: '$_browserName is not installed or could not be found.',
         );
       }
 
@@ -127,9 +138,9 @@ class WindowsSttExternalEdgeLauncher {
       }
 
       if (_stopRequested) {
-        return const ExternalEdgeLaunchResult(
+        return ExternalEdgeLaunchResult(
           success: false,
-          message: 'The Microsoft Edge speech fallback was stopped.',
+          message: 'The $_browserName speech fallback was stopped.',
         );
       }
 
@@ -141,6 +152,10 @@ class WindowsSttExternalEdgeLauncher {
         '--disable-sync',
         '--disable-extensions',
         '--disable-background-mode',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--start-minimized',
         '--window-position=-32000,-32000',
         '--window-size=320,240',
         '--use-fake-ui-for-media-stream',
@@ -153,26 +168,15 @@ class WindowsSttExternalEdgeLauncher {
         _track(process);
         if (_stopRequested) {
           await stop();
-          return const ExternalEdgeLaunchResult(
+          return ExternalEdgeLaunchResult(
             success: false,
-            message: 'The Microsoft Edge speech fallback was stopped.',
-          );
-        }
-        // Give an immediately-failed process one event-loop turn to publish
-        // its exit before claiming the host was launched successfully.
-        await Future<void>.delayed(Duration.zero);
-        if (!identical(_process, process)) {
-          return const ExternalEdgeLaunchResult(
-            success: false,
-            message:
-                'Microsoft Edge closed before speech recognition was ready.',
+            message: 'The $_browserName speech fallback was stopped.',
           );
         }
       } catch (_) {
-        return const ExternalEdgeLaunchResult(
+        return ExternalEdgeLaunchResult(
           success: false,
-          message:
-              'Microsoft Edge could not be started for speech recognition.',
+          message: '$_browserName could not be started for speech recognition.',
         );
       }
 
@@ -182,9 +186,10 @@ class WindowsSttExternalEdgeLauncher {
     }
   }
 
-  /// Stops only the process returned by this launcher's direct Edge start.
+  /// Stops only the process returned by this launcher's direct browser start.
   ///
-  /// It deliberately never searches for or terminates other Edge processes.
+  /// It deliberately never searches for or terminates unrelated browser
+  /// processes.
   Future<void> stop() async {
     _stopRequested = true;
     final process = _process;
@@ -228,11 +233,10 @@ class WindowsSttExternalEdgeLauncher {
     _process = process;
     unawaited(
       process.exitCode.then<void>(
-        (exitCode) {
-          if (identical(_process, process)) {
-            _process = null;
-            if (!_stopRequested) onUnexpectedExit?.call(exitCode);
-          }
+        (_) {
+          // Do not clear the launch lease or report failure here. Chromium can
+          // use the returned process only as a bootstrap and keep the app alive
+          // in another process. Socket readiness/disconnect is authoritative.
         },
         onError: (_) {
           // Keep the process tracked when its exit cannot be confirmed. This
@@ -242,7 +246,7 @@ class WindowsSttExternalEdgeLauncher {
     );
   }
 
-  _ValidatedEdgeUrl? _validateUrl(String value) {
+  _ValidatedBrowserUrl? _validateUrl(String value) {
     if (value.isEmpty || value.trim() != value) return null;
     if (value.contains(RegExp(r'[\u0000-\u001F\u007F]'))) return null;
 
@@ -260,7 +264,7 @@ class WindowsSttExternalEdgeLauncher {
       return null;
     }
 
-    return _ValidatedEdgeUrl(
+    return _ValidatedBrowserUrl(
       uri: uri,
       origin: 'http://localhost:${uri.port}',
     );
@@ -280,19 +284,26 @@ class WindowsSttExternalEdgeLauncher {
         canonicalRoot,
         'AutoTeleprompter',
         'BrowserSTT',
-        'EdgeProfile',
+        _profileDirectoryName,
       ),
     );
     if (!path.windows.isWithin(canonicalRoot, profile)) return null;
     return profile;
   }
 
-  String? _resolveEdgeExecutable() {
-    final roots = <String?>[
-      _environmentValue('ProgramFiles(x86)'),
-      _environmentValue('ProgramFiles'),
-      _environmentValue('LOCALAPPDATA'),
-    ];
+  String? _resolveExecutable() {
+    final roots =
+        browser == WindowsSttExternalBrowser.edge
+            ? <String?>[
+              _environmentValue('ProgramFiles(x86)'),
+              _environmentValue('ProgramFiles'),
+              _environmentValue('LOCALAPPDATA'),
+            ]
+            : <String?>[
+              _environmentValue('ProgramFiles'),
+              _environmentValue('ProgramFiles(x86)'),
+              _environmentValue('LOCALAPPDATA'),
+            ];
     final checked = <String>{};
 
     for (final rawRoot in roots) {
@@ -301,13 +312,7 @@ class WindowsSttExternalEdgeLauncher {
         continue;
       }
       final candidate = path.windows.normalize(
-        path.windows.join(
-          root,
-          'Microsoft',
-          'Edge',
-          'Application',
-          'msedge.exe',
-        ),
+        path.windows.joinAll(<String>[root, ..._executableSegments]),
       );
       if (checked.add(candidate.toLowerCase()) && _fileExists(candidate)) {
         return candidate;
@@ -315,6 +320,31 @@ class WindowsSttExternalEdgeLauncher {
     }
     return null;
   }
+
+  String get _browserName => switch (browser) {
+    WindowsSttExternalBrowser.edge => 'Microsoft Edge',
+    WindowsSttExternalBrowser.chrome => 'Google Chrome',
+  };
+
+  String get _profileDirectoryName => switch (browser) {
+    WindowsSttExternalBrowser.edge => 'EdgeProfile',
+    WindowsSttExternalBrowser.chrome => 'ChromeProfile',
+  };
+
+  List<String> get _executableSegments => switch (browser) {
+    WindowsSttExternalBrowser.edge => const <String>[
+      'Microsoft',
+      'Edge',
+      'Application',
+      'msedge.exe',
+    ],
+    WindowsSttExternalBrowser.chrome => const <String>[
+      'Google',
+      'Chrome',
+      'Application',
+      'chrome.exe',
+    ],
+  };
 
   String? _environmentValue(String key) {
     final normalizedKey = key.toLowerCase();
@@ -347,8 +377,36 @@ class WindowsSttExternalEdgeLauncher {
   }
 }
 
-class _ValidatedEdgeUrl {
-  const _ValidatedEdgeUrl({required this.uri, required this.origin});
+/// Source-compatible Edge facade used by the existing provider.
+class WindowsSttExternalEdgeLauncher extends WindowsSttExternalBrowserLauncher {
+  WindowsSttExternalEdgeLauncher({
+    super.environment,
+    super.processStarter,
+    super.fileExists,
+    super.ensureDirectory,
+    super.onUnexpectedExit,
+    super.isWindows,
+    super.stopTimeout,
+    super.forceStopTimeout,
+  }) : super(browser: WindowsSttExternalBrowser.edge);
+}
+
+class WindowsSttExternalChromeLauncher
+    extends WindowsSttExternalBrowserLauncher {
+  WindowsSttExternalChromeLauncher({
+    super.environment,
+    super.processStarter,
+    super.fileExists,
+    super.ensureDirectory,
+    super.onUnexpectedExit,
+    super.isWindows,
+    super.stopTimeout,
+    super.forceStopTimeout,
+  }) : super(browser: WindowsSttExternalBrowser.chrome);
+}
+
+class _ValidatedBrowserUrl {
+  const _ValidatedBrowserUrl({required this.uri, required this.origin});
 
   final Uri uri;
   final String origin;

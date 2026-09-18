@@ -8,14 +8,29 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
   void _handleSttResult(SpeechResult result) {
     if (_currentScript == null || _disposed) return;
     _safeSetState((s) => s.copyWith(isStarting: false));
-    if (_handleVoiceCommand(result.words)) return;
+    // Whisper emits revisable cumulative partials. Running command matching on
+    // those partials can repeat an old command or execute a hallucination.
+    // Browser speech shards retain the existing explicit command behavior.
+    if (!_useWhisper && _handleVoiceCommand(result.words)) return;
 
     final buffer = _transcriptBuffer.update(
       rawTranscript: result.words,
-      transcriptFloor: _transcriptFloor,
+      transcriptFloor:
+          _useWhisper ? _cumulativeTranscriptBaselineFloor : _transcriptFloor,
       recentWordWindow: TeleprompterNotifier._sttLiveAlignmentWindowWords,
+      cumulativeReplacement: _useWhisper,
+      cumulativeBaselineWords: _cumulativeTranscriptBaselineWords,
+      cumulativeFinal: _useWhisper && result.isFinal,
     );
+    _latestCumulativeTranscriptWords =
+        _useWhisper ? buffer.spokenWords : const <String>[];
     _transcriptFloor = buffer.transcriptFloor;
+    if (_useWhisper && result.isFinal) {
+      _cumulativeTranscriptBaselineWords = List<String>.unmodifiable(
+        buffer.spokenWords,
+      );
+      _cumulativeTranscriptBaselineFloor = buffer.transcriptFloor;
+    }
     if (!buffer.hasFreshSpeech) return;
 
     _accumulatedTranscript = buffer.recentTranscript;
@@ -141,16 +156,16 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     final pendingStartTarget = _pendingStartEvidenceTargetIndex;
 
     AlignmentResult align(String transcriptWindow) => WordAligner.align(
-          script: script.words,
-          transcript: transcriptWindow,
-          lastConfirmedIndex: _currentState.confirmedWordIndex,
-          visibleSkipStartIndex:
-              maxSkipTargetIndex == null ? null : _visibleWordStart,
-          maxSkipTargetIndex: maxSkipTargetIndex,
-          strictBulletMode: strictBulletMode,
-          policy: policy,
-          readingStandby: _sttReadingStandby || _lockedOn,
-        );
+      script: script.words,
+      transcript: transcriptWindow,
+      lastConfirmedIndex: _currentState.confirmedWordIndex,
+      visibleSkipStartIndex:
+          maxSkipTargetIndex == null ? null : _visibleWordStart,
+      maxSkipTargetIndex: maxSkipTargetIndex,
+      strictBulletMode: strictBulletMode,
+      policy: policy,
+      readingStandby: _sttReadingStandby || _lockedOn,
+    );
 
     AlignmentResult? continuePendingStart(String transcriptWindow) {
       if (pendingStartTarget == null ||
@@ -214,10 +229,10 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     final guardIndex = _currentSttAdvanceGuardIndex(currentIndex);
     final visibleSkipTargetTrusted =
         TeleprompterNotifier.isTrustedVisibleSkipTarget(
-      alignedIndex: aligned.confirmedWordIndex,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: maxSkipTargetIndex ?? _visibleWordEnd,
-    );
+          alignedIndex: aligned.confirmedWordIndex,
+          visibleWordStart: _visibleWordStart,
+          visibleWordEnd: maxSkipTargetIndex ?? _visibleWordEnd,
+        );
     final decision = _movementPolicy.evaluateCandidate(
       alignment: aligned,
       policy: policy,
@@ -295,7 +310,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     _sttReadingStandby = true;
     if (previousTrackingState == SttEvidenceTrackingState.locked ||
         previousTrackingState == SttEvidenceTrackingState.offScript) {
-      _transcriptFloor = spokenWordCount;
+      _acknowledgeTranscriptFloor(spokenWordCount);
     }
     _noProgressCount = 0;
     _resetStaleNoProgressTracking();
@@ -429,7 +444,9 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       _lockedOn = false;
       _sttReadingStandby = false;
       _sttEvidenceTrackingState = decision.nextState;
-      if (spokenWordCount != null) _transcriptFloor = spokenWordCount;
+      if (spokenWordCount != null) {
+        _acknowledgeTranscriptFloor(spokenWordCount);
+      }
       _pendingStartEvidenceTargetIndex = null;
       _clearPendingVisibleSkipEvidence();
       _noProgressCount = 0;
@@ -539,10 +556,10 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     }
     final visibleSkipTargetTrusted =
         TeleprompterNotifier.isTrustedVisibleSkipTarget(
-      alignedIndex: rescue.confirmedWordIndex,
-      visibleWordStart: _visibleWordStart,
-      visibleWordEnd: maxSkipTargetIndex,
-    );
+          alignedIndex: rescue.confirmedWordIndex,
+          visibleWordStart: _visibleWordStart,
+          visibleWordEnd: maxSkipTargetIndex,
+        );
     final decision = _movementPolicy.evaluateCandidate(
       alignment: rescue,
       policy: policy,
@@ -630,8 +647,9 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     _fluidAdvanceTimer?.cancel();
     _fluidTarget = target;
 
-    _fluidAdvanceTimer =
-        Timer.periodic(const Duration(milliseconds: 80), (timer) {
+    _fluidAdvanceTimer = Timer.periodic(const Duration(milliseconds: 80), (
+      timer,
+    ) {
       if (_disposed || _sessionStopped) {
         timer.cancel();
         return;

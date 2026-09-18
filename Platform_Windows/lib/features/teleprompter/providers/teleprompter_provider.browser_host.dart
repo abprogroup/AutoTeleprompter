@@ -1,6 +1,14 @@
 part of 'teleprompter_provider.dart';
 
 const int _browserNetworkFailureLimit = 3;
+const Duration _browserNetworkFailureQuietResetAfter = Duration(seconds: 30);
+
+int _browserHostFailurePriority(String reasonCode) => switch (reasonCode) {
+  'microphone-permission-denied' => 4,
+  'speech-api-unavailable' || 'browser-disconnected' => 3,
+  'readiness-timeout' || 'browser-health-degraded' => 2,
+  _ => 1,
+};
 
 bool shouldStartOfflineWhisperFallback({
   required WindowsSttHostMode mode,
@@ -8,7 +16,7 @@ bool shouldStartOfflineWhisperFallback({
   required WindowsSttHostAction action,
 }) =>
     mode == WindowsSttHostMode.smart &&
-    failedHost == WindowsSttBrowserHost.externalEdge &&
+    failedHost == WindowsSttBrowserHost.externalChrome &&
     action == WindowsSttHostAction.stop;
 
 extension TeleprompterBrowserHost on TeleprompterNotifier {
@@ -24,9 +32,23 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     _pendingSttHostReadinessPhases.clear();
     _observedWebView2RuntimeVersion = null;
     _useExternalEdgeSttHost = false;
+    _useExternalChromeSttHost = false;
 
     if (_useWhisper || sttEngine == AppSettings.sttEngineWindowsOffline) {
       return true;
+    }
+
+    if (_sttHostEventJournal == null) {
+      try {
+        _sttHostEventJournal = await SttHostEventJournal.create().timeout(
+          const Duration(milliseconds: 750),
+        );
+      } catch (_) {
+        LightweightDiagnostics.instance.record(
+          'stt',
+          'speech host event journal unavailable',
+        );
+      }
     }
 
     final probe = await SafeWebView2RuntimeProbe().probe();
@@ -61,6 +83,8 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     _windowsSttHostPolicy = policy;
     _useExternalEdgeSttHost =
         policy.currentHost == WindowsSttBrowserHost.externalEdge;
+    _useExternalChromeSttHost =
+        policy.currentHost == WindowsSttBrowserHost.externalChrome;
     if (probe.status != WebView2RuntimeProbeStatus.available) {
       _recordSttHostDiagnostic(
         SttHostDiagnosticKind.runtimeProbeUnavailable,
@@ -71,6 +95,9 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
       _addDebugLog(
         '[Smart speech host] This WebView2 version is quarantined; using Edge.',
       );
+    } else if (_useExternalChromeSttHost &&
+        policy.mode == WindowsSttHostMode.smart) {
+      _addDebugLog('[Smart speech host] Using Google Chrome compatibility.');
     }
     return true;
   }
@@ -110,6 +137,9 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
         _sttHostReadinessTimer?.cancel();
         _sttHostReadinessTimer = null;
         _pendingSttHostReadinessPhases.clear();
+        if (_pendingSttHostFailure?.reasonCode == 'readiness-timeout') {
+          _pendingSttHostFailure = null;
+        }
         return;
       }
       final awaiting = readiness.awaitingPhase;
@@ -156,24 +186,19 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
 
     final policy = _windowsSttHostPolicy;
     if (policy != null) {
-      final payload =
-          SttHostDiagnosticData.fromTimeout(
-            host: policy.currentHost,
-            metadata: metadata,
-            webView2RuntimeVersion: policy.exactWebView2RuntimeVersion,
-          ).toMap();
-      LightweightDiagnostics.instance.record(
-        'sttHost',
-        'speech host readiness timeout',
-        data: payload,
+      _recordSttHostDiagnostic(
+        SttHostDiagnosticKind.timeout,
+        phase: metadata.awaitingPhase,
+        timeout: metadata.timeout,
       );
     }
-    final quarantineRuntime =
-        metadata.awaitingPhase != SttHostReadinessPhase.microphoneReady;
     unawaited(
       _handleBrowserHostFailure(
         reasonCode: 'readiness-timeout',
-        quarantineRuntime: quarantineRuntime,
+        // A readiness timeout can be caused by a slow machine, microphone
+        // prompt, or service outage. Only explicit WebView initialization,
+        // load, or API incompatibility failures persist a runtime quarantine.
+        quarantineRuntime: false,
       ),
     );
   }
@@ -226,36 +251,6 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     );
   }
 
-  void _handleUnexpectedEdgeExit(int exitCode) {
-    final policy = _windowsSttHostPolicy;
-    if (_disposed ||
-        _sessionStopped ||
-        _useWhisper ||
-        policy?.currentHost != WindowsSttBrowserHost.externalEdge) {
-      return;
-    }
-    LightweightDiagnostics.instance.record(
-      'sttHost',
-      'external Edge speech host exited',
-      data: {'exitCode': exitCode},
-    );
-    if (_sttHostTransitionInFlight) {
-      _pendingSttHostFailure ??= _PendingSttHostFailure(
-        reasonCode: 'edge-process-exited',
-        quarantineRuntime: false,
-        sessionToken: _sessionToken,
-        policy: policy!,
-      );
-      return;
-    }
-    unawaited(
-      _handleBrowserHostFailure(
-        reasonCode: 'edge-process-exited',
-        quarantineRuntime: false,
-      ),
-    );
-  }
-
   void _handleBrowserHostRuntimeHealth(SttRuntimeHealth health) {
     if (_useWhisper || _disposed || _sessionStopped) return;
     switch (health.type) {
@@ -288,25 +283,44 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
         unawaited(
           _handleBrowserHostFailure(
             reasonCode: 'browser-disconnected',
-            quarantineRuntime: true,
+            quarantineRuntime: false,
           ),
         );
         return;
       case 'network':
-        _recoverableSttErrorCount += health.failures <= 0 ? 1 : health.failures;
-        _lastRecoverableSttErrorAt = DateTime.now();
+        final now = DateTime.now();
+        final previousError = _lastRecoverableSttErrorAt;
+        _recoverableSttErrorCount =
+            previousError == null ||
+                    now.difference(previousError) >=
+                        _browserNetworkFailureQuietResetAfter
+                ? 1
+                : _recoverableSttErrorCount + 1;
+        _lastRecoverableSttErrorAt = now;
         if (_recoverableSttErrorCount >= _browserNetworkFailureLimit) {
           unawaited(
             _handleBrowserHostFailure(
               reasonCode: 'network-failure-limit',
-              quarantineRuntime: true,
+              // A cloud/ISP failure is not proof that this exact WebView2
+              // runtime is incompatible. Advance this session without
+              // persisting a months-long runtime ban.
+              quarantineRuntime: false,
             ),
           );
         }
         return;
+      case 'productiveResult':
+        _recoverableSttErrorCount = 0;
+        _lastRecoverableSttErrorAt = null;
+        return;
       case 'heartbeat':
-        _lastBrowserHeartbeatAt = DateTime.now();
-        if (health.failures <= 0) {
+        final now = DateTime.now();
+        _lastBrowserHeartbeatAt = now;
+        final lastError = _lastRecoverableSttErrorAt;
+        if (health.failures <= 0 ||
+            (lastError != null &&
+                now.difference(lastError) >=
+                    _browserNetworkFailureQuietResetAfter)) {
           _recoverableSttErrorCount = 0;
           _lastRecoverableSttErrorAt = null;
         }
@@ -319,18 +333,37 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     required bool quarantineRuntime,
     String? observedRuntimeVersion,
   }) async {
-    if (_disposed ||
-        _sessionStopped ||
-        _useWhisper ||
-        _sttHostTransitionInFlight) {
+    if (_disposed || _sessionStopped || _useWhisper) {
+      return;
+    }
+    final policy = _windowsSttHostPolicy;
+    final failedHost =
+        policy?.currentHost ?? WindowsSttBrowserHost.embeddedWebView2;
+    if (_sttHostTransitionInFlight) {
+      // Source-host shutdown events are expected during a transition. Queue
+      // only events emitted after the destination adapter installed its new
+      // readiness generation.
+      if (policy != null && _sttHostReadiness != null) {
+        final candidate = _PendingSttHostFailure(
+          reasonCode: reasonCode,
+          quarantineRuntime: quarantineRuntime,
+          observedRuntimeVersion: observedRuntimeVersion,
+          sessionToken: _sessionToken,
+          policy: policy,
+          failedHost: failedHost,
+        );
+        final pending = _pendingSttHostFailure;
+        if (pending == null ||
+            _browserHostFailurePriority(candidate.reasonCode) >
+                _browserHostFailurePriority(pending.reasonCode)) {
+          _pendingSttHostFailure = candidate;
+        }
+      }
       return;
     }
     final sessionToken = _sessionToken;
-    final policy = _windowsSttHostPolicy;
     final transitionOwner = _sttHostTransitionGuard.begin();
     _sttHostReadinessTimer?.cancel();
-    final failedHost =
-        policy?.currentHost ?? WindowsSttBrowserHost.embeddedWebView2;
     try {
       if (policy == null) {
         await _stopWithBrowserHostError(
@@ -374,7 +407,7 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
       switch (decision.action) {
         case WindowsSttHostAction.switchHost:
           await _restartBrowserHost(
-            host: WindowsSttBrowserHost.externalEdge,
+            host: decision.host,
             reasonCode: reasonCode,
             sessionToken: sessionToken,
             policy: policy,
@@ -440,7 +473,9 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     final settings = ref.read(settingsProvider);
     final locale = _activeLocale ?? _scriptLanguageLocale ?? 'he_IL';
     _useExternalEdgeSttHost = host == WindowsSttBrowserHost.externalEdge;
-    _externalEdgeFailureInFlight = false;
+    _useExternalChromeSttHost = host == WindowsSttBrowserHost.externalChrome;
+    _browserHostStartedAt = DateTime.now();
+    _lastBrowserHeartbeatAt = null;
     _recoverableSttErrorCount = 0;
     _lastRecoverableSttErrorAt = null;
     _safeSetState(
@@ -452,6 +487,10 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
         statusMessage: '',
       ),
     );
+    _sttHostReadinessTimer?.cancel();
+    _sttHostReadinessTimer = null;
+    _sttHostReadiness = null;
+    _pendingSttHostReadinessPhases.clear();
     await _stopExternalEdgeHostServices();
     if (!_ownsSttHostTransition(
       transitionOwner,
@@ -489,10 +528,13 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
 
     _sttService = _browserSttService;
     _activeSttCanSwitchLocale = true;
-    _activeSttEngineLabel =
-        host == WindowsSttBrowserHost.externalEdge
-            ? 'Microsoft Edge compatibility speech-to-text'
-            : 'Browser online speech-to-text';
+    _activeSttEngineLabel = switch (host) {
+      WindowsSttBrowserHost.externalEdge =>
+        'Microsoft Edge compatibility speech-to-text',
+      WindowsSttBrowserHost.externalChrome =>
+        'Google Chrome compatibility speech-to-text',
+      WindowsSttBrowserHost.embeddedWebView2 => 'Browser online speech-to-text',
+    };
     _startBrowserHostReadiness(sessionToken: sessionToken);
     final activated = await _activateConfiguredBrowserSttHost(
       sessionToken: sessionToken,
@@ -505,10 +547,11 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
         )) {
       _handoffSttHostTransition(transitionOwner);
       await _handleBrowserHostFailure(
-        reasonCode:
-            host == WindowsSttBrowserHost.externalEdge
-                ? 'edge-launch-failed'
-                : 'embedded-host-failed',
+        reasonCode: switch (host) {
+          WindowsSttBrowserHost.externalEdge => 'edge-launch-failed',
+          WindowsSttBrowserHost.externalChrome => 'chrome-launch-failed',
+          WindowsSttBrowserHost.embeddedWebView2 => 'embedded-host-failed',
+        },
         quarantineRuntime: host == WindowsSttBrowserHost.embeddedWebView2,
       );
     }
@@ -549,6 +592,7 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     }
 
     _useExternalEdgeSttHost = false;
+    _useExternalChromeSttHost = false;
     _useWhisper = true;
     _activeSttCanSwitchLocale = false;
     _activeSttEngineLabel = 'Offline Whisper Tiny';
@@ -560,6 +604,8 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
       'switched to offline speech fallback',
       data: {'reasonCode': reasonCode, 'model': 'tiny'},
     );
+    final settings = ref.read(settingsProvider);
+    _whisperService.setPreferredInputDeviceLabel(settings.sttInputDeviceLabel);
     await _whisperService.start(localeId: locale, model: WhisperModel.tiny);
   }
 
@@ -607,10 +653,21 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
       return 'Microphone access is blocked. Open Windows Settings > Privacy & '
           'security > Microphone and allow desktop apps.';
     }
-    final hostName =
-        host == WindowsSttBrowserHost.externalEdge
-            ? 'Microsoft Edge'
-            : 'the in-app browser';
+    if (reasonCode == 'edge-launch-failed') {
+      return 'Microsoft Edge could not be started for speech recognition. '
+          'Install or update Edge, or choose Smart compatibility or Offline '
+          'Whisper in Speech Input.';
+    }
+    if (reasonCode == 'chrome-launch-failed') {
+      return 'Google Chrome could not be started for speech recognition. '
+          'Install or update Chrome, or choose Smart compatibility or Offline '
+          'Whisper in Speech Input.';
+    }
+    final hostName = switch (host) {
+      WindowsSttBrowserHost.externalEdge => 'Microsoft Edge',
+      WindowsSttBrowserHost.externalChrome => 'Google Chrome',
+      _ => 'the in-app browser',
+    };
     return 'Speech recognition could not become ready in $hostName. '
         'Choose Smart compatibility or Offline Whisper in Speech Input, then '
         'start listening again.';
@@ -621,6 +678,7 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     required SttHostReadinessPhase phase,
     String? reasonCode,
     WindowsSttBrowserHost? host,
+    Duration? timeout,
   }) {
     final policy = _windowsSttHostPolicy;
     if (policy == null) return;
@@ -635,12 +693,30 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
           phase: phase,
           elapsed: elapsed,
           webView2RuntimeVersion: policy.exactWebView2RuntimeVersion,
+          timeout: timeout,
         ).toMap();
     LightweightDiagnostics.instance.record(
       'sttHost',
       'speech host lifecycle',
       data: {...payload, if (reasonCode != null) 'reasonCode': reasonCode},
     );
+    final journal = _sttHostEventJournal;
+    if (journal != null) {
+      unawaited(
+        journal
+            .record(
+              event: kind,
+              host: host ?? policy.currentHost,
+              phase: phase,
+              reasonCode: reasonCode,
+              webView2RuntimeVersion: policy.exactWebView2RuntimeVersion,
+              elapsed: elapsed,
+              timeout: timeout,
+            )
+            .timeout(const Duration(milliseconds: 500))
+            .then<void>((_) {}, onError: (_) {}),
+      );
+    }
   }
 
   bool _ownsSttHostTransition(
@@ -673,13 +749,16 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
         pending.sessionToken != sessionToken ||
         sessionToken != _sessionToken ||
         !identical(pending.policy, policy) ||
-        !identical(policy, _windowsSttHostPolicy)) {
+        !identical(policy, _windowsSttHostPolicy) ||
+        policy == null ||
+        pending.failedHost != policy.currentHost) {
       return;
     }
     unawaited(
       _handleBrowserHostFailure(
         reasonCode: pending.reasonCode,
         quarantineRuntime: pending.quarantineRuntime,
+        observedRuntimeVersion: pending.observedRuntimeVersion,
       ),
     );
   }
@@ -689,12 +768,16 @@ class _PendingSttHostFailure {
   const _PendingSttHostFailure({
     required this.reasonCode,
     required this.quarantineRuntime,
+    required this.observedRuntimeVersion,
     required this.sessionToken,
     required this.policy,
+    required this.failedHost,
   });
 
   final String reasonCode;
   final bool quarantineRuntime;
+  final String? observedRuntimeVersion;
   final int sessionToken;
   final WindowsSttHostPolicy policy;
+  final WindowsSttBrowserHost failedHost;
 }

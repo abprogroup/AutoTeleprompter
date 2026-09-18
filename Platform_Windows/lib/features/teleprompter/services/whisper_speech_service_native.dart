@@ -5,117 +5,48 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:crypto/crypto.dart';
-import 'package:path/path.dart' as path;
 import 'package:record/record.dart';
 import 'package:whisper_ggml/whisper_ggml.dart';
 
 import 'speech_service.dart';
+import 'whisper_audio_signal.dart';
+import 'whisper_input_device_resolver.dart';
+import 'whisper_model_support.dart';
+import 'whisper_native_process_gate.dart';
+import 'whisper_phrase_session_coordinator.dart';
 
-export 'package:whisper_ggml/whisper_ggml.dart' show WhisperModel;
+export 'whisper_model_support.dart';
 
-const int _mib = 1024 * 1024;
+part 'whisper_speech_service_native.models.dart';
+
 const int _modelMarkerSchema = 1;
 const String _bundledTinyModelAsset = 'assets/models/ggml-tiny.bin';
 const String _tinyModelSha256 =
     'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21';
-
-enum WhisperModelReadiness { missing, incomplete, invalid, ready }
-
-extension WhisperModelPathExt on WhisperModel {
-  String getPath(String directory) =>
-      path.join(directory, whisperModelFileName(this));
-}
-
-String whisperModelFileName(WhisperModel model) =>
-    'ggml-${model.modelName}.bin';
-
-WhisperModel whisperModelFromEngine(String engine) {
-  switch (engine) {
-    case 'whisper_base':
-      return WhisperModel.base;
-    case 'whisper_small':
-      return WhisperModel.small;
-    case 'whisper_medium':
-      return WhisperModel.medium;
-    case 'whisper_tiny':
-    default:
-      return WhisperModel.tiny;
-  }
-}
-
-String whisperLanguageForLocale(String? localeId) {
-  final normalized = localeId?.trim().toLowerCase() ?? '';
-  final language =
-      normalized.isEmpty ? '' : normalized.split(RegExp(r'[-_]')).first;
-  if (language == 'he' || language == 'iw') return 'he';
-  if (language == 'en') return 'en';
-  return 'auto';
-}
-
-class WhisperModelInfo {
-  final String engineKey;
-  final String label;
-  final String size;
-  final String description;
-  final WhisperModel model;
-
-  const WhisperModelInfo({
-    required this.engineKey,
-    required this.label,
-    required this.size,
-    required this.description,
-    required this.model,
-  });
-}
-
-const whisperModels = [
-  WhisperModelInfo(
-    engineKey: 'whisper_tiny',
-    label: 'Whisper Tiny',
-    size: '~75MB',
-    description: 'Fastest multilingual model. Recommended for live prompting.',
-    model: WhisperModel.tiny,
-  ),
-  WhisperModelInfo(
-    engineKey: 'whisper_base',
-    label: 'Whisper Base',
-    size: '~142MB',
-    description: 'Good balance of speed and accuracy.',
-    model: WhisperModel.base,
-  ),
-  WhisperModelInfo(
-    engineKey: 'whisper_small',
-    label: 'Whisper Small',
-    size: '~466MB',
-    description: 'More accurate. Needs a capable PC.',
-    model: WhisperModel.small,
-  ),
-  WhisperModelInfo(
-    engineKey: 'whisper_medium',
-    label: 'Whisper Medium',
-    size: '~1.5GB',
-    description: 'Most accurate option. Needs a powerful PC.',
-    model: WhisperModel.medium,
-  ),
-];
 
 class WhisperSpeechService {
   static const _startupTimeout = Duration(seconds: 60);
   static const _ioTimeout = Duration(seconds: 30);
   static const _shortStopTimeout = Duration(seconds: 3);
   static const _nativeStopTimeout = Duration(seconds: 10);
-
+  static const _nativeLeaseTimeout = Duration(seconds: 30);
   final AudioRecorder _recorder = AudioRecorder();
+  final WhisperAudioSignalTracker _audioSignal = WhisperAudioSignalTracker();
+  final WhisperPcmFrameNormalizer _audioFrames = WhisperPcmFrameNormalizer();
+  final WhisperBoundedAudioFeed _audioFeed = WhisperBoundedAudioFeed();
 
   void Function(SpeechResult)? onResult;
   void Function(SpeechStatus)? onStatusChange;
   void Function(String)? onError;
+  void Function(String)? onDiagnostic;
+  void Function(double)? onSoundLevelChange;
 
   WhisperModel _activeModel = WhisperModel.tiny;
-  WhisperLiveSession? _liveSession;
+  WhisperPhraseSessionCoordinator? _nativeCoordinator;
+  Object? _nativeLeaseOwner;
   StreamSubscription<Uint8List>? _audioSubscription;
-  StreamSubscription<String>? _partialSubscription;
-  Future<WhisperLiveSession>? _pendingNativeStart;
+  Future<Stream<Uint8List>>? _pendingRecorderStart;
+  Future<bool>? _recorderStopInFlight;
   Future<void>? _shutdownInFlight;
   HttpClient? _downloadClient;
   int _sessionGeneration = 0;
@@ -125,227 +56,59 @@ class WhisperSpeechService {
   bool _starting = false;
   bool _isListening = false;
   bool _disposed = false;
+  bool _nativePoisoned = false;
+  bool _capturePoisoned = false;
   String _lastTranscript = '';
+  String _committedTranscript = '';
+  String _activePhraseTranscript = '';
+  String _lastObservedTranscript = '';
+  String _preferredInputDeviceLabel = 'System default microphone';
 
   bool get isListening => _isListening;
 
-  Future<WhisperModelReadiness> modelReadiness(
-    WhisperModel model,
-  ) async {
-    final files = await _modelFiles(model);
-    final modelExists = await files.model.exists();
-    final markerExists = await files.marker.exists();
-
-    if (modelExists && markerExists) {
-      try {
-        final markerJson = jsonDecode(await files.marker.readAsString());
-        if (markerJson is! Map<String, dynamic>) {
-          return WhisperModelReadiness.invalid;
-        }
-        final bytes = await files.model.length();
-        final recordedBytes = markerJson['bytes'];
-        final expectedDigest = _expectedModelDigest(model);
-        final digestMatches = expectedDigest == null ||
-            (markerJson['sha256'] == expectedDigest &&
-                await _fileDigest(files.model) == expectedDigest);
-        final valid = markerJson['schema'] == _modelMarkerSchema &&
-            markerJson['model'] == model.modelName &&
-            recordedBytes is int &&
-            recordedBytes == bytes &&
-            digestMatches &&
-            _isPlausibleModelSize(model, bytes);
-        return valid
-            ? WhisperModelReadiness.ready
-            : WhisperModelReadiness.invalid;
-      } catch (_) {
-        return WhisperModelReadiness.invalid;
-      }
-    }
-
-    if (await files.partial.exists()) {
-      return WhisperModelReadiness.incomplete;
-    }
-    if (modelExists || markerExists) return WhisperModelReadiness.invalid;
-    return WhisperModelReadiness.missing;
+  void setPreferredInputDeviceLabel(String? label) {
+    final normalized = label?.trim() ?? '';
+    _preferredInputDeviceLabel =
+        normalized.isEmpty ? 'System default microphone' : normalized;
   }
 
-  Future<bool> isModelDownloaded(WhisperModel model) async {
-    try {
-      return await modelReadiness(model) == WhisperModelReadiness.ready;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<WhisperModelReadiness> modelReadiness(WhisperModel model) =>
+      _modelReadiness(model);
+
+  Future<bool> isModelDownloaded(WhisperModel model) =>
+      _isModelDownloaded(model);
 
   Future<bool> downloadModel({
     required WhisperModel model,
     void Function(String status)? onProgress,
-  }) async {
-    if (_disposed) return false;
-    if (_downloadInProgress) {
-      _safeProgress(onProgress, 'Another offline model download is active.');
-      return false;
-    }
+  }) => _downloadModel(model: model, onProgress: onProgress);
 
-    _downloadInProgress = true;
-    final generation = ++_downloadGeneration;
-    final client = HttpClient()..connectionTimeout = _ioTimeout;
-    _downloadClient = client;
-
-    try {
-      if (await modelReadiness(model) == WhisperModelReadiness.ready) {
-        _safeProgress(onProgress, 'Whisper ${model.modelName} is ready.');
-        return true;
-      }
-
-      final files = await _modelFiles(model, createDirectory: true);
-      await _deleteIfPresent(files.partial);
-      await _deleteIfPresent(files.markerTemporary);
-      _safeProgress(onProgress, 'Downloading Whisper ${model.modelName}: 0%');
-
-      final request = await client.getUrl(model.modelUri).timeout(_ioTimeout);
-      request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
-      final response = await request.close().timeout(_ioTimeout);
-      if (response.statusCode != HttpStatus.ok) {
-        throw const HttpException('Unexpected download response');
-      }
-
-      final expectedBytes = response.contentLength;
-      final maximumBytes = _maximumModelBytes(model);
-      if (expectedBytes > maximumBytes) {
-        throw const FileSystemException('Model download exceeds size limit');
-      }
-
-      var receivedBytes = 0;
-      var lastPercent = -1;
-      final sink = files.partial.openWrite(mode: FileMode.writeOnly);
-      try {
-        await for (final chunk in response.timeout(_ioTimeout)) {
-          if (_disposed || generation != _downloadGeneration) {
-            throw const FileSystemException('Model download cancelled');
-          }
-          receivedBytes += chunk.length;
-          if (receivedBytes > maximumBytes) {
-            throw const FileSystemException(
-                'Model download exceeds size limit');
-          }
-          sink.add(chunk);
-
-          if (expectedBytes > 0) {
-            final percent = (receivedBytes * 100 ~/ expectedBytes).clamp(0, 99);
-            if (percent != lastPercent) {
-              lastPercent = percent;
-              _safeProgress(
-                onProgress,
-                'Downloading Whisper ${model.modelName}: $percent%',
-              );
-            }
-          }
-        }
-        await sink.flush();
-      } finally {
-        await sink.close();
-      }
-
-      if (_disposed || generation != _downloadGeneration) {
-        throw const FileSystemException('Model download cancelled');
-      }
-      if ((expectedBytes > 0 && receivedBytes != expectedBytes) ||
-          !_isPlausibleModelSize(model, receivedBytes)) {
-        throw const FileSystemException('Incomplete model download');
-      }
-      final expectedDigest = _expectedModelDigest(model);
-      final actualDigest = await _fileDigest(files.partial);
-      if (expectedDigest != null && actualDigest != expectedDigest) {
-        throw const FileSystemException('Model checksum verification failed');
-      }
-
-      await files.markerTemporary.writeAsString(
-        jsonEncode({
-          'schema': _modelMarkerSchema,
-          'model': model.modelName,
-          'bytes': receivedBytes,
-          if (expectedDigest != null) 'sha256': actualDigest,
-        }),
-        flush: true,
-      );
-      await _deleteIfPresent(files.model);
-      await _deleteIfPresent(files.marker);
-      await files.partial.rename(files.model.path);
-      await files.markerTemporary.rename(files.marker.path);
-
-      _safeProgress(onProgress, 'Whisper ${model.modelName} is ready.');
-      return true;
-    } catch (_) {
-      try {
-        final files = await _modelFiles(model);
-        await _deleteIfPresent(files.partial);
-        await _deleteIfPresent(files.markerTemporary);
-      } catch (_) {}
-      _safeProgress(
-        onProgress,
-        'Model download failed. Check your connection and try again.',
-      );
-      return false;
-    } finally {
-      client.close(force: true);
-      if (identical(_downloadClient, client)) _downloadClient = null;
-      _downloadInProgress = false;
-    }
-  }
-
-  void cancelModelDownload() {
-    _downloadGeneration++;
-    _downloadClient?.close(force: true);
-    _downloadClient = null;
-  }
+  void cancelModelDownload() => _cancelModelDownload();
 
   Future<bool> initialize({
     required WhisperModel model,
     void Function(String)? onProgress,
-  }) =>
-      _prepareModel(model, onProgress: onProgress);
-
-  Future<bool> _prepareModel(
-    WhisperModel model, {
-    void Function(String)? onProgress,
-    bool Function()? shouldContinue,
-  }) async {
-    if (_disposed) return false;
-    try {
-      if (await modelReadiness(model) != WhisperModelReadiness.ready) {
-        if (shouldContinue != null && !shouldContinue()) return false;
-        if (model == WhisperModel.tiny) {
-          _safeProgress(
-              onProgress, 'Preparing the bundled Whisper Tiny model.');
-          await _installBundledTinyModel();
-        }
-        if (shouldContinue != null && !shouldContinue()) return false;
-        if (await modelReadiness(model) != WhisperModelReadiness.ready) {
-          final downloaded = await downloadModel(
-            model: model,
-            onProgress: onProgress,
-          );
-          if (!downloaded) return false;
-        }
-      }
-      if (shouldContinue != null && !shouldContinue()) return false;
-      _activeModel = model;
-      _safeProgress(onProgress, 'Whisper ${model.modelName} is ready.');
-      return true;
-    } catch (_) {
-      _safeProgress(onProgress, 'The offline model could not be checked.');
-      return false;
-    }
-  }
+  }) => _prepareModel(model, onProgress: onProgress);
 
   Future<void> start({String? localeId, WhisperModel? model}) async {
     if (_disposed) return;
+    if (_nativePoisoned || _capturePoisoned) {
+      _emitStartFailure(
+        'Offline speech needs an app restart after an incomplete audio-engine shutdown.',
+      );
+      return;
+    }
     await _endSession(SpeechStatus.idle, notify: false);
     if (_disposed) return;
-    if (_pendingNativeStart != null) {
+    if (_nativePoisoned || _capturePoisoned) {
       _emitStartFailure(
-        'Whisper init failed: the previous offline session is still closing.',
+        'Offline speech needs an app restart after an incomplete audio-engine shutdown.',
+      );
+      return;
+    }
+    if (_pendingRecorderStart != null) {
+      _emitStartFailure(
+        'Whisper init failed: the previous microphone session is still closing.',
       );
       return;
     }
@@ -354,6 +117,9 @@ class WhisperSpeechService {
     final selectedModel = model ?? _activeModel;
     _starting = true;
     _lastTranscript = '';
+    _committedTranscript = '';
+    _activePhraseTranscript = '';
+    _lastObservedTranscript = '';
 
     try {
       if (!await _prepareModel(
@@ -386,62 +152,151 @@ class WhisperSpeechService {
       }
       if (!_isCurrent(generation)) return;
 
-      final files = await _modelFiles(selectedModel);
-      final nativeStart = startWhisperLiveSession(
-        modelPath: files.model.path,
-        lang: whisperLanguageForLocale(localeId),
-        suppressNonSpeechTokens: true,
-        keepModelLoaded: false,
+      final inputDevice = await resolveWhisperInputDevice(
+        recorder: _recorder,
+        preferredLabel: _preferredInputDeviceLabel,
+        onDiagnostic: onDiagnostic,
       );
-      _pendingNativeStart = nativeStart;
-      _cleanUpLateNativeStart(nativeStart, generation);
+      if (!_isCurrent(generation)) return;
 
-      final session = await nativeStart.timeout(_startupTimeout);
-      if (identical(_pendingNativeStart, nativeStart)) {
-        _pendingNativeStart = null;
+      final files = await _modelFiles(selectedModel);
+      final coordinator = WhisperPhraseSessionCoordinator(
+        streamFactory:
+            () async => GgmlWhisperNativeStream(
+              await startWhisperLiveSession(
+                modelPath: files.model.path,
+                lang: whisperLanguageForLocale(localeId),
+                suppressNonSpeechTokens: false,
+                keepModelLoaded: true,
+                threads: Platform.numberOfProcessors.clamp(2, 8).toInt(),
+                gateRmsMin: whisperNativeGateRmsMin,
+                gateVoiceRatio: whisperNativeGateVoiceRatio,
+                gateNoiseFloorCap: whisperNativeGateNoiseFloorCap,
+              ),
+            ),
+        onPartial:
+            (transcript) => _handleNativePhraseTranscript(
+              generation,
+              transcript,
+              isFinal: false,
+            ),
+        onPhraseFinal:
+            (transcript) => _handleNativePhraseTranscript(
+              generation,
+              transcript,
+              isFinal: true,
+            ),
+        onFailure: () => _handleSessionFailure(generation),
+        startTimeout: _startupTimeout,
+        stopTimeout: _nativeStopTimeout,
+      );
+      final leaseOwner = Object();
+      _nativeLeaseOwner = leaseOwner;
+      final leaseAcquired = await whisperNativeProcessGate.acquire(
+        leaseOwner,
+        timeout: _nativeLeaseTimeout,
+      );
+      if (!_isCurrent(generation)) {
+        if (identical(_nativeLeaseOwner, leaseOwner)) {
+          _nativeLeaseOwner = null;
+        }
+        if (leaseAcquired) {
+          whisperNativeProcessGate.release(leaseOwner, clean: true);
+        }
+        return;
+      }
+      if (!leaseAcquired) {
+        if (identical(_nativeLeaseOwner, leaseOwner)) {
+          _nativeLeaseOwner = null;
+        }
+        _nativePoisoned = _nativePoisoned || whisperNativeProcessGate.poisoned;
+        await _failStart(
+          generation,
+          _nativePoisoned
+              ? 'Whisper needs an app restart after an incomplete previous shutdown.'
+              : 'Whisper init failed: the previous offline engine is still closing.',
+        );
+        return;
+      }
+      // Publish ownership before awaiting native start so a concurrent stop can
+      // retire this exact stream and no older service can stop a newer owner.
+      _nativeCoordinator = coordinator;
+      if (!await coordinator.start()) {
+        _nativePoisoned = _nativePoisoned || coordinator.poisoned;
+        await _failStart(
+          generation,
+          'Whisper init failed: the offline engine could not start.',
+        );
+        return;
       }
       if (!_isCurrent(generation)) {
-        await _stopNativeSession(session);
+        final shutdown = _shutdownInFlight;
+        if (shutdown != null) await shutdown;
         return;
       }
 
-      _liveSession = session;
-      _partialSubscription = session.partials.listen(
-        (transcript) => _handlePartial(generation, transcript),
-        onError: (_) => _handleSessionFailure(generation),
-      );
-
-      _recorderStarted = true;
-      final audioStream = await _recorder.startStream(
-        const RecordConfig(
+      final recorderStart = _recorder.startStream(
+        RecordConfig(
           encoder: AudioEncoder.pcm16bits,
           sampleRate: 16000,
           numChannels: 1,
+          device: inputDevice,
           autoGain: false,
           echoCancel: false,
           noiseSuppress: false,
         ),
       );
+      _pendingRecorderStart = recorderStart;
+      _cleanUpLateRecorderStart(recorderStart, generation);
+      final audioStream = await recorderStart.timeout(_ioTimeout);
+      if (identical(_pendingRecorderStart, recorderStart)) {
+        _pendingRecorderStart = null;
+      }
+      _recorderStarted = true;
       if (!_isCurrent(generation)) {
         await _stopRecorder();
         return;
       }
 
+      _activeModel = selectedModel;
+      _starting = false;
+      _isListening = true;
+      _audioSignal.reset();
+      _audioFrames.reset();
+      _audioFeed.reset();
       _audioSubscription = audioStream.listen(
         (bytes) {
-          if (_isCurrent(generation) && _isListening) {
-            session.feed(bytes);
+          if (!_isCurrent(generation) || !_isListening) return;
+          for (final frame in _audioFrames.add(bytes)) {
+            final signal = _audioSignal.add(frame);
+            if (signal.shouldEmitMeter) {
+              _emitSoundLevel(signal.meterLevel);
+            }
+            final wasFeeding = _audioFeed.isFeeding;
+            for (final payload in _audioFeed.add(
+              frame,
+              speechActive: signal.speechEvidenceActive,
+            )) {
+              coordinator.feed(payload);
+            }
+            if (wasFeeding && !_audioFeed.isFeeding) {
+              coordinator.closePhrase();
+            }
           }
         },
         onError: (_) => _handleAudioFailure(generation),
         onDone: () => _handleAudioFailure(generation),
         cancelOnError: true,
       );
-      _activeModel = selectedModel;
-      _starting = false;
-      _isListening = true;
       _emitStatus(SpeechStatus.listening);
     } on TimeoutException {
+      // Future.timeout cannot cancel microphone capture. Refuse an in-process
+      // restart so a late capture cannot overlap a newer session.
+      if (_pendingRecorderStart != null) {
+        _capturePoisoned = true;
+      } else {
+        _nativePoisoned = true;
+      }
       await _failStart(
         generation,
         'Whisper init failed: the offline engine took too long to start.',
@@ -463,20 +318,73 @@ class WhisperSpeechService {
     _disposed = true;
     cancelModelDownload();
     await _endSession(SpeechStatus.idle, notify: false);
-    await _ignoreErrors(
-      _recorder.dispose(),
-      timeout: _shortStopTimeout,
-    );
+    await _ignoreErrors(_recorder.dispose(), timeout: _shortStopTimeout);
+    // Model state is process-global too. Acquire a maintenance lease before
+    // releasing it so a replacement provider cannot start a stream under us.
+    final maintenanceLease = Object();
+    if (!_nativePoisoned &&
+        await whisperNativeProcessGate.acquire(
+          maintenanceLease,
+          timeout: _nativeStopTimeout,
+        )) {
+      var clean = false;
+      try {
+        await WhisperController().releaseModel().timeout(_nativeStopTimeout);
+        clean = true;
+      } catch (_) {
+        _nativePoisoned = true;
+      } finally {
+        whisperNativeProcessGate.release(maintenanceLease, clean: clean);
+      }
+    }
   }
 
-  void _handlePartial(int generation, String transcript) {
+  void _handleNativePhraseTranscript(
+    int generation,
+    String transcript, {
+    required bool isFinal,
+  }) {
     if (!_isCurrent(generation) || !_isListening) return;
-    final normalized = transcript.trim();
-    if (normalized.isEmpty || normalized == _lastTranscript) return;
-    _lastTranscript = normalized;
-    try {
-      onResult?.call(SpeechResult(normalized, false));
-    } catch (_) {}
+    final phrase = normalizeWhisperTranscript(transcript);
+    if (phrase.isNotEmpty) _activePhraseTranscript = phrase;
+    final settledPhrase =
+        isFinal && phrase.isEmpty ? _activePhraseTranscript : phrase;
+    if (isFinal && settledPhrase.isEmpty) {
+      _activePhraseTranscript = '';
+      return;
+    }
+    final combined = _joinWhisperTranscript(
+      _committedTranscript,
+      settledPhrase,
+    );
+    final observationChanged = combined != _lastObservedTranscript;
+    _lastObservedTranscript = combined;
+    if (!isFinal && !observationChanged) return;
+
+    final normalized = acceptedWhisperPartial(
+      transcript: combined,
+      previousTranscript: _lastTranscript,
+      // A phrase-final callback is produced only by an acknowledged native
+      // stop requested after app-level speech evidence closed.
+      acceptsTranscripts: isFinal || _audioSignal.acceptsTranscripts,
+      allowDuplicate: isFinal,
+    );
+    if (isFinal) {
+      _committedTranscript = combined;
+      _activePhraseTranscript = '';
+    }
+    if (normalized != null) {
+      _lastTranscript = normalized;
+      try {
+        onResult?.call(SpeechResult(normalized, isFinal));
+      } catch (_) {}
+    }
+  }
+
+  static String _joinWhisperTranscript(String prefix, String suffix) {
+    if (prefix.isEmpty) return suffix;
+    if (suffix.isEmpty) return prefix;
+    return '$prefix $suffix';
   }
 
   void _handleAudioFailure(int generation) {
@@ -505,14 +413,12 @@ class WhisperSpeechService {
     _emitStatus(SpeechStatus.error);
   }
 
-  Future<void> _endSession(
-    SpeechStatus status, {
-    bool notify = true,
-  }) async {
+  Future<void> _endSession(SpeechStatus status, {bool notify = true}) async {
     _sessionGeneration++;
     final cancelStartupDownload = _starting;
     _starting = false;
     _isListening = false;
+    _emitSoundLevel(0.0);
     if (cancelStartupDownload) cancelModelDownload();
 
     final existingShutdown = _shutdownInFlight;
@@ -536,65 +442,113 @@ class WhisperSpeechService {
 
   Future<void> _tearDownSession() async {
     final audioSubscription = _audioSubscription;
-    final partialSubscription = _partialSubscription;
-    final liveSession = _liveSession;
-    final pendingNativeStart = _pendingNativeStart;
+    final coordinator = _nativeCoordinator;
+    final leaseOwner = _nativeLeaseOwner;
     _audioSubscription = null;
-    _partialSubscription = null;
-    _liveSession = null;
+    _nativeCoordinator = null;
+    _nativeLeaseOwner = null;
     _lastTranscript = '';
+    _committedTranscript = '';
+    _activePhraseTranscript = '';
+    _lastObservedTranscript = '';
 
-    if (audioSubscription != null) {
-      await _ignoreErrors(
-        audioSubscription.cancel(),
-        timeout: _shortStopTimeout,
-      );
-    }
-    await _stopRecorder();
-    if (partialSubscription != null) {
-      await _ignoreErrors(
-        partialSubscription.cancel(),
-        timeout: _shortStopTimeout,
-      );
-    }
-    if (liveSession != null) await _stopNativeSession(liveSession);
-
-    if (liveSession == null && pendingNativeStart != null) {
-      try {
-        final lateSession = await pendingNativeStart.timeout(
-          _shortStopTimeout,
+    var cleanNativeShutdown = coordinator == null;
+    var cleanCaptureShutdown = false;
+    try {
+      if (audioSubscription != null) {
+        await _ignoreErrors(
+          audioSubscription.cancel(),
+          timeout: _shortStopTimeout,
         );
-        await _stopNativeSession(lateSession);
-      } catch (_) {}
+      }
+      // The provider has already closed presentation, so the stop-finalized
+      // text is intentionally discarded instead of moving the teleprompter.
+      _audioFeed.finish();
+      _audioFrames.reset();
+      _audioFeed.reset();
+      _audioSignal.reset();
+      cleanCaptureShutdown = await _stopRecorder();
+      if (coordinator != null) {
+        try {
+          cleanNativeShutdown = await coordinator.stop();
+        } catch (_) {
+          cleanNativeShutdown = false;
+        }
+        _nativePoisoned =
+            _nativePoisoned || coordinator.poisoned || !cleanNativeShutdown;
+      }
+    } finally {
+      if (leaseOwner != null) {
+        whisperNativeProcessGate.release(
+          leaseOwner,
+          clean:
+              cleanNativeShutdown &&
+              coordinator?.poisoned != true &&
+              cleanCaptureShutdown &&
+              !_capturePoisoned &&
+              !_nativePoisoned,
+        );
+      }
     }
   }
 
-  Future<void> _stopRecorder() async {
-    if (!_recorderStarted) return;
-    _recorderStarted = false;
-    await _ignoreErrors(
-      _recorder.stop(),
-      timeout: _shortStopTimeout,
-    );
+  Future<bool> _stopRecorder() async {
+    final existing = _recorderStopInFlight;
+    if (existing != null) return existing;
+    final operation = _performStopRecorder();
+    _recorderStopInFlight = operation;
+    try {
+      return await operation;
+    } finally {
+      if (identical(_recorderStopInFlight, operation)) {
+        _recorderStopInFlight = null;
+      }
+    }
   }
 
-  Future<void> _stopNativeSession(WhisperLiveSession session) =>
-      _ignoreErrors(session.stop(), timeout: _nativeStopTimeout);
+  Future<bool> _performStopRecorder() async {
+    final pendingStart = _pendingRecorderStart;
+    if (!_recorderStarted && pendingStart != null) {
+      try {
+        await pendingStart.timeout(_shortStopTimeout);
+        _recorderStarted = true;
+      } on TimeoutException {
+        _capturePoisoned = true;
+        return false;
+      } catch (_) {
+        return true;
+      }
+    }
+    if (!_recorderStarted) return true;
+    try {
+      await _recorder.stop().timeout(_shortStopTimeout);
+      _recorderStarted = false;
+      return true;
+    } catch (_) {
+      // A timed-out native recorder stop may still complete later. Refuse to
+      // start a second capture in this process and overlap microphone streams.
+      _capturePoisoned = true;
+      return false;
+    }
+  }
 
-  void _cleanUpLateNativeStart(
-    Future<WhisperLiveSession> nativeStart,
+  void _cleanUpLateRecorderStart(
+    Future<Stream<Uint8List>> recorderStart,
     int generation,
   ) {
     unawaited(
-      nativeStart.then<void>((session) {
-        if (!_isCurrent(generation)) {
-          unawaited(_stopNativeSession(session));
-        }
-      }, onError: (_) {}).whenComplete(() {
-        if (identical(_pendingNativeStart, nativeStart)) {
-          _pendingNativeStart = null;
-        }
-      }),
+      recorderStart
+          .then<void>((_) async {
+            if (!_isCurrent(generation)) {
+              _recorderStarted = true;
+              await _stopRecorder();
+            }
+          }, onError: (_) {})
+          .whenComplete(() {
+            if (identical(_pendingRecorderStart, recorderStart)) {
+              _pendingRecorderStart = null;
+            }
+          }),
     );
   }
 
@@ -615,10 +569,14 @@ class WhisperSpeechService {
     } catch (_) {}
   }
 
-  static void _safeProgress(
-    void Function(String)? callback,
-    String message,
-  ) {
+  void _emitSoundLevel(double level) {
+    if (_disposed) return;
+    try {
+      onSoundLevelChange?.call(level.clamp(0.0, 1.0).toDouble());
+    } catch (_) {}
+  }
+
+  static void _safeProgress(void Function(String)? callback, String message) {
     try {
       callback?.call(message);
     } catch (_) {}
@@ -632,130 +590,4 @@ class WhisperSpeechService {
       await operation.timeout(timeout);
     } catch (_) {}
   }
-
-  Future<_WhisperModelFiles> _modelFiles(
-    WhisperModel model, {
-    bool createDirectory = false,
-  }) async {
-    final directory = Directory(await WhisperController.getModelDir());
-    if (createDirectory) await directory.create(recursive: true);
-    final modelPath = path.join(directory.path, whisperModelFileName(model));
-    return _WhisperModelFiles(modelPath);
-  }
-
-  Future<bool> _installBundledTinyModel() async {
-    final files = await _modelFiles(
-      WhisperModel.tiny,
-      createDirectory: true,
-    );
-    try {
-      final asset = await rootBundle.load(_bundledTinyModelAsset);
-      final bytes = asset.lengthInBytes;
-      if (_disposed || !_isPlausibleModelSize(WhisperModel.tiny, bytes)) {
-        return false;
-      }
-      final assetBytes =
-          asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes);
-      if (sha256.convert(assetBytes).toString() != _tinyModelSha256) {
-        return false;
-      }
-
-      await _deleteIfPresent(files.partial);
-      await _deleteIfPresent(files.markerTemporary);
-      await files.partial.writeAsBytes(
-        assetBytes,
-        flush: true,
-      );
-      if (await files.partial.length() != bytes) {
-        throw const FileSystemException('Incomplete bundled model copy');
-      }
-      await files.markerTemporary.writeAsString(
-        jsonEncode({
-          'schema': _modelMarkerSchema,
-          'model': WhisperModel.tiny.modelName,
-          'bytes': bytes,
-          'sha256': _tinyModelSha256,
-        }),
-        flush: true,
-      );
-      if (_disposed) throw const FileSystemException('Model copy cancelled');
-      await _deleteIfPresent(files.model);
-      await _deleteIfPresent(files.marker);
-      await files.partial.rename(files.model.path);
-      await files.markerTemporary.rename(files.marker.path);
-      return true;
-    } catch (_) {
-      try {
-        await _deleteIfPresent(files.partial);
-        await _deleteIfPresent(files.markerTemporary);
-      } catch (_) {}
-      return false;
-    }
-  }
-
-  static bool _isPlausibleModelSize(WhisperModel model, int bytes) =>
-      bytes >= _minimumModelBytes(model) && bytes <= _maximumModelBytes(model);
-
-  static String? _expectedModelDigest(WhisperModel model) =>
-      model == WhisperModel.tiny ? _tinyModelSha256 : null;
-
-  static Future<String> _fileDigest(File file) async =>
-      (await sha256.bind(file.openRead()).first).toString();
-
-  static int _minimumModelBytes(WhisperModel model) {
-    switch (model) {
-      case WhisperModel.tiny:
-      case WhisperModel.tinyEn:
-        return 50 * _mib;
-      case WhisperModel.base:
-      case WhisperModel.baseEn:
-        return 100 * _mib;
-      case WhisperModel.small:
-      case WhisperModel.smallEn:
-      case WhisperModel.smallEnTdrz:
-        return 300 * _mib;
-      case WhisperModel.medium:
-      case WhisperModel.mediumEn:
-        return 900 * _mib;
-      case WhisperModel.large:
-        return 2000 * _mib;
-    }
-  }
-
-  static int _maximumModelBytes(WhisperModel model) {
-    switch (model) {
-      case WhisperModel.tiny:
-      case WhisperModel.tinyEn:
-        return 200 * _mib;
-      case WhisperModel.base:
-      case WhisperModel.baseEn:
-        return 400 * _mib;
-      case WhisperModel.small:
-      case WhisperModel.smallEn:
-      case WhisperModel.smallEnTdrz:
-        return 1200 * _mib;
-      case WhisperModel.medium:
-      case WhisperModel.mediumEn:
-        return 3500 * _mib;
-      case WhisperModel.large:
-        return 7000 * _mib;
-    }
-  }
-
-  static Future<void> _deleteIfPresent(File file) async {
-    if (await file.exists()) await file.delete();
-  }
-}
-
-class _WhisperModelFiles {
-  _WhisperModelFiles(String modelPath)
-      : model = File(modelPath),
-        partial = File('$modelPath.part'),
-        marker = File('$modelPath.complete.json'),
-        markerTemporary = File('$modelPath.complete.json.part');
-
-  final File model;
-  final File partial;
-  final File marker;
-  final File markerTemporary;
 }

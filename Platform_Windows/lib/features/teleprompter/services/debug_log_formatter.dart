@@ -28,6 +28,7 @@ class DebugLogFormatter {
     return value.startsWith('[') ||
         value.startsWith('SESSION START') ||
         value.startsWith('LANG:') ||
+        value.startsWith('ENGINE HEALTH') ||
         value.startsWith('HEARTBEAT') ||
         value.startsWith('SILENT LISTENING') ||
         value.startsWith('FIX:') ||
@@ -52,6 +53,7 @@ class DebugLogFormatter {
     if (value.startsWith('ADVANCE')) return '[OK] $value';
     if (value.startsWith('SESSION START')) return '[SESSION] $value';
     if (value.startsWith('LANG:')) return '[LANG] $value';
+    if (value.startsWith('ENGINE HEALTH')) return '[HEALTH] $value';
     if (value.startsWith('HEARTBEAT')) return '[HEARTBEAT] $value';
     if (value.startsWith('SILENT LISTENING')) return '[WARN] $value';
     if (value.startsWith('FIX:')) return '[FIX] $value';

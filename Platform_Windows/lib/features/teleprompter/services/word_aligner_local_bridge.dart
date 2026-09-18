@@ -1,5 +1,90 @@
 part of 'word_aligner.dart';
 
+AlignmentResult? _continuePendingStartEvidence({
+  required List<ScriptWord> script,
+  required String transcript,
+  required int pendingTargetIndex,
+  required bool strictBulletMode,
+}) {
+  if (script.isEmpty ||
+      pendingTargetIndex < 0 ||
+      pendingTargetIndex >= script.length ||
+      transcript.trim().isEmpty) {
+    return null;
+  }
+
+  final rawWords =
+      transcript
+          .split(RegExp(r'\s+'))
+          .map((w) => w.trim().normalizeForMatching())
+          .where((w) => w.isNotEmpty)
+          .toList();
+  final transcriptWords = _collapseAbbreviations(rawWords);
+  if (transcriptWords.isEmpty) return null;
+
+  final searchStart = WordAligner.nextRequiredSpeakableIndex(
+    script,
+    pendingTargetIndex + 1,
+  );
+  if (searchStart >= script.length) return null;
+
+  final repeatedTail = _confirmedTailBridgeMatch(
+    script: script,
+    transcriptWords: transcriptWords,
+    lastConfirmedIndex: pendingTargetIndex,
+    strictBulletMode: strictBulletMode,
+  );
+  if (repeatedTail != null) {
+    return repeatedTail.copyWith(
+      debugInfo: 'CONTINUED_START | ${repeatedTail.debugInfo}',
+      thresholdFamily: SttThresholdFamily.startAdvance,
+    );
+  }
+
+  final nameBridge = _properNameRunBridgeMatch(
+    script: script,
+    transcriptWords: transcriptWords,
+    searchStart: searchStart,
+    lastConfirmedIndex: pendingTargetIndex,
+    strictBulletMode: strictBulletMode,
+  );
+  if (nameBridge != null) {
+    return nameBridge.copyWith(
+      debugInfo: 'CONTINUED_START | ${nameBridge.debugInfo}',
+      thresholdFamily: SttThresholdFamily.startAdvance,
+    );
+  }
+
+  final oneWord = _pendingSingleWordContinuation(
+    script: script,
+    transcriptWords: transcriptWords,
+    searchStart: searchStart,
+    pendingTargetIndex: pendingTargetIndex,
+    strictBulletMode: strictBulletMode,
+  );
+  if (oneWord != null) return oneWord;
+
+  final phrase = _contiguousNextPhraseMatch(
+    script: script,
+    transcriptWords: transcriptWords,
+    searchStart: searchStart,
+    lastConfirmedIndex: pendingTargetIndex,
+    maxPhraseWords: WordAligner._localRecoveryPhraseMaxWords,
+    evidenceThreshold: const SttEvidenceThreshold(1, 1),
+    thresholdFamily: SttThresholdFamily.startAdvance,
+    overrideWordThreshold:
+        strictBulletMode ? WordAligner._strictPhraseThreshold : null,
+    minPhraseScore:
+        strictBulletMode ? WordAligner._strictPhraseThreshold : 0.70,
+  );
+  if (phrase == null) return null;
+  return phrase.copyWith(
+    debugInfo: 'CONTINUED_START | ${phrase.debugInfo}',
+    kind: SttAlignmentKind.confirmedTailBridge,
+    thresholdFamily: SttThresholdFamily.startAdvance,
+  );
+}
+
 /// Walks forward from an already-confirmed match, consuming as many more
 /// consecutive already-heard words as keep matching consecutive script
 /// words - so a burst the user already said in one breath (e.g. "a real
@@ -26,11 +111,15 @@ int _extendConsecutiveRun({
       scriptPos++;
       continue;
     }
-    final threshold = strictBulletMode
-        ? WordAligner._strictPhraseThreshold
-        : (word.isRtl ? 0.45 : 0.55);
-    final sim =
-        _wordSimilarity(transcriptWords[transcriptPos], word.normalized, word.isRtl);
+    final threshold =
+        strictBulletMode
+            ? WordAligner._strictPhraseThreshold
+            : (word.isRtl ? 0.45 : 0.55);
+    final sim = _wordSimilarity(
+      transcriptWords[transcriptPos],
+      word.normalized,
+      word.isRtl,
+    );
     if (sim < threshold) break;
     extendedIndex = scriptPos;
     transcriptPos++;
@@ -53,13 +142,17 @@ int _extendFromLatestMatch({
 }) {
   if (candidateIndex >= script.length) return candidateIndex;
   final anchorWord = script[candidateIndex];
-  final anchorThreshold = strictBulletMode
-      ? WordAligner._strictPhraseThreshold
-      : (anchorWord.isRtl ? 0.45 : 0.55);
+  final anchorThreshold =
+      strictBulletMode
+          ? WordAligner._strictPhraseThreshold
+          : (anchorWord.isRtl ? 0.45 : 0.55);
   var anchorPos = -1;
   for (var i = transcriptWords.length - 1; i >= 0; i--) {
-    final sim =
-        _wordSimilarity(transcriptWords[i], anchorWord.normalized, anchorWord.isRtl);
+    final sim = _wordSimilarity(
+      transcriptWords[i],
+      anchorWord.normalized,
+      anchorWord.isRtl,
+    );
     if (sim >= anchorThreshold) {
       anchorPos = i;
       break;
@@ -121,9 +214,10 @@ AlignmentResult? _confirmedTailBridgeMatch({
     var matched = true;
     for (var i = 0; i < phraseLen; i++) {
       final word = localWords[i];
-      final threshold = strictBulletMode
-          ? WordAligner._strictPhraseThreshold
-          : (word.isRtl ? 0.70 : 0.82);
+      final threshold =
+          strictBulletMode
+              ? WordAligner._strictPhraseThreshold
+              : (word.isRtl ? 0.70 : 0.82);
       final sim = _wordSimilarity(spokenPhrase[i], word.normalized, word.isRtl);
       if (sim < threshold) {
         matched = false;
@@ -182,19 +276,24 @@ AlignmentResult? _confirmedTailNextWordMatch({
   final first =
       (transcriptWords.length - 8).clamp(0, transcriptWords.length - 1).toInt();
   for (var i = transcriptWords.length - 2; i >= first; i--) {
-    final anchorScore =
-        _wordSimilarity(transcriptWords[i], anchor.normalized, anchor.isRtl);
+    final anchorScore = _wordSimilarity(
+      transcriptWords[i],
+      anchor.normalized,
+      anchor.isRtl,
+    );
     final nextScore = _wordSimilarity(
       transcriptWords[i + 1],
       next.normalized,
       next.isRtl,
     );
-    final anchorThreshold = strictBulletMode
-        ? WordAligner._strictPhraseThreshold
-        : (anchor.isRtl ? 0.70 : 0.82);
-    final nextThreshold = strictBulletMode
-        ? WordAligner._strictPhraseThreshold
-        : (next.isRtl ? 0.70 : 0.82);
+    final anchorThreshold =
+        strictBulletMode
+            ? WordAligner._strictPhraseThreshold
+            : (anchor.isRtl ? 0.70 : 0.82);
+    final nextThreshold =
+        strictBulletMode
+            ? WordAligner._strictPhraseThreshold
+            : (next.isRtl ? 0.70 : 0.82);
     if (anchorScore < anchorThreshold || nextScore < nextThreshold) continue;
     final confidence = (anchorScore + nextScore) / 2;
     final extendedIndex = _extendConsecutiveRun(
@@ -234,27 +333,35 @@ AlignmentResult? _properNameRunBridgeMatch({
   if (transcriptWords.length < 2 || searchStart >= script.length) return null;
   final nameRun = _localProperNamePrefix(script, searchStart);
   if (nameRun.length < 2 || !_endsSentence(nameRun.last.raw)) return null;
-  final bodyStart =
-      WordAligner.nextRequiredSpeakableIndex(script, nameRun.last.index + 1);
+  final bodyStart = WordAligner.nextRequiredSpeakableIndex(
+    script,
+    nameRun.last.index + 1,
+  );
   if (bodyStart >= script.length) return null;
   final bodyWords = _requiredSpeakableWords(script, bodyStart, 3);
   if (bodyWords.length < 2) return null;
 
-  for (var transcriptStart = 0;
-      transcriptStart <= transcriptWords.length - 2 &&
-          transcriptStart <= nameRun.length + 3;
-      transcriptStart++) {
+  for (
+    var transcriptStart = 0;
+    transcriptStart <= transcriptWords.length - 2 &&
+        transcriptStart <= nameRun.length + 3;
+    transcriptStart++
+  ) {
     final available = transcriptWords.length - transcriptStart;
-    final longest =
-        [3, available, bodyWords.length].reduce((a, b) => a < b ? a : b);
+    final longest = [
+      3,
+      available,
+      bodyWords.length,
+    ].reduce((a, b) => a < b ? a : b);
     for (var phraseLen = longest; phraseLen >= 2; phraseLen--) {
       var score = 0.0;
       var matched = true;
       for (var i = 0; i < phraseLen; i++) {
         final word = bodyWords[i];
-        final threshold = strictBulletMode
-            ? WordAligner._strictPhraseThreshold
-            : (word.isRtl ? 0.70 : 0.82);
+        final threshold =
+            strictBulletMode
+                ? WordAligner._strictPhraseThreshold
+                : (word.isRtl ? 0.70 : 0.82);
         final sim = _wordSimilarity(
           transcriptWords[transcriptStart + i],
           word.normalized,
@@ -297,9 +404,11 @@ List<ScriptWord> _localProperNamePrefix(
   int searchStart,
 ) {
   final names = <ScriptWord>[];
-  for (var cursor = searchStart;
-      cursor < script.length && names.length < 4;
-      cursor++) {
+  for (
+    var cursor = searchStart;
+    cursor < script.length && names.length < 4;
+    cursor++
+  ) {
     final word = script[cursor];
     if (word.isNewline || _isUnspeakable(word) || word.isOptionalCue) break;
     if (names.isNotEmpty && _endsSentence(script[cursor - 1].raw)) break;
@@ -332,11 +441,15 @@ AlignmentResult? _pendingSingleWordContinuation({
     return null;
   }
   final word = script[searchStart];
-  final threshold = strictBulletMode
-      ? WordAligner._strictPhraseThreshold
-      : (word.isRtl ? 0.70 : 0.82);
-  final sim =
-      _wordSimilarity(transcriptWords.single, word.normalized, word.isRtl);
+  final threshold =
+      strictBulletMode
+          ? WordAligner._strictPhraseThreshold
+          : (word.isRtl ? 0.70 : 0.82);
+  final sim = _wordSimilarity(
+    transcriptWords.single,
+    word.normalized,
+    word.isRtl,
+  );
   if (sim < threshold) return null;
   return AlignmentResult(
     searchStart,
@@ -356,10 +469,11 @@ AlignmentResult? _pendingSingleWordContinuation({
 bool _isLikelyProperNameWord(ScriptWord word) {
   if (word.isNewline || word.normalized.length < 2) return false;
   if (_isNameAnchorStopWord(word.normalized)) return false;
-  final cleaned = word.raw
-      .replaceAll(RegExp(r'\[[^\]]+\]|\*\*'), ' ')
-      .replaceAll(RegExp(r"[^A-Za-z'\- ]"), ' ')
-      .trim();
+  final cleaned =
+      word.raw
+          .replaceAll(RegExp(r'\[[^\]]+\]|\*\*'), ' ')
+          .replaceAll(RegExp(r"[^A-Za-z'\- ]"), ' ')
+          .trim();
   if (cleaned.length < 2) return false;
   final firstAlpha = RegExp(r'[A-Za-z]').firstMatch(cleaned);
   if (firstAlpha == null) return false;

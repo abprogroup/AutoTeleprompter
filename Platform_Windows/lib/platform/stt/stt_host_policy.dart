@@ -14,12 +14,9 @@ enum WindowsSttHostMode {
 
   /// Maps persisted settings without making this policy depend on UI models.
   static WindowsSttHostMode fromSetting(String? value) {
-    return switch (value) {
-      'browser_online' => WindowsSttHostMode.embeddedOnly,
-      'browser_external_edge' => WindowsSttHostMode.edgeOnly,
-      'browser_external_chrome' => WindowsSttHostMode.chromeOnly,
-      _ => WindowsSttHostMode.smart,
-    };
+    // V5 has one production host surface. Legacy values remain parseable in
+    // AppSettings, but none may launch an external browser or offline engine.
+    return WindowsSttHostMode.smart;
   }
 }
 
@@ -30,8 +27,6 @@ enum WindowsSttHostAction { retry, switchHost, stop, ignoreStaleFailure }
 enum WindowsSttHostDecisionReason {
   embeddedRecovery,
   embeddedRecoveryExhausted,
-  smartEdgeFailover,
-  smartChromeFailover,
   selectedHostFailed,
   staleHostFailure,
 }
@@ -52,9 +47,9 @@ class WindowsSttHostDecision {
 
 /// Session-scoped policy for choosing and recovering the Windows browser host.
 ///
-/// Smart mode moves only forward through embedded WebView2, external Edge, and
-/// external Chrome. It never revisits a host during the session, preventing
-/// host-bounce recovery loops before the caller's offline fallback.
+/// Smart mode is the V5 production path and stays inside the app's embedded
+/// WebView2. It performs bounded in-place recovery, then stops with a clear
+/// error. It never changes recognition engine or launches a top-level browser.
 class WindowsSttHostPolicy {
   WindowsSttHostPolicy._({
     required this.mode,
@@ -64,30 +59,21 @@ class WindowsSttHostPolicy {
     required this.embeddedRecoveryBudget,
     required this.quarantineOperationTimeout,
   }) : _currentHost = initialHost,
-       _quarantine = quarantine,
-       _smartEdgeAttempted =
-           mode == WindowsSttHostMode.smart &&
-           initialHost == WindowsSttBrowserHost.externalEdge,
-       _smartChromeAttempted =
-           mode == WindowsSttHostMode.smart &&
-           initialHost == WindowsSttBrowserHost.externalChrome;
+       _quarantine = quarantine;
 
   final WindowsSttHostMode mode;
   final String? exactWebView2RuntimeVersion;
+
   final int embeddedRecoveryBudget;
   final Duration quarantineOperationTimeout;
   final WebView2RuntimeQuarantine? _quarantine;
 
-  WindowsSttBrowserHost _currentHost;
+  final WindowsSttBrowserHost _currentHost;
   int _embeddedRecoveriesUsed = 0;
-  bool _smartEdgeAttempted;
-  bool _smartChromeAttempted;
 
   WindowsSttBrowserHost get currentHost => _currentHost;
   int get embeddedRecoveriesUsed => _embeddedRecoveriesUsed;
-  bool get smartFailoverUsed => _smartEdgeAttempted || _smartChromeAttempted;
-  bool get smartEdgeAttempted => _smartEdgeAttempted;
-  bool get smartChromeAttempted => _smartChromeAttempted;
+  bool get smartFailoverUsed => false;
 
   static Future<WindowsSttHostPolicy> resolve({
     required WindowsSttHostMode mode,
@@ -99,28 +85,9 @@ class WindowsSttHostPolicy {
     assert(embeddedRecoveryBudget >= 0);
     assert(quarantineOperationTimeout > Duration.zero);
     final version = sanitizeWebView2RuntimeVersion(webView2RuntimeVersion);
-    var runtimeQuarantined = false;
-    if (mode == WindowsSttHostMode.smart && version != null) {
-      runtimeQuarantined = knownIncompatibleWebView2SttVersions.contains(
-        version,
-      );
-      if (!runtimeQuarantined && quarantine != null) {
-        try {
-          runtimeQuarantined = await quarantine
-              .contains(version)
-              .timeout(quarantineOperationTimeout);
-        } catch (_) {
-          // Compatibility persistence is advisory. A store failure must not
-          // prevent a session from selecting a usable host.
-          runtimeQuarantined = false;
-        }
-      }
-    }
     final initialHost = switch (mode) {
       WindowsSttHostMode.edgeOnly => WindowsSttBrowserHost.externalEdge,
       WindowsSttHostMode.chromeOnly => WindowsSttBrowserHost.externalChrome,
-      WindowsSttHostMode.smart when runtimeQuarantined =>
-        WindowsSttBrowserHost.externalEdge,
       _ => WindowsSttBrowserHost.embeddedWebView2,
     };
 
@@ -163,29 +130,8 @@ class WindowsSttHostPolicy {
       _persistQuarantineBestEffort(versionToQuarantine);
     }
 
-    if (mode == WindowsSttHostMode.smart &&
-        failedHost == WindowsSttBrowserHost.embeddedWebView2 &&
-        !_smartEdgeAttempted) {
-      _smartEdgeAttempted = true;
-      _currentHost = WindowsSttBrowserHost.externalEdge;
-      return _decision(
-        WindowsSttHostAction.switchHost,
-        WindowsSttHostDecisionReason.smartEdgeFailover,
-      );
-    }
-
-    if (mode == WindowsSttHostMode.smart &&
-        failedHost == WindowsSttBrowserHost.externalEdge &&
-        !_smartChromeAttempted) {
-      _smartChromeAttempted = true;
-      _currentHost = WindowsSttBrowserHost.externalChrome;
-      return _decision(
-        WindowsSttHostAction.switchHost,
-        WindowsSttHostDecisionReason.smartChromeFailover,
-      );
-    }
-
-    if (mode == WindowsSttHostMode.embeddedOnly &&
+    if ((mode == WindowsSttHostMode.smart ||
+            mode == WindowsSttHostMode.embeddedOnly) &&
         failedHost == WindowsSttBrowserHost.embeddedWebView2) {
       if (_embeddedRecoveriesUsed < embeddedRecoveryBudget) {
         _embeddedRecoveriesUsed += 1;
@@ -222,7 +168,7 @@ class WindowsSttHostPolicy {
     final quarantine = _quarantine;
     if (quarantine == null) return;
     // Schedule persistence after the synchronous host decision. A slow or
-    // unavailable preference backend must never hold up Edge failover.
+    // unavailable preference backend must never hold up in-app recovery.
     unawaited(
       Future<void>.microtask(() async {
         try {

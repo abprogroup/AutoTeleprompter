@@ -77,17 +77,20 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   Future<void> _togglePresenterColorInversion() async {
     final settings = ref.read(settingsProvider);
-    final nextBackground =
-        ScriptColorInversionService.nextBackgroundColor(settings);
+    final nextBackground = ScriptColorInversionService.nextBackgroundColor(
+      settings,
+    );
     final nextFutureText =
         ScriptColorInversionService.futureTextColorForBackground(
-      nextBackground,
-    );
+          nextBackground,
+        );
 
     final settingsNotifier = ref.read(settingsProvider.notifier);
     await settingsNotifier.setScriptBgColor(nextBackground);
     await settingsNotifier.setFutureWordColor(nextFutureText);
-    await ref.read(scriptProvider.notifier).updateStyleMetadata(
+    await ref
+        .read(scriptProvider.notifier)
+        .updateStyleMetadata(
           scriptBgColor: nextBackground,
           futureWordColor: nextFutureText,
         );
@@ -109,7 +112,8 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       return false;
     }
     final keyboard = HardwareKeyboard.instance;
-    final isSearchShortcut = event.logicalKey == LogicalKeyboardKey.keyF &&
+    final isSearchShortcut =
+        event.logicalKey == LogicalKeyboardKey.keyF &&
         keyboard.isShiftPressed &&
         (keyboard.isControlPressed || keyboard.isMetaPressed);
     if (event.logicalKey == LogicalKeyboardKey.escape && _presenterFullscreen) {
@@ -129,9 +133,10 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
   Future<void> _exitPresentation({bool returnCurrentPosition = false}) async {
     if (_closingPresentation) return;
     final navigator = Navigator.of(context);
-    final returnWordIndex = returnCurrentPosition
-        ? ref.read(teleprompterProvider).confirmedWordIndex
-        : null;
+    final returnWordIndex =
+        returnCurrentPosition
+            ? ref.read(teleprompterProvider).confirmedWordIndex
+            : null;
     if (mounted) {
       _setTeleprompterState(() => _closingPresentation = true);
     } else {
@@ -174,53 +179,118 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     }
   }
 
-  Future<void> _loadSttWebView(String url) async {
-    if (!Platform.isWindows || !mounted) return;
+  Future<WebviewController?> _ensureSttWebViewController() async {
+    if (!Platform.isWindows || !mounted || _webViewControllerOwnerDisposed) {
+      return null;
+    }
+    final existing = _webviewController;
+    if (existing != null) return existing;
+    final inFlight = _webViewControllerInitFuture;
+    if (inFlight != null) return inFlight;
+
+    final runtimeBootstrap = WebView2RuntimeBootstrap.current;
+    if (runtimeBootstrap?.mode == WebView2RuntimeMode.unavailable) {
+      LightweightDiagnostics.instance.record(
+        'error',
+        'Embedded WebView2 runtime unavailable',
+        data: {
+          'source': 'presenter.webviewRuntime',
+          'reason': runtimeBootstrap?.reason.name,
+        },
+      );
+      return null;
+    }
+
+    WebView2RuntimeConfig.configureForLocalSttDefaults();
+    final initialization = _initializeSttWebViewController();
+    _webViewControllerInitFuture = initialization;
+    try {
+      return await initialization;
+    } finally {
+      if (identical(_webViewControllerInitFuture, initialization)) {
+        _webViewControllerInitFuture = null;
+      }
+    }
+  }
+
+  Future<WebviewController?> _initializeSttWebViewController() async {
+    WebviewController? controller;
+    try {
+      controller = WebviewController();
+      await controller.initialize();
+      if (!mounted || _webViewControllerOwnerDisposed) {
+        await _disposeSttWebViewController(controller);
+        return null;
+      }
+      _setTeleprompterState(() => _webviewController = controller);
+      return controller;
+    } catch (_) {
+      if (controller != null) {
+        await _disposeSttWebViewController(controller);
+      }
+      LightweightDiagnostics.instance.record(
+        'error',
+        'Embedded WebView2 initialization failed',
+        data: const {'source': 'presenter.webviewInit'},
+      );
+      return null;
+    }
+  }
+
+  Future<void> _loadSttWebView(String url) {
+    if (!Platform.isWindows || !mounted || _webViewControllerOwnerDisposed) {
+      return Future<void>.value();
+    }
     final generation = ++_webViewLoadGeneration;
     _pendingWebViewUrl = url;
     WebView2RuntimeConfig.configureForLocalSttUrl(url);
-    final runtimeVersion = await _readWebViewRuntimeVersion();
-    if (!_isCurrentSttWebViewLoad(generation, url)) return;
-    WebviewController? controller = _webviewController;
-    var createdController = false;
-
-    if (controller == null) {
+    final previousNavigation = _webViewNavigationTail;
+    final operation = () async {
       try {
-        controller = WebviewController();
-        createdController = true;
-        await controller.initialize();
+        await previousNavigation;
+        if (!_isCurrentSttWebViewLoad(generation, url)) return;
+        await _performSttWebViewLoad(generation, url);
       } catch (_) {
-        if (controller != null) {
-          await _disposeSttWebViewController(controller);
-        }
-        if (_isCurrentSttWebViewLoad(generation, url)) {
-          _pendingWebViewUrl = null;
-          ref.read(teleprompterProvider.notifier).reportEmbeddedSttHostFailure(
-                reasonCode: 'webview-init-failed',
-                runtimeVersion: runtimeVersion,
-              );
-        }
         LightweightDiagnostics.instance.record(
           'error',
-          'Embedded WebView2 initialization failed',
-          data: const {'source': 'presenter.webviewInit'},
+          'Unexpected embedded WebView2 navigation failure',
+          data: const {'source': 'presenter.webviewLoadUnexpected'},
         );
-        return;
       }
+    }();
+    _webViewNavigationTail = operation;
+    return operation;
+  }
 
-      if (!_isCurrentSttWebViewLoad(generation, url)) {
-        await _disposeSttWebViewController(controller);
-        return;
-      }
-      _setTeleprompterState(() => _webviewController = controller);
+  Future<void> _performSttWebViewLoad(int generation, String url) async {
+    final runtimeBootstrap = WebView2RuntimeBootstrap.current;
+    final runtimeVersion = runtimeBootstrap?.effectiveRuntimeVersion;
+    if (runtimeBootstrap?.mode == WebView2RuntimeMode.unavailable) {
+      _pendingWebViewUrl = null;
+      ref
+          .read(teleprompterProvider.notifier)
+          .reportEmbeddedSttHostFailure(
+            reasonCode: 'webview-runtime-unavailable',
+            runtimeVersion: runtimeVersion,
+          );
+      return;
+    }
+    final controller = await _ensureSttWebViewController();
+    if (!_isCurrentSttWebViewLoad(generation, url)) return;
+    if (controller == null) {
+      _pendingWebViewUrl = null;
+      ref
+          .read(teleprompterProvider.notifier)
+          .reportEmbeddedSttHostFailure(
+            reasonCode: 'webview-init-failed',
+            runtimeVersion: runtimeVersion,
+          );
+      return;
     }
 
     try {
-      await controller.loadUrl(url);
+      await controller.loadUrl(url).timeout(const Duration(seconds: 12));
       if (!_isCurrentSttWebViewLoad(generation, url)) {
-        if (createdController && controller != _webviewController) {
-          await _disposeSttWebViewController(controller);
-        }
         return;
       }
       _pendingWebViewUrl = null;
@@ -237,7 +307,9 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         }
         await _disposeSttWebViewController(controller);
         if (_isCurrentSttWebViewLoad(generation, url)) {
-          ref.read(teleprompterProvider.notifier).reportEmbeddedSttHostFailure(
+          ref
+              .read(teleprompterProvider.notifier)
+              .reportEmbeddedSttHostFailure(
                 reasonCode: 'webview-load-failed',
                 runtimeVersion: runtimeVersion,
               );
@@ -257,17 +329,6 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         ref.read(teleprompterProvider).sttWebViewUrl == url;
   }
 
-  Future<String?> _readWebViewRuntimeVersion() async {
-    try {
-      final version = await WebviewController.getWebViewVersion().timeout(
-        const Duration(seconds: 3),
-      );
-      return sanitizeWebView2RuntimeVersion(version);
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _disposeSttWebViewController(
     WebviewController controller,
   ) async {
@@ -279,14 +340,24 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     }
   }
 
+  Future<void> _disposeSttWebViewResources(
+    WebviewController? controller,
+    Future<void> navigationTail,
+  ) async {
+    try {
+      await navigationTail;
+    } catch (_) {
+      // Navigation failures are already reported by the owning operation.
+    }
+    if (controller != null) {
+      await _disposeSttWebViewController(controller);
+    }
+  }
+
   void _clearSttWebView() {
     _webViewLoadGeneration++;
     _pendingWebViewUrl = null;
     _loadedWebViewUrl = null;
-    final controller = _webviewController;
-    if (controller == null) return;
-    _setTeleprompterState(() => _webviewController = null);
-    unawaited(_disposeSttWebViewController(controller));
   }
 
   void _scheduleHideControls() {
@@ -318,160 +389,203 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     if (Platform.isWindows) {
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.settings_voice, color: Color(0xFFFFBF00), size: 24),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text('Windows built-in speech-to-text',
-                    style: TextStyle(color: Colors.white, fontSize: 18)),
+        builder:
+            (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Windows requires the "$languageName" Speech Pack for offline recognition. If no offline pack exists for this language, please enable Online Speech Recognition.',
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 14, height: 1.4),
+              title: const Row(
+                children: [
+                  Icon(
+                    Icons.settings_voice,
+                    color: Color(0xFFFFBF00),
+                    size: 24,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Windows built-in speech-to-text',
+                      style: TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Action 1: Download Offline Pack',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Windows requires the "$languageName" Speech Pack for offline recognition. If no offline pack exists for this language, please enable Online Speech Recognition.',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Action 1: Download Offline Pack',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Open Windows Settings -> Time & Language -> Speech, and add the speech pack if available.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Action 2: Enable Online Fallback',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'If offline is unavailable, open Privacy -> Speech, and toggle "Online speech recognition" to ON.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              const Text(
-                'Open Windows Settings -> Time & Language -> Speech, and add the speech pack if available.',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Action 2: Enable Online Fallback',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'If offline is unavailable, open Privacy -> Speech, and toggle "Online speech recognition" to ON.',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Process.run('cmd', ['/c', 'start', 'ms-settings:speech']);
-              },
-              child: const Text('Download Packs',
-                  style: TextStyle(color: Color(0xFF4DA8DA))),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Process.run('cmd', ['/c', 'start', 'ms-settings:speech']);
+                  },
+                  child: const Text(
+                    'Download Packs',
+                    style: TextStyle(color: Color(0xFF4DA8DA)),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Process.run('cmd', [
+                      '/c',
+                      'start',
+                      'ms-settings:privacy-speech',
+                    ]);
+                  },
+                  child: const Text(
+                    'Online Fallback',
+                    style: TextStyle(color: Color(0xFF4DA8DA)),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Process.run(
-                    'cmd', ['/c', 'start', 'ms-settings:privacy-speech']);
-              },
-              child: const Text('Online Fallback',
-                  style: TextStyle(color: Color(0xFF4DA8DA))),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child:
-                  const Text('Cancel', style: TextStyle(color: Colors.white54)),
-            ),
-          ],
-        ),
       );
       return;
     }
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.wifi_off_rounded,
-                color: Color(0xFFFFBF00), size: 24),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('$languageName Speech Recognition',
-                  style: const TextStyle(color: Colors.white, fontSize: 18)),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$languageName is not available for offline speech recognition on this device.',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            const Row(
+            title: Row(
               children: [
-                Icon(Icons.wifi_rounded, color: Color(0xFFFFBF00), size: 20),
-                SizedBox(width: 8),
+                const Icon(
+                  Icons.wifi_off_rounded,
+                  color: Color(0xFFFFBF00),
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'An internet connection is required for this language.',
-                    style: TextStyle(
-                        color: Color(0xFFFFBF00),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600),
+                    '$languageName Speech Recognition',
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Please try:',
-              style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$languageName is not available for offline speech recognition on this device.',
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.wifi_rounded,
+                      color: Color(0xFFFFBF00),
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'An internet connection is required for this language.',
+                        style: TextStyle(
+                          color: Color(0xFFFFBF00),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Please try:',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '1. Connect this Windows device to the internet\n\n'
+                  '2. Enable online speech recognition if this language has no offline pack\n\n'
+                  '3. Restart the teleprompter session',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Note: English may work offline if the speech pack is already downloaded. '
+                  'Other languages (Hebrew, Arabic, etc.) typically require an internet connection.',
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            const Text(
-              '1. Connect this Windows device to the internet\n\n'
-              '2. Enable online speech recognition if this language has no offline pack\n\n'
-              '3. Restart the teleprompter session',
-              style:
-                  TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Note: English may work offline if the speech pack is already downloaded. '
-              'Other languages (Hebrew, Arabic, etc.) typically require an internet connection.',
-              style: TextStyle(
-                  color: Colors.white38,
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK', style: TextStyle(color: Colors.white54)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  'OK',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -504,10 +618,11 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   Future<void> _openMicrophonePrivacySettings() async {
     if (Platform.isWindows) {
-      await Process.run(
-        'cmd',
-        ['/c', 'start', 'ms-settings:privacy-microphone'],
-      );
+      await Process.run('cmd', [
+        '/c',
+        'start',
+        'ms-settings:privacy-microphone',
+      ]);
       return;
     }
     await openAppSettings();
@@ -554,27 +669,34 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       if (mounted) {
         showDialog(
           context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            title: const Text('Microphone Permission Required',
-                style: TextStyle(color: Colors.white)),
-            content: const Text(
-              'Microphone permission was denied.\n\nOpen Windows Settings > Privacy & security > Microphone, then allow microphone access and allow desktop apps.',
-              style: TextStyle(color: Colors.white70),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel')),
-              TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    openAppSettings();
-                  },
-                  child: const Text('Open Settings',
-                      style: TextStyle(color: Color(0xFFFFBF00)))),
-            ],
-          ),
+          builder:
+              (_) => AlertDialog(
+                backgroundColor: const Color(0xFF1A1A1A),
+                title: const Text(
+                  'Microphone Permission Required',
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: const Text(
+                  'Microphone permission was denied.\n\nOpen Windows Settings > Privacy & security > Microphone, then allow microphone access and allow desktop apps.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      openAppSettings();
+                    },
+                    child: const Text(
+                      'Open Settings',
+                      style: TextStyle(color: Color(0xFFFFBF00)),
+                    ),
+                  ),
+                ],
+              ),
         );
       }
       return;
@@ -592,27 +714,34 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         if (mounted) {
           showDialog(
             context: context,
-            builder: (_) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              title: const Text('Speech Permission Required',
-                  style: TextStyle(color: Colors.white)),
-              content: const Text(
-                'Speech recognition permission is needed.\n\nGo to Settings and enable Speech Recognition.',
-                style: TextStyle(color: Colors.white70),
-              ),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel')),
-                TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      openAppSettings();
-                    },
-                    child: const Text('Open Settings',
-                        style: TextStyle(color: Color(0xFFFFBF00)))),
-              ],
-            ),
+            builder:
+                (_) => AlertDialog(
+                  backgroundColor: const Color(0xFF1A1A1A),
+                  title: const Text(
+                    'Speech Permission Required',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  content: const Text(
+                    'Speech recognition permission is needed.\n\nGo to Settings and enable Speech Recognition.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        openAppSettings();
+                      },
+                      child: const Text(
+                        'Open Settings',
+                        style: TextStyle(color: Color(0xFFFFBF00)),
+                      ),
+                    ),
+                  ],
+                ),
           );
         }
         return;
@@ -623,20 +752,24 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
       if (mounted) {
         showDialog(
           context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            title: const Text('Microphone Permission Required',
-                style: TextStyle(color: Colors.white)),
-            content: const Text(
-              'AutoTeleprompter needs microphone access to follow your speech.\n\nPlease grant the permission when prompted.',
-              style: TextStyle(color: Colors.white70),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK')),
-            ],
-          ),
+          builder:
+              (_) => AlertDialog(
+                backgroundColor: const Color(0xFF1A1A1A),
+                title: const Text(
+                  'Microphone Permission Required',
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: const Text(
+                  'AutoTeleprompter needs microphone access to follow your speech.\n\nPlease grant the permission when prompted.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
         );
       }
       return;
@@ -645,11 +778,12 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     final script = ref.read(scriptProvider);
     if (script != null) {
       await ref.read(teleprompterProvider.notifier).startSession(script);
-      final currentIndex = ref
-          .read(teleprompterProvider)
-          .confirmedWordIndex
-          .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
-          .toInt();
+      final currentIndex =
+          ref
+              .read(teleprompterProvider)
+              .confirmedWordIndex
+              .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
+              .toInt();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollToWordIndex(currentIndex, anticipate: true);
       });

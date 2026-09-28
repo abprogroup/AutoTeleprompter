@@ -13,6 +13,10 @@ AutoTeleprompter_BACKUP_*
 # Tests and QA artifacts stay private unless explicitly allowlisted for CI.
 .tmp/
 **/.tmp/
+
+# Google Drive for desktop transient upload/download caches.
+.tmp.driveupload/
+.tmp.drivedownload/
 test/
 Platform_*/test/
 
@@ -21,6 +25,7 @@ Platform_*/test/
 /Platform_Windows/test/*
 !/Platform_Windows/test/platform/
 /Platform_Windows/test/platform/*
+!/Platform_Windows/test/platform/markup_controller_live_selection_test.dart
 !/Platform_Windows/test/platform/stt/
 /Platform_Windows/test/platform/stt/*
 !/Platform_Windows/test/platform/stt/stt_browser_adapter_security_test.dart
@@ -31,6 +36,9 @@ Platform_*/test/
 !/Platform_Windows/test/platform/stt/stt_host_readiness_test.dart
 !/Platform_Windows/test/platform/stt/stt_host_transition_guard_test.dart
 !/Platform_Windows/test/platform/stt/stt_webview2_compatibility_test.dart
+!/Platform_Windows/test/platform/webview2/
+/Platform_Windows/test/platform/webview2/*
+!/Platform_Windows/test/platform/webview2/webview2_runtime_bootstrap_test.dart
 !/Platform_Windows/test/settings/
 /Platform_Windows/test/settings/*
 !/Platform_Windows/test/settings/app_settings_stt_engine_test.dart
@@ -39,9 +47,14 @@ Platform_*/test/
 !/Platform_Windows/test/teleprompter/
 /Platform_Windows/test/teleprompter/*
 !/Platform_Windows/test/teleprompter/debug_log_formatter_health_test.dart
+!/Platform_Windows/test/teleprompter/hidden_stt_webview_lifecycle_contract_test.dart
+!/Platform_Windows/test/teleprompter/number_mismatch_safety_recovery_test.dart
+!/Platform_Windows/test/teleprompter/presenter_reading_position_service_test.dart
+!/Platform_Windows/test/teleprompter/spoken_number_normalizer_test.dart
 !/Platform_Windows/test/teleprompter/stt_recognition_policy_heartbeat_test.dart
 !/Platform_Windows/test/teleprompter/stt_transcript_buffer_service_test.dart
 !/Platform_Windows/test/teleprompter/teleprompter_external_edge_host_test.dart
+!/Platform_Windows/test/teleprompter/word_aligner_number_matching_test.dart
 !/Platform_Windows/test/teleprompter/whisper_audio_signal_test.dart
 !/Platform_Windows/test/teleprompter/whisper_native_process_gate_test.dart
 !/Platform_Windows/test/teleprompter/whisper_phrase_session_coordinator_test.dart

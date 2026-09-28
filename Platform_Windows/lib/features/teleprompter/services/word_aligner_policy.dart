@@ -55,11 +55,7 @@ class AlignmentResult {
   }
 }
 
-enum SttAlignmentDecision {
-  wait,
-  standby,
-  advance,
-}
+enum SttAlignmentDecision { wait, standby, advance }
 
 enum SttAlignmentKind {
   unknown,
@@ -74,6 +70,8 @@ enum SttAlignmentKind {
   headingPrefixSkip,
   confirmedTailBridge,
   nameRunBodyBridge,
+  numberPhrase,
+  numberMismatchRecovery,
 }
 
 enum SttThresholdFamily {
@@ -112,9 +110,9 @@ class SttEvidenceThreshold {
   double evidenceCost(String normalizedWord) {
     if (normalizedWord.isEmpty) return 0.0;
     return WordAligner.isBigRecognitionWord(
-      normalizedWord,
-      minLetters: bigWordMinLetters,
-    )
+          normalizedWord,
+          minLetters: bigWordMinLetters,
+        )
         ? _bigWordWeight
         : 1.0;
   }
@@ -139,10 +137,11 @@ class SttRecognitionPolicy {
     this.safetyRecovery = const SttEvidenceThreshold(2),
     this.bulletAdvance = const SttEvidenceThreshold(3),
     SttEvidenceThreshold? visibleSkip,
-  }) : visibleSkip = visibleSkip ??
-            (hardVisibleSkipEnabled
-                ? const SttEvidenceThreshold(5)
-                : const SttEvidenceThreshold(4));
+  }) : visibleSkip =
+           visibleSkip ??
+           (hardVisibleSkipEnabled
+               ? const SttEvidenceThreshold(5)
+               : const SttEvidenceThreshold(4));
 
   factory SttRecognitionPolicy.legacy({
     bool strictBulletMode = false,

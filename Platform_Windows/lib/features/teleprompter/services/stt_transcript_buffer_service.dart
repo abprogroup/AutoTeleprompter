@@ -5,6 +5,7 @@ class SttTranscriptBuffer {
   final List<String> spokenWords;
   final List<String> freshWords;
   final String recentTranscript;
+  final String recentSurfaceTranscript;
   final bool resetFloor;
 
   const SttTranscriptBuffer({
@@ -12,6 +13,7 @@ class SttTranscriptBuffer {
     required this.spokenWords,
     required this.freshWords,
     required this.recentTranscript,
+    required this.recentSurfaceTranscript,
     required this.resetFloor,
   });
 
@@ -29,11 +31,19 @@ class SttTranscriptBufferService {
     List<String> cumulativeBaselineWords = const <String>[],
     bool cumulativeFinal = false,
   }) {
-    final spokenWords = rawTranscript
-        .split(RegExp(r'\s+'))
-        .map((word) => word.trim().normalizeForMatching())
-        .where((word) => word.isNotEmpty)
-        .toList(growable: false);
+    final mutableSpokenWords = <String>[];
+    final surfaceTokens = <({String surface, int normalizedBefore})>[];
+    for (final rawWord in rawTranscript.split(RegExp(r'\s+'))) {
+      final surface = rawWord.trim();
+      if (surface.isEmpty) continue;
+      final normalized = surface.normalizeForMatching();
+      surfaceTokens.add((
+        surface: surface,
+        normalizedBefore: mutableSpokenWords.length,
+      ));
+      if (normalized.isNotEmpty) mutableSpokenWords.add(normalized);
+    }
+    final spokenWords = mutableSpokenWords.toList(growable: false);
     // Browser result shards may legitimately start a new phrase. Whisper
     // partials are full revisable replacements, so their consumed boundary is
     // remapped through anchored token edits instead of trusting a raw index.
@@ -61,12 +71,21 @@ class SttTranscriptBufferService {
         freshWords.length > safeWindow
             ? freshWords.sublist(freshWords.length - safeWindow)
             : freshWords;
+    final recentSurfaceFloor =
+        safeFloor +
+        (freshWords.length > safeWindow ? freshWords.length - safeWindow : 0);
+    final recentSurfaceWords = surfaceTokens
+        .where((token) => token.normalizedBefore >= recentSurfaceFloor)
+        .map((token) => token.surface)
+        .toList(growable: false);
     final recentTranscript = recentWords.join(' ');
+    final recentSurfaceTranscript = recentSurfaceWords.join(' ');
     return SttTranscriptBuffer(
       transcriptFloor: safeFloor,
       spokenWords: spokenWords,
       freshWords: freshWords,
       recentTranscript: recentTranscript,
+      recentSurfaceTranscript: recentSurfaceTranscript,
       resetFloor: resetFloor,
     );
   }

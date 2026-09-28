@@ -17,13 +17,14 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       final sttState = ref.read(teleprompterProvider);
       final activeManualOverride =
           PresenterInputLockService.allowActiveManualScroll(
-        settingEnabled: settings.allowScrollDuringActiveSession,
-        isListening: sttState.isListening,
-        isStarting: sttState.isStarting,
-      );
-      final speed = settings.scrollMode == 'manual' || activeManualOverride
-          ? settings.scrollSpeed
-          : 100.0;
+            settingEnabled: settings.allowScrollDuringActiveSession,
+            isListening: sttState.isListening,
+            isStarting: sttState.isStarting,
+          );
+      final speed =
+          settings.scrollMode == 'manual' || activeManualOverride
+              ? settings.scrollSpeed
+              : 100.0;
       if (speed == 0) return;
 
       // pixels per tick: speed(wpm) x 3px x 16ms/1000ms
@@ -101,42 +102,68 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
     final axis = _presenterScrollAxis();
     final targetAxis = _presenterReadingTargetAxis(axis);
+    final maxIndex =
+        _wordKeys.length < script.words.length
+            ? _wordKeys.length
+            : script.words.length;
+    final normalizedTarget = axis.direction >= 0 ? targetAxis : -targetAxis;
+    final anchor = PresenterReadingPositionService.anchorIndexNearAxis(
+      wordCount: maxIndex,
+      axis: normalizedTarget,
+      boundsAt: (index) => _presenterReadingBoundsForIndex(index, axis),
+    );
+    if (anchor == null) return null;
 
+    final nearby = PresenterReadingPositionService.boundedRangeAround(
+      wordCount: maxIndex,
+      anchorIndex: anchor,
+      padding: 140,
+    );
     final candidates = <PresenterReadingWordBounds>[];
-    final maxIndex = _wordKeys.length < script.words.length
-        ? _wordKeys.length
-        : script.words.length;
-
-    for (var i = 0; i < maxIndex; i++) {
-      final word = script.words[i];
-      if (word.isNewline) continue;
-      final ctx = _wordKeys[i].currentContext;
-      if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached) continue;
-      final bounds = _presenterGlobalRect(box);
-      final minAxis = axis.horizontal ? bounds.left : bounds.top;
-      final maxAxis = axis.horizontal ? bounds.right : bounds.bottom;
-      candidates.add(
-        PresenterReadingWordBounds(
-          index: i,
-          leading: axis.direction >= 0 ? minAxis : -maxAxis,
-          trailing: axis.direction >= 0 ? maxAxis : -minAxis,
-        ),
-      );
+    for (var i = nearby.start; i < nearby.end; i++) {
+      if (script.words[i].isNewline) continue;
+      final bounds = _presenterReadingBoundsForIndex(i, axis);
+      if (bounds != null) candidates.add(bounds);
     }
 
-    return PresenterReadingPositionService.wordIndexAtReadingLine(
+    final result = PresenterReadingPositionService.wordIndexAtReadingLine(
       words: candidates,
-      readingLine: axis.direction >= 0 ? targetAxis : -targetAxis,
+      readingLine: normalizedTarget,
+    );
+    return result;
+  }
+
+  PresenterReadingWordBounds? _presenterReadingBoundsForIndex(
+    int index,
+    _PresenterScrollAxis axis,
+  ) {
+    if (index < 0 || index >= _wordKeys.length) return null;
+    final ctx = _wordKeys[index].currentContext;
+    if (ctx == null) return null;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return null;
+    final bounds = _presenterGlobalRect(box);
+    final minAxis = axis.horizontal ? bounds.left : bounds.top;
+    final maxAxis = axis.horizontal ? bounds.right : bounds.bottom;
+    return PresenterReadingWordBounds(
+      index: index,
+      leading: axis.direction >= 0 ? minAxis : -maxAxis,
+      trailing: axis.direction >= 0 ? maxAxis : -minAxis,
     );
   }
 
   void _stopManualScroll() {
     _manualScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
+    _manualScrollTimer = null;
+    _wordTrackTimer = null;
     _scrollingBackward = false;
-    if (mounted) _setTeleprompterState(() => _manualScrolling = false);
+    if (!_manualScrolling) return;
+    if (mounted) {
+      _setTeleprompterState(() => _manualScrolling = false);
+    } else {
+      _manualScrolling = false;
+    }
   }
 
   void _cancelSmoothScroll() {
@@ -154,9 +181,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         DateTime.now().difference(signalAt) < const Duration(milliseconds: 420);
   }
 
-  void _suppressPresenterProgrammaticPositionCommit({
-    required bool immediate,
-  }) {
+  void _suppressPresenterProgrammaticPositionCommit({required bool immediate}) {
     _presenterProgrammaticCommitBlockedUntil = DateTime.now().add(
       Duration(milliseconds: immediate ? 380 : 220),
     );
@@ -198,19 +223,58 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final viewport = Offset.zero & MediaQuery.sizeOf(context);
     int? firstVisible;
     int? lastVisible;
+    final maxIndex = math.min(_wordKeys.length, script.words.length);
+    final axis = _presenterScrollAxis();
+    final rawLeading = axis.horizontal ? viewport.left : viewport.top;
+    final rawTrailing = axis.horizontal ? viewport.right : viewport.bottom;
+    final viewportLeading = axis.direction >= 0 ? rawLeading : -rawTrailing;
+    final viewportTrailing = axis.direction >= 0 ? rawTrailing : -rawLeading;
+    final leadingAnchor = PresenterReadingPositionService.anchorIndexNearAxis(
+      wordCount: maxIndex,
+      axis: viewportLeading,
+      boundsAt: (index) => _presenterReadingBoundsForIndex(index, axis),
+    );
+    final trailingAnchor = PresenterReadingPositionService.anchorIndexNearAxis(
+      wordCount: maxIndex,
+      axis: viewportTrailing,
+      boundsAt: (index) => _presenterReadingBoundsForIndex(index, axis),
+    );
 
-    for (var i = 0; i < _wordKeys.length && i < script.words.length; i++) {
-      final word = script.words[i];
-      if (word.isNewline || word.normalized.isEmpty) continue;
-      final ctx = _wordKeys[i].currentContext;
-      if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached) continue;
-      final bounds = _presenterGlobalRect(box);
-      if (!bounds.overlaps(viewport)) continue;
-      firstVisible ??= i;
-      lastVisible = i;
+    if (leadingAnchor == null && trailingAnchor == null) {
+      ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
+      return;
     }
+
+    final firstAnchor = leadingAnchor ?? trailingAnchor!;
+    final lastAnchor = trailingAnchor ?? leadingAnchor!;
+    const edgePadding = 140;
+    final nearby = (
+      start: (math.min(firstAnchor, lastAnchor) - edgePadding).clamp(
+        0,
+        maxIndex,
+      ),
+      end: (math.max(firstAnchor, lastAnchor) + edgePadding + 1).clamp(
+        0,
+        maxIndex,
+      ),
+    );
+
+    void scan(int start, int end) {
+      for (var i = start; i < end; i++) {
+        final word = script.words[i];
+        if (word.isNewline || word.normalized.isEmpty) continue;
+        final ctx = _wordKeys[i].currentContext;
+        if (ctx == null) continue;
+        final box = ctx.findRenderObject() as RenderBox?;
+        if (box == null || !box.attached) continue;
+        final bounds = _presenterGlobalRect(box);
+        if (!bounds.overlaps(viewport)) continue;
+        firstVisible ??= i;
+        lastVisible = i;
+      }
+    }
+
+    scan(nearby.start.toInt(), nearby.end.toInt());
 
     ref
         .read(teleprompterProvider.notifier)
@@ -223,9 +287,10 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final sttState = ref.read(teleprompterProvider);
     final settings = ref.read(settingsProvider);
     final speechActive = sttState.isListening || sttState.isStarting;
-    final baseIndex = settings.scrollMode == 'manual' && !speechActive
-        ? _manualWordIndex
-        : sttState.confirmedWordIndex;
+    final baseIndex =
+        settings.scrollMode == 'manual' && !speechActive
+            ? _manualWordIndex
+            : sttState.confirmedWordIndex;
     final targetIndex = baseIndex.clamp(0, script.words.length - 1).toInt();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -238,14 +303,20 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   void _resetManual() {
     _stopManualScroll();
     _manualWordIndex = 0;
-    _scrollController.animateTo(0,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   // -- Speech-mode scroll ------------------------------------------------------
 
-  void _scrollToWordIndex(int index,
-      {bool anticipate = false, bool immediate = false}) {
+  void _scrollToWordIndex(
+    int index, {
+    bool anticipate = false,
+    bool immediate = false,
+  }) {
     final targetIndex = index;
     if (targetIndex < 0 || targetIndex >= _wordKeys.length) return;
     final key = _wordKeys[targetIndex];
@@ -261,19 +332,24 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final wordAxis = _presenterBoxAxisLeading(box, axis);
     final targetAxis = _presenterReadingTargetAxis(axis);
     final rowProgress = anticipate ? _visualRowProgress(targetIndex, box) : 0.0;
-    final lineAdvance =
-        (box.size.height * settings.lineSpacing).clamp(0.0, screenH * 0.22);
-    final rawTarget = _scrollController.offset +
+    final lineAdvance = (box.size.height * settings.lineSpacing).clamp(
+      0.0,
+      screenH * 0.22,
+    );
+    final rawTarget =
+        _scrollController.offset +
         (wordAxis - targetAxis) * axis.direction +
         rowProgress * lineAdvance;
-    _scrollTarget =
-        rawTarget.clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollTarget = rawTarget.clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
     _suppressPresenterProgrammaticPositionCommit(immediate: immediate);
 
     if (immediate) {
       _cancelSmoothScroll();
       _scrollController.jumpTo(_scrollTarget);
-      _syncVisibleWordWindow(force: true);
+      _scheduleVisibleWordWindowSync();
       return;
     }
 
@@ -281,8 +357,10 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (!_smoothScrollActive) {
       _smoothScrollActive = true;
       _smoothScrollTimer?.cancel();
-      _smoothScrollTimer =
-          Timer.periodic(const Duration(milliseconds: 16), _smoothScrollTick);
+      _smoothScrollTimer = Timer.periodic(
+        const Duration(milliseconds: 16),
+        _smoothScrollTick,
+      );
     }
   }
 
@@ -340,25 +418,28 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final speechActive = sttState.isListening || sttState.isStarting;
     final activeManualOverride =
         PresenterInputLockService.allowActiveManualScroll(
-      settingEnabled: settings.allowScrollDuringActiveSession,
-      isListening: sttState.isListening,
-      isStarting: sttState.isStarting,
-    );
+          settingEnabled: settings.allowScrollDuringActiveSession,
+          isListening: sttState.isListening,
+          isStarting: sttState.isStarting,
+        );
     if (sttState.isStarting ||
         (sttState.isListening && !activeManualOverride)) {
       _userBrowsingWhileStopped = false;
       return false;
     }
 
-    final isUserScrollStart = notification is ScrollStartNotification &&
+    final isUserScrollStart =
+        notification is ScrollStartNotification &&
         notification.dragDetails != null;
-    final isUserScrollUpdate = notification is UserScrollNotification &&
+    final isUserScrollUpdate =
+        notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle;
     final isPointerWheelScrollUpdate =
         notification is ScrollUpdateNotification &&
-            notification.dragDetails == null &&
-            _recentPresenterUserScrollSignal();
-    final userScrollIntent = isUserScrollStart ||
+        notification.dragDetails == null &&
+        _recentPresenterUserScrollSignal();
+    final userScrollIntent =
+        isUserScrollStart ||
         isUserScrollUpdate ||
         isPointerWheelScrollUpdate ||
         _recentPresenterUserScrollSignal();
@@ -383,14 +464,11 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
     if (_userBrowsingWhileStopped &&
         (userScrollActive || isScrollPositionUpdate)) {
-      _syncVisibleWordWindow(force: true);
+      _scheduleVisibleWordWindowSync();
       if (speechActive && activeManualOverride) {
         _scheduleActiveManualCorrectionCommit();
       } else {
-        _syncResumePointToReadingLine(
-          throttled: true,
-          commitProvider: false,
-        );
+        _syncResumePointToReadingLine(throttled: true, commitProvider: false);
       }
     }
 
@@ -409,19 +487,27 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _scheduleActiveManualCorrectionCommit() {
     _activeManualCorrectionTimer?.cancel();
-    _activeManualCorrectionTimer =
-        Timer(const Duration(milliseconds: 420), _finishActiveManualCorrection);
+    _activeManualCorrectionTimer = Timer(
+      const Duration(milliseconds: 420),
+      _finishActiveManualCorrection,
+    );
   }
 
   void _finishActiveManualCorrection() {
     _activeManualCorrectionTimer?.cancel();
     _activeManualCorrectionTimer = null;
     if (!_activeManualCorrection) return;
-    _activeManualCorrection = false;
     _userBrowsingWhileStopped = false;
     _lastBrowsingWordSync = null;
     _syncVisibleWordWindow(force: true);
     _syncResumePointToReadingLine();
+    // Keep recognition-driven auto-scroll suppressed until this provider
+    // commit and the following frame have settled. Clearing the flag before
+    // the commit caused a snap-back race against incoming STT updates.
+    _activeManualCorrectionTimer = Timer(const Duration(milliseconds: 160), () {
+      _activeManualCorrectionTimer = null;
+      _activeManualCorrection = false;
+    });
   }
 
   void _syncResumePointToReadingLine({
@@ -438,10 +524,13 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
 
     final script = ref.read(scriptProvider);
-    if (script == null) return;
+    if (script == null || script.words.isEmpty) return;
     if (_scrollController.hasClients && _scrollController.offset <= 1.0) {
-      _setTeleprompterState(() => _manualWordIndex = 0);
-      if (commitProvider) {
+      if (_manualWordIndex != 0) {
+        _setTeleprompterState(() => _manualWordIndex = 0);
+      }
+      if (commitProvider &&
+          ref.read(teleprompterProvider).confirmedWordIndex != 0) {
         ref
             .read(teleprompterProvider.notifier)
             .jumpToPosition(0, script: script);
@@ -450,8 +539,11 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
     final targetIndex = _wordIndexNearestReadingLine();
     if (targetIndex == null) return;
-    _setTeleprompterState(() => _manualWordIndex = targetIndex);
-    if (commitProvider) {
+    if (_manualWordIndex != targetIndex) {
+      _setTeleprompterState(() => _manualWordIndex = targetIndex);
+    }
+    if (commitProvider &&
+        ref.read(teleprompterProvider).confirmedWordIndex != targetIndex) {
       ref
           .read(teleprompterProvider.notifier)
           .jumpToPosition(targetIndex, script: script);

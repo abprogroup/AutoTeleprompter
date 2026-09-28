@@ -41,34 +41,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v6
 
-      - name: Prepare Bundled Offline Speech Model
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $modelDirectory = "Platform_Windows\assets\models"
-          $modelPath = Join-Path $modelDirectory "ggml-tiny.bin"
-          $temporaryPath = "$modelPath.part"
-          $modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin"
-          $expectedSize = 77691713
-          $expectedSha256 = "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"
-
-          New-Item -ItemType Directory -Force -Path $modelDirectory | Out-Null
-          if (Test-Path -LiteralPath $temporaryPath) {
-            Remove-Item -LiteralPath $temporaryPath -Force
-          }
-          curl.exe --fail --location --retry 3 --output $temporaryPath $modelUrl
-          if ($LASTEXITCODE -ne 0) { throw "Offline speech model download failed." }
-
-          $downloaded = Get-Item -LiteralPath $temporaryPath
-          if ($downloaded.Length -ne $expectedSize) {
-            throw "Offline speech model size verification failed."
-          }
-          $actualSha256 = (Get-FileHash -LiteralPath $temporaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha256 -ne $expectedSha256) {
-            throw "Offline speech model checksum verification failed."
-          }
-          Move-Item -LiteralPath $temporaryPath -Destination $modelPath -Force
-
       - name: Resolve Release Metadata
         id: release
         shell: pwsh
@@ -183,7 +155,6 @@ jobs:
           AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          UPDATE_MANIFEST_URL_SECRET: ${{ secrets.UPDATE_MANIFEST_URL }}
           UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
           PUBLIC_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
           INTERNAL_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_INTERNAL_RELEASES_TOKEN }}
@@ -211,10 +182,7 @@ jobs:
             throw "SUPABASE_URL must be the HTTPS Supabase project URL."
           }
 
-          $manifestUrl = ($env:UPDATE_MANIFEST_URL_SECRET -replace "`r", "" -replace "`n", "").Trim()
-          if ([string]::IsNullOrWhiteSpace($manifestUrl)) {
-            $manifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
-          }
+          $manifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
           if ([string]::IsNullOrWhiteSpace($manifestUrl)) {
             $manifestUrl = "${{ steps.release.outputs.manifest_url }}"
           }
@@ -272,6 +240,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $sttRegressionTests = @(
+            "test/platform/markup_controller_live_selection_test.dart"
             "test/platform/stt/stt_browser_adapter_security_test.dart"
             "test/platform/stt/stt_browser_lifecycle_test.dart"
             "test/platform/stt/stt_external_edge_launcher_test.dart"
@@ -280,22 +249,25 @@ jobs:
             "test/platform/stt/stt_host_readiness_test.dart"
             "test/platform/stt/stt_host_transition_guard_test.dart"
             "test/platform/stt/stt_webview2_compatibility_test.dart"
+            "test/platform/webview2/webview2_runtime_bootstrap_test.dart"
             "test/settings/app_settings_stt_engine_test.dart"
             "test/settings/settings_provider_stt_engine_test.dart"
             "test/settings/windows_stt_engine_selector_test.dart"
             "test/teleprompter/debug_log_formatter_health_test.dart"
+            "test/teleprompter/hidden_stt_webview_lifecycle_contract_test.dart"
+            "test/teleprompter/number_mismatch_safety_recovery_test.dart"
+            "test/teleprompter/presenter_reading_position_service_test.dart"
+            "test/teleprompter/spoken_number_normalizer_test.dart"
             "test/teleprompter/stt_recognition_policy_heartbeat_test.dart"
             "test/teleprompter/stt_transcript_buffer_service_test.dart"
             "test/teleprompter/teleprompter_external_edge_host_test.dart"
-            "test/teleprompter/whisper_audio_signal_test.dart"
-            "test/teleprompter/whisper_native_process_gate_test.dart"
-            "test/teleprompter/whisper_phrase_session_coordinator_test.dart"
-            "test/teleprompter/whisper_speech_service_native_test.dart"
+            "test/teleprompter/word_aligner_number_matching_test.dart"
           )
           & flutter test --no-pub --concurrency=1 @sttRegressionTests
           if ($LASTEXITCODE -ne 0) {
             throw "Windows STT regression tests failed."
           }
+          & ".\tool\windows\assert_v5_release_stt_artifacts_test.ps1"
 
       - name: Build Windows Archive
         shell: pwsh
@@ -312,10 +284,7 @@ jobs:
           $googleDriveClientSecret = ($env:GOOGLE_DRIVE_CLIENT_SECRET -replace "\s", "").Trim()
           $dropboxClientId = ($env:DROPBOX_CLIENT_ID -replace "\s", "").Trim()
           $dropboxClientSecret = ($env:DROPBOX_CLIENT_SECRET -replace "\s", "").Trim()
-          $dropboxSyncRootPath = ($env:DROPBOX_SYNC_ROOT_PATH_SECRET -replace "`r", "" -replace "`n", "").Trim()
-          if ([string]::IsNullOrWhiteSpace($dropboxSyncRootPath)) {
-            $dropboxSyncRootPath = ($env:DROPBOX_SYNC_ROOT_PATH_VAR -replace "`r", "" -replace "`n", "").Trim()
-          }
+          $dropboxSyncRootPath = ($env:DROPBOX_SYNC_ROOT_PATH_VAR -replace "`r", "" -replace "`n", "").Trim()
           $adminEmail = ($env:AUTOTELEPROMPTER_ADMIN_EMAIL -replace "`r", "" -replace "`n", "").Trim()
           $adminCodeHash = ($env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256 -replace "\s", "").Trim().ToLowerInvariant()
           $supabaseUrl = ($env:SUPABASE_URL -replace "`r", "" -replace "`n", "").Trim()
@@ -327,10 +296,7 @@ jobs:
           $adminEmailForBuild = if ($accountBackendEnabled -eq "true") { "" } else { $adminEmail }
           $adminCodeHashForBuild = if ($accountBackendEnabled -eq "true") { "" } else { $adminCodeHash }
           $feedbackEndpointForBuild = if ($accountBackendEnabled -eq "true") { "" } else { $endpoint }
-          $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_SECRET -replace "`r", "" -replace "`n", "").Trim()
-          if ([string]::IsNullOrWhiteSpace($updateManifestUrl)) {
-            $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
-          }
+          $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
           if ([string]::IsNullOrWhiteSpace($updateManifestUrl)) {
             $updateManifestUrl = "${{ steps.release.outputs.manifest_url }}"
           }
@@ -365,14 +331,27 @@ jobs:
           GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
           DROPBOX_CLIENT_ID: ${{ secrets.DROPBOX_CLIENT_ID }}
           DROPBOX_CLIENT_SECRET: ${{ secrets.DROPBOX_CLIENT_SECRET }}
-          DROPBOX_SYNC_ROOT_PATH_SECRET: ${{ secrets.DROPBOX_SYNC_ROOT_PATH }}
           DROPBOX_SYNC_ROOT_PATH_VAR: ${{ vars.DROPBOX_SYNC_ROOT_PATH }}
           AUTOTELEPROMPTER_ADMIN_EMAIL: ${{ secrets.AUTOTELEPROMPTER_ADMIN_EMAIL }}
           AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          UPDATE_MANIFEST_URL_SECRET: ${{ secrets.UPDATE_MANIFEST_URL }}
           UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
+
+      - name: Bundle Fixed WebView2 Runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ".\Platform_Windows\tool\windows\package_fixed_webview2_runtime.ps1" `
+            -DestinationRoot ".\Platform_Windows\build\windows\x64\runner\Release" `
+            -CabPath (Join-Path $env:RUNNER_TEMP "Microsoft.WebView2.FixedVersionRuntime.152.0.4191.62.x64.cab")
+
+      - name: Verify Browser-Only V5 STT Artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & ".\Platform_Windows\tool\windows\assert_v5_release_stt_artifacts.ps1" `
+            -ReleaseRoot ".\Platform_Windows\build\windows\x64\runner\Release"
 
       - name: Verify Windows Binary Version
         shell: pwsh

@@ -1,4 +1,5 @@
 import '../../settings/models/app_settings.dart';
+import 'spoken_number_normalizer.dart';
 import 'word_aligner.dart';
 
 class SttRecognitionPolicyService {
@@ -20,21 +21,24 @@ class SttRecognitionPolicyService {
     return browserHostReadinessComplete && !browserHostTransitionInFlight;
   }
 
-  static List<String> _transcriptWords(String transcript) => transcript
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((word) => word.trim().isNotEmpty)
-      .toList();
+  static List<String> _transcriptWords(String transcript) =>
+      transcript
+          .trim()
+          .split(RegExp(r'\s+'))
+          .where((word) => word.trim().isNotEmpty)
+          .toList();
 
-  static String capTranscriptWords(
-    String transcript, {
-    int maxWords = 96,
-  }) {
+  static String capTranscriptWords(String transcript, {int maxWords = 96}) {
     final words = _transcriptWords(transcript);
     if (words.isEmpty) return '';
     final safeMax = maxWords.clamp(8, 240).toInt();
     if (words.length <= safeMax) return words.join(' ');
-    return words.sublist(words.length - safeMax).join(' ');
+    final range = SpokenNumberNormalizer.expandSurfaceWindow(
+      words,
+      words.length - safeMax,
+      words.length,
+    );
+    return words.sublist(range.start, range.endExclusive).join(' ');
   }
 
   static List<String> liveTranscriptWindowsForAlignment(
@@ -65,26 +69,37 @@ class SttRecognitionPolicyService {
       final start = rawStart.clamp(0, words.length).toInt();
       final end = rawEnd.clamp(start, words.length).toInt();
       if (end <= start) return;
-      addWords(words.sublist(start, end));
+      final range = SpokenNumberNormalizer.expandSurfaceWindow(
+        words,
+        start,
+        end,
+      );
+      addWords(words.sublist(range.start, range.endExclusive));
     }
 
     addRange(words.length - safeShort, words.length);
     addRange(words.length - safeMedium, words.length);
     addRange(words.length - safeLong, words.length);
 
-    final sentenceParts = transcript
-        .split(RegExp(r'[.!?;:…]+'))
+    final sentenceParts = _sentencePartsPreservingStructuredNumbers(transcript)
         .map((part) => part.trim())
         .where((part) => part.isNotEmpty)
         .toList(growable: false);
-    for (var i = sentenceParts.length - 1;
-        i >= 0 && windows.length < maxWindows;
-        i--) {
+    for (
+      var i = sentenceParts.length - 1;
+      i >= 0 && windows.length < maxWindows;
+      i--
+    ) {
       final sentenceWords = _transcriptWords(sentenceParts[i]);
       if (sentenceWords.isEmpty) continue;
       final start =
           sentenceWords.length > safeLong ? sentenceWords.length - safeLong : 0;
-      addWords(sentenceWords.sublist(start));
+      final range = SpokenNumberNormalizer.expandSurfaceWindow(
+        sentenceWords,
+        start,
+        sentenceWords.length,
+      );
+      addWords(sentenceWords.sublist(range.start, range.endExclusive));
     }
 
     for (final window in rollingTranscriptWindowsForAlignment(
@@ -97,6 +112,68 @@ class SttRecognitionPolicyService {
     }
 
     return windows.take(maxWindows).toList(growable: false);
+  }
+
+  static List<String> _sentencePartsPreservingStructuredNumbers(String text) {
+    final parts = <String>[];
+    final current = StringBuffer();
+    for (var index = 0; index < text.length; index++) {
+      final char = text[index];
+      final isSeparator = '.!?;:…'.contains(char);
+      var previous = index - 1;
+      while (previous >= 0 && text[previous].trim().isEmpty) {
+        previous--;
+      }
+      var next = index + 1;
+      while (next < text.length && text[next].trim().isEmpty) {
+        next++;
+      }
+      final betweenNumbers =
+          (char == '.' || char == ':' || char == ';') &&
+          previous >= 0 &&
+          next < text.length &&
+          _surfaceTokenIsNumber(_tokenBefore(text, index)) &&
+          _surfaceTokenIsNumber(_tokenAfter(text, index));
+      if (isSeparator && !betweenNumbers) {
+        final part = current.toString();
+        if (part.trim().isNotEmpty) parts.add(part);
+        current.clear();
+        continue;
+      }
+      current.write(char);
+    }
+    final tail = current.toString();
+    if (tail.trim().isNotEmpty) parts.add(tail);
+    return parts;
+  }
+
+  static String _tokenBefore(String text, int boundary) {
+    var end = boundary;
+    while (end > 0 && text[end - 1].trim().isEmpty) {
+      end--;
+    }
+    var start = end - 1;
+    while (start >= 0 && text[start].trim().isNotEmpty) {
+      start--;
+    }
+    return text.substring(start + 1, end).trim();
+  }
+
+  static String _tokenAfter(String text, int boundary) {
+    var start = boundary + 1;
+    while (start < text.length && text[start].trim().isEmpty) {
+      start++;
+    }
+    var end = start;
+    while (end < text.length && text[end].trim().isNotEmpty) {
+      end++;
+    }
+    return text.substring(start, end).trim();
+  }
+
+  static bool _surfaceTokenIsNumber(String surface) {
+    if (surface.isEmpty) return false;
+    return SpokenNumberNormalizer.hasTailNumericIntent([surface]);
   }
 
   static List<String> rollingTranscriptWindowsForAlignment(
@@ -116,16 +193,23 @@ class SttRecognitionPolicyService {
       final start = rawStart.clamp(0, words.length).toInt();
       final end = rawEnd.clamp(start, words.length).toInt();
       if (end <= start) return;
-      final window = words.sublist(start, end).join(' ');
+      final range = SpokenNumberNormalizer.expandSurfaceWindow(
+        words,
+        start,
+        end,
+      );
+      final window = words.sublist(range.start, range.endExclusive).join(' ');
       if (seen.add(window)) windows.add(window);
     }
 
     addWindow(words.length - safeWindow, words.length);
 
     final step = (safeWindow / 2).round().clamp(3, safeWindow).toInt();
-    for (var end = words.length - step;
-        end > 0 && windows.length < maxWindows - 1;
-        end -= step) {
+    for (
+      var end = words.length - step;
+      end > 0 && windows.length < maxWindows - 1;
+      end -= step
+    ) {
       addWindow(end - safeWindow, end);
     }
 
@@ -211,7 +295,8 @@ class SttRecognitionPolicyService {
     return SttRecognitionPolicy(
       bulletMode: settings.sttStrictBulletMode,
       visibleSkipEnabled: visibleSkipEnabled,
-      hardVisibleSkipEnabled: visibleSkipEnabled &&
+      hardVisibleSkipEnabled:
+          visibleSkipEnabled &&
           (settings.sttHardVisibleSkipEnabled || noisyRoom),
     );
   }

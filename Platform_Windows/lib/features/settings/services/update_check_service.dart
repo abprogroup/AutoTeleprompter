@@ -14,12 +14,7 @@ const autoTeleprompterUpdateManifestUrl = String.fromEnvironment(
   'UPDATE_MANIFEST_URL',
 );
 
-enum UpdateCheckStatus {
-  notConfigured,
-  upToDate,
-  updateAvailable,
-  failed,
-}
+enum UpdateCheckStatus { notConfigured, upToDate, updateAvailable, failed }
 
 class UpdateCheckResult {
   final UpdateCheckStatus status;
@@ -47,7 +42,7 @@ class UpdateCheckResult {
 
 class UpdateCheckService {
   UpdateCheckService({HttpClient? httpClient})
-      : _httpClient = httpClient ?? HttpClient();
+    : _httpClient = httpClient ?? HttpClient();
 
   final HttpClient _httpClient;
 
@@ -127,8 +122,10 @@ class UpdateCheckService {
     }
 
     final newest = candidates.reduce((best, candidate) {
-      final comparison =
-          _compareVersions(candidate.latestVersion, best.latestVersion);
+      final comparison = _compareVersions(
+        candidate.latestVersion,
+        best.latestVersion,
+      );
       return comparison > 0 ? candidate : best;
     });
     final comparison = _compareVersions(
@@ -164,17 +161,20 @@ class UpdateCheckService {
     required String channel,
   }) {
     final latestVersion = _stringValue(channelEntry, 'version');
-    final downloadUrl = _stringValue(channelEntry, 'url') ??
+    final downloadUrl =
+        _stringValue(channelEntry, 'url') ??
         _stringValue(channelEntry, 'downloadUrl');
     if (latestVersion == null || latestVersion.trim().isEmpty) {
       throw FormatException('Manifest is missing $channel.version.');
     }
-    final notes = _stringValue(channelEntry, 'notes') ??
+    final notes =
+        _stringValue(channelEntry, 'notes') ??
         _stringValue(channelEntry, 'releaseNotes');
     final publishedAtText = _stringValue(channelEntry, 'publishedAt');
-    final publishedAt = publishedAtText == null
-        ? null
-        : DateTime.tryParse(publishedAtText)?.toLocal();
+    final publishedAt =
+        publishedAtText == null
+            ? null
+            : DateTime.tryParse(publishedAtText)?.toLocal();
     return _UpdateManifestCandidate(
       channel: channel,
       latestVersion: latestVersion.trim(),

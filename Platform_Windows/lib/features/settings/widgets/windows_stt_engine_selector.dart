@@ -4,10 +4,6 @@ import '../models/app_settings.dart';
 
 class WindowsSttEngineSelector extends StatelessWidget {
   static const Key smartChoiceKey = Key('windows-stt-engine-smart');
-  static const Key inAppChoiceKey = Key('windows-stt-engine-in-app');
-  static const Key edgeChoiceKey = Key('windows-stt-engine-edge');
-  static const Key chromeChoiceKey = Key('windows-stt-engine-chrome');
-  static const Key offlineChoiceKey = Key('windows-stt-engine-offline');
 
   final String value;
   final bool enabled;
@@ -26,16 +22,7 @@ class WindowsSttEngineSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final normalized = AppSettings.normalizeSttEngine(value);
-    final selected = switch (normalized) {
-      AppSettings.sttEngineBrowserOnline => AppSettings.sttEngineBrowserOnline,
-      AppSettings.sttEngineBrowserExternalEdge =>
-        AppSettings.sttEngineBrowserExternalEdge,
-      AppSettings.sttEngineBrowserExternalChrome =>
-        AppSettings.sttEngineBrowserExternalChrome,
-      AppSettings.sttEngineWhisperTiny => AppSettings.sttEngineWhisperTiny,
-      _ => AppSettings.sttEngineBrowserSmartCompatibility,
-    };
+    final selected = AppSettings.normalizeSttEngine(value);
 
     return AnimatedOpacity(
       opacity: enabled ? 1.0 : 0.45,
@@ -70,8 +57,8 @@ class WindowsSttEngineSelector extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         enabled
-                            ? _selectionGuidance(selected)
-                            : 'Stop listening to change this. A new choice takes effect on the next listening session.',
+                            ? 'Speech stays inside AutoTeleprompter in a hidden embedded WebView.'
+                            : 'Listening uses the same hidden in-app speech engine.',
                         style: const TextStyle(
                           color: Colors.white38,
                           fontSize: 11,
@@ -90,7 +77,7 @@ class WindowsSttEngineSelector extends StatelessWidget {
               children: [
                 _EngineChoiceChip(
                   key: smartChoiceKey,
-                  label: 'Smart compatibility (recommended)',
+                  label: 'Hidden in-app speech (recommended)',
                   selected:
                       selected ==
                       AppSettings.sttEngineBrowserSmartCompatibility,
@@ -101,65 +88,12 @@ class WindowsSttEngineSelector extends StatelessWidget {
                         AppSettings.sttEngineBrowserSmartCompatibility,
                       ),
                 ),
-                _EngineChoiceChip(
-                  key: inAppChoiceKey,
-                  label: 'In-app browser only',
-                  selected: selected == AppSettings.sttEngineBrowserOnline,
-                  enabled: enabled,
-                  accentColor: accentColor,
-                  onSelected:
-                      () => onChanged(AppSettings.sttEngineBrowserOnline),
-                ),
-                _EngineChoiceChip(
-                  key: edgeChoiceKey,
-                  label: 'Microsoft Edge only',
-                  selected:
-                      selected == AppSettings.sttEngineBrowserExternalEdge,
-                  enabled: enabled,
-                  accentColor: accentColor,
-                  onSelected:
-                      () => onChanged(AppSettings.sttEngineBrowserExternalEdge),
-                ),
-                _EngineChoiceChip(
-                  key: chromeChoiceKey,
-                  label: 'Google Chrome only',
-                  selected:
-                      selected == AppSettings.sttEngineBrowserExternalChrome,
-                  enabled: enabled,
-                  accentColor: accentColor,
-                  onSelected:
-                      () =>
-                          onChanged(AppSettings.sttEngineBrowserExternalChrome),
-                ),
-                _EngineChoiceChip(
-                  key: offlineChoiceKey,
-                  label: 'Offline Whisper',
-                  selected: selected == AppSettings.sttEngineWhisperTiny,
-                  enabled: enabled,
-                  accentColor: accentColor,
-                  onSelected: () => onChanged(AppSettings.sttEngineWhisperTiny),
-                ),
               ],
             ),
           ],
         ),
       ),
     );
-  }
-
-  String _selectionGuidance(String selected) {
-    switch (selected) {
-      case AppSettings.sttEngineBrowserOnline:
-        return 'Always uses the in-app browser. Changes take effect on the next listening session.';
-      case AppSettings.sttEngineBrowserExternalEdge:
-        return 'Always uses Microsoft Edge. Changes take effect on the next listening session.';
-      case AppSettings.sttEngineBrowserExternalChrome:
-        return 'Always uses Google Chrome. Changes take effect on the next listening session.';
-      case AppSettings.sttEngineWhisperTiny:
-        return 'Runs fully on this computer with the bundled multilingual model. No browser speech service is used.';
-      default:
-        return 'Smart chooses a compatible browser host when needed. Changes take effect on the next listening session.';
-    }
   }
 }
 

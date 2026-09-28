@@ -3,7 +3,32 @@ part of 'teleprompter_screen.dart';
 extension _TeleprompterBuildParts on _TeleprompterScreenState {
   Widget _buildTeleprompterScreen(BuildContext context) {
     final script = ref.watch(scriptProvider);
-    final tState = ref.watch(teleprompterProvider);
+    final coreState = ref.watch(
+      teleprompterProvider.select(
+        (s) => (
+          confirmedWordIndex: s.confirmedWordIndex,
+          isListening: s.isListening,
+          isStarting: s.isStarting,
+          statusMessage: s.statusMessage,
+          hasError: s.hasError,
+          missingLanguage: s.missingLanguage,
+          sttWebViewUrl: s.sttWebViewUrl,
+          audioInputDevices: s.audioInputDevices,
+        ),
+      ),
+    );
+    // Meter samples and debug lines update their own small Consumers below.
+    // They must never rebuild the thousands of word widgets in this surface.
+    final tState = TeleprompterState(
+      confirmedWordIndex: coreState.confirmedWordIndex,
+      isListening: coreState.isListening,
+      isStarting: coreState.isStarting,
+      statusMessage: coreState.statusMessage,
+      hasError: coreState.hasError,
+      missingLanguage: coreState.missingLanguage,
+      sttWebViewUrl: coreState.sttWebViewUrl,
+      audioInputDevices: coreState.audioInputDevices,
+    );
     final settings = ref.watch(settingsProvider);
     _publishPresenterStateIfChanged(script, tState, settings);
     if (script != null) {
@@ -19,8 +44,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     }
 
     // Auto-scroll on speech recognition
-    ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex),
-        (prev, next) {
+    ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex), (
+      prev,
+      next,
+    ) {
       final liveState = ref.read(teleprompterProvider);
       if (_activeManualCorrection) return;
       if (settings.scrollMode == 'auto' && liveState.isListening && next > 0) {
@@ -32,8 +59,11 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       return Scaffold(
         backgroundColor: Color(settings.scriptBgColor),
         body: const Center(
-            child: Text('No script loaded.',
-                style: TextStyle(color: Colors.white))),
+          child: Text(
+            'No script loaded.',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
       );
     }
 
@@ -46,33 +76,36 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final presenterWordGap = _presenterWordGap(presentationFontSize, settings);
     final controlsReservedHeight =
         settings.scrollMode == 'manual' ? 150.0 : 104.0;
-    final debugConsoleExpanded = settings.debugMode &&
+    final debugConsoleExpanded =
+        settings.debugMode &&
         !_debugConsoleMinimized &&
         (_controlsVisible || _debugConsolePinned);
     final debugConsoleHeight =
         settings.debugMode ? (debugConsoleExpanded ? 220.0 : 38.0) : 0.0;
-    final debugConsoleBottom = settings.debugMode
-        ? (debugConsoleExpanded
-            ? (_debugConsolePinned && !_controlsVisible
-                ? 10.0
-                : controlsReservedHeight)
-            : (_controlsVisible ? controlsReservedHeight : 10.0))
-        : 10.0;
-    final bookmarkWordIndexes = _bookmarks
-        .map(
-          (bookmark) => ScriptBookmarkService.nearestBookmarkableWordIndex(
-            script.words,
-            bookmark.wordIndex,
-          ),
-        )
-        .whereType<int>()
-        .toSet();
+    final debugConsoleBottom =
+        settings.debugMode
+            ? (debugConsoleExpanded
+                ? (_debugConsolePinned && !_controlsVisible
+                    ? 10.0
+                    : controlsReservedHeight)
+                : (_controlsVisible ? controlsReservedHeight : 10.0))
+            : 10.0;
+    final bookmarkWordIndexes =
+        _bookmarks
+            .map(
+              (bookmark) => ScriptBookmarkService.nearestBookmarkableWordIndex(
+                script.words,
+                bookmark.wordIndex,
+              ),
+            )
+            .whereType<int>()
+            .toSet();
     final allowActiveManualScroll =
         PresenterInputLockService.allowActiveManualScroll(
-      settingEnabled: settings.allowScrollDuringActiveSession,
-      isListening: tState.isListening,
-      isStarting: tState.isStarting,
-    );
+          settingEnabled: settings.allowScrollDuringActiveSession,
+          isListening: tState.isListening,
+          isStarting: tState.isStarting,
+        );
     final activeInputLocked = PresenterInputLockService.inputLocked(
       isWindows: Platform.isWindows,
       isListening: tState.isListening,
@@ -103,18 +136,24 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
           autofocus: true,
           child: Shortcuts(
             shortcuts: const {
-              SingleActivator(LogicalKeyboardKey.keyF,
-                  control: true, shift: true): _PresentationSearchIntent(),
+              SingleActivator(
+                    LogicalKeyboardKey.keyF,
+                    control: true,
+                    shift: true,
+                  ):
+                  _PresentationSearchIntent(),
               SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
                   _PresentationSearchIntent(),
             },
             child: Actions(
               actions: {
                 _PresentationSearchIntent:
-                    CallbackAction<_PresentationSearchIntent>(onInvoke: (_) {
-                  _showSearchDialog();
-                  return null;
-                }),
+                    CallbackAction<_PresentationSearchIntent>(
+                      onInvoke: (_) {
+                        _showSearchDialog();
+                        return null;
+                      },
+                    ),
               },
               child: GestureDetector(
                 onTap: activeInputLocked ? null : _showControls,
@@ -138,15 +177,17 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                     }
                                     if (!activeInputLocked) return;
                                     GestureBinding
-                                        .instance.pointerSignalResolver
+                                        .instance
+                                        .pointerSignalResolver
                                         .register(event, (_) {});
                                   }
                                 },
                                 child: SingleChildScrollView(
                                   controller: _scrollController,
-                                  physics: activeInputLocked
-                                      ? const NeverScrollableScrollPhysics()
-                                      : const ClampingScrollPhysics(),
+                                  physics:
+                                      activeInputLocked
+                                          ? const NeverScrollableScrollPhysics()
+                                          : const ClampingScrollPhysics(),
                                   child: wordList,
                                 ),
                               ),
@@ -182,23 +223,41 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         left: 12,
                         right: 12,
                         bottom: 12.0,
-                        child: _SoundLevelBar(
-                          level: tState.soundLevel,
-                          isListening: tState.isListening,
-                          isStarting: tState.isStarting,
-                          accentColor: Color(settings.currentWordColor),
+                        child: Consumer(
+                          builder: (context, liveRef, _) {
+                            final live = liveRef.watch(
+                              teleprompterProvider.select(
+                                (s) => (
+                                  level: s.soundLevel,
+                                  listening: s.isListening,
+                                  starting: s.isStarting,
+                                ),
+                              ),
+                            );
+                            return _SoundLevelBar(
+                              level: live.level,
+                              isListening: live.listening,
+                              isStarting: live.starting,
+                              accentColor: Color(settings.currentWordColor),
+                            );
+                          },
                         ),
                       ),
                     if (settings.debugMode)
-                      _buildPresenterDebugConsole(
-                        context,
-                        tState,
-                        bottom: debugConsoleBottom,
-                        height: debugConsoleHeight,
-                        expanded: debugConsoleExpanded,
-                        accentColor: Color(settings.currentWordColor),
-                        wordCount:
-                            script.words.where((w) => !w.isNewline).length,
+                      Consumer(
+                        builder: (context, liveRef, _) {
+                          final liveState = liveRef.watch(teleprompterProvider);
+                          return _buildPresenterDebugConsole(
+                            context,
+                            liveState,
+                            bottom: debugConsoleBottom,
+                            height: debugConsoleHeight,
+                            expanded: debugConsoleExpanded,
+                            accentColor: Color(settings.currentWordColor),
+                            wordCount:
+                                script.words.where((w) => !w.isNewline).length,
+                          );
+                        },
                       ),
 
                     // STT Pro Dashboard Integration
@@ -231,15 +290,18 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                               tState.statusMessage,
                             )) {
                               unawaited(_openMicrophonePrivacySettings());
-                            } else if (tState.statusMessage
-                                    .contains('permission') ||
+                            } else if (tState.statusMessage.contains(
+                                  'permission',
+                                ) ||
                                 tState.statusMessage.contains('Permission')) {
                               openAppSettings();
                             }
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.red.withValues(alpha: 0.9),
                               borderRadius: BorderRadius.circular(10),
@@ -250,7 +312,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                 Text(
                                   _getUserFriendlyError(tState.statusMessage),
                                   style: const TextStyle(
-                                      color: Colors.white, fontSize: 13),
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
                                 ),
                                 if (_isBrowserMicrophoneSettingsError(
                                       tState.statusMessage,
@@ -260,14 +324,15 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                                     padding: const EdgeInsets.only(top: 6),
                                     child: Text(
                                       _isBrowserMicrophoneSettingsError(
-                                        tState.statusMessage,
-                                      )
+                                            tState.statusMessage,
+                                          )
                                           ? 'Tap here to open microphone settings'
                                           : 'Tap here to open Settings',
                                       style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 11,
-                                          decoration: TextDecoration.underline),
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                        decoration: TextDecoration.underline,
+                                      ),
                                     ),
                                   ),
                               ],
@@ -359,7 +424,9 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     _lastPublishedRemoteIsStarting = isStarting;
     _lastPublishedRemoteScrollMode = mode;
     _lastPublishedRemoteScrollSpeed = speed;
-    ref.read(remoteControlProvider).publishPresenterState(
+    ref
+        .read(remoteControlProvider)
+        .publishPresenterState(
           scriptActive: scriptActive,
           sessionActive: sessionActive,
           isStarting: isStarting,
@@ -393,7 +460,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
   }
 
   List<List<ScriptWord>> _paragraphsForScript(Script script) {
-    final key = '${script.sessionId}|${script.words.length}|'
+    final key =
+        '${script.sessionId}|${script.words.length}|'
         '${identityHashCode(script.words)}';
     if (_paragraphCacheKey == key) return _paragraphCache;
 

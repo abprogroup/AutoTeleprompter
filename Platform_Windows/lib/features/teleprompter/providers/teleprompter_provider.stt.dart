@@ -7,33 +7,19 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
 
   void _handleSttResult(SpeechResult result) {
     if (_currentScript == null || _disposed) return;
-    _safeSetState((s) => s.copyWith(isStarting: false));
+    if (_currentState.isStarting) {
+      _safeSetState((s) => s.copyWith(isStarting: false));
+    }
+    final usesCumulativeTranscript = _useWhisper || result.isCumulative;
+    _prepareTranscriptStream(
+      usesCumulativeTranscript: usesCumulativeTranscript,
+      browserStreamId: result.isCumulative ? result.streamId : null,
+    );
     // Whisper emits revisable cumulative partials. Running command matching on
     // those partials can repeat an old command or execute a hallucination.
-    // Browser speech shards retain the existing explicit command behavior.
-    if (!_useWhisper && _handleVoiceCommand(result.words)) return;
+    // Legacy browser/native shards retain the existing explicit command path.
+    if (!usesCumulativeTranscript && _handleVoiceCommand(result.words)) return;
 
-    final buffer = _transcriptBuffer.update(
-      rawTranscript: result.words,
-      transcriptFloor:
-          _useWhisper ? _cumulativeTranscriptBaselineFloor : _transcriptFloor,
-      recentWordWindow: TeleprompterNotifier._sttLiveAlignmentWindowWords,
-      cumulativeReplacement: _useWhisper,
-      cumulativeBaselineWords: _cumulativeTranscriptBaselineWords,
-      cumulativeFinal: _useWhisper && result.isFinal,
-    );
-    _latestCumulativeTranscriptWords =
-        _useWhisper ? buffer.spokenWords : const <String>[];
-    _transcriptFloor = buffer.transcriptFloor;
-    if (_useWhisper && result.isFinal) {
-      _cumulativeTranscriptBaselineWords = List<String>.unmodifiable(
-        buffer.spokenWords,
-      );
-      _cumulativeTranscriptBaselineFloor = buffer.transcriptFloor;
-    }
-    if (!buffer.hasFreshSpeech) return;
-
-    _accumulatedTranscript = buffer.recentTranscript;
     final script = _currentScript!;
     final settings = ref.read(settingsProvider);
     final policy = TeleprompterNotifier.recognitionPolicyForSettings(settings);
@@ -46,13 +32,38 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       scriptWordCount: script.words.length,
       sustainedStuck: _isSustainedlyStuck,
     );
-    final aligned = _bestAlignmentForTranscript(
+    final selected = _selectRecognitionCandidate(
+      result: result,
       script: script,
-      transcript: _accumulatedTranscript,
       policy: policy,
       strictBulletMode: strictBulletMode,
       maxSkipTargetIndex: maxSkipTargetIndex,
+      usesCumulativeTranscript: usesCumulativeTranscript,
     );
+    if (selected == null) return;
+    final buffer = selected.buffer;
+    final aligned = selected.alignment;
+
+    _latestCumulativeTranscriptWords =
+        usesCumulativeTranscript ? buffer.spokenWords : const <String>[];
+    _transcriptFloor = buffer.transcriptFloor;
+    if (usesCumulativeTranscript && result.isFinal) {
+      _cumulativeTranscriptBaselineWords = List<String>.unmodifiable(
+        buffer.spokenWords,
+      );
+      _cumulativeTranscriptBaselineFloor = buffer.transcriptFloor;
+    }
+
+    // Preserve numeric punctuation for the number-aware aligner. The buffer's
+    // normalized word list still owns transcript-floor accounting, so interim
+    // replacement behavior and consumed-word counts remain unchanged.
+    _accumulatedTranscript = selected.transcript;
+    if (!_useWhisper &&
+        result.isCumulative &&
+        _handleVoiceCommand(_accumulatedTranscript)) {
+      _acknowledgeTranscriptFloor(buffer.spokenWords.length);
+      return;
+    }
     final engineTag = _useWhisper ? '[Whisper]' : '[Speech]';
 
     if (aligned.shouldEnterStandby) {
@@ -377,6 +388,23 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       return;
     }
 
+    final preservationTranscript =
+        _pendingVisibleSkipTranscript.trim().isEmpty
+            ? transcript
+            : _pendingVisibleSkipTranscript;
+    final visiblePreservation =
+        decision.shouldReset
+            ? _visibleSkipContext.preservationAlignment(
+              script: script.words,
+              transcript: preservationTranscript,
+              lastConfirmedIndex: _currentState.confirmedWordIndex,
+              visibleSkipStartIndex: _visibleWordStart,
+              maxSkipTargetIndex: maxSkipTargetIndex,
+              policy: policy,
+              strictBulletMode: strictBulletMode,
+            )
+            : null;
+
     if (decision.shouldReset && _pendingStartEvidenceTargetIndex != null) {
       decision = SttMovementDecision(
         action: SttMovementAction.hold,
@@ -394,16 +422,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         ),
         neededScore: policy.startAdvance.smallWords.toDouble(),
       );
-    } else if (decision.shouldReset &&
-        _visibleSkipContext.shouldPreserve(
-          script: script.words,
-          transcript: transcript,
-          lastConfirmedIndex: _currentState.confirmedWordIndex,
-          visibleSkipStartIndex: _visibleWordStart,
-          maxSkipTargetIndex: maxSkipTargetIndex,
-          policy: policy,
-          strictBulletMode: strictBulletMode,
-        )) {
+    } else if (decision.shouldReset && visiblePreservation != null) {
       _rememberPendingVisibleSkipTranscript(
         transcript: transcript,
         currentIndex: _currentState.confirmedWordIndex,
@@ -415,7 +434,9 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         label: 'TRACK_HOLD',
         reason: 'visible_skip_evidence_waiting',
         thresholdLabel: 'visibleSkip',
-        evidenceScore: 0,
+        evidenceScore: policy.visibleSkip.evidenceScore(
+          visiblePreservation.evidenceWords,
+        ),
         neededScore: policy.visibleSkip.smallWords.toDouble(),
       );
     } else if (decision.shouldReset) {
@@ -525,6 +546,9 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     required int spokenWordCount,
     required String engineTag,
   }) {
+    if (_pendingVisibleSkipHasExpired) {
+      _clearPendingVisibleSkipEvidence();
+    }
     final pending = _pendingVisibleSkipTranscript;
     if (pending.trim().isEmpty || maxSkipTargetIndex == null) return false;
     if (_pendingVisibleSkipOriginIndex != _currentState.confirmedWordIndex ||
@@ -613,6 +637,15 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     required int currentIndex,
   }) {
     if (transcript.trim().isEmpty || _visibleWordStart == null) return;
+    final contextChanged =
+        _pendingVisibleSkipOriginIndex != null &&
+        (_pendingVisibleSkipOriginIndex != currentIndex ||
+            _pendingVisibleSkipStartIndex != _visibleWordStart ||
+            _pendingVisibleSkipEndIndex != _visibleWordEnd);
+    if (_pendingVisibleSkipHasExpired || contextChanged) {
+      _clearPendingVisibleSkipEvidence();
+    }
+    _pendingVisibleSkipStartedAt ??= DateTime.now();
     _pendingVisibleSkipOriginIndex = currentIndex;
     _pendingVisibleSkipStartIndex = _visibleWordStart;
     _pendingVisibleSkipEndIndex = _visibleWordEnd;

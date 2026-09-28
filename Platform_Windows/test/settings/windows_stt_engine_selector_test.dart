@@ -22,51 +22,61 @@ void main() {
     );
   }
 
-  testWidgets('shows browser strategies and the offline engine', (
+  testWidgets('exposes only the hidden in-app speech engine', (tester) async {
+    await tester.pumpWidget(
+      buildSelector(
+        value: AppSettings.sttEngineBrowserSmartCompatibility,
+        enabled: true,
+        onChanged: (_) {},
+      ),
+    );
+
+    expect(find.byType(ChoiceChip), findsOneWidget);
+    expect(
+      find.textContaining(
+        RegExp(r'hidden.*in-app|in-app.*hidden', caseSensitive: false),
+      ),
+      findsWidgets,
+    );
+    expect(
+      find.textContaining(
+        RegExp(r'\b(edge|chrome|whisper|offline)\b', caseSensitive: false),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('legacy values still select the sole in-app choice', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      buildSelector(
-        value: AppSettings.sttEngineBrowserSmartCompatibility,
-        enabled: true,
-        onChanged: (_) {},
-      ),
-    );
+    const legacyValues = <String>[
+      AppSettings.sttEngineAuto,
+      AppSettings.sttEngineWindowsOffline,
+      AppSettings.sttEngineBrowserOnline,
+      AppSettings.sttEngineBrowserExternalEdge,
+      AppSettings.sttEngineBrowserExternalChrome,
+      AppSettings.sttEngineWhisperTiny,
+      AppSettings.sttEngineWhisperBase,
+      AppSettings.sttEngineWhisperSmall,
+      AppSettings.sttEngineWhisperMedium,
+      'google',
+      'unexpected',
+    ];
 
-    expect(find.text('Smart compatibility (recommended)'), findsOneWidget);
-    expect(find.text('In-app browser only'), findsOneWidget);
-    expect(find.text('Microsoft Edge only'), findsOneWidget);
-    expect(find.text('Google Chrome only'), findsOneWidget);
-    expect(find.text('Offline Whisper'), findsOneWidget);
-    expect(
-      find.text(
-        'Smart chooses a compatible browser host when needed. Changes take effect on the next listening session.',
-      ),
-      findsOneWidget,
-    );
+    for (final value in legacyValues) {
+      await tester.pumpWidget(
+        buildSelector(value: value, enabled: true, onChanged: (_) {}),
+      );
+      final chip = tester.widget<ChoiceChip>(find.byType(ChoiceChip));
+      expect(
+        chip.selected,
+        isTrue,
+        reason: 'Legacy selection "$value" must map to hidden in-app speech.',
+      );
+    }
   });
 
-  testWidgets('maps legacy windows_auto to the recommended Smart choice', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      buildSelector(
-        value: AppSettings.sttEngineAuto,
-        enabled: true,
-        onChanged: (_) {},
-      ),
-    );
-
-    final smartChip = tester.widget<ChoiceChip>(
-      find.descendant(
-        of: find.byKey(WindowsSttEngineSelector.smartChoiceKey),
-        matching: find.byType(ChoiceChip),
-      ),
-    );
-    expect(smartChip.selected, isTrue);
-  });
-
-  testWidgets('reports explicit in-app-only selection', (tester) async {
+  testWidgets('the sole choice reports Smart embedded speech', (tester) async {
     String? selected;
     await tester.pumpWidget(
       buildSelector(
@@ -76,82 +86,10 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(WindowsSttEngineSelector.inAppChoiceKey));
+    await tester.tap(find.byType(ChoiceChip));
     await tester.pump();
 
-    expect(selected, AppSettings.sttEngineBrowserOnline);
-  });
-
-  testWidgets('reports Edge selection when enabled', (tester) async {
-    String? selected;
-    await tester.pumpWidget(
-      buildSelector(
-        value: AppSettings.sttEngineBrowserSmartCompatibility,
-        enabled: true,
-        onChanged: (value) => selected = value,
-      ),
-    );
-
-    await tester.tap(find.byKey(WindowsSttEngineSelector.edgeChoiceKey));
-    await tester.pump();
-
-    expect(selected, AppSettings.sttEngineBrowserExternalEdge);
-  });
-
-  testWidgets('reports Chrome selection when enabled', (tester) async {
-    String? selected;
-    await tester.pumpWidget(
-      buildSelector(
-        value: AppSettings.sttEngineBrowserSmartCompatibility,
-        enabled: true,
-        onChanged: (value) => selected = value,
-      ),
-    );
-
-    await tester.tap(find.byKey(WindowsSttEngineSelector.chromeChoiceKey));
-    await tester.pump();
-
-    expect(selected, AppSettings.sttEngineBrowserExternalChrome);
-  });
-
-  testWidgets('shows an explicit persisted Chrome selection', (tester) async {
-    await tester.pumpWidget(
-      buildSelector(
-        value: AppSettings.sttEngineBrowserExternalChrome,
-        enabled: true,
-        onChanged: (_) {},
-      ),
-    );
-
-    final chromeChip = tester.widget<ChoiceChip>(
-      find.descendant(
-        of: find.byKey(WindowsSttEngineSelector.chromeChoiceKey),
-        matching: find.byType(ChoiceChip),
-      ),
-    );
-    expect(chromeChip.selected, isTrue);
-    expect(
-      find.text(
-        'Always uses Google Chrome. Changes take effect on the next listening session.',
-      ),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('reports offline Whisper selection when enabled', (tester) async {
-    String? selected;
-    await tester.pumpWidget(
-      buildSelector(
-        value: AppSettings.sttEngineBrowserSmartCompatibility,
-        enabled: true,
-        onChanged: (value) => selected = value,
-      ),
-    );
-
-    await tester.tap(find.byKey(WindowsSttEngineSelector.offlineChoiceKey));
-    await tester.pump();
-
-    expect(selected, AppSettings.sttEngineWhisperTiny);
+    expect(selected, AppSettings.sttEngineBrowserSmartCompatibility);
   });
 
   testWidgets('does not change engine while listening', (tester) async {
@@ -164,13 +102,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(WindowsSttEngineSelector.edgeChoiceKey));
+    await tester.tap(find.byType(ChoiceChip));
     await tester.pump();
 
     expect(selected, isNull);
-    expect(
-      find.textContaining('Stop listening to change this.'),
-      findsOneWidget,
-    );
   });
 }

@@ -1,12 +1,7 @@
 import 'stt_tracking_state.dart';
 import 'word_aligner.dart';
 
-enum SttMovementAction {
-  advance,
-  hold,
-  reset,
-  block,
-}
+enum SttMovementAction { advance, hold, reset, block }
 
 class SttMovementDecision {
   final SttMovementAction action;
@@ -75,6 +70,7 @@ class SttMovementPolicyService {
       alignment,
       trackingState,
       jump,
+      advanceGuardIndex,
       maxLocalAdvanceWithoutWait,
     );
 
@@ -86,15 +82,18 @@ class SttMovementPolicyService {
       maxLocalAdvanceWithoutWait: maxLocalAdvanceWithoutWait,
     );
 
-    final requiresVisibleThreshold = visibleSkipTargetTrusted &&
+    final requiresVisibleThreshold =
+        visibleSkipTargetTrusted &&
         jump > maxLocalAdvanceWithoutWait &&
         !structuralLocal &&
         !localContinuation;
-    final visibleFamily = requiresVisibleThreshold ||
+    final visibleFamily =
+        requiresVisibleThreshold ||
         family == SttThresholdFamily.visibleSkip ||
         alignment.kind == SttAlignmentKind.visiblePhrase ||
         alignment.kind == SttAlignmentKind.sentenceRecovery;
-    final unsafeOffscreenJump = !visibleSkipTargetTrusted &&
+    final unsafeOffscreenJump =
+        !visibleSkipTargetTrusted &&
         jump > maxLocalAdvanceWithoutWait &&
         !structuralLocal &&
         !localContinuation;
@@ -178,7 +177,8 @@ class SttMovementPolicyService {
     required bool repeatedTranscript,
   }) {
     final heardSomething = transcript.trim().isNotEmpty;
-    final partialEvidence = alignment.debugInfo.startsWith('WAIT_EVIDENCE') ||
+    final partialEvidence =
+        alignment.debugInfo.startsWith('WAIT_EVIDENCE') ||
         alignment.debugInfo.startsWith('EMPTY') ||
         alignment.debugInfo.startsWith('AT_END');
     if (!heardSomething || repeatedTranscript || partialEvidence) {
@@ -187,9 +187,10 @@ class SttMovementPolicyService {
         nextState: _preservedState(trackingState),
         targetIndex: alignment.confirmedWordIndex,
         label: 'TRACK_HOLD',
-        reason: repeatedTranscript
-            ? 'repeated_partial'
-            : 'waiting_for_profile_evidence',
+        reason:
+            repeatedTranscript
+                ? 'repeated_partial'
+                : 'waiting_for_profile_evidence',
       );
     }
 
@@ -230,10 +231,11 @@ class SttMovementPolicyService {
     }
     if (family == SttThresholdFamily.visibleSkip &&
         jump <= maxLocalAdvanceWithoutWait) {
-      family = trackingState == SttEvidenceTrackingState.tracking ||
-              trackingState == SttEvidenceTrackingState.recovering
-          ? SttThresholdFamily.safetyRecovery
-          : SttThresholdFamily.startAdvance;
+      family =
+          trackingState == SttEvidenceTrackingState.tracking ||
+                  trackingState == SttEvidenceTrackingState.recovering
+              ? SttThresholdFamily.safetyRecovery
+              : SttThresholdFamily.startAdvance;
     }
     if (trackingState == SttEvidenceTrackingState.locked ||
         trackingState == SttEvidenceTrackingState.offScript) {
@@ -251,14 +253,22 @@ class SttMovementPolicyService {
     AlignmentResult alignment,
     SttEvidenceTrackingState trackingState,
     int jump,
+    int advanceGuardIndex,
     int maxLocalAdvanceWithoutWait,
   ) {
     if (trackingState != SttEvidenceTrackingState.tracking &&
         trackingState != SttEvidenceTrackingState.recovering) {
       return false;
     }
-    if (jump > maxLocalAdvanceWithoutWait) return false;
     if (alignment.confidence < 0.70) return false;
+    if (alignment.kind == SttAlignmentKind.numberPhrase) {
+      final start = alignment.candidateStartIndex;
+      return start != null &&
+          start <= advanceGuardIndex + maxLocalAdvanceWithoutWait + 1 &&
+          jump <= WordAligner.maxLocalNumberAdvance &&
+          alignment.evidenceWords.length <= 2;
+    }
+    if (jump > maxLocalAdvanceWithoutWait) return false;
     return alignment.kind == SttAlignmentKind.nextWord ||
         alignment.kind == SttAlignmentKind.nextWordLowEvidence ||
         alignment.kind == SttAlignmentKind.singleWord;

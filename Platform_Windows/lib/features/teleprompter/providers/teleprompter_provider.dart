@@ -26,6 +26,7 @@ import '../../../platform/stt/stt_host_readiness.dart';
 import '../../../platform/stt/stt_host_transition_guard.dart';
 import '../../../platform/stt/stt_service_factory.dart';
 import '../../../platform/stt/stt_webview2_compatibility.dart';
+import '../../../platform/webview2/webview2_runtime_bootstrap.dart';
 part 'teleprompter_provider.browser_host.dart';
 part 'teleprompter_provider.external_edge.dart';
 part 'teleprompter_provider.heartbeat.dart';
@@ -33,6 +34,7 @@ part 'teleprompter_provider.locale.dart';
 part 'teleprompter_provider.relock.dart';
 part 'teleprompter_provider.state_helpers.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
+part 'teleprompter_provider.stt_candidates.dart';
 part 'teleprompter_provider.stt.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
@@ -43,9 +45,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late final RemoteControlService _remoteControlService;
   late final WindowsSttExternalEdgeLauncher _externalEdgeLauncher;
   late final WindowsSttExternalChromeLauncher _externalChromeLauncher;
-  bool _useWhisper = false;
-  bool _useExternalEdgeSttHost = false;
-  bool _useExternalChromeSttHost = false;
+  // Hard V5 boundary. Future engines stay compiled but cannot be activated by
+  // settings, failure recovery, or a stale persisted value in this release.
+  bool get _useWhisper => false;
+  bool get _useExternalEdgeSttHost => false;
+  bool get _useExternalChromeSttHost => false;
   Future<void>? _externalEdgeHostStopInFlight;
   SttHostEventJournal? _sttHostEventJournal;
   WindowsSttHostPolicy? _windowsSttHostPolicy;
@@ -87,11 +91,14 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int _cumulativeTranscriptBaselineFloor = 0;
   List<String> _cumulativeTranscriptBaselineWords = const <String>[];
   List<String> _latestCumulativeTranscriptWords = const <String>[];
+  int? _activeBrowserCumulativeStreamId;
+  bool _lastResultUsesCumulativeTranscript = false;
   int? _pendingStartEvidenceTargetIndex;
   String _pendingVisibleSkipTranscript = '';
   int? _pendingVisibleSkipOriginIndex;
   int? _pendingVisibleSkipStartIndex;
   int? _pendingVisibleSkipEndIndex;
+  DateTime? _pendingVisibleSkipStartedAt;
   SttEvidenceTrackingState _sttEvidenceTrackingState =
       SttEvidenceTrackingState.locked;
   DateTime? _lastConfirmedAdvanceAt;
@@ -118,6 +125,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   );
   // After a real stall, widen recovery beyond the rendered viewport.
   static const Duration _sustainedStuckThreshold = Duration(seconds: 6);
+  static const Duration _pendingVisibleSkipMaxAge = Duration(seconds: 8);
   // Bounded widening applied to the visible-skip search/trust window once
   // sustained-stuck - not unlimited, so a coincidental phrase match still
   // can't jump arbitrarily far ahead.
@@ -133,6 +141,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _cumulativeTranscriptBaselineFloor = 0;
       _cumulativeTranscriptBaselineWords = const <String>[];
       _latestCumulativeTranscriptWords = const <String>[];
+      _activeBrowserCumulativeStreamId = null;
+      _lastResultUsesCumulativeTranscript = false;
     }
     _pendingStartEvidenceTargetIndex = null;
     _clearPendingVisibleSkipEvidence();
@@ -170,7 +180,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (_disposed || _sessionStopped) return;
     try {
       final current = state;
-      state = updater(current);
+      final next = updater(current);
+      if (current.hasSameValues(next)) return;
+      state = next;
     } catch (e, stack) {
       _recordStateFailureDiagnostic('safeSetState', e, stack);
       _disposed = true;
@@ -213,25 +225,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final logs = [...state.debugLogs, entry];
     if (logs.length > 80) logs.removeRange(0, logs.length - 80);
     _safeSetState((s) => s.copyWith(debugLogs: logs));
-  }
-
-  // Windows.Media.SpeechRecognition (the engine speech_to_text_windows wraps
-  // for this "Windows Offline" path) requires MSIX package identity per
-  // Microsoft's own docs - "packaged or packaged with external location.
-  // Unpackaged apps cannot use these APIs." This app ships as a plain
-  // unpackaged .exe, so this path can never receive audio: it initializes
-  // successfully (the object can be constructed without package identity)
-  // and reports "listening", but the actual capture pipeline silently gets
-  // nothing, every time, on every machine, regardless of language pack,
-  // locale, or microphone setup. That is a permanent architectural
-  // constraint, not an occasional failure worth detecting-and-recovering
-  // from at runtime - so "auto" must never route here. Only the explicit
-  // engine override below still allows it, for local testing if this app
-  // is ever built as an MSIX/packaged-with-external-location package. Do
-  // not re-enable the "auto" default without that packaging change.
-  static bool shouldUseWindowsOfflineSpeech(AppSettings settings) {
-    final engine = AppSettings.normalizeSttEngine(settings.sttEngine);
-    return engine == AppSettings.sttEngineWindowsOffline;
   }
 
   static List<String> rollingTranscriptWindowsForAlignment(
@@ -345,6 +338,12 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         visibleWordStart <= visibleWordEnd ? visibleWordEnd : visibleWordStart;
     return alignedIndex >= start && alignedIndex <= end;
   }
+
+  static bool isPendingVisibleSkipExpired({
+    required DateTime? startedAt,
+    required DateTime now,
+    Duration maxAge = _pendingVisibleSkipMaxAge,
+  }) => startedAt != null && now.difference(startedAt) > maxAge;
 
   static bool visibleTranscriptPlausiblyMatchesLocale({
     required List<ScriptWord> words,
@@ -467,14 +466,10 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _precomputeSectionLocales(script);
     final settings = ref.read(settingsProvider);
     final sttEngine = AppSettings.normalizeSttEngine(settings.sttEngine);
-    _useWhisper = sttEngine.startsWith('whisper');
-    // A direct session restart or engine switch must never leave a previous
-    // microphone/native engine alive beside the selected engine.
-    if (_useWhisper) {
-      await Future.wait([_desktopSttService.stop(), _browserSttService.stop()]);
-    } else {
-      await _whisperService.stop();
-    }
+    // Whisper is future work, not a V5 production fallback. Keep every
+    // dormant/native engine stopped even when old settings contain a legacy
+    // engine value.
+    await Future.wait([_desktopSttService.stop(), _whisperService.stop()]);
     if (_disposed || token != _sessionToken) return;
     if (!await _prepareWindowsSttHostPolicy(
       sttEngine: sttEngine,
@@ -672,7 +667,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _visibleWordEnd = null;
     _resetVisibleLocaleAssist();
 
-    // Stop all engines - Whisper may have been auto-started via fallback.
+    // Stop every dormant engine too, so a prior/legacy session cannot retain
+    // microphone ownership beside the V5 hidden embedded host.
     final stopFuture = Future.wait([
       _stopExternalEdgeHostServices(),
       _desktopSttService.stop(),
@@ -683,8 +679,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       await _stopInFlight;
     } finally {
       _stopInFlight = null;
-      _useExternalEdgeSttHost = false;
-      _useExternalChromeSttHost = false;
       _windowsSttHostPolicy = null;
       _sttHostReadiness = null;
       _sttHostTransitionGuard.invalidate();

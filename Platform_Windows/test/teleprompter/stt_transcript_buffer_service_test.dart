@@ -15,6 +15,23 @@ void main() {
     expect(result.freshWords, ['new', 'phrase']);
   });
 
+  test(
+    'browser cumulative snapshot restores unchanged earlier result slots',
+    () {
+      final result = service.update(
+        rawTranscript: 'meeting founded in 20 22 more',
+        transcriptFloor: 3,
+        cumulativeReplacement: true,
+        cumulativeBaselineWords: const ['meeting', 'founded', 'in'],
+      );
+
+      expect(result.resetFloor, isFalse);
+      expect(result.transcriptFloor, 3);
+      expect(result.freshWords, ['20', '22', 'more']);
+      expect(result.recentSurfaceTranscript, '20 22 more');
+    },
+  );
+
   test('Whisper retraction preserves the acknowledged baseline', () {
     final result = service.update(
       rawTranscript: 'one two',
@@ -126,4 +143,23 @@ void main() {
     expect(phraseFinal.transcriptFloor, 2);
     expect(phraseFinal.freshWords, ['revised', 'appended']);
   });
+
+  test(
+    'keeps numeric surface punctuation without changing floor word counts',
+    () {
+      final result = service.update(
+        rawTranscript: 'at 20:22 value 3.14 range 20-22 year 2022',
+        transcriptFloor: 1,
+        recentWordWindow: 20,
+      );
+
+      expect(result.spokenWords.length, 8);
+      expect(result.freshWords.length, 7);
+      expect(
+        result.recentSurfaceTranscript,
+        '20:22 value 3.14 range 20-22 year 2022',
+      );
+      expect(result.recentTranscript, '2022 value 314 range 2022 year 2022');
+    },
+  );
 }

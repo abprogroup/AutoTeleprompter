@@ -121,7 +121,6 @@ jobs:
           GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
           DROPBOX_CLIENT_ID: ${{ secrets.DROPBOX_CLIENT_ID }}
           DROPBOX_CLIENT_SECRET: ${{ secrets.DROPBOX_CLIENT_SECRET }}
-          MACOS_UPDATE_MANIFEST_URL_SECRET: ${{ secrets.MACOS_UPDATE_MANIFEST_URL }}
           MACOS_UPDATE_MANIFEST_URL_VAR: ${{ vars.MACOS_UPDATE_MANIFEST_URL }}
           FALLBACK_MANIFEST_URL: ${{ steps.release.outputs.manifest_url }}
         run: |
@@ -153,10 +152,7 @@ jobs:
             *) echo "Unsupported release channel: $RELEASE_CHANNEL" >&2; exit 1 ;;
           esac
 
-          manifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_SECRET:-}" | tr -d '\r\n' | xargs)"
-          if [ -z "$manifestUrl" ]; then
-            manifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_VAR:-}" | tr -d '\r\n' | xargs)"
-          fi
+          manifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_VAR:-}" | tr -d '\r\n' | xargs)"
           if [ -z "$manifestUrl" ]; then
             manifestUrl="$FALLBACK_MANIFEST_URL"
           fi
@@ -193,10 +189,7 @@ jobs:
           dropboxSecret="$(printf '%s' "${DROPBOX_CLIENT_SECRET:-}" | tr -d ' \r\n')"
           adminEmail="$(printf '%s' "${AUTOTELEPROMPTER_ADMIN_EMAIL:-}" | tr -d '\r\n' | xargs)"
           adminCodeHash="$(printf '%s' "${AUTOTELEPROMPTER_ADMIN_CODE_SHA256:-}" | tr -d ' \r\n' | tr 'A-F' 'a-f')"
-          updateManifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_SECRET:-}" | tr -d '\r\n' | xargs)"
-          if [ -z "$updateManifestUrl" ]; then
-            updateManifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_VAR:-}" | tr -d '\r\n' | xargs)"
-          fi
+          updateManifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_VAR:-}" | tr -d '\r\n' | xargs)"
           if [ -z "$updateManifestUrl" ]; then
             updateManifestUrl="${{ steps.release.outputs.manifest_url }}"
           fi
@@ -251,7 +244,6 @@ jobs:
           DROPBOX_CLIENT_SECRET: ${{ secrets.DROPBOX_CLIENT_SECRET }}
           AUTOTELEPROMPTER_ADMIN_EMAIL: ${{ secrets.AUTOTELEPROMPTER_ADMIN_EMAIL }}
           AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
-          MACOS_UPDATE_MANIFEST_URL_SECRET: ${{ secrets.MACOS_UPDATE_MANIFEST_URL }}
           MACOS_UPDATE_MANIFEST_URL_VAR: ${{ vars.MACOS_UPDATE_MANIFEST_URL }}
 
       - name: Zip App Bundle

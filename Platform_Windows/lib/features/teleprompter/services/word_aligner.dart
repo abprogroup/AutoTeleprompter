@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../script/models/script_word.dart';
 import '../../../core/extensions/string_extensions.dart';
+import 'spoken_number_normalizer.dart';
 
 part 'word_aligner_tokenizer.dart';
 part 'word_aligner_similarity.dart';
@@ -10,6 +11,8 @@ part 'word_aligner_local_bridge.dart';
 part 'word_aligner_sentence_recovery.dart';
 part 'word_aligner_phrase_match.dart';
 part 'word_aligner_slow_context.dart';
+part 'word_aligner_number_match.dart';
+part 'word_aligner_number_mismatch.dart';
 
 class WordAligner {
   // -- Tuning constants -------------------------------------------------------
@@ -17,6 +20,11 @@ class WordAligner {
   static const int _searchWindowSize = 50;
   // Max words for a SINGLE-word match (prevents false jumps on common words).
   static const int _maxSingleJump = 5;
+  // A complete number is one semantic unit even when its written form spans
+  // several ScriptWords. The cap covers the eight-token number grammar plus
+  // one immediately following lexical word.
+  static const int maxLocalNumberAdvance =
+      SpokenNumberNormalizer.maxSpanTokens + 1;
   // Nearby phrase window checked before the visible-skip fallback.
   static const int _nearPhrasePriorityWindow = 50;
   static const int _nearPhraseMaxWords = 8;
@@ -201,8 +209,7 @@ class WordAligner {
       );
     }
 
-    final nonNL = script.where((w) => !w.isNewline).toList();
-    if (nonNL.isEmpty) {
+    if (!script.any((word) => !word.isNewline)) {
       return AlignmentResult(
         lastConfirmedIndex,
         0.0,
@@ -243,6 +250,44 @@ class WordAligner {
     final visibleThreshold = effectivePolicy.visibleSkip;
     final transcriptPassesLocal = localThreshold.passes(transcriptWords);
     final transcriptPassesVisible = visibleThreshold.passes(transcriptWords);
+    final visibleMaxSkipTargetIndex = maxSkipTargetIndex;
+    final visibleSkipEnabled =
+        visibleMaxSkipTargetIndex != null && effectivePolicy.visibleSkipEnabled;
+
+    // Digits remain skippable display tokens in the generic aligner. When the
+    // current transcript actually contains a complete number, this bounded
+    // semantic bridge can match its Hebrew/English/digit form without changing
+    // ScriptWord text, indexes, or the normal heading/skip behavior.
+    final numberScanStart =
+        (lastConfirmedIndex + 1).clamp(0, script.length).toInt();
+    final numberScanEnd =
+        maxSkipTargetIndex == null
+            ? (numberScanStart + 24)
+                .clamp(numberScanStart, script.length)
+                .toInt()
+            : (maxSkipTargetIndex + 1)
+                .clamp(numberScanStart, script.length)
+                .toInt();
+    final numberOutcome = _numberAwareMatch(
+      script: script,
+      transcript: transcript,
+      lastConfirmedIndex: lastConfirmedIndex,
+      scanStart: numberScanStart,
+      scanEnd: numberScanEnd,
+      strictBulletMode: policyBulletMode,
+      policy: effectivePolicy,
+      visibleSkipEnabled: visibleSkipEnabled,
+      visibleSkipStartIndex: visibleSkipStartIndex,
+    );
+    if (numberOutcome?.result != null) return numberOutcome!.result!;
+    if (numberOutcome?.blocksGenericFallback ?? false) {
+      return AlignmentResult(
+        lastConfirmedIndex,
+        0.0,
+        'NUMBER_MATCH_REJECTED',
+        SttAlignmentDecision.wait,
+      );
+    }
 
     final lastSpoken = transcriptWords.last;
 
@@ -260,9 +305,6 @@ class WordAligner {
 
     // Default allows small local recovery for missed STT words. Larger
     // paragraph/section skips remain opt-in and viewport-bound.
-    final visibleMaxSkipTargetIndex = maxSkipTargetIndex;
-    final visibleSkipEnabled =
-        visibleMaxSkipTargetIndex != null && effectivePolicy.visibleSkipEnabled;
     final strictEnd = searchStart + 1;
     const localRecoveryWords = _maxSingleJump;
     final defaultLocalRecoveryEnd =

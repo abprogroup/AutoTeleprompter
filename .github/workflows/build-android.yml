@@ -86,10 +86,7 @@ jobs:
             admin_code_hash="$(printf '%s' "$AUTOTELEPROMPTER_ADMIN_CODE_SHA256" | tr -d '[:space:]' | tr 'A-Z' 'a-z')"
           fi
 
-          update_manifest_url="$(printf '%s' "$UPDATE_MANIFEST_URL_SECRET" | tr -d '\r\n')"
-          if [ -z "$update_manifest_url" ]; then
-            update_manifest_url="$(printf '%s' "$UPDATE_MANIFEST_URL_VAR" | tr -d '\r\n')"
-          fi
+          update_manifest_url="$(printf '%s' "$UPDATE_MANIFEST_URL_VAR" | tr -d '\r\n')"
 
           flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi \
             "--dart-define=APP_VERSION=5.0.0+3" \
@@ -108,7 +105,6 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           AUTOTELEPROMPTER_ADMIN_EMAIL: ${{ secrets.AUTOTELEPROMPTER_ADMIN_EMAIL }}
           AUTOTELEPROMPTER_ADMIN_CODE_SHA256: ${{ secrets.AUTOTELEPROMPTER_ADMIN_CODE_SHA256 }}
-          UPDATE_MANIFEST_URL_SECRET: ${{ secrets.UPDATE_MANIFEST_URL }}
           UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
           ACCOUNT_MANAGE_SUBSCRIPTION_URL: ${{ vars.ACCOUNT_MANAGE_SUBSCRIPTION_URL }}
 

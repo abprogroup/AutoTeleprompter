@@ -2,68 +2,59 @@ import 'package:autoteleprompter/features/settings/models/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('AppSettings.normalizeSttEngine', () {
-    test('uses Smart compatibility for new settings', () {
-      expect(
-        const AppSettings().sttEngine,
-        AppSettings.sttEngineBrowserSmartCompatibility,
-      );
+  const currentReleaseEngine = AppSettings.sttEngineBrowserSmartCompatibility;
+
+  group('AppSettings.normalizeSttEngine current-release boundary', () {
+    test('new settings default to the hidden in-app speech path', () {
+      expect(const AppSettings().sttEngine, currentReleaseEngine);
     });
 
-    test('preserves explicit supported engine values', () {
-      expect(
-        AppSettings.normalizeSttEngine(AppSettings.sttEngineWindowsOffline),
-        AppSettings.sttEngineWhisperTiny,
-      );
-      expect(
-        AppSettings.normalizeSttEngine(AppSettings.sttEngineBrowserOnline),
+    test('every persisted engine value migrates to hidden in-app speech', () {
+      const persistedValues = <String?>[
+        null,
+        AppSettings.sttEngineAuto,
+        AppSettings.sttEngineWindowsOffline,
         AppSettings.sttEngineBrowserOnline,
-      );
-      expect(
-        AppSettings.normalizeSttEngine(
-          AppSettings.sttEngineBrowserExternalEdge,
-        ),
         AppSettings.sttEngineBrowserExternalEdge,
-      );
-      expect(
-        AppSettings.normalizeSttEngine(
-          AppSettings.sttEngineBrowserExternalChrome,
-        ),
         AppSettings.sttEngineBrowserExternalChrome,
-      );
-      expect(
-        AppSettings.normalizeSttEngine(
-          AppSettings.sttEngineBrowserSmartCompatibility,
-        ),
         AppSettings.sttEngineBrowserSmartCompatibility,
-      );
-      expect(
-        AppSettings.normalizeSttEngine(AppSettings.sttEngineWhisperTiny),
         AppSettings.sttEngineWhisperTiny,
-      );
-      expect(
-        AppSettings.normalizeSttEngine(AppSettings.sttEngineWhisperBase),
-        AppSettings.sttEngineWhisperTiny,
-      );
+        AppSettings.sttEngineWhisperBase,
+        AppSettings.sttEngineWhisperSmall,
+        AppSettings.sttEngineWhisperMedium,
+        'google',
+        'unexpected',
+      ];
+
+      for (final value in persistedValues) {
+        expect(
+          AppSettings.normalizeSttEngine(value),
+          currentReleaseEngine,
+          reason:
+              'Persisted STT engine "$value" must not reactivate a '
+              'future or external speech engine.',
+        );
+      }
     });
 
-    test('migrates legacy and missing values to Smart compatibility', () {
-      expect(
-        AppSettings.normalizeSttEngine(AppSettings.sttEngineAuto),
-        AppSettings.sttEngineBrowserSmartCompatibility,
-      );
-      expect(
-        AppSettings.normalizeSttEngine(null),
-        AppSettings.sttEngineBrowserSmartCompatibility,
-      );
-      expect(
-        AppSettings.normalizeSttEngine('google'),
-        AppSettings.sttEngineBrowserSmartCompatibility,
-      );
-      expect(
-        AppSettings.normalizeSttEngine('unexpected'),
-        AppSettings.sttEngineBrowserSmartCompatibility,
-      );
+    test('normalization never returns an external or Whisper engine', () {
+      const unsupportedCurrentReleaseEngines = <String>{
+        AppSettings.sttEngineWindowsOffline,
+        AppSettings.sttEngineBrowserExternalEdge,
+        AppSettings.sttEngineBrowserExternalChrome,
+        AppSettings.sttEngineWhisperTiny,
+        AppSettings.sttEngineWhisperBase,
+        AppSettings.sttEngineWhisperSmall,
+        AppSettings.sttEngineWhisperMedium,
+      };
+
+      for (final value in unsupportedCurrentReleaseEngines) {
+        expect(
+          unsupportedCurrentReleaseEngines,
+          isNot(contains(AppSettings.normalizeSttEngine(value))),
+          reason: 'The current release must sanitize "$value".',
+        );
+      }
     });
   });
 }

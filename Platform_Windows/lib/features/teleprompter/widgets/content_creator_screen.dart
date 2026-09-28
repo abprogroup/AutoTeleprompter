@@ -12,8 +12,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_windows/webview_windows.dart';
 import '../../../platform/permissions/platform_permissions.dart';
-import '../../../platform/stt/stt_webview2_compatibility.dart';
 import '../../../platform/webview2/webview2_runtime_config.dart';
+import '../../../platform/webview2/webview2_runtime_bootstrap.dart';
 import '../models/alignment_result.dart';
 import '../services/content_camera_device_classifier.dart';
 import '../services/presenter_input_lock_service.dart';
@@ -56,7 +56,8 @@ part 'content_creator_screen.camera_settings_controls.dart';
 part 'content_creator_screen.camera_widgets.dart';
 
 final _contentCreatorTagStripRe = RegExp(
-    r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
+  r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*',
+);
 
 enum _ContentCameraSourceMode { native, usb, virtual, all }
 
@@ -99,6 +100,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   Timer? _wordTrackTimer;
   Timer? _positionCommitTimer;
   WebviewController? _contentWebviewController;
+  Future<WebviewController?>? _contentWebViewControllerInitFuture;
+  Future<void> _contentWebViewNavigationTail = Future<void>.value();
+  bool _contentWebViewControllerOwnerDisposed = false;
   String? _loadedContentWebViewUrl;
   String? _pendingContentWebViewUrl;
   int _contentWebViewLoadGeneration = 0;
@@ -142,8 +146,13 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     _scrollController.addListener(_handleContentScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl),
-          (prev, next) {
+      if (Platform.isWindows) {
+        unawaited(_ensureContentSttWebViewController());
+      }
+      ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl), (
+        prev,
+        next,
+      ) {
         if (next == null) {
           _clearContentSttWebView();
         } else if (next != _loadedContentWebViewUrl &&
@@ -152,18 +161,23 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         }
       });
       ref.listenManual(
-          teleprompterProvider.select((s) => s.isListening || s.isStarting),
-          (prev, next) {
-        if (mounted) _syncContentControlsForActiveSession(next || _isRecording);
-      });
-      ref.listenManual(teleprompterProvider.select((s) => s.confirmedWordIndex),
-          (prev, next) {
-        if (!mounted) return;
-        final live = ref.read(teleprompterProvider);
-        if (!live.isListening || next <= 0) return;
-        _updateContentCreatorState(() => _activeWordIndex = next);
-        _scrollToContentWordIndex(next);
-      });
+        teleprompterProvider.select((s) => s.isListening || s.isStarting),
+        (prev, next) {
+          if (mounted) {
+            _syncContentControlsForActiveSession(next || _isRecording);
+          }
+        },
+      );
+      ref.listenManual(
+        teleprompterProvider.select((s) => s.confirmedWordIndex),
+        (prev, next) {
+          if (!mounted) return;
+          final live = ref.read(teleprompterProvider);
+          if (!live.isListening || next <= 0) return;
+          _updateContentCreatorState(() => _activeWordIndex = next);
+          _scrollToContentWordIndex(next);
+        },
+      );
       final initialWebViewUrl = ref.read(teleprompterProvider).sttWebViewUrl;
       if (Platform.isWindows && initialWebViewUrl != null) {
         unawaited(_loadContentSttWebView(initialWebViewUrl));
@@ -178,12 +192,16 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         settings.contentCreatorRecordingFormat !=
             AppSettings.contentCreatorRecordingFormatWav) {
       unawaited(
-        ref.read(settingsProvider.notifier).setContentCreatorRecordingFormat(
+        ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingFormat(
               AppSettings.contentCreatorRecordingFormatWav,
             ),
       );
       unawaited(
-        ref.read(settingsProvider.notifier).setContentCreatorRecordingAudioMode(
+        ref
+            .read(settingsProvider.notifier)
+            .setContentCreatorRecordingAudioMode(
               AppSettings.contentCreatorRecordingAudioCamera,
             ),
       );
@@ -217,14 +235,17 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
         source: 'contentCreator.disposeVisibleWindow',
       );
     }
+    _contentWebViewControllerOwnerDisposed = true;
     _contentWebViewLoadGeneration++;
     final contentWebviewController = _contentWebviewController;
     _contentWebviewController = null;
-    if (contentWebviewController != null) {
-      unawaited(
-        _disposeContentSttWebViewController(contentWebviewController),
-      );
-    }
+    final contentWebViewNavigationTail = _contentWebViewNavigationTail;
+    unawaited(
+      _disposeContentSttWebViewResources(
+        contentWebviewController,
+        contentWebViewNavigationTail,
+      ),
+    );
     _scrollController.removeListener(_handleContentScroll);
     _scrollController.dispose();
     super.dispose();
@@ -232,9 +253,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _updateContentCreatorState(VoidCallback update) {
@@ -296,7 +317,24 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
   Widget build(BuildContext context) {
     final script = ref.watch(scriptProvider);
     final settings = ref.watch(settingsProvider);
-    final tState = ref.watch(teleprompterProvider);
+    final coreState = ref.watch(
+      teleprompterProvider.select(
+        (state) => (
+          confirmedWordIndex: state.confirmedWordIndex,
+          isListening: state.isListening,
+          isStarting: state.isStarting,
+          sttWebViewUrl: state.sttWebViewUrl,
+        ),
+      ),
+    );
+    // Meter samples and debug lines update their own small Consumer below.
+    // They must never rebuild the full camera and thousands-of-words surface.
+    final tState = TeleprompterState(
+      confirmedWordIndex: coreState.confirmedWordIndex,
+      isListening: coreState.isListening,
+      isStarting: coreState.isStarting,
+      sttWebViewUrl: coreState.sttWebViewUrl,
+    );
     final audioOnlyMode = _contentAudioOnlyMode(settings);
 
     if (!audioOnlyMode && !_contentFrameConfirmed) {
@@ -312,8 +350,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
           _scrollController.hasClients ? _scrollController.offset : null;
       final preservedIndex = _activeContentIndex();
       _lastContentRotation = normalizedRotation;
-      _contentRotationRecenterUntil =
-          DateTime.now().add(const Duration(milliseconds: 650));
+      _contentRotationRecenterUntil = DateTime.now().add(
+        const Duration(milliseconds: 650),
+      );
       _scheduleContentRotationRestore(
         preservedOffset: preservedOffset,
         fallbackIndex: preservedIndex,
@@ -325,15 +364,20 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
           '${script.sessionId}|${script.title}|${script.words.length}';
       if (_activeScriptSeedKey != seedKey) {
         _activeScriptSeedKey = seedKey;
-        final pendingResume = _contentEntryResumeIndex > 0 &&
+        final pendingResume =
+            _contentEntryResumeIndex > 0 &&
             !_resumeDialogShown &&
             !tState.isListening &&
             !tState.isStarting;
-        _activeWordIndex = pendingResume
-            ? 0
-            : tState.confirmedWordIndex
-                .clamp(0, script.words.isEmpty ? 0 : script.words.length - 1)
-                .toInt();
+        _activeWordIndex =
+            pendingResume
+                ? 0
+                : tState.confirmedWordIndex
+                    .clamp(
+                      0,
+                      script.words.isEmpty ? 0 : script.words.length - 1,
+                    )
+                    .toInt();
         _pendingPositionCommit = null;
         _positionCommitTimer?.cancel();
       }
@@ -345,9 +389,10 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
       }
       unawaited(_loadBookmarksForScript(script));
     }
-    final activeWordIndex = script == null || script.words.isEmpty
-        ? 0
-        : _activeWordIndex.clamp(0, script.words.length - 1).toInt();
+    final activeWordIndex =
+        script == null || script.words.isEmpty
+            ? 0
+            : _activeWordIndex.clamp(0, script.words.length - 1).toInt();
 
     final paragraphs =
         script == null ? <List<ScriptWord>>[] : _paragraphsForScript(script);
@@ -357,56 +402,61 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncContentVisibleWordWindow();
     });
-    final bookmarkWordIndexes = script == null
-        ? <int>{}
-        : _bookmarks
-            .map(
-              (bookmark) => ScriptBookmarkService.nearestBookmarkableWordIndex(
-                script.words,
-                bookmark.wordIndex,
+    final bookmarkWordIndexes =
+        script == null
+            ? <int>{}
+            : _bookmarks
+                .map(
+                  (bookmark) =>
+                      ScriptBookmarkService.nearestBookmarkableWordIndex(
+                        script.words,
+                        bookmark.wordIndex,
+                      ),
+                )
+                .whereType<int>()
+                .toSet();
+    final wordList =
+        script == null || script.isEmpty
+            ? const Center(
+              child: Text(
+                'No script loaded.',
+                style: TextStyle(color: Colors.white),
               ),
             )
-            .whereType<int>()
-            .toSet();
-    final wordList = script == null || script.isEmpty
-        ? const Center(
-            child: Text(
-              'No script loaded.',
-              style: TextStyle(color: Colors.white),
-            ),
-          )
-        : _buildContentPresenterWordList(
-            context: context,
-            script: script,
-            paragraphs: paragraphs,
-            activeWordIndex: activeWordIndex,
-            settings: settings,
-            bookmarkWordIndexes: bookmarkWordIndexes,
-            presentationFontSize: presentationFontSize,
-            presenterWordGap: presenterWordGap,
-            allowWordJump: !activeStt && !_contentResumeDecisionPending,
-          );
+            : _buildContentPresenterWordList(
+              context: context,
+              script: script,
+              paragraphs: paragraphs,
+              activeWordIndex: activeWordIndex,
+              settings: settings,
+              bookmarkWordIndexes: bookmarkWordIndexes,
+              presentationFontSize: presentationFontSize,
+              presenterWordGap: presenterWordGap,
+              allowWordJump: !activeStt && !_contentResumeDecisionPending,
+            );
 
     final contentSessionActive = _contentSessionActive(tState);
     const controlsReservedHeight = 104.0;
-    final debugConsoleExpanded = settings.debugMode &&
+    final debugConsoleExpanded =
+        settings.debugMode &&
         !_contentDebugConsoleMinimized &&
         (_contentControlsVisible || _contentDebugConsolePinned);
     final debugConsoleHeight =
         settings.debugMode ? (debugConsoleExpanded ? 220.0 : 38.0) : 0.0;
-    final debugConsoleBottom = settings.debugMode
-        ? (debugConsoleExpanded
-            ? (_contentDebugConsolePinned && !_contentControlsVisible
-                ? 10.0
-                : controlsReservedHeight)
-            : (_contentControlsVisible ? controlsReservedHeight : 10.0))
-        : 10.0;
+    final debugConsoleBottom =
+        settings.debugMode
+            ? (debugConsoleExpanded
+                ? (_contentDebugConsolePinned && !_contentControlsVisible
+                    ? 10.0
+                    : controlsReservedHeight)
+                : (_contentControlsVisible ? controlsReservedHeight : 10.0))
+            : 10.0;
     final allowActiveManualScroll =
         PresenterInputLockService.allowActiveManualScroll(
-      settingEnabled: settings.allowScrollDuringActiveSession,
-      isListening: tState.isListening,
-      isStarting: tState.isStarting,
-    );
+          settingEnabled: settings.allowScrollDuringActiveSession,
+          isListening: tState.isListening,
+          isStarting: tState.isStarting,
+        );
     final activeInputLocked = PresenterInputLockService.inputLocked(
       isWindows: Platform.isWindows,
       isListening: tState.isListening,
@@ -432,15 +482,18 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
                 child: Listener(
                   onPointerSignal: (event) {
                     if (inputLocked && event is PointerScrollEvent) {
-                      GestureBinding.instance.pointerSignalResolver
-                          .register(event, (_) {});
+                      GestureBinding.instance.pointerSignalResolver.register(
+                        event,
+                        (_) {},
+                      );
                     }
                   },
                   child: SingleChildScrollView(
                     controller: _scrollController,
-                    physics: inputLocked
-                        ? const NeverScrollableScrollPhysics()
-                        : const ClampingScrollPhysics(),
+                    physics:
+                        inputLocked
+                            ? const NeverScrollableScrollPhysics()
+                            : const ClampingScrollPhysics(),
                     child: wordList,
                   ),
                 ),
@@ -505,15 +558,20 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
               ),
             ),
             if (settings.debugMode)
-              _buildContentCreatorDebugConsole(
-                context,
-                tState,
-                bottom: debugConsoleBottom,
-                height: debugConsoleHeight,
-                expanded: debugConsoleExpanded,
-                accentColor: Color(settings.currentWordColor),
-                settings: settings,
-                wordCount: script?.words.length ?? 0,
+              Consumer(
+                builder: (context, liveRef, _) {
+                  final liveState = liveRef.watch(teleprompterProvider);
+                  return _buildContentCreatorDebugConsole(
+                    context,
+                    liveState,
+                    bottom: debugConsoleBottom,
+                    height: debugConsoleHeight,
+                    expanded: debugConsoleExpanded,
+                    accentColor: Color(settings.currentWordColor),
+                    settings: settings,
+                    wordCount: script?.words.length ?? 0,
+                  );
+                },
               ),
           ],
         ),

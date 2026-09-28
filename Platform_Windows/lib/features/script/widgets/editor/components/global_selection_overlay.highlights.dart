@@ -13,11 +13,11 @@ class _EditorHighlightOverlayPainter extends CustomPainter {
     required this.highlightBackgroundsAsText,
     Listenable? repaint,
   }) : super(
-          repaint: Listenable.merge([
-            ...controllers,
-            if (repaint != null) repaint,
-          ]),
-        );
+         repaint: Listenable.merge([
+           ...controllers,
+           if (repaint != null) repaint,
+         ]),
+       );
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -27,9 +27,10 @@ class _EditorHighlightOverlayPainter extends CustomPainter {
     final styleBandsByColor = <Color, List<Rect>>{};
     final selectionBands = <Rect>[];
     final underlineBands = <Rect>[];
-    final blockCount = controllers.length < blockKeys.length
-        ? controllers.length
-        : blockKeys.length;
+    final blockCount =
+        controllers.length < blockKeys.length
+            ? controllers.length
+            : blockKeys.length;
 
     for (var index = 0; index < blockCount; index++) {
       final renderObject = blockKeys[index].currentContext?.findRenderObject();
@@ -77,7 +78,7 @@ class _EditorHighlightOverlayPainter extends CustomPainter {
       }
 
       if (kUseCustomEditorSelectionPainting) {
-        final selection = _activeSelectionForBlock(controller);
+        final selection = controller.customPaintSelection;
         if (selection != null) {
           final bands = _localPaintBands(
             editable,
@@ -114,16 +115,18 @@ class _EditorHighlightOverlayPainter extends CustomPainter {
 
   void _paintUnderlineBands(Canvas canvas, List<Rect> bands, Size size) {
     if (bands.isEmpty) return;
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.square
-      ..style = PaintingStyle.stroke;
+    final paint =
+        Paint()
+          ..color = Colors.white
+          ..strokeWidth = 1.5
+          ..strokeCap = StrokeCap.square
+          ..style = PaintingStyle.stroke;
     for (final rect in bands) {
       final left = rect.left.clamp(0.0, size.width).toDouble();
       final right = rect.right.clamp(0.0, size.width).toDouble();
       if (right <= left) continue;
-      final y = rect.bottom.clamp(0.0, size.height).toDouble() -
+      final y =
+          rect.bottom.clamp(0.0, size.height).toDouble() -
           paint.strokeWidth * 0.5;
       canvas.drawLine(Offset(left, y), Offset(right, y), paint);
     }
@@ -140,9 +143,10 @@ class _EditorHighlightOverlayPainter extends CustomPainter {
       editable,
       selection,
       rawText: rawText,
-      gapTolerance: applyBackgroundTail
-          ? _styleBackgroundGapTolerance(editable)
-          : MarkupDecorationBoxMerger.activeSelectionGapTolerance,
+      gapTolerance:
+          applyBackgroundTail
+              ? _styleBackgroundGapTolerance(editable)
+              : MarkupDecorationBoxMerger.activeSelectionGapTolerance,
     );
     if (bands.isEmpty) return const [];
     final lanes = HighlightBandPainter.textLaneBands(
@@ -177,12 +181,14 @@ class _EditorHighlightOverlayPainter extends CustomPainter {
       );
     }
     final isRtl = editable.textDirection == TextDirection.rtl;
-    final leftTail = isRtl
-        ? MarkupDecorationBoxMerger.styleBackgroundVisualEndTail
-        : MarkupDecorationBoxMerger.styleBackgroundInnerTail;
-    final rightTail = isRtl
-        ? MarkupDecorationBoxMerger.styleBackgroundInnerTail
-        : MarkupDecorationBoxMerger.styleBackgroundVisualEndTail;
+    final leftTail =
+        isRtl
+            ? MarkupDecorationBoxMerger.styleBackgroundVisualEndTail
+            : MarkupDecorationBoxMerger.styleBackgroundInnerTail;
+    final rightTail =
+        isRtl
+            ? MarkupDecorationBoxMerger.styleBackgroundInnerTail
+            : MarkupDecorationBoxMerger.styleBackgroundVisualEndTail;
     return Rect.fromLTRB(
       (rect.left - leftTail)
           .clamp(0.0, editable.size.width)
@@ -239,25 +245,6 @@ class _EditorHighlightOverlayPainter extends CustomPainter {
     ].where((rect) => rect.width > 0 && rect.height > 0).toList();
   }
 
-  TextSelection? _activeSelectionForBlock(MarkupController controller) {
-    final length = controller.text.length;
-    if (length <= 0) return null;
-    TextSelection? selection;
-    if (controller.isGlobalSelected) {
-      selection = TextSelection(baseOffset: 0, extentOffset: length);
-    } else {
-      final external = controller.externalSelection;
-      if (external == null || !external.isValid || external.isCollapsed) {
-        return null;
-      }
-      selection = external;
-    }
-    final start = selection.start.clamp(0, length).toInt();
-    final end = selection.end.clamp(start, length).toInt();
-    if (end <= start) return null;
-    return TextSelection(baseOffset: start, extentOffset: end);
-  }
-
   List<_EditorHighlightRun> _backgroundPaintRuns(String rawText) {
     final runs = <_EditorHighlightRun>[];
     Color? pendingColor;
@@ -281,7 +268,8 @@ class _EditorHighlightOverlayPainter extends CustomPainter {
       );
       final color = range.color;
       if (paintable == null || color == null) continue;
-      final canJoin = pendingColor == color &&
+      final canJoin =
+          pendingColor == color &&
           pendingRange != null &&
           _visibleGapIsWhitespace(rawText, pendingRange!.end, paintable.start);
       if (canJoin) {
@@ -329,8 +317,5 @@ class _EditorHighlightRun {
   final TextRange range;
   final Color color;
 
-  const _EditorHighlightRun({
-    required this.range,
-    required this.color,
-  });
+  const _EditorHighlightRun({required this.range, required this.color});
 }

@@ -34,8 +34,8 @@ import '../../remote/services/remote_control_service.dart';
 import '../../../core/window/presenter_fullscreen_service.dart';
 import '../../../platform/permissions/platform_permissions.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
-import '../../../platform/stt/stt_webview2_compatibility.dart';
 import '../../../platform/webview2/webview2_runtime_config.dart';
+import '../../../platform/webview2/webview2_runtime_bootstrap.dart';
 import 'presenter_bookmark_marker_layer.dart';
 
 part 'teleprompter_screen.session_stt.dart';
@@ -59,7 +59,8 @@ part 'teleprompter_screen.walkthrough.dart';
 
 // Regex to strip any unprocessed markup tags that somehow leaked into word.raw
 final _tagStripRe = RegExp(
-    r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*');
+  r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*',
+);
 
 class _PresentationSearchIntent extends Intent {
   const _PresentationSearchIntent();
@@ -103,6 +104,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   bool _activeManualCorrection = false;
   StreamSubscription? _remoteCmdSub;
   WebviewController? _webviewController;
+  Future<WebviewController?>? _webViewControllerInitFuture;
+  Future<void> _webViewNavigationTail = Future<void>.value();
+  bool _webViewControllerOwnerDisposed = false;
   String? _loadedWebViewUrl;
   String? _pendingWebViewUrl;
   int _webViewLoadGeneration = 0;
@@ -145,15 +149,22 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initRemoteListener();
-        ref.listenManual(teleprompterProvider.select((s) => s.missingLanguage),
-            (prev, next) {
-          if (next != null && next.isNotEmpty && mounted) {
-            _showMissingLanguageDialog(next);
-          }
-        });
+        if (Platform.isWindows) {
+          unawaited(_ensureSttWebViewController());
+        }
+        ref.listenManual(
+          teleprompterProvider.select((s) => s.missingLanguage),
+          (prev, next) {
+            if (next != null && next.isNotEmpty && mounted) {
+              _showMissingLanguageDialog(next);
+            }
+          },
+        );
         // Watch for STT Dashboard URL
-        ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl),
-            (prev, next) {
+        ref.listenManual(teleprompterProvider.select((s) => s.sttWebViewUrl), (
+          prev,
+          next,
+        ) {
           if (next == null) {
             _clearSttWebView();
           } else if (next != _loadedWebViewUrl && next != _pendingWebViewUrl) {
@@ -161,11 +172,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
           }
         });
         ref.listenManual(
-            teleprompterProvider.select((s) => s.isListening || s.isStarting),
-            (prev, next) {
-          if (!mounted || !Platform.isWindows) return;
-          _syncWindowsControlsForSpeech(next);
-        });
+          teleprompterProvider.select((s) => s.isListening || s.isStarting),
+          (prev, next) {
+            if (!mounted || !Platform.isWindows) return;
+            _syncWindowsControlsForSpeech(next);
+          },
+        );
         final initialWebViewUrl = ref.read(teleprompterProvider).sttWebViewUrl;
         if (Platform.isWindows && initialWebViewUrl != null) {
           unawaited(_loadSttWebView(initialWebViewUrl));
@@ -193,14 +205,18 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     if (_presenterFullscreen) {
       unawaited(PresenterFullscreenService.setEnabled(false));
     }
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-        overlays: SystemUiOverlay.values);
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
     _manualScrollTimer?.cancel();
     _wordTrackTimer?.cancel();
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
     _activeManualCorrectionTimer?.cancel();
-    ref.read(remoteControlProvider).publishPresenterState(
+    ref
+        .read(remoteControlProvider)
+        .publishPresenterState(
           scriptActive: false,
           sessionActive: false,
           isStarting: false,
@@ -209,12 +225,14 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
         );
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
+    _webViewControllerOwnerDisposed = true;
     _webViewLoadGeneration++;
     final webviewController = _webviewController;
     _webviewController = null;
-    if (webviewController != null) {
-      unawaited(_disposeSttWebViewController(webviewController));
-    }
+    final webViewNavigationTail = _webViewNavigationTail;
+    unawaited(
+      _disposeSttWebViewResources(webviewController, webViewNavigationTail),
+    );
     super.dispose();
   }
 

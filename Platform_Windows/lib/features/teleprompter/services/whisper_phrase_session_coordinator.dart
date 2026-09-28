@@ -2,29 +2,12 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
-import 'package:whisper_ggml/whisper_ggml.dart';
-
 abstract interface class WhisperNativeStream {
   Stream<String> get partials;
 
   void feed(Uint8List pcm16Bytes);
 
   Future<String> stop();
-}
-
-class GgmlWhisperNativeStream implements WhisperNativeStream {
-  const GgmlWhisperNativeStream(this._session);
-
-  final WhisperLiveSession _session;
-
-  @override
-  Stream<String> get partials => _session.partials;
-
-  @override
-  void feed(Uint8List pcm16Bytes) => _session.feed(pcm16Bytes);
-
-  @override
-  Future<String> stop() => _session.stop();
 }
 
 typedef WhisperNativeStreamFactory = Future<WhisperNativeStream> Function();

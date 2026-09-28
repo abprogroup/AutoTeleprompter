@@ -9,46 +9,6 @@ import 'package:autoteleprompter/platform/stt/stt_browser_lifecycle.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('SttSpeechEvidenceGate', () {
-    late Duration now;
-    late SttSpeechEvidenceGate gate;
-
-    setUp(() {
-      now = Duration.zero;
-      gate = SttSpeechEvidenceGate(
-        now: () => now,
-        trailingGrace: const Duration(seconds: 4),
-      );
-    });
-
-    test('accepts only active speech and its bounded final-result grace', () {
-      expect(gate.acceptsResult, isFalse);
-
-      gate.speechEnded();
-      expect(gate.acceptsResult, isFalse);
-
-      gate.speechStarted();
-      expect(gate.acceptsResult, isTrue);
-
-      gate.speechEnded();
-      now = const Duration(seconds: 4);
-      expect(gate.acceptsResult, isTrue);
-
-      now = const Duration(seconds: 4, milliseconds: 1);
-      expect(gate.acceptsResult, isFalse);
-    });
-
-    test('reset clears active and trailing evidence', () {
-      gate.speechStarted();
-      gate.speechEnded();
-      expect(gate.acceptsResult, isTrue);
-
-      gate.reset();
-
-      expect(gate.acceptsResult, isFalse);
-    });
-  });
-
   group('SttBrowserLifecycleEvent', () {
     test('parses the bounded page lifecycle protocol', () {
       const expected = <String, SttBrowserLifecyclePhase>{
@@ -150,6 +110,7 @@ void main() {
     late List<String> diagnostics;
     late List<String> errors;
     late List<SpeechResult> results;
+    late List<double> soundLevels;
 
     setUp(() {
       adapter = SttBrowserAdapter();
@@ -157,10 +118,12 @@ void main() {
       diagnostics = <String>[];
       errors = <String>[];
       results = <SpeechResult>[];
+      soundLevels = <double>[];
       adapter.onRuntimeHealth = healthEvents.add;
       adapter.onDiagnostic = diagnostics.add;
       adapter.onError = errors.add;
       adapter.onResult = results.add;
+      adapter.onSoundLevelChange = soundLevels.add;
     });
 
     tearDown(() async {
@@ -250,7 +213,45 @@ void main() {
       await subscription.cancel();
     });
 
-    test('rejects results without authenticated speech evidence', () async {
+    test(
+      'accepts current-session results without speechstart or VAD',
+      () async {
+        expect((await adapter.start(localeId: 'he-IL')).success, isTrue);
+        final socket = await _connect(Uri.parse(adapter.sttWebViewUrl!));
+        final subscription = socket.listen((_) {});
+
+        socket.add(
+          jsonEncode(const {
+            'type': 'result',
+            'words': 'spoken without speechstart',
+            'isFinal': false,
+          }),
+        );
+        socket.add(
+          jsonEncode(const {
+            'type': 'result',
+            'words': 'final without speechstart',
+            'isFinal': true,
+          }),
+        );
+        await _waitUntil(() => results.length == 2);
+        expect(results.map((result) => result.words), <String>[
+          'spoken without speechstart',
+          'final without speechstart',
+        ]);
+
+        socket.add(
+          jsonEncode(const {'type': 'result', 'words': '   ', 'isFinal': true}),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        expect(results, hasLength(2));
+
+        await socket.close();
+        await subscription.cancel();
+      },
+    );
+
+    test('preserves cumulative browser snapshots and alternatives', () async {
       expect((await adapter.start(localeId: 'he-IL')).success, isTrue);
       final socket = await _connect(Uri.parse(adapter.sttWebViewUrl!));
       final subscription = socket.listen((_) {});
@@ -258,49 +259,56 @@ void main() {
       socket.add(
         jsonEncode(const {
           'type': 'result',
-          'words': 'ambient',
+          'words': 'נפגשים הוקמה בשנת 20',
           'isFinal': false,
+          'isCumulative': true,
+          'streamId': 7,
+          'alternatives': [
+            'נפגשים הוקמה בשנת עשרים',
+            'נפגשים הוקמה בשנת 20',
+            '',
+            22,
+          ],
         }),
       );
-      socket.add(jsonEncode(const {'type': 'speechEnd'}));
-      socket.add(
-        jsonEncode(const {
-          'type': 'result',
-          'words': 'still ambient',
-          'isFinal': false,
-        }),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-      expect(results, isEmpty);
 
-      socket.add(jsonEncode(const {'type': 'speechStart'}));
+      await _waitUntil(() => results.length == 1);
+      final result = results.single;
+      expect(result.words, 'נפגשים הוקמה בשנת 20');
+      expect(result.isFinal, isFalse);
+      expect(result.isCumulative, isTrue);
+      expect(result.streamId, 7);
+      expect(result.alternatives, <String>['נפגשים הוקמה בשנת עשרים']);
+
       socket.add(
         jsonEncode(const {
           'type': 'result',
-          'words': 'spoken',
-          'isFinal': false,
-        }),
-      );
-      socket.add(jsonEncode(const {'type': 'speechEnd'}));
-      socket.add(
-        jsonEncode(const {
-          'type': 'result',
-          'words': 'final spoken',
+          'words': 'legacy without stream id',
           'isFinal': true,
+          'isCumulative': true,
         }),
       );
       await _waitUntil(() => results.length == 2);
-      expect(results.map((result) => result.words), <String>[
-        'spoken',
-        'final spoken',
-      ]);
+      expect(results.last.isCumulative, isFalse);
 
-      socket.add(jsonEncode(const {'type': 'speechReset'}));
-      socket.add(
-        jsonEncode(const {'type': 'result', 'words': 'stale', 'isFinal': true}),
-      );
+      await socket.close();
+      await subscription.cancel();
+    });
+
+    test('meter telemetry alone never fabricates a transcript', () async {
+      expect((await adapter.start(localeId: 'he-IL')).success, isTrue);
+      final socket = await _connect(Uri.parse(adapter.sttWebViewUrl!));
+      final subscription = socket.listen((_) {});
+
+      for (final level in <double>[0.0, 0.02, 0.20, 0.08, 0.30, 0.0]) {
+        socket.add(jsonEncode({'type': 'level', 'level': level}));
+      }
       await Future<void>.delayed(const Duration(milliseconds: 30));
-      expect(results, hasLength(2));
+      expect(results, isEmpty);
+      expect(
+        healthEvents.where((event) => event.type == 'recognizerUnproductive'),
+        isEmpty,
+      );
 
       await socket.close();
       await subscription.cancel();
@@ -319,6 +327,11 @@ void main() {
           }
         });
 
+        socket.add(jsonEncode(const {'type': 'level', 'level': 0.75}));
+        await _waitUntil(
+          () => soundLevels.isNotEmpty && soundLevels.last == 0.75,
+        );
+
         var completed = false;
         final stopFuture = adapter.stop().whenComplete(() => completed = true);
         await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -326,6 +339,7 @@ void main() {
 
         await stopFuture.timeout(const Duration(seconds: 1));
         expect(completed, isTrue);
+        expect(soundLevels.last, 0.0);
 
         await subscription.cancel();
       },

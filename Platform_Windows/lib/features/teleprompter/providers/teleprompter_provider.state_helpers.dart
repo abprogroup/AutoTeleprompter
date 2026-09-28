@@ -3,7 +3,7 @@ part of 'teleprompter_provider.dart';
 extension TeleprompterNotifierStateHelpers on TeleprompterNotifier {
   void _acknowledgeTranscriptFloor(int spokenWordCount) {
     _transcriptFloor = spokenWordCount;
-    if (!_useWhisper) return;
+    if (!_lastResultUsesCumulativeTranscript) return;
     _cumulativeTranscriptBaselineWords = List<String>.unmodifiable(
       _latestCumulativeTranscriptWords,
     );
@@ -36,7 +36,14 @@ extension TeleprompterNotifierStateHelpers on TeleprompterNotifier {
     _pendingVisibleSkipOriginIndex = null;
     _pendingVisibleSkipStartIndex = null;
     _pendingVisibleSkipEndIndex = null;
+    _pendingVisibleSkipStartedAt = null;
   }
+
+  bool get _pendingVisibleSkipHasExpired =>
+      TeleprompterNotifier.isPendingVisibleSkipExpired(
+        startedAt: _pendingVisibleSkipStartedAt,
+        now: DateTime.now(),
+      );
 
   int _currentSttAdvanceGuardIndex(int confirmedIndex) =>
       _fluidAdvanceTimer?.isActive == true && _fluidTarget > confirmedIndex

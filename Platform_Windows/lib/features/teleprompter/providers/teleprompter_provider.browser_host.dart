@@ -10,15 +10,6 @@ int _browserHostFailurePriority(String reasonCode) => switch (reasonCode) {
   _ => 1,
 };
 
-bool shouldStartOfflineWhisperFallback({
-  required WindowsSttHostMode mode,
-  required WindowsSttBrowserHost failedHost,
-  required WindowsSttHostAction action,
-}) =>
-    mode == WindowsSttHostMode.smart &&
-    failedHost == WindowsSttBrowserHost.externalChrome &&
-    action == WindowsSttHostAction.stop;
-
 extension TeleprompterBrowserHost on TeleprompterNotifier {
   Future<bool> _prepareWindowsSttHostPolicy({
     required String sttEngine,
@@ -31,13 +22,6 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     _pendingSttHostFailure = null;
     _pendingSttHostReadinessPhases.clear();
     _observedWebView2RuntimeVersion = null;
-    _useExternalEdgeSttHost = false;
-    _useExternalChromeSttHost = false;
-
-    if (_useWhisper || sttEngine == AppSettings.sttEngineWindowsOffline) {
-      return true;
-    }
-
     if (_sttHostEventJournal == null) {
       try {
         _sttHostEventJournal = await SttHostEventJournal.create().timeout(
@@ -51,7 +35,21 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
       }
     }
 
-    final probe = await SafeWebView2RuntimeProbe().probe();
+    final runtimeBootstrap = WebView2RuntimeBootstrap.current;
+    final effectiveRuntimeVersion = sanitizeWebView2RuntimeVersion(
+      runtimeBootstrap?.effectiveRuntimeVersion,
+    );
+    final WebView2RuntimeProbeResult probe;
+    if (runtimeBootstrap != null) {
+      probe =
+          effectiveRuntimeVersion == null
+              ? const WebView2RuntimeProbeResult.unreadable()
+              : WebView2RuntimeProbeResult.available(effectiveRuntimeVersion);
+    } else {
+      // Production initializes WebView2 before runApp. Retain a bounded probe
+      // only for tests or unusual entry points that bypass main().
+      probe = await SafeWebView2RuntimeProbe().probe();
+    }
     if (_disposed || _sessionStopped || sessionToken != _sessionToken) {
       return false;
     }
@@ -81,23 +79,14 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
       return false;
     }
     _windowsSttHostPolicy = policy;
-    _useExternalEdgeSttHost =
-        policy.currentHost == WindowsSttBrowserHost.externalEdge;
-    _useExternalChromeSttHost =
-        policy.currentHost == WindowsSttBrowserHost.externalChrome;
+    // V5 has one production speech surface: the hidden embedded WebView2.
+    // Legacy host values remain parseable, but provider routing must never
+    // turn them into a visible Edge/Chrome window.
     if (probe.status != WebView2RuntimeProbeStatus.available) {
       _recordSttHostDiagnostic(
         SttHostDiagnosticKind.runtimeProbeUnavailable,
         phase: SttHostReadinessPhase.serverBound,
       );
-    }
-    if (_useExternalEdgeSttHost && policy.mode == WindowsSttHostMode.smart) {
-      _addDebugLog(
-        '[Smart speech host] This WebView2 version is quarantined; using Edge.',
-      );
-    } else if (_useExternalChromeSttHost &&
-        policy.mode == WindowsSttHostMode.smart) {
-      _addDebugLog('[Smart speech host] Using Google Chrome compatibility.');
     }
     return true;
   }
@@ -406,9 +395,8 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
       );
       switch (decision.action) {
         case WindowsSttHostAction.switchHost:
-          await _restartBrowserHost(
-            host: decision.host,
-            reasonCode: reasonCode,
+          await _stopWithBrowserHostError(
+            'external-host-disabled',
             sessionToken: sessionToken,
             policy: policy,
             transitionOwner: transitionOwner,
@@ -424,25 +412,12 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
           );
           return;
         case WindowsSttHostAction.stop:
-          if (shouldStartOfflineWhisperFallback(
-            mode: policy.mode,
-            failedHost: failedHost,
-            action: decision.action,
-          )) {
-            await _startOfflineWhisperFallback(
-              reasonCode,
-              sessionToken: sessionToken,
-              policy: policy,
-              transitionOwner: transitionOwner,
-            );
-          } else {
-            await _stopWithBrowserHostError(
-              reasonCode,
-              sessionToken: sessionToken,
-              policy: policy,
-              transitionOwner: transitionOwner,
-            );
-          }
+          await _stopWithBrowserHostError(
+            reasonCode,
+            sessionToken: sessionToken,
+            policy: policy,
+            transitionOwner: transitionOwner,
+          );
           return;
         case WindowsSttHostAction.ignoreStaleFailure:
           return;
@@ -470,10 +445,17 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     )) {
       return;
     }
+    if (host != WindowsSttBrowserHost.embeddedWebView2) {
+      await _stopWithBrowserHostError(
+        'external-host-disabled',
+        sessionToken: sessionToken,
+        policy: policy,
+        transitionOwner: transitionOwner,
+      );
+      return;
+    }
     final settings = ref.read(settingsProvider);
     final locale = _activeLocale ?? _scriptLanguageLocale ?? 'he_IL';
-    _useExternalEdgeSttHost = host == WindowsSttBrowserHost.externalEdge;
-    _useExternalChromeSttHost = host == WindowsSttBrowserHost.externalChrome;
     _browserHostStartedAt = DateTime.now();
     _lastBrowserHeartbeatAt = null;
     _recoverableSttErrorCount = 0;
@@ -528,13 +510,7 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
 
     _sttService = _browserSttService;
     _activeSttCanSwitchLocale = true;
-    _activeSttEngineLabel = switch (host) {
-      WindowsSttBrowserHost.externalEdge =>
-        'Microsoft Edge compatibility speech-to-text',
-      WindowsSttBrowserHost.externalChrome =>
-        'Google Chrome compatibility speech-to-text',
-      WindowsSttBrowserHost.embeddedWebView2 => 'Browser online speech-to-text',
-    };
+    _activeSttEngineLabel = 'Hidden in-app speech-to-text';
     _startBrowserHostReadiness(sessionToken: sessionToken);
     final activated = await _activateConfiguredBrowserSttHost(
       sessionToken: sessionToken,
@@ -547,66 +523,10 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
         )) {
       _handoffSttHostTransition(transitionOwner);
       await _handleBrowserHostFailure(
-        reasonCode: switch (host) {
-          WindowsSttBrowserHost.externalEdge => 'edge-launch-failed',
-          WindowsSttBrowserHost.externalChrome => 'chrome-launch-failed',
-          WindowsSttBrowserHost.embeddedWebView2 => 'embedded-host-failed',
-        },
-        quarantineRuntime: host == WindowsSttBrowserHost.embeddedWebView2,
+        reasonCode: 'embedded-host-failed',
+        quarantineRuntime: true,
       );
     }
-  }
-
-  Future<void> _startOfflineWhisperFallback(
-    String reasonCode, {
-    required int sessionToken,
-    required WindowsSttHostPolicy policy,
-    required int transitionOwner,
-  }) async {
-    if (!_ownsSttHostTransition(
-      transitionOwner,
-      sessionToken: sessionToken,
-      policy: policy,
-    )) {
-      return;
-    }
-    final locale = _activeLocale ?? _scriptLanguageLocale ?? 'he_IL';
-    _sttHostReadinessTimer?.cancel();
-    _sttHostReadiness = null;
-    _safeSetState(
-      (s) => s.copyWith(
-        sttWebViewUrl: null,
-        isListening: false,
-        isStarting: true,
-        hasError: false,
-        statusMessage: 'Starting offline speech recognition...',
-      ),
-    );
-    await _stopExternalEdgeHostServices();
-    if (!_ownsSttHostTransition(
-      transitionOwner,
-      sessionToken: sessionToken,
-      policy: policy,
-    )) {
-      return;
-    }
-
-    _useExternalEdgeSttHost = false;
-    _useExternalChromeSttHost = false;
-    _useWhisper = true;
-    _activeSttCanSwitchLocale = false;
-    _activeSttEngineLabel = 'Offline Whisper Tiny';
-    _addDebugLog(
-      '[Smart speech host] Browser hosts unavailable; starting offline Whisper.',
-    );
-    LightweightDiagnostics.instance.record(
-      'sttHost',
-      'switched to offline speech fallback',
-      data: {'reasonCode': reasonCode, 'model': 'tiny'},
-    );
-    final settings = ref.read(settingsProvider);
-    _whisperService.setPreferredInputDeviceLabel(settings.sttInputDeviceLabel);
-    await _whisperService.start(localeId: locale, model: WhisperModel.tiny);
   }
 
   Future<void> _stopWithBrowserHostError(
@@ -654,23 +574,22 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
           'security > Microphone and allow desktop apps.';
     }
     if (reasonCode == 'edge-launch-failed') {
-      return 'Microsoft Edge could not be started for speech recognition. '
-          'Install or update Edge, or choose Smart compatibility or Offline '
-          'Whisper in Speech Input.';
+      return 'The external Edge speech host is disabled in this V5 build. '
+          'Restart listening to use hidden in-app speech recognition.';
     }
     if (reasonCode == 'chrome-launch-failed') {
-      return 'Google Chrome could not be started for speech recognition. '
-          'Install or update Chrome, or choose Smart compatibility or Offline '
-          'Whisper in Speech Input.';
+      return 'The external Chrome speech host is disabled in this V5 build. '
+          'Restart listening to use hidden in-app speech recognition.';
     }
-    final hostName = switch (host) {
-      WindowsSttBrowserHost.externalEdge => 'Microsoft Edge',
-      WindowsSttBrowserHost.externalChrome => 'Google Chrome',
-      _ => 'the in-app browser',
-    };
-    return 'Speech recognition could not become ready in $hostName. '
-        'Choose Smart compatibility or Offline Whisper in Speech Input, then '
-        'start listening again.';
+    if (reasonCode == 'external-host-disabled' ||
+        host == WindowsSttBrowserHost.externalEdge ||
+        host == WindowsSttBrowserHost.externalChrome) {
+      return 'This V5 build supports speech recognition only inside the app. '
+          'Restart listening to use the hidden in-app speech host.';
+    }
+    return 'Hidden in-app speech recognition could not become ready. Restart '
+        'listening. If this repeats, reinstall the complete build so its '
+        'compatible WebView2 runtime is available.';
   }
 
   void _recordSttHostDiagnostic(

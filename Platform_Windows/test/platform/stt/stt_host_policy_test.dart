@@ -18,52 +18,51 @@ void main() {
     );
   });
 
-  test('persisted engine values map to stable host modes', () {
-    expect(
-      WindowsSttHostMode.fromSetting('browser_online'),
-      WindowsSttHostMode.embeddedOnly,
-    );
-    expect(
-      WindowsSttHostMode.fromSetting('browser_external_edge'),
-      WindowsSttHostMode.edgeOnly,
-    );
-    expect(
-      WindowsSttHostMode.fromSetting('browser_external_chrome'),
-      WindowsSttHostMode.chromeOnly,
-    );
-    expect(
-      WindowsSttHostMode.fromSetting('browser_smart_compatibility'),
-      WindowsSttHostMode.smart,
-    );
-    expect(
-      WindowsSttHostMode.fromSetting('legacy_value'),
-      WindowsSttHostMode.smart,
-    );
+  test('every persisted setting resolves to Smart embedded mode', () {
+    const persistedValues = <String?>[
+      null,
+      'windows_auto',
+      'windows_offline',
+      'browser_online',
+      'browser_external_edge',
+      'browser_external_chrome',
+      'browser_smart_compatibility',
+      'whisper_tiny',
+      'whisper_base',
+      'whisper_small',
+      'whisper_medium',
+      'google',
+      'legacy_value',
+    ];
+
+    for (final value in persistedValues) {
+      expect(
+        WindowsSttHostMode.fromSetting(value),
+        WindowsSttHostMode.smart,
+        reason: 'Persisted setting "$value" must stay on the in-app host.',
+      );
+    }
   });
 
-  test('Smart starts embedded when exact runtime is not quarantined', () async {
-    final policy = await WindowsSttHostPolicy.resolve(
-      mode: WindowsSttHostMode.smart,
-      webView2RuntimeVersion: '154.0.4300.1',
-      quarantine: quarantine,
-    );
+  test('Smart always starts the embedded WebView2 host', () async {
+    for (final runtime in <String?>[
+      null,
+      '153.0.4234.32',
+      '154.0.4300.1',
+      '155.0.4400.7 canary',
+    ]) {
+      final policy = await WindowsSttHostPolicy.resolve(
+        mode: WindowsSttHostMode.smart,
+        webView2RuntimeVersion: runtime,
+        quarantine: quarantine,
+      );
 
-    expect(policy.currentHost, WindowsSttBrowserHost.embeddedWebView2);
-    expect(policy.smartFailoverUsed, isFalse);
+      expect(policy.currentHost, WindowsSttBrowserHost.embeddedWebView2);
+      expect(policy.smartFailoverUsed, isFalse);
+    }
   });
 
-  test('Smart skips the confirmed incompatible WebView2 runtime', () async {
-    final policy = await WindowsSttHostPolicy.resolve(
-      mode: WindowsSttHostMode.smart,
-      webView2RuntimeVersion: '153.0.4234.32',
-      quarantine: quarantine,
-    );
-
-    expect(policy.currentHost, WindowsSttBrowserHost.externalEdge);
-    expect(policy.smartFailoverUsed, isTrue);
-  });
-
-  test('Smart starts Edge when exact runtime is quarantined', () async {
+  test('a quarantined runtime remains on the embedded host', () async {
     await quarantine.quarantine('154.0.4300.1');
 
     final policy = await WindowsSttHostPolicy.resolve(
@@ -72,108 +71,91 @@ void main() {
       quarantine: quarantine,
     );
 
-    expect(policy.currentHost, WindowsSttBrowserHost.externalEdge);
-    expect(policy.smartFailoverUsed, isTrue);
+    expect(policy.currentHost, WindowsSttBrowserHost.embeddedWebView2);
   });
 
-  test(
-    'Smart failover is one-way through Edge and Chrome and ignores stale hosts',
-    () async {
-      final policy = await WindowsSttHostPolicy.resolve(
-        mode: WindowsSttHostMode.smart,
-        webView2RuntimeVersion: '154.0.4300.1',
-        quarantine: quarantine,
-      );
-
-      final failover = await policy.handleFailure(
-        failedHost: WindowsSttBrowserHost.embeddedWebView2,
-        quarantineWebViewRuntime: true,
-      );
-      final stale = await policy.handleFailure(
-        failedHost: WindowsSttBrowserHost.embeddedWebView2,
-      );
-      final edgeFailure = await policy.handleFailure(
-        failedHost: WindowsSttBrowserHost.externalEdge,
-      );
-      final staleEdge = await policy.handleFailure(
-        failedHost: WindowsSttBrowserHost.externalEdge,
-      );
-      final chromeFailure = await policy.handleFailure(
-        failedHost: WindowsSttBrowserHost.externalChrome,
-      );
-
-      expect(failover.action, WindowsSttHostAction.switchHost);
-      expect(failover.host, WindowsSttBrowserHost.externalEdge);
-      expect(stale.action, WindowsSttHostAction.ignoreStaleFailure);
-      expect(edgeFailure.action, WindowsSttHostAction.switchHost);
-      expect(edgeFailure.host, WindowsSttBrowserHost.externalChrome);
-      expect(
-        edgeFailure.reason,
-        WindowsSttHostDecisionReason.smartChromeFailover,
-      );
-      expect(staleEdge.action, WindowsSttHostAction.ignoreStaleFailure);
-      expect(chromeFailure.action, WindowsSttHostAction.stop);
-      expect(policy.smartEdgeAttempted, isTrue);
-      expect(policy.smartChromeAttempted, isTrue);
-      await _waitUntil(() => quarantine.contains('154.0.4300.1'));
-      expect(await quarantine.contains('154.0.4300.1'), isTrue);
-    },
-  );
-
-  test('Smart remains usable without a persistent quarantine store', () async {
+  test('Smart retries embedded twice, then stops clearly', () async {
     final policy = await WindowsSttHostPolicy.resolve(
       mode: WindowsSttHostMode.smart,
       webView2RuntimeVersion: '154.0.4300.1',
+      quarantine: quarantine,
+      embeddedRecoveryBudget: 2,
     );
 
-    expect(policy.currentHost, WindowsSttBrowserHost.embeddedWebView2);
-    final decision = await policy.handleFailure(
+    final first = await policy.handleFailure(
       failedHost: WindowsSttBrowserHost.embeddedWebView2,
-      quarantineWebViewRuntime: true,
     );
-    expect(decision.action, WindowsSttHostAction.switchHost);
-    expect(policy.currentHost, WindowsSttBrowserHost.externalEdge);
+    final second = await policy.handleFailure(
+      failedHost: WindowsSttBrowserHost.embeddedWebView2,
+    );
+    final exhausted = await policy.handleFailure(
+      failedHost: WindowsSttBrowserHost.embeddedWebView2,
+    );
+
+    expect(first.action, WindowsSttHostAction.retry);
+    expect(first.host, WindowsSttBrowserHost.embeddedWebView2);
+    expect(first.reason, WindowsSttHostDecisionReason.embeddedRecovery);
+    expect(first.embeddedRecoveriesUsed, 1);
+    expect(second.action, WindowsSttHostAction.retry);
+    expect(second.host, WindowsSttBrowserHost.embeddedWebView2);
+    expect(second.embeddedRecoveriesUsed, 2);
+    expect(exhausted.action, WindowsSttHostAction.stop);
+    expect(exhausted.host, WindowsSttBrowserHost.embeddedWebView2);
+    expect(
+      exhausted.reason,
+      WindowsSttHostDecisionReason.embeddedRecoveryExhausted,
+    );
+    expect(policy.smartFailoverUsed, isFalse);
   });
 
-  test(
-    'known incompatible runtime still selects Edge without a store',
-    () async {
-      final policy = await WindowsSttHostPolicy.resolve(
-        mode: WindowsSttHostMode.smart,
-        webView2RuntimeVersion: '153.0.4234.32',
-      );
+  test('Smart never switches to an external host after failure', () async {
+    final policy = await WindowsSttHostPolicy.resolve(
+      mode: WindowsSttHostMode.smart,
+      webView2RuntimeVersion: '154.0.4300.1',
+      quarantine: quarantine,
+      embeddedRecoveryBudget: 0,
+    );
 
-      expect(policy.currentHost, WindowsSttBrowserHost.externalEdge);
+    final embeddedFailure = await policy.handleFailure(
+      failedHost: WindowsSttBrowserHost.embeddedWebView2,
+    );
+    final staleEdgeFailure = await policy.handleFailure(
+      failedHost: WindowsSttBrowserHost.externalEdge,
+    );
+    final staleChromeFailure = await policy.handleFailure(
+      failedHost: WindowsSttBrowserHost.externalChrome,
+    );
 
-      final edgeFailure = await policy.handleFailure(
-        failedHost: WindowsSttBrowserHost.externalEdge,
-      );
-      expect(edgeFailure.action, WindowsSttHostAction.switchHost);
-      expect(edgeFailure.host, WindowsSttBrowserHost.externalChrome);
-    },
-  );
+    expect(embeddedFailure.action, WindowsSttHostAction.stop);
+    expect(embeddedFailure.host, WindowsSttBrowserHost.embeddedWebView2);
+    expect(
+      embeddedFailure.reason,
+      WindowsSttHostDecisionReason.embeddedRecoveryExhausted,
+    );
+    expect(staleEdgeFailure.action, WindowsSttHostAction.ignoreStaleFailure);
+    expect(staleChromeFailure.action, WindowsSttHostAction.ignoreStaleFailure);
+    expect(policy.currentHost, WindowsSttBrowserHost.embeddedWebView2);
+    expect(policy.smartFailoverUsed, isFalse);
+  });
 
-  test(
-    'quarantine lookup timeout cannot block initial host selection',
-    () async {
-      final blockedLookup = Completer<bool>();
-      final controlled = _ControlledQuarantine(
-        preferences,
-        onContains: (_) => blockedLookup.future,
-      );
+  test('quarantine lookup timeout cannot block embedded startup', () async {
+    final blockedLookup = Completer<bool>();
+    final controlled = _ControlledQuarantine(
+      preferences,
+      onContains: (_) => blockedLookup.future,
+    );
 
-      final policy = await WindowsSttHostPolicy.resolve(
-        mode: WindowsSttHostMode.smart,
-        webView2RuntimeVersion: '154.0.4300.1',
-        quarantine: controlled,
-        quarantineOperationTimeout: const Duration(milliseconds: 5),
-      ).timeout(const Duration(milliseconds: 100));
+    final policy = await WindowsSttHostPolicy.resolve(
+      mode: WindowsSttHostMode.smart,
+      webView2RuntimeVersion: '154.0.4300.1',
+      quarantine: controlled,
+      quarantineOperationTimeout: const Duration(milliseconds: 5),
+    ).timeout(const Duration(milliseconds: 100));
 
-      expect(policy.currentHost, WindowsSttBrowserHost.embeddedWebView2);
-    },
-  );
+    expect(policy.currentHost, WindowsSttBrowserHost.embeddedWebView2);
+  });
 
-  test('quarantine write cannot block the Smart failover decision', () async {
+  test('quarantine write cannot block an embedded retry decision', () async {
     final blockedWrite = Completer<void>();
     var writeCalls = 0;
     final controlled = _ControlledQuarantine(
@@ -198,94 +180,41 @@ void main() {
         )
         .timeout(const Duration(milliseconds: 100));
 
-    expect(decision.action, WindowsSttHostAction.switchHost);
-    expect(policy.currentHost, WindowsSttBrowserHost.externalEdge);
+    expect(decision.action, WindowsSttHostAction.retry);
+    expect(decision.host, WindowsSttBrowserHost.embeddedWebView2);
     await _waitUntil(() async => writeCalls == 1);
     await Future<void>.delayed(const Duration(milliseconds: 10));
   });
 
-  test('observed exact runtime overrides a missing startup probe', () async {
-    String? persistedVersion;
-    final controlled = _ControlledQuarantine(
-      preferences,
-      onQuarantine: (version) async {
-        persistedVersion = version;
-      },
-    );
-    final policy = await WindowsSttHostPolicy.resolve(
-      mode: WindowsSttHostMode.smart,
-      webView2RuntimeVersion: null,
-      quarantine: controlled,
-      quarantineOperationTimeout: const Duration(milliseconds: 50),
-    );
+  test(
+    'observed runtime quarantine does not change the embedded route',
+    () async {
+      String? persistedVersion;
+      final controlled = _ControlledQuarantine(
+        preferences,
+        onQuarantine: (version) async {
+          persistedVersion = version;
+        },
+      );
+      final policy = await WindowsSttHostPolicy.resolve(
+        mode: WindowsSttHostMode.smart,
+        webView2RuntimeVersion: null,
+        quarantine: controlled,
+        quarantineOperationTimeout: const Duration(milliseconds: 50),
+      );
 
-    final decision = await policy.handleFailure(
-      failedHost: WindowsSttBrowserHost.embeddedWebView2,
-      quarantineWebViewRuntime: true,
-      observedWebView2RuntimeVersion: '155.0.4400.7 canary',
-    );
+      final decision = await policy.handleFailure(
+        failedHost: WindowsSttBrowserHost.embeddedWebView2,
+        quarantineWebViewRuntime: true,
+        observedWebView2RuntimeVersion: '155.0.4400.7 canary',
+      );
 
-    expect(decision.action, WindowsSttHostAction.switchHost);
-    await _waitUntil(() async => persistedVersion != null);
-    expect(persistedVersion, '155.0.4400.7');
-  });
-
-  test('embedded-only mode has exactly two recovery attempts', () async {
-    final policy = await WindowsSttHostPolicy.resolve(
-      mode: WindowsSttHostMode.embeddedOnly,
-      webView2RuntimeVersion: '153.0.4234.32',
-      quarantine: quarantine,
-    );
-
-    final first = await policy.handleFailure(
-      failedHost: WindowsSttBrowserHost.embeddedWebView2,
-    );
-    final second = await policy.handleFailure(
-      failedHost: WindowsSttBrowserHost.embeddedWebView2,
-    );
-    final third = await policy.handleFailure(
-      failedHost: WindowsSttBrowserHost.embeddedWebView2,
-    );
-
-    expect(first.action, WindowsSttHostAction.retry);
-    expect(second.action, WindowsSttHostAction.retry);
-    expect(second.embeddedRecoveriesUsed, 2);
-    expect(third.action, WindowsSttHostAction.stop);
-    expect(
-      third.reason,
-      WindowsSttHostDecisionReason.embeddedRecoveryExhausted,
-    );
-  });
-
-  test('Edge-only mode never enters embedded recovery', () async {
-    final policy = await WindowsSttHostPolicy.resolve(
-      mode: WindowsSttHostMode.edgeOnly,
-      webView2RuntimeVersion: '153.0.4234.32',
-      quarantine: quarantine,
-    );
-
-    expect(policy.currentHost, WindowsSttBrowserHost.externalEdge);
-    final decision = await policy.handleFailure(
-      failedHost: WindowsSttBrowserHost.externalEdge,
-    );
-    expect(decision.action, WindowsSttHostAction.stop);
-  });
-
-  test('Chrome-only mode never enters the Smart or embedded chain', () async {
-    final policy = await WindowsSttHostPolicy.resolve(
-      mode: WindowsSttHostMode.chromeOnly,
-      webView2RuntimeVersion: '153.0.4234.32',
-      quarantine: quarantine,
-    );
-
-    expect(policy.currentHost, WindowsSttBrowserHost.externalChrome);
-    expect(policy.smartFailoverUsed, isFalse);
-    final decision = await policy.handleFailure(
-      failedHost: WindowsSttBrowserHost.externalChrome,
-    );
-    expect(decision.action, WindowsSttHostAction.stop);
-    expect(decision.reason, WindowsSttHostDecisionReason.selectedHostFailed);
-  });
+      expect(decision.action, WindowsSttHostAction.retry);
+      expect(decision.host, WindowsSttBrowserHost.embeddedWebView2);
+      await _waitUntil(() async => persistedVersion != null);
+      expect(persistedVersion, '155.0.4400.7');
+    },
+  );
 }
 
 class _ControlledQuarantine extends WebView2RuntimeQuarantine {

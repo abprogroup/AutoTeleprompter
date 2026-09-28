@@ -54,21 +54,23 @@ class AppSettings {
 
   static String normalizeSttEngine(String? engine) {
     switch (engine) {
+      case sttEngineBrowserSmartCompatibility:
+        return sttEngineBrowserSmartCompatibility;
+      // V5 supports one production speech path: the hidden embedded WebView2
+      // host. Keep every older/experimental value readable so existing
+      // preferences migrate safely, but never let those values activate an
+      // external browser, Windows Offline, or Whisper engine.
       case sttEngineBrowserOnline:
       case sttEngineBrowserExternalEdge:
       case sttEngineBrowserExternalChrome:
-      case sttEngineBrowserSmartCompatibility:
-      case sttEngineWhisperTiny:
-        return engine!;
       case sttEngineWindowsOffline:
+      case sttEngineWhisperTiny:
       case sttEngineWhisperBase:
       case sttEngineWhisperSmall:
       case sttEngineWhisperMedium:
-        return sttEngineWhisperTiny;
       case sttEngineAuto:
       case 'google':
       case null:
-        return sttEngineBrowserSmartCompatibility;
       default:
         return sttEngineBrowserSmartCompatibility;
     }

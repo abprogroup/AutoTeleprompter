@@ -4,113 +4,107 @@ import 'package:autoteleprompter/platform/stt/stt_host_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('external Edge STT host policy', () {
-    test('Smart uses offline Whisper only after the Chrome tier stops', () {
-      expect(
-        shouldStartOfflineWhisperFallback(
-          mode: WindowsSttHostMode.smart,
-          failedHost: WindowsSttBrowserHost.externalChrome,
-          action: WindowsSttHostAction.stop,
-        ),
-        isTrue,
-      );
-      expect(
-        shouldStartOfflineWhisperFallback(
-          mode: WindowsSttHostMode.smart,
-          failedHost: WindowsSttBrowserHost.externalEdge,
-          action: WindowsSttHostAction.stop,
-        ),
-        isFalse,
-      );
-      expect(
-        shouldStartOfflineWhisperFallback(
-          mode: WindowsSttHostMode.smart,
-          failedHost: WindowsSttBrowserHost.embeddedWebView2,
-          action: WindowsSttHostAction.switchHost,
-        ),
-        isFalse,
-      );
+  group('current-release speech-host boundary', () {
+    test('persisted settings only retry and stop the embedded host', () async {
+      const persistedValues = <String?>[
+        null,
+        AppSettings.sttEngineAuto,
+        AppSettings.sttEngineWindowsOffline,
+        AppSettings.sttEngineBrowserOnline,
+        AppSettings.sttEngineBrowserExternalEdge,
+        AppSettings.sttEngineBrowserExternalChrome,
+        AppSettings.sttEngineBrowserSmartCompatibility,
+        AppSettings.sttEngineWhisperTiny,
+        AppSettings.sttEngineWhisperBase,
+        AppSettings.sttEngineWhisperSmall,
+        AppSettings.sttEngineWhisperMedium,
+        'google',
+        'unexpected',
+      ];
+
+      for (final value in persistedValues) {
+        final mode = WindowsSttHostMode.fromSetting(value);
+        final policy = await WindowsSttHostPolicy.resolve(
+          mode: mode,
+          webView2RuntimeVersion: '153.0.4234.32',
+          embeddedRecoveryBudget: 1,
+        );
+        expect(mode, WindowsSttHostMode.smart);
+        expect(policy.currentHost, WindowsSttBrowserHost.embeddedWebView2);
+        expect(
+          (await policy.handleFailure(
+            failedHost: WindowsSttBrowserHost.embeddedWebView2,
+          )).action,
+          WindowsSttHostAction.retry,
+        );
+        expect(
+          (await policy.handleFailure(
+            failedHost: WindowsSttBrowserHost.embeddedWebView2,
+          )).action,
+          WindowsSttHostAction.stop,
+        );
+      }
     });
 
-    test('selects external Chrome only for the explicit Chrome option', () {
-      expect(
-        usesExternalChromeSttHost(AppSettings.sttEngineBrowserExternalChrome),
-        isTrue,
-      );
-      expect(usesExternalChromeSttHost(AppSettings.sttEngineAuto), isFalse);
-      expect(
-        usesExternalChromeSttHost(AppSettings.sttEngineBrowserExternalEdge),
-        isFalse,
-      );
+    test('no persisted setting selects an external browser host', () {
+      const persistedValues = <String?>[
+        null,
+        AppSettings.sttEngineAuto,
+        AppSettings.sttEngineWindowsOffline,
+        AppSettings.sttEngineBrowserOnline,
+        AppSettings.sttEngineBrowserExternalEdge,
+        AppSettings.sttEngineBrowserExternalChrome,
+        AppSettings.sttEngineBrowserSmartCompatibility,
+        AppSettings.sttEngineWhisperTiny,
+        AppSettings.sttEngineWhisperBase,
+        AppSettings.sttEngineWhisperSmall,
+        AppSettings.sttEngineWhisperMedium,
+        'google',
+        'unexpected',
+      ];
+
+      for (final value in persistedValues) {
+        expect(
+          usesExternalEdgeSttHost(value),
+          isFalse,
+          reason: 'Persisted setting "$value" must not launch Edge.',
+        );
+        expect(
+          usesExternalChromeSttHost(value),
+          isFalse,
+          reason: 'Persisted setting "$value" must not launch Chrome.',
+        );
+      }
     });
 
-    test(
-      'selects external Edge only for the explicit compatibility option',
-      () {
-        expect(
-          usesExternalEdgeSttHost(AppSettings.sttEngineBrowserExternalEdge),
-          isTrue,
-        );
-        expect(usesExternalEdgeSttHost(AppSettings.sttEngineAuto), isFalse);
-        expect(
-          usesExternalEdgeSttHost(AppSettings.sttEngineBrowserOnline),
-          isFalse,
-        );
-        expect(
-          usesExternalEdgeSttHost(AppSettings.sttEngineWindowsOffline),
-          isFalse,
-        );
-      },
-    );
-
-    test('keeps authenticated adapter URL out of embedded WebView state', () {
+    test('every persisted setting keeps STT in the embedded WebView', () {
       const url = 'http://localhost:8082/?session=private-token';
-      expect(
-        embeddedSttWebViewUrlForHost(usesExternalEdge: true, adapterUrl: url),
-        isNull,
-      );
-      expect(
-        embeddedSttWebViewUrlForHost(usesExternalEdge: false, adapterUrl: url),
-        url,
-      );
-    });
+      const persistedValues = <String?>[
+        null,
+        AppSettings.sttEngineAuto,
+        AppSettings.sttEngineWindowsOffline,
+        AppSettings.sttEngineBrowserOnline,
+        AppSettings.sttEngineBrowserExternalEdge,
+        AppSettings.sttEngineBrowserExternalChrome,
+        AppSettings.sttEngineBrowserSmartCompatibility,
+        AppSettings.sttEngineWhisperTiny,
+        AppSettings.sttEngineWhisperBase,
+        'google',
+        'unexpected',
+      ];
 
-    test('launch failure tells the user how to restore embedded mode', () {
-      final message = externalEdgeSttLaunchFailureMessage(
-        'Microsoft Edge is not installed or could not be found.',
-      );
-
-      expect(message, contains('Smart compatibility'));
-      expect(message, contains('Offline Whisper'));
-      expect(message, contains('install Microsoft Edge'));
-      expect(message, isNot(contains('localhost')));
-    });
-
-    test('disconnect fails immediately without waiting for retries', () {
-      expect(
-        externalEdgeRuntimeFailureReason(
-          error: 'browser-disconnected',
-          consecutiveNetworkFailures: 0,
-        ),
-        contains('disconnected'),
-      );
-    });
-
-    test('network errors fail only at the bounded threshold', () {
-      expect(
-        externalEdgeRuntimeFailureReason(
-          error: 'network',
-          consecutiveNetworkFailures: externalEdgeNetworkFailureLimit - 1,
-        ),
-        isNull,
-      );
-      expect(
-        externalEdgeRuntimeFailureReason(
-          error: 'network',
-          consecutiveNetworkFailures: externalEdgeNetworkFailureLimit,
-        ),
-        contains('network'),
-      );
+      for (final value in persistedValues) {
+        final usesExternalBrowser =
+            usesExternalEdgeSttHost(value) || usesExternalChromeSttHost(value);
+        expect(
+          embeddedSttWebViewUrlForHost(
+            usesExternalEdge: usesExternalBrowser,
+            adapterUrl: url,
+          ),
+          url,
+          reason: 'Persisted setting "$value" must keep the in-app URL.',
+        );
+      }
     });
   });
 }

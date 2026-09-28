@@ -8,13 +8,26 @@ import 'package:google_fonts/google_fonts.dart';
 import 'features/feedback/services/lightweight_diagnostics.dart';
 import 'features/settings/services/update_install_service.dart';
 import 'platform/permissions/platform_permissions.dart';
-import 'platform/webview2/webview2_runtime_config.dart';
+import 'platform/webview2/webview2_runtime_bootstrap.dart';
 import 'app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isWindows) {
-    WebView2RuntimeConfig.configureForLocalSttDefaults();
+    final webView2 = await WebView2RuntimeBootstrap.initialize();
+    LightweightDiagnostics.instance.record(
+      'webview2',
+      'embedded runtime selected',
+      data: {
+        'mode': webView2.mode.name,
+        'reason': webView2.reason.name,
+        'installedVersion': webView2.installedEvergreenVersion,
+        'effectiveVersion': webView2.effectiveRuntimeVersion,
+        'fixedRuntimeStatus': webView2.fixedRuntimeStatus.name,
+        'compatibilityRuntimeRequired': webView2.compatibilityRuntimeRequired,
+        'compatibilityRuntimeAvailable': webView2.compatibilityRuntimeAvailable,
+      },
+    );
   }
   GoogleFonts.config.allowRuntimeFetching = false;
   await PlatformPermissions.requestAll();

@@ -22,6 +22,32 @@ AlignmentResult? _continuePendingStartEvidence({
   final transcriptWords = _collapseAbbreviations(rawWords);
   if (transcriptWords.isEmpty) return null;
 
+  final numberOutcome = _numberAwareMatch(
+    script: script,
+    transcript: transcript,
+    lastConfirmedIndex: pendingTargetIndex,
+    scanStart: (pendingTargetIndex + 1).clamp(0, script.length).toInt(),
+    scanEnd: (pendingTargetIndex + 25).clamp(0, script.length).toInt(),
+    strictBulletMode: strictBulletMode,
+    policy: SttRecognitionPolicy.legacy(strictBulletMode: strictBulletMode),
+    visibleSkipEnabled: false,
+  );
+  final numberContinuation = numberOutcome?.result;
+  if (numberContinuation != null) {
+    return numberContinuation.copyWith(
+      debugInfo: 'CONTINUED_START | ${numberContinuation.debugInfo}',
+      thresholdFamily: SttThresholdFamily.startAdvance,
+    );
+  }
+  if (numberOutcome?.blocksGenericFallback ?? false) {
+    return AlignmentResult(
+      pendingTargetIndex,
+      0.0,
+      'CONTINUED_START_NUMBER_MATCH_REJECTED',
+      SttAlignmentDecision.wait,
+    );
+  }
+
   final searchStart = WordAligner.nextRequiredSpeakableIndex(
     script,
     pendingTargetIndex + 1,

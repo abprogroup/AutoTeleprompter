@@ -52,8 +52,6 @@ const dot = document.getElementById('dot');
 const status = document.getElementById('status');
 const words = document.getElementById('words');
 const err = document.getElementById('err');
-const canvas = document.getElementById('waveCanvas');
-const ctx = canvas.getContext('2d');
 let rec;
 let currentLocale = $localeJson;
 let selectedDeviceId = $selectedDeviceJson;
@@ -62,25 +60,30 @@ let consecutiveFails = 0;
 let consecutiveNetworkFails = 0;
 let audioContext;
 let analyser;
-let dataArray;
+let timeDataArray;
 let activeStream;
-let animationId;
+let meterTimer;
 let restartTimer;
 let watchdogTimer;
 let lastError = '';
 let lastStartAt = 0;
+let startRequestedAt = 0;
 let lastResultAt = 0;
 let lastHeartbeatAt = 0;
 let lastLeaseRestartAt = 0;
-let speechActive = false;
-let speechActiveStartedAt = 0;
-let speechEvidenceUntil = 0;
+let meterLevel = 0;
+let lastMeterSendAt = 0;
+const meterSilenceFloorDb = -60;
+const meterCeilingDb = -12;
+const meterAttack = 0.45;
+const meterRelease = 0.10;
 let switchingLocale = false;
 let switchingInput = false;
 let closedByHost = false;
 let recognitionGeneration = 0;
 let restartGeneration = 0;
 let restartSuppressed = false;
+let recognitionInputMode = 'unstarted';
 
 function audioConstraints(deviceId) {
   if (deviceId) {
@@ -214,8 +217,8 @@ async function initVisualizer() {
     stopActiveStream();
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
-    const bufferLength = analyser.frequencyBinCount;
-    dataArray = new Uint8Array(bufferLength);
+    timeDataArray = new Float32Array(analyser.fftSize);
+    resetMeter();
 
     activeStream = await acquireConfiguredAudioStream();
 
@@ -231,10 +234,13 @@ async function initVisualizer() {
     const trackLabel = currentTrack ? currentTrack.label : '';
     sendLifecycle('microphoneReady');
     if (trackLabel) send({type: 'inputReady', label: trackLabel});
-    await refreshDevices();
-    if (!animationId) draw();
+    startMeterSampling();
+    // Device enumeration is informational after the stream is open. Do not
+    // hold recognizer startup behind a slow browser/OS device-list refresh.
+    refreshDevices();
   } catch (e) {
     console.error('Visualizer mic error:', e);
+    resetMeter();
     if(e.name === 'NotAllowedError' || e.name === 'SecurityError') {
       sendLifecycle('permissionDenied');
     } else {
@@ -243,36 +249,71 @@ async function initVisualizer() {
   }
 }
 
-function draw() {
-  animationId = requestAnimationFrame(draw);
-  analyser.getByteFrequencyData(dataArray);
+function startMeterSampling() {
+  if(meterTimer) return;
+  sampleMeter();
+  meterTimer = setInterval(sampleMeter, 100);
+}
 
-  const width = canvas.width;
-  const height = canvas.height;
-  ctx.clearRect(0, 0, width, height);
+function stopMeterSampling() {
+  if(meterTimer) clearInterval(meterTimer);
+  meterTimer = null;
+}
 
-  const barWidth = (width / dataArray.length) * 2.5;
-  let x = 0;
-  let sum = 0;
+function sampleMeter() {
+  if(!analyser || !timeDataArray) return;
+  analyser.getFloatTimeDomainData(timeDataArray);
 
-  for(let i = 0; i < dataArray.length; i++) {
-    const barHeight = (dataArray[i] / 255) * height;
-    ctx.fillStyle = i % 2 === 0 ? '#FFBF00' : '#886600';
-    ctx.fillRect(x, height - barHeight, barWidth, barHeight);
-    x += barWidth + 1;
-    sum += dataArray[i];
+  let mean = 0;
+  for(let i = 0; i < timeDataArray.length; i++) mean += timeDataArray[i];
+  mean /= timeDataArray.length;
+  let sumSquares = 0;
+  for(let i = 0; i < timeDataArray.length; i++) {
+    const centered = timeDataArray[i] - mean;
+    sumSquares += centered * centered;
   }
+  const rms = Math.sqrt(sumSquares / timeDataArray.length);
+  const rmsDb = 20 * Math.log10(Math.max(rms, 1e-7));
+  const targetLevel = rmsDb <= meterSilenceFloorDb
+    ? 0
+    : Math.min(
+        1,
+        Math.max(
+          0,
+          (rmsDb - meterSilenceFloorDb) /
+            (meterCeilingDb - meterSilenceFloorDb)
+        )
+      );
+  const smoothing = targetLevel > meterLevel ? meterAttack : meterRelease;
+  meterLevel += (targetLevel - meterLevel) * smoothing;
+  if(meterLevel < 0.005) meterLevel = 0;
 
-  // Calculate average volume (0.0 to 1.0) and send to Flutter
-  const avgVol = sum / dataArray.length / 255.0;
-  // Boost the signal slightly so even quiet speech registers
-  const normalizedVol = Math.min(1.0, avgVol * 2.5);
-  // Metering is independent from recognition evidence: users must be able to
-  // verify their selected microphone even before Chromium detects speech.
-  if (!window.lastVolSend || Date.now() - window.lastVolSend > 100) {
-     send({type: 'level', level: normalizedVol});
-     window.lastVolSend = Date.now();
+  // Meter telemetry is presentation-only. Recognition remains exclusively
+  // driven by SpeechRecognition.onresult below.
+  const now = Date.now();
+  if(now - lastMeterSendAt >= 100) {
+    send({type: 'level', level: meterLevel});
+    lastMeterSendAt = now;
   }
+}
+
+function shutdownVisualizer() {
+  stopMeterSampling();
+  resetMeter();
+  stopActiveStream();
+  analyser = null;
+  timeDataArray = null;
+  const closingContext = audioContext;
+  audioContext = null;
+  if(closingContext) {
+    try { closingContext.close().catch(() => {}); } catch(e) {}
+  }
+}
+
+function resetMeter() {
+  meterLevel = 0;
+  lastMeterSendAt = 0;
+  send({type: 'level', level: 0.0});
 }
 
 ws.onopen = async () => {
@@ -288,7 +329,7 @@ ws.onclose = () => {
   if(watchdogTimer) clearInterval(watchdogTimer);
   status.textContent = 'Standby';
   invalidateRecognition();
-  stopActiveStream();
+  shutdownVisualizer();
 };
 ws.onmessage = (e) => {
   const d = JSON.parse(e.data);
@@ -297,7 +338,7 @@ ws.onmessage = (e) => {
     cancelScheduledRestart();
     if(watchdogTimer) clearInterval(watchdogTimer);
     invalidateRecognition();
-    stopActiveStream();
+    shutdownVisualizer();
     status.textContent = 'Closed';
     send({type: 'closeAck'});
     setTimeout(() => {
@@ -350,19 +391,11 @@ function cancelScheduledRestart() {
   restartTimer = null;
 }
 
-function resetSpeechEvidence() {
-  speechActive = false;
-  speechActiveStartedAt = 0;
-  speechEvidenceUntil = 0;
-  send({type: 'speechReset'});
-  send({type: 'level', level: 0.0});
-}
-
 function invalidateRecognition() {
   const recognizer = rec;
   recognitionGeneration++;
   rec = null;
-  resetSpeechEvidence();
+  startRequestedAt = 0;
   dot.classList.remove('on');
   if(recognizer) {
     try { recognizer.abort(); } catch(e) {}
@@ -375,24 +408,6 @@ function isTerminalRecognitionError(errorCode) {
     errorCode === 'language-not-supported' ||
     errorCode === 'audio-capture' ||
     errorCode === 'bad-grammar';
-}
-
-function noteSpeechEvidence() {
-  speechEvidenceUntil = Math.max(speechEvidenceUntil, performance.now() + 4000);
-}
-
-function endSpeechActivity() {
-  const wasActive = speechActive;
-  speechActive = false;
-  speechActiveStartedAt = 0;
-  if(wasActive) {
-    speechEvidenceUntil = Math.max(
-      speechEvidenceUntil,
-      performance.now() + 4000
-    );
-    send({type: 'speechEnd'});
-    send({type: 'level', level: 0.0});
-  }
 }
 
 function scheduleRestart(delay, reason) {
@@ -416,19 +431,30 @@ function restartDelay() {
   return Math.min(300 * Math.pow(2, consecutiveFails - 2), 3000);
 }
 
-function startRecognitionWithSelectedInput(recognizer) {
+function startRecognitionWithConfiguredInput(recognizer) {
   const track = activeStream && activeStream.getAudioTracks
     ? activeStream.getAudioTracks()[0]
     : null;
-  if(track && track.readyState === 'live') {
+  if(selectedDeviceId && track && track.readyState === 'live') {
     try {
-      // Chromium 133+ can recognize the same MediaStreamTrack used by the
-      // meter. Older runtimes throw synchronously and safely fall back below.
+      // Chromium 133+ accepts an audio MediaStreamTrack. Reusing the stream
+      // already opened for the meter keeps an explicitly selected device on
+      // that exact input.
       recognizer.start(track);
+      recognitionInputMode = 'selected-stream';
+      send({type: 'recognitionInput', mode: recognitionInputMode});
       return;
-    } catch(e) {}
+    } catch(e) {
+      // Older or incompatible runtimes reject the overload synchronously.
+      // Preserve the original browser-owned microphone path as a fallback.
+    }
   }
+  // Preserve the original, proven Web Speech path for the system default.
+  // Feeding the metering track through start(track) changed cloud recognition
+  // behaviour on some Chromium/WebView2 versions and produced tiny fragments.
   recognizer.start();
+  recognitionInputMode = 'default-microphone';
+  send({type: 'recognitionInput', mode: recognitionInputMode});
 }
 
 function ensureWatchdog() {
@@ -453,19 +479,15 @@ function ensureWatchdog() {
       scheduleRestart(120, 'watchdog-missing-rec');
       return;
     }
-    if(!dotOn && lastStartAt > 0 && now - lastStartAt > 1800) {
+    if(!dotOn && startRequestedAt > 0 && now - startRequestedAt > 10000) {
       invalidateRecognition();
-      scheduleRestart(120, 'watchdog-idle');
+      scheduleRestart(120, 'watchdog-start-timeout');
       return;
-    }
-    if(speechActive && speechActiveStartedAt > 0 &&
-       now - speechActiveStartedAt > 120000) {
-      endSpeechActivity();
     }
     // Renew a recognizer that claims to stay active forever without using
     // ordinary silence as a failure signal. Normal Chromium onend cycles reset
     // lastStartAt long before this bounded lease expires.
-    if(dotOn && !speechActive && lastStartAt > 0 &&
+    if(dotOn && lastStartAt > 0 &&
        now - lastStartAt > 900000 && now - lastLeaseRestartAt > 900000) {
       lastLeaseRestartAt = now;
       send({
@@ -495,13 +517,16 @@ function startRec(locale) {
   const recognizer = new SR();
   const generation = ++recognitionGeneration;
   rec = recognizer;
-  lastStartAt = Date.now();
+  startRequestedAt = Date.now();
+  lastStartAt = 0;
   recognizer.lang = locale;
   recognizer.continuous = true;
   recognizer.interimResults = true;
+  recognizer.maxAlternatives = 3;
   recognizer.onstart = () => {
     if(!isCurrentRecognition(recognizer, generation)) return;
-    lastError = ''; lastStartAt = Date.now(); resetSpeechEvidence();
+    startRequestedAt = 0;
+    lastError = ''; lastStartAt = Date.now();
     dot.classList.add('on');
     status.textContent = '[' + locale.toUpperCase() + '] Active';
     // Always signal recognizer readiness so the host can leave starting state.
@@ -510,47 +535,65 @@ function startRec(locale) {
   };
   recognizer.onresult = (e) => {
     if(!isCurrentRecognition(recognizer, generation)) return;
-    const evidenceNow = performance.now();
-    if(!speechActive && evidenceNow > speechEvidenceUntil) return;
-    let acceptedResult = false;
-    for(let i = e.resultIndex; i < e.results.length; i++){
+    const snapshotParts = [];
+    let snapshotIsFinal = true;
+    for(let i = 0; i < e.results.length; i++){
       const t = e.results[i][0].transcript;
       if(typeof t !== 'string' || t.trim().length === 0) continue;
-      const f = e.results[i].isFinal;
-      send({type: 'result', words: t, isFinal: f});
-      words.textContent = t.length > 30 ? '...' + t.slice(-30) : t;
-      acceptedResult = true;
+      snapshotParts.push(t.trim());
+      if(!e.results[i].isFinal) snapshotIsFinal = false;
     }
-    if(acceptedResult) {
+    const snapshotTranscript = snapshotParts.join(' ').trim();
+    if(snapshotTranscript.length > 0) {
+      const alternatives = [];
+      for(let i = e.resultIndex; i < e.results.length; i++){
+        const result = e.results[i];
+        for(let alternativeIndex = 1;
+            alternativeIndex < result.length && alternatives.length < 4;
+            alternativeIndex++) {
+          const alternative = result[alternativeIndex].transcript;
+          if(typeof alternative !== 'string' || alternative.trim().length === 0) {
+            continue;
+          }
+          const candidateParts = [];
+          for(let snapshotIndex = 0;
+              snapshotIndex < e.results.length;
+              snapshotIndex++) {
+            const candidate = snapshotIndex === i
+              ? alternative
+              : e.results[snapshotIndex][0].transcript;
+            if(typeof candidate === 'string' && candidate.trim().length > 0) {
+              candidateParts.push(candidate.trim());
+            }
+          }
+          const candidateTranscript = candidateParts.join(' ').trim();
+          if(candidateTranscript.length > 0 &&
+             candidateTranscript !== snapshotTranscript &&
+             !alternatives.includes(candidateTranscript)) {
+            alternatives.push(candidateTranscript);
+          }
+        }
+      }
+      send({
+        type: 'result',
+        words: snapshotTranscript,
+        isFinal: snapshotIsFinal,
+        isCumulative: true,
+        streamId: generation,
+        alternatives: alternatives
+      });
+      words.textContent = snapshotTranscript.length > 30
+        ? '...' + snapshotTranscript.slice(-30)
+        : snapshotTranscript;
       consecutiveFails = 0;
       consecutiveNetworkFails = 0;
       lastError = '';
       lastResultAt = Date.now();
     }
   };
-  recognizer.onspeechstart = () => {
-    if(!isCurrentRecognition(recognizer, generation)) return;
-    speechActive = true;
-    speechActiveStartedAt = Date.now();
-    noteSpeechEvidence();
-    send({type: 'speechStart'});
-  };
-  recognizer.onspeechend = () => {
-    if(!isCurrentRecognition(recognizer, generation)) return;
-    endSpeechActivity();
-  };
-  recognizer.onsoundend = () => {
-    if(!isCurrentRecognition(recognizer, generation)) return;
-    endSpeechActivity();
-  };
-  recognizer.onaudioend = () => {
-    if(!isCurrentRecognition(recognizer, generation)) return;
-    endSpeechActivity();
-  };
   recognizer.onerror = (e) => {
     if(!isCurrentRecognition(recognizer, generation)) return;
     if(e.error === 'aborted') return;
-    resetSpeechEvidence();
     lastError = e.error || '';
     if(isTerminalRecognitionError(lastError)) restartSuppressed = true;
     if(e.error === 'network') {
@@ -580,7 +623,7 @@ function startRec(locale) {
     if(!isCurrentRecognition(recognizer, generation)) return;
     recognitionGeneration++;
     rec = null;
-    resetSpeechEvidence();
+    startRequestedAt = 0;
     dot.classList.remove('on');
     if(closedByHost || ws.readyState !== 1) return;
     if(restartSuppressed) return;
@@ -588,7 +631,7 @@ function startRec(locale) {
     if(switchingInput) return;
     scheduleRestart(restartDelay(), 'recognition-ended');
   };
-  try{ startRecognitionWithSelectedInput(rec); } catch(ex){
+  try{ startRecognitionWithConfiguredInput(recognizer); } catch(ex){
     if(!isCurrentRecognition(recognizer, generation)) return;
     const errorName = ex && typeof ex.name === 'string' ? ex.name : '';
     if(errorName === 'NotAllowedError' || errorName === 'SecurityError') {
@@ -610,10 +653,6 @@ function startRec(locale) {
   }
 }
 
-// Canvas resizing
-function resize() { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
-window.onresize = resize;
-resize();
 </script>
 </body>
 </html>

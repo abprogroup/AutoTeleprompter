@@ -57,13 +57,38 @@ class TeleprompterState {
       statusMessage: statusMessage ?? this.statusMessage,
       hasError: hasError ?? this.hasError,
       debugLogs: debugLogs ?? this.debugLogs,
-      missingLanguage: missingLanguage == _clearSentinel
-          ? this.missingLanguage
-          : missingLanguage,
+      missingLanguage:
+          missingLanguage == _clearSentinel
+              ? this.missingLanguage
+              : missingLanguage,
       soundLevel: soundLevel ?? this.soundLevel,
       sttWebViewUrl:
           sttWebViewUrl == _clearSentinel ? this.sttWebViewUrl : sttWebViewUrl,
       audioInputDevices: audioInputDevices ?? this.audioInputDevices,
     );
+  }
+
+  bool hasSameValues(TeleprompterState other) {
+    if (confirmedWordIndex != other.confirmedWordIndex ||
+        isListening != other.isListening ||
+        isStarting != other.isStarting ||
+        statusMessage != other.statusMessage ||
+        hasError != other.hasError ||
+        missingLanguage != other.missingLanguage ||
+        soundLevel != other.soundLevel ||
+        sttWebViewUrl != other.sttWebViewUrl ||
+        debugLogs.length != other.debugLogs.length ||
+        audioInputDevices.length != other.audioInputDevices.length) {
+      return false;
+    }
+    for (var i = 0; i < debugLogs.length; i++) {
+      if (debugLogs[i] != other.debugLogs[i]) return false;
+    }
+    for (var i = 0; i < audioInputDevices.length; i++) {
+      final current = audioInputDevices[i];
+      final next = other.audioInputDevices[i];
+      if (current.id != next.id || current.label != next.label) return false;
+    }
+    return true;
   }
 }

@@ -34,6 +34,31 @@ class MarkupController extends TextEditingController {
   /// These fields live outside [value], so listeners otherwise won't fire.
   void refresh() => notifyListeners();
 
+  /// Selection range painted by the editor's custom highlight overlay.
+  ///
+  /// The native TextField selection color is intentionally transparent. While
+  /// a same-block mouse drag is still owned by the TextField, [selection]
+  /// changes continuously and must therefore remain visible through the custom
+  /// painter. Once the global overlay owns a selection, [externalSelection]
+  /// remains authoritative; even a collapsed external selection deliberately
+  /// suppresses a stale native range.
+  TextSelection? get customPaintSelection {
+    final length = text.length;
+    if (length <= 0) return null;
+
+    if (isGlobalSelected) {
+      return TextSelection(baseOffset: 0, extentOffset: length);
+    }
+
+    final candidate = externalSelection ?? selection;
+    if (!candidate.isValid || candidate.isCollapsed) return null;
+
+    final start = candidate.start.clamp(0, length).toInt();
+    final end = candidate.end.clamp(start, length).toInt();
+    if (end <= start) return null;
+    return TextSelection(baseOffset: start, extentOffset: end);
+  }
+
   static const TextStyle _tagStyle = TextStyle(
     color: Colors.transparent,
     fontSize: 0.1,
@@ -368,13 +393,14 @@ class MarkupController extends TextEditingController {
       // painting literal hidden "[bg]" / "[align]" letters. Those invisible
       // LTR tag characters still participate in Unicode bidi layout and can
       // split RTL punctuation, underline, and DOCX highlight bands.
-      children.add(TextSpan(
-        text: String.fromCharCodes(List<int>.filled(
-          end - start,
-          _hiddenTagPlaceholderCodeUnit,
-        )),
-        style: _tagStyle,
-      ));
+      children.add(
+        TextSpan(
+          text: String.fromCharCodes(
+            List<int>.filled(end - start, _hiddenTagPlaceholderCodeUnit),
+          ),
+          style: _tagStyle,
+        ),
+      );
     }
 
     int cursor = 0;

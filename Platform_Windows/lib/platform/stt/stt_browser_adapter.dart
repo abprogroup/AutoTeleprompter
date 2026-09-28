@@ -50,7 +50,6 @@ class SttBrowserAdapter extends AbstractSttService {
   String _sessionToken = '';
   int _port = _defaultPort;
   final Set<SttBrowserLifecyclePhase> _reportedLifecyclePhases = {};
-  final SttSpeechEvidenceGate _speechEvidence = SttSpeechEvidenceGate();
   Future<void> _lifecycleOperationTail = Future<void>.value();
 
   @override
@@ -69,7 +68,6 @@ class SttBrowserAdapter extends AbstractSttService {
     _sessionToken = _createSessionToken();
     final sessionToken = _sessionToken;
     _reportedLifecyclePhases.clear();
-    _speechEvidence.reset();
 
     onDiagnostic?.call(
       '[Browser STT] Starting local server on port $_defaultPort...',
@@ -180,12 +178,43 @@ class SttBrowserAdapter extends AbstractSttService {
                 case 'listening':
                   // Kept for compatibility with an already-loaded older page.
                   break;
+                case 'recognitionInput':
+                  final mode = data['mode'] as String? ?? '';
+                  final label =
+                      mode == 'selected-stream'
+                          ? 'selected microphone stream'
+                          : 'browser default microphone';
+                  onDiagnostic?.call('[Browser STT] Recognizer input: $label');
+                  break;
                 case 'result':
-                  if (!_speechEvidence.acceptsResult) break;
                   final words = data['words'] as String? ?? '';
                   final isFinal = data['isFinal'] as bool? ?? false;
+                  final streamId = (data['streamId'] as num?)?.toInt();
+                  final isCumulative =
+                      (data['isCumulative'] as bool? ?? false) &&
+                      streamId != null;
+                  final alternatives =
+                      (data['alternatives'] as List?)
+                          ?.whereType<String>()
+                          .map((candidate) => candidate.trim())
+                          .where(
+                            (candidate) =>
+                                candidate.isNotEmpty &&
+                                candidate != words.trim(),
+                          )
+                          .take(4)
+                          .toList(growable: false) ??
+                      const <String>[];
                   if (words.trim().isNotEmpty) {
-                    onResult?.call(SpeechResult(words, isFinal));
+                    onResult?.call(
+                      SpeechResult(
+                        words,
+                        isFinal,
+                        isCumulative: isCumulative,
+                        streamId: streamId,
+                        alternatives: alternatives,
+                      ),
+                    );
                     onRuntimeHealth?.call(
                       SttRuntimeHealth(
                         type: 'productiveResult',
@@ -194,15 +223,6 @@ class SttBrowserAdapter extends AbstractSttService {
                       ),
                     );
                   }
-                  break;
-                case 'speechStart':
-                  _speechEvidence.speechStarted();
-                  break;
-                case 'speechEnd':
-                  _speechEvidence.speechEnded();
-                  break;
-                case 'speechReset':
-                  _speechEvidence.reset();
                   break;
                 case 'level':
                   final level = (data['level'] as num?)?.toDouble() ?? 0.0;
@@ -440,7 +460,7 @@ class SttBrowserAdapter extends AbstractSttService {
       );
     }
     _server = null;
-    _speechEvidence.reset();
+    onSoundLevelChange?.call(0.0);
   }
 
   Future<T> _serializeLifecycleOperation<T>(Future<T> Function() operation) {

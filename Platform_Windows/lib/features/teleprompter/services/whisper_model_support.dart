@@ -1,9 +1,26 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as path;
-import 'package:whisper_ggml/whisper_ggml.dart';
 
-export 'package:whisper_ggml/whisper_ggml.dart' show WhisperModel;
+/// Legacy model identifiers retained only so old Windows preferences and
+/// future-facing source helpers remain readable without linking a Whisper
+/// runtime into the V5 application.
+enum WhisperModel {
+  tiny('tiny'),
+  base('base'),
+  small('small'),
+  medium('medium'),
+  large('large-v3'),
+  tinyEn('tiny.en'),
+  baseEn('base.en'),
+  smallEn('small.en'),
+  mediumEn('medium.en'),
+  smallEnTdrz('small.en-tdrz');
+
+  const WhisperModel(this.modelName);
+
+  final String modelName;
+}
 
 enum WhisperModelReadiness { missing, incomplete, invalid, ready }
 

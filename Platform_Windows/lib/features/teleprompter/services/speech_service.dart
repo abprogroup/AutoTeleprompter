@@ -9,7 +9,17 @@ enum SpeechStatus { idle, listening, paused, error }
 class SpeechResult {
   final String words;
   final bool isFinal;
-  SpeechResult(this.words, this.isFinal);
+  final bool isCumulative;
+  final int? streamId;
+  final List<String> alternatives;
+
+  SpeechResult(
+    this.words,
+    this.isFinal, {
+    this.isCumulative = false,
+    this.streamId,
+    this.alternatives = const <String>[],
+  });
 }
 
 /// Result of starting the speech service - tells the caller what happened.
@@ -19,7 +29,7 @@ class SpeechStartResult {
   final String? requestedLocale; // What was requested
   final bool languageMissing; // True if requested language wasn't available
   final String?
-      missingLanguageName; // Human-readable name of the missing language
+  missingLanguageName; // Human-readable name of the missing language
   final String? message;
 
   SpeechStartResult({
@@ -139,14 +149,16 @@ class SpeechService {
           }
 
           // Permission and hardware errors - stop and notify user
-          final fatal = msg == 'error_audio' ||
+          final fatal =
+              msg == 'error_audio' ||
               msg == 'error_insufficient_permissions' ||
               msg == 'error_permission';
           if (fatal) {
             _isActive = false;
-            final userMsg = msg == 'error_audio'
-                ? 'Microphone blocked or in use by another app. Check Windows Settings > Privacy & security > Microphone.'
-                : 'Microphone permission denied. Enable microphone access in Windows Settings > Privacy & security > Microphone.';
+            final userMsg =
+                msg == 'error_audio'
+                    ? 'Microphone blocked or in use by another app. Check Windows Settings > Privacy & security > Microphone.'
+                    : 'Microphone permission denied. Enable microphone access in Windows Settings > Privacy & security > Microphone.';
             onError?.call(userMsg);
             onStatusChange?.call(SpeechStatus.error);
             return;
@@ -155,12 +167,15 @@ class SpeechService {
           // Track consecutive errors
           _consecutiveErrors++;
           _errorResetTimer?.cancel();
-          _errorResetTimer =
-              Timer(const Duration(seconds: 10), () => _consecutiveErrors = 0);
+          _errorResetTimer = Timer(
+            const Duration(seconds: 10),
+            () => _consecutiveErrors = 0,
+          );
 
           if (_isRestarting) return;
 
-          final isTimeout = msg == 'error_no_match' ||
+          final isTimeout =
+              msg == 'error_no_match' ||
               msg.contains('no_match') ||
               msg.contains('speech_timeout');
 
@@ -173,9 +188,10 @@ class SpeechService {
             _isInitialized = false;
             _scheduleRestart(const Duration(milliseconds: 600), reinit: true);
           } else {
-            final delay = isTimeout
-                ? const Duration(milliseconds: 20)
-                : const Duration(milliseconds: 150);
+            final delay =
+                isTimeout
+                    ? const Duration(milliseconds: 20)
+                    : const Duration(milliseconds: 150);
             _scheduleRestart(delay);
           }
         },
@@ -203,13 +219,15 @@ class SpeechService {
       onError?.call('Speech-to-text setup failed: $e');
       _isInitialized = false;
     }
-    onDiagnostic?.call(_isInitialized
-        ? '[STT] init OK'
-        : '[STT] init FAILED - this PC has no speech recognition language installed. '
-            'Fix: Settings > Time & Language > Language & region > click the '
-            '... next to your language > Language options > Speech recognition '
-            '> Download. (Not the same as Voices/Text-to-speech.) Falling back '
-            'to slower browser-based recognition until this is installed.');
+    onDiagnostic?.call(
+      _isInitialized
+          ? '[STT] init OK'
+          : '[STT] init FAILED - this PC has no speech recognition language installed. '
+              'Fix: Settings > Time & Language > Language & region > click the '
+              '... next to your language > Language options > Speech recognition '
+              '> Download. (Not the same as Voices/Text-to-speech.) Falling back '
+              'to slower browser-based recognition until this is installed.',
+    );
     return _isInitialized;
   }
 
@@ -266,7 +284,8 @@ class SpeechService {
     final hasPermission = await _stt.hasPermission;
 
     onDiagnostic?.call(
-        '[STT] hasPermission=$hasPermission, initialized=$_isInitialized');
+      '[STT] hasPermission=$hasPermission, initialized=$_isInitialized',
+    );
     if (!_isInitialized || !hasPermission) {
       final ok = await initialize();
       if (!ok) {
@@ -281,7 +300,8 @@ class SpeechService {
     // Get available locales from the device
     final locales = await _stt.locales();
     onDiagnostic?.call(
-        '[STT] Available locales (${locales.length}): ${locales.map((l) => l.localeId).take(8).join(', ')}${locales.length > 8 ? '...' : ''}');
+      '[STT] Available locales (${locales.length}): ${locales.map((l) => l.localeId).take(8).join(', ')}${locales.length > 8 ? '...' : ''}',
+    );
     bool languageMissing = false;
     String? requestedLang = localeId;
 
@@ -320,9 +340,10 @@ class SpeechService {
       actualLocale: _localeId.isEmpty ? 'device default' : _localeId,
       requestedLocale: requestedLang,
       languageMissing: languageMissing,
-      missingLanguageName: languageMissing && requestedLang != null
-          ? SpeechStartResult.languageNameFromLocale(requestedLang)
-          : null,
+      missingLanguageName:
+          languageMissing && requestedLang != null
+              ? SpeechStartResult.languageNameFromLocale(requestedLang)
+              : null,
     );
   }
 
@@ -349,7 +370,8 @@ class SpeechService {
           }
           if (result.recognizedWords.isNotEmpty) {
             onResult?.call(
-                SpeechResult(result.recognizedWords, result.finalResult));
+              SpeechResult(result.recognizedWords, result.finalResult),
+            );
           }
           if (result.finalResult && _isActive && !_isRestarting) {
             _scheduleRestart(const Duration(milliseconds: 100));

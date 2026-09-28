@@ -21,8 +21,8 @@ String externalEdgeSttLaunchFailureMessage([String? reason]) {
       safeReason == null || safeReason.isEmpty
           ? 'Microsoft Edge could not host speech recognition.'
           : safeReason;
-  return '$prefix Choose Smart compatibility or Offline Whisper under '
-      'Speech Input, or install Microsoft Edge and try again.';
+  return '$prefix External browser speech is disabled in this V5 build. '
+      'Restart listening to use the hidden in-app speech host.';
 }
 
 String? externalEdgeRuntimeFailureReason({
@@ -60,10 +60,15 @@ extension TeleprompterExternalEdgeHost on TeleprompterNotifier {
 
     late final Future<void> stopFuture;
     stopFuture = (() async {
+      final externalBrowserWasRunning =
+          _externalEdgeLauncher.isRunning || _externalChromeLauncher.isRunning;
       // Give the authenticated local page a chance to close its own browser
-      // window before terminating the launcher-owned bootstrap process.
+      // window before terminating the launcher-owned bootstrap process. V5's
+      // normal hidden host must not pay this legacy delay on every start.
       await _browserSttService.stop();
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      if (externalBrowserWasRunning) {
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
       await Future.wait<void>([
         _externalEdgeLauncher.stop(),
         _externalChromeLauncher.stop(),

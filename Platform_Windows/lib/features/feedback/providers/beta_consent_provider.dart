@@ -63,7 +63,8 @@ class BetaConsentState {
       deviceKey: deviceKey ?? this.deviceKey,
       acceptedPolicyVersion:
           acceptedPolicyVersion ?? this.acceptedPolicyVersion,
-      acceptedSpeechDisclosureVersion: acceptedSpeechDisclosureVersion ??
+      acceptedSpeechDisclosureVersion:
+          acceptedSpeechDisclosureVersion ??
           this.acceptedSpeechDisclosureVersion,
       acceptedCloudDisclosureVersion:
           acceptedCloudDisclosureVersion ?? this.acceptedCloudDisclosureVersion,
@@ -202,5 +203,5 @@ class BetaConsentNotifier extends Notifier<BetaConsentState> {
 
 final betaConsentProvider =
     NotifierProvider<BetaConsentNotifier, BetaConsentState>(
-  BetaConsentNotifier.new,
-);
+      BetaConsentNotifier.new,
+    );

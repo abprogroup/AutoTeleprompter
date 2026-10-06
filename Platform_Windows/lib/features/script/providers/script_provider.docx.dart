@@ -33,6 +33,17 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     var uniformDocumentFontSizeValid = true;
     var sawVisibleDocumentText = false;
 
+    void recordFontSize(double? size) {
+      sawVisibleDocumentText = true;
+      if (size == null) {
+        uniformDocumentFontSizeValid = false;
+      } else if (uniformDocumentFontSize == null) {
+        uniformDocumentFontSize = size;
+      } else if ((uniformDocumentFontSize! - size).abs() > 0.001) {
+        uniformDocumentFontSizeValid = false;
+      }
+    }
+
     for (final p in paragraphs) {
       final paragraph = StringBuffer();
       final segments = <_DocxRunSegment>[];
@@ -61,14 +72,7 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
         final runFontSize = _docxRunFontSize(rPr, complex: complex);
         final runFontFamily = _docxRunFontFamily(rPr, complex: complex);
         if (text.trim().isNotEmpty) {
-          sawVisibleDocumentText = true;
-          if (runFontSize == null) {
-            uniformDocumentFontSizeValid = false;
-          } else if (uniformDocumentFontSize == null) {
-            uniformDocumentFontSize = runFontSize;
-          } else if ((uniformDocumentFontSize - runFontSize).abs() > 0.001) {
-            uniformDocumentFontSizeValid = false;
-          }
+          recordFontSize(runFontSize);
         }
 
         if (_docxIsDecorationWhitespace(text)) {
@@ -107,7 +111,33 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       var paragraphText = paragraph.toString();
       final listLabel = numbering.labelForParagraph(p);
       if (listLabel != null && paragraphText.trim().isNotEmpty) {
-        paragraphText = '$listLabel $paragraphText';
+        final labelProperties = styles.numberingRunProperties(
+          p,
+          listLabel.runProperties,
+        );
+        final complex = ['cs', 'rtl'].any((name) {
+              final property = labelProperties.getElement('w:$name');
+              return property != null && _docxBoolOn(property);
+            }) ||
+            RegExp(r'[\u0590-\u08FF]').hasMatch(listLabel.text);
+        final labelFontSize = _docxRunFontSize(
+          labelProperties,
+          complex: complex,
+        );
+        recordFontSize(labelFontSize);
+        final styledLabel = _docxWrapRun(
+          '${listLabel.text} ',
+          // This repair adds label typography only. Do not copy text-run
+          // highlight/underline onto the generated number or its following run.
+          isBold: false,
+          isItalic: false,
+          isUnderline: false,
+          color: null,
+          highlightColor: null,
+          fontSize: labelFontSize,
+          fontFamily: _docxRunFontFamily(labelProperties, complex: complex),
+        );
+        paragraphText = '$styledLabel$paragraphText';
       }
 
       parsedParagraphs.add(_docxWrapParagraph(

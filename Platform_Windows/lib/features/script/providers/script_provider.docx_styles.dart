@@ -89,6 +89,23 @@ class _DocxStyleResolver {
     properties.add(direct);
     return properties.element('rPr');
   }
+
+  XmlElement numberingRunProperties(
+    XmlElement paragraph,
+    XmlElement? levelProperties,
+  ) {
+    // List labels inherit document/paragraph and paragraph-mark typography,
+    // not the first text run's incidental size/font. Explicit level typography
+    // is scoped to the label; paragraph-mark properties never leak into text.
+    final mark = paragraph.getElement('w:pPr')?.getElement('w:rPr');
+    final markRun = XmlElement(XmlName('r', 'w'), [], [
+      if (mark != null) mark.copy(),
+    ]);
+    final properties = _DocxPropertySet();
+    properties.add(runProperties(paragraph, markRun));
+    properties.add(levelProperties);
+    return properties.element('rPr');
+  }
 }
 
 class _DocxPropertySet {

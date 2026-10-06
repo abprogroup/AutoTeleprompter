@@ -16,10 +16,12 @@ class _DocxNumberingResolver {
     try {
       final document =
           XmlDocument.parse(utf8.decode(bytes, allowMalformed: true));
+      final levels = _parseAbstractLevels(document);
+      final mappings = _parseNumMappings(document);
       return _DocxNumberingResolver(
-        abstractLevels: _parseAbstractLevels(document),
-        numToAbstract: _parseNumMappings(document),
-        numOverrides: _parseNumOverrides(document),
+        abstractLevels: levels,
+        numToAbstract: mappings,
+        numOverrides: _parseNumOverrides(document, levels, mappings),
       );
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
@@ -37,7 +39,7 @@ class _DocxNumberingResolver {
         numOverrides: const {},
       );
 
-  String? labelForParagraph(XmlElement paragraph) {
+  _DocxNumberLabel? labelForParagraph(XmlElement paragraph) {
     final numPr = paragraph.getElement('w:pPr')?.getElement('w:numPr');
     if (numPr == null) return null;
     final numId = _docxIntAttr(numPr.getElement('w:numId'), 'val');
@@ -47,7 +49,10 @@ class _DocxNumberingResolver {
     if (effective == null || effective.format == 'none') return null;
 
     final current = _advanceCounter(numId, level, effective.start);
-    return _formatLabel(numId, level, current, effective);
+    final text = _formatLabel(numId, level, current, effective);
+    return text == null
+        ? null
+        : _DocxNumberLabel(text, effective.runProperties);
   }
 
   _DocxNumberLevel? _levelFor(int numId, int level) {
@@ -121,6 +126,8 @@ class _DocxNumberingResolver {
 
   static Map<int, Map<int, _DocxNumberLevel>> _parseNumOverrides(
     XmlDocument document,
+    Map<int, Map<int, _DocxNumberLevel>> abstractLevels,
+    Map<int, int> mappings,
   ) {
     final result = <int, Map<int, _DocxNumberLevel>>{};
     for (final num in document.findAllElements('w:num')) {
@@ -138,8 +145,12 @@ class _DocxNumberingResolver {
           result.putIfAbsent(numId, () => {})[ilvl] =
               parsedLevel.copyWith(start: start);
         } else if (start != null) {
-          result.putIfAbsent(numId, () => {})[ilvl] =
-              _DocxNumberLevel(start: start, format: 'decimal', text: '%1.');
+          // A start-only override must not erase the inherited format or font.
+          final inherited = abstractLevels[mappings[numId]]?[ilvl] ??
+              const _DocxNumberLevel(start: 1, format: 'decimal', text: '%1.');
+          result.putIfAbsent(numId, () => {})[ilvl] = inherited.copyWith(
+            start: start,
+          );
         }
       }
     }
@@ -158,7 +169,12 @@ class _DocxNumberingResolver {
           'val',
         ) ??
         '%1.';
-    return _DocxNumberLevel(start: start, format: format, text: text);
+    return _DocxNumberLevel(
+      start: start,
+      format: format,
+      text: text,
+      runProperties: level.getElement('w:rPr')?.copy(),
+    );
   }
 
   static int? _docxIntAttr(XmlElement? element, String attr) {
@@ -223,16 +239,26 @@ class _DocxNumberLevel {
   final int start;
   final String format;
   final String text;
+  final XmlElement? runProperties;
 
   const _DocxNumberLevel({
     required this.start,
     required this.format,
     required this.text,
+    this.runProperties,
   });
 
   _DocxNumberLevel copyWith({int? start}) => _DocxNumberLevel(
         start: start ?? this.start,
         format: format,
         text: text,
+        runProperties: runProperties,
       );
+}
+
+class _DocxNumberLabel {
+  final String text;
+  final XmlElement? runProperties;
+
+  const _DocxNumberLabel(this.text, this.runProperties);
 }

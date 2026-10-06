@@ -14,6 +14,7 @@ import '../../../features/teleprompter/services/word_aligner.dart';
 import '../../../platform/file_import/legacy_word_doc_import.dart';
 
 part 'script_provider.docx.dart';
+part 'script_provider.docx_styles.dart';
 part 'script_provider.docx_numbering.dart';
 part 'script_provider.pages_rtf.dart';
 part 'script_provider.models.dart';

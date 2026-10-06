@@ -13,19 +13,6 @@ extension TeleprompterNotifierStateHelpers on TeleprompterNotifier {
             .toInt();
   }
 
-  /// True after the tracker has genuinely stalled long enough to widen the
-  /// visible-skip recovery window beyond the rendered viewport.
-  bool get _isSustainedlyStuck {
-    if (_sttEvidenceTrackingState != SttEvidenceTrackingState.recovering &&
-        _sttEvidenceTrackingState != SttEvidenceTrackingState.offScript) {
-      return false;
-    }
-    final since = _lastConfirmedAdvanceAt ?? _sessionStartTime;
-    if (since == null) return false;
-    return DateTime.now().difference(since) >=
-        TeleprompterNotifier._sustainedStuckThreshold;
-  }
-
   void _resetStaleNoProgressTracking() {
     _lastNoProgressTranscriptKey = null;
     _staleNoProgressTranscriptCount = 0;

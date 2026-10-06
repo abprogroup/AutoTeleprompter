@@ -448,6 +448,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       media.size.width.round(),
       media.size.height.round(),
       settings.fontSize,
+      settings.fontFamily,
       settings.lineSpacing,
       settings.wordSpacing,
       settings.letterSpacing,

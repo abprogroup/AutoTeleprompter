@@ -9,6 +9,7 @@ class ScriptWord {
   final bool isBold;
   final bool isUnderline;
   final double? fontSize;
+  final String? fontFamily;
   final TextAlign? alignment; // paragraph alignment
   final bool isItalic;
   final bool? isParagraphRtl; // manual direction override
@@ -25,6 +26,7 @@ class ScriptWord {
     this.isBold = false,
     this.isUnderline = false,
     this.fontSize,
+    this.fontFamily,
     this.alignment, // Default to null (fall back to settings)
     this.isItalic = false,
     this.isParagraphRtl, // If null, auto-detect from isRtl

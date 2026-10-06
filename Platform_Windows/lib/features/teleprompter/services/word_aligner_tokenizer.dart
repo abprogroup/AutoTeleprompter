@@ -64,6 +64,7 @@ class _WordAlignerTokenizer {
               isBold: token.isBold,
               isUnderline: token.isUnderline,
               fontSize: token.fontSize,
+              fontFamily: token.fontFamily,
               alignment: token.alignment,
               isItalic: token.isItalic,
               isParagraphRtl: token.isParagraphRtl,
@@ -281,6 +282,7 @@ class _WordAlignerTokenizer {
     var underline = false;
     var italic = false;
     final sizes = <double>[];
+    final fonts = <String>[];
     final aligns = <TextAlign>[];
     final rtls = <bool>[];
     final highlights = <Color>[];
@@ -294,6 +296,7 @@ class _WordAlignerTokenizer {
         isUnderline: underline,
         isItalic: italic,
         fontSize: sizes.isEmpty ? null : sizes.last,
+        fontFamily: fonts.isEmpty ? null : fonts.last,
         alignment: aligns.isEmpty ? null : aligns.last,
         isParagraphRtl: rtls.isEmpty ? null : rtls.last,
         highlight: highlights.isEmpty ? null : highlights.last,
@@ -354,8 +357,10 @@ class _WordAlignerTokenizer {
         if (c != null) highlights.add(c);
       } else if (tag == '[/bg]') {
         pop(highlights);
-      } else if (tag.startsWith('[font=') || tag == '[/font]') {
-        // Font family is visual-only metadata; consume but do not style words.
+      } else if (tag.startsWith('[font=')) {
+        fonts.add(tag.substring(6, tag.length - 1));
+      } else if (tag == '[/font]') {
+        pop(fonts);
       } else if (tag.startsWith('[/')) {
         // Shorthand close: [/y].. (highlight) or [/yc].. (text color).
         final name = tag.substring(2, tag.length - 1);
@@ -546,6 +551,7 @@ class _Span {
   final bool isBold;
   final bool isUnderline;
   final double? fontSize;
+  final String? fontFamily;
   final TextAlign? alignment;
   final bool isItalic;
   final bool? isParagraphRtl;
@@ -557,6 +563,7 @@ class _Span {
     this.isBold = false,
     this.isUnderline = false,
     this.fontSize,
+    this.fontFamily,
     this.alignment,
     this.isItalic = false,
     this.isParagraphRtl,
@@ -569,6 +576,7 @@ class _Span {
     bool? isBold,
     bool? isUnderline,
     double? fontSize,
+    String? fontFamily,
     TextAlign? alignment,
     bool? isItalic,
     bool? isParagraphRtl,
@@ -580,6 +588,7 @@ class _Span {
       isBold: isBold ?? this.isBold,
       isUnderline: isUnderline ?? this.isUnderline,
       fontSize: fontSize ?? this.fontSize,
+      fontFamily: fontFamily ?? this.fontFamily,
       alignment: alignment ?? this.alignment,
       isItalic: isItalic ?? this.isItalic,
       isParagraphRtl: isParagraphRtl ?? this.isParagraphRtl,

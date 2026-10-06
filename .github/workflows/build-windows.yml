@@ -1,5 +1,5 @@
-name: Build Windows EXE (v5.2.1)
-run-name: Windows ${{ github.event.inputs.app_version || '5.2.1+63' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
+name: Build Windows EXE (v5.2.2)
+run-name: Windows ${{ github.event.inputs.app_version || '5.2.2+64' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -17,9 +17,9 @@ on:
           - beta
           - internal
       app_version:
-        description: 'Flutter app version, for example 5.2.1+63'
+        description: 'Flutter app version, for example 5.2.2+64'
         required: true
-        default: '5.2.1+63'
+        default: '5.2.2+64'
         type: string
       release_label:
         description: 'Human label such as Beta 1 or Stable'
@@ -57,11 +57,11 @@ jobs:
 
           $appVersion = "${{ github.event.inputs.app_version }}"
           if ([string]::IsNullOrWhiteSpace($appVersion)) {
-            $appVersion = "5.2.1+63"
+            $appVersion = "5.2.2+64"
           }
           $appVersion = $appVersion.Trim()
           if ($appVersion -notmatch '^\d+\.\d+\.\d+\+\d+$') {
-            throw "app_version must look like 5.2.1+63."
+            throw "app_version must look like 5.2.2+64."
           }
           $versionName = ($appVersion -split '\+', 2)[0]
 
@@ -234,13 +234,15 @@ jobs:
         run: flutter analyze --no-pub
         working-directory: Platform_Windows
 
-      - name: Test Windows STT Regressions
+      - name: Test Windows Release Regressions
         shell: pwsh
         working-directory: Platform_Windows
         run: |
           $ErrorActionPreference = "Stop"
           $sttRegressionTests = @(
+            "test/platform/docx_import_styles_test.dart"
             "test/platform/markup_controller_live_selection_test.dart"
+            "test/platform/rtf_import_formatting_test.dart"
             "test/platform/stt/stt_browser_adapter_security_test.dart"
             "test/platform/stt/stt_browser_lifecycle_test.dart"
             "test/platform/stt/stt_external_edge_launcher_test.dart"
@@ -248,6 +250,7 @@ jobs:
             "test/platform/stt/stt_host_policy_test.dart"
             "test/platform/stt/stt_host_readiness_test.dart"
             "test/platform/stt/stt_host_transition_guard_test.dart"
+            "test/platform/stt/stt_microphone_intent_test.dart"
             "test/platform/stt/stt_webview2_compatibility_test.dart"
             "test/platform/webview2/webview2_runtime_bootstrap_test.dart"
             "test/settings/app_settings_stt_engine_test.dart"
@@ -256,16 +259,18 @@ jobs:
             "test/teleprompter/debug_log_formatter_health_test.dart"
             "test/teleprompter/hidden_stt_webview_lifecycle_contract_test.dart"
             "test/teleprompter/number_mismatch_safety_recovery_test.dart"
+            "test/teleprompter/presenter_highlight_style_test.dart"
             "test/teleprompter/presenter_reading_position_service_test.dart"
             "test/teleprompter/spoken_number_normalizer_test.dart"
             "test/teleprompter/stt_recognition_policy_heartbeat_test.dart"
             "test/teleprompter/stt_transcript_buffer_service_test.dart"
             "test/teleprompter/teleprompter_external_edge_host_test.dart"
+            "test/teleprompter/teleprompter_visible_skip_recovery_test.dart"
             "test/teleprompter/word_aligner_number_matching_test.dart"
           )
           & flutter test --no-pub --concurrency=1 @sttRegressionTests
           if ($LASTEXITCODE -ne 0) {
-            throw "Windows STT regression tests failed."
+            throw "Windows release regression tests failed."
           }
           & ".\tool\windows\assert_v5_release_stt_artifacts_test.ps1"
 

@@ -55,6 +55,9 @@ extension _TeleprompterAlignmentHelperParts on _TeleprompterScreenState {
       text.replaceAll(RegExp('[\u200E\u200F\u2066\u2067\u2068\u2069]'), '');
 
   bool _paragraphIsRtl(List<ScriptWord> words) {
+    for (final word in words) {
+      if (word.isParagraphRtl != null) return word.isParagraphRtl!;
+    }
     var hasLatin = false;
     for (final word in words) {
       final clean = word.raw.replaceAll(_tagStripRe, '').trim();

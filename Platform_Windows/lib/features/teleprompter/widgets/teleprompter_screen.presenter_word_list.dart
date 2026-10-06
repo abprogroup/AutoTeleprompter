@@ -188,13 +188,23 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     final trackingBgColor = isCurrent && settings.showCurrentWordHighlight
         ? Color(settings.currentWordColor).withValues(alpha: 0.3)
         : null;
-    final effectiveBg = trackingBgColor ??
-        (isPast ? userBgColor?.withValues(alpha: 0.15) : userBgColor);
-    final textColor = _presenterWordTextColor(
-      word: word,
-      isCurrent: isCurrent,
+    final effectiveBg = PresenterHighlightStyle.wordBackground(
+      imported: userBgColor,
+      tracking: trackingBgColor,
       isPast: isPast,
-      settings: settings,
+      customPainterEnabled: kUseCustomDocxDecorationPainting,
+    );
+    final textColor = PresenterHighlightStyle.readableText(
+      text: _presenterWordTextColor(
+        word: word,
+        isCurrent: isCurrent,
+        isPast: isPast,
+        settings: settings,
+      ),
+      imported: userBgColor,
+      tracking: trackingBgColor,
+      scriptBackground: Color(settings.scriptBgColor),
+      isPast: isPast,
     );
     final joinsPreviousHighlight = _sameHighlightColor(
       userBgColor,
@@ -239,6 +249,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
             displayText,
             style: TextStyle(
               fontSize: effectiveFontSize,
+              fontFamily: word.fontFamily ?? settings.fontFamily,
               fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
               fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
               letterSpacing: settings.letterSpacing,

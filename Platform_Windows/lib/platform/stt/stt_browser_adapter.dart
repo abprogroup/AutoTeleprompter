@@ -229,10 +229,9 @@ class SttBrowserAdapter extends AbstractSttService {
                   onSoundLevelChange?.call(level);
                   break;
                 case 'inputReady':
-                  final label = data['label'] as String? ?? '';
-                  if (label.isNotEmpty) {
-                    _selectedAudioInputDeviceLabel = label;
-                  }
+                  // The meter reports the device it opened, not a user choice.
+                  // Persisting that observation here silently turns a default
+                  // input into label-based explicit capture on page reload.
                   onDiagnostic?.call('[Browser STT] Input ready');
                   break;
                 case 'meterUnavailable':

@@ -14,26 +14,6 @@ class ParsedFile {
   bool get isError => errorMessage != null;
 }
 
-class _DocxRunStyle {
-  final bool isBold;
-  final bool isItalic;
-  final bool isUnderline;
-  final String? color;
-  final String? highlightColor;
-  final double? fontSize;
-  final String? fontFamily;
-
-  const _DocxRunStyle({
-    this.isBold = false,
-    this.isItalic = false,
-    this.isUnderline = false,
-    this.color,
-    this.highlightColor,
-    this.fontSize,
-    this.fontFamily,
-  });
-}
-
 class _DocxRunSegment {
   final String text;
   final bool isBold;

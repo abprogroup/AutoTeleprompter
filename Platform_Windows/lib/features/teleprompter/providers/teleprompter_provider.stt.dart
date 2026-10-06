@@ -30,7 +30,6 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       visibleWordStart: _visibleWordStart,
       visibleWordEnd: _visibleWordEnd,
       scriptWordCount: script.words.length,
-      sustainedStuck: _isSustainedlyStuck,
     );
     final selected = _selectRecognitionCandidate(
       result: result,
@@ -242,7 +241,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         TeleprompterNotifier.isTrustedVisibleSkipTarget(
           alignedIndex: aligned.confirmedWordIndex,
           visibleWordStart: _visibleWordStart,
-          visibleWordEnd: maxSkipTargetIndex ?? _visibleWordEnd,
+          visibleWordEnd: _visibleWordEnd,
         );
     final decision = _movementPolicy.evaluateCandidate(
       alignment: aligned,
@@ -316,7 +315,6 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     _pendingStartEvidenceTargetIndex = null;
     _clearPendingVisibleSkipEvidence();
     _sttEvidenceTrackingState = decision.nextState;
-    _lastConfirmedAdvanceAt = DateTime.now();
     _lockedOn = true;
     _sttReadingStandby = true;
     if (previousTrackingState == SttEvidenceTrackingState.locked ||
@@ -528,6 +526,8 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     );
     final details = <String>[
       decision.debugSummary,
+      'confirmed=${_currentState.confirmedWordIndex}',
+      'visible=${_visibleWordStart ?? "?"}..${_visibleWordEnd ?? "?"}',
       alignment.kind.name,
       if (alignment.confidence > 0)
         'conf=${alignment.confidence.toStringAsFixed(2)}',
@@ -582,7 +582,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         TeleprompterNotifier.isTrustedVisibleSkipTarget(
           alignedIndex: rescue.confirmedWordIndex,
           visibleWordStart: _visibleWordStart,
-          visibleWordEnd: maxSkipTargetIndex,
+          visibleWordEnd: _visibleWordEnd,
         );
     final decision = _movementPolicy.evaluateCandidate(
       alignment: rescue,

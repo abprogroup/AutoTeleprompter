@@ -3,7 +3,6 @@ part of 'script_provider.dart';
 extension _ScriptProviderDocxParsing on ScriptNotifier {
   ParsedFile _parseDocx(List<int> rawBytes) {
     final archive = _decodeCheckedArchive(rawBytes, 'DOCX');
-    double? detectedFontSize;
 
     // Find document.xml through common paths.
     ArchiveFile? docEntry;
@@ -28,6 +27,7 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     final document = XmlDocument.parse(xmlStr);
     final paragraphs = document.findAllElements('w:p').toList();
     final numbering = _docxNumberingFromArchive(archive);
+    final styles = _docxStylesFromArchive(archive);
     final parsedParagraphs = <String>[];
     double? uniformDocumentFontSize;
     var uniformDocumentFontSizeValid = true;
@@ -36,47 +36,30 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     for (final p in paragraphs) {
       final paragraph = StringBuffer();
       final segments = <_DocxRunSegment>[];
-      final paragraphAlign = _docxParagraphAlign(p);
-      final paragraphRunDefaults = _docxParagraphRunDefaults(p);
+      final paragraphProperties = styles.paragraphProperties(p);
+      final paragraphAlign = _docxParagraphAlign(paragraphProperties);
+      final bidi = paragraphProperties.getElement('w:bidi');
+      final paragraphRtl = bidi == null ? null : _docxBoolOn(bidi);
 
       for (final r in p.findAllElements('w:r')) {
-        final rPr = r.getElement('w:rPr');
+        final rPr = styles.runProperties(p, r);
         final text = _docxRunText(r);
         if (text.isEmpty) continue;
-
-        bool isBold = paragraphRunDefaults.isBold;
-        bool isItalic = paragraphRunDefaults.isItalic;
-        bool isUnderline = paragraphRunDefaults.isUnderline;
-        String? color = paragraphRunDefaults.color;
-        String? highlightColor = paragraphRunDefaults.highlightColor;
-        double? runFontSize = paragraphRunDefaults.fontSize;
-        String? runFontFamily = paragraphRunDefaults.fontFamily;
-
-        if (rPr != null) {
-          final bold = rPr.getElement('w:b');
-          if (bold != null) {
-            isBold = _docxBoolOn(bold);
-          }
-          final italic = rPr.getElement('w:i');
-          if (italic != null) {
-            isItalic = _docxBoolOn(italic);
-          }
-          final underline = rPr.getElement('w:u');
-          if (underline != null) {
-            isUnderline = _docxUnderlineOn(underline);
-          }
-          final colorElement = rPr.getElement('w:color');
-          if (colorElement != null) {
-            color = _docxAttr(colorElement, 'val');
-          }
-          if (_docxRunHasHighlightProperty(rPr)) {
-            highlightColor = _docxRunHighlightColor(rPr);
-          }
-
-          runFontSize = _docxRunFontSize(rPr) ?? runFontSize;
-          runFontFamily = _docxRunFontFamily(rPr) ?? runFontFamily;
-        }
-        detectedFontSize ??= runFontSize;
+        final complex = RegExp(r'[\u0590-\u08FF]').hasMatch(text) &&
+            !RegExp(r'[A-Za-z]').hasMatch(text);
+        final bold = (complex ? rPr.getElement('w:bCs') : null) ??
+            rPr.getElement('w:b');
+        final italic = (complex ? rPr.getElement('w:iCs') : null) ??
+            rPr.getElement('w:i');
+        final underline = rPr.getElement('w:u');
+        final isBold = bold != null && _docxBoolOn(bold);
+        final isItalic = italic != null && _docxBoolOn(italic);
+        var isUnderline = underline != null && _docxUnderlineOn(underline);
+        final colorElement = rPr.getElement('w:color');
+        final color = colorElement == null ? null : _docxAttr(colorElement, 'val');
+        var highlightColor = _docxRunHighlightColor(rPr);
+        final runFontSize = _docxRunFontSize(rPr, complex: complex);
+        final runFontFamily = _docxRunFontFamily(rPr, complex: complex);
         if (text.trim().isNotEmpty) {
           sawVisibleDocumentText = true;
           if (runFontSize == null) {
@@ -130,6 +113,7 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       parsedParagraphs.add(_docxWrapParagraph(
         paragraphText,
         paragraphAlign,
+        rtl: paragraphRtl,
       ));
     }
 
@@ -162,16 +146,12 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
             uniformDocumentFontSizeValid &&
             uniformDocumentFontSize != null
         ? uniformDocumentFontSize
-        : detectedFontSize;
+        : null;
     final importedText =
         _normalizeImportedDocxText(parsedParagraphs.join('\n'));
-    final normalizedText = baseFontSize != null &&
-            uniformDocumentFontSizeValid &&
-            uniformDocumentFontSize != null
-        ? _docxStripUniformFontSize(importedText, uniformDocumentFontSize)
-        : importedText;
-
-    return ParsedFile(normalizedText, fontSize: baseFontSize);
+    // Inline metadata must survive both file-open paths. The editor can ignore
+    // baseFontSize, so stripping uniform tags makes imports preference-dependent.
+    return ParsedFile(importedText, fontSize: baseFontSize);
   }
 
   static void _addDocxRunSegment(
@@ -280,66 +260,44 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
   }
 
   static String? _docxRunHighlightColor(XmlElement runProperties) {
-    final shading = runProperties.getElement('w:shd');
-    final shadingFill = shading == null ? null : _docxAttr(shading, 'fill');
-    final normalizedShading = _docxNormalizeColor(shadingFill);
-    if (normalizedShading != null) return normalizedShading;
-
     final highlightElement = runProperties.getElement('w:highlight');
     final highlight =
         highlightElement == null ? null : _docxAttr(highlightElement, 'val');
-    if (highlight == null || highlight == 'none') return null;
-    return _docxHighlightNameToHex(highlight);
+    if (highlight != null && highlight != 'none') {
+      final color = _docxHighlightNameToHex(highlight);
+      if (color != null) return color;
+    }
+    // Word highlight takes precedence over run shading. Explicit highlight
+    // 'none' clears highlight only; a separate shading fill can still apply.
+    final shading = runProperties.getElement('w:shd');
+    final shadingFill = shading == null ? null : _docxAttr(shading, 'fill');
+    return _docxNormalizeColor(shadingFill);
   }
 
-  static _DocxRunStyle _docxParagraphRunDefaults(XmlElement paragraph) {
-    final rPr = paragraph.getElement('w:pPr')?.getElement('w:rPr');
-    if (rPr == null) return const _DocxRunStyle();
-    final bold = rPr.getElement('w:b');
-    final italic = rPr.getElement('w:i');
-    final underline = rPr.getElement('w:u');
-    final color = rPr.getElement('w:color');
-    return _DocxRunStyle(
-      isBold: bold != null && _docxBoolOn(bold),
-      isItalic: italic != null && _docxBoolOn(italic),
-      isUnderline: underline != null && _docxUnderlineOn(underline),
-      color: color == null
-          ? null
-          : _docxNormalizeTextColor(_docxAttr(color, 'val')),
-      highlightColor: _docxRunHasHighlightProperty(rPr)
-          ? _docxNormalizeColor(_docxRunHighlightColor(rPr))
-          : null,
-      fontSize: _docxRunFontSize(rPr),
-      fontFamily: _docxRunFontFamily(rPr),
-    );
-  }
-
-  static double? _docxRunFontSize(XmlElement runProperties) {
-    final sizeElement = runProperties.getElement('w:sz');
+  static double? _docxRunFontSize(XmlElement runProperties, {bool complex = false}) {
+    final sizeElement = (complex ? runProperties.getElement('w:szCs') : null) ??
+        runProperties.getElement('w:sz');
     final complexSizeElement = runProperties.getElement('w:szCs');
     final sz = (sizeElement == null ? null : _docxAttr(sizeElement, 'val')) ??
         (complexSizeElement == null
             ? null
             : _docxAttr(complexSizeElement, 'val'));
     final halfPoints = sz == null ? null : double.tryParse(sz);
-    if (halfPoints == null || halfPoints <= 0) return null;
+    if (halfPoints == null || !halfPoints.isFinite || halfPoints <= 0) return null;
     return halfPoints / 2.0;
   }
 
-  static String? _docxRunFontFamily(XmlElement runProperties) {
+  static String? _docxRunFontFamily(XmlElement runProperties, {bool complex = false}) {
     final fonts = runProperties.getElement('w:rFonts');
     if (fonts == null) return null;
     return _docxNormalizeFontFamily(
-      _docxAttr(fonts, 'ascii') ??
+      (complex ? _docxAttr(fonts, 'cs') : null) ??
+          _docxAttr(fonts, 'ascii') ??
           _docxAttr(fonts, 'hAnsi') ??
           _docxAttr(fonts, 'cs') ??
           _docxAttr(fonts, 'eastAsia'),
     );
   }
-
-  static bool _docxRunHasHighlightProperty(XmlElement runProperties) =>
-      runProperties.getElement('w:shd') != null ||
-      runProperties.getElement('w:highlight') != null;
 
   static bool _docxBoolOn(XmlElement element) {
     final val = _docxAttr(element, 'val');
@@ -376,19 +334,6 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       return size.round().toString();
     }
     return size.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
-  }
-
-  static String _docxStripUniformFontSize(String text, double fontSize) {
-    final withoutOpenTags = text.replaceAllMapped(
-      RegExp(r'\[size=(\d+(?:\.\d+)?)\]'),
-      (match) {
-        final value = double.tryParse(match.group(1)!);
-        return value != null && (value - fontSize).abs() < 0.001
-            ? ''
-            : match.group(0)!;
-      },
-    );
-    return withoutOpenTags.replaceAll('[/size]', '');
   }
 
   static String? _docxNormalizeFontFamily(String? family) {
@@ -443,25 +388,28 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     }
   }
 
-  static String _docxWrapParagraph(String paragraph, String? align) {
-    if (align == null || paragraph.isEmpty) return paragraph;
+  static String _docxWrapParagraph(String paragraph, String? align, {bool? rtl}) {
+    if (paragraph.isEmpty) return paragraph;
     return paragraph.split('\n').map((line) {
       if (line.isEmpty) return '';
-      return '[align=$align]$line[/align=$align]';
+      var wrapped = align == null ? line : '[align=$align]$line[/align=$align]';
+      if (rtl != null) {
+        final direction = rtl ? 'rtl' : 'ltr';
+        wrapped = '[$direction]$wrapped[/$direction]';
+      }
+      return wrapped;
     }).join('\n');
   }
 
-  static String? _docxParagraphAlign(XmlElement paragraph) {
-    final pPr = paragraph.getElement('w:pPr');
-    if (pPr == null) return null;
-
+  static String? _docxParagraphAlign(XmlElement pPr) {
     final alignment = pPr.getElement('w:jc');
     final jc = alignment == null ? null : _docxAttr(alignment, 'val');
     if (jc == 'center' || jc == 'left' || jc == 'right') return jc;
 
     // Word often stores Hebrew/RTL paragraph direction with w:bidi instead of
     // an explicit right alignment. Preserve that as app-level right alignment.
-    if (pPr.getElement('w:bidi') != null) return 'right';
+    final bidi = pPr.getElement('w:bidi');
+    if (bidi != null && _docxBoolOn(bidi)) return 'right';
     return null;
   }
 

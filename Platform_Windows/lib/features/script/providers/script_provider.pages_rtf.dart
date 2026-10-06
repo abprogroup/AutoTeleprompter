@@ -118,6 +118,18 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
     double? currentFontSize;
     String? currentFontFamily;
     String? paragraphAlign;
+    // RTF groups inherit the current formatting and restore it on close.
+    // An underline inside {\ul ...} must not reach the next run/paragraph.
+    final groupStyles = <({
+      bool bold,
+      bool italic,
+      bool underline,
+      int color,
+      int highlight,
+      double? fontSize,
+      String? fontFamily,
+      String? align,
+    })>[];
 
     // Collect styled runs
     final runs = <_RtfRun>[];
@@ -152,7 +164,27 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
     while (i < raw.length) {
       final c = raw[i];
 
+      // Even ignored destinations may contain escaped braces/backslashes.
+      // They are literal data, not group boundaries that restore formatting.
+      if (skipDepths.isNotEmpty && c == '\\' && i + 1 < raw.length) {
+        final escaped = raw[i + 1];
+        if (escaped == '{' || escaped == '}' || escaped == '\\') {
+          i += 2;
+          continue;
+        }
+      }
+
       if (c == '{') {
+        groupStyles.add((
+          bold: bold,
+          italic: italic,
+          underline: underline,
+          color: colorIndex,
+          highlight: highlightIndex,
+          fontSize: currentFontSize,
+          fontFamily: currentFontFamily,
+          align: paragraphAlign,
+        ));
         depth++;
         if (skipDepths.isEmpty) {
           // Ignorable destination {\*...}
@@ -176,10 +208,22 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
       }
 
       if (c == '}') {
+        if (skipDepths.isEmpty) flushRun();
         if (skipDepths.isNotEmpty && skipDepths.last == depth) {
           skipDepths.removeLast();
         }
-        depth--;
+        if (groupStyles.isNotEmpty) {
+          final parent = groupStyles.removeLast();
+          bold = parent.bold;
+          italic = parent.italic;
+          underline = parent.underline;
+          colorIndex = parent.color;
+          highlightIndex = parent.highlight;
+          currentFontSize = parent.fontSize;
+          currentFontFamily = parent.fontFamily;
+          paragraphAlign = parent.align;
+          depth--;
+        }
         i++;
         continue;
       }
@@ -305,9 +349,10 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
               }
               break;
             case 'ul':
-              if (!underline) {
+              final newUnderline = param != '0';
+              if (newUnderline != underline) {
                 flushRun();
-                underline = true;
+                underline = newUnderline;
               }
               break;
             case 'ulnone':

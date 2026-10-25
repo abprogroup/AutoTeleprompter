@@ -30,6 +30,7 @@ class SttTranscriptBufferService {
     bool cumulativeReplacement = false,
     List<String> cumulativeBaselineWords = const <String>[],
     bool cumulativeFinal = false,
+    bool allowFinalTailReplay = true,
   }) {
     final mutableSpokenWords = <String>[];
     final surfaceTokens = <({String surface, int normalizedBefore})>[];
@@ -57,7 +58,7 @@ class SttTranscriptBufferService {
               cumulativeBaselineWords,
               spokenWords,
               transcriptFloor,
-              finalSnapshot: cumulativeFinal,
+              finalSnapshot: cumulativeFinal && allowFinalTailReplay,
             )
             : transcriptFloor;
     final freshWords =

@@ -644,7 +644,7 @@ class WordAligner {
         windowEnd: windowEnd,
         lastConfirmedIndex: lastConfirmedIndex,
         scanFullWindow: true,
-        scanAllTranscriptPhrases: policyBulletMode,
+        scanAllTranscriptPhrases: true,
         minPhraseWords: visibleThreshold.bigWords,
         evidenceThreshold: visibleThreshold,
         scriptGapThreshold: effectivePolicy.safetyRecovery,

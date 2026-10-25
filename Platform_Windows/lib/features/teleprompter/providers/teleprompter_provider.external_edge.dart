@@ -41,7 +41,9 @@ String? externalEdgeRuntimeFailureReason({
 
 extension TeleprompterExternalEdgeHost on TeleprompterNotifier {
   void _initializeSpeechServices() {
-    _browserSttService = SttServiceFactory.createWindowsBrowser();
+    _browserSttService =
+        _providedBrowserSpeechService ??
+        SttServiceFactory.createWindowsBrowser();
     _desktopSttService = SttServiceFactory.createWindowsDesktop();
     _sttService = _browserSttService;
     _whisperService = WhisperSpeechService();

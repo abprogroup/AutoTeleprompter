@@ -3,6 +3,8 @@ import '../../script/models/script_word.dart';
 import 'spoken_number_normalizer.dart';
 import 'word_aligner.dart';
 
+part 'stt_visible_skip_context_revisions.dart';
+
 class SttVisibleSkipContextService {
   const SttVisibleSkipContextService();
 
@@ -16,6 +18,10 @@ class SttVisibleSkipContextService {
     if (currentWords.isEmpty) return _joinSurface(pendingWords);
     if (pendingWords.isEmpty) {
       return _joinSurface(_capWords(currentWords, maxWords));
+    }
+    final anchoredRevision = _replaceAnchoredTail(pendingWords, currentWords);
+    if (anchoredRevision != null) {
+      return _joinSurface(_capWords(anchoredRevision, maxWords));
     }
     final numericRevision = _replaceTrailingNumberRevision(
       pendingWords,
@@ -103,11 +109,8 @@ class SttVisibleSkipContextService {
           aligned.kind != SttAlignmentKind.sentenceRecovery) {
         continue;
       }
-      final evidenceWords =
-          aligned.kind == SttAlignmentKind.numberMismatchRecovery ||
-                  aligned.kind == SttAlignmentKind.numberPhrase
-              ? aligned.evidenceWords
-              : _normalizedWords(candidate.transcript);
+      // Only the matched phrase is evidence, never trailing asides/noise.
+      final evidenceWords = aligned.evidenceWords;
       if (!policy.visibleSkip.passes(evidenceWords)) continue;
       return aligned.copyWith(
         debugInfo: 'VISIBLE_SKIP_ACCUMULATED | ${aligned.debugInfo}',
@@ -198,7 +201,16 @@ class SttVisibleSkipContextService {
     );
     if (!relaxed.shouldAdvance ||
         relaxed.confirmedWordIndex <= lastConfirmedIndex) {
-      return null;
+      return fragmentedYear ??
+          _preserveBeforeNumericTail(
+            script: script,
+            transcript: transcript,
+            lastConfirmedIndex: lastConfirmedIndex,
+            visibleSkipStartIndex: visibleSkipStartIndex,
+            maxSkipTargetIndex: maxSkipTargetIndex,
+            policy: policy,
+            strictBulletMode: strictBulletMode,
+          );
     }
     final preservable =
         relaxed.thresholdFamily == SttThresholdFamily.visibleSkip ||

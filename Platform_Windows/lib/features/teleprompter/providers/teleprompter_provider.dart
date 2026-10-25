@@ -6,6 +6,7 @@ import '../../feedback/services/lightweight_diagnostics.dart';
 import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
 import '../services/stt_movement_policy_service.dart';
+import '../services/stt_consumed_speech_service.dart';
 import '../services/stt_recognition_policy_service.dart';
 import '../services/stt_transcript_buffer_service.dart';
 import '../services/stt_tracking_state.dart';
@@ -38,6 +39,9 @@ part 'teleprompter_provider.stt_candidates.dart';
 part 'teleprompter_provider.stt.dart';
 
 class TeleprompterNotifier extends Notifier<TeleprompterState> {
+  TeleprompterNotifier({AbstractSttService? browserSpeechService})
+    : _providedBrowserSpeechService = browserSpeechService;
+  final AbstractSttService? _providedBrowserSpeechService;
   late AbstractSttService _sttService;
   late final AbstractSttService _browserSttService;
   late final AbstractSttService _desktopSttService;
@@ -93,6 +97,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   List<String> _latestCumulativeTranscriptWords = const <String>[];
   int? _activeBrowserCumulativeStreamId;
   bool _lastResultUsesCumulativeTranscript = false;
+  bool _protectManualTranscriptBoundary = false;
   int? _pendingStartEvidenceTargetIndex;
   String _pendingVisibleSkipTranscript = '';
   int? _pendingVisibleSkipOriginIndex;
@@ -136,6 +141,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _latestCumulativeTranscriptWords = const <String>[];
       _activeBrowserCumulativeStreamId = null;
       _lastResultUsesCumulativeTranscript = false;
+      _protectManualTranscriptBoundary = false;
     }
     _pendingStartEvidenceTargetIndex = null;
     _clearPendingVisibleSkipEvidence();
@@ -309,7 +315,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     if (visibleWordEnd == null) return null;
     if (visibleWordStart < 0 || visibleWordEnd < visibleWordStart) return null;
     if (scriptWordCount == null) return visibleWordEnd;
-    if (scriptWordCount <= 0 || visibleWordStart >= scriptWordCount) return null;
+    if (scriptWordCount <= 0 || visibleWordStart >= scriptWordCount) {
+      return null;
+    }
     // Recovery searches only what is actually rendered. Widening this end
     // also invalidated pending fragments saved against the real viewport.
     return visibleWordEnd.clamp(visibleWordStart, scriptWordCount - 1).toInt();
@@ -690,7 +698,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   void resetPosition() {
-    _resetSttTrackingContext();
+    _resetTrackingForManualPosition();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog('POSITION RESET -> 0');
@@ -706,7 +714,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final activeScript = _currentScript;
     if (_disposed || activeScript == null || activeScript.words.isEmpty) return;
     final target = index.clamp(0, activeScript.words.length - 1);
-    _resetSttTrackingContext();
+    _resetTrackingForManualPosition();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
     _addDebugLog(

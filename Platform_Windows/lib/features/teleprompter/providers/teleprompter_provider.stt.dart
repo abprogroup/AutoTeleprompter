@@ -161,6 +161,22 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     required bool strictBulletMode,
     required int? maxSkipTargetIndex,
   }) {
+    final acceptedIndex = _currentSttAdvanceGuardIndex(
+      _currentState.confirmedWordIndex,
+    );
+    if (const SttConsumedSpeechService().isConsumed(
+      script: script.words,
+      transcript: transcript,
+      confirmedIndex: acceptedIndex,
+      strict: strictBulletMode,
+    )) {
+      return AlignmentResult(
+        acceptedIndex,
+        1,
+        'CONFIRMED_TRANSCRIPT',
+        SttAlignmentDecision.wait,
+      );
+    }
     final windows = _recentTranscriptWindows(transcript);
     final alignmentWindows = windows.isEmpty ? [transcript] : windows;
     final pendingStartTarget = _pendingStartEvidenceTargetIndex;
@@ -250,6 +266,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       currentIndex: currentIndex,
       advanceGuardIndex: guardIndex,
       visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+      requireVisibleTarget: true,
       maxLocalAdvanceWithoutWait:
           TeleprompterNotifier._maxLocalSttJumpWithoutWait,
     );
@@ -373,6 +390,16 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       preserveSlowContext: preserveSlowContext,
       repeatedTranscript: repeatedTranscript,
     );
+
+    if (aligned.debugInfo == 'CONFIRMED_TRANSCRIPT') {
+      _addTrackDebug(
+        engineTag: engineTag,
+        decision: decision,
+        alignment: aligned,
+        transcript: transcript,
+      );
+      return;
+    }
 
     if (_maybeAdvancePendingVisibleSkip(
       script: script,
@@ -593,6 +620,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         _currentState.confirmedWordIndex,
       ),
       visibleSkipTargetTrusted: visibleSkipTargetTrusted,
+      requireVisibleTarget: true,
       maxLocalAdvanceWithoutWait:
           TeleprompterNotifier._maxLocalSttJumpWithoutWait,
     );
@@ -660,6 +688,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
   void _applySttAdvanceTarget(int target, Script script) {
     final current = _currentState.confirmedWordIndex;
     if (target <= current) return;
+    if (!_isVisibleSttTarget(target)) return;
 
     final nextSpeakable = WordAligner.nextSpeakableIndex(
       script.words,
@@ -692,6 +721,12 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       // If a newer result pushed the target further, follow it
       final effectiveTarget = _fluidTarget;
 
+      // Layout/manual scrolling can change visibility after qualification.
+      if (!_isVisibleSttTarget(effectiveTarget)) {
+        timer.cancel();
+        return;
+      }
+
       if (current >= effectiveTarget) {
         timer.cancel();
         return;
@@ -704,7 +739,19 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       }
       if (next > effectiveTarget) next = effectiveTarget;
 
+      if (!_isVisibleSttTarget(next)) {
+        timer.cancel();
+        return;
+      }
+
       _safeSetState((s) => s.copyWith(confirmedWordIndex: next));
     });
   }
+
+  bool _isVisibleSttTarget(int target) =>
+      TeleprompterNotifier.isTrustedVisibleSkipTarget(
+        alignedIndex: target,
+        visibleWordStart: _visibleWordStart,
+        visibleWordEnd: _visibleWordEnd,
+      );
 }

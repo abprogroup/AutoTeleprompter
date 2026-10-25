@@ -1,6 +1,18 @@
 part of 'teleprompter_provider.dart';
 
 extension TeleprompterNotifierStateHelpers on TeleprompterNotifier {
+  void _resetTrackingForManualPosition() {
+    final preserveStream =
+        !_sessionStopped &&
+        _lastResultUsesCumulativeTranscript &&
+        _latestCumulativeTranscriptWords.isNotEmpty;
+    if (preserveStream) {
+      _acknowledgeTranscriptFloor(_latestCumulativeTranscriptWords.length);
+      _protectManualTranscriptBoundary = true;
+    }
+    _resetSttTrackingContext(clearTranscriptFloor: !preserveStream);
+  }
+
   void _acknowledgeTranscriptFloor(int spokenWordCount) {
     _transcriptFloor = spokenWordCount;
     if (!_lastResultUsesCumulativeTranscript) return;

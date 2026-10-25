@@ -1,5 +1,5 @@
 name: Build Windows EXE (v5.2.2)
-run-name: Windows ${{ github.event.inputs.app_version || '5.2.2+64' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
+run-name: Windows ${{ github.event.inputs.app_version || '5.2.2+65' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -17,9 +17,9 @@ on:
           - beta
           - internal
       app_version:
-        description: 'Flutter app version, for example 5.2.2+64'
+        description: 'Flutter app version, for example 5.2.2+65'
         required: true
-        default: '5.2.2+64'
+        default: '5.2.2+65'
         type: string
       release_label:
         description: 'Human label such as Beta 1 or Stable'
@@ -57,11 +57,11 @@ jobs:
 
           $appVersion = "${{ github.event.inputs.app_version }}"
           if ([string]::IsNullOrWhiteSpace($appVersion)) {
-            $appVersion = "5.2.2+64"
+            $appVersion = "5.2.2+65"
           }
           $appVersion = $appVersion.Trim()
           if ($appVersion -notmatch '^\d+\.\d+\.\d+\+\d+$') {
-            throw "app_version must look like 5.2.2+64."
+            throw "app_version must look like 5.2.2+65."
           }
           $versionName = ($appVersion -split '\+', 2)[0]
 
@@ -264,6 +264,7 @@ jobs:
             "test/teleprompter/spoken_number_normalizer_test.dart"
             "test/teleprompter/stt_recognition_policy_heartbeat_test.dart"
             "test/teleprompter/stt_transcript_buffer_service_test.dart"
+            "test/teleprompter/stt_log_replay_test.dart"
             "test/teleprompter/teleprompter_external_edge_host_test.dart"
             "test/teleprompter/teleprompter_visible_skip_recovery_test.dart"
             "test/teleprompter/word_aligner_number_matching_test.dart"

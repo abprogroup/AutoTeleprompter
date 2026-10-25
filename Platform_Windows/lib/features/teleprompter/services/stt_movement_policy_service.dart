@@ -47,8 +47,18 @@ class SttMovementPolicyService {
     required int advanceGuardIndex,
     required bool visibleSkipTargetTrusted,
     required int maxLocalAdvanceWithoutWait,
+    bool requireVisibleTarget = false,
   }) {
     final target = alignment.confirmedWordIndex;
+    if (requireVisibleTarget && !visibleSkipTargetTrusted) {
+      return _decision(
+        action: SttMovementAction.block,
+        nextState: trackingState,
+        targetIndex: target,
+        label: 'TRACK_BLOCK_VISIBLE',
+        reason: 'offscreen_target_blocked',
+      );
+    }
     if (target <= advanceGuardIndex || target <= currentIndex) {
       return _decision(
         action: SttMovementAction.hold,
@@ -177,6 +187,15 @@ class SttMovementPolicyService {
     required bool repeatedTranscript,
   }) {
     final heardSomething = transcript.trim().isNotEmpty;
+    if (alignment.debugInfo == 'CONFIRMED_TRANSCRIPT') {
+      return _decision(
+        action: SttMovementAction.hold,
+        nextState: trackingState,
+        targetIndex: alignment.confirmedWordIndex,
+        label: 'TRACK_HOLD',
+        reason: 'already_confirmed_revision',
+      );
+    }
     final partialEvidence =
         alignment.debugInfo.startsWith('WAIT_EVIDENCE') ||
         alignment.debugInfo.startsWith('EMPTY') ||

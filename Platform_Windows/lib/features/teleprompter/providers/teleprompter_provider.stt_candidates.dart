@@ -13,6 +13,7 @@ extension TeleprompterNotifierSttCandidates on TeleprompterNotifier {
     }
     if (_activeBrowserCumulativeStreamId == browserStreamId) return;
     _activeBrowserCumulativeStreamId = browserStreamId;
+    _protectManualTranscriptBoundary = false;
     _transcriptFloor = 0;
     _cumulativeTranscriptBaselineFloor = 0;
     _cumulativeTranscriptBaselineWords = const <String>[];
@@ -47,6 +48,7 @@ extension TeleprompterNotifierSttCandidates on TeleprompterNotifier {
         cumulativeReplacement: usesCumulativeTranscript,
         cumulativeBaselineWords: _cumulativeTranscriptBaselineWords,
         cumulativeFinal: usesCumulativeTranscript && result.isFinal,
+        allowFinalTailReplay: !_protectManualTranscriptBoundary,
       );
       if (!buffer.hasFreshSpeech) continue;
       final transcript = buffer.recentSurfaceTranscript;

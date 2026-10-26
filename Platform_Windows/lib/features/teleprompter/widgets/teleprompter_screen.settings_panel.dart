@@ -10,12 +10,15 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
   final ValueChanged<double>? onFontSizeChanged;
   final VoidCallback? onLayoutChanged;
   final Future<void> Function()? onInvertColors;
+  // Creator shares this panel but has a separate scroll animation engine.
+  final bool showSpeechScrollControls;
 
   const TeleprompterSettingsPanel({
     super.key,
     this.onFontSizeChanged,
     this.onLayoutChanged,
     this.onInvertColors,
+    this.showSpeechScrollControls = false,
   });
 
   @override
@@ -136,6 +139,11 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             style: _segmentStyle(settings),
           ),
           const SizedBox(height: 16),
+
+          if (showSpeechScrollControls && settings.scrollMode == 'auto') ...[
+            const SpeechScrollControls(),
+            const SizedBox(height: 16),
+          ],
 
           if (Platform.isWindows) ...[
             const _WindowsSpeechSettingsSection(),

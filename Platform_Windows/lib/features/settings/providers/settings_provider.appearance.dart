@@ -43,6 +43,20 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setString(_manualScrollBarPlacementKey, normalized);
   }
 
+  Future<void> setSpeechScrollSmoothness(double value) async {
+    final normalized = AppSettings.normalizeSpeechScrollSmoothness(value);
+    state = state.copyWith(speechScrollSmoothness: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_speechScrollSmoothnessKey, normalized);
+  }
+
+  Future<void> setSpeechScrollSpeed(double value) async {
+    final normalized = AppSettings.normalizeSpeechScrollSpeed(value);
+    state = state.copyWith(speechScrollSpeed: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_speechScrollSpeedKey, normalized);
+  }
+
   Future<void> setTextAlign(String align) async {
     final normalized = _normalizeTextAlign(align);
     state = state.copyWith(textAlign: normalized);

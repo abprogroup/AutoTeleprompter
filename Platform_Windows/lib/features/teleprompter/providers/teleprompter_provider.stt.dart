@@ -15,6 +15,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       usesCumulativeTranscript: usesCumulativeTranscript,
       browserStreamId: result.isCumulative ? result.streamId : null,
     );
+    _browserTranscriptBoundary.observe(result);
     // Whisper emits revisable cumulative partials. Running command matching on
     // those partials can repeat an old command or execute a hallucination.
     // Legacy browser/native shards retain the existing explicit command path.
@@ -39,6 +40,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       maxSkipTargetIndex: maxSkipTargetIndex,
       usesCumulativeTranscript: usesCumulativeTranscript,
     );
+    _sttResultFlow.record(filtered: selected == null, now: DateTime.now());
     if (selected == null) return;
     final buffer = selected.buffer;
     final aligned = selected.alignment;
@@ -73,7 +75,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         decision: SttMovementDecision(
           action: SttMovementAction.hold,
           nextState: _sttEvidenceTrackingState,
-          targetIndex: _currentState.confirmedWordIndex,
+          targetIndex: _sttAcceptedIndex,
           label: 'TRACK_HOLD',
           reason: 'standby_lock',
           thresholdLabel: 'none',
@@ -87,7 +89,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     }
 
     if (aligned.shouldAdvance &&
-        aligned.confirmedWordIndex > _currentState.confirmedWordIndex) {
+        aligned.confirmedWordIndex > _sttAcceptedIndex) {
       _handleMovementCandidate(
         aligned: aligned,
         script: script,
@@ -109,6 +111,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       transcript: _accumulatedTranscript,
       spokenWordCount: buffer.spokenWords.length,
       engineTag: engineTag,
+      consumeRejectedTranscript: !result.isCumulative || result.isFinal,
     );
   }
 
@@ -184,7 +187,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     AlignmentResult align(String transcriptWindow) => WordAligner.align(
       script: script.words,
       transcript: transcriptWindow,
-      lastConfirmedIndex: _currentState.confirmedWordIndex,
+      lastConfirmedIndex: acceptedIndex,
       visibleSkipStartIndex:
           maxSkipTargetIndex == null ? null : _visibleWordStart,
       maxSkipTargetIndex: maxSkipTargetIndex,
@@ -194,8 +197,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     );
 
     AlignmentResult? continuePendingStart(String transcriptWindow) {
-      if (pendingStartTarget == null ||
-          pendingStartTarget <= _currentState.confirmedWordIndex) {
+      if (pendingStartTarget == null || pendingStartTarget <= acceptedIndex) {
         return null;
       }
       return WordAligner.continuePendingStartEvidence(
@@ -229,6 +231,20 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
             '${pendingCandidate.debugInfo} | window=${i + 1}/${alignmentWindows.length}',
       );
     }
+    if (!best.shouldAdvance &&
+        _isVisibleSttTarget(acceptedIndex) &&
+        _acceptedSpeechRevision.isRevision(
+          transcript: transcript,
+          currentIndex: acceptedIndex,
+          now: DateTime.now(),
+        )) {
+      return AlignmentResult(
+        acceptedIndex,
+        1,
+        'CONFIRMED_TRANSCRIPT',
+        SttAlignmentDecision.wait,
+      );
+    }
     return best;
   }
 
@@ -250,7 +266,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     required int spokenWordCount,
     required String engineTag,
   }) {
-    final currentIndex = _currentState.confirmedWordIndex;
+    final currentIndex = _sttAcceptedIndex;
     final previousTrackingState = _sttEvidenceTrackingState;
     final guardIndex = _currentSttAdvanceGuardIndex(currentIndex);
     final visibleSkipTargetTrusted =
@@ -322,7 +338,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     required SttEvidenceTrackingState previousTrackingState,
     required bool visibleSkipTargetTrusted,
   }) {
-    final currentIndex = _currentState.confirmedWordIndex;
+    final currentIndex = _sttAcceptedIndex;
     final target = TeleprompterNotifier.resolveAdvanceTarget(
       currentIndex: currentIndex,
       alignedIndex: aligned.confirmedWordIndex,
@@ -359,6 +375,22 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       },
     );
     _applySttAdvanceTarget(target, script);
+    if (_sttAcceptedIndex == target &&
+        target > currentIndex &&
+        SttConnectionStatus.isTransient(_currentState.statusMessage)) {
+      // A returned transcript proves transport recovery, not script alignment.
+      // Clear the catch-up notice only after the unchanged movement guards pass.
+      _safeSetState((s) => s.copyWith(statusMessage: ''));
+    }
+    if (target == aligned.confirmedWordIndex &&
+        _sttAcceptedIndex == target &&
+        _isVisibleSttTarget(target)) {
+      _acceptedSpeechRevision.remember(
+        transcript: transcript,
+        target: target,
+        now: DateTime.now(),
+      );
+    }
     _syncLocaleForPosition(script, target + 1, reason: 'advance');
   }
 
@@ -371,6 +403,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     required String transcript,
     required int spokenWordCount,
     required String engineTag,
+    required bool consumeRejectedTranscript,
   }) {
     _checkAndSwitchLocale();
     final key = _noProgressTranscriptKey(transcript);
@@ -379,7 +412,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     final preserveSlowContext = WordAligner.shouldPreserveSlowContext(
       script: script.words,
       transcript: transcript,
-      lastConfirmedIndex: _currentState.confirmedWordIndex,
+      lastConfirmedIndex: _sttAcceptedIndex,
       policy: policy,
       strictBulletMode: strictBulletMode,
     );
@@ -422,7 +455,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
             ? _visibleSkipContext.preservationAlignment(
               script: script.words,
               transcript: preservationTranscript,
-              lastConfirmedIndex: _currentState.confirmedWordIndex,
+              lastConfirmedIndex: _sttAcceptedIndex,
               visibleSkipStartIndex: _visibleWordStart,
               maxSkipTargetIndex: maxSkipTargetIndex,
               policy: policy,
@@ -450,12 +483,12 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     } else if (decision.shouldReset && visiblePreservation != null) {
       _rememberPendingVisibleSkipTranscript(
         transcript: transcript,
-        currentIndex: _currentState.confirmedWordIndex,
+        currentIndex: _sttAcceptedIndex,
       );
       decision = SttMovementDecision(
         action: SttMovementAction.hold,
         nextState: _sttEvidenceTrackingState,
-        targetIndex: _currentState.confirmedWordIndex,
+        targetIndex: _sttAcceptedIndex,
         label: 'TRACK_HOLD',
         reason: 'visible_skip_evidence_waiting',
         thresholdLabel: 'visibleSkip',
@@ -473,7 +506,10 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       aligned: aligned,
       transcript: transcript,
       engineTag: engineTag,
-      spokenWordCount: spokenWordCount,
+      // An unaccepted browser interim may still be corrected and extended.
+      // Consuming it would also swallow those new words until a final arrives.
+      // Keep the previous accepted/manual floor; only settle rejected finals.
+      spokenWordCount: consumeRejectedTranscript ? spokenWordCount : null,
     );
     _maybeAssistVisibleLocale(script, policy, transcript);
   }
@@ -487,6 +523,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
   }) {
     _rememberPendingStartEvidenceIfNeeded(decision, aligned);
     if (decision.shouldReset) {
+      _acceptedSpeechRevision.reset();
       _lockedOn = false;
       _sttReadingStandby = false;
       _sttEvidenceTrackingState = decision.nextState;
@@ -519,7 +556,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
         decision.thresholdLabel != 'startAdvance' ||
         !alignment.shouldAdvance ||
         decision.evidenceScore <= 0 ||
-        decision.targetIndex <= _currentState.confirmedWordIndex ||
+        decision.targetIndex <= _sttAcceptedIndex ||
         alignment.debugInfo.startsWith('CONTINUED_START')) {
       return;
     }
@@ -549,11 +586,12 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
   }) {
     final next = WordAligner.debugNextExpected(
       _currentScript?.words ?? const [],
-      _currentState.confirmedWordIndex,
+      _sttAcceptedIndex,
     );
     final details = <String>[
       decision.debugSummary,
       'confirmed=${_currentState.confirmedWordIndex}',
+      'accepted=$_sttAcceptedIndex',
       'visible=${_visibleWordStart ?? "?"}..${_visibleWordEnd ?? "?"}',
       alignment.kind.name,
       if (alignment.confidence > 0)
@@ -578,7 +616,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     }
     final pending = _pendingVisibleSkipTranscript;
     if (pending.trim().isEmpty || maxSkipTargetIndex == null) return false;
-    if (_pendingVisibleSkipOriginIndex != _currentState.confirmedWordIndex ||
+    if (_pendingVisibleSkipOriginIndex != _sttAcceptedIndex ||
         _pendingVisibleSkipStartIndex != _visibleWordStart ||
         _pendingVisibleSkipEndIndex != maxSkipTargetIndex) {
       _clearPendingVisibleSkipEvidence();
@@ -592,7 +630,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       script: script.words,
       pendingTranscript: pending,
       transcript: transcript,
-      lastConfirmedIndex: _currentState.confirmedWordIndex,
+      lastConfirmedIndex: _sttAcceptedIndex,
       visibleSkipStartIndex: _visibleWordStart,
       maxSkipTargetIndex: maxSkipTargetIndex,
       policy: policy,
@@ -601,7 +639,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     if (rescue == null) {
       _rememberPendingVisibleSkipTranscript(
         transcript: transcript,
-        currentIndex: _currentState.confirmedWordIndex,
+        currentIndex: _sttAcceptedIndex,
       );
       return false;
     }
@@ -615,7 +653,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       alignment: rescue,
       policy: policy,
       trackingState: _sttEvidenceTrackingState,
-      currentIndex: _currentState.confirmedWordIndex,
+      currentIndex: _sttAcceptedIndex,
       advanceGuardIndex: _currentSttAdvanceGuardIndex(
         _currentState.confirmedWordIndex,
       ),
@@ -627,7 +665,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
     if (!decision.shouldAdvance) {
       _rememberPendingVisibleSkipTranscript(
         transcript: transcript,
-        currentIndex: _currentState.confirmedWordIndex,
+        currentIndex: _sttAcceptedIndex,
       );
       return false;
     }
@@ -706,8 +744,10 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
   /// Animate word advancement from current position to [target],
   /// advancing one word every ~80ms so the eye can follow.
   void _startFluidAdvance(int target, Script script) {
-    _fluidAdvanceTimer?.cancel();
     _fluidTarget = target;
+    // Frequent partials can extend the destination without postponing the
+    // next visual tick indefinitely by repeatedly restarting its timer.
+    if (_fluidAdvanceTimer?.isActive == true) return;
 
     _fluidAdvanceTimer = Timer.periodic(const Duration(milliseconds: 80), (
       timer,

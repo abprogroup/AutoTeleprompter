@@ -12,6 +12,9 @@ enum SttBrowserLifecyclePhase {
   permissionDenied,
   disconnected,
   network,
+  networkOffline,
+  networkRecovering,
+  networkAwaitingSpeech,
 }
 
 /// A validated lifecycle event from the local browser speech host.
@@ -71,6 +74,18 @@ class SttBrowserLifecycleEvent {
         );
       case 'network':
         return const SttBrowserLifecycleEvent(SttBrowserLifecyclePhase.network);
+      case 'networkOffline':
+        return const SttBrowserLifecycleEvent(
+          SttBrowserLifecyclePhase.networkOffline,
+        );
+      case 'networkRecovering':
+        return const SttBrowserLifecycleEvent(
+          SttBrowserLifecyclePhase.networkRecovering,
+        );
+      case 'networkAwaitingSpeech':
+        return const SttBrowserLifecycleEvent(
+          SttBrowserLifecyclePhase.networkAwaitingSpeech,
+        );
       default:
         // Disconnects are server-owned and cannot be asserted by page input.
         return null;

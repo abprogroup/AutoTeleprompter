@@ -14,6 +14,7 @@ import '../models/alignment_result.dart';
 import '../providers/teleprompter_provider.dart';
 import '../services/approximate_spoken_search_service.dart';
 import '../services/presenter_reading_position_service.dart';
+import '../services/presenter_scroll_motion.dart';
 import '../services/presenter_input_lock_service.dart';
 import '../services/presenter_highlight_style.dart';
 import '../../script/services/script_color_inversion_service.dart';
@@ -38,6 +39,9 @@ import '../../../platform/stt/abstract_stt_service.dart';
 import '../../../platform/webview2/webview2_runtime_config.dart';
 import '../../../platform/webview2/webview2_runtime_bootstrap.dart';
 import 'presenter_bookmark_marker_layer.dart';
+import 'speech_scroll_controls.dart';
+import 'speech_connection_notice.dart';
+import '../services/stt_connection_status.dart';
 
 part 'teleprompter_screen.session_stt.dart';
 part 'teleprompter_screen.manual_scroll.dart';

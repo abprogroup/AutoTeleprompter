@@ -1,6 +1,5 @@
 part of 'teleprompter_provider.dart';
 
-const int _browserNetworkFailureLimit = 3;
 const Duration _browserNetworkFailureQuietResetAfter = Duration(seconds: 30);
 
 int _browserHostFailurePriority(String reasonCode) => switch (reasonCode) {
@@ -162,6 +161,20 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     }
     final metadata = _sttHostReadiness?.timeoutMetadata();
     if (metadata == null) return;
+    if (metadata.awaitingPhase == SttHostReadinessPhase.recognizerListening &&
+        SttConnectionStatus.isTransient(_currentState.statusMessage) &&
+        _lastBrowserHeartbeatAt != null &&
+        DateTime.now().difference(_lastBrowserHeartbeatAt!) <
+            const Duration(seconds: 18)) {
+      // The local page/microphone completed their handshake. An explicit
+      // cloud outage is not a broken host. Keep waiting without claiming ready;
+      // a dead local page still times out once its heartbeats stop.
+      _sttHostReadinessTimer = Timer(
+        const Duration(seconds: 5),
+        () => _checkBrowserHostReadinessTimeout(sessionToken),
+      );
+      return;
+    }
     if (!metadata.isTimedOut) {
       final remaining = metadata.timeout - metadata.stageElapsed;
       _sttHostReadinessTimer = Timer(
@@ -286,21 +299,25 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
                 ? 1
                 : _recoverableSttErrorCount + 1;
         _lastRecoverableSttErrorAt = now;
-        if (_recoverableSttErrorCount >= _browserNetworkFailureLimit) {
-          unawaited(
-            _handleBrowserHostFailure(
-              reasonCode: 'network-failure-limit',
-              // A cloud/ISP failure is not proof that this exact WebView2
-              // runtime is incompatible. Advance this session without
-              // persisting a months-long runtime ban.
-              quarantineRuntime: false,
-            ),
-          );
-        }
+        // Network retries belong to the existing page. Repeated outages are
+        // not host incompatibility and must not exhaust/stop the user's session.
+        _showSpeechRecovery(SttConnectionStatus.reconnecting);
+        return;
+      case 'networkOffline':
+        _showSpeechRecovery(SttConnectionStatus.offline);
+        return;
+      case 'networkRecovering':
+        _showSpeechRecovery(SttConnectionStatus.reconnecting);
+        return;
+      case 'networkAwaitingSpeech':
+        _showSpeechRecovery(SttConnectionStatus.awaitingSpeech);
         return;
       case 'productiveResult':
         _recoverableSttErrorCount = 0;
         _lastRecoverableSttErrorAt = null;
+        if (SttConnectionStatus.isTransient(_currentState.statusMessage)) {
+          _showSpeechRecovery(SttConnectionStatus.matching);
+        }
         return;
       case 'heartbeat':
         final now = DateTime.now();
@@ -315,6 +332,13 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
         }
         return;
     }
+  }
+
+  void _showSpeechRecovery(String message) {
+    if (_currentState.hasError || _sttHostTransitionInFlight) return;
+    if (_currentState.statusMessage == message) return;
+    // Do not stop/reset the session, discard position, or synthesize progress.
+    _safeSetState((s) => s.copyWith(statusMessage: message));
   }
 
   Future<void> _handleBrowserHostFailure({

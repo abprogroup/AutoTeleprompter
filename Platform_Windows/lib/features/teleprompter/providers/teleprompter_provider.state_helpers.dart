@@ -16,6 +16,9 @@ extension TeleprompterNotifierStateHelpers on TeleprompterNotifier {
   void _acknowledgeTranscriptFloor(int spokenWordCount) {
     _transcriptFloor = spokenWordCount;
     if (!_lastResultUsesCumulativeTranscript) return;
+    if (spokenWordCount >= _latestCumulativeTranscriptWords.length) {
+      _browserTranscriptBoundary.consumeSnapshot();
+    }
     _cumulativeTranscriptBaselineWords = List<String>.unmodifiable(
       _latestCumulativeTranscriptWords,
     );
@@ -45,9 +48,16 @@ extension TeleprompterNotifierStateHelpers on TeleprompterNotifier {
       );
 
   int _currentSttAdvanceGuardIndex(int confirmedIndex) =>
-      _fluidAdvanceTimer?.isActive == true && _fluidTarget > confirmedIndex
+      _fluidAdvanceTimer?.isActive == true &&
+              _fluidTarget > confirmedIndex &&
+              _isVisibleSttTarget(_fluidTarget)
           ? _fluidTarget
           : confirmedIndex;
+
+  // Speech owns the accepted destination; painting may still be catching up.
+  // A manual/stop/visibility cancellation removes this temporary authority.
+  int get _sttAcceptedIndex =>
+      _currentSttAdvanceGuardIndex(_currentState.confirmedWordIndex);
 
   String _noProgressTranscriptKey(String transcript) {
     final words = transcript

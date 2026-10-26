@@ -31,6 +31,7 @@ class SttTranscriptBufferService {
     List<String> cumulativeBaselineWords = const <String>[],
     bool cumulativeFinal = false,
     bool allowFinalTailReplay = true,
+    int? freshFloorCeiling,
   }) {
     final mutableSpokenWords = <String>[];
     final surfaceTokens = <({String surface, int normalizedBefore})>[];
@@ -50,7 +51,7 @@ class SttTranscriptBufferService {
     // remapped through anchored token edits instead of trusting a raw index.
     final resetFloor =
         !cumulativeReplacement && spokenWords.length < transcriptFloor;
-    final safeFloor =
+    var safeFloor =
         resetFloor
             ? 0
             : cumulativeReplacement
@@ -61,6 +62,13 @@ class SttTranscriptBufferService {
               finalSnapshot: cumulativeFinal && allowFinalTailReplay,
             )
             : transcriptFloor;
+    if (cumulativeReplacement &&
+        freshFloorCeiling != null &&
+        freshFloorCeiling >= 0 &&
+        freshFloorCeiling <= spokenWords.length &&
+        safeFloor > freshFloorCeiling) {
+      safeFloor = freshFloorCeiling;
+    }
     final freshWords =
         safeFloor > spokenWords.length
             ? const <String>[]

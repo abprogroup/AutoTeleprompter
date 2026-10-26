@@ -277,6 +277,18 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         ),
                       ),
 
+                    // Connection status is visible even when debug is hidden.
+                    if (!tState.hasError &&
+                        SttConnectionStatus.isTransient(tState.statusMessage))
+                      Positioned(
+                        top: 12,
+                        left: 20,
+                        right: 20,
+                        child: SpeechConnectionNotice(
+                          message: tState.statusMessage,
+                        ),
+                      ),
+
                     // Error banner with actionable guidance
                     if (tState.hasError && tState.statusMessage.isNotEmpty)
                       Positioned(

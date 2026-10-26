@@ -2,6 +2,33 @@ import 'package:autoteleprompter/features/teleprompter/services/stt_recognition_
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('host recovery is independent of cloud network retry count', () {
+    final now = DateTime(2026, 10, 25, 12);
+    expect(
+      SttRecognitionPolicyService.browserRecoveryReason(
+        now: now,
+        sessionStart: now.subtract(const Duration(minutes: 2)),
+        lastHeartbeat: now.subtract(const Duration(seconds: 6)),
+      ),
+      isNull,
+    );
+    expect(
+      SttRecognitionPolicyService.browserRecoveryReason(
+        now: now,
+        sessionStart: now.subtract(const Duration(minutes: 2)),
+        lastHeartbeat: now.subtract(const Duration(seconds: 19)),
+      ),
+      'stale browser heartbeat',
+    );
+    expect(
+      SttRecognitionPolicyService.browserRecoveryReason(
+        now: now,
+        sessionStart: now.subtract(const Duration(minutes: 2)),
+        lastHeartbeat: null,
+      ),
+      'missing browser heartbeat',
+    );
+  });
   group('heartbeat listening readiness', () {
     test('blocks an active browser adapter before recognizer readiness', () {
       expect(

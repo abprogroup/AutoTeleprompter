@@ -69,6 +69,8 @@ let lastError = '';
 let lastStartAt = 0;
 let startRequestedAt = 0;
 let lastResultAt = 0;
+let networkRecoveryPending = false;
+let networkOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
 let lastHeartbeatAt = 0;
 let lastLeaseRestartAt = 0;
 let meterLevel = 0;
@@ -411,7 +413,7 @@ function isTerminalRecognitionError(errorCode) {
 }
 
 function scheduleRestart(delay, reason) {
-  if(closedByHost || restartSuppressed || ws.readyState !== 1) return;
+  if(closedByHost || restartSuppressed || networkOffline || ws.readyState !== 1) return;
   if(switchingLocale && reason !== 'locale-switch') return;
   if(switchingInput && reason !== 'input-switch') return;
   cancelScheduledRestart();
@@ -425,11 +427,30 @@ function scheduleRestart(delay, reason) {
 }
 
 function restartDelay() {
+  // Keep backoff across onstart/no-speech; only productive speech clears it.
+  if(networkRecoveryPending) {
+    return Math.min(1250 * Math.pow(2, Math.max(0, Math.min(consecutiveNetworkFails - 1, 3))), 8000);
+  }
   if(lastError === 'no-speech') return 120;
-  if(lastError === 'network') return Math.min(900 + consecutiveFails * 350, 2600);
   if(consecutiveFails <= 2) return 240;
   return Math.min(300 * Math.pow(2, consecutiveFails - 2), 3000);
 }
+
+window.addEventListener('offline', () => {
+  networkOffline = true;
+  if(closedByHost || restartSuppressed || ws.readyState !== 1) return;
+  networkRecoveryPending = true;
+  cancelScheduledRestart();
+  invalidateRecognition();
+  sendLifecycle('networkOffline');
+});
+window.addEventListener('online', () => {
+  const wasOffline = networkOffline;
+  networkOffline = false;
+  if(!wasOffline || closedByHost || restartSuppressed || ws.readyState !== 1) return;
+  sendLifecycle('networkRecovering');
+  scheduleRestart(250, 'network-online');
+});
 
 function startRecognitionWithConfiguredInput(recognizer) {
   const track = activeStream && activeStream.getAudioTracks
@@ -460,8 +481,7 @@ function startRecognitionWithConfiguredInput(recognizer) {
 function ensureWatchdog() {
   if(watchdogTimer) return;
   watchdogTimer = setInterval(() => {
-    if(closedByHost || ws.readyState !== 1 || switchingLocale || switchingInput) return;
-    if(restartTimer) return;
+    if(closedByHost || ws.readyState !== 1) return;
     const dotOn = dot.classList.contains('on');
     const now = Date.now();
     if(now - lastHeartbeatAt > 5000) {
@@ -474,7 +494,11 @@ function ensureWatchdog() {
         failures: consecutiveNetworkFails
       });
     }
-    if(restartSuppressed) return;
+    // Internet/service failure must not silence the authenticated localhost
+    // heartbeat: the host is alive even while recognition is backing off.
+    if(restartSuppressed || networkOffline || restartTimer || switchingLocale || switchingInput) return;
+    // Explicit network errors retire their generation immediately. Quiet audio
+    // or absent results alone never trigger a recognizer restart.
     if(!rec) {
       scheduleRestart(120, 'watchdog-missing-rec');
       return;
@@ -504,6 +528,11 @@ function ensureWatchdog() {
 
 function startRec(locale) {
   if(closedByHost || restartSuppressed || ws.readyState !== 1) return;
+  if(networkOffline) {
+    networkRecoveryPending = true;
+    sendLifecycle('networkOffline');
+    return;
+  }
   if(restartTimer) cancelScheduledRestart();
   if(rec) invalidateRecognition();
   switchingLocale = false;
@@ -531,14 +560,19 @@ function startRec(locale) {
     status.textContent = '[' + locale.toUpperCase() + '] Active';
     // Always signal recognizer readiness so the host can leave starting state.
     sendLifecycle('recognizerListening');
+    if(networkRecoveryPending) sendLifecycle('networkAwaitingSpeech');
     if (audioContext && audioContext.state === 'suspended') audioContext.resume();
   };
   recognizer.onresult = (e) => {
     if(!isCurrentRecognition(recognizer, generation)) return;
     const snapshotParts = [];
+    const segments = [];
+    let finalizedSegmentCount = 0;
     let snapshotIsFinal = true;
     for(let i = 0; i < e.results.length; i++){
       const t = e.results[i][0].transcript;
+      segments.push(typeof t === 'string' ? t.trim() : '');
+      if(e.results[i].isFinal && finalizedSegmentCount === i) finalizedSegmentCount++;
       if(typeof t !== 'string' || t.trim().length === 0) continue;
       snapshotParts.push(t.trim());
       if(!e.results[i].isFinal) snapshotIsFinal = false;
@@ -580,7 +614,9 @@ function startRec(locale) {
         isFinal: snapshotIsFinal,
         isCumulative: true,
         streamId: generation,
-        alternatives: alternatives
+        alternatives: alternatives,
+        segments: segments,
+        finalizedSegmentCount: finalizedSegmentCount
       });
       words.textContent = snapshotTranscript.length > 30
         ? '...' + snapshotTranscript.slice(-30)
@@ -589,6 +625,7 @@ function startRec(locale) {
       consecutiveNetworkFails = 0;
       lastError = '';
       lastResultAt = Date.now();
+      networkRecoveryPending = false;
     }
   };
   recognizer.onerror = (e) => {
@@ -597,9 +634,15 @@ function startRec(locale) {
     lastError = e.error || '';
     if(isTerminalRecognitionError(lastError)) restartSuppressed = true;
     if(e.error === 'network') {
+      networkRecoveryPending = true;
       consecutiveFails++;
       consecutiveNetworkFails++;
       sendLifecycle('network');
+      // Do not wait for onend (some runtimes never send it after failure).
+      // Retire this generation BEFORE abort so late text/status cannot leak.
+      invalidateRecognition();
+      scheduleRestart(restartDelay(), 'network-error');
+      return;
     } else if(e.error === 'not-allowed' || e.error === 'service-not-allowed') {
       consecutiveFails++;
       sendLifecycle('permissionDenied');

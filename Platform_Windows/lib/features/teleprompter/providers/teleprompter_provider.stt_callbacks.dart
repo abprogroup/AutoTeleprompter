@@ -128,7 +128,11 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
         (s) => s.copyWith(
           isListening: status == SpeechStatus.listening,
           isStarting: false,
-          statusMessage: '',
+          statusMessage:
+              status == SpeechStatus.listening &&
+                      SttConnectionStatus.isTransient(s.statusMessage)
+                  ? s.statusMessage
+                  : '',
           hasError: false,
         ),
       );
@@ -156,7 +160,12 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
           error.contains('Microphone blocked');
       _safeSetState(
         (s) => s.copyWith(
-          statusMessage: isFatal ? error : '',
+          statusMessage:
+              isFatal
+                  ? error
+                  : SttConnectionStatus.isTransient(s.statusMessage)
+                  ? s.statusMessage
+                  : '',
           hasError: isFatal,
           isListening: isFatal ? false : s.isListening,
           isStarting: isFatal ? false : s.isStarting,

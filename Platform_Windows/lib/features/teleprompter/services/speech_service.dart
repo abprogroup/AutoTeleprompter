@@ -12,6 +12,8 @@ class SpeechResult {
   final bool isCumulative;
   final int? streamId;
   final List<String> alternatives;
+  final List<String> browserSegments;
+  final int browserFinalizedSegmentCount;
 
   SpeechResult(
     this.words,
@@ -19,6 +21,8 @@ class SpeechResult {
     this.isCumulative = false,
     this.streamId,
     this.alternatives = const <String>[],
+    this.browserSegments = const <String>[],
+    this.browserFinalizedSegmentCount = 0,
   });
 }
 

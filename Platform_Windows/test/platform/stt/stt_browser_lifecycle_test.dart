@@ -18,6 +18,9 @@ void main() {
         'speechApiUnavailable': SttBrowserLifecyclePhase.speechApiUnavailable,
         'permissionDenied': SttBrowserLifecyclePhase.permissionDenied,
         'network': SttBrowserLifecyclePhase.network,
+        'networkOffline': SttBrowserLifecyclePhase.networkOffline,
+        'networkRecovering': SttBrowserLifecyclePhase.networkRecovering,
+        'networkAwaitingSpeech': SttBrowserLifecyclePhase.networkAwaitingSpeech,
       };
 
       for (final entry in expected.entries) {
@@ -210,6 +213,44 @@ void main() {
       expect(disconnected.error, 'browser-disconnected');
       expect(disconnected.failures, 1);
 
+      await subscription.cancel();
+    });
+
+    test('repeated recovery notices are delivered for every outage', () async {
+      expect((await adapter.start(localeId: 'en-US')).success, isTrue);
+      final socket = await _connect(Uri.parse(adapter.sttWebViewUrl!));
+      final subscription = socket.listen((_) {});
+      final expected = <String>[];
+      for (var i = 0; i < 2; i++) {
+        for (final phase in [
+          'networkOffline',
+          'networkRecovering',
+          'networkAwaitingSpeech',
+        ]) {
+          expected.add(phase);
+          socket.add(jsonEncode({'type': 'lifecycle', 'phase': phase}));
+        }
+      }
+      await _waitUntil(
+        () =>
+            healthEvents
+                .where((event) => event.type == 'networkAwaitingSpeech')
+                .length ==
+            2,
+      );
+      expect(
+        healthEvents
+            .where((event) => expected.contains(event.type))
+            .map((event) => event.type),
+        expected,
+      );
+      expect(errors, isEmpty);
+      expect(
+        results,
+        isEmpty,
+        reason: 'connection hints are never recognized words',
+      );
+      await socket.close();
       await subscription.cancel();
     });
 

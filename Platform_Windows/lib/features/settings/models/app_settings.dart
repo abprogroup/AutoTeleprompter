@@ -1,4 +1,17 @@
 class AppSettings {
+  static const double defaultSpeechScrollSmoothness = 0.5;
+  static const double defaultSpeechScrollSpeed = 1.0;
+
+  static double normalizeSpeechScrollSmoothness(Object? value) {
+    if (value is! num || !value.isFinite) return defaultSpeechScrollSmoothness;
+    return value.clamp(0.0, 1.0).toDouble();
+  }
+
+  static double normalizeSpeechScrollSpeed(Object? value) {
+    if (value is! num || !value.isFinite) return defaultSpeechScrollSpeed;
+    return value.clamp(0.25, 2.0).toDouble();
+  }
+
   static const String sttEngineAuto = 'windows_auto';
   static const String sttEngineWindowsOffline = 'windows_offline';
   static const String sttEngineBrowserOnline = 'browser_online';
@@ -105,6 +118,8 @@ class AppSettings {
   final String lastScriptSessionId;
   final String scrollMode; // 'auto' (speech) | 'manual' (timer)
   final double scrollSpeed; // words per minute for manual mode
+  final double speechScrollSmoothness; // 0..1, visual easing only
+  final double speechScrollSpeed; // 0.25..2, maximum speed vs default visual cap
   final String textAlign; // 'center' | 'left' | 'right'
   final bool mirrorHorizontal; // flip horizontally
   final bool mirrorVertical; // flip vertically
@@ -194,6 +209,8 @@ class AppSettings {
     this.lastScriptSessionId = '',
     this.scrollMode = 'auto',
     this.scrollSpeed = 100.0,
+    this.speechScrollSmoothness = defaultSpeechScrollSmoothness,
+    this.speechScrollSpeed = defaultSpeechScrollSpeed,
     this.textAlign = 'center',
     this.mirrorHorizontal = false,
     this.mirrorVertical = false,
@@ -275,6 +292,8 @@ class AppSettings {
     String? lastScriptSessionId,
     String? scrollMode,
     double? scrollSpeed,
+    double? speechScrollSmoothness,
+    double? speechScrollSpeed,
     String? textAlign,
     bool? mirrorHorizontal,
     bool? mirrorVertical,
@@ -355,6 +374,9 @@ class AppSettings {
       lastScriptSessionId: lastScriptSessionId ?? this.lastScriptSessionId,
       scrollMode: scrollMode ?? this.scrollMode,
       scrollSpeed: scrollSpeed ?? this.scrollSpeed,
+      speechScrollSmoothness:
+          speechScrollSmoothness ?? this.speechScrollSmoothness,
+      speechScrollSpeed: speechScrollSpeed ?? this.speechScrollSpeed,
       textAlign: textAlign ?? this.textAlign,
       mirrorHorizontal: mirrorHorizontal ?? this.mirrorHorizontal,
       mirrorVertical: mirrorVertical ?? this.mirrorVertical,

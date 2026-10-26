@@ -162,6 +162,12 @@ class SettingsNotifier extends Notifier<AppSettings>
       lastScriptSessionId: lastScriptSessionId,
       scrollMode: _normalizeScrollMode(prefs.getString(_scrollModeKey)),
       scrollSpeed: _normalizeScrollSpeed(prefs.getDouble(_scrollSpeedKey)),
+      speechScrollSmoothness: AppSettings.normalizeSpeechScrollSmoothness(
+        prefs.get(_speechScrollSmoothnessKey),
+      ),
+      speechScrollSpeed: AppSettings.normalizeSpeechScrollSpeed(
+        prefs.get(_speechScrollSpeedKey),
+      ),
       textAlign: _normalizeTextAlign(prefs.getString(_textAlignKey)),
       mirrorHorizontal: prefs.getBool(_mirrorHorizontalKey) ?? false,
       mirrorVertical: prefs.getBool(_mirrorVerticalKey) ?? false,

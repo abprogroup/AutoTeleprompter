@@ -305,12 +305,8 @@ class SttRecognitionPolicyService {
     required DateTime now,
     required DateTime? sessionStart,
     required DateTime? lastHeartbeat,
-    required DateTime? lastRecoverableError,
-    required int recoverableErrorCount,
     Duration missingInitialHeartbeatAfter = const Duration(seconds: 18),
     Duration staleHeartbeatAfter = const Duration(seconds: 18),
-    Duration recoverableErrorWindow = const Duration(seconds: 30),
-    int recoverableErrorThreshold = 3,
   }) {
     if (lastHeartbeat == null) {
       final start = sessionStart;
@@ -322,12 +318,8 @@ class SttRecognitionPolicyService {
       return 'stale browser heartbeat';
     }
 
-    if (lastRecoverableError != null &&
-        now.difference(lastRecoverableError) < recoverableErrorWindow &&
-        recoverableErrorCount >= recoverableErrorThreshold) {
-      return 'recoverable browser errors';
-    }
-
+    // Provider recovery owns host liveness only. Cloud network errors are
+    // retried by the page and must not exhaust the embedded host's retry budget.
     return null;
   }
 }

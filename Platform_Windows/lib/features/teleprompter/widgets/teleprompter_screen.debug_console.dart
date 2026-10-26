@@ -35,21 +35,9 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    tState.isListening ? Icons.mic : Icons.mic_off,
-                    color: tState.isListening ? Colors.greenAccent : Colors.red,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    tState.isListening ? 'MIC READY' : 'IDLE',
-                    style: TextStyle(
-                      color:
-                          tState.isListening ? Colors.greenAccent : Colors.red,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
+                  SpeechConnectionBadge(
+                    message: tState.statusMessage,
+                    isListening: tState.isListening,
                   ),
                   const SizedBox(width: 8),
                   Expanded(

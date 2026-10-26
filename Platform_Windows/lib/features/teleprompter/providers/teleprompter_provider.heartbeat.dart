@@ -21,6 +21,8 @@ extension TeleprompterHeartbeat on TeleprompterNotifier {
     );
 
     if (settings.debugMode) {
+      final flow = _sttResultFlow.takeSummary(DateTime.now());
+      if (flow != null) _addDebugLog(flow);
       final engineName =
           _useWhisper ? 'WHISPER' : _sttService.platformName.toUpperCase();
       final debugState = '$engineName:${listening ? "ready" : "idle"}';
@@ -51,8 +53,6 @@ extension TeleprompterHeartbeat on TeleprompterNotifier {
       now: DateTime.now(),
       sessionStart: _browserHostStartedAt ?? _sessionStartTime,
       lastHeartbeat: _lastBrowserHeartbeatAt,
-      lastRecoverableError: _lastRecoverableSttErrorAt,
-      recoverableErrorCount: _recoverableSttErrorCount,
     );
     if (reason == null) return;
 
@@ -77,7 +77,7 @@ extension TeleprompterHeartbeat on TeleprompterNotifier {
 
     _syncLocaleForPosition(
       _currentScript!,
-      _currentState.confirmedWordIndex + 1,
+      _sttAcceptedIndex + 1,
       reason: 'heartbeat',
     );
   }

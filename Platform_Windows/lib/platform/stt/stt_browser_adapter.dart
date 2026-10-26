@@ -213,6 +213,16 @@ class SttBrowserAdapter extends AbstractSttService {
                         isCumulative: isCumulative,
                         streamId: streamId,
                         alternatives: alternatives,
+                        browserSegments:
+                            (data['segments'] is List &&
+                                    (data['segments'] as List).every(
+                                      (s) => s is String,
+                                    ))
+                                ? List<String>.from(data['segments'] as List)
+                                : const <String>[],
+                        browserFinalizedSegmentCount:
+                            (data['finalizedSegmentCount'] as num?)?.toInt() ??
+                            0,
                       ),
                     );
                     onRuntimeHealth?.call(
@@ -254,7 +264,7 @@ class SttBrowserAdapter extends AbstractSttService {
                     ),
                   );
                   onDiagnostic?.call(
-                    '[Browser STT] Renewing recognizer health lease after ${ageMs ~/ 1000}s ($reason)',
+                    '[Browser STT] Recovering recognizer after ${ageMs ~/ 1000}s ($reason)',
                   );
                   break;
                 case 'heartbeat':
@@ -528,7 +538,13 @@ class SttBrowserAdapter extends AbstractSttService {
   }
 
   bool _emitBrowserLifecycle(SttBrowserLifecycleEvent event) {
-    final repeatable = event.phase == SttBrowserLifecyclePhase.network;
+    final repeatable = switch (event.phase) {
+      SttBrowserLifecyclePhase.network ||
+      SttBrowserLifecyclePhase.networkOffline ||
+      SttBrowserLifecyclePhase.networkRecovering ||
+      SttBrowserLifecyclePhase.networkAwaitingSpeech => true,
+      _ => false,
+    };
     if (!repeatable && !_reportedLifecyclePhases.add(event.phase)) return false;
 
     onRuntimeHealth?.call(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../services/stt_connection_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alignment_result.dart';
 import '../services/debug_log_formatter.dart';
@@ -7,8 +8,11 @@ import '../services/speech_service.dart';
 import '../services/whisper_speech_service_native.dart';
 import '../services/stt_movement_policy_service.dart';
 import '../services/stt_consumed_speech_service.dart';
+import '../services/stt_accepted_revision_service.dart';
 import '../services/stt_recognition_policy_service.dart';
 import '../services/stt_transcript_buffer_service.dart';
+import '../services/stt_browser_transcript_boundary.dart';
+import '../services/stt_result_flow_diagnostics.dart';
 import '../services/stt_tracking_state.dart';
 import '../services/stt_visible_skip_context_service.dart';
 import '../services/teleprompter_locale_resolver.dart';
@@ -98,6 +102,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int? _activeBrowserCumulativeStreamId;
   bool _lastResultUsesCumulativeTranscript = false;
   bool _protectManualTranscriptBoundary = false;
+  final _browserTranscriptBoundary = SttBrowserTranscriptBoundary();
+  final _sttResultFlow = SttResultFlowDiagnostics();
+  final _acceptedSpeechRevision = SttAcceptedRevisionService();
   int? _pendingStartEvidenceTargetIndex;
   String _pendingVisibleSkipTranscript = '';
   int? _pendingVisibleSkipOriginIndex;
@@ -130,6 +137,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   static const Duration _pendingVisibleSkipMaxAge = Duration(seconds: 8);
 
   void _resetSttTrackingContext({bool clearTranscriptFloor = true}) {
+    _acceptedSpeechRevision.reset();
     _accumulatedTranscript = '';
     _noProgressCount = 0;
     _sttReadingStandby = false;
@@ -142,6 +150,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _activeBrowserCumulativeStreamId = null;
       _lastResultUsesCumulativeTranscript = false;
       _protectManualTranscriptBoundary = false;
+      _browserTranscriptBoundary.reset();
+      _sttResultFlow.reset();
     }
     _pendingStartEvidenceTargetIndex = null;
     _clearPendingVisibleSkipEvidence();
@@ -767,6 +777,11 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
     _visibleWordStart = startIndex;
     _visibleWordEnd = endIndex;
+    if (_fluidAdvanceTimer?.isActive == true &&
+        !_isVisibleSttTarget(_fluidTarget)) {
+      _fluidAdvanceTimer?.cancel();
+      _clearPendingVisibleSkipEvidence();
+    }
   }
 }
 

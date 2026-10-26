@@ -20,9 +20,12 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
     }
 
     _suppressPresenterProgrammaticPositionCommit(immediate: false);
-    var step = diff * 0.035;
-    step = step.clamp(-7.0, 7.0).toDouble();
-    if (step.abs() < 0.25) step = diff.isNegative ? -0.25 : 0.25;
+    final settings = ref.read(settingsProvider);
+    final step = PresenterScrollMotion.step(
+      diff,
+      smoothness: settings.speechScrollSmoothness,
+      speed: settings.speechScrollSpeed,
+    );
     final next = current + step;
     _scrollController
         .jumpTo(next.clamp(0.0, _scrollController.position.maxScrollExtent));
@@ -38,6 +41,7 @@ extension _TeleprompterSmoothSettingsParts on _TeleprompterScreenState {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       isScrollControlled: true,
       builder: (_) => TeleprompterSettingsPanel(
+        showSpeechScrollControls: true,
         onFontSizeChanged: _preserveReadingPositionAfterLayoutChange,
         onLayoutChanged: () => _preserveReadingPositionAfterLayoutChange(0),
         onInvertColors: _togglePresenterColorInversion,

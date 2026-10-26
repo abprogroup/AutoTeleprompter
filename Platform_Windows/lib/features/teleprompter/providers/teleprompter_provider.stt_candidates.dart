@@ -8,11 +8,17 @@ extension TeleprompterNotifierSttCandidates on TeleprompterNotifier {
     _lastResultUsesCumulativeTranscript = usesCumulativeTranscript;
     if (_useWhisper) return;
     if (!usesCumulativeTranscript) {
+      if (_activeBrowserCumulativeStreamId != null) {
+        _acceptedSpeechRevision.reset();
+      }
       _activeBrowserCumulativeStreamId = null;
+      _browserTranscriptBoundary.reset();
       return;
     }
     if (_activeBrowserCumulativeStreamId == browserStreamId) return;
+    _acceptedSpeechRevision.reset();
     _activeBrowserCumulativeStreamId = browserStreamId;
+    _browserTranscriptBoundary.reset();
     _protectManualTranscriptBoundary = false;
     _transcriptFloor = 0;
     _cumulativeTranscriptBaselineFloor = 0;
@@ -37,6 +43,7 @@ extension TeleprompterNotifierSttCandidates on TeleprompterNotifier {
     }
 
     _SttResultCandidate? selected;
+    SttTranscriptBuffer? consumedPrimary;
     for (final candidate in candidates) {
       final buffer = TeleprompterNotifierStt._transcriptBuffer.update(
         rawTranscript: candidate,
@@ -49,8 +56,16 @@ extension TeleprompterNotifierSttCandidates on TeleprompterNotifier {
         cumulativeBaselineWords: _cumulativeTranscriptBaselineWords,
         cumulativeFinal: usesCumulativeTranscript && result.isFinal,
         allowFinalTailReplay: !_protectManualTranscriptBoundary,
+        freshFloorCeiling: _browserTranscriptBoundary.freshFloorCeiling(
+          candidate,
+        ),
       );
-      if (!buffer.hasFreshSpeech) continue;
+      if (!buffer.hasFreshSpeech) {
+        if (candidate == result.words.trim() && buffer.spokenWords.isNotEmpty) {
+          consumedPrimary = buffer;
+        }
+        continue;
+      }
       final transcript = buffer.recentSurfaceTranscript;
       final alignment = _bestAlignmentForTranscript(
         script: script,
@@ -68,6 +83,19 @@ extension TeleprompterNotifierSttCandidates on TeleprompterNotifier {
           _recognitionCandidateIsBetter(candidateResult, selected)) {
         selected = candidateResult;
       }
+    }
+    if (selected == null &&
+        consumedPrimary != null &&
+        result.isCumulative &&
+        result.isFinal &&
+        _protectManualTranscriptBoundary) {
+      // A settled correction to pre-jump speech is still consumed, but becomes
+      // the baseline for future appends. Otherwise every later append can be
+      // swallowed by remapping against the obsolete pre-correction snapshot.
+      // Never rebase interim retractions or replace a chosen fresh alternative.
+      // This is bookkeeping only: no alignment, evidence, command or movement.
+      _latestCumulativeTranscriptWords = consumedPrimary.spokenWords;
+      _acknowledgeTranscriptFloor(consumedPrimary.spokenWords.length);
     }
     return selected;
   }

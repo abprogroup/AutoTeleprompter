@@ -16,7 +16,7 @@ extension TeleprompterNotifierLocale on TeleprompterNotifier {
     if (_useWhisper || _disposed || _sessionStopped) return;
     if (_visibleLocaleAssistPinActive()) return;
     if (_sectionLocales.isEmpty) return;
-    final currentIdx = _currentState.confirmedWordIndex;
+    final currentIdx = _sttAcceptedIndex;
     if (currentIdx < 0 || currentIdx >= _sectionLocales.length) return;
 
     final lookIdx =
@@ -25,8 +25,11 @@ extension TeleprompterNotifierLocale on TeleprompterNotifier {
     _switchLocaleIfNeeded(needed, reason: 'pre-switch');
   }
 
-  void _syncLocaleForPosition(Script script, int wordIndex,
-      {required String reason}) {
+  void _syncLocaleForPosition(
+    Script script,
+    int wordIndex, {
+    required String reason,
+  }) {
     if (_useWhisper || _disposed || _sessionStopped) return;
     if (_visibleLocaleAssistPinActive()) return;
     if (_sectionLocales.length != script.words.length) {
@@ -80,7 +83,7 @@ extension TeleprompterNotifierLocale on TeleprompterNotifier {
           transcript: heard,
           visibleStart: _visibleWordStart!,
           visibleEnd: _visibleWordEnd!,
-          currentIndex: _currentState.confirmedWordIndex,
+          currentIndex: _sttAcceptedIndex,
         )) {
       _pendingVisibleLocaleAssistLocale = null;
       return false;
@@ -119,8 +122,9 @@ extension TeleprompterNotifierLocale on TeleprompterNotifier {
     _lastVisibleLocaleAssistAt = now;
     _lastVisibleLocaleAssistLocale = candidate;
     _visibleLocaleAssistPinnedLocale = candidate;
-    _visibleLocaleAssistPinnedUntil =
-        now.add(TeleprompterNotifier._visibleLocaleAssistPinDuration);
+    _visibleLocaleAssistPinnedUntil = now.add(
+      TeleprompterNotifier._visibleLocaleAssistPinDuration,
+    );
     _pendingVisibleLocaleAssistLocale = null;
     _noProgressCount = 0;
     final switched = _switchLocaleIfNeeded(
@@ -141,12 +145,11 @@ extension TeleprompterNotifierLocale on TeleprompterNotifier {
     }
     if (_sectionLocales.isEmpty || script.words.isEmpty) return null;
 
-    final rawStart = _visibleWordStart ?? _currentState.confirmedWordIndex + 1;
+    final rawStart = _visibleWordStart ?? _sttAcceptedIndex + 1;
     final rawEnd = _visibleWordEnd ?? rawStart;
     final start = rawStart.clamp(0, script.words.length - 1).toInt();
     final end = rawEnd.clamp(start, script.words.length - 1).toInt();
-    final minIndex =
-        (_currentState.confirmedWordIndex + 1).clamp(0, end).toInt();
+    final minIndex = (_sttAcceptedIndex + 1).clamp(0, end).toInt();
     final scanStart = start < minIndex ? minIndex : start;
     if (scanStart > end) return null;
 

@@ -52,14 +52,17 @@ class _ControlBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    final hotkeys = ref.watch(hotkeyProvider);
     final hasBookmarkAccess = ref.watch(authProvider).hasPremiumAccess;
     // Forward scroll is active when scrolling but NOT backward
-    final isActive = isManualMode
-        ? (isManualScrolling && settings.scrollSpeed != 0)
-        : isListening;
+    final isActive =
+        isManualMode
+            ? (isManualScrolling && settings.scrollSpeed != 0)
+            : isListening;
     final isBooting = !isManualMode && isStarting;
-    final effectiveFontSize =
-        ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
+    final effectiveFontSize = ref
+        .read(scriptProvider.notifier)
+        .effectiveFontSize(settings.fontSize);
     void applyPresenterFontSize(double size) {
       final clamped = size.clamp(14.0, 120.0).toDouble();
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
@@ -78,9 +81,9 @@ class _ControlBar extends ConsumerWidget {
             label: 'Connect',
             onPressed: () {
               messenger.hideCurrentSnackBar();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
             },
           ),
         ),
@@ -119,13 +122,16 @@ class _ControlBar extends ConsumerWidget {
               ),
               onPressed:
                   hasBookmarkAccess ? onPreviousBookmark : showLockedBookmarks,
-              tooltip: hasBookmarkAccess
-                  ? 'Previous bookmark'
-                  : 'Bookmarks are included with Pro',
+              tooltip:
+                  hasBookmarkAccess
+                      ? 'Previous bookmark (${hotkeys.labelFor(AppHotkeyAction.previousBookmark)})'
+                      : 'Bookmarks are included with Pro',
             ),
             IconButton(
-              icon: const Text('A',
-                  style: TextStyle(color: Colors.white70, fontSize: 16)),
+              icon: const Text(
+                'A',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
               onPressed: () {
                 applyPresenterFontSize(effectiveFontSize - 4);
               },
@@ -155,11 +161,14 @@ class _ControlBar extends ConsumerWidget {
               ),
             ),
             IconButton(
-              icon: const Text('A',
-                  style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold)),
+              icon: const Text(
+                'A',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: () {
                 applyPresenterFontSize(effectiveFontSize + 4);
               },
@@ -174,9 +183,10 @@ class _ControlBar extends ConsumerWidget {
               ),
               onPressed:
                   hasBookmarkAccess ? onAddBookmark : showLockedBookmarks,
-              tooltip: hasBookmarkAccess
-                  ? 'Add bookmark'
-                  : 'Bookmarks are included with Pro',
+              tooltip:
+                  hasBookmarkAccess
+                      ? 'Add bookmark (toggle: ${hotkeys.labelFor(AppHotkeyAction.toggleBookmark)})'
+                      : 'Bookmarks are included with Pro',
             ),
             IconButton(
               icon: Icon(
@@ -185,12 +195,14 @@ class _ControlBar extends ConsumerWidget {
                     : Icons.lock_outline_rounded,
                 color: hasBookmarkAccess ? Colors.white70 : Colors.white38,
               ),
-              onPressed: !hasBookmarkAccess
-                  ? showLockedBookmarks
-                  : (isListening || isStarting ? null : onRemoveBookmark),
-              tooltip: hasBookmarkAccess
-                  ? 'Remove bookmark'
-                  : 'Bookmarks are included with Pro',
+              onPressed:
+                  !hasBookmarkAccess
+                      ? showLockedBookmarks
+                      : (isListening || isStarting ? null : onRemoveBookmark),
+              tooltip:
+                  hasBookmarkAccess
+                      ? 'Remove bookmark (toggle: ${hotkeys.labelFor(AppHotkeyAction.toggleBookmark)})'
+                      : 'Bookmarks are included with Pro',
             ),
             IconButton(
               key: settingsKey,
@@ -204,7 +216,10 @@ class _ControlBar extends ConsumerWidget {
                 color: Colors.white70,
               ),
               onPressed: onToggleFullscreen,
-              tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
+              tooltip:
+                  isFullscreen
+                      ? 'Exit fullscreen (${hotkeys.labelFor(AppHotkeyAction.exitFullscreen)})'
+                      : 'Fullscreen (${hotkeys.labelFor(AppHotkeyAction.enterFullscreen)})',
             ),
             IconButton(
               icon: Icon(
@@ -215,9 +230,10 @@ class _ControlBar extends ConsumerWidget {
               ),
               onPressed:
                   hasBookmarkAccess ? onNextBookmark : showLockedBookmarks,
-              tooltip: hasBookmarkAccess
-                  ? 'Next bookmark'
-                  : 'Bookmarks are included with Pro',
+              tooltip:
+                  hasBookmarkAccess
+                      ? 'Next bookmark (${hotkeys.labelFor(AppHotkeyAction.nextBookmark)})'
+                      : 'Bookmarks are included with Pro',
             ),
             IconButton(
               icon: const Icon(Icons.replay, color: Colors.white70),
@@ -226,7 +242,8 @@ class _ControlBar extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.search, color: Colors.white70),
               onPressed: onSearch,
-              tooltip: 'Search (Ctrl+Shift+F)',
+              tooltip:
+                  'Search (${hotkeys.labelFor(AppHotkeyAction.searchScript)})',
             ),
           ],
         ),

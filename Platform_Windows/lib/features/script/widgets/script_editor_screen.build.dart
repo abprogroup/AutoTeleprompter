@@ -185,16 +185,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                           ): const _PasteIntent(),
                           LogicalKeySet(
                             LogicalKeyboardKey.control,
-                            LogicalKeyboardKey.shift,
-                            LogicalKeyboardKey.keyF,
-                          ): const _SearchIntent(),
-                          LogicalKeySet(
-                            LogicalKeyboardKey.meta,
-                            LogicalKeyboardKey.shift,
-                            LogicalKeyboardKey.keyF,
-                          ): const _SearchIntent(),
-                          LogicalKeySet(
-                            LogicalKeyboardKey.control,
                             LogicalKeyboardKey.keyZ,
                           ): const _UndoIntent(),
                           LogicalKeySet(
@@ -255,12 +245,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                             _RedoIntent: CallbackAction<_RedoIntent>(
                               onInvoke: (_) {
                                 _redo();
-                                return null;
-                              },
-                            ),
-                            _SearchIntent: CallbackAction<_SearchIntent>(
-                              onInvoke: (intent) {
-                                _showEditorSearchDialog();
                                 return null;
                               },
                             ),
@@ -427,7 +411,6 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                               onPaste: _onPaste,
                                               onUndo: _undo,
                                               onRedo: _redo,
-                                              onSearch: _showEditorSearchDialog,
                                               hasBookmark:
                                                   _hasBookmarkInEditorBlock(
                                                       index),

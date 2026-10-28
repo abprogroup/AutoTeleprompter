@@ -98,9 +98,10 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
 
   // Add bookmark.
 
-  Future<void> _addEditorBookmark() async {
+  Future<void> _addEditorBookmark({bool Function()? stillCurrent}) async {
     if (_controllers.isEmpty) return;
     await _loadBookmarksForCurrentScript(force: true);
+    if (!mounted || (stillCurrent != null && !stillCurrent())) return;
     final block = _currentEditorBlockIndex();
     final offset = _currentEditorOffset(block);
     if (block < 0 || block >= _controllers.length) return;
@@ -129,7 +130,7 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
     }
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
     final label = _bookmarkLabelForEditorPosition(block, safeOffset);
-    if (!mounted) return;
+    if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
     // Restore focus + caret to the editable so keyboard navigation continues
     // from the bookmark instead of jumping to the start of the script.
     _focusEditorPosition((block: block, offset: cursorOffset));
@@ -143,9 +144,14 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
 
   // Navigate bookmarks.
 
-  Future<void> _jumpEditorBookmark(int direction) async {
+  Future<void> _jumpEditorBookmark(
+    int direction, {
+    bool Function()? stillCurrent,
+  }) async {
     await _loadBookmarksForCurrentScript(force: true);
+    if (!mounted || (stillCurrent != null && !stillCurrent())) return;
     await _syncBookmarksFromEditorSigns(notify: true, save: true);
+    if (!mounted || (stillCurrent != null && !stillCurrent())) return;
     if (_bookmarks.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

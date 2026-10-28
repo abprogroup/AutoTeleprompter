@@ -10,7 +10,11 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
     // 60fps smooth pixel scroll
     _manualScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
-      if (!mounted || !_scrollController.hasClients) return;
+      if (!mounted ||
+          !_scrollController.hasClients ||
+          _viewportAnchor != null) {
+        return;
+      }
       final settings = ref.read(settingsProvider);
 
       // Speed can be negative for backward scrolling
@@ -55,6 +59,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   }
 
   void _updateManualWordIndex() {
+    if (_viewportAnchor != null) return;
     if (!mounted || !_scrollController.hasClients) return;
     if (_scrollController.offset <= 1.0) {
       final script = ref.read(scriptProvider);
@@ -205,6 +210,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   }
 
   void _syncVisibleWordWindow({bool force = false}) {
+    if (_viewportGeometryPending) return;
+    if (_viewportAnchor != null && !force) return;
     final now = DateTime.now();
     final previous = _lastVisibleWindowSync;
     if (!force &&
@@ -413,6 +420,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   }
 
   bool _handleStoppedBrowsingScroll(ScrollNotification notification) {
+    if (_viewportAnchor != null) return false;
     final sttState = ref.read(teleprompterProvider);
     final settings = ref.read(settingsProvider);
     final speechActive = sttState.isListening || sttState.isStarting;
@@ -494,6 +502,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   }
 
   void _finishActiveManualCorrection() {
+    if (_viewportAnchor != null) return;
     _activeManualCorrectionTimer?.cancel();
     _activeManualCorrectionTimer = null;
     if (!_activeManualCorrection) return;

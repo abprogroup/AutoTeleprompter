@@ -24,6 +24,8 @@ import '../../script/services/script_bookmark_service.dart';
 import '../../script/services/markup_decoration_service.dart';
 import '../../script/services/highlight_band_painter.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../settings/models/app_hotkey.dart';
+import '../../settings/providers/hotkey_provider.dart';
 import '../../settings/widgets/windows_stt_engine_selector.dart';
 import '../../script/models/script_word.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
@@ -44,6 +46,8 @@ import 'speech_connection_notice.dart';
 import '../services/stt_connection_status.dart';
 
 part 'teleprompter_screen.session_stt.dart';
+part 'teleprompter_screen.hotkeys.dart';
+part 'teleprompter_screen.viewport_anchor.dart';
 part 'teleprompter_screen.manual_scroll.dart';
 part 'teleprompter_screen.bookmarks_search.dart';
 part 'teleprompter_screen.presenter_search.dart';
@@ -67,10 +71,6 @@ final _tagStripRe = RegExp(
   r'\[\/?(y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc|u|i|center|left|right|rtl|ltr|color|bg)\]|\[\/?(size|color|bg|font|align)(?:=[^\]]+)?\]|\*\*',
 );
 
-class _PresentationSearchIntent extends Intent {
-  const _PresentationSearchIntent();
-}
-
 class TeleprompterScreen extends ConsumerStatefulWidget {
   final bool showWalkthroughGuide;
 
@@ -80,7 +80,8 @@ class TeleprompterScreen extends ConsumerStatefulWidget {
   ConsumerState<TeleprompterScreen> createState() => _TeleprompterScreenState();
 }
 
-class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
+class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
+    with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _presenterContentKey = GlobalKey();
   final GlobalKey _presenterReadingLineKey = GlobalKey();
@@ -117,6 +118,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   int _webViewLoadGeneration = 0;
   String _lastSearchQuery = '';
   bool _searchDialogOpen = false;
+  bool _bookmarkHotkeyBusy = false;
   bool _resumeDialogShown = false;
   // Presenter search state
   List<_PresenterSearchMatch> _presenterSearchMatches = const [];
@@ -142,10 +144,26 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
   DateTime? _lastPresenterUserScrollSignalAt;
   bool _windowsControlsHovering = false;
   bool _presenterFullscreen = false;
+  _PresenterViewportAnchor? _viewportAnchor;
+  _PresenterViewportAnchor? _settledViewportAnchor;
+  double? _settledViewportOffset;
+  Size? _lastPresenterViewportSize;
+  Timer? _viewportSettleTimer;
+  bool _viewportRestoreScheduled = false;
+  bool _viewportGeometryPending = false;
+  int _viewportGeometryGeneration = 0;
+  Completer<void>? _fullscreenCompletion;
+  late final TeleprompterNotifier _sessionOwner;
+  late final RemoteControlService _remoteStateOwner;
 
   @override
   void initState() {
     super.initState();
+    // Riverpod's widget ref is unavailable during unmount. Capture the existing
+    // owners while mounted so disposal still stops speech and clears remotes.
+    _sessionOwner = ref.read(teleprompterProvider.notifier);
+    _remoteStateOwner = ref.read(remoteControlProvider);
+    WidgetsBinding.instance.addObserver(this);
     _presenterWalkthroughVisible = widget.showWalkthroughGuide;
     HardwareKeyboard.instance.addHandler(_handlePresentationKey);
     WakelockPlus.enable();
@@ -204,8 +222,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _viewportSettleTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_handlePresentationKey);
-    ref.read(teleprompterProvider.notifier).stopSession();
+    _sessionOwner.stopSession();
     WakelockPlus.disable();
     if (_presenterFullscreen) {
       unawaited(PresenterFullscreenService.setEnabled(false));
@@ -219,15 +239,13 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     _hideControlsTimer?.cancel();
     _smoothScrollTimer?.cancel();
     _activeManualCorrectionTimer?.cancel();
-    ref
-        .read(remoteControlProvider)
-        .publishPresenterState(
-          scriptActive: false,
-          sessionActive: false,
-          isStarting: false,
-          scrollMode: 'auto',
-          scrollSpeed: 0,
-        );
+    _remoteStateOwner.publishPresenterState(
+      scriptActive: false,
+      sessionActive: false,
+      isStarting: false,
+      scrollMode: 'auto',
+      scrollSpeed: 0,
+    );
     _scrollController.dispose();
     _remoteCmdSub?.cancel();
     _webViewControllerOwnerDisposed = true;
@@ -240,6 +258,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen> {
     );
     super.dispose();
   }
+
+  @override
+  void didChangeMetrics() => _captureViewportAnchor();
 
   void _setPresenterDebugPinned(bool value) {
     setState(() {

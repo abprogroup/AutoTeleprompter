@@ -1,5 +1,5 @@
 name: Build Windows EXE (v5.2.2)
-run-name: Windows ${{ github.event.inputs.app_version || '5.2.2+65' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
+run-name: Windows ${{ github.event.inputs.app_version || '5.2.2+66' }} ${{ github.event.inputs.release_channel || 'stable' }} EXE
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -17,9 +17,9 @@ on:
           - beta
           - internal
       app_version:
-        description: 'Flutter app version, for example 5.2.2+65'
+        description: 'Flutter app version, for example 5.2.2+66'
         required: true
-        default: '5.2.2+65'
+        default: '5.2.2+66'
         type: string
       release_label:
         description: 'Human label such as Beta 1 or Stable'
@@ -57,11 +57,11 @@ jobs:
 
           $appVersion = "${{ github.event.inputs.app_version }}"
           if ([string]::IsNullOrWhiteSpace($appVersion)) {
-            $appVersion = "5.2.2+65"
+            $appVersion = "5.2.2+66"
           }
           $appVersion = $appVersion.Trim()
           if ($appVersion -notmatch '^\d+\.\d+\.\d+\+\d+$') {
-            throw "app_version must look like 5.2.2+65."
+            throw "app_version must look like 5.2.2+66."
           }
           $versionName = ($appVersion -split '\+', 2)[0]
 
@@ -240,6 +240,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $sttRegressionTests = @(
+            "test/auth/account_session_refresh_test.dart"
             "test/platform/docx_import_styles_test.dart"
             "test/platform/markup_controller_live_selection_test.dart"
             "test/platform/rtf_import_formatting_test.dart"
@@ -255,6 +256,13 @@ jobs:
             "test/platform/stt/stt_webview2_compatibility_test.dart"
             "test/platform/webview2/webview2_runtime_bootstrap_test.dart"
             "test/settings/app_settings_stt_engine_test.dart"
+            "test/settings/cloud_account_connection_actions_test.dart"
+            "test/settings/cloud_connection_refresh_test.dart"
+            "test/settings/cloud_sign_in_test.dart"
+            "test/settings/connection_maintenance_test.dart"
+            "test/settings/editor_hotkeys_test.dart"
+            "test/settings/hotkey_provider_test.dart"
+            "test/settings/hotkey_settings_page_test.dart"
             "test/settings/settings_provider_stt_engine_test.dart"
             "test/settings/speech_scroll_settings_test.dart"
             "test/settings/windows_stt_engine_selector_test.dart"
@@ -262,8 +270,10 @@ jobs:
             "test/teleprompter/hidden_stt_webview_lifecycle_contract_test.dart"
             "test/teleprompter/number_mismatch_safety_recovery_test.dart"
             "test/teleprompter/presenter_highlight_style_test.dart"
+            "test/teleprompter/presenter_hotkeys_test.dart"
             "test/teleprompter/presenter_reading_position_service_test.dart"
             "test/teleprompter/presenter_scroll_motion_test.dart"
+            "test/teleprompter/presenter_viewport_test.dart"
             "test/teleprompter/speech_scroll_controls_test.dart"
             "test/teleprompter/spoken_number_normalizer_test.dart"
             "test/teleprompter/stt_recognition_policy_heartbeat_test.dart"

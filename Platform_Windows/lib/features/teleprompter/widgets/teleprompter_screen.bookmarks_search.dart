@@ -18,9 +18,9 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
           label: 'Connect',
           onPressed: () {
             messenger.hideCurrentSnackBar();
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-            );
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
           },
         ),
       ),
@@ -37,46 +37,56 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     if (script == null) return;
 
     final wordCount = script.words.where((w) => !w.isNewline).length;
-    final percent = wordCount > 0
-        ? ((savedIndex / script.words.length) * 100).clamp(0, 100).round()
-        : 0;
+    final percent =
+        wordCount > 0
+            ? ((savedIndex / script.words.length) * 100).clamp(0, 100).round()
+            : 0;
 
     final choice = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
-          children: [
-            Icon(Icons.history, color: Color(0xFFFFBF00), size: 20),
-            SizedBox(width: 8),
-            Text('Resume reading?',
-                style: TextStyle(color: Colors.white, fontSize: 16)),
-          ],
-        ),
-        content: Text(
-          'You left this script at ~$percent%. Would you like to continue '
-          'from where you left off, or restart from the beginning?',
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Restart',
-                style: TextStyle(color: Colors.white54, fontSize: 14)),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.history, color: Color(0xFFFFBF00), size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Resume reading?',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+            content: Text(
+              'You left this script at ~$percent%. Would you like to continue '
+              'from where you left off, or restart from the beginning?',
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text(
+                  'Restart',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFBF00),
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Continue', style: TextStyle(fontSize: 14)),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFBF00),
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8))),
-            child: const Text('Continue', style: TextStyle(fontSize: 14)),
-          ),
-        ],
-      ),
     );
 
     if (!mounted) return;
@@ -90,8 +100,10 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     }
   }
 
-  Future<void> _loadBookmarksForScript(Script script,
-      {bool force = false}) async {
+  Future<void> _loadBookmarksForScript(
+    Script script, {
+    bool force = false,
+  }) async {
     final key = ScriptBookmarkService.scopeKey(script.sessionId, script.title);
     if (!force &&
         _bookmarkScopeKey == key &&
@@ -106,12 +118,13 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     for (final bookmark in loaded) {
       final anchoredTarget =
           ScriptBookmarkService.anchoredWordIndexFromEditorPosition(
-        rawText: script.rawText,
-        words: script.words,
-        blockIndex: bookmark.blockIndex,
-        offset: bookmark.offset,
-      );
-      final target = anchoredTarget ??
+            rawText: script.rawText,
+            words: script.words,
+            blockIndex: bookmark.blockIndex,
+            offset: bookmark.offset,
+          );
+      final target =
+          anchoredTarget ??
           ScriptBookmarkService.nearestBookmarkableWordIndex(
             script.words,
             bookmark.wordIndex,
@@ -119,16 +132,17 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       if (target == null) {
         continue;
       }
-      final normalizedBookmark = target == bookmark.wordIndex
-          ? bookmark
-          : ScriptBookmark(
-              id: bookmark.id,
-              label: _bookmarkLabelForWord(script, target),
-              wordIndex: target,
-              blockIndex: bookmark.blockIndex,
-              offset: bookmark.offset,
-              createdAt: bookmark.createdAt,
-            );
+      final normalizedBookmark =
+          target == bookmark.wordIndex
+              ? bookmark
+              : ScriptBookmark(
+                id: bookmark.id,
+                label: _bookmarkLabelForWord(script, target),
+                wordIndex: target,
+                blockIndex: bookmark.blockIndex,
+                offset: bookmark.offset,
+                createdAt: bookmark.createdAt,
+              );
       normalized = ScriptBookmarkService.upsert(normalized, normalizedBookmark);
     }
     if (!mounted || _bookmarkScopeKey != key) return;
@@ -151,10 +165,11 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     for (var i = wordIndex; i < script.words.length && i < wordIndex + 8; i++) {
       final word = script.words[i];
       if (word.isNewline) continue;
-      final text = word.raw
-          .replaceAll(_tagStripRe, '')
-          .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '')
-          .trim();
+      final text =
+          word.raw
+              .replaceAll(_tagStripRe, '')
+              .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '')
+              .trim();
       if (text.isEmpty) continue;
       if (buffer.isNotEmpty) buffer.write(' ');
       buffer.write(text);
@@ -164,12 +179,21 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     return label.length <= 44 ? label : '${label.substring(0, 44)}...';
   }
 
-  Future<void> _addPresenterBookmark() async {
+  Future<void> _addPresenterBookmark({
+    int? atWordIndex,
+    bool Function()? stillCurrent,
+  }) async {
     if (!await _ensurePresenterBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
-    final currentIndex = ref.read(teleprompterProvider).confirmedWordIndex;
+    if (!mounted ||
+        !identical(ref.read(scriptProvider), script) ||
+        (stillCurrent != null && !stillCurrent())) {
+      return;
+    }
+    final currentIndex =
+        atWordIndex ?? ref.read(teleprompterProvider).confirmedWordIndex;
     final index = ScriptBookmarkService.nearestBookmarkableWordIndex(
       script.words,
       currentIndex,
@@ -196,13 +220,21 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     );
   }
 
-  Future<void> _jumpPresenterBookmark(int direction) async {
+  Future<void> _jumpPresenterBookmark(
+    int direction, {
+    int? fromWordIndex,
+    bool Function()? stillCurrent,
+  }) async {
     if (!await _ensurePresenterBookmarkAccess()) return;
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     final sttState = ref.read(teleprompterProvider);
     await _loadBookmarksForScript(script, force: true);
-    if (!mounted) return;
+    if (!mounted ||
+        !identical(ref.read(scriptProvider), script) ||
+        (stillCurrent != null && !stillCurrent())) {
+      return;
+    }
     if (_bookmarks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -213,14 +245,15 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       return;
     }
 
-    final current = sttState.confirmedWordIndex;
+    final current = fromWordIndex ?? sttState.confirmedWordIndex;
     int bookmarkListIndex;
     if (direction >= 0) {
       bookmarkListIndex = _bookmarks.indexWhere((b) => b.wordIndex > current);
       if (bookmarkListIndex == -1) bookmarkListIndex = 0;
     } else {
-      bookmarkListIndex =
-          _bookmarks.lastIndexWhere((b) => b.wordIndex < current);
+      bookmarkListIndex = _bookmarks.lastIndexWhere(
+        (b) => b.wordIndex < current,
+      );
       if (bookmarkListIndex == -1) bookmarkListIndex = _bookmarks.length - 1;
     }
     final bookmark = _bookmarks[bookmarkListIndex];
@@ -271,14 +304,32 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     );
   }
 
-  Future<void> _deletePresenterBookmark(int wordIndex) async {
+  Future<void> _deletePresenterBookmark(
+    int wordIndex, {
+    bool Function()? stillCurrent,
+  }) async {
     if (!await _ensurePresenterBookmarkAccess()) return;
+    if (!mounted || (stillCurrent != null && !stillCurrent())) return;
+    // Recheck at the mutation boundary: speech may start while access or
+    // bookmark loading is awaiting completion.
+    final session = ref.read(teleprompterProvider);
+    if (session.isListening || session.isStarting) {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Pause speech before removing a bookmark.'),
+        ),
+      );
+      return;
+    }
     final script = ref.read(scriptProvider);
     if (script == null) return;
     final before = _bookmarks.length;
-    final next = _bookmarks
-        .where((bookmark) => bookmark.wordIndex != wordIndex)
-        .toList();
+    final next =
+        _bookmarks
+            .where((bookmark) => bookmark.wordIndex != wordIndex)
+            .toList();
     final deleted = before - next.length;
     if (deleted <= 0) return;
     _setTeleprompterState(() => _bookmarks = next);
@@ -287,7 +338,8 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-            deleted == 1 ? 'Bookmark deleted' : '$deleted bookmarks deleted'),
+          deleted == 1 ? 'Bookmark deleted' : '$deleted bookmarks deleted',
+        ),
         duration: const Duration(seconds: 2),
       ),
     );

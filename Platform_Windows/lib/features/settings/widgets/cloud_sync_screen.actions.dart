@@ -1,6 +1,20 @@
 part of 'cloud_sync_screen.dart';
 
 extension _CloudSyncScreenActions on _CloudSyncScreenState {
+  Future<void> _checkProviderConnection(
+    CloudProviderDefinition provider,
+  ) async {
+    if (!_checkingAccounts.add(provider.id)) return;
+    _connectionStateChanged();
+    try {
+      final result = await _oauth.checkConnection(provider);
+      if (mounted) _showSnack(result.message);
+    } finally {
+      _checkingAccounts.remove(provider.id);
+      _connectionStateChanged();
+    }
+  }
+
   Future<void> _uploadLocalBackupScripts() async {
     if (_syncingScripts) return;
     final scripts = await _scriptPayloadsForSync();

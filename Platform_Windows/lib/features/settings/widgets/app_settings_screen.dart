@@ -24,6 +24,7 @@ import '../services/update_check_service.dart';
 import '../services/update_download_service.dart';
 import '../services/update_install_service.dart';
 import 'cloud_sync_screen.dart';
+import 'hotkey_settings_page.dart';
 import 'windows_stt_engine_selector.dart';
 
 part 'app_settings_screen.tiles.dart';
@@ -40,6 +41,7 @@ enum AppSettingsTab {
   account,
   remote,
   cloud,
+  hotkeys,
 }
 
 extension AppSettingsTabIndex on AppSettingsTab {
@@ -112,6 +114,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               Tab(icon: Icon(Icons.person_outline), text: 'Account'),
               Tab(icon: Icon(Icons.settings_remote_outlined), text: 'Remote'),
               Tab(icon: Icon(Icons.cloud_outlined), text: 'Cloud'),
+              Tab(icon: Icon(Icons.keyboard_outlined), text: 'Hotkeys'),
             ],
           ),
         ),
@@ -121,6 +124,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             _settingsList(_accountTab(settings, auth)),
             _settingsList(_remoteTab(remote)),
             const CloudSyncScreen(embedded: true),
+            const HotkeySettingsPage(),
           ],
         ),
       ),

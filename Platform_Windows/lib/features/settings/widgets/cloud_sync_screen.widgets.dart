@@ -74,8 +74,9 @@ class _CloudDisclosureNote extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF151515),
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: const Color(0xFFFFBF00).withValues(alpha: .2)),
+        border: Border.all(
+          color: const Color(0xFFFFBF00).withValues(alpha: .2),
+        ),
       ),
       child: const Text(
         'Cloud disclosure: Google Drive and Dropbox account connections use '
@@ -112,7 +113,8 @@ class _CloudActionBar extends StatelessWidget {
         ElevatedButton.icon(
           onPressed: enabled ? onSyncScripts : null,
           icon: Icon(
-              syncing ? Icons.sync_problem_rounded : Icons.cloud_sync_outlined),
+            syncing ? Icons.sync_problem_rounded : Icons.cloud_sync_outlined,
+          ),
           label: Text(syncing ? 'Syncing scripts...' : 'Sync scripts'),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFFFFBF00),
@@ -167,16 +169,20 @@ class _LocalBackupCard extends StatelessWidget {
         color: const Color(0xFF1A1A1A),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: connected
-              ? const Color(0xFFFFBF00).withValues(alpha: .35)
-              : Colors.white.withValues(alpha: .06),
+          color:
+              connected
+                  ? const Color(0xFFFFBF00).withValues(alpha: .35)
+                  : Colors.white.withValues(alpha: .06),
         ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.folder_copy_outlined,
-              color: Color(0xFFFFBF00), size: 28),
+          const Icon(
+            Icons.folder_copy_outlined,
+            color: Color(0xFFFFBF00),
+            size: 28,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -194,9 +200,9 @@ class _LocalBackupCard extends StatelessWidget {
                   !enabled
                       ? 'Connect a Pro account to use Local Backup.'
                       : connected
-                          ? 'Folder: ${connection.folderPath}'
-                          : 'Choose one local folder for Pro backup and provider '
-                              'desktop sync folders.',
+                      ? 'Folder: ${connection.folderPath}'
+                      : 'Choose one local folder for Pro backup and provider '
+                          'desktop sync folders.',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -318,8 +324,8 @@ class _DeletedScriptsFolderCard extends StatelessWidget {
                   !enabled
                       ? 'Connect a Pro account to view or manage deleted-script backups.'
                       : hasFolder
-                          ? 'Folder: $folderPath'
-                          : 'Uses Local Backup/Deleted Scripts unless you choose a separate folder.',
+                      ? 'Folder: $folderPath'
+                      : 'Uses Local Backup/Deleted Scripts unless you choose a separate folder.',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -331,9 +337,10 @@ class _DeletedScriptsFolderCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 CheckboxListTile(
                   value: useCustomFolder,
-                  onChanged: enabled
-                      ? (value) => onToggleCustomFolder(value ?? false)
-                      : null,
+                  onChanged:
+                      enabled
+                          ? (value) => onToggleCustomFolder(value ?? false)
+                          : null,
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
@@ -353,8 +360,9 @@ class _DeletedScriptsFolderCard extends StatelessWidget {
                       ElevatedButton.icon(
                         onPressed: enabled ? onChoose : null,
                         icon: const Icon(Icons.folder_open_outlined),
-                        label:
-                            Text(hasFolder ? 'Change folder' : 'Choose folder'),
+                        label: Text(
+                          hasFolder ? 'Change folder' : 'Choose folder',
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFFBF00),
                           foregroundColor: Colors.black,
@@ -385,153 +393,6 @@ class _DeletedScriptsFolderCard extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _CloudOption extends StatelessWidget {
-  final CloudProviderConnection connection;
-  final CloudAccountInfo? account;
-  final VoidCallback? onConnectAccount;
-  final VoidCallback? onUploadAccount;
-  final VoidCallback? onListAccount;
-  final VoidCallback? onSyncWithApp;
-  final VoidCallback? onDisconnectAccount;
-
-  const _CloudOption({
-    required this.connection,
-    required this.account,
-    required this.onConnectAccount,
-    required this.onUploadAccount,
-    required this.onListAccount,
-    required this.onSyncWithApp,
-    required this.onDisconnectAccount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final account = this.account;
-    final accountConnected = account != null;
-    final icon = _providerIcon(connection.provider.id);
-    final color = _providerColor(connection.provider.id);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: accountConnected
-              ? const Color(0xFFFFBF00).withValues(alpha: .35)
-              : Colors.white.withValues(alpha: 0.05),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  connection.provider.label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  accountConnected
-                      ? 'Account: ${account.accountLabel}'
-                      : _providerSubtitle(connection.provider),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: accountConnected ? Colors.white60 : Colors.white38,
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (onConnectAccount != null)
-                      ElevatedButton.icon(
-                        onPressed: onConnectAccount,
-                        icon: const Icon(Icons.account_circle_outlined),
-                        label: Text(
-                          accountConnected
-                              ? 'Reconnect account'
-                              : 'Connect account',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFFBF00),
-                          foregroundColor: Colors.black,
-                        ),
-                      ),
-                    OutlinedButton.icon(
-                      onPressed: onUploadAccount,
-                      icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                      label: const Text('Upload script'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: onListAccount,
-                      icon: const Icon(Icons.cloud_sync_outlined, size: 18),
-                      label: const Text('Synced scripts'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: onSyncWithApp,
-                      icon: const Icon(Icons.sync_alt_rounded, size: 18),
-                      label: const Text('Sync with App'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: onDisconnectAccount,
-                      icon: const Icon(Icons.logout_rounded, size: 18),
-                      label: const Text('Disconnect account'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (accountConnected)
-            const _StatusPill(
-              label: 'ACCOUNT',
-              color: Colors.lightBlueAccent,
-              background: Colors.blue,
-            ),
-        ],
-      ),
-    );
-  }
-
-  String _providerSubtitle(CloudProviderDefinition provider) {
-    if (provider.id == CloudConnectionStore.dropbox) {
-      return '${provider.subtitle}. Dropbox App Folder apps appear under Apps; '
-          'keep scripts in Apps/AutoTeleprompter. Root-level folders require '
-          'a Full Dropbox app.';
-    }
-    return provider.subtitle;
-  }
-
-  IconData _providerIcon(String providerId) {
-    return switch (providerId) {
-      CloudConnectionStore.googleDrive => Icons.add_to_drive,
-      CloudConnectionStore.dropbox => Icons.cloud_queue_rounded,
-      _ => Icons.cloud_done_outlined,
-    };
-  }
-
-  Color _providerColor(String providerId) {
-    return switch (providerId) {
-      CloudConnectionStore.googleDrive => const Color(0xFF4285F4),
-      CloudConnectionStore.dropbox => const Color(0xFF1E88FF),
-      _ => Colors.white70,
-    };
   }
 }
 
@@ -578,8 +439,9 @@ class _ManagedCloudCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF151515),
         borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: const Color(0xFFFFBF00).withValues(alpha: .18)),
+        border: Border.all(
+          color: const Color(0xFFFFBF00).withValues(alpha: .18),
+        ),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -655,9 +517,10 @@ class _AutomationCard extends StatelessWidget {
         children: [
           _AutomationRow(
             title: 'Auto-sync on save',
-            subtitle: !premiumUnlocked
-                ? 'Connect a Pro account to use script auto-sync.'
-                : anyConnected
+            subtitle:
+                !premiumUnlocked
+                    ? 'Connect a Pro account to use script auto-sync.'
+                    : anyConnected
                     ? 'Backs up changed scripts every 30 seconds and before reading modes.'
                     : 'Connect an account or choose a Local Backup folder first.',
             enabled: premiumUnlocked && anyConnected,
@@ -667,9 +530,10 @@ class _AutomationCard extends StatelessWidget {
           const Divider(color: Colors.white12),
           _AutomationRow(
             title: 'Sync deleted scripts folder',
-            subtitle: !premiumUnlocked
-                ? 'Connect a Pro account to sync deleted-script cleanup.'
-                : cloudAccountsConnected
+            subtitle:
+                !premiumUnlocked
+                    ? 'Connect a Pro account to sync deleted-script cleanup.'
+                    : cloudAccountsConnected
                     ? 'When deleted backups are removed from the app, remove matching cloud Deleted Scripts files and metadata.'
                     : 'Connect Google Drive or Dropbox before syncing deleted-script cleanup.',
             enabled: premiumUnlocked && cloudAccountsConnected,
@@ -679,9 +543,10 @@ class _AutomationCard extends StatelessWidget {
           const Divider(color: Colors.white12),
           _AutomationRow(
             title: 'Upload recordings automatically',
-            subtitle: !premiumUnlocked
-                ? 'Connect a Pro account to upload recordings automatically.'
-                : cloudAccountsConnected
+            subtitle:
+                !premiumUnlocked
+                    ? 'Connect a Pro account to upload recordings automatically.'
+                    : cloudAccountsConnected
                     ? 'Uploads completed MP4/WAV recordings to connected cloud accounts.'
                     : 'Connect Google Drive or Dropbox before uploading recordings.',
             enabled: premiumUnlocked && cloudAccountsConnected,
@@ -713,11 +578,7 @@ class _AutomationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: const Icon(
-        Icons.sync_rounded,
-        color: Colors.white54,
-        size: 22,
-      ),
+      leading: const Icon(Icons.sync_rounded, color: Colors.white54, size: 22),
       title: Text(
         title,
         style: const TextStyle(color: Colors.white70, fontSize: 14),

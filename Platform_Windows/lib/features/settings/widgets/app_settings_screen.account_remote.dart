@@ -17,13 +17,15 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
       ),
       const SizedBox(height: 8),
       _SettingsTile(
-        icon: signedIn
-            ? Icons.verified_user_outlined
-            : Icons.person_add_alt_1_outlined,
+        icon:
+            signedIn
+                ? Icons.verified_user_outlined
+                : Icons.person_add_alt_1_outlined,
         title: signedIn ? 'Account connection' : 'Connect account',
-        subtitle: signedIn
-            ? accountStatus
-            : 'Connect a Pro account when account services are ready',
+        subtitle:
+            signedIn
+                ? accountStatus
+                : 'Connect a Pro account when account services are ready',
         onTap: signedIn ? null : _openAccountActivation,
       ),
       if (signedIn) ...[
@@ -86,9 +88,9 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
     await ref.read(authProvider.notifier).logout();
     await ref.read(settingsProvider.notifier).resetDisplayNameToGuest();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Signed out on this device.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Signed out on this device.')));
   }
 
   String _accountConnectionSubtitle(AuthState auth) {
@@ -99,6 +101,15 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
 
   String _accountRoleStatusLabel(AuthState auth) {
     if (auth.isCheckingBackendAccess) return 'checking account';
+    if (auth.backendStatus == 'connectionRetryWaiting') {
+      return 'connection unavailable — retrying automatically';
+    }
+    if (auth.backendStatus == 'offlineGraceActive') {
+      return '${auth.roleLabel} — temporary offline access';
+    }
+    if (auth.backendStatus == 'clockRollbackDetected') {
+      return 'check computer date/time';
+    }
     if (auth.backendStatus == 'disabledAccount') return 'account disabled';
     if (auth.entitlementStatus == 'revoked') return '${auth.roleLabel} revoked';
     if (auth.entitlementStatus == 'expired') return '${auth.roleLabel} expired';
@@ -126,70 +137,76 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text(
-            'Set / change password',
-            style: TextStyle(color: Colors.white),
+      builder:
+          (ctx) => StatefulBuilder(
+            builder:
+                (ctx, setDialogState) => AlertDialog(
+                  backgroundColor: const Color(0xFF1A1A1A),
+                  title: const Text(
+                    'Set / change password',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _AccountDialogTextField(
+                        controller: currentController,
+                        label: 'Current password (if already set)',
+                        obscure: true,
+                      ),
+                      const SizedBox(height: 12),
+                      _AccountDialogTextField(
+                        controller: passwordController,
+                        label: 'New password',
+                        obscure: true,
+                      ),
+                      const SizedBox(height: 12),
+                      _AccountDialogTextField(
+                        controller: confirmController,
+                        label: 'Confirm new password',
+                        obscure: true,
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: busy ? null : () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed:
+                          busy
+                              ? null
+                              : () async {
+                                final dialogNavigator = Navigator.of(ctx);
+                                if (passwordController.text !=
+                                    confirmController.text) {
+                                  _showAccountSnack('Passwords do not match.');
+                                  return;
+                                }
+                                setDialogState(() => busy = true);
+                                try {
+                                  await ref
+                                      .read(authProvider.notifier)
+                                      .setBackendPassword(
+                                        newPassword: passwordController.text,
+                                        currentPassword: currentController.text,
+                                      );
+                                  if (!mounted) return;
+                                  dialogNavigator.pop();
+                                  _showAccountSnack('Password updated.');
+                                } catch (error) {
+                                  setDialogState(() => busy = false);
+                                  _showAccountSnack(
+                                    _accountBackendMessage(error),
+                                  );
+                                }
+                              },
+                      child: const Text('Save'),
+                    ),
+                  ],
+                ),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _AccountDialogTextField(
-                controller: currentController,
-                label: 'Current password (if already set)',
-                obscure: true,
-              ),
-              const SizedBox(height: 12),
-              _AccountDialogTextField(
-                controller: passwordController,
-                label: 'New password',
-                obscure: true,
-              ),
-              const SizedBox(height: 12),
-              _AccountDialogTextField(
-                controller: confirmController,
-                label: 'Confirm new password',
-                obscure: true,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: busy ? null : () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      final dialogNavigator = Navigator.of(ctx);
-                      if (passwordController.text != confirmController.text) {
-                        _showAccountSnack('Passwords do not match.');
-                        return;
-                      }
-                      setDialogState(() => busy = true);
-                      try {
-                        await ref
-                            .read(authProvider.notifier)
-                            .setBackendPassword(
-                              newPassword: passwordController.text,
-                              currentPassword: currentController.text,
-                            );
-                        if (!mounted) return;
-                        dialogNavigator.pop();
-                        _showAccountSnack('Password updated.');
-                      } catch (error) {
-                        setDialogState(() => busy = false);
-                        _showAccountSnack(_accountBackendMessage(error));
-                      }
-                    },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -202,78 +219,88 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text(
-            'Reset password',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _AccountDialogTextField(
-                controller: emailController,
-                label: 'Account email',
-              ),
-              if (codeRequested) ...[
-                const SizedBox(height: 12),
-                _AccountDialogTextField(
-                  controller: codeController,
-                  label: 'Reset code',
-                  obscure: true,
+      builder:
+          (ctx) => StatefulBuilder(
+            builder:
+                (ctx, setDialogState) => AlertDialog(
+                  backgroundColor: const Color(0xFF1A1A1A),
+                  title: const Text(
+                    'Reset password',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _AccountDialogTextField(
+                        controller: emailController,
+                        label: 'Account email',
+                      ),
+                      if (codeRequested) ...[
+                        const SizedBox(height: 12),
+                        _AccountDialogTextField(
+                          controller: codeController,
+                          label: 'Reset code',
+                          obscure: true,
+                        ),
+                        const SizedBox(height: 12),
+                        _AccountDialogTextField(
+                          controller: passwordController,
+                          label: 'New password',
+                          obscure: true,
+                        ),
+                      ],
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: busy ? null : () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed:
+                          busy
+                              ? null
+                              : () async {
+                                final dialogNavigator = Navigator.of(ctx);
+                                setDialogState(() => busy = true);
+                                try {
+                                  final notifier = ref.read(
+                                    authProvider.notifier,
+                                  );
+                                  if (!codeRequested) {
+                                    await notifier
+                                        .requestBackendPasswordResetCode(
+                                          emailController.text,
+                                        );
+                                    setDialogState(() {
+                                      codeRequested = true;
+                                      busy = false;
+                                    });
+                                    _showAccountSnack(
+                                      'Password reset code sent.',
+                                    );
+                                    return;
+                                  }
+                                  await notifier.resetBackendPasswordWithCode(
+                                    email: emailController.text,
+                                    code: codeController.text,
+                                    newPassword: passwordController.text,
+                                  );
+                                  if (!mounted) return;
+                                  dialogNavigator.pop();
+                                  _showAccountSnack('Password reset complete.');
+                                } catch (error) {
+                                  setDialogState(() => busy = false);
+                                  _showAccountSnack(
+                                    _accountBackendMessage(error),
+                                  );
+                                }
+                              },
+                      child: Text(codeRequested ? 'Reset' : 'Send code'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                _AccountDialogTextField(
-                  controller: passwordController,
-                  label: 'New password',
-                  obscure: true,
-                ),
-              ],
-            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: busy ? null : () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      final dialogNavigator = Navigator.of(ctx);
-                      setDialogState(() => busy = true);
-                      try {
-                        final notifier = ref.read(authProvider.notifier);
-                        if (!codeRequested) {
-                          await notifier.requestBackendPasswordResetCode(
-                            emailController.text,
-                          );
-                          setDialogState(() {
-                            codeRequested = true;
-                            busy = false;
-                          });
-                          _showAccountSnack('Password reset code sent.');
-                          return;
-                        }
-                        await notifier.resetBackendPasswordWithCode(
-                          email: emailController.text,
-                          code: codeController.text,
-                          newPassword: passwordController.text,
-                        );
-                        if (!mounted) return;
-                        dialogNavigator.pop();
-                        _showAccountSnack('Password reset complete.');
-                      } catch (error) {
-                        setDialogState(() => busy = false);
-                        _showAccountSnack(_accountBackendMessage(error));
-                      }
-                    },
-              child: Text(codeRequested ? 'Reset' : 'Send code'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -286,79 +313,90 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text(
-            'Change account email',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _AccountDialogTextField(
-                controller: emailController,
-                label: 'New email',
-              ),
-              const SizedBox(height: 12),
-              if (!codeRequested)
-                _AccountDialogTextField(
-                  controller: passwordController,
-                  label: 'Current password',
-                  obscure: true,
-                )
-              else
-                _AccountDialogTextField(
-                  controller: codeController,
-                  label: 'Email confirmation code',
+      builder:
+          (ctx) => StatefulBuilder(
+            builder:
+                (ctx, setDialogState) => AlertDialog(
+                  backgroundColor: const Color(0xFF1A1A1A),
+                  title: const Text(
+                    'Change account email',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _AccountDialogTextField(
+                        controller: emailController,
+                        label: 'New email',
+                      ),
+                      const SizedBox(height: 12),
+                      if (!codeRequested)
+                        _AccountDialogTextField(
+                          controller: passwordController,
+                          label: 'Current password',
+                          obscure: true,
+                        )
+                      else
+                        _AccountDialogTextField(
+                          controller: codeController,
+                          label: 'Email confirmation code',
+                        ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: busy ? null : () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed:
+                          busy
+                              ? null
+                              : () async {
+                                final dialogNavigator = Navigator.of(ctx);
+                                setDialogState(() => busy = true);
+                                try {
+                                  final notifier = ref.read(
+                                    authProvider.notifier,
+                                  );
+                                  if (!codeRequested) {
+                                    await notifier
+                                        .changeBackendEmailWithPassword(
+                                          newEmail: emailController.text,
+                                          currentPassword:
+                                              passwordController.text,
+                                        );
+                                    if (!mounted) return;
+                                    setDialogState(() {
+                                      codeRequested = true;
+                                      busy = false;
+                                    });
+                                    _showAccountSnack(
+                                      'Email change code sent to the new inbox.',
+                                    );
+                                    return;
+                                  }
+                                  await notifier.verifyBackendEmailChangeCode(
+                                    newEmail: emailController.text,
+                                    code: codeController.text,
+                                  );
+                                  if (!mounted) return;
+                                  dialogNavigator.pop();
+                                  _showAccountSnack('Account email updated.');
+                                } catch (error) {
+                                  setDialogState(() => busy = false);
+                                  _showAccountSnack(
+                                    _accountBackendMessage(error),
+                                  );
+                                }
+                              },
+                      child: Text(
+                        codeRequested ? 'Confirm email' : 'Send code',
+                      ),
+                    ),
+                  ],
                 ),
-            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: busy ? null : () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      final dialogNavigator = Navigator.of(ctx);
-                      setDialogState(() => busy = true);
-                      try {
-                        final notifier = ref.read(authProvider.notifier);
-                        if (!codeRequested) {
-                          await notifier.changeBackendEmailWithPassword(
-                            newEmail: emailController.text,
-                            currentPassword: passwordController.text,
-                          );
-                          if (!mounted) return;
-                          setDialogState(() {
-                            codeRequested = true;
-                            busy = false;
-                          });
-                          _showAccountSnack(
-                            'Email change code sent to the new inbox.',
-                          );
-                          return;
-                        }
-                        await notifier.verifyBackendEmailChangeCode(
-                          newEmail: emailController.text,
-                          code: codeController.text,
-                        );
-                        if (!mounted) return;
-                        dialogNavigator.pop();
-                        _showAccountSnack('Account email updated.');
-                      } catch (error) {
-                        setDialogState(() => busy = false);
-                        _showAccountSnack(_accountBackendMessage(error));
-                      }
-                    },
-              child: Text(codeRequested ? 'Confirm email' : 'Send code'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -386,11 +424,12 @@ extension _AccountSettingsTab on _AppSettingsScreenState {
   String _compactBackendError(Object error) {
     final message = error.toString();
     const prefix = 'AccountBackendError(';
-    final compact = !message.startsWith(prefix) || !message.endsWith(')')
-        ? message
-        : message
-            .substring(prefix.length, message.length - 1)
-            .replaceFirst(', ', ': ');
+    final compact =
+        !message.startsWith(prefix) || !message.endsWith(')')
+            ? message
+            : message
+                .substring(prefix.length, message.length - 1)
+                .replaceFirst(', ', ': ');
     return sanitizeSettingsErrorForUser(compact);
   }
 }
@@ -423,15 +462,16 @@ class _AccountDialogTextFieldState extends State<_AccountDialogTextField> {
       decoration: InputDecoration(
         labelText: widget.label,
         labelStyle: const TextStyle(color: Colors.white54),
-        suffixIcon: widget.obscure
-            ? IconButton(
-                icon: Icon(
-                  _visible ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.white54,
-                ),
-                onPressed: () => setState(() => _visible = !_visible),
-              )
-            : null,
+        suffixIcon:
+            widget.obscure
+                ? IconButton(
+                  icon: Icon(
+                    _visible ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.white54,
+                  ),
+                  onPressed: () => setState(() => _visible = !_visible),
+                )
+                : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );

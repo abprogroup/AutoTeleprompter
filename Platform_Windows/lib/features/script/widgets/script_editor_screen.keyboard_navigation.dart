@@ -4,6 +4,7 @@ extension _ScriptEditorKeyboardNavigationParts on _ScriptEditorScreenState {
   bool _onGlobalArrowKey(KeyEvent event) {
     if (!mounted || _controllers.isEmpty) return false;
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (_handleEditorAppHotkey(event)) return true;
     if (_handleGlobalEditingShortcut(event)) return true;
     final hasEditorFocus = _focusNodes.any((n) => n.hasFocus);
     final hasAppSelectionForKeyboard =

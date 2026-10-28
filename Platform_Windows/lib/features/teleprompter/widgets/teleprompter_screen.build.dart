@@ -30,6 +30,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       audioInputDevices: coreState.audioInputDevices,
     );
     final settings = ref.watch(settingsProvider);
+    _handlePresenterViewportSize(MediaQuery.sizeOf(context));
     _publishPresenterStateIfChanged(script, tState, settings);
     if (script != null) {
       while (_wordKeys.length < script.words.length) {
@@ -49,7 +50,7 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       next,
     ) {
       final liveState = ref.read(teleprompterProvider);
-      if (_activeManualCorrection) return;
+      if (_activeManualCorrection || _viewportAnchor != null) return;
       if (settings.scrollMode == 'auto' && liveState.isListening && next > 0) {
         _scrollToWordIndex(next, anticipate: true);
       }
@@ -134,278 +135,252 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         backgroundColor: Color(settings.scriptBgColor),
         body: Focus(
           autofocus: true,
-          child: Shortcuts(
-            shortcuts: const {
-              SingleActivator(
-                    LogicalKeyboardKey.keyF,
-                    control: true,
-                    shift: true,
-                  ):
-                  _PresentationSearchIntent(),
-              SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
-                  _PresentationSearchIntent(),
-            },
-            child: Actions(
-              actions: {
-                _PresentationSearchIntent:
-                    CallbackAction<_PresentationSearchIntent>(
-                      onInvoke: (_) {
-                        _showSearchDialog();
-                        return null;
+          child: GestureDetector(
+            onTap: activeInputLocked ? null : _showControls,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildPresenterReadingSurface(
+                  settings: settings,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Scrollable script
+                      Positioned.fill(
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: _handleStoppedBrowsingScroll,
+                          child: Listener(
+                            onPointerSignal: (event) {
+                              if (event is PointerScrollEvent) {
+                                if (!activeInputLocked) {
+                                  _notePresenterUserScrollSignal();
+                                }
+                                if (!activeInputLocked) return;
+                                GestureBinding.instance.pointerSignalResolver
+                                    .register(event, (_) {});
+                              }
+                            },
+                            child: SingleChildScrollView(
+                              controller: _scrollController,
+                              physics:
+                                  activeInputLocked
+                                      ? const NeverScrollableScrollPhysics()
+                                      : const ClampingScrollPhysics(),
+                              child: wordList,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Reading fade overlay: gradient that dims already-read text above the reading line
+                      if (settings.readFadeIntensity > 0)
+                        _buildPresenterReadFadeOverlay(settings),
+                      _buildPresenterReadingLine(settings),
+                    ],
+                  ),
+                ),
+                if (tState.isStarting && !tState.hasError)
+                  Positioned(
+                    top: 22,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: _SttStartingIndicator(
+                        accentColor: Color(settings.currentWordColor),
+                      ),
+                    ),
+                  ),
+                // User-facing mic signal meter. The debug console below
+                // already shows its own embedded sound bar when debug
+                // mode is on, so this standalone one only needs to cover
+                // the non-debug case - otherwise both would render at
+                // once.
+                if (!settings.debugMode &&
+                    settings.showSoundLevelMeter &&
+                    (tState.isListening || tState.isStarting))
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12.0,
+                    child: Consumer(
+                      builder: (context, liveRef, _) {
+                        final live = liveRef.watch(
+                          teleprompterProvider.select(
+                            (s) => (
+                              level: s.soundLevel,
+                              listening: s.isListening,
+                              starting: s.isStarting,
+                            ),
+                          ),
+                        );
+                        return _SoundLevelBar(
+                          level: live.level,
+                          isListening: live.listening,
+                          isStarting: live.starting,
+                          accentColor: Color(settings.currentWordColor),
+                        );
                       },
                     ),
-              },
-              child: GestureDetector(
-                onTap: activeInputLocked ? null : _showControls,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _buildPresenterReadingSurface(
-                      settings: settings,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          // Scrollable script
-                          Positioned.fill(
-                            child: NotificationListener<ScrollNotification>(
-                              onNotification: _handleStoppedBrowsingScroll,
-                              child: Listener(
-                                onPointerSignal: (event) {
-                                  if (event is PointerScrollEvent) {
-                                    if (!activeInputLocked) {
-                                      _notePresenterUserScrollSignal();
-                                    }
-                                    if (!activeInputLocked) return;
-                                    GestureBinding
-                                        .instance
-                                        .pointerSignalResolver
-                                        .register(event, (_) {});
-                                  }
-                                },
-                                child: SingleChildScrollView(
-                                  controller: _scrollController,
-                                  physics:
-                                      activeInputLocked
-                                          ? const NeverScrollableScrollPhysics()
-                                          : const ClampingScrollPhysics(),
-                                  child: wordList,
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Reading fade overlay: gradient that dims already-read text above the reading line
-                          if (settings.readFadeIntensity > 0)
-                            _buildPresenterReadFadeOverlay(settings),
-                          _buildPresenterReadingLine(settings),
-                        ],
+                  ),
+                if (settings.debugMode)
+                  Consumer(
+                    builder: (context, liveRef, _) {
+                      final liveState = liveRef.watch(teleprompterProvider);
+                      return _buildPresenterDebugConsole(
+                        context,
+                        liveState,
+                        bottom: debugConsoleBottom,
+                        height: debugConsoleHeight,
+                        expanded: debugConsoleExpanded,
+                        accentColor: Color(settings.currentWordColor),
+                        wordCount:
+                            script.words.where((w) => !w.isNewline).length,
+                      );
+                    },
+                  ),
+
+                // STT Pro Dashboard Integration
+                if (_webviewController != null && tState.sttWebViewUrl != null)
+                  Positioned(
+                    left: 0,
+                    bottom: 0,
+                    width: 1,
+                    height: 1,
+                    child: IgnorePointer(
+                      ignoring: true,
+                      child: Opacity(
+                        opacity: 0.01,
+                        child: Webview(_webviewController!),
                       ),
                     ),
-                    if (tState.isStarting && !tState.hasError)
-                      Positioned(
-                        top: 22,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: _SttStartingIndicator(
-                            accentColor: Color(settings.currentWordColor),
-                          ),
+                  ),
+
+                // Connection status is visible even when debug is hidden.
+                if (!tState.hasError &&
+                    SttConnectionStatus.isTransient(tState.statusMessage))
+                  Positioned(
+                    top: 12,
+                    left: 20,
+                    right: 20,
+                    child: SpeechConnectionNotice(
+                      message: tState.statusMessage,
+                    ),
+                  ),
+
+                // Error banner with actionable guidance
+                if (tState.hasError && tState.statusMessage.isNotEmpty)
+                  Positioned(
+                    top: 60,
+                    left: 20,
+                    right: 20,
+                    child: GestureDetector(
+                      onTap: () {
+                        // Tapping permission errors opens the exact settings page.
+                        if (_isBrowserMicrophoneSettingsError(
+                          tState.statusMessage,
+                        )) {
+                          unawaited(_openMicrophonePrivacySettings());
+                        } else if (tState.statusMessage.contains(
+                              'permission',
+                            ) ||
+                            tState.statusMessage.contains('Permission')) {
+                          openAppSettings();
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
-                      ),
-                    // User-facing mic signal meter. The debug console below
-                    // already shows its own embedded sound bar when debug
-                    // mode is on, so this standalone one only needs to cover
-                    // the non-debug case - otherwise both would render at
-                    // once.
-                    if (!settings.debugMode &&
-                        settings.showSoundLevelMeter &&
-                        (tState.isListening || tState.isStarting))
-                      Positioned(
-                        left: 12,
-                        right: 12,
-                        bottom: 12.0,
-                        child: Consumer(
-                          builder: (context, liveRef, _) {
-                            final live = liveRef.watch(
-                              teleprompterProvider.select(
-                                (s) => (
-                                  level: s.soundLevel,
-                                  listening: s.isListening,
-                                  starting: s.isStarting,
-                                ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _getUserFriendlyError(tState.statusMessage),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
                               ),
-                            );
-                            return _SoundLevelBar(
-                              level: live.level,
-                              isListening: live.listening,
-                              isStarting: live.starting,
-                              accentColor: Color(settings.currentWordColor),
-                            );
-                          },
-                        ),
-                      ),
-                    if (settings.debugMode)
-                      Consumer(
-                        builder: (context, liveRef, _) {
-                          final liveState = liveRef.watch(teleprompterProvider);
-                          return _buildPresenterDebugConsole(
-                            context,
-                            liveState,
-                            bottom: debugConsoleBottom,
-                            height: debugConsoleHeight,
-                            expanded: debugConsoleExpanded,
-                            accentColor: Color(settings.currentWordColor),
-                            wordCount:
-                                script.words.where((w) => !w.isNewline).length,
-                          );
-                        },
-                      ),
-
-                    // STT Pro Dashboard Integration
-                    if (_webviewController != null &&
-                        tState.sttWebViewUrl != null)
-                      Positioned(
-                        left: 0,
-                        bottom: 0,
-                        width: 1,
-                        height: 1,
-                        child: IgnorePointer(
-                          ignoring: true,
-                          child: Opacity(
-                            opacity: 0.01,
-                            child: Webview(_webviewController!),
-                          ),
-                        ),
-                      ),
-
-                    // Connection status is visible even when debug is hidden.
-                    if (!tState.hasError &&
-                        SttConnectionStatus.isTransient(tState.statusMessage))
-                      Positioned(
-                        top: 12,
-                        left: 20,
-                        right: 20,
-                        child: SpeechConnectionNotice(
-                          message: tState.statusMessage,
-                        ),
-                      ),
-
-                    // Error banner with actionable guidance
-                    if (tState.hasError && tState.statusMessage.isNotEmpty)
-                      Positioned(
-                        top: 60,
-                        left: 20,
-                        right: 20,
-                        child: GestureDetector(
-                          onTap: () {
-                            // Tapping permission errors opens the exact settings page.
+                            ),
                             if (_isBrowserMicrophoneSettingsError(
-                              tState.statusMessage,
-                            )) {
-                              unawaited(_openMicrophonePrivacySettings());
-                            } else if (tState.statusMessage.contains(
-                                  'permission',
+                                  tState.statusMessage,
                                 ) ||
-                                tState.statusMessage.contains('Permission')) {
-                              openAppSettings();
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.9),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _getUserFriendlyError(tState.statusMessage),
+                                tState.statusMessage.contains('permission'))
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  _isBrowserMicrophoneSettingsError(
+                                        tState.statusMessage,
+                                      )
+                                      ? 'Tap here to open microphone settings'
+                                      : 'Tap here to open Settings',
                                   style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                    decoration: TextDecoration.underline,
                                   ),
                                 ),
-                                if (_isBrowserMicrophoneSettingsError(
-                                      tState.statusMessage,
-                                    ) ||
-                                    tState.statusMessage.contains('permission'))
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 6),
-                                    child: Text(
-                                      _isBrowserMicrophoneSettingsError(
-                                            tState.statusMessage,
-                                          )
-                                          ? 'Tap here to open microphone settings'
-                                          : 'Tap here to open Settings',
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 11,
-                                        decoration: TextDecoration.underline,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
+                              ),
+                          ],
                         ),
                       ),
-
-                    // Compact search toolbar floats at top: prev/next/count.
-                    Positioned(
-                      top: 8,
-                      left: 0,
-                      right: 0,
-                      child: Center(child: _buildPresenterSearchToolbar()),
                     ),
+                  ),
 
-                    if (Platform.isWindows &&
-                        (tState.isListening ||
-                            tState.isStarting ||
-                            _manualScrolling))
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        height: 92,
-                        child: MouseRegion(
-                          opaque: false,
-                          onEnter: (_) {
-                            _windowsControlsHovering = true;
-                            _showWindowsControlsFromHotZone();
-                          },
-                          onExit: (_) {
-                            _windowsControlsHovering = false;
-                            _scheduleHideControls();
-                          },
-                          child: const SizedBox.expand(),
-                        ),
-                      ),
+                // Compact search toolbar floats at top: prev/next/count.
+                Positioned(
+                  top: 8,
+                  left: 0,
+                  right: 0,
+                  child: Center(child: _buildPresenterSearchToolbar()),
+                ),
 
-                    // Controls overlay: control bar + speed slider stacked at bottom.
-                    _buildFloatingManualSpeedSlider(
+                if (Platform.isWindows &&
+                    (tState.isListening ||
+                        tState.isStarting ||
+                        _manualScrolling))
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 92,
+                    child: MouseRegion(
+                      opaque: false,
+                      onEnter: (_) {
+                        _windowsControlsHovering = true;
+                        _showWindowsControlsFromHotZone();
+                      },
+                      onExit: (_) {
+                        _windowsControlsHovering = false;
+                        _scheduleHideControls();
+                      },
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+
+                // Controls overlay: control bar + speed slider stacked at bottom.
+                _buildFloatingManualSpeedSlider(
+                  settings: settings,
+                  tState: tState,
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: KeyedSubtree(
+                    key: _presenterControlsKey,
+                    child: _buildPresenterControlsOverlay(
                       settings: settings,
                       tState: tState,
                     ),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: KeyedSubtree(
-                        key: _presenterControlsKey,
-                        child: _buildPresenterControlsOverlay(
-                          settings: settings,
-                          tState: tState,
-                        ),
-                      ),
-                    ),
-                    if (_presenterWalkthroughVisible)
-                      _buildPresenterWalkthroughOverlay(),
-                  ],
+                  ),
                 ),
-              ),
+                if (_presenterWalkthroughVisible)
+                  _buildPresenterWalkthroughOverlay(),
+              ],
             ),
           ),
         ),

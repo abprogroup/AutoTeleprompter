@@ -94,6 +94,7 @@ class AuthState {
     AccountBackendRole? backendRole,
     String? backendStatus,
     String? backendError,
+    bool clearBackendError = false,
     DateTime? backendTokenExpiry,
     String? backendEntitlementStatus,
     DateTime? entitlementExpiresAt,
@@ -115,13 +116,15 @@ class AuthState {
       backendAccountId: backendAccountId ?? this.backendAccountId,
       backendRole: backendRole ?? this.backendRole,
       backendStatus: backendStatus ?? this.backendStatus,
-      backendError: backendError ?? this.backendError,
+      backendError:
+          clearBackendError ? null : backendError ?? this.backendError,
       backendTokenExpiry: backendTokenExpiry ?? this.backendTokenExpiry,
       backendEntitlementStatus:
           backendEntitlementStatus ?? this.backendEntitlementStatus,
-      entitlementExpiresAt: clearEntitlementExpiresAt
-          ? null
-          : entitlementExpiresAt ?? this.entitlementExpiresAt,
+      entitlementExpiresAt:
+          clearEntitlementExpiresAt
+              ? null
+              : entitlementExpiresAt ?? this.entitlementExpiresAt,
       entitlementRevoked: entitlementRevoked ?? this.entitlementRevoked,
       offlineGraceExpiry: offlineGraceExpiry ?? this.offlineGraceExpiry,
       deviceId: deviceId ?? this.deviceId,

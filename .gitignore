@@ -23,6 +23,10 @@ Platform_*/test/
 # Windows release regression suite (exact public CI allowlist).
 !/Platform_Windows/test/
 /Platform_Windows/test/*
+!/Platform_Windows/test/auth/
+/Platform_Windows/test/auth/*
+!/Platform_Windows/test/auth/account_session_refresh_test.dart
+!/Platform_Windows/test/auth/connection_test_support.dart
 !/Platform_Windows/test/platform/
 /Platform_Windows/test/platform/*
 !/Platform_Windows/test/platform/markup_controller_live_selection_test.dart
@@ -46,12 +50,22 @@ Platform_*/test/
 !/Platform_Windows/test/platform/webview2/webview2_runtime_bootstrap_test.dart
 !/Platform_Windows/test/settings/
 /Platform_Windows/test/settings/*
+!/Platform_Windows/test/settings/cloud_account_connection_actions_test.dart
+!/Platform_Windows/test/settings/cloud_connection_refresh_test.dart
+!/Platform_Windows/test/settings/cloud_sign_in_test.dart
+!/Platform_Windows/test/settings/cloud_sign_in_test_support.dart
+!/Platform_Windows/test/settings/connection_maintenance_test.dart
+!/Platform_Windows/test/settings/editor_hotkeys_test.dart
+!/Platform_Windows/test/settings/hotkey_provider_test.dart
+!/Platform_Windows/test/settings/hotkey_settings_page_test.dart
 !/Platform_Windows/test/settings/speech_scroll_settings_test.dart
 !/Platform_Windows/test/settings/app_settings_stt_engine_test.dart
 !/Platform_Windows/test/settings/settings_provider_stt_engine_test.dart
 !/Platform_Windows/test/settings/windows_stt_engine_selector_test.dart
 !/Platform_Windows/test/teleprompter/
 /Platform_Windows/test/teleprompter/*
+!/Platform_Windows/test/teleprompter/presenter_viewport_test.dart
+!/Platform_Windows/test/teleprompter/presenter_hotkeys_test.dart
 !/Platform_Windows/test/teleprompter/presenter_scroll_motion_test.dart
 !/Platform_Windows/test/teleprompter/speech_scroll_controls_test.dart
 !/Platform_Windows/test/teleprompter/debug_log_formatter_health_test.dart

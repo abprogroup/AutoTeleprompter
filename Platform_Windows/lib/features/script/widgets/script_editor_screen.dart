@@ -28,6 +28,8 @@ import '../../../core/security/secure_script_store.dart';
 import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../settings/models/app_hotkey.dart';
+import '../../settings/providers/hotkey_provider.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
@@ -76,6 +78,7 @@ part 'script_editor_screen.arrow_trace.dart';
 part 'script_editor_screen.highlight_trace.dart';
 part 'script_editor_screen.selection_trace.dart';
 part 'script_editor_screen.keyboard_navigation.dart';
+part 'script_editor_screen.hotkeys.dart';
 part 'script_editor_screen.keyboard_selection.dart';
 part 'script_editor_screen.keyboard_selection_seed.dart';
 part 'script_editor_screen.keyboard_render_caret.dart';
@@ -103,10 +106,6 @@ class _CutIntent extends Intent {
 
 class _PasteIntent extends Intent {
   const _PasteIntent();
-}
-
-class _SearchIntent extends Intent {
-  const _SearchIntent();
 }
 
 class _UndoIntent extends Intent {
@@ -192,6 +191,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   Color _lastChosenHighlightColor = const Color(0x4DFFFFFF);
   String _lastSearchQuery = '';
   bool _searchDialogOpen = false;
+  bool _editorBookmarkHotkeyBusy = false;
   bool _searchWholeWord = false;
   bool _editorSearchToolbarVisible = false;
   List<_EditorSearchMatch> _editorSearchMatches = const [];
@@ -315,6 +315,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   @override
   void initState() {
     super.initState();
+    ref.read(hotkeyProvider);
     _walkthroughSampleGuideVisible = widget.showWalkthroughSampleGuide;
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onGlobalArrowKey);

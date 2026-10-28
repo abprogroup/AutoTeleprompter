@@ -107,24 +107,6 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
     );
   }
 
-  bool _handlePresentationKey(KeyEvent event) {
-    if (event is! KeyDownEvent || _searchDialogOpen || !mounted) {
-      return false;
-    }
-    final keyboard = HardwareKeyboard.instance;
-    final isSearchShortcut =
-        event.logicalKey == LogicalKeyboardKey.keyF &&
-        keyboard.isShiftPressed &&
-        (keyboard.isControlPressed || keyboard.isMetaPressed);
-    if (event.logicalKey == LogicalKeyboardKey.escape && _presenterFullscreen) {
-      Future.microtask(() => _setPresenterFullscreen(false));
-      return true;
-    }
-    if (!isSearchShortcut) return false;
-    Future.microtask(_showSearchDialog);
-    return true;
-  }
-
   Future<void> _stopPresentationSession() async {
     _stopManualScroll();
     await ref.read(teleprompterProvider.notifier).stopSession();
@@ -149,34 +131,6 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
 
   Future<void> _editCurrentPresenterPosition() async {
     await _exitPresentation(returnCurrentPosition: true);
-  }
-
-  Future<void> _togglePresenterFullscreen() async {
-    await _setPresenterFullscreen(!_presenterFullscreen);
-    _showWindowsControlsFromHotZone();
-  }
-
-  Future<void> _setPresenterFullscreen(bool enabled) async {
-    if (!Platform.isWindows && enabled == _presenterFullscreen) return;
-    try {
-      final applied = await PresenterFullscreenService.setEnabled(enabled);
-      if (!mounted) {
-        _presenterFullscreen = applied;
-        return;
-      }
-      _setTeleprompterState(() => _presenterFullscreen = applied);
-    } catch (error, stack) {
-      LightweightDiagnostics.instance.recordError(
-        error,
-        stack,
-        source: 'presenter.fullscreen',
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fullscreen is unavailable.')),
-        );
-      }
-    }
   }
 
   Future<WebviewController?> _ensureSttWebViewController() async {

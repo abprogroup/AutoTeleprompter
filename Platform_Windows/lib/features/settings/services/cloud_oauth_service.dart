@@ -4,25 +4,37 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import '../../../core/services/connection_retry_gate.dart';
 
 import '../../../core/security/encrypted_file_store.dart';
 import 'cloud_connection_store.dart';
+import 'cloud_sign_in_runtime.dart';
 
-const googleDriveOAuthClientId =
-    String.fromEnvironment('GOOGLE_DRIVE_CLIENT_ID');
-const googleDriveOAuthClientSecret =
-    String.fromEnvironment('GOOGLE_DRIVE_CLIENT_SECRET');
+part 'cloud_oauth_service.providers.dart';
+part 'cloud_oauth_service.renewal.dart';
+part 'cloud_oauth_service.sign_in.dart';
+
+const googleDriveOAuthClientId = String.fromEnvironment(
+  'GOOGLE_DRIVE_CLIENT_ID',
+);
+const googleDriveOAuthClientSecret = String.fromEnvironment(
+  'GOOGLE_DRIVE_CLIENT_SECRET',
+);
 const dropboxOAuthClientId = String.fromEnvironment('DROPBOX_CLIENT_ID');
-const cloudOAuthRedirectPort =
-    int.fromEnvironment('CLOUD_OAUTH_REDIRECT_PORT', defaultValue: 51747);
+const cloudOAuthRedirectPort = int.fromEnvironment(
+  'CLOUD_OAUTH_REDIRECT_PORT',
+  defaultValue: 51747,
+);
 
 String _cleanOAuthClientId(String value) {
   return value.replaceAll(RegExp(r'\s+'), '').trim();
 }
 
 bool _looksLikeGoogleOAuthClientId(String value) {
-  return RegExp(r'^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$')
-      .hasMatch(value);
+  return RegExp(
+    r'^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$',
+  ).hasMatch(value);
 }
 
 class CloudAccountInfo {
@@ -41,12 +53,12 @@ class CloudAccountInfo {
   });
 
   Map<String, Object?> toJson() => {
-        'providerId': providerId,
-        'providerLabel': providerLabel,
-        'accountLabel': accountLabel,
-        'connectedAtIso': connectedAtIso,
-        if (expiresAtIso != null) 'expiresAtIso': expiresAtIso,
-      };
+    'providerId': providerId,
+    'providerLabel': providerLabel,
+    'accountLabel': accountLabel,
+    'connectedAtIso': connectedAtIso,
+    if (expiresAtIso != null) 'expiresAtIso': expiresAtIso,
+  };
 
   static CloudAccountInfo? fromJson(Map<String, dynamic> json) {
     final providerId = json['providerId']?.toString() ?? '';
@@ -99,16 +111,68 @@ class CloudOAuthService {
   static const String _collection = 'cloud_accounts';
   static const String _extension = 'json';
   static const String _kind = 'cloud-oauth-token';
-  static const Duration _authTimeout = Duration(minutes: 3);
 
-  CloudOAuthService({
+  factory CloudOAuthService({
     EncryptedFileStore? encryptedStore,
     HttpClient? httpClient,
-  })  : _encryptedStore = encryptedStore ?? EncryptedFileStore(),
-        _httpClient = httpClient ?? HttpClient();
+    CloudOAuthCredentials? credentials,
+    DateTime Function()? now,
+    Duration? requestTimeout,
+    CloudSignInRuntime? signInRuntime,
+  }) {
+    if (encryptedStore == null &&
+        httpClient == null &&
+        credentials == null &&
+        now == null &&
+        requestTimeout == null &&
+        signInRuntime == null) {
+      return _shared;
+    }
+    return CloudOAuthService._(
+      encryptedStore: encryptedStore,
+      httpClient: httpClient,
+      credentials: credentials,
+      now: now,
+      requestTimeout: requestTimeout,
+      signInRuntime: signInRuntime,
+    );
+  }
 
+  CloudOAuthService._({
+    EncryptedFileStore? encryptedStore,
+    HttpClient? httpClient,
+    CloudOAuthCredentials? credentials,
+    DateTime Function()? now,
+    Duration? requestTimeout,
+    CloudSignInRuntime? signInRuntime,
+  }) : _encryptedStore = encryptedStore ?? EncryptedFileStore(),
+       _httpClient =
+           httpClient ??
+           (HttpClient()
+             ..connectionTimeout =
+                 (requestTimeout ?? const Duration(seconds: 15))),
+       _credentials = credentials ?? const CloudOAuthCredentials(),
+       _now = now ?? DateTime.now,
+       _requestTimeout = requestTimeout ?? const Duration(seconds: 15),
+       _signInRuntime = signInRuntime ?? const CloudSignInRuntime();
+
+  static final _shared = CloudOAuthService._();
   final EncryptedFileStore _encryptedStore;
   final HttpClient _httpClient;
+  final CloudOAuthCredentials _credentials;
+  final DateTime Function() _now;
+  final Duration _requestTimeout;
+  final CloudSignInRuntime _signInRuntime;
+  final activeSignIn = ValueNotifier<String?>(null);
+  _CloudSignInAttempt? _signInAttempt;
+  final _pending = <String, Future<CloudAuthorizedSession?>>{};
+  final _epochs = <String, int>{};
+  final _storageOperations = <String, Future<void>>{};
+  final _retry = <String, ConnectionRetryGate>{};
+  final connectionStates = ValueNotifier<Map<String, CloudConnectionStatus>>(
+    {},
+  );
+  final _states = <String, CloudConnectionStatus>{};
 
   Future<Map<String, CloudAccountInfo>> loadAccounts() async {
     final result = <String, CloudAccountInfo>{};
@@ -120,59 +184,34 @@ class CloudOAuthService {
   }
 
   Future<CloudAccountInfo?> loadAccount(String providerId) async {
+    final epoch = _epochs[providerId] ?? 0;
     final decoded = await _loadEncryptedAccountPayload(providerId);
+    if ((_epochs[providerId] ?? 0) != epoch) return null;
     if (decoded == null) return null;
     final accountJson = decoded['account'];
     if (accountJson is! Map<String, dynamic>) return null;
     return CloudAccountInfo.fromJson(accountJson);
   }
 
-  Future<CloudAuthorizedSession?> authorizeAccount(String providerId) async {
-    final decoded = await _loadEncryptedAccountPayload(providerId);
-    if (decoded == null) return null;
-    final accountJson = decoded['account'];
-    final tokenJson = decoded['token'];
-    if (accountJson is! Map<String, dynamic> ||
-        tokenJson is! Map<String, dynamic>) {
-      return null;
-    }
-    var account = CloudAccountInfo.fromJson(accountJson);
-    if (account == null) return null;
-    var tokenPayload = Map<String, dynamic>.from(tokenJson);
-    if (_shouldRefreshToken(account, tokenPayload)) {
-      final provider = CloudConnectionStore.providers.firstWhere(
-        (item) => item.id == providerId,
-        orElse: () => CloudProviderDefinition(
-          id: providerId,
-          label: providerId,
-          subtitle: '',
-        ),
-      );
-      final config = _oauthConfigFor(provider);
-      if (config != null && config.clientId.trim().isNotEmpty) {
-        tokenPayload = await _refreshToken(
-          config: config,
-          refreshToken: tokenPayload['refresh_token'].toString(),
-          previousPayload: tokenPayload,
-        );
-        account = CloudAccountInfo(
-          providerId: account.providerId,
-          providerLabel: account.providerLabel,
-          accountLabel: account.accountLabel,
-          connectedAtIso: account.connectedAtIso,
-          expiresAtIso: _expiresAtIso(tokenPayload),
-        );
-        await _saveEncryptedAccount(providerId, account, tokenPayload);
-      }
-    }
-    final accessToken = tokenPayload['access_token']?.toString() ?? '';
-    if (accessToken.isEmpty) return null;
-    return CloudAuthorizedSession(account: account, accessToken: accessToken);
+  Future<CloudAuthorizedSession?> authorizeAccount(String providerId) =>
+      _authorizeWithRenewal(providerId);
+
+  /// Credential maintenance only. Never lists, uploads or deletes cloud files.
+  Future<void> maintainConnections() async {
+    await Future.wait(
+      CloudConnectionStore.providers.map((provider) async {
+        try {
+          await authorizeAccount(provider.id);
+        } catch (_) {
+          // Status and bounded retry are owned by the renewal operation.
+        }
+      }),
+    );
   }
 
   Future<Map<String, dynamic>?> _loadEncryptedAccountPayload(
     String providerId,
-  ) async {
+  ) => _serializeAccountStorage<Map<String, dynamic>?>(providerId, () async {
     final file = await _encryptedStore.fileFor(
       collection: _collection,
       id: providerId,
@@ -183,157 +222,56 @@ class CloudOAuthService {
     final decoded = jsonDecode(utf8.decode(bytes));
     if (decoded is! Map<String, dynamic>) return null;
     return decoded;
-  }
+  });
 
-  Future<void> disconnect(String providerId) {
-    return _encryptedStore.delete(
-      collection: _collection,
-      id: providerId,
-      extension: _extension,
+  Future<void> disconnect(String providerId) async {
+    if (activeSignIn.value == providerId) cancelSignIn();
+    _epochs[providerId] = (_epochs[providerId] ?? 0) + 1;
+    _pending.remove(providerId);
+    await _serializeAccountStorage(
+      providerId,
+      () => _encryptedStore.delete(
+        collection: _collection,
+        id: providerId,
+        extension: _extension,
+      ),
     );
+    _retry.remove(providerId);
+    _setConnectionStatus(providerId, CloudConnectionStatus.disconnected);
   }
 
-  Future<CloudAccountConnectResult> connect(
+  Future<CloudAccountConnectResult> connect(CloudProviderDefinition provider) =>
+      _connectAccount(provider);
+
+  void cancelSignIn() => _signInAttempt?.cancel();
+
+  Future<CloudAccountConnectResult> checkConnection(
     CloudProviderDefinition provider,
-  ) async {
-    final config = _oauthConfigFor(provider);
-    if (config == null) {
-      return CloudAccountConnectResult(
-        connected: false,
-        unsupported: true,
-        message:
-            '${provider.label} direct account sign-in is not available in this '
-            'Windows app yet. Use the local synced folder for now.',
-      );
-    }
-    if (config.clientId.trim().isEmpty) {
-      return CloudAccountConnectResult(
-        connected: false,
-        missingCredentials: true,
-        message: '${provider.label} account sign-in is ready in code, but this '
-            'installation is missing ${config.clientIdDefineName}.',
-      );
-    }
-    final credentialIssue = config.credentialIssue;
-    if (credentialIssue != null) {
-      return CloudAccountConnectResult(
-        connected: false,
-        missingCredentials: true,
-        message: credentialIssue,
-      );
-    }
-
-    HttpServer? callbackServer;
-    try {
-      try {
-        callbackServer = await _bindOAuthCallbackServer(config);
-      } on SocketException {
-        final portText = config.allowDynamicLoopbackPort
-            ? '$cloudOAuthRedirectPort-${cloudOAuthRedirectPort + 20}'
-            : '$cloudOAuthRedirectPort';
-        return CloudAccountConnectResult(
-          connected: false,
-          message: 'Cloud sign-in callback port $portText is already in use. '
-              'Close the older sign-in tab or restart AutoTeleprompter, then '
-              'try again.',
-        );
-      }
-      final redirectUri =
-          'http://localhost:${callbackServer.port}/oauth/callback';
-      final state = _randomBase64Url(24);
-      final verifier = _randomBase64Url(64);
-      final challenge = _pkceChallenge(verifier);
-      final callbackFuture = _waitForOAuthCallback(callbackServer, state);
-
-      await _openBrowser(
-        config.authorizationUri(
-          redirectUri: redirectUri,
-          state: state,
-          challenge: challenge,
-        ),
-      );
-
-      final callback = await callbackFuture.timeout(_authTimeout);
-      if (callback.error != null) {
-        return CloudAccountConnectResult(
-          connected: false,
-          message: '${provider.label} sign-in was rejected: ${callback.error}.',
-        );
-      }
-      final code = callback.code;
-      if (code == null || code.isEmpty) {
-        return CloudAccountConnectResult(
-          connected: false,
-          message: '${provider.label} did not return an authorization code.',
-        );
-      }
-
-      final tokenPayload = await _exchangeCode(
-        config: config,
-        code: code,
-        verifier: verifier,
-        redirectUri: redirectUri,
-      );
-      final accessToken = tokenPayload['access_token']?.toString() ?? '';
-      if (accessToken.isEmpty) {
-        return CloudAccountConnectResult(
-          connected: false,
-          message: '${provider.label} token response did not include access.',
-        );
-      }
-
-      final accountLabel = await config.accountLabel(_httpClient, accessToken);
-      final account = CloudAccountInfo(
-        providerId: provider.id,
-        providerLabel: provider.label,
-        accountLabel: accountLabel,
-        connectedAtIso: DateTime.now().toUtc().toIso8601String(),
-        expiresAtIso: _expiresAtIso(tokenPayload),
-      );
-      await _saveEncryptedAccount(provider.id, account, tokenPayload);
-      return CloudAccountConnectResult(
-        connected: true,
-        account: account,
-        message: '${provider.label} connected as $accountLabel.',
-      );
-    } on TimeoutException {
-      return CloudAccountConnectResult(
-        connected: false,
-        message: '${provider.label} sign-in timed out.',
-      );
-    } on _CloudOAuthTokenException catch (error) {
-      return CloudAccountConnectResult(
-        connected: false,
-        missingCredentials: error.isCredentialConfigurationIssue,
-        message: error.message,
-      );
-    } catch (error) {
-      return CloudAccountConnectResult(
-        connected: false,
-        message: '${provider.label} sign-in failed: $error',
-      );
-    } finally {
-      unawaited(callbackServer?.close(force: true));
-    }
-  }
+  ) => _checkAccountConnection(provider);
 
   Future<void> _saveEncryptedAccount(
     String providerId,
     CloudAccountInfo account,
-    Map<String, dynamic> tokenPayload,
-  ) async {
+    Map<String, dynamic> tokenPayload, {
+    required int epoch,
+  }) async {
     final payload = jsonEncode({
       'schemaVersion': 1,
       'account': account.toJson(),
       'token': tokenPayload,
     });
-    await _encryptedStore.writeBytes(
-      collection: _collection,
-      id: providerId,
-      extension: _extension,
-      kind: _kind,
-      bytes: utf8.encode(payload),
-    );
+    await _serializeAccountStorage(providerId, () async {
+      if ((_epochs[providerId] ?? 0) != epoch) {
+        throw const CloudConnectionException('Connection changed.');
+      }
+      await _encryptedStore.writeBytes(
+        collection: _collection,
+        id: providerId,
+        extension: _extension,
+        kind: _kind,
+        bytes: utf8.encode(payload),
+      );
+    });
   }
 
   Future<HttpServer> _bindOAuthCallbackServer(
@@ -345,8 +283,13 @@ class CloudOAuthService {
     SocketException? lastError;
     for (var port = firstPort; port <= lastPort; port++) {
       try {
-        return await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+        return await _signInRuntime.bindServer(port);
       } on SocketException catch (error) {
+        if (error.osError?.errorCode != 10048 &&
+            error.osError?.errorCode != 98 &&
+            error.osError?.errorCode != 48) {
+          rethrow;
+        }
         lastError = error;
       }
     }
@@ -376,18 +319,34 @@ class CloudOAuthService {
     required _OAuthProviderConfig config,
     required Map<String, String> parameters,
   }) async {
-    final request = await _httpClient.postUrl(config.tokenEndpoint);
+    final request = await _httpClient
+        .postUrl(config.tokenEndpoint)
+        .timeout(_requestTimeout);
+    request.followRedirects = false;
     request.headers.contentType = ContentType(
       'application',
       'x-www-form-urlencoded',
       charset: 'utf-8',
     );
-    final payload = <String, String>{
-      ...parameters,
-    };
+    final payload = <String, String>{...parameters};
     request.write(Uri(queryParameters: payload).query);
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
+    final response = await request.close().timeout(
+      _requestTimeout,
+      onTimeout: () {
+        request.abort();
+        throw TimeoutException('Cloud renewal timed out.');
+      },
+    );
+    final body = await response
+        .transform(utf8.decoder)
+        .join()
+        .timeout(
+          _requestTimeout,
+          onTimeout: () {
+            request.abort();
+            throw TimeoutException('Cloud renewal timed out.');
+          },
+        );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       if (config.shouldRetryWithClientSecret(
         parameters: parameters,
@@ -395,10 +354,7 @@ class CloudOAuthService {
       )) {
         return _postTokenRequest(
           config: config,
-          parameters: {
-            ...parameters,
-            'client_secret': config.clientSecret!,
-          },
+          parameters: {...parameters, 'client_secret': config.clientSecret!},
         );
       }
       throw _CloudOAuthTokenException.fromTokenResponse(
@@ -409,7 +365,9 @@ class CloudOAuthService {
     }
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) {
-      throw StateError('token exchange returned invalid JSON');
+      throw const CloudConnectionException(
+        'Cloud renewal returned invalid data.',
+      );
     }
     return decoded;
   }
@@ -428,57 +386,21 @@ class CloudOAuthService {
       config: config,
       parameters: parameters,
     );
+    if ((decoded['access_token']?.toString().trim().isEmpty ?? true) ||
+        decoded['expires_in'] is! num ||
+        (decoded['expires_in'] as num) <= 0) {
+      throw const CloudConnectionException(
+        'Cloud renewal returned incomplete credentials.',
+      );
+    }
     return {
       ...previousPayload,
       ...decoded,
-      'refresh_token': decoded['refresh_token'] ?? refreshToken,
+      'refresh_token':
+          (decoded['refresh_token']?.toString().isNotEmpty ?? false)
+              ? decoded['refresh_token']
+              : refreshToken,
     };
-  }
-
-  Future<_OAuthCallback> _waitForOAuthCallback(
-    HttpServer server,
-    String expectedState,
-  ) {
-    final completer = Completer<_OAuthCallback>();
-    late StreamSubscription<HttpRequest> subscription;
-    subscription = server.listen((request) async {
-      if (request.uri.path != '/oauth/callback') {
-        request.response.statusCode = HttpStatus.notFound;
-        await request.response.close();
-        return;
-      }
-      final state = request.uri.queryParameters['state'];
-      final code = request.uri.queryParameters['code'];
-      final error = request.uri.queryParameters['error'];
-      final ok = state == expectedState;
-      request.response.headers.contentType = ContentType.html;
-      request.response.write(ok
-          ? '<html><body><h2>AutoTeleprompter connected.</h2>'
-              '<p>You can close this browser tab.</p></body></html>'
-          : '<html><body><h2>AutoTeleprompter sign-in rejected.</h2>'
-              '<p>Security state did not match.</p></body></html>');
-      await request.response.close();
-      if (!ok) {
-        completer.complete(
-          const _OAuthCallback(error: 'security_state_mismatch'),
-        );
-      } else {
-        completer.complete(_OAuthCallback(code: code, error: error));
-      }
-      await subscription.cancel();
-    });
-    return completer.future;
-  }
-
-  Future<void> _openBrowser(Uri uri) async {
-    if (Platform.isWindows) {
-      await Process.run(
-        'rundll32',
-        ['url.dll,FileProtocolHandler', uri.toString()],
-      );
-    } else {
-      await Process.run('open', [uri.toString()]);
-    }
   }
 
   String _randomBase64Url(int bytes) {
@@ -494,248 +416,33 @@ class CloudOAuthService {
 
   String? _expiresAtIso(Map<String, dynamic> tokenPayload) {
     final expiresIn = tokenPayload['expires_in'];
-    if (expiresIn is! int || expiresIn <= 0) return null;
-    return DateTime.now()
+    if (expiresIn is! num || expiresIn <= 0) return null;
+    return _now()
         .toUtc()
-        .add(Duration(seconds: expiresIn))
+        .add(Duration(seconds: expiresIn.toInt()))
         .toIso8601String();
   }
 
   bool _tokenExpired(CloudAccountInfo account) {
     final raw = account.expiresAtIso;
-    if (raw == null || raw.isEmpty) return false;
-    final expiresAt = DateTime.tryParse(raw);
-    if (expiresAt == null) return false;
-    return DateTime.now().toUtc().isAfter(
-          expiresAt.subtract(const Duration(minutes: 2)),
-        );
-  }
-
-  bool _shouldRefreshToken(
-    CloudAccountInfo account,
-    Map<String, dynamic> tokenPayload,
-  ) {
-    if (tokenPayload['refresh_token'] == null) return false;
-    final raw = account.expiresAtIso;
     if (raw == null || raw.isEmpty) return true;
-    return _tokenExpired(account);
+    final expiresAt = DateTime.tryParse(raw);
+    if (expiresAt == null) return true;
+    return !_now().toUtc().isBefore(
+      expiresAt.subtract(const Duration(minutes: 2)),
+    );
   }
 
   _OAuthProviderConfig? _oauthConfigFor(CloudProviderDefinition provider) {
     return switch (provider.id) {
       CloudConnectionStore.googleDrive => _OAuthProviderConfig.googleDrive(
-          clientId: googleDriveOAuthClientId,
-          clientSecret: googleDriveOAuthClientSecret,
-        ),
+        clientId: _credentials.googleClientId,
+        clientSecret: _credentials.googleClientSecret,
+      ),
       CloudConnectionStore.dropbox => _OAuthProviderConfig.dropbox(
-          clientId: dropboxOAuthClientId,
-        ),
+        clientId: _credentials.dropboxClientId,
+      ),
       _ => null,
     };
-  }
-}
-
-class _CloudOAuthTokenException implements Exception {
-  final String message;
-  final bool isCredentialConfigurationIssue;
-
-  const _CloudOAuthTokenException(
-    this.message, {
-    this.isCredentialConfigurationIssue = false,
-  });
-
-  factory _CloudOAuthTokenException.fromTokenResponse({
-    required _OAuthProviderConfig config,
-    required int statusCode,
-    required String body,
-  }) {
-    final lower = body.toLowerCase();
-    final mentionsClientSecret =
-        lower.contains('client_secret') || lower.contains('client secret');
-    if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
-        mentionsClientSecret &&
-        lower.contains('missing')) {
-      return const _CloudOAuthTokenException(
-        'Google Drive reached the token exchange, but Google requested a '
-        'client secret. AutoTeleprompter does not embed provider secrets in '
-        'public desktop builds; use Local Backup or connect Google Drive after '
-        'the secure backend token exchange is available.',
-        isCredentialConfigurationIssue: true,
-      );
-    }
-    if (config.clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
-        lower.contains('invalid_client')) {
-      return const _CloudOAuthTokenException(
-        'Google Drive rejected the Desktop OAuth credentials. Verify the '
-        'GOOGLE_DRIVE_CLIENT_ID and OAuth consent settings, or use the future '
-        'secure backend token exchange for Google account sync.',
-        isCredentialConfigurationIssue: true,
-      );
-    }
-    return _CloudOAuthTokenException(
-      'Token exchange failed ($statusCode): $body',
-    );
-  }
-
-  @override
-  String toString() => message;
-}
-
-class _OAuthCallback {
-  final String? code;
-  final String? error;
-
-  const _OAuthCallback({this.code, this.error});
-}
-
-class _OAuthProviderConfig {
-  final String clientId;
-  final String? clientSecret;
-  final String clientIdDefineName;
-  final Uri tokenEndpoint;
-  final bool allowDynamicLoopbackPort;
-  final Uri Function({
-    required String redirectUri,
-    required String state,
-    required String challenge,
-  }) authorizationUri;
-  final Future<String> Function(HttpClient client, String accessToken)
-      accountLabel;
-
-  const _OAuthProviderConfig({
-    required this.clientId,
-    this.clientSecret,
-    required this.clientIdDefineName,
-    required this.tokenEndpoint,
-    required this.allowDynamicLoopbackPort,
-    required this.authorizationUri,
-    required this.accountLabel,
-  });
-
-  String? get credentialIssue {
-    if (clientIdDefineName == 'GOOGLE_DRIVE_CLIENT_ID' &&
-        !_looksLikeGoogleOAuthClientId(clientId)) {
-      return 'Google Drive account sign-in is ready in code, but '
-          'GOOGLE_DRIVE_CLIENT_ID is not a valid OAuth Desktop app Client ID.';
-    }
-    return null;
-  }
-
-  bool shouldRetryWithClientSecret({
-    required Map<String, String> parameters,
-    required String responseBody,
-  }) {
-    if (clientIdDefineName != 'GOOGLE_DRIVE_CLIENT_ID') return false;
-    if (parameters.containsKey('client_secret')) return false;
-    final secret = clientSecret?.trim();
-    if (secret == null || secret.isEmpty) return false;
-    final lower = responseBody.toLowerCase();
-    return lower.contains('client_secret') && lower.contains('missing');
-  }
-
-  factory _OAuthProviderConfig.googleDrive({
-    required String clientId,
-    required String clientSecret,
-  }) {
-    final normalizedClientId = _cleanOAuthClientId(clientId);
-    return _OAuthProviderConfig(
-      clientId: normalizedClientId,
-      clientSecret: clientSecret.replaceAll(RegExp(r'\s+'), '').trim(),
-      clientIdDefineName: 'GOOGLE_DRIVE_CLIENT_ID',
-      tokenEndpoint: Uri.parse('https://oauth2.googleapis.com/token'),
-      allowDynamicLoopbackPort: true,
-      authorizationUri: ({
-        required String redirectUri,
-        required String state,
-        required String challenge,
-      }) =>
-          Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-        'client_id': normalizedClientId,
-        'redirect_uri': redirectUri,
-        'response_type': 'code',
-        'scope': 'openid email profile '
-            'https://www.googleapis.com/auth/drive.file',
-        'access_type': 'offline',
-        'prompt': 'consent',
-        'code_challenge': challenge,
-        'code_challenge_method': 'S256',
-        'state': state,
-      }),
-      accountLabel: _googleAccountLabel,
-    );
-  }
-
-  factory _OAuthProviderConfig.dropbox({required String clientId}) {
-    final normalizedClientId = _cleanOAuthClientId(clientId);
-    return _OAuthProviderConfig(
-      clientId: normalizedClientId,
-      clientIdDefineName: 'DROPBOX_CLIENT_ID',
-      tokenEndpoint: Uri.parse('https://api.dropboxapi.com/oauth2/token'),
-      allowDynamicLoopbackPort: false,
-      authorizationUri: ({
-        required String redirectUri,
-        required String state,
-        required String challenge,
-      }) =>
-          Uri.https('www.dropbox.com', '/oauth2/authorize', {
-        'client_id': normalizedClientId,
-        'redirect_uri': redirectUri,
-        'response_type': 'code',
-        'token_access_type': 'offline',
-        'scope': 'account_info.read files.metadata.read '
-            'files.content.read files.content.write',
-        'code_challenge': challenge,
-        'code_challenge_method': 'S256',
-        'state': state,
-      }),
-      accountLabel: _dropboxAccountLabel,
-    );
-  }
-
-  static Future<String> _googleAccountLabel(
-    HttpClient client,
-    String accessToken,
-  ) async {
-    final request = await client.getUrl(
-      Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
-    );
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $accessToken');
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Google account lookup failed (${response.statusCode})');
-    }
-    final decoded = jsonDecode(body);
-    if (decoded is! Map<String, dynamic>) return 'Google Drive account';
-    return decoded['email']?.toString().trim().isNotEmpty == true
-        ? decoded['email'].toString()
-        : decoded['name']?.toString() ?? 'Google Drive account';
-  }
-
-  static Future<String> _dropboxAccountLabel(
-    HttpClient client,
-    String accessToken,
-  ) async {
-    final request = await client.postUrl(
-      Uri.parse('https://api.dropboxapi.com/2/users/get_current_account'),
-    );
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $accessToken');
-    request.headers.contentType = ContentType.json;
-    request.write('null');
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-          'Dropbox account lookup failed (${response.statusCode})');
-    }
-    final decoded = jsonDecode(body);
-    if (decoded is! Map<String, dynamic>) return 'Dropbox account';
-    final email = decoded['email']?.toString();
-    if (email != null && email.trim().isNotEmpty) return email;
-    final name = decoded['name'];
-    if (name is Map<String, dynamic>) {
-      return name['display_name']?.toString() ?? 'Dropbox account';
-    }
-    return 'Dropbox account';
   }
 }

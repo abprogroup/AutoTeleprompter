@@ -13,7 +13,6 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onPaste;
   final VoidCallback onUndo;
   final VoidCallback onRedo;
-  final VoidCallback onSearch;
   final bool hasBookmark;
   final VoidCallback onBookmarkTap;
 
@@ -31,7 +30,6 @@ class _EditorBlock extends StatelessWidget {
     required this.onPaste,
     required this.onUndo,
     required this.onRedo,
-    required this.onSearch,
     required this.hasBookmark,
     required this.onBookmarkTap,
   });
@@ -158,10 +156,6 @@ class _EditorBlock extends StatelessWidget {
                     control: true, shift: true): _RedoIntent(),
                 SingleActivator(LogicalKeyboardKey.keyZ,
                     meta: true, shift: true): _RedoIntent(),
-                SingleActivator(LogicalKeyboardKey.keyF,
-                    control: true, shift: true): _SearchIntent(),
-                SingleActivator(LogicalKeyboardKey.keyF,
-                    meta: true, shift: true): _SearchIntent(),
               },
               child: Actions(
                 actions: {
@@ -188,10 +182,6 @@ class _EditorBlock extends StatelessWidget {
                   }),
                   _RedoIntent: CallbackAction<_RedoIntent>(onInvoke: (_) {
                     onRedo();
-                    return null;
-                  }),
-                  _SearchIntent: CallbackAction<_SearchIntent>(onInvoke: (_) {
-                    onSearch();
                     return null;
                   }),
                   // Override internal EditableText intents so Cmd/Ctrl+C/X/V/A

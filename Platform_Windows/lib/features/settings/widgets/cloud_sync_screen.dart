@@ -20,6 +20,7 @@ import '../services/cloud_connection_store.dart';
 import '../services/cloud_oauth_service.dart';
 import '../services/deleted_scripts_service.dart';
 import '../services/local_backup_service.dart';
+import 'cloud_account_connection_actions.dart';
 
 part 'cloud_sync_screen.actions.dart';
 part 'cloud_sync_screen.deleted_actions.dart';
@@ -30,14 +31,12 @@ part 'cloud_sync_screen.payloads.dart';
 part 'cloud_sync_screen.sync_with_app.dart';
 part 'cloud_sync_screen.synced_scripts_dialog.dart';
 part 'cloud_sync_screen.widgets.dart';
+part 'cloud_sync_screen.account_card.dart';
 
 class CloudSyncScreen extends ConsumerStatefulWidget {
   final bool embedded;
 
-  const CloudSyncScreen({
-    super.key,
-    this.embedded = false,
-  });
+  const CloudSyncScreen({super.key, this.embedded = false});
 
   @override
   ConsumerState<CloudSyncScreen> createState() => _CloudSyncScreenState();
@@ -55,11 +54,25 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   String _deletedFolderPath = '';
   bool _loading = true;
   bool _syncingScripts = false;
+  final _checkingAccounts = <String>{};
 
   @override
   void initState() {
     super.initState();
+    _oauth.connectionStates.addListener(_connectionStateChanged);
+    _oauth.activeSignIn.addListener(_connectionStateChanged);
     _loadConnections();
+  }
+
+  void _connectionStateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _oauth.connectionStates.removeListener(_connectionStateChanged);
+    _oauth.activeSignIn.removeListener(_connectionStateChanged);
+    super.dispose();
   }
 
   Future<void> _loadConnections() async {
@@ -69,6 +82,8 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
         await _store.loadDeletedScriptsCustomFolderEnabled();
     final deletedFolderPath = await _store.loadDeletedScriptsCustomFolderPath();
     final accounts = await _oauth.loadAccounts();
+    // Non-blocking credential check; no file sync or browser is started.
+    _oauth.maintainConnections();
     if (!mounted) return;
     setState(() {
       _connections = connections;
@@ -126,7 +141,8 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
     AppSettings settings,
     bool premiumUnlocked,
   ) {
-    final localBackup = _localBackup ??
+    final localBackup =
+        _localBackup ??
         const CloudProviderConnection(
           provider: CloudConnectionStore.localBackupProvider,
           folderPath: '',
@@ -167,9 +183,10 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
             connection: localBackup,
             enabled: premiumUnlocked,
             onChoose: _chooseLocalBackupFolder,
-            onOpen: localBackup.isConnected
-                ? () => _openFolder(localBackup.folderPath)
-                : null,
+            onOpen:
+                localBackup.isConnected
+                    ? () => _openFolder(localBackup.folderPath)
+                    : null,
             onForget: localBackup.isConnected ? _disconnectLocalBackup : null,
             onUpload:
                 localBackup.isConnected ? _uploadLocalBackupScripts : null,
@@ -184,15 +201,19 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
             folderPath: _resolvedDeletedFolderLabel(localBackup),
             onToggleCustomFolder: _setDeletedFolderOverride,
             onChoose: _chooseDeletedScriptsFolder,
-            onOpen: _deletedFolderPath.trim().isNotEmpty
-                ? () => _openFolder(_deletedFolderPath)
-                : null,
-            onForget: _deletedFolderPath.trim().isNotEmpty
-                ? _forgetDeletedScriptsFolder
-                : null,
+            onOpen:
+                _deletedFolderPath.trim().isNotEmpty
+                    ? () => _openFolder(_deletedFolderPath)
+                    : null,
+            onForget:
+                _deletedFolderPath.trim().isNotEmpty
+                    ? _forgetDeletedScriptsFolder
+                    : null,
           ),
           const SizedBox(height: 24),
           const _SectionLabel('PERSONAL CLOUD STORAGE'),
+          if (_oauth.activeSignIn.value != null)
+            CloudSignInNotice(onCancel: _oauth.cancelSignIn),
           const SizedBox(height: 12),
           if (_loading)
             const Center(
@@ -206,26 +227,41 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
               _CloudOption(
                 connection: connection,
                 account: _accounts[connection.provider.id],
-                onConnectAccount: premiumUnlocked &&
-                        _providerSupportsAccount(connection.provider.id)
-                    ? () => _connectProviderAccount(connection.provider)
-                    : null,
-                onUploadAccount: premiumUnlocked &&
-                        _accounts.containsKey(connection.provider.id)
-                    ? () => _uploadSelectedScripts(connection.provider.id)
-                    : null,
-                onListAccount: premiumUnlocked &&
-                        _accounts.containsKey(connection.provider.id)
-                    ? () => _showSyncedScripts(connection.provider)
-                    : null,
-                onSyncWithApp: premiumUnlocked &&
-                        _accounts.containsKey(connection.provider.id)
-                    ? () => _syncProviderWithApp(connection.provider.id)
-                    : null,
-                onDisconnectAccount: premiumUnlocked &&
-                        _accounts.containsKey(connection.provider.id)
-                    ? () => _disconnectProviderAccount(connection.provider.id)
-                    : null,
+                signInBusy: _oauth.activeSignIn.value != null,
+                checking: _checkingAccounts.contains(connection.provider.id),
+                onCheckConnection:
+                    premiumUnlocked &&
+                            _accounts.containsKey(connection.provider.id)
+                        ? () => _checkProviderConnection(connection.provider)
+                        : null,
+                connectionStatus:
+                    _oauth.connectionStates.value[connection.provider.id],
+                onConnectAccount:
+                    premiumUnlocked &&
+                            _providerSupportsAccount(connection.provider.id)
+                        ? () => _connectProviderAccount(connection.provider)
+                        : null,
+                onUploadAccount:
+                    premiumUnlocked &&
+                            _accounts.containsKey(connection.provider.id)
+                        ? () => _uploadSelectedScripts(connection.provider.id)
+                        : null,
+                onListAccount:
+                    premiumUnlocked &&
+                            _accounts.containsKey(connection.provider.id)
+                        ? () => _showSyncedScripts(connection.provider)
+                        : null,
+                onSyncWithApp:
+                    premiumUnlocked &&
+                            _accounts.containsKey(connection.provider.id)
+                        ? () => _syncProviderWithApp(connection.provider.id)
+                        : null,
+                onDisconnectAccount:
+                    premiumUnlocked &&
+                            _accounts.containsKey(connection.provider.id)
+                        ? () =>
+                            _disconnectProviderAccount(connection.provider.id)
+                        : null,
               ),
           const SizedBox(height: 16),
           const _SectionLabel('MANAGED CLOUD'),
@@ -310,15 +346,16 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _shortError(Object error) {
-    final compact = sanitizeSettingsErrorForUser(error)
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    final compact =
+        sanitizeSettingsErrorForUser(
+          error,
+        ).replaceAll(RegExp(r'\s+'), ' ').trim();
     if (compact.length <= 220) return compact;
     return '${compact.substring(0, 220)}...';
   }

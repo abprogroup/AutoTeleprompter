@@ -102,7 +102,7 @@ extension _TeleprompterViewportAnchorParts on _TeleprompterScreenState {
     // Pixel targets from the old wrapping are no longer meaningful.
     _cancelSmoothScroll();
     _activeManualCorrectionTimer?.cancel();
-    _activeManualCorrection = false;
+    _manualCorrectionGeneration++;
     _userBrowsingWhileStopped = false;
     _lastPresenterUserScrollSignalAt = null;
     _scheduleViewportAnchorRestore();
@@ -132,7 +132,8 @@ extension _TeleprompterViewportAnchorParts on _TeleprompterScreenState {
   void _restoreViewportAnchor() {
     final anchor = _viewportAnchor;
     if (anchor == null || !_scrollController.hasClients) return;
-    if (!identical(anchor.script, ref.read(scriptProvider))) {
+    if (anchor.script.sessionId != ref.read(scriptProvider)?.sessionId) {
+      _cancelActiveManualCorrection();
       _viewportAnchor = null;
       _viewportGeometryPending = false;
       _scheduleVisibleWordWindowSync(force: true);
@@ -141,7 +142,13 @@ extension _TeleprompterViewportAnchorParts on _TeleprompterScreenState {
     final size = MediaQuery.sizeOf(context);
     if (size.width <= 0 || size.height <= 0) return;
     final box = _boxForWordIndex(anchor.index);
-    if (box == null || !box.attached || !box.hasSize) return;
+    if (box == null || !box.attached || !box.hasSize) {
+      _viewportAnchor = null;
+      _viewportGeometryPending = false;
+      _scheduleVisibleWordWindowSync(force: true);
+      if (_activeManualCorrection) _scheduleActiveManualCorrectionCommit();
+      return;
+    }
     final axis = _presenterScrollAxis();
     final delta =
         (_presenterBoxAxisLeading(box, axis) -
@@ -175,6 +182,9 @@ extension _TeleprompterViewportAnchorParts on _TeleprompterScreenState {
       }
       _viewportAnchor = null;
       if (mounted) _scheduleVisibleWordWindowSync(force: true);
+      if (mounted && _activeManualCorrection) {
+        _scheduleActiveManualCorrectionCommit();
+      }
     });
   }
 }

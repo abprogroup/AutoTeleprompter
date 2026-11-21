@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'script_editor_screen.dart';
 import '../../../core/security/secure_script_store.dart';
@@ -25,6 +26,10 @@ import '../../settings/widgets/cloud_sync_screen.dart';
 import '../providers/script_provider.dart';
 import '../services/styling_service.dart';
 import 'script_delete_dialog.dart';
+import 'script_name_dialog.dart';
+import 'script_folder_import_dialog.dart';
+import '../services/script_folder_import_service.dart';
+import '../services/script_library_parser.dart';
 import '../../../platform/file_import/platform_file_import.dart';
 
 part 'script_gallery_screen.account_menu.dart';
@@ -34,6 +39,7 @@ part 'script_gallery_screen.premium_hub.dart';
 part 'script_gallery_screen.recent_item.dart';
 part 'script_gallery_screen.widgets.dart';
 part 'script_gallery_screen.onboarding.dart';
+part 'script_gallery_screen.library_workflow.dart';
 
 class ScriptGalleryScreen extends ConsumerStatefulWidget {
   final Duration initialInputShieldDuration;
@@ -268,7 +274,8 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                       children: [
                         _GalleryActionCard(
                           title: 'New Script',
-                          subtitle: 'Start with a blank canvas',
+                          subtitle:
+                              'Name a script and keep it in the app library',
                           icon: Icons.add_rounded,
                           color: const Color(0xFFFFBF00),
                           onTap: () {
@@ -281,7 +288,7 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                         ),
                         const SizedBox(height: 12),
                         _GalleryActionCard(
-                          title: 'Load Script',
+                          title: 'Open script file',
                           subtitle:
                               'Import from ${PlatformFileImport.formatsLabel}',
                           icon: Icons.file_open_outlined,
@@ -298,10 +305,21 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => const ScriptEditorScreen(
-                                      shouldAutoLoad: true)),
+                                builder: (_) => const ScriptEditorScreen(
+                                  shouldAutoLoad: true,
+                                ),
+                              ),
                             );
                           },
+                        ),
+                        const SizedBox(height: 12),
+                        _GalleryActionCard(
+                          title: 'Import scripts from folder',
+                          subtitle:
+                              'Choose files to copy into the app library; originals stay unchanged',
+                          icon: Icons.create_new_folder_outlined,
+                          color: Colors.white,
+                          onTap: _importScriptFolder,
                         ),
                       ],
                     ),
@@ -314,11 +332,14 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Recent Activity',
-                                style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold)),
+                            const Text(
+                              'App library',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -469,55 +490,6 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
               _buildWindowsOnboardingOverlay(settings, hasProAccess),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showNewScriptDialog(BuildContext context) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Production Title',
-            style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: 'e.g. Broadcast V1',
-            hintStyle: const TextStyle(color: Colors.white24),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              final name = controller.text.trim();
-              Navigator.pop(ctx);
-              LightweightDiagnostics.instance.record(
-                'gallery',
-                'new script created',
-                data: {'title': name.isEmpty ? 'New Script' : name},
-              );
-              ref.read(scriptProvider.notifier).clear();
-              ref.read(settingsProvider.notifier).resetToDefaultAppearance();
-              ref
-                  .read(scriptProvider.notifier)
-                  .loadText('', title: name.isEmpty ? 'New Script' : name);
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const ScriptEditorScreen()));
-            },
-            child: const Text('Start Producing',
-                style: TextStyle(
-                    color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
   }

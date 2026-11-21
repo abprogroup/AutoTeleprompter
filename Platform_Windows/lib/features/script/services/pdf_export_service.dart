@@ -13,7 +13,15 @@ class PdfExportService {
   static pw.Font? _boldFont;
   static pw.Font? _italicFont;
 
-  static Future<List<int>> generate(String text, {bool? defaultRtl}) async {
+  static Future<List<int>> generate(
+    String text, {
+    bool? defaultRtl,
+    double? defaultFontSize,
+  }) async {
+    final resolvedDefaultFontSize =
+        (defaultFontSize != null && defaultFontSize > 0)
+            ? defaultFontSize
+            : 18.0;
     final regular = await _loadFont(
       cached: _regularFont,
       systemCandidates: const [
@@ -66,7 +74,13 @@ class PdfExportService {
         ),
         build: (context) => [
           for (final paragraph in paragraphs)
-            _paragraphWidget(paragraph, regular, bold, italic),
+            _paragraphWidget(
+              paragraph,
+              regular,
+              bold,
+              italic,
+              defaultFontSize: resolvedDefaultFontSize,
+            ),
         ],
       ),
     );
@@ -113,8 +127,9 @@ class PdfExportService {
     ExportParagraph paragraph,
     pw.Font regular,
     pw.Font bold,
-    pw.Font italic,
-  ) {
+    pw.Font italic, {
+    required double defaultFontSize,
+  }) {
     if (paragraph.isEmpty) return pw.SizedBox(height: 12);
     final paragraphBackground = _uniformParagraphBackground(paragraph);
     final richText = pw.RichText(
@@ -133,6 +148,7 @@ class PdfExportService {
               regular: regular,
               bold: bold,
               italic: italic,
+              defaultFontSize: defaultFontSize,
               includeBackground: paragraphBackground == null,
             ),
         ],
@@ -202,6 +218,7 @@ class PdfExportService {
     required pw.Font regular,
     required pw.Font bold,
     required pw.Font italic,
+    required double defaultFontSize,
     bool includeBackground = true,
   }) {
     final displayText = BidiExportMarks.wrap(text, rtl: isRtl);
@@ -210,6 +227,7 @@ class PdfExportService {
       regular,
       bold,
       italic,
+      defaultFontSize: defaultFontSize,
       includeBackground: includeBackground,
     );
     return pw.TextSpan(text: displayText, style: style);
@@ -220,6 +238,7 @@ class PdfExportService {
     pw.Font regular,
     pw.Font bold,
     pw.Font italic, {
+    required double defaultFontSize,
     bool includeBackground = true,
   }) {
     final isBold = run.isBold;
@@ -230,7 +249,7 @@ class PdfExportService {
           : isItalic
               ? italic
               : regular,
-      fontSize: (run.fontSize ?? 18).clamp(8, 96).toDouble(),
+      fontSize: (run.fontSize ?? defaultFontSize).clamp(8, 96).toDouble(),
       fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
       fontStyle: isItalic ? pw.FontStyle.italic : pw.FontStyle.normal,
       decoration: run.isUnderline

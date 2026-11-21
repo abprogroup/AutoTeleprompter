@@ -34,15 +34,9 @@ extension _ScriptEditorClearStyleParts on _ScriptEditorScreenState {
             selection: TextSelection.collapsed(offset: sel.start),
           );
         } else if (sel.isValid && sel.isCollapsed) {
-          final cursorInPlain = sel.start >= text.length ||
-              text.substring(sel.start).replaceAll(tagPattern, '').isEmpty;
-          if (cursorInPlain) {
-            for (final ctrl in _controllers) {
-              ctrl.text = ctrl.text.replaceAll(tagPattern, '');
-            }
-          } else {
-            _clearStyleAtCursor(c, sel.start);
-          }
+          // Never wipe the whole script on a collapsed cursor; clear only the
+          // word at/before the cursor (Select All + Clear clears whole script).
+          _clearStyleAtCursor(c, sel.start.clamp(0, text.length));
         }
       }
     }

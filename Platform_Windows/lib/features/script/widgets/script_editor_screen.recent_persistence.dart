@@ -7,15 +7,11 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
         timer.cancel();
         return;
       }
-      final text = _getRefinedFullTextWithoutBookmarkSigns();
-      if (text.isEmpty && _currentTitle == 'New Project') return;
       _persistRecentSafely('autosaveTimer');
     });
   }
 
-  void _scheduleRecentUpdate({
-    Duration delay = const Duration(seconds: 30),
-  }) {
+  void _scheduleRecentUpdate({Duration delay = const Duration(seconds: 30)}) {
     _recentTimer?.cancel();
     _recentTimer = Timer(delay, () {
       if (mounted) _persistRecentSafely('scheduledRecentUpdate');
@@ -41,7 +37,7 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
       return;
     }
     final text = _getRefinedFullTextWithoutBookmarkSigns();
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty && _currentSessionId == null) return;
     final settings = ref.read(settingsProvider);
     final historyJson = jsonEncode(_history.map((e) => e.toJson()).toList());
     final fingerprint = _recentPersistenceFingerprint(
@@ -126,4 +122,57 @@ extension _ScriptEditorRecentPersistenceParts on _ScriptEditorScreenState {
       settings.futureWordColor.toString(),
     ].join('|');
   }
+
+  void _clearAppSelectionAfterTextInput(MarkupController editedController) {
+    _overlayKey.currentState?.clearSelection();
+    _shiftSelectionAnchor = null;
+    _shiftSelectionFocus = null;
+    _isGlobalSelection = false;
+    for (final c in _controllers) {
+      c.isGlobalSelected = false;
+      c.externalSelection = null;
+      c.externalVisibleSelection = null;
+      if (!identical(c, editedController) &&
+          c.selection.isValid &&
+          !c.selection.isCollapsed) {
+        final collapseAt = c.selection.extentOffset.clamp(0, c.text.length);
+        c.selection = TextSelection.collapsed(offset: collapseAt);
+      }
+      c.refresh();
+    }
+    _lastFocusedController = editedController;
+  }
+
+  void _syncEditorControllersFromPresentedScript() {
+    final active = ref.read(scriptProvider);
+    if (active == null || active.sessionId != _currentSessionId) return;
+    final currentEditorRaw = _getRefinedFullTextWithoutBookmarkSigns();
+    if (active.rawText == currentEditorRaw) return;
+    final blocks = active.rawText.split('\n');
+    if (blocks.length != _controllers.length) return;
+    _isCommandExecuting = true;
+    try {
+      for (var i = 0; i < blocks.length; i++) {
+        final next = blocks[i];
+        if (_controllers[i].text == next) continue;
+        final safeOffset = _controllers[i]
+            .selection
+            .baseOffset
+            .clamp(0, next.length);
+        _controllers[i].value = TextEditingValue(
+          text: next,
+          selection: TextSelection.collapsed(offset: safeOffset),
+        );
+        _controllers[i].refresh();
+      }
+    } finally {
+      _isCommandExecuting = false;
+    }
+  }
+}
+
+class _EnterSelectionRange {
+  final int blockIndex;
+  final TextSelection selection;
+  const _EnterSelectionRange(this.blockIndex, this.selection);
 }

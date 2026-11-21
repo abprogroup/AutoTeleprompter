@@ -23,7 +23,10 @@ class CloudAppFolderSyncService {
     CloudOAuthService? oauth,
     HttpClient? httpClient,
   })  : _oauth = oauth ?? CloudOAuthService(),
-        _httpClient = httpClient ?? HttpClient();
+        _httpClient = httpClient ??
+            (HttpClient()
+              ..connectionTimeout = const Duration(seconds: 15)
+              ..idleTimeout = const Duration(seconds: 15));
 
   final CloudOAuthService _oauth;
   final HttpClient _httpClient;

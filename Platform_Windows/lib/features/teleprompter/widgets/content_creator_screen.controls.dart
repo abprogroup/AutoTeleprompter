@@ -83,10 +83,10 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
                 hasBookmarkAccess
                     ? () => _jumpContentBookmark(-1)
                     : showLockedBookmarks),
-            _barText('A', 'Smaller font', () => _applyContentFontDelta(-4)),
+            _barText('A', 'Smaller font', () => _applyContentFontDelta(-1)),
             _contentSpeechButton(settings, tState),
             _recordButton(isReady, audioOnly: audioOnly),
-            _barText('A', 'Larger font', () => _applyContentFontDelta(4),
+            _barText('A', 'Larger font', () => _applyContentFontDelta(1),
                 large: true),
             _barIcon(
                 hasBookmarkAccess

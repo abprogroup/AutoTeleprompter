@@ -118,14 +118,14 @@ extension _SettingsSecureScriptParts on SettingsNotifier {
   }) async {
     final effectiveSessionId =
         sessionId ?? 'script_${DateTime.now().microsecondsSinceEpoch}';
-    if (text.trim().isEmpty) {
+    if (text.trim().isEmpty && (sessionId == null || sessionId.isEmpty)) {
       return _SavedSecureScript(sessionId: effectiveSessionId, recordId: '');
     }
-    final secureRecordId = await SecureScriptStore().save(
-      recordId: effectiveSessionId,
-      text: text,
-      historyJson: historyJson,
-    );
+    final secureRecordId = await ref.read(scriptLibraryStoreProvider).save(
+          recordId: effectiveSessionId,
+          text: text,
+          historyJson: historyJson,
+        );
     return _SavedSecureScript(
       sessionId: effectiveSessionId,
       recordId: secureRecordId,

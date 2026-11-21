@@ -182,11 +182,21 @@ extension _ContentCreatorCameraSettings on _ContentCreatorScreenState {
   }
 
   void _showPrompterSettings() {
+    void recenterAfterLayout() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _scrollToContentWordIndex(_activeContentIndex(), immediate: true);
+        _syncContentVisibleWordWindow();
+      });
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => TeleprompterSettingsPanel(
+        onFontSizeChanged: (_) => recenterAfterLayout(),
+        onLayoutChanged: recenterAfterLayout,
         onInvertColors: _toggleContentColorInversion,
       ),
     );

@@ -11,6 +11,8 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     required double presentationFontSize,
     required double presenterWordGap,
   }) {
+    final displayWordIndex =
+        _activeManualCorrection ? _manualWordIndex : tState.confirmedWordIndex;
     Widget wordList = Padding(
       key: _presenterContentKey,
       padding: EdgeInsets.symmetric(
@@ -72,6 +74,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                     localWordIndex: entry.key,
                     word: entry.value,
                     tState: tState,
+                    displayWordIndex: displayWordIndex,
                     settings: settings,
                     paragraphDirection: paraDir,
                     presentationFontSize: presentationFontSize,
@@ -102,7 +105,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   contentKey: _presenterContentKey,
                   wordKeys: _wordKeys,
                   words: script.words,
-                  confirmedWordIndex: tState.confirmedWordIndex,
+                  confirmedWordIndex: displayWordIndex,
                   isManualMode: false,
                   type: MarkupDecorationType.background,
                   gapTolerance: _decorationGapTolerance(presenterWordGap),
@@ -118,7 +121,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   contentKey: _presenterContentKey,
                   wordKeys: _wordKeys,
                   words: script.words,
-                  confirmedWordIndex: tState.confirmedWordIndex,
+                  confirmedWordIndex: displayWordIndex,
                   isManualMode: false,
                   type: MarkupDecorationType.underline,
                   gapTolerance: _decorationGapTolerance(presenterWordGap),
@@ -159,6 +162,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     required int localWordIndex,
     required ScriptWord word,
     required TeleprompterState tState,
+    required int displayWordIndex,
     required AppSettings settings,
     required TextDirection paragraphDirection,
     required double presentationFontSize,
@@ -167,9 +171,9 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     final readingActive = tState.isListening ||
         tState.isStarting ||
         _manualScrolling ||
-        tState.confirmedWordIndex > 0;
-    final isCurrent = readingActive && i == tState.confirmedWordIndex;
-    final isPast = i < tState.confirmedWordIndex;
+        displayWordIndex > 0;
+    final isCurrent = readingActive && i == displayWordIndex;
+    final isPast = i < displayWordIndex;
     final visibleWordText = word.raw
         .replaceAll(_tagStripRe, '')
         .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
@@ -252,8 +256,10 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
               fontFamily: word.fontFamily ?? settings.fontFamily,
               fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
               fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
-              letterSpacing: settings.letterSpacing,
-              wordSpacing: settings.wordSpacing,
+              letterSpacing: ScriptTypographyService.effectiveSpacing(
+                settings.letterSpacing,
+                scale: ScriptTypographyService.presenterScaleFactor,
+              ),
               color: textColor,
               height: settings.lineSpacing,
               decoration: word.isUnderline && !kUseCustomDocxDecorationPainting

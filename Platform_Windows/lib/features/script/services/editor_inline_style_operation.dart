@@ -212,7 +212,12 @@ class EditorInlineStyleOperation {
       } else if (tag == close) {
         sourceValue = null;
       } else {
-        setOutputValue(null);
+        // Keep parameterized spans (e.g. [size=...]) open across unrelated
+        // inline tags ([font=], [bg=], [color=], [u], [i], **) so resizing
+        // styled DOCX runs does not explode hidden tag boundaries around spaces.
+        if (_isBlockLayoutTag(tag)) {
+          setOutputValue(null);
+        }
         buffer.write(tag);
       }
       cursor = match.end;
@@ -343,6 +348,7 @@ class EditorInlineStyleOperation {
     required String defaultTextColor,
     required String scriptBackgroundColor,
   }) {
+    final defaultText = _normalizeHex(defaultTextColor);
     final scriptBg = _normalizeHex(scriptBackgroundColor);
     final buffer = StringBuffer();
     String? sourceTextColor;
@@ -387,13 +393,16 @@ class EditorInlineStyleOperation {
         nextBackgroundColor = null;
         changed = true;
       } else if (sourceTextColor != null) {
-        // Explicitly-colored text with no highlight: invert text <-> background
-        // by moving the text color to the (old) script background color. Without
-        // this, RTF-imported text keeps its baked-in color (e.g. white) and goes
-        // invisible once the script background swaps to that same color.
-        nextTextColor = scriptBg;
+        // Preserve distinct author colors (red/yellow/green/blue cues) across
+        // repeated invert toggles. Only remap explicit text colors that would
+        // blend into the NEW script background (which is the old defaultText).
+        if (_isNearHexColor(sourceTextColor, defaultText)) {
+          nextTextColor = scriptBg;
+          changed = nextTextColor != sourceTextColor;
+        } else {
+          nextTextColor = sourceTextColor;
+        }
         nextBackgroundColor = null;
-        changed = true;
       } else {
         // Truly plain text carries no color tag; it follows the swapped
         // futureWordColor setting, so leave it untagged.
@@ -453,6 +462,21 @@ class EditorInlineStyleOperation {
   static bool _isToggleTag(String tag, String open, String close) =>
       open == close && tag == open;
 
+  static bool _isBlockLayoutTag(String tag) {
+    return tag.startsWith('[align=') ||
+        tag.startsWith('[/align') ||
+        tag == '[center]' ||
+        tag == '[/center]' ||
+        tag == '[left]' ||
+        tag == '[/left]' ||
+        tag == '[right]' ||
+        tag == '[/right]' ||
+        tag == '[rtl]' ||
+        tag == '[/rtl]' ||
+        tag == '[ltr]' ||
+        tag == '[/ltr]';
+  }
+
   static String? _targetParameterizedOpenValue(String tag, String family) {
     final prefix = '[$family=';
     if (!tag.startsWith(prefix) || !tag.endsWith(']')) return null;
@@ -468,6 +492,29 @@ class EditorInlineStyleOperation {
       return cleaned.substring(cleaned.length - 6).toUpperCase();
     }
     return cleaned.padLeft(6, '0').toUpperCase();
+  }
+
+  static bool _isNearHexColor(String a, String b, {int tolerance = 24}) {
+    final na = _normalizeHex(a);
+    final nb = _normalizeHex(b);
+    if (na == nb) return true;
+    final ra = int.tryParse(na.substring(0, 2), radix: 16);
+    final ga = int.tryParse(na.substring(2, 4), radix: 16);
+    final ba = int.tryParse(na.substring(4, 6), radix: 16);
+    final rb = int.tryParse(nb.substring(0, 2), radix: 16);
+    final gb = int.tryParse(nb.substring(2, 4), radix: 16);
+    final bb = int.tryParse(nb.substring(4, 6), radix: 16);
+    if (ra == null ||
+        ga == null ||
+        ba == null ||
+        rb == null ||
+        gb == null ||
+        bb == null) {
+      return false;
+    }
+    return (ra - rb).abs() <= tolerance &&
+        (ga - gb).abs() <= tolerance &&
+        (ba - bb).abs() <= tolerance;
   }
 }
 

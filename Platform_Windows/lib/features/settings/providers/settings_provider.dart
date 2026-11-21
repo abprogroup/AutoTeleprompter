@@ -21,14 +21,18 @@ part 'settings_provider.secure_scripts.dart';
 part 'settings_provider.appearance.dart';
 part 'settings_provider.stt.dart';
 part 'settings_provider.recent_delete.dart';
+part 'settings_provider.script_library.dart';
 
 class SettingsNotifier extends Notifier<AppSettings>
     with
         SettingsNotifierAppearance,
         SettingsNotifierSttSettings,
-        SettingsNotifierRecentDelete {
+        SettingsNotifierRecentDelete,
+        SettingsNotifierScriptLibrary {
   int _loadGeneration = 0;
   bool _isDisposed = false;
+  @override
+  bool get _libraryIsDisposed => _isDisposed;
 
   @override
   AppSettings build() {
@@ -38,7 +42,8 @@ class SettingsNotifier extends Notifier<AppSettings>
       _isDisposed = true;
       _loadGeneration++;
     });
-    unawaited(_load(generation));
+    _libraryReady = _load(generation);
+    unawaited(_libraryReady!);
     return const AppSettings();
   }
 
@@ -95,10 +100,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         LightweightDiagnostics.instance.record(
           'settings',
           'ignored malformed recent settings metadata',
-          data: {
-            'source': 'settingsLoad',
-            'error': error.toString(),
-          },
+          data: {'source': 'settingsLoad', 'error': error.toString()},
         );
         sanitizedRecents.add(json); // Preservation
       }
@@ -174,20 +176,29 @@ class SettingsNotifier extends Notifier<AppSettings>
       flipRotation: _normalizeFlipRotation(prefs.getInt(_flipRotationKey)),
       lineSpacing: _normalizeLineSpacing(prefs.getDouble(_lineSpacingKey)),
       wordSpacing: _normalizeWordSpacing(prefs.getDouble(_wordSpacingKey)),
-      letterSpacing:
-          _normalizeLetterSpacing(prefs.getDouble(_letterSpacingKey)),
-      scriptBgColor:
-          _normalizeColor(prefs.getInt(_scriptBgColorKey), 0xFF000000),
-      currentWordColor:
-          _normalizeColor(prefs.getInt(_currentWordColorKey), 0xFFFFBF00),
-      futureWordColor:
-          _normalizeColor(prefs.getInt(_futureWordColorKey), 0xFFFFFFFF),
-      pastWordOpacity:
-          _normalizePastWordOpacity(prefs.getDouble(_pastWordOpacityKey)),
+      letterSpacing: _normalizeLetterSpacing(
+        prefs.getDouble(_letterSpacingKey),
+      ),
+      scriptBgColor: _normalizeColor(
+        prefs.getInt(_scriptBgColorKey),
+        0xFF000000,
+      ),
+      currentWordColor: _normalizeColor(
+        prefs.getInt(_currentWordColorKey),
+        0xFFFFBF00,
+      ),
+      futureWordColor: _normalizeColor(
+        prefs.getInt(_futureWordColorKey),
+        0xFFFFFFFF,
+      ),
+      pastWordOpacity: _normalizePastWordOpacity(
+        prefs.getDouble(_pastWordOpacityKey),
+      ),
       debugMode: prefs.getBool(_debugModeKey) ?? false,
       showSoundLevelMeter: prefs.getBool(_showSoundLevelMeterKey) ?? false,
-      videoResolution:
-          _normalizeVideoResolution(prefs.getString(_videoResolutionKey)),
+      videoResolution: _normalizeVideoResolution(
+        prefs.getString(_videoResolutionKey),
+      ),
       recentScripts: migratedRecents,
       displayName: prefs.getString(_displayNameKey) ?? 'Guest',
       lastTextColor: prefs.getInt(_lastTextColorKey) ?? 0xFFFFBF00,
@@ -224,8 +235,9 @@ class SettingsNotifier extends Notifier<AppSettings>
       sttManualVisibleSkipSmallWords: manualVisibleSmall,
       sttManualVisibleSkipBigWords: manualVisibleBig,
       sttManualBigWordMinLetters: manualBigWordMinLetters,
-      sttReliabilityMode:
-          _normalizeSttReliabilityMode(prefs.getString(_sttReliabilityModeKey)),
+      sttReliabilityMode: _normalizeSttReliabilityMode(
+        prefs.getString(_sttReliabilityModeKey),
+      ),
       defaultCameraDeviceName:
           prefs.getString(_defaultCameraDeviceNameKey) ?? '',
       contentCreatorCameraSourceMode: _normalizeContentCreatorCameraSource(
@@ -280,7 +292,8 @@ class SettingsNotifier extends Notifier<AppSettings>
               .clamp(0.0, 0.9)
               .toDouble(),
       contentCreatorRecordingFolder: _normalizeLocalPath(
-          prefs.getString(_contentCreatorRecordingFolderKey)),
+        prefs.getString(_contentCreatorRecordingFolderKey),
+      ),
       contentCreatorRecordingFormat: _normalizeContentCreatorRecordingFormat(
         prefs.getString(_contentCreatorRecordingFormatKey),
       ),
@@ -330,195 +343,217 @@ class SettingsNotifier extends Notifier<AppSettings>
     bool? isRtl,
     String? historyJson,
   }) async {
-    final currentTitle = title ?? state.lastScriptTitle;
-    final secureRecord = await _saveEncryptedScriptRecord(
-      text: text,
-      sessionId: sessionId,
-      historyJson: historyJson,
-    );
-    final effectiveSessionId = secureRecord.sessionId;
-    final secureRecordId = secureRecord.recordId;
-
-    if (!isSilent) {
-      state = state.copyWith(
-        lastScript: '',
-        lastScriptTitle: currentTitle,
-        lastScriptSessionId: secureRecordId,
-        lastHistoryIndex: historyIndex ?? state.lastHistoryIndex,
-      );
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_lastScriptKey);
-    await prefs.setString(_lastScriptSessionIdKey, secureRecordId);
-    if (title != null) {
-      await prefs.setString('last_script_title', title);
-    }
-
-    final recentList = List<String>.from(state.recentScripts);
-    final currentIdentityKeys = _recentIdentityKeys(
-      title: currentTitle,
-      type: type,
-      sourcePath: sourcePath,
-    );
-    bool updated = false;
-
-    for (int i = 0; i < recentList.length; i++) {
-      try {
-        final decoded = jsonDecode(recentList[i]);
-        final itemSessionId = decoded['sessionId'];
-        final itemTitle = decoded['title'];
-
-        bool isMatch = false;
-        final itemIdentityKeys = _recentIdentityKeys(
-          title: itemTitle?.toString(),
-          type: decoded['type']?.toString(),
-          sourcePath: decoded['sourcePath']?.toString(),
-        );
-
-        if (sessionId != null && itemSessionId == sessionId) {
-          isMatch = true;
-        } else if (currentIdentityKeys.isNotEmpty &&
-            itemIdentityKeys.any(currentIdentityKeys.contains)) {
-          isMatch = true;
-        } else if (sessionId == null && itemTitle == currentTitle) {
-          isMatch = true;
-        }
-
-        if (isMatch) {
-          decoded['title'] = currentTitle;
-          decoded['sessionId'] = effectiveSessionId;
-          decoded[SecureScriptStore.recordIdKey] = secureRecordId;
-          decoded[SecureScriptStore.storageVersionKey] =
-              SecureScriptStore.storageVersion;
-          decoded.remove('fullText');
-          decoded.remove('historyJson');
-          decoded.remove('snippet');
-          if (historyIndex != null) decoded['historyIndex'] = historyIndex;
-          if (type != null) decoded['type'] = type;
-          if (decoded['type'] == null) decoded['type'] = 'FILE';
-          if (sourcePath != null && sourcePath.trim().isNotEmpty) {
-            decoded['sourcePath'] = sourcePath;
-          }
-
-          final styleMap = decoded['style'] as Map<String, dynamic>? ?? {};
-          if (fontSize != null) styleMap['fontSize'] = fontSize;
-          if (fontFamily != null) styleMap['fontFamily'] = fontFamily;
-          if (lineSpacing != null) styleMap['lineSpacing'] = lineSpacing;
-          if (letterSpacing != null) styleMap['letterSpacing'] = letterSpacing;
-          if (wordSpacing != null) styleMap['wordSpacing'] = wordSpacing;
-          if (textAlign != null) styleMap['textAlign'] = textAlign;
-          if (scriptBgColor != null) styleMap['scriptBgColor'] = scriptBgColor;
-          if (currentWordColor != null) {
-            styleMap['currentWordColor'] = currentWordColor;
-          }
-          if (futureWordColor != null) {
-            styleMap['futureWordColor'] = futureWordColor;
-          }
-          if (isRtl != null) styleMap['isRtl'] = isRtl;
-
-          if (styleMap.isNotEmpty) decoded['style'] = styleMap;
-
-          recentList.removeAt(i);
-          recentList.insert(0, jsonEncode(decoded));
-          _dedupeRecentMetadataList(recentList);
-
-          updated = true;
-          break;
-        }
-      } catch (error) {
-        LightweightDiagnostics.instance.record(
-          'settings',
-          'ignored malformed recent metadata during save',
-          data: {
-            'source': 'saveScriptRecentUpdate',
-            'title': currentTitle,
-            'error': error.toString(),
-          },
-        );
-        try {
-          final decoded = Map<String, dynamic>.from(jsonDecode(recentList[i]))
-            ..remove('fullText')
-            ..remove('historyJson')
-            ..remove('snippet');
-          recentList[i] = jsonEncode(decoded);
-          updated = true;
-        } catch (sanitizeError) {
-          LightweightDiagnostics.instance.record(
-            'settings',
-            'failed to scrub malformed recent metadata during save',
-            data: {
-              'source': 'saveScriptRecentScrub',
-              'title': currentTitle,
-              'error': sanitizeError.toString(),
-            },
-          );
-          recentList.removeAt(i);
-          i--;
-          updated = true;
-        }
-      }
-    }
-
-    if (updated) {
-      if (!isSilent) {
-        state = state.copyWith(recentScripts: recentList);
-      }
-      await prefs.setStringList(_recentScriptsKey, recentList);
-    } else if (secureRecordId.isNotEmpty) {
-      final newEntry = {
-        'title': currentTitle,
-        'type': type ?? 'FILE', // v3.9.5.54: Restore Label Integrity
-        if (sourcePath != null && sourcePath.trim().isNotEmpty)
-          'sourcePath': sourcePath,
-        'sessionId': effectiveSessionId,
-        SecureScriptStore.recordIdKey: secureRecordId,
-        SecureScriptStore.storageVersionKey: SecureScriptStore.storageVersion,
-        'historyIndex': historyIndex ?? 0,
-        'lastModified': DateTime.now().toIso8601String(),
-        'style': {
-          if (fontSize != null) 'fontSize': fontSize,
-          if (fontFamily != null) 'fontFamily': fontFamily,
-          if (lineSpacing != null) 'lineSpacing': lineSpacing,
-          if (letterSpacing != null) 'letterSpacing': letterSpacing,
-          if (wordSpacing != null) 'wordSpacing': wordSpacing,
-          if (textAlign != null) 'textAlign': textAlign,
-          if (scriptBgColor != null) 'scriptBgColor': scriptBgColor,
-          if (currentWordColor != null) 'currentWordColor': currentWordColor,
-          if (futureWordColor != null) 'futureWordColor': futureWordColor,
-          if (isRtl != null) 'isRtl': isRtl,
-        },
-      };
-      recentList.insert(0, jsonEncode(newEntry));
-      _dedupeRecentMetadataList(recentList);
-      if (!isSilent) {
-        state = state.copyWith(recentScripts: recentList);
-      }
-      await prefs.setStringList(_recentScriptsKey, recentList);
-    }
-
-    if (historyIndex != null) {
-      await prefs.setInt(_lastHistoryIndexKey, historyIndex);
-    }
-    if (!isSilent && state.cloudAutoSyncOnSave) {
-      await _syncSavedScriptSnapshot(
-        title: currentTitle,
+    String? syncTitle;
+    String? syncSessionId;
+    var shouldCloudSync = false;
+    await _serializeLibraryWrite(() async {
+      final currentTitle = title ?? state.lastScriptTitle;
+      final secureRecord = await _saveEncryptedScriptRecord(
         text: text,
-        sourceType: type,
-        sourcePath: sourcePath,
-        sessionId: effectiveSessionId,
-        historyIndex: historyIndex,
-        fontSize: fontSize,
-        fontFamily: fontFamily,
-        lineSpacing: lineSpacing,
-        letterSpacing: letterSpacing,
-        wordSpacing: wordSpacing,
-        textAlign: textAlign,
-        scriptBgColor: scriptBgColor,
-        currentWordColor: currentWordColor,
-        futureWordColor: futureWordColor,
-        isRtl: isRtl,
+        sessionId: sessionId,
         historyJson: historyJson,
+      );
+      final effectiveSessionId = secureRecord.sessionId;
+      final secureRecordId = secureRecord.recordId;
+      syncTitle = currentTitle;
+      syncSessionId = effectiveSessionId;
+      shouldCloudSync = !isSilent && state.cloudAutoSyncOnSave;
+
+        if (!isSilent) {
+          state = state.copyWith(
+            lastScript: '',
+            lastScriptTitle: currentTitle,
+            lastScriptSessionId: secureRecordId,
+            lastHistoryIndex: historyIndex ?? state.lastHistoryIndex,
+          );
+        }
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_lastScriptKey);
+        await prefs.setString(_lastScriptSessionIdKey, secureRecordId);
+        if (title != null) {
+          await prefs.setString('last_script_title', title);
+        }
+
+        final recentList = List<String>.from(
+            prefs.getStringList(_recentScriptsKey) ?? state.recentScripts);
+        final currentIdentityKeys = _recentIdentityKeys(
+          title: currentTitle,
+          type: type,
+          sourcePath: sourcePath,
+        );
+        bool updated = false;
+
+        for (int i = 0; i < recentList.length; i++) {
+          try {
+            final decoded = jsonDecode(recentList[i]);
+            final itemSessionId = decoded['sessionId'];
+            final itemTitle = decoded['title'];
+
+            bool isMatch = false;
+            final itemIdentityKeys = _recentIdentityKeys(
+              title: itemTitle?.toString(),
+              type: decoded['type']?.toString(),
+              sourcePath: decoded['sourcePath']?.toString(),
+            );
+
+            if (sessionId != null && itemSessionId == sessionId) {
+              isMatch = true;
+            } else if (currentIdentityKeys.isNotEmpty &&
+                itemIdentityKeys.any(currentIdentityKeys.contains)) {
+              isMatch = true;
+            } else if (sessionId == null && itemTitle == currentTitle) {
+              isMatch = true;
+            }
+
+            if (isMatch) {
+              decoded['title'] = currentTitle;
+              decoded['sessionId'] = effectiveSessionId;
+              decoded[SecureScriptStore.recordIdKey] = secureRecordId;
+              decoded[SecureScriptStore.storageVersionKey] =
+                  SecureScriptStore.storageVersion;
+              decoded.remove('fullText');
+              decoded.remove('historyJson');
+              decoded.remove('snippet');
+              if (historyIndex != null) decoded['historyIndex'] = historyIndex;
+              if (type != null) decoded['type'] = type;
+              if (decoded['type'] == null) decoded['type'] = 'FILE';
+              if (sourcePath != null && sourcePath.trim().isNotEmpty) {
+                decoded['sourcePath'] = sourcePath;
+              }
+
+              final styleMap = decoded['style'] as Map<String, dynamic>? ?? {};
+              if (fontSize != null) styleMap['fontSize'] = fontSize;
+              if (fontFamily != null) styleMap['fontFamily'] = fontFamily;
+              if (lineSpacing != null) styleMap['lineSpacing'] = lineSpacing;
+              if (letterSpacing != null) {
+                styleMap['letterSpacing'] = letterSpacing;
+              }
+              if (wordSpacing != null) styleMap['wordSpacing'] = wordSpacing;
+              if (textAlign != null) styleMap['textAlign'] = textAlign;
+              if (scriptBgColor != null) {
+                styleMap['scriptBgColor'] = scriptBgColor;
+              }
+              if (currentWordColor != null) {
+                styleMap['currentWordColor'] = currentWordColor;
+              }
+              if (futureWordColor != null) {
+                styleMap['futureWordColor'] = futureWordColor;
+              }
+              if (isRtl != null) styleMap['isRtl'] = isRtl;
+
+              if (styleMap.isNotEmpty) decoded['style'] = styleMap;
+
+              recentList.removeAt(i);
+              recentList.insert(0, jsonEncode(decoded));
+              _dedupeRecentMetadataList(recentList);
+
+              updated = true;
+              break;
+            }
+          } catch (error) {
+            LightweightDiagnostics.instance.record(
+              'settings',
+              'ignored malformed recent metadata during save',
+              data: {
+                'source': 'saveScriptRecentUpdate',
+                'title': currentTitle,
+                'error': error.toString(),
+              },
+            );
+            try {
+              final decoded =
+                  Map<String, dynamic>.from(jsonDecode(recentList[i]))
+                    ..remove('fullText')
+                    ..remove('historyJson')
+                    ..remove('snippet');
+              recentList[i] = jsonEncode(decoded);
+              updated = true;
+            } catch (sanitizeError) {
+              LightweightDiagnostics.instance.record(
+                'settings',
+                'failed to scrub malformed recent metadata during save',
+                data: {
+                  'source': 'saveScriptRecentScrub',
+                  'title': currentTitle,
+                  'error': sanitizeError.toString(),
+                },
+              );
+              recentList.removeAt(i);
+              i--;
+              updated = true;
+            }
+          }
+        }
+
+        if (updated) {
+          if (!isSilent) state = state.copyWith(recentScripts: recentList);
+          await prefs.setStringList(_recentScriptsKey, recentList);
+        } else if (secureRecordId.isNotEmpty) {
+          final newEntry = {
+            'title': currentTitle,
+            'type': type ?? 'FILE', // v3.9.5.54: Restore Label Integrity
+            if (sourcePath != null && sourcePath.trim().isNotEmpty)
+              'sourcePath': sourcePath,
+            'sessionId': effectiveSessionId,
+            SecureScriptStore.recordIdKey: secureRecordId,
+            SecureScriptStore.storageVersionKey:
+                SecureScriptStore.storageVersion,
+            'historyIndex': historyIndex ?? 0,
+            'lastModified': DateTime.now().toIso8601String(),
+            'style': {
+              if (fontSize != null) 'fontSize': fontSize,
+              if (fontFamily != null) 'fontFamily': fontFamily,
+              if (lineSpacing != null) 'lineSpacing': lineSpacing,
+              if (letterSpacing != null) 'letterSpacing': letterSpacing,
+              if (wordSpacing != null) 'wordSpacing': wordSpacing,
+              if (textAlign != null) 'textAlign': textAlign,
+              if (scriptBgColor != null) 'scriptBgColor': scriptBgColor,
+              if (currentWordColor != null)
+                'currentWordColor': currentWordColor,
+              if (futureWordColor != null) 'futureWordColor': futureWordColor,
+              if (isRtl != null) 'isRtl': isRtl,
+            },
+          };
+          recentList.insert(0, jsonEncode(newEntry));
+          _dedupeRecentMetadataList(recentList);
+          if (!isSilent) state = state.copyWith(recentScripts: recentList);
+          await prefs.setStringList(_recentScriptsKey, recentList);
+        }
+
+        if (historyIndex != null) {
+          await prefs.setInt(_lastHistoryIndexKey, historyIndex);
+        }
+      });
+    // Run local/cloud snapshot sync outside the library write lock so slow
+    // network calls never block subsequent local saves, imports, or renames.
+    if (shouldCloudSync && syncTitle != null && !_isDisposed) {
+      unawaited(
+        _syncSavedScriptSnapshot(
+          title: syncTitle!,
+          text: text,
+          sourceType: type,
+          sourcePath: sourcePath,
+          sessionId: syncSessionId,
+          historyIndex: historyIndex,
+          fontSize: fontSize,
+          fontFamily: fontFamily,
+          lineSpacing: lineSpacing,
+          letterSpacing: letterSpacing,
+          wordSpacing: wordSpacing,
+          textAlign: textAlign,
+          scriptBgColor: scriptBgColor,
+          currentWordColor: currentWordColor,
+          futureWordColor: futureWordColor,
+          isRtl: isRtl,
+          historyJson: historyJson,
+        ).catchError((Object error, StackTrace stack) {
+          LightweightDiagnostics.instance.recordError(
+            error,
+            stack,
+            source: 'settings.backgroundSnapshotSync',
+          );
+        }),
       );
     }
   }
@@ -584,9 +619,11 @@ class SettingsNotifier extends Notifier<AppSettings>
       final oauth = CloudOAuthService();
       final accounts = await oauth.loadAccounts();
       final providerIds = accounts.keys
-          .where((id) =>
-              id == CloudConnectionStore.googleDrive ||
-              id == CloudConnectionStore.dropbox)
+          .where(
+            (id) =>
+                id == CloudConnectionStore.googleDrive ||
+                id == CloudConnectionStore.dropbox,
+          )
           .toList(growable: false);
       if (providerIds.isEmpty) return;
 
@@ -752,5 +789,6 @@ class SettingsNotifier extends Notifier<AppSettings>
   }
 }
 
-final settingsProvider =
-    NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(
+  SettingsNotifier.new,
+);

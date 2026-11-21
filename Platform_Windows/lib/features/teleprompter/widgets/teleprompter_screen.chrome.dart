@@ -56,6 +56,8 @@ extension _TeleprompterChromeParts on _TeleprompterScreenState {
                       if (settings.scrollMode == 'manual') {
                         _resetManual();
                       } else {
+                        _cancelActiveManualCorrection();
+                        _setTeleprompterState(() => _manualWordIndex = 0);
                         ref.read(teleprompterProvider.notifier).resetPosition();
                         _scrollController.animateTo(
                           0,

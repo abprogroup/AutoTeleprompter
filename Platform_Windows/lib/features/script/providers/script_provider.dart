@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 import '../models/script.dart';
 import '../models/script_word.dart';
+import '../services/script_typography_service.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
 import '../../../core/extensions/string_extensions.dart';
@@ -53,6 +54,7 @@ class ScriptNotifier extends Notifier<Script?> {
     ref.onDispose(() {
       _isDisposed = true;
       _storedLoadGeneration++;
+      _fontSizeSaveGeneration++;
     });
     ref.listen<AppSettings>(settingsProvider, (previous, next) {
       if (previous?.lastScriptSessionId != next.lastScriptSessionId) {
@@ -421,22 +423,35 @@ class ScriptNotifier extends Notifier<Script?> {
         );
   }
 
+  int _fontSizeSaveGeneration = 0;
+
   double effectiveFontSize(double fallback) {
-    final current = state;
-    if (current == null) return fallback;
-    return _uniformInlineFontSize(current.words) ?? current.fontSize;
+    return ScriptTypographyService.effectiveBaseFontSize(state, fallback);
   }
 
   Future<void> applyBaseFontSize(double size) async {
-    final clamped = size.clamp(14.0, 120.0).toDouble();
-    await ref.read(settingsProvider.notifier).setFontSize(clamped);
+    final clamped = size
+        .clamp(
+          ScriptTypographyService.minBaseFontSize,
+          ScriptTypographyService.maxBaseFontSize,
+        )
+        .toDouble();
+    // Update settings state synchronously before awaiting prefs I/O so rapid
+    // A+/A- clicks and slider drags never drop or snap back on the next frame.
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    final settingsPersist = settingsNotifier.setFontSize(clamped);
 
     final current = state;
-    if (current == null) return;
-    final uniformInlineSize = _uniformInlineFontSize(current.words);
-    final rawText = uniformInlineSize == null
-        ? current.rawText
-        : _stripUniformInlineFontSize(current.rawText, uniformInlineSize);
+    if (current == null) {
+      await settingsPersist;
+      return;
+    }
+    final oldBase = effectiveFontSize(current.fontSize);
+    final rawText = ScriptTypographyService.scaleInlineFontSizes(
+      current.rawText,
+      fromBaseSize: oldBase,
+      toBaseSize: clamped,
+    );
     final next = current.copyWith(
       rawText: rawText,
       words: rawText == current.rawText
@@ -445,7 +460,10 @@ class ScriptNotifier extends Notifier<Script?> {
       fontSize: clamped,
     );
     state = next;
-    await ref.read(settingsProvider.notifier).saveScript(
+    final saveGeneration = ++_fontSizeSaveGeneration;
+    await settingsPersist;
+    if (_isDisposed || saveGeneration != _fontSizeSaveGeneration) return;
+    await settingsNotifier.saveScript(
           next.rawText,
           title: next.title,
           type: next.sourceType,
@@ -465,34 +483,6 @@ class ScriptNotifier extends Notifier<Script?> {
         );
   }
 
-  static double? _uniformInlineFontSize(List<ScriptWord> words) {
-    double? size;
-    for (final word in words) {
-      if (word.isNewline) continue;
-      final wordSize = word.fontSize;
-      if (wordSize == null) return null;
-      if (size == null) {
-        size = wordSize;
-      } else if ((size - wordSize).abs() > 0.001) {
-        return null;
-      }
-    }
-    return size;
-  }
-
-  static String _stripUniformInlineFontSize(String text, double fontSize) {
-    final withoutOpenTags = text.replaceAllMapped(
-      RegExp(r'\[size=(\d+(?:\.\d+)?)\]'),
-      (match) {
-        final value = double.tryParse(match.group(1)!);
-        return value != null && (value - fontSize).abs() < 0.001
-            ? ''
-            : match.group(0)!;
-      },
-    );
-    return withoutOpenTags.replaceAll('[/size]', '');
-  }
-
   Future<ParsedFile> parseFile(File file) async {
     final lower = file.path.toLowerCase();
     ParsedFile result = ParsedFile('');
@@ -501,7 +491,14 @@ class ScriptNotifier extends Notifier<Script?> {
       final byteLength = await file.length();
       _validateImportFileSize(lower, byteLength);
       final rawBytes = await file.readAsBytes();
-      if (lower.endsWith('.docx')) {
+      if (lower.endsWith('.pdf') || lower.endsWith('.odt')) {
+        final extLabel = lower.endsWith('.pdf') ? 'PDF' : 'ODT';
+        return ParsedFile(
+          '',
+          errorMessage: 'Importing $extLabel files is not supported yet. '
+              'Please save your document as DOCX, RTF, or TXT and try again.',
+        );
+      } else if (lower.endsWith('.docx')) {
         result = _parseDocx(rawBytes);
       } else if (lower.endsWith('.pages')) {
         result = _parsePages(rawBytes);

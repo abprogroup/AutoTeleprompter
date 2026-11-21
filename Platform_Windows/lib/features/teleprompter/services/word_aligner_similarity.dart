@@ -30,6 +30,7 @@ const Set<String> _phraseStopWords = {
 double _wordSimilarity(String spoken, String scriptWord, bool isRtl) {
   if (spoken == scriptWord) return 1.0;
   if (spoken.isEmpty || scriptWord.isEmpty) return 0.0;
+  if (isRtl && _isHebrewDivineNameEquivalent(spoken, scriptWord)) return 0.95;
 
   double sim = spoken.similarity(scriptWord);
 
@@ -77,6 +78,14 @@ double _wordSimilarity(String spoken, String scriptWord, bool isRtl) {
   }
 
   return sim;
+}
+
+/// Hebrew blessings/scripts abbreviate God's name as `ה'` / `ה׳` / `יי`,
+/// which speakers read aloud as `אדוני` / `אדני` / `השם`.
+bool _isHebrewDivineNameEquivalent(String spoken, String scriptWord) {
+  const scriptForms = {'ה', 'ה\u05F3', 'יי', 'השם', 'אדני', 'אדוני'};
+  const spokenForms = {'אדוני', 'אדני', 'השם'};
+  return scriptForms.contains(scriptWord) && spokenForms.contains(spoken);
 }
 
 /// Normalize Hebrew letters that sound the same for phonetic comparison.

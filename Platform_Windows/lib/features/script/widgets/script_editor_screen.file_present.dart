@@ -1,10 +1,31 @@
 part of 'script_editor_screen.dart';
 
 extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
+  Future<SecureScriptData?> _readStoredScriptForFileConflict(
+      String title, Map<String, dynamic> metadata) async {
+    try {
+      return await ref.read(settingsProvider.notifier).readLibraryScript(metadata);
+    } catch (_) {
+      if (mounted) {
+        await _showImportErrorDialog(title: title, message:
+            'The stored copy could not be read. Nothing was replaced. '
+            'Restore access to your app data before choosing which copy to keep.');
+      }
+      return null;
+    }
+  }
+
   Future<void> _importFile() async {
     final supportedExts = PlatformFileImport.supportedExtensions;
+    final lastFolder = ref.read(settingsProvider).lastImportPath;
+    final initialFolder =
+        lastFolder.isNotEmpty && await Directory(lastFolder).exists()
+            ? lastFolder
+            : null;
+    if (!mounted) return;
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Open script',
+      dialogTitle: 'Open script file',
+      initialDirectory: initialFolder,
       type: FileType.custom,
       allowedExtensions: supportedExts,
     );
@@ -118,7 +139,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     if (nameChoice == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Save cancelled.'),
+          content: Text('Export cancelled.'),
           backgroundColor: Colors.black54,
           duration: Duration(seconds: 2),
         ),
@@ -143,7 +164,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         sourceType: format,
         sourcePath: null,
         preferredExtension: format,
-        fontSize: settings.fontSize,
+        fontSize: ref
+            .read(scriptProvider.notifier)
+            .effectiveFontSize(settings.fontSize),
         fontFamily: settings.fontFamily,
         textAlign: settings.textAlign,
         futureWordColor: settings.futureWordColor,
@@ -172,7 +195,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
 
     // Build filename with guaranteed extension — strip any prior extension first
     final savedPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save as ${format.toUpperCase()}',
+      dialogTitle: 'Export ${format.toUpperCase()} file — choose folder',
       fileName: export.fileName,
     );
 
@@ -182,7 +205,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       // User cancelled the dialog — make that explicit
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Save cancelled.'),
+          content: Text('Export cancelled.'),
           backgroundColor: Colors.black54,
           duration: Duration(seconds: 2),
         ),
@@ -321,7 +344,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           sourcePath: _currentSourcePath,
           sessionId: _currentSessionId,
           historyIndex: _historyIndex,
-          fontSize: settings.fontSize,
+          fontSize: ref
+            .read(scriptProvider.notifier)
+            .effectiveFontSize(settings.fontSize),
           fontFamily: settings.fontFamily,
           lineSpacing: settings.lineSpacing,
           letterSpacing: settings.letterSpacing,
@@ -342,7 +367,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
           sessionId: _currentSessionId,
           historyIndex: _historyIndex,
           historyJson: historyJson,
-          fontSize: settings.fontSize,
+          fontSize: ref
+            .read(scriptProvider.notifier)
+            .effectiveFontSize(settings.fontSize),
           fontFamily: settings.fontFamily,
           lineSpacing: settings.lineSpacing,
           letterSpacing: settings.letterSpacing,
@@ -451,7 +478,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             sessionId: _currentSessionId,
             historyIndex: _historyIndex,
             historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
-            fontSize: settings.fontSize,
+            fontSize: ref
+            .read(scriptProvider.notifier)
+            .effectiveFontSize(settings.fontSize),
             fontFamily: settings.fontFamily,
             lineSpacing: settings.lineSpacing,
             letterSpacing: settings.letterSpacing,
@@ -481,6 +510,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         ),
       );
       if (mounted) {
+        _syncEditorControllersFromPresentedScript();
         await _loadBookmarksForCurrentScript(force: true);
         await _reconcileEditorBookmarkSignsFromMetadata(recordHistory: false);
         if (returnWordIndex != null) {
@@ -550,7 +580,9 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             sessionId: _currentSessionId,
             historyIndex: _historyIndex,
             historyJson: jsonEncode(_history.map((e) => e.toJson()).toList()),
-            fontSize: settings.fontSize,
+            fontSize: ref
+            .read(scriptProvider.notifier)
+            .effectiveFontSize(settings.fontSize),
             fontFamily: settings.fontFamily,
             lineSpacing: settings.lineSpacing,
             letterSpacing: settings.letterSpacing,
@@ -578,6 +610,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
       ),
     );
     if (!mounted) return;
+    _syncEditorControllersFromPresentedScript();
     if (returnWordIndex != null) {
       _focusEditorWordIndex(returnWordIndex);
     } else {

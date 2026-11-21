@@ -104,6 +104,7 @@ String _normalizeRecentGalleryTitle(String? value) {
 }
 
 class _ScriptListItem extends ConsumerWidget {
+  static const int _maxPreviewCacheEntries = 100;
   static final Map<String, Future<String>> _previewCache = {};
 
   final String title;
@@ -143,8 +144,8 @@ class _ScriptListItem extends ConsumerWidget {
       fullText.hashCode.toString(),
       snippet.hashCode.toString(),
     ].join('|');
-    final previewFuture =
-        _previewCache.putIfAbsent(previewKey, _loadPreviewText);
+    final store = ref.read(scriptLibraryStoreProvider);
+    final previewFuture = _cachedPreviewFuture(previewKey, store);
 
     return Material(
       color: Colors.transparent,
@@ -196,7 +197,8 @@ class _ScriptListItem extends ConsumerWidget {
                               future: previewFuture,
                               builder: (context, snapshot) {
                                 return Text(
-                                  snapshot.data ?? 'Loading preview...',
+                                  snapshot.hasError ? 'Stored copy unavailable'
+                                      : snapshot.data ?? 'Loading preview...',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -315,22 +317,25 @@ class _ScriptListItem extends ConsumerWidget {
     try {
       final recentScripts = ref.read(settingsProvider).recentScripts;
       final targetMeta = _findRecentMetadata(recentScripts);
+      if (targetMeta == null && secureRecordId?.isNotEmpty == true) {
+        throw StateError('Stored script metadata is unavailable.');
+      }
 
       var resolvedText = fullText;
       String? resolvedHistoryJson;
       if (targetMeta != null) {
         final meta = jsonDecode(targetMeta) as Map<String, dynamic>;
         decodedMeta = meta;
-        final secureData = await SecureScriptStore().readFromMetadata(meta);
-        if (secureData != null) {
-          resolvedText = secureData.text;
-          resolvedHistoryJson = secureData.historyJson;
-        }
+        final secureData = await settingsNotifier.readLibraryScript(meta);
+        if (!context.mounted) return;
+        resolvedText = secureData.text;
+        resolvedHistoryJson = secureData.historyJson;
         if (meta['style'] != null) {
           await settingsNotifier.applySessionStyles(meta['style']);
         }
       }
 
+      if (!context.mounted) return;
       scriptNotifier.loadText(
         resolvedText,
         title: title,
@@ -370,14 +375,14 @@ class _ScriptListItem extends ConsumerWidget {
         },
       );
       if (kDebugMode) debugPrint('Session Recovery Error: $e');
-      scriptNotifier.loadText(
-        fullText,
-        title: title,
-        sourceType: type,
-        sourcePath: decodedMeta?['sourcePath'] as String?,
-        sessionId: sessionId,
-        tokenize: false,
-      );
+      // An unreadable encrypted record is not an empty script. Never turn a
+      // failed reopen into a persisted empty edit over the user's original.
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(
+          'Could not open the stored script. Nothing was replaced. '
+          'Check access to your app data. Your source file is unchanged.')));
+      }
+      return;
     }
 
     if (context.mounted) {
@@ -403,12 +408,36 @@ class _ScriptListItem extends ConsumerWidget {
     return null;
   }
 
-  Future<String> _loadPreviewText() async {
+  Future<String> _cachedPreviewFuture(
+    String previewKey,
+    SecureScriptStore store,
+  ) {
+    final existing = _previewCache[previewKey];
+    if (existing != null) return existing;
+    while (_previewCache.length >= _maxPreviewCacheEntries) {
+      _previewCache.remove(_previewCache.keys.first);
+    }
+    final future = _loadPreviewText(store).then((value) {
+      if (value == 'Stored copy unavailable') {
+        _previewCache.remove(previewKey);
+      }
+      return value;
+    }).catchError((Object error, StackTrace stack) {
+      _previewCache.remove(previewKey);
+      Error.throwWithStackTrace(error, stack);
+    });
+    _previewCache[previewKey] = future;
+    return future;
+  }
+
+  Future<String> _loadPreviewText(SecureScriptStore store) async {
     String text = fullText;
     if (secureRecordId != null && secureRecordId!.isNotEmpty) {
-      final data = await SecureScriptStore().read(secureRecordId);
-      text = data?.text ?? '';
+      final data = await store.read(secureRecordId);
+      if (data == null) return 'Stored copy unavailable';
+      text = data.text;
     }
+    if (text.isEmpty) return 'Empty script — ready to edit';
     return StylingService.recentScriptPreviewText(
       fullText: text,
       snippet: null,

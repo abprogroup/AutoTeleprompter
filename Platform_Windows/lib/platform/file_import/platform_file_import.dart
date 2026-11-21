@@ -16,14 +16,15 @@ class PlatformFileImport {
   const PlatformFileImport._();
 
   /// File extensions the app can import on the current platform.
+  /// Only formats with real import parsers are offered (PDF/ODT are export-only).
   static List<String> get supportedExtensions => [
-    'rtf', 'pdf', 'docx', 'doc', 'odt', 'txt', 'md', 'log', 'text',
+    'rtf', 'docx', 'doc', 'txt', 'md', 'log', 'text',
     if (Platform.isIOS || Platform.isMacOS) 'pages',
   ];
 
   /// Human-readable formats string shown in the "not supported" error dialog.
   static String get formatsLabel {
-    const base = 'DOCX · DOC · RTF · PDF · TXT · ODT · MD';
+    const base = 'DOCX · DOC · RTF · TXT · MD';
     return (Platform.isIOS || Platform.isMacOS) ? '$base · PAGES' : base;
   }
 }

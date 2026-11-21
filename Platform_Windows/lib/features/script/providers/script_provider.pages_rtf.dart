@@ -118,6 +118,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
     double? currentFontSize;
     String? currentFontFamily;
     String? paragraphAlign;
+    int ucCount = 1;
     // RTF groups inherit the current formatting and restore it on close.
     // An underline inside {\ul ...} must not reach the next run/paragraph.
     final groupStyles = <({
@@ -129,6 +130,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
       double? fontSize,
       String? fontFamily,
       String? align,
+      int ucCount,
     })>[];
 
     // Collect styled runs
@@ -184,6 +186,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
           fontSize: currentFontSize,
           fontFamily: currentFontFamily,
           align: paragraphAlign,
+          ucCount: ucCount,
         ));
         depth++;
         if (skipDepths.isEmpty) {
@@ -222,6 +225,7 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
           currentFontSize = parent.fontSize;
           currentFontFamily = parent.fontFamily;
           paragraphAlign = parent.align;
+          ucCount = parent.ucCount;
           depth--;
         }
         i++;
@@ -298,12 +302,31 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
             final code = num < 0 ? num + 65536 : num;
             if (code > 31) currentText.writeCharCode(code);
           }
-          // Skip replacement char
-          if (i < raw.length &&
-              raw[i] != '\\' &&
-              raw[i] != '{' &&
-              raw[i] != '}') {
+          // Consume optional single space delimiting the \uNNNN control word.
+          if (i < raw.length && raw[i] == ' ') i++;
+          // Skip ucCount ANSI replacement tokens (e.g. '?', \'f9, \\, \{, \}).
+          var skipped = 0;
+          while (skipped < ucCount && i < raw.length) {
+            final rep = raw[i];
+            if (rep == '{' || rep == '}') break;
+            if (rep == '\\') {
+              if (i + 3 < raw.length && raw[i + 1] == '\'') {
+                i += 4;
+                skipped++;
+                continue;
+              }
+              if (i + 1 < raw.length &&
+                  (raw[i + 1] == '\\' ||
+                      raw[i + 1] == '{' ||
+                      raw[i + 1] == '}')) {
+                i += 2;
+                skipped++;
+                continue;
+              }
+              break;
+            }
             i++;
+            skipped++;
           }
           continue;
         }
@@ -435,6 +458,9 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
             case 'pard':
               flushRun();
               paragraphAlign = null;
+              break;
+            case 'uc':
+              ucCount = (int.tryParse(param) ?? 1).clamp(0, 16);
               break;
           }
           continue;

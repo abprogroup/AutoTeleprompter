@@ -26,6 +26,7 @@ class FlutterWindow : public Win32Window {
 
  private:
   bool SetPresenterFullscreen(bool enabled);
+  void SnapFullscreenToCurrentMonitor();
   void RegisterPresenterWindowChannel();
 
   // The project to run.

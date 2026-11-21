@@ -12,7 +12,15 @@ class RtfService {
   RtfService._();
 
   /// Converts internal-markup text to RTF bytes.
-  static List<int> generate(String text, {bool? defaultRtl}) {
+  static List<int> generate(
+    String text, {
+    bool? defaultRtl,
+    double? defaultFontSize,
+  }) {
+    final resolvedDefaultFontSize =
+        (defaultFontSize != null && defaultFontSize > 0)
+            ? defaultFontSize
+            : 18.0;
     final paragraphs = MarkupExportService.parse(text, defaultRtl: defaultRtl);
     final colorTable = <String>[];
     final fontTable = <String>['Arial'];
@@ -77,6 +85,7 @@ class RtfService {
           colorTable,
           fontTable,
           directionalRun.isRtl,
+          resolvedDefaultFontSize,
           buf,
         );
       }
@@ -93,6 +102,7 @@ class RtfService {
     List<String> colorTable,
     List<String> fontTable,
     bool rtl,
+    double defaultFontSize,
     StringBuffer buf,
   ) {
     if (text.isEmpty) return;
@@ -106,7 +116,7 @@ class RtfService {
     if (run.isBold) controls.add(r'\b');
     if (run.isItalic) controls.add(r'\i');
     if (run.isUnderline) controls.add(r'\ul');
-    controls.add('\\fs${((run.fontSize ?? 18) * 2).round()}');
+    controls.add('\\fs${((run.fontSize ?? defaultFontSize) * 2).round()}');
     if (run.color != null && !_isDefaultDisplayWhite(run.color)) {
       final colorIndex = colorTable.indexOf(run.color!) + 1;
       if (colorIndex > 0) controls.add('\\cf$colorIndex');

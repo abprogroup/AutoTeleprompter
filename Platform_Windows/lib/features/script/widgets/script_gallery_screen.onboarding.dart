@@ -8,9 +8,8 @@ Welcome to AutoTeleprompter
 
 This is a temporary practice script for your first walkthrough.
 
-Try editing this paragraph, then use Save to give the script a real name. Once
-you save it, AutoTeleprompter adds it to Recents so it is ready for your next
-session.
+Try editing this paragraph, then use Export file to choose a name, format,
+and folder. The script is also kept in the app library for your next session.
 
 When you are ready, press Present and test your reading settings.
 ''';
@@ -37,21 +36,21 @@ const List<_WindowsOnboardingStep> _windowsOnboardingSteps = [
     icon: Icons.add_rounded,
     title: 'Start or load a script',
     body:
-        'Use New Script for a fresh production, or Load Script to import a document. Recents keeps saved work close for quick access.',
+        'Use New Script to name a blank script, Open script file for one document, or Import scripts from folder to copy selected documents. The app library keeps your scripts together.',
   ),
   _WindowsOnboardingStep(
     id: 'lobby.recents',
     icon: Icons.history_rounded,
     title: 'Saved scripts return here',
     body:
-        'After a script is saved, it appears in Recent Activity for fast access. The temporary walkthrough sample will stay out of this list until you save it.',
+        'Named scripts appear in the app library, even before you type. The temporary walkthrough sample is separate; use Export file when ready to keep it.',
   ),
   _WindowsOnboardingStep(
     id: 'editor.temporary_sample',
     icon: Icons.description_outlined,
     title: 'Practice with a temporary script',
     body:
-        'Open the sample script, edit it, rename it, and save it. It stays out of Recents until you save, so the walkthrough stays clean.',
+        'Open the temporary sample script, edit it, and use Export file to choose a file name, format, and folder.',
     showsSampleAction: true,
   ),
 ];

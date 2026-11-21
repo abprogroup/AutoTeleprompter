@@ -68,7 +68,16 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_FONTCHANGE:
-      flutter_controller_->engine()->ReloadSystemFonts();
+      if (flutter_controller_ && flutter_controller_->engine()) {
+        flutter_controller_->engine()->ReloadSystemFonts();
+      }
+      break;
+    case WM_DPICHANGED:
+    case WM_DISPLAYCHANGE:
+      if (presenter_fullscreen_) {
+        SnapFullscreenToCurrentMonitor();
+        return 0;
+      }
       break;
   }
 
@@ -139,7 +148,9 @@ bool FlutterWindow::SetPresenterFullscreen(bool enabled) {
 
     SetWindowLongPtr(hwnd, GWL_STYLE, fullscreen_style);
     SetWindowLongPtr(hwnd, GWL_EXSTYLE, fullscreen_ex_style);
-    SetWindowPos(hwnd, HWND_TOPMOST, monitor_info.rcMonitor.left,
+    // Borderless fullscreen using HWND_TOP covers the taskbar automatically
+    // without trapping Alt+Tab or system dialogs behind HWND_TOPMOST.
+    SetWindowPos(hwnd, HWND_TOP, monitor_info.rcMonitor.left,
                  monitor_info.rcMonitor.top,
                  monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
                  monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
@@ -148,13 +159,33 @@ bool FlutterWindow::SetPresenterFullscreen(bool enabled) {
     return true;
   }
 
-  SetWindowLongPtr(hwnd, GWL_STYLE, windowed_style_);
-  SetWindowLongPtr(hwnd, GWL_EXSTYLE, windowed_ex_style_);
-  windowed_placement_.length = sizeof(WINDOWPLACEMENT);
-  SetWindowPlacement(hwnd, &windowed_placement_);
-  SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-               SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER |
-                   SWP_FRAMECHANGED);
+  if (windowed_style_ != 0) {
+    SetWindowLongPtr(hwnd, GWL_STYLE, windowed_style_);
+    SetWindowLongPtr(hwnd, GWL_EXSTYLE, windowed_ex_style_);
+    windowed_placement_.length = sizeof(WINDOWPLACEMENT);
+    SetWindowPlacement(hwnd, &windowed_placement_);
+    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER |
+                     SWP_FRAMECHANGED);
+  }
   presenter_fullscreen_ = false;
   return false;
+}
+
+void FlutterWindow::SnapFullscreenToCurrentMonitor() {
+  HWND hwnd = GetHandle();
+  if (!hwnd || !presenter_fullscreen_) {
+    return;
+  }
+  HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO monitor_info = {};
+  monitor_info.cbSize = sizeof(MONITORINFO);
+  if (!GetMonitorInfo(monitor, &monitor_info)) {
+    return;
+  }
+  SetWindowPos(hwnd, HWND_TOP, monitor_info.rcMonitor.left,
+               monitor_info.rcMonitor.top,
+               monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
+               monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+               SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
 }

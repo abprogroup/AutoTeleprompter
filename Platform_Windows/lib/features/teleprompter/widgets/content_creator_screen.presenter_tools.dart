@@ -399,11 +399,18 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     final settings = ref.read(settingsProvider);
     final effectiveFontSize =
         ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
-    final size = (effectiveFontSize + delta).clamp(14.0, 120.0).toDouble();
+    final size = (effectiveFontSize + delta)
+        .clamp(
+          ScriptTypographyService.minBaseFontSize,
+          ScriptTypographyService.maxBaseFontSize,
+        )
+        .toDouble();
+    ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
     unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(size));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _scrollToContentWordIndex(_activeContentIndex(), immediate: true);
+        _syncContentVisibleWordWindow();
       }
     });
   }

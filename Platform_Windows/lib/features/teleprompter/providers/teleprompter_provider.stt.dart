@@ -16,6 +16,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
       browserStreamId: result.isCumulative ? result.streamId : null,
     );
     _browserTranscriptBoundary.observe(result);
+    if (_consumeSpeechDuringManualScroll(result)) return;
     // Whisper emits revisable cumulative partials. Running command matching on
     // those partials can repeat an old command or execute a hallucination.
     // Legacy browser/native shards retain the existing explicit command path.
@@ -789,6 +790,7 @@ extension TeleprompterNotifierStt on TeleprompterNotifier {
   }
 
   bool _isVisibleSttTarget(int target) =>
+      !_manualScrollInProgress &&
       TeleprompterNotifier.isTrustedVisibleSkipTarget(
         alignedIndex: target,
         visibleWordStart: _visibleWordStart,

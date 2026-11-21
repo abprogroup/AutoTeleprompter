@@ -14,6 +14,7 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
   SttThresholdFamily thresholdFamily = SttThresholdFamily.none,
   bool scanFullWindow = false,
   bool scanAllTranscriptPhrases = false,
+  bool allowOneSpokenSubstitution = false,
   double? overrideWordThreshold,
   double minPhraseScore = WordAligner._matchThreshold,
   String debugPrefix = 'NEAR_PHRASE_PRIORITY',
@@ -36,6 +37,7 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
       scriptGapThreshold: scriptGapThreshold,
       thresholdFamily: thresholdFamily,
       scanFullWindow: scanFullWindow,
+      allowOneSpokenSubstitution: allowOneSpokenSubstitution,
       overrideWordThreshold: overrideWordThreshold,
       minPhraseScore: minPhraseScore,
       debugPrefix: debugPrefix,
@@ -71,6 +73,7 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
     int phraseBestEnd = -1;
     int phraseBestTranscriptStart = -1;
     double phraseBestGapCost = 0.0;
+    List<String> phraseBestEvidence = const [];
 
     for (final transcriptStart in phraseStarts) {
       final spokenPhrase = transcriptWords.sublist(
@@ -87,15 +90,23 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
       int bestStart = -1;
       int bestEnd = -1;
       double bestGapCost = 0.0;
+      List<String> bestEvidence = const [];
+      final allowOneSpokenSub =
+          allowOneSpokenSubstitution &&
+          thresholdFamily == SttThresholdFamily.visibleSkip &&
+          scriptGapThreshold != null &&
+          spokenPhrase.length >= 4;
 
       for (int i = searchStart; i < phraseWindowEnd; i++) {
         if (script[i].isNewline || _isUnspeakable(script[i])) continue;
 
         int si = i;
         int matched = 0;
+        int substitutions = 0;
         double score = 0.0;
         double gapCost = 0.0;
         int endIdx = i;
+        final matchedSpoken = <String>[];
 
         for (int j = 0; j < spokenPhrase.length && si < phraseWindowEnd; si++) {
           if (script[si].isNewline || _isUnspeakable(script[si])) {
@@ -115,6 +126,39 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
                   : WordAligner._matchThreshold);
           if (sim < threshold) {
             if (script[si].isOptionalCue) continue;
+            // Allow at most one interior spoken substitution (e.g. a single
+            // STT mishearing like "פסטיבל" for "וציוונו") when the very next
+            // spoken word matches the next speakable script word. The
+            // substituted word contributes 0.0 evidence.
+            if (allowOneSpokenSub &&
+                substitutions == 0 &&
+                matched >= 1 &&
+                j + 1 < spokenPhrase.length &&
+                !RegExp(r'\d').hasMatch(spokenPhrase[j]) &&
+                !RegExp(r'\d').hasMatch(scriptWord)) {
+              final nextSi = WordAligner.nextRequiredSpeakableIndex(
+                script,
+                si + 1,
+              );
+              if (nextSi < phraseWindowEnd) {
+                final nextWord = script[nextSi];
+                final nextThreshold =
+                    overrideWordThreshold ??
+                    (nextWord.isRtl
+                        ? WordAligner._hebrewMatchThreshold
+                        : WordAligner._matchThreshold);
+                final nextSim = _wordSimilarity(
+                  spokenPhrase[j + 1],
+                  nextWord.normalized,
+                  nextWord.isRtl,
+                );
+                if (nextSim >= nextThreshold) {
+                  substitutions++;
+                  j++;
+                  continue;
+                }
+              }
+            }
             if (matched == 0 || scriptGapThreshold == null) break;
             final nextGapCost =
                 gapCost + scriptGapThreshold.evidenceCost(scriptWord);
@@ -126,10 +170,16 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
           matched++;
           score += sim;
           endIdx = si;
+          matchedSpoken.add(spokenPhrase[j]);
           j++;
         }
 
-        if (matched != spokenPhrase.length) continue;
+        if (matched + substitutions != spokenPhrase.length) continue;
+        if (substitutions > 0 &&
+            evidenceThreshold != null &&
+            !evidenceThreshold.passes(matchedSpoken)) {
+          continue;
+        }
 
         final distance = i - searchStart;
         final adjustedScore =
@@ -143,6 +193,7 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
           bestStart = i;
           bestEnd = endIdx;
           bestGapCost = gapCost;
+          bestEvidence = List<String>.unmodifiable(matchedSpoken);
         }
       }
 
@@ -158,6 +209,7 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
         phraseBestEnd = bestEnd;
         phraseBestTranscriptStart = transcriptStart;
         phraseBestGapCost = bestGapCost;
+        phraseBestEvidence = bestEvidence;
       }
     }
 
@@ -172,12 +224,7 @@ AlignmentResult? _nearbyPhrasePriorityMatch({
             : SttAlignmentKind.localRecoveryPhrase,
         thresholdFamily,
         [for (var i = phraseBestStart; i <= phraseBestEnd; i++) i],
-        transcriptWords
-            .sublist(
-              phraseBestTranscriptStart,
-              phraseBestTranscriptStart + phraseLen,
-            )
-            .toList(growable: false),
+        phraseBestEvidence,
         phraseBestStart,
         phraseBestEnd,
       );
@@ -262,3 +309,123 @@ AlignmentResult? _contiguousNextPhraseMatch({
 
   return null;
 }
+
+/// Evaluates visible-skip phrase matching directly on the visible window
+/// without letting a weak local next-word similarity shadow it.
+AlignmentResult? visibleSkipPreviewMatch({
+  required List<ScriptWord> script,
+  required String transcript,
+  required int lastConfirmedIndex,
+  required int? visibleSkipStartIndex,
+  required int maxSkipTargetIndex,
+  required SttRecognitionPolicy policy,
+  required bool strictBulletMode,
+}) {
+  if (script.isEmpty || transcript.trim().isEmpty) return null;
+  final policyBulletMode = policy.bulletMode || strictBulletMode;
+  final numberScanStart =
+      (lastConfirmedIndex + 1).clamp(0, script.length).toInt();
+  final numberScanEnd =
+      (maxSkipTargetIndex + 1).clamp(numberScanStart, script.length).toInt();
+  final relaxedPolicy = SttRecognitionPolicy(
+    bulletMode: policy.bulletMode,
+    visibleSkipEnabled: true,
+    hardVisibleSkipEnabled: false,
+    startAdvance: policy.startAdvance,
+    safetyRecovery: policy.safetyRecovery,
+    bulletAdvance: policy.bulletAdvance,
+    visibleSkip: SttEvidenceThreshold(
+      2,
+      1,
+      policy.visibleSkip.bigWordMinLetters,
+    ),
+  );
+  final numberOutcome = _numberAwareMatch(
+    script: script,
+    transcript: transcript,
+    lastConfirmedIndex: lastConfirmedIndex,
+    scanStart: numberScanStart,
+    scanEnd: numberScanEnd,
+    strictBulletMode: policyBulletMode,
+    policy: relaxedPolicy,
+    visibleSkipEnabled: true,
+    visibleSkipStartIndex: visibleSkipStartIndex,
+  );
+  if (numberOutcome?.result != null) {
+    final res = numberOutcome!.result!;
+    return (res.thresholdFamily == SttThresholdFamily.visibleSkip ||
+            res.kind == SttAlignmentKind.visiblePhrase ||
+            res.kind == SttAlignmentKind.sentenceRecovery)
+        ? res
+        : null;
+  }
+  if (numberOutcome?.blocksGenericFallback ?? false) return null;
+
+  final rawWords =
+      transcript
+          .split(RegExp(r'\s+'))
+          .map((w) => w.trim().normalizeForMatching())
+          .where((w) => w.isNotEmpty)
+          .toList();
+  final transcriptWords = _collapseAbbreviations(rawWords);
+  if (transcriptWords.isEmpty) return null;
+  final searchStart = WordAligner.nextSpeakableIndex(
+    script,
+    lastConfirmedIndex + 1,
+  );
+  if (searchStart >= script.length) return null;
+  final windowEnd =
+      (maxSkipTargetIndex + 1).clamp(searchStart + 1, script.length).toInt();
+  final visibleScanStart =
+      (visibleSkipStartIndex ?? searchStart).clamp(searchStart, windowEnd).toInt();
+  return _nearbyPhrasePriorityMatch(
+    script: script,
+    transcriptWords: transcriptWords,
+    searchStart: visibleScanStart,
+    windowEnd: windowEnd,
+    lastConfirmedIndex: lastConfirmedIndex,
+    scanFullWindow: true,
+    scanAllTranscriptPhrases: true,
+    minPhraseWords: relaxedPolicy.visibleSkip.bigWords,
+    evidenceThreshold: relaxedPolicy.visibleSkip,
+    scriptGapThreshold: policy.safetyRecovery,
+    thresholdFamily: SttThresholdFamily.visibleSkip,
+    overrideWordThreshold:
+        policyBulletMode ? WordAligner._strictPhraseThreshold : null,
+    minPhraseScore:
+        policyBulletMode
+            ? WordAligner._strictPhraseThreshold
+            : WordAligner._matchThreshold,
+    debugPrefix: 'NEAR_PHRASE_PRIORITY',
+  );
+}
+
+AlignmentResult? _visibleSkipOneSubFallback({
+  required List<ScriptWord> script,
+  required List<String> transcriptWords,
+  required int visibleScanStart,
+  required int windowEnd,
+  required int lastConfirmedIndex,
+  required SttRecognitionPolicy effectivePolicy,
+  required bool policyBulletMode,
+}) => _nearbyPhrasePriorityMatch(
+  script: script,
+  transcriptWords: transcriptWords,
+  searchStart: visibleScanStart,
+  windowEnd: windowEnd,
+  lastConfirmedIndex: lastConfirmedIndex,
+  scanFullWindow: true,
+  scanAllTranscriptPhrases: true,
+  allowOneSpokenSubstitution: true,
+  minPhraseWords: effectivePolicy.visibleSkip.bigWords,
+  evidenceThreshold: effectivePolicy.visibleSkip,
+  scriptGapThreshold: effectivePolicy.safetyRecovery,
+  thresholdFamily: SttThresholdFamily.visibleSkip,
+  overrideWordThreshold:
+      policyBulletMode ? WordAligner._strictPhraseThreshold : null,
+  minPhraseScore:
+      policyBulletMode
+          ? WordAligner._strictPhraseThreshold
+          : WordAligner._matchThreshold,
+  debugPrefix: 'NEAR_PHRASE_PRIORITY',
+);

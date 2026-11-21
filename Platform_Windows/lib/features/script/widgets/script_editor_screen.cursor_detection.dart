@@ -171,9 +171,9 @@ extension _ScriptEditorCursorDetectionParts on _ScriptEditorScreenState {
       final exitIdx = text.indexOf(closeTag, tagIdx);
       if (exitIdx != -1 && exitIdx < p) return defaultValue;
       if (exitIdx == -1) return defaultValue;
-      return int.tryParse(
+      return double.tryParse(
             text.substring(tagIdx + openTag.length, closeBracket),
-          ) ??
+          )?.round() ??
           defaultValue;
     }
 

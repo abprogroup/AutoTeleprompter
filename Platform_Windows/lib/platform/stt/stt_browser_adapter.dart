@@ -47,6 +47,11 @@ class SttBrowserAdapter extends AbstractSttService {
   String _selectedAudioInputDeviceLabel = 'System default microphone';
   List<SttAudioInputDevice> _audioInputDevices = const [];
   int _sessionSequence = 0;
+  // Opaque transcript identity survives page reloads and adapter stop/start.
+  // The page's raw recognition generation starts at one on every load.
+  int _transcriptStreamSequence = 0;
+  int _configurationRevision = 0;
+  bool _configurationRevisionRequired = false;
   String _sessionToken = '';
   int _port = _defaultPort;
   final Set<SttBrowserLifecyclePhase> _reportedLifecyclePhases = {};
@@ -63,6 +68,8 @@ class SttBrowserAdapter extends AbstractSttService {
     _isActive = true;
     _everListened = false;
     _currentLocale = (localeId ?? 'en-US').replaceAll('_', '-');
+    _configurationRevision++;
+    _configurationRevisionRequired = false;
     _sessionSequence++;
     final sessionSequence = _sessionSequence;
     _sessionToken = _createSessionToken();
@@ -111,6 +118,9 @@ class SttBrowserAdapter extends AbstractSttService {
         }
         final previousClient = _wsClient;
         _wsClient = channel;
+        int? browserStreamGeneration;
+        int? transcriptStreamId;
+        var configurationTagged = false;
         if (previousClient != null && previousClient != channel) {
           try {
             previousClient.sink.close();
@@ -123,6 +133,9 @@ class SttBrowserAdapter extends AbstractSttService {
           }
         }
         onDiagnostic?.call('[Browser STT] browser host connected');
+        // A page fetched before a locale change may connect after it. Send the
+        // latest configuration, not merely the one embedded in that page.
+        _sendLocaleConfiguration();
 
         channel.stream.listen(
           (message) {
@@ -143,6 +156,20 @@ class SttBrowserAdapter extends AbstractSttService {
                 return;
               }
               if (!_isActive) return;
+              if (_configurationOwnsMessage(data)) {
+                final revision = data['configurationRevision'];
+                if (data.containsKey('configurationRevision')) {
+                  if (revision is! int || revision != _configurationRevision) {
+                    return;
+                  }
+                  configurationTagged = true;
+                } else if (_configurationRevisionRequired ||
+                    configurationTagged) {
+                  // Older pages are compatible only before a configuration
+                  // transition. They cannot prove which locale produced text.
+                  return;
+                }
+              }
               final lifecycle = SttBrowserLifecycleEvent.fromBrowserMessage(
                 data,
               );
@@ -188,11 +215,30 @@ class SttBrowserAdapter extends AbstractSttService {
                   break;
                 case 'result':
                   final words = data['words'] as String? ?? '';
+                  if (words.trim().isEmpty) break;
                   final isFinal = data['isFinal'] as bool? ?? false;
-                  final streamId = (data['streamId'] as num?)?.toInt();
-                  final isCumulative =
-                      (data['isCumulative'] as bool? ?? false) &&
-                      streamId != null;
+                  final browserGeneration = switch (data['streamId']) {
+                    int value when value > 0 => value,
+                    _ => null,
+                  };
+                  final isCumulative = data['isCumulative'] as bool? ?? false;
+                  // A malformed cumulative identity must not masquerade as an
+                  // independent legacy phrase and bypass a consumed boundary.
+                  if (isCumulative && browserGeneration == null) break;
+                  int? streamId;
+                  if (isCumulative && browserGeneration != null) {
+                    // Socket ownership was checked above. Also reject a late
+                    // retired recognizer on the still-current socket.
+                    if (browserStreamGeneration != null &&
+                        browserGeneration < browserStreamGeneration!) {
+                      break;
+                    }
+                    if (browserGeneration != browserStreamGeneration) {
+                      browserStreamGeneration = browserGeneration;
+                      transcriptStreamId = ++_transcriptStreamSequence;
+                    }
+                    streamId = transcriptStreamId;
+                  }
                   final alternatives =
                       (data['alternatives'] as List?)
                           ?.whereType<String>()
@@ -206,6 +252,7 @@ class SttBrowserAdapter extends AbstractSttService {
                           .toList(growable: false) ??
                       const <String>[];
                   if (words.trim().isNotEmpty) {
+                    final resultRevision = _configurationRevision;
                     onResult?.call(
                       SpeechResult(
                         words,
@@ -225,6 +272,9 @@ class SttBrowserAdapter extends AbstractSttService {
                             0,
                       ),
                     );
+                    // Consuming the boundary word may synchronously switch
+                    // locale. That old result cannot heal the new recognizer.
+                    if (resultRevision != _configurationRevision) break;
                     onRuntimeHealth?.call(
                       SttRuntimeHealth(
                         type: 'productiveResult',
@@ -250,6 +300,9 @@ class SttBrowserAdapter extends AbstractSttService {
                   );
                   break;
                 case 'lifecycle':
+                  break;
+                case 'restartScheduled':
+                  _reportScheduledRestart(data);
                   break;
                 case 'watchdogRestart':
                   final reason = data['reason'] as String? ?? 'stale';
@@ -365,11 +418,21 @@ class SttBrowserAdapter extends AbstractSttService {
     final normalized = locale.replaceAll('_', '-');
     if (normalized == _currentLocale) return;
     _currentLocale = normalized;
+    _configurationRevision++;
+    _configurationRevisionRequired = true;
     _everListened = false;
     onDiagnostic?.call('[Browser STT] Switching locale -> $normalized');
+    _sendLocaleConfiguration();
+  }
+
+  void _sendLocaleConfiguration() {
     try {
       _wsClient?.sink.add(
-        jsonEncode({'type': 'setLocale', 'locale': normalized}),
+        jsonEncode({
+          'type': 'setLocale',
+          'locale': _currentLocale,
+          'configurationRevision': _configurationRevision,
+        }),
       );
     } catch (error) {
       _reportAdapterFailure(
@@ -378,6 +441,22 @@ class SttBrowserAdapter extends AbstractSttService {
         'failed to send locale change',
       );
     }
+  }
+
+  bool _configurationOwnsMessage(Map<String, dynamic> data) {
+    const boundTypes = {
+      'result',
+      'listening',
+      'recognitionInput',
+      'restartScheduled',
+      'watchdogRestart',
+      'heartbeat',
+      'error',
+    };
+    if (boundTypes.contains(data['type'])) return true;
+    return data['type'] == 'lifecycle' &&
+        data['phase'] != 'socketConnected' &&
+        data['phase'] != 'microphoneReady';
   }
 
   @override
@@ -497,6 +576,33 @@ class SttBrowserAdapter extends AbstractSttService {
     );
   }
 
+  void _reportScheduledRestart(Map<String, dynamic> data) {
+    const allowedReasons = {
+      'locale-switch',
+      'input-switch',
+      'network-online',
+      'network-error',
+      'recognition-ended',
+      'start-failed',
+      'watchdog-missing-rec',
+      'watchdog-start-timeout',
+      'watchdog-lease-renewal',
+    };
+    final reason =
+        allowedReasons.contains(data['reason'])
+            ? data['reason'] as String
+            : 'unknown';
+    int bounded(Object? value, int maximum) =>
+        value is num && value.isFinite ? value.toInt().clamp(0, maximum) : 0;
+    final delay = bounded(data['delayMs'], 8000);
+    final generation = bounded(data['generation'], 1000000000);
+    final emptyEnds = bounded(data['emptyEnds'], 32);
+    onDiagnostic?.call(
+      '[Browser STT] Restart scheduled reason=$reason delayMs=$delay '
+      'generation=$generation emptyEnds=$emptyEnds',
+    );
+  }
+
   bool _matchesCurrentBrowserSession({
     required int sessionSequence,
     required String sessionToken,
@@ -525,7 +631,9 @@ class SttBrowserAdapter extends AbstractSttService {
     if (event.phase == SttBrowserLifecyclePhase.recognizerListening &&
         !_everListened) {
       _everListened = true;
+      final listeningRevision = _configurationRevision;
       onStatusChange?.call(SpeechStatus.listening);
+      if (listeningRevision != _configurationRevision) return;
     }
     final emitted = _emitBrowserLifecycle(event);
     if (emitted && event.phase == SttBrowserLifecyclePhase.permissionDenied) {

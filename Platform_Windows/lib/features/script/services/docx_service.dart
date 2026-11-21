@@ -70,7 +70,15 @@ class DocxService {
       '</Properties>';
 
   /// Converts internal markup to styled DOCX bytes.
-  static List<int> generate(String text, {bool? defaultRtl}) {
+  static List<int> generate(
+    String text, {
+    bool? defaultRtl,
+    double? defaultFontSize,
+  }) {
+    final resolvedDefaultFontSize =
+        (defaultFontSize != null && defaultFontSize > 0)
+            ? defaultFontSize
+            : 18.0;
     final archive = Archive();
     final contentTypeBytes = utf8.encode(_contentTypes);
     archive.addFile(ArchiveFile(
@@ -119,6 +127,7 @@ class DocxService {
           directionalRun.text,
           buf,
           directionalRun.isRtl,
+          resolvedDefaultFontSize,
         );
       }
       buf.write('</w:p>');
@@ -140,6 +149,7 @@ class DocxService {
     String text,
     StringBuffer buf,
     bool rtl,
+    double defaultFontSize,
   ) {
     if (text.isEmpty) return;
     buf.write('<w:r>');
@@ -159,7 +169,7 @@ class DocxService {
         'w:fill="${run.backgroundColor}"/>',
       );
     }
-    final halfPoints = ((run.fontSize ?? 18) * 2).round();
+    final halfPoints = ((run.fontSize ?? defaultFontSize) * 2).round();
     buf.write('<w:sz w:val="$halfPoints"/>');
     buf.write('<w:szCs w:val="$halfPoints"/>');
     if (run.fontFamily != null) {

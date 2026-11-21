@@ -134,10 +134,34 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
+  int window_x = Scale(origin.x, scale_factor);
+  int window_y = Scale(origin.y, scale_factor);
+  int window_w = Scale(size.width, scale_factor);
+  int window_h = Scale(size.height, scale_factor);
+
+  // Clamp initial window bounds to the monitor's usable work area so 150%+
+  // DPI laptops (e.g. 1920x1080 @ 150%) do not clip the window off-screen.
+  MONITORINFO monitor_info = {};
+  monitor_info.cbSize = sizeof(MONITORINFO);
+  if (GetMonitorInfo(monitor, &monitor_info)) {
+    const RECT& work = monitor_info.rcWork;
+    const int work_w = work.right - work.left;
+    const int work_h = work.bottom - work.top;
+    if (work_w > 0 && window_w > work_w) window_w = work_w;
+    if (work_h > 0 && window_h > work_h) window_h = work_h;
+    if (window_x < work.left) window_x = work.left;
+    if (window_y < work.top) window_y = work.top;
+    if (window_x + window_w > work.right) {
+      window_x = work.right - window_w;
+    }
+    if (window_y + window_h > work.bottom) {
+      window_y = work.bottom - window_h;
+    }
+  }
+
   HWND window = CreateWindow(
       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
-      Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
+      window_x, window_y, window_w, window_h,
       nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {
@@ -208,7 +232,7 @@ Win32Window::MessageHandler(HWND hwnd,
     }
 
     case WM_ACTIVATE:
-      if (child_content_ != nullptr) {
+      if (LOWORD(wparam) != WA_INACTIVE && child_content_ != nullptr) {
         SetFocus(child_content_);
       }
       return 0;

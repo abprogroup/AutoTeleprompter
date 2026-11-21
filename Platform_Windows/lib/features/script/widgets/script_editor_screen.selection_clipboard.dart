@@ -145,8 +145,12 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
     if (c != null) {
       final sel = c.selection;
       final oldText = c.text;
-      final before = oldText.substring(0, sel.start);
-      final after = oldText.substring(sel.end);
+      final selStart =
+          (sel.isValid ? sel.start : oldText.length).clamp(0, oldText.length);
+      final selEnd =
+          (sel.isValid ? sel.end : oldText.length).clamp(selStart, oldText.length);
+      final before = oldText.substring(0, selStart);
+      final after = oldText.substring(selEnd);
 
       if (text.contains('\n')) {
         final lines = text.split('\n');
@@ -162,10 +166,14 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
 
             final targetIdx = currentIdx + lines.length - 1;
             Future.delayed(Duration.zero, () {
-              if (mounted) {
+              if (mounted &&
+                  targetIdx >= 0 &&
+                  targetIdx < _focusNodes.length &&
+                  targetIdx < _controllers.length) {
                 _focusNodes[targetIdx].requestFocus();
-                _controllers[targetIdx].selection =
-                    TextSelection.collapsed(offset: lines.last.length);
+                final targetCtrl = _controllers[targetIdx];
+                final offset = lines.last.length.clamp(0, targetCtrl.text.length);
+                targetCtrl.selection = TextSelection.collapsed(offset: offset);
               }
             });
           });
@@ -173,7 +181,7 @@ extension _ScriptEditorSelectionClipboardParts on _ScriptEditorScreenState {
       } else {
         c.value = TextEditingValue(
           text: before + text + after,
-          selection: TextSelection.collapsed(offset: sel.start + text.length),
+          selection: TextSelection.collapsed(offset: selStart + text.length),
         );
       }
       _saveHistory(description: 'Paste');

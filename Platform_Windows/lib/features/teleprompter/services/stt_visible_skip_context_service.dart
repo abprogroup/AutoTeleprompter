@@ -177,29 +177,17 @@ class SttVisibleSkipContextService {
       return fragmentedYear;
     }
 
-    final relaxed = WordAligner.align(
+    final relaxed = visibleSkipPreviewMatch(
       script: script,
       transcript: transcript,
       lastConfirmedIndex: lastConfirmedIndex,
       visibleSkipStartIndex: visibleSkipStartIndex,
       maxSkipTargetIndex: maxSkipTargetIndex,
       strictBulletMode: strictBulletMode,
-      policy: SttRecognitionPolicy(
-        bulletMode: policy.bulletMode,
-        visibleSkipEnabled: true,
-        hardVisibleSkipEnabled: false,
-        startAdvance: policy.startAdvance,
-        safetyRecovery: policy.safetyRecovery,
-        bulletAdvance: policy.bulletAdvance,
-        visibleSkip: SttEvidenceThreshold(
-          2,
-          1,
-          policy.visibleSkip.bigWordMinLetters,
-        ),
-      ),
-      readingStandby: true,
+      policy: policy,
     );
-    if (!relaxed.shouldAdvance ||
+    if (relaxed == null ||
+        !relaxed.shouldAdvance ||
         relaxed.confirmedWordIndex <= lastConfirmedIndex) {
       return fragmentedYear ??
           _preserveBeforeNumericTail(
@@ -212,11 +200,7 @@ class SttVisibleSkipContextService {
             strictBulletMode: strictBulletMode,
           );
     }
-    final preservable =
-        relaxed.thresholdFamily == SttThresholdFamily.visibleSkip ||
-        relaxed.kind == SttAlignmentKind.visiblePhrase ||
-        relaxed.kind == SttAlignmentKind.sentenceRecovery;
-    return preservable ? relaxed : fragmentedYear;
+    return relaxed;
   }
 
   /// Preserves short browser-STT shards only when every lexical token belongs

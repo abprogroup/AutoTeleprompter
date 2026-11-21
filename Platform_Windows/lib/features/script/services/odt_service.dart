@@ -7,7 +7,15 @@ import 'markup_export_service.dart';
 class OdtService {
   OdtService._();
 
-  static List<int> generate(String text, {bool? defaultRtl}) {
+  static List<int> generate(
+    String text, {
+    bool? defaultRtl,
+    double? defaultFontSize,
+  }) {
+    final resolvedDefaultFontSize =
+        (defaultFontSize != null && defaultFontSize > 0)
+            ? defaultFontSize
+            : 18.0;
     final archive = Archive();
     final mimetype = utf8.encode(
       'application/vnd.oasis.opendocument.text',
@@ -19,12 +27,22 @@ class OdtService {
       ArchiveFile('META-INF/manifest.xml', manifest.length, manifest),
     );
 
-    final content = utf8.encode(_contentXml(text, defaultRtl: defaultRtl));
+    final content = utf8.encode(
+      _contentXml(
+        text,
+        defaultRtl: defaultRtl,
+        defaultFontSize: resolvedDefaultFontSize,
+      ),
+    );
     archive.addFile(ArchiveFile('content.xml', content.length, content));
     return ZipEncoder().encode(archive)!;
   }
 
-  static String _contentXml(String text, {bool? defaultRtl}) {
+  static String _contentXml(
+    String text, {
+    bool? defaultRtl,
+    double defaultFontSize = 18.0,
+  }) {
     final styleBuffer = StringBuffer();
     final bodyBuffer = StringBuffer();
     var styleIndex = 0;
@@ -40,7 +58,12 @@ class OdtService {
         if (directionalRun.text.isEmpty) continue;
         final styleName = 'T${styleIndex++}';
         styleBuffer.write(
-          _textStyleXml(styleName, directionalRun.run, directionalRun.isRtl),
+          _textStyleXml(
+            styleName,
+            directionalRun.run,
+            directionalRun.isRtl,
+            defaultFontSize,
+          ),
         );
         bodyBuffer.write(
           '<text:span text:style-name="$styleName">'
@@ -92,7 +115,12 @@ class OdtService {
         '</style:style>';
   }
 
-  static String _textStyleXml(String name, ExportTextRun run, bool rtl) {
+  static String _textStyleXml(
+    String name,
+    ExportTextRun run,
+    bool rtl,
+    double defaultFontSize,
+  ) {
     final props = <String>[];
     props.add('style:writing-mode="${rtl ? 'rl-tb' : 'lr-tb'}"');
     props.add('style:direction="${rtl ? 'rtl' : 'ltr'}"');
@@ -104,7 +132,7 @@ class OdtService {
         ..add('style:text-underline-width="auto"')
         ..add('style:text-underline-color="font-color"');
     }
-    final fontSize = (run.fontSize ?? 18).toStringAsFixed(1);
+    final fontSize = (run.fontSize ?? defaultFontSize).toStringAsFixed(1);
     props.add('fo:font-size="${fontSize}pt"');
     props.add('style:font-size-asian="${fontSize}pt"');
     props.add('style:font-size-complex="${fontSize}pt"');

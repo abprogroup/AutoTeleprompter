@@ -25,7 +25,10 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
 
     final xmlStr = utf8.decode(bytes, allowMalformed: true);
     final document = XmlDocument.parse(xmlStr);
-    final paragraphs = document.findAllElements('w:p').toList();
+    final paragraphs = document
+        .findAllElements('w:p')
+        .where((p) => !_docxHasAncestor(p, 'mc:Fallback'))
+        .toList();
     final numbering = _docxNumberingFromArchive(archive);
     final styles = _docxStylesFromArchive(archive);
     final parsedParagraphs = <String>[];
@@ -52,12 +55,21 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       final bidi = paragraphProperties.getElement('w:bidi');
       final paragraphRtl = bidi == null ? null : _docxBoolOn(bidi);
 
-      for (final r in p.findAllElements('w:r')) {
+      for (final r in _docxDirectRunsForParagraph(p)) {
         final rPr = styles.runProperties(p, r);
         final text = _docxRunText(r);
         if (text.isEmpty) continue;
-        final complex = RegExp(r'[\u0590-\u08FF]').hasMatch(text) &&
-            !RegExp(r'[A-Za-z]').hasMatch(text);
+        final hebrewCount = RegExp(r'[\u0590-\u08FF]').allMatches(text).length;
+        final latinCount = RegExp(r'[A-Za-z]').allMatches(text).length;
+        final explicitCsOrRtl = ['cs', 'rtl'].any((name) {
+          final property = rPr.getElement('w:$name');
+          return property != null && _docxBoolOn(property);
+        });
+        final complex = hebrewCount > 0
+            ? (latinCount == 0 ||
+                hebrewCount >= latinCount ||
+                explicitCsOrRtl)
+            : (latinCount == 0 && explicitCsOrRtl);
         final bold = (complex ? rPr.getElement('w:bCs') : null) ??
             rPr.getElement('w:b');
         final italic = (complex ? rPr.getElement('w:iCs') : null) ??
@@ -182,6 +194,35 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
     // Inline metadata must survive both file-open paths. The editor can ignore
     // baseFontSize, so stripping uniform tags makes imports preference-dependent.
     return ParsedFile(importedText, fontSize: baseFontSize);
+  }
+
+  static bool _docxHasAncestor(XmlNode node, String qualifiedName) {
+    var parent = node.parent;
+    while (parent != null) {
+      if (parent is XmlElement && parent.name.qualified == qualifiedName) {
+        return true;
+      }
+      parent = parent.parent;
+    }
+    return false;
+  }
+
+  /// Collects `<w:r>` elements owned directly by [paragraph], skipping runs
+  /// inside nested `<w:p>` (e.g. text boxes) and `<mc:Fallback>` duplicates.
+  static Iterable<XmlElement> _docxDirectRunsForParagraph(
+    XmlElement paragraph,
+  ) {
+    return paragraph.findAllElements('w:r').where((run) {
+      var parent = run.parent;
+      while (parent != null && parent != paragraph) {
+        if (parent is XmlElement) {
+          final name = parent.name.qualified;
+          if (name == 'w:p' || name == 'mc:Fallback') return false;
+        }
+        parent = parent.parent;
+      }
+      return parent == paragraph;
+    });
   }
 
   static void _addDocxRunSegment(

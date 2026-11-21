@@ -178,13 +178,17 @@ class _EditableFontSizeFieldState extends State<_EditableFontSizeField> {
   }
 
   void _handleFocusChanged() {
-    if (!_focusNode.hasFocus) _applyTypedValue();
+    if (!_focusNode.hasFocus) _applyTypedValue(onlyIfChanged: true);
   }
 
-  void _applyTypedValue() {
+  void _applyTypedValue({bool onlyIfChanged = false}) {
     final raw = _controller.text.trim().replaceAll('px', '');
     final parsed = double.tryParse(raw);
     if (parsed == null || parsed <= 0) {
+      _controller.text = _format(widget.value);
+      return;
+    }
+    if (onlyIfChanged && (parsed - widget.value).abs() < 0.001) {
       _controller.text = _format(widget.value);
       return;
     }

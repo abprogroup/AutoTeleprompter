@@ -32,47 +32,45 @@ class _WordAlignerTokenizer {
         final lineIsOptionalCue = _isProductionCueLine(line);
         var visiblePartIndex = 0;
 
-        for (final token in parsed) {
-          final clean = token.text.trim();
-          if (clean.isEmpty) continue;
-
-          final parts =
-              _mergeStandaloneNeutralParts(clean.split(RegExp(r'\s+')));
-          for (final part in parts) {
-            if (part.isEmpty) continue;
-            // v3.9.7: Strip residual markup tags before RTL detection AND normalization
-            // so [color=#HEX] etc. don't dilute the Hebrew character ratio
-            final cleanPart = part.replaceAll(
-                RegExp(
-                    r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr)(?:=[^\]]+)?\]|\*\*'),
-                '');
-            final isRtl = cleanPart.isHebrew;
-            final optionalCue = lineIsOptionalCue ||
-                _isLeadingSpeakerLabel(cleanPart, visiblePartIndex);
-            final normalized = cleanPart.normalizeForMatching();
-            if (normalized.isEmpty &&
-                _isStandaloneNeutralPunctuation(cleanPart)) {
-              continue;
-            }
-            if (normalized.isEmpty && cleanPart.trim().isEmpty) continue;
-            visiblePartIndex++;
-            words.add(ScriptWord(
-              raw: part,
-              normalized: normalized,
-              index: index++,
-              isRtl: isRtl,
-              isBold: token.isBold,
-              isUnderline: token.isUnderline,
-              fontSize: token.fontSize,
-              fontFamily: token.fontFamily,
-              alignment: token.alignment,
-              isItalic: token.isItalic,
-              isParagraphRtl: token.isParagraphRtl,
-              highlight: token.highlight,
-              textColor: token.textColor,
-              isOptionalCue: optionalCue,
-            ));
+        final clusters = _mergeStandaloneNeutralClusters(
+          _splitSpansIntoWordClusters(parsed),
+        );
+        for (final cluster in clusters) {
+          final part = cluster.text;
+          final token = cluster.style;
+          if (part.isEmpty) continue;
+          // v3.9.7: Strip residual markup tags before RTL detection AND normalization
+          // so [color=#HEX] etc. don't dilute the Hebrew character ratio
+          final cleanPart = part.replaceAll(
+              RegExp(
+                  r'\[\/?(u|i|color|bg|font|size|align|center|left|right|rtl|ltr)(?:=[^\]]+)?\]|\*\*'),
+              '');
+          final isRtl = cleanPart.isHebrew;
+          final optionalCue = lineIsOptionalCue ||
+              _isLeadingSpeakerLabel(cleanPart, visiblePartIndex);
+          final normalized = cleanPart.normalizeForMatching();
+          if (normalized.isEmpty &&
+              _isStandaloneNeutralPunctuation(cleanPart)) {
+            continue;
           }
+          if (normalized.isEmpty && cleanPart.trim().isEmpty) continue;
+          visiblePartIndex++;
+          words.add(ScriptWord(
+            raw: part,
+            normalized: normalized,
+            index: index++,
+            isRtl: isRtl,
+            isBold: token.isBold,
+            isUnderline: token.isUnderline,
+            fontSize: token.fontSize,
+            fontFamily: token.fontFamily,
+            alignment: token.alignment,
+            isItalic: token.isItalic,
+            isParagraphRtl: token.isParagraphRtl,
+            highlight: token.highlight,
+            textColor: token.textColor,
+            isOptionalCue: optionalCue,
+          ));
         }
 
         // v3.9.5.3: Preserve single newlines as paragraph breaks
@@ -190,6 +188,122 @@ class _WordAlignerTokenizer {
     'shot',
     'smile',
   };
+
+  static final RegExp _wsSplitRegex = RegExp(r'(\s+)');
+
+  /// Groups adjacent non-whitespace fragments across span boundaries so
+  /// intra-word tags (e.g. `**un**known`) and adjacent punctuation
+  /// (e.g. `[bg=#FFFF00]Hello[/bg]!`) stay one ScriptWord instead of splitting
+  /// or dropping punctuation.
+  static List<_WordCluster> _splitSpansIntoWordClusters(List<_Span> spans) {
+    final clusters = <_WordCluster>[];
+    StringBuffer? buf;
+    _Span? style;
+    var styleHasWordChars = false;
+
+    void flush() {
+      if (buf != null && buf!.isNotEmpty && style != null) {
+        clusters.add(_WordCluster(buf!.toString(), style!));
+      }
+      buf = null;
+      style = null;
+      styleHasWordChars = false;
+    }
+
+    for (final span in spans) {
+      if (span.text.isEmpty) continue;
+      var cursor = 0;
+      for (final m in _wsSplitRegex.allMatches(span.text)) {
+        if (m.start > cursor) {
+          final piece = span.text.substring(cursor, m.start);
+          final pieceHasWord = piece.normalizeForMatching().isNotEmpty;
+          buf ??= StringBuffer();
+          buf!.write(piece);
+          if (style == null || (!styleHasWordChars && pieceHasWord)) {
+            style = span;
+            styleHasWordChars = pieceHasWord;
+          }
+        }
+        flush();
+        cursor = m.end;
+      }
+      if (cursor < span.text.length) {
+        final piece = span.text.substring(cursor);
+        final pieceHasWord = piece.normalizeForMatching().isNotEmpty;
+        buf ??= StringBuffer();
+        buf!.write(piece);
+        if (style == null || (!styleHasWordChars && pieceHasWord)) {
+          style = span;
+          styleHasWordChars = pieceHasWord;
+        }
+      }
+    }
+    flush();
+    return clusters;
+  }
+
+  static List<_WordCluster> _mergeStandaloneNeutralClusters(
+    List<_WordCluster> clusters,
+  ) {
+    final merged = <_WordCluster>[];
+    var pendingOpen = '';
+    _Span? pendingStyle;
+    for (final cluster in clusters) {
+      if (cluster.text.isEmpty) continue;
+      var current = cluster.text;
+      final trailingDash = _takeTrailingDashAfterClosingNeutral(current);
+      if (trailingDash != null) {
+        current = current.substring(0, current.length - trailingDash.length);
+      }
+      if (current.isNotEmpty && _isStandaloneOpeningNeutral(current)) {
+        pendingOpen += current;
+        pendingStyle ??= cluster.style;
+        if (trailingDash != null) pendingOpen += '$trailingDash ';
+        continue;
+      }
+      if (current.isNotEmpty && _isStandaloneDashPrefix(current)) {
+        pendingOpen += '$current ';
+        pendingStyle ??= cluster.style;
+        if (trailingDash != null) pendingOpen += '$trailingDash ';
+        continue;
+      }
+      if (current.isNotEmpty &&
+          _isStandaloneClosingNeutral(current) &&
+          merged.isNotEmpty) {
+        final prev = merged.last;
+        merged[merged.length - 1] =
+            _WordCluster(prev.text + current, prev.style);
+        if (trailingDash != null) {
+          pendingOpen += '$trailingDash ';
+          pendingStyle ??= cluster.style;
+        }
+        continue;
+      }
+      if (current.isNotEmpty) {
+        merged.add(_WordCluster(pendingOpen + current, cluster.style));
+        pendingOpen = '';
+        pendingStyle = null;
+      }
+      if (trailingDash != null) {
+        pendingOpen += '$trailingDash ';
+        pendingStyle ??= cluster.style;
+      }
+    }
+    if (pendingOpen.isNotEmpty && merged.isNotEmpty) {
+      if (RegExp(r'[-\u2010-\u2015]\s*$').hasMatch(pendingOpen)) {
+        merged.add(
+          _WordCluster(pendingOpen.trimRight(), pendingStyle ?? merged.last.style),
+        );
+      } else {
+        final prev = merged.last;
+        merged[merged.length - 1] =
+            _WordCluster(prev.text + pendingOpen, prev.style);
+      }
+    } else if (pendingOpen.isNotEmpty && pendingStyle != null) {
+      merged.add(_WordCluster(pendingOpen.trimRight(), pendingStyle));
+    }
+    return merged;
+  }
 
   static List<String> _mergeStandaloneNeutralParts(Iterable<String> parts) {
     final merged = <String>[];
@@ -544,6 +658,13 @@ class _WordAlignerTokenizer {
     final v = int.tryParse(hex, radix: 16);
     return v == null ? null : Color(v);
   }
+}
+
+class _WordCluster {
+  final String text;
+  final _Span style;
+
+  const _WordCluster(this.text, this.style);
 }
 
 class _Span {

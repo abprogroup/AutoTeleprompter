@@ -33,7 +33,11 @@ void main() {
     final speech = await result.future.timeout(const Duration(seconds: 3));
     expect(speech.browserSegments, ['settled phrase', 'fresh words']);
     expect(speech.browserFinalizedSegmentCount, 1);
-    expect(speech.streamId, 3);
+    expect(
+      speech.streamId,
+      isPositive,
+      reason: 'adapter-owned opaque stream identity',
+    );
   });
   test(
     'execute served browser page with deterministic recognition lifecycle',

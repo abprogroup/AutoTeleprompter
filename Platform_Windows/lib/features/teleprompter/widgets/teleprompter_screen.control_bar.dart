@@ -52,6 +52,7 @@ class _ControlBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    ref.watch(scriptProvider);
     final hotkeys = ref.watch(hotkeyProvider);
     final hasBookmarkAccess = ref.watch(authProvider).hasPremiumAccess;
     // Forward scroll is active when scrolling but NOT backward
@@ -64,7 +65,12 @@ class _ControlBar extends ConsumerWidget {
         .read(scriptProvider.notifier)
         .effectiveFontSize(settings.fontSize);
     void applyPresenterFontSize(double size) {
-      final clamped = size.clamp(14.0, 120.0).toDouble();
+      final clamped = size
+          .clamp(
+            ScriptTypographyService.minBaseFontSize,
+            ScriptTypographyService.maxBaseFontSize,
+          )
+          .toDouble();
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
       unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(clamped));
       onFontSizeChanged(clamped);
@@ -133,7 +139,7 @@ class _ControlBar extends ConsumerWidget {
                 style: TextStyle(color: Colors.white70, fontSize: 16),
               ),
               onPressed: () {
-                applyPresenterFontSize(effectiveFontSize - 4);
+                applyPresenterFontSize(effectiveFontSize - 1);
               },
               tooltip: 'Smaller font',
             ),
@@ -170,7 +176,7 @@ class _ControlBar extends ConsumerWidget {
                 ),
               ),
               onPressed: () {
-                applyPresenterFontSize(effectiveFontSize + 4);
+                applyPresenterFontSize(effectiveFontSize + 1);
               },
               tooltip: 'Larger font',
             ),

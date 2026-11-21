@@ -19,19 +19,19 @@ final List<_EditorWalkthroughStep> _editorSampleWalkthroughSteps = [
     icon: Icons.edit_note_rounded,
     title: 'Edit the sample',
     body:
-        'Click directly into the sample text and make a small change. The sample stays temporary until you save it.',
+        'Click directly into the sample text and make a small change. Use Export file when you want a separate document.',
   ),
   const _EditorWalkthroughStep(
     icon: Icons.drive_file_rename_outline_rounded,
     title: 'Name the script',
     body:
-        'This pencil is where you rename a production. Use clear names so Recents stays easy to scan later.',
+        'Use this pencil to change the Script name. Clear names make the app library easy to scan.',
   ),
   const _EditorWalkthroughStep(
     icon: Icons.save_alt_rounded,
-    title: 'Save when ready',
+    title: 'Export a file when ready',
     body:
-        'This Save button chooses the file name and format. After saving, the sample becomes a real recent script.',
+        'Export file chooses a format, file name, and folder. Your script also remains in the app library; editing it does not overwrite the original file.',
   ),
   const _EditorWalkthroughStep(
     icon: Icons.bookmarks_rounded,

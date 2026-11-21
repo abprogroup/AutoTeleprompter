@@ -502,15 +502,44 @@ extension _ScriptEditorStylingCommandParts on _ScriptEditorScreenState {
   }
 
   Future<void> _applyGlobalFontSize(double size) async {
-    final clamped = size.clamp(14.0, 120.0).toDouble();
+    final clamped = size
+        .clamp(
+          ScriptTypographyService.minBaseFontSize,
+          ScriptTypographyService.maxBaseFontSize,
+        )
+        .toDouble();
     final inSuite = _activeSuite != EditorSuite.none;
     if (inSuite) {
       _trackSuiteSection('Font Size');
     }
-    await ref.read(settingsProvider.notifier).setFontSize(clamped);
-    await ref.read(scriptProvider.notifier).updateStyleMetadata(
-          fontSize: clamped,
+    final oldBase = ref
+        .read(scriptProvider.notifier)
+        .effectiveFontSize(ref.read(settingsProvider).fontSize);
+    _setEditorState(() => _isCommandExecuting = true);
+    try {
+      for (final c in _controllers) {
+        final scaled = ScriptTypographyService.scaleInlineFontSizes(
+          c.text,
+          fromBaseSize: oldBase,
+          toBaseSize: clamped,
         );
+        if (scaled != c.text) {
+          final safeOffset = c.selection.baseOffset.clamp(0, scaled.length);
+          c.value = TextEditingValue(
+            text: scaled,
+            selection: TextSelection.collapsed(offset: safeOffset),
+          );
+          c.refresh();
+        }
+      }
+      await ref.read(scriptProvider.notifier).applyBaseFontSize(clamped);
+    } finally {
+      if (mounted) {
+        _setEditorState(() => _isCommandExecuting = false);
+      } else {
+        _isCommandExecuting = false;
+      }
+    }
     if (!mounted) return;
     ref.read(cursorStyleProvider.notifier).state =
         ref.read(cursorStyleProvider).copyWith(fontSize: clamped.round());

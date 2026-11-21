@@ -97,15 +97,11 @@ class WordAligner {
   }
 
   static AlignmentResult? continuePendingStartEvidence({
-    required List<ScriptWord> script,
-    required String transcript,
-    required int pendingTargetIndex,
-    bool strictBulletMode = false,
+    required List<ScriptWord> script, required String transcript,
+    required int pendingTargetIndex, bool strictBulletMode = false,
   }) => _continuePendingStartEvidence(
-    script: script,
-    transcript: transcript,
-    pendingTargetIndex: pendingTargetIndex,
-    strictBulletMode: strictBulletMode,
+    script: script, transcript: transcript,
+    pendingTargetIndex: pendingTargetIndex, strictBulletMode: strictBulletMode,
   );
 
   static double spokenWordSimilarity(String spoken, ScriptWord word) {
@@ -667,6 +663,12 @@ class WordAligner {
         recoveryThreshold: effectivePolicy.visibleSkip,
       );
       if (recovery != null) return recovery;
+      final subMatch = _visibleSkipOneSubFallback(
+        script: script, transcriptWords: transcriptWords, visibleScanStart: visibleScanStart,
+        windowEnd: windowEnd, lastConfirmedIndex: lastConfirmedIndex,
+        effectivePolicy: effectivePolicy, policyBulletMode: policyBulletMode,
+      );
+      if (subMatch != null) return subMatch;
     }
 
     // -- STEP 3: MULTI-WORD SEQUENCE CONFIRMATION ----------------------------

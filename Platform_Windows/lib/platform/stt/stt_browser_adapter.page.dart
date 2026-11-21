@@ -54,10 +54,12 @@ const words = document.getElementById('words');
 const err = document.getElementById('err');
 let rec;
 let currentLocale = $localeJson;
+let configurationRevision = $_configurationRevision;
 let selectedDeviceId = $selectedDeviceJson;
 let selectedDeviceLabel = $selectedDeviceLabelJson;
 let consecutiveFails = 0;
 let consecutiveNetworkFails = 0;
+let consecutiveEmptyEnds = 0;
 let audioContext;
 let analyser;
 let timeDataArray;
@@ -349,8 +351,15 @@ ws.onmessage = (e) => {
     }, 0);
     return;
   }
-  if(d.type === 'setLocale' && d.locale !== currentLocale) {
+  if(d.type === 'setLocale') {
+    // Commands can be queued across a page load or rapid A -> B -> A switch.
+    // The revision, not the locale string, owns the recognizer's results.
+    if(!Number.isSafeInteger(d.configurationRevision) ||
+       d.configurationRevision < configurationRevision) return;
+    if(d.configurationRevision === configurationRevision && d.locale === currentLocale) return;
+    configurationRevision = d.configurationRevision;
     currentLocale = d.locale; consecutiveFails = 0; switchingLocale = true;
+    consecutiveEmptyEnds = 0;
     restartSuppressed = false; lastError = '';
     status.textContent = 'Syncing ' + d.locale;
     cancelScheduledRestart();
@@ -362,6 +371,7 @@ ws.onmessage = (e) => {
     selectedDeviceLabel = d.label || 'System default microphone';
     switchingInput = true;
     consecutiveFails = 0; restartSuppressed = false; lastError = '';
+    consecutiveEmptyEnds = 0;
     status.textContent =
       selectedDeviceId || !isSystemDefaultInputLabel(selectedDeviceLabel)
         ? 'Switching input'
@@ -370,6 +380,7 @@ ws.onmessage = (e) => {
     invalidateRecognition();
     initVisualizer().finally(() => {
       switchingInput = false;
+      switchingLocale = false;
       if(!closedByHost && ws.readyState === 1) {
         scheduleRestart(250, 'input-switch');
       }
@@ -380,7 +391,7 @@ ws.onmessage = (e) => {
   }
 };
 
-function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o));}
+function send(o){if(ws.readyState===1)ws.send(JSON.stringify({configurationRevision, ...o}));}
 function sendLifecycle(phase){send({type: 'lifecycle', phase: phase});}
 
 function isCurrentRecognition(recognizer, generation) {
@@ -419,6 +430,8 @@ function scheduleRestart(delay, reason) {
   cancelScheduledRestart();
   const scheduledGeneration = restartGeneration;
   status.textContent = 'Restarting';
+  send({type: 'restartScheduled', reason: reason, delayMs: delay,
+    generation: recognitionGeneration, emptyEnds: consecutiveEmptyEnds});
   restartTimer = setTimeout(() => {
     if(scheduledGeneration !== restartGeneration) return;
     restartTimer = null;
@@ -427,13 +440,18 @@ function scheduleRestart(delay, reason) {
 }
 
 function restartDelay() {
+  // Only observed rapid empty END cycles back off. Never interrupt an active
+  // recognizer merely because it is quiet or its results are delayed.
+  const emptyEndDelay = consecutiveEmptyEnds < 3 ? 0
+    : Math.min(500 * Math.pow(2, Math.min(consecutiveEmptyEnds - 3, 4)), 8000);
   // Keep backoff across onstart/no-speech; only productive speech clears it.
   if(networkRecoveryPending) {
-    return Math.min(1250 * Math.pow(2, Math.max(0, Math.min(consecutiveNetworkFails - 1, 3))), 8000);
+    return Math.max(emptyEndDelay,
+      Math.min(1250 * Math.pow(2, Math.max(0, Math.min(consecutiveNetworkFails - 1, 3))), 8000));
   }
-  if(lastError === 'no-speech') return 120;
-  if(consecutiveFails <= 2) return 240;
-  return Math.min(300 * Math.pow(2, consecutiveFails - 2), 3000);
+  if(lastError === 'no-speech') return Math.max(120, emptyEndDelay);
+  if(consecutiveFails <= 2) return Math.max(240, emptyEndDelay);
+  return Math.max(emptyEndDelay, Math.min(300 * Math.pow(2, consecutiveFails - 2), 3000));
 }
 
 window.addEventListener('offline', () => {
@@ -449,7 +467,7 @@ window.addEventListener('online', () => {
   networkOffline = false;
   if(!wasOffline || closedByHost || restartSuppressed || ws.readyState !== 1) return;
   sendLifecycle('networkRecovering');
-  scheduleRestart(250, 'network-online');
+  scheduleRestart(250, switchingLocale ? 'locale-switch' : 'network-online');
 });
 
 function startRecognitionWithConfiguredInput(recognizer) {
@@ -545,6 +563,9 @@ function startRec(locale) {
   }
   const recognizer = new SR();
   const generation = ++recognitionGeneration;
+  const recognizerConfigurationRevision = configurationRevision;
+  const attemptStartedAt = Date.now();
+  let receivedResult = false;
   rec = recognizer;
   startRequestedAt = Date.now();
   lastStartAt = 0;
@@ -610,6 +631,7 @@ function startRec(locale) {
       }
       send({
         type: 'result',
+        configurationRevision: recognizerConfigurationRevision,
         words: snapshotTranscript,
         isFinal: snapshotIsFinal,
         isCumulative: true,
@@ -623,6 +645,8 @@ function startRec(locale) {
         : snapshotTranscript;
       consecutiveFails = 0;
       consecutiveNetworkFails = 0;
+      consecutiveEmptyEnds = 0;
+      receivedResult = true;
       lastError = '';
       lastResultAt = Date.now();
       networkRecoveryPending = false;
@@ -672,6 +696,8 @@ function startRec(locale) {
     if(restartSuppressed) return;
     if(switchingLocale) return;
     if(switchingInput) return;
+    const rapidEmptyEnd = !receivedResult && Date.now() - attemptStartedAt <= 2000;
+    consecutiveEmptyEnds = rapidEmptyEnd ? Math.min(consecutiveEmptyEnds + 1, 32) : 0;
     scheduleRestart(restartDelay(), 'recognition-ended');
   };
   try{ startRecognitionWithConfiguredInput(recognizer); } catch(ex){

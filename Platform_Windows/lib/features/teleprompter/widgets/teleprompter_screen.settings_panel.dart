@@ -29,7 +29,12 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
     final effectiveFontSize =
         ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
     void applyPresenterFontSize(double size) {
-      final clamped = size.clamp(14.0, 120.0).toDouble();
+      final clamped = size
+          .clamp(
+            ScriptTypographyService.minBaseFontSize,
+            ScriptTypographyService.maxBaseFontSize,
+          )
+          .toDouble();
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
       unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(clamped));
       if (onFontSizeChanged != null) {
@@ -308,17 +313,29 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
                 _PresetBtn(
                     label: 'Classic',
                     icon: Icons.document_scanner,
-                    onTap: () => notifier.applyPreset('Classic')),
+                    onTap: () {
+                      notifier.applyPreset('Classic');
+                      applyPresenterFontSize(42);
+                      applyPresenterLineSpacing(1.7);
+                    }),
                 const SizedBox(width: 8),
                 _PresetBtn(
                     label: 'High-Contrast',
                     icon: Icons.visibility,
-                    onTap: () => notifier.applyPreset('High Contrast')),
+                    onTap: () {
+                      notifier.applyPreset('High Contrast');
+                      applyPresenterFontSize(48);
+                      applyPresenterLineSpacing(1.8);
+                    }),
                 const SizedBox(width: 8),
                 _PresetBtn(
                     label: 'Modern Soft',
                     icon: Icons.auto_awesome_mosaic,
-                    onTap: () => notifier.applyPreset('Modern Soft')),
+                    onTap: () {
+                      notifier.applyPreset('Modern Soft');
+                      applyPresenterFontSize(38);
+                      applyPresenterLineSpacing(1.6);
+                    }),
               ],
             ),
           ),
@@ -334,9 +351,14 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
             tooltip: 'Reset Font Size',
             onReset: () => applyPresenterFontSize(20.0),
             slider: Slider(
-              value: effectiveFontSize.clamp(14.0, 120.0).toDouble(),
-              min: 14,
-              max: 120,
+              value: effectiveFontSize
+                  .clamp(
+                    ScriptTypographyService.minBaseFontSize,
+                    ScriptTypographyService.maxBaseFontSize,
+                  )
+                  .toDouble(),
+              min: ScriptTypographyService.minBaseFontSize,
+              max: ScriptTypographyService.maxBaseFontSize,
               activeColor: Color(settings.currentWordColor),
               inactiveColor: Colors.white24,
               onChanged: applyPresenterFontSize,

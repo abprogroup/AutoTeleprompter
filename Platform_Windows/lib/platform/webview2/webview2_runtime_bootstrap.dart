@@ -188,13 +188,14 @@ class WebView2RuntimeBootstrap {
     );
 
     if (decision.preferredMode == WebView2RuntimeMode.bundledFixed) {
-      final aclReady = await _prepareWindows10FixedRuntimeAcl(fixedPath);
-      final initialized =
-          aclReady &&
-          await _initializeEnvironment(
-            mode: WebView2RuntimeMode.bundledFixed,
-            browserExecutablePath: fixedPath,
-          );
+      // Best-effort on Windows 10: a standard user installed in Program Files
+      // cannot run icacls, yet the installer/directory may already have valid
+      // AppContainer read/execute ACLs, so still attempt initialization.
+      await _prepareWindows10FixedRuntimeAcl(fixedPath);
+      final initialized = await _initializeEnvironment(
+        mode: WebView2RuntimeMode.bundledFixed,
+        browserExecutablePath: fixedPath,
+      );
       return _current = WebView2RuntimeBootstrapResult(
         mode:
             initialized

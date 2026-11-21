@@ -318,7 +318,11 @@ void main() {
       expect(result.words, 'נפגשים הוקמה בשנת 20');
       expect(result.isFinal, isFalse);
       expect(result.isCumulative, isTrue);
-      expect(result.streamId, 7);
+      expect(
+        result.streamId,
+        isPositive,
+        reason: 'adapter-owned opaque stream identity',
+      );
       expect(result.alternatives, <String>['נפגשים הוקמה בשנת עשרים']);
 
       socket.add(
@@ -326,7 +330,6 @@ void main() {
           'type': 'result',
           'words': 'legacy without stream id',
           'isFinal': true,
-          'isCumulative': true,
         }),
       );
       await _waitUntil(() => results.length == 2);

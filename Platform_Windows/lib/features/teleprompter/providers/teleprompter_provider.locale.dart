@@ -30,7 +30,9 @@ extension TeleprompterNotifierLocale on TeleprompterNotifier {
     int wordIndex, {
     required String reason,
   }) {
-    if (_useWhisper || _disposed || _sessionStopped) return;
+    if (_useWhisper || _disposed || _sessionStopped || _manualScrollInProgress) {
+      return;
+    }
     if (_visibleLocaleAssistPinActive()) return;
     if (_sectionLocales.length != script.words.length) {
       _precomputeSectionLocales(script);
@@ -42,7 +44,9 @@ extension TeleprompterNotifierLocale on TeleprompterNotifier {
   }
 
   bool _switchLocaleIfNeeded(String locale, {required String reason}) {
-    if (_useWhisper || _disposed || _sessionStopped) return false;
+    if (_useWhisper || _disposed || _sessionStopped || _manualScrollInProgress) {
+      return false;
+    }
     if (!_activeSttCanSwitchLocale) return false;
     if (locale == _activeLocale && locale == _scriptLanguageLocale) {
       return false;

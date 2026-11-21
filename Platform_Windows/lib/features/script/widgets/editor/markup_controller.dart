@@ -61,13 +61,16 @@ class MarkupController extends TextEditingController {
 
   static const TextStyle _tagStyle = TextStyle(
     color: Colors.transparent,
-    fontSize: 0.1,
-    letterSpacing: 0,
-    wordSpacing: 0,
-    height: 0,
+    fontSize: 0.0,
+    letterSpacing: 0.0,
+    wordSpacing: 0.0,
+    height: 0.0,
   );
 
-  static const int _hiddenTagPlaceholderCodeUnit = 0x2060; // WORD JOINER
+  // Zero-Width Non-Joiner (UAX #14 class CM): bidi-neutral and zero-width,
+  // preserving raw-to-rendered offset parity without WORD JOINER (U+2060)
+  // LB11 glue across adjacent spaces or kerning/shaping distortions.
+  static const int _hiddenTagPlaceholderCodeUnit = 0x200C;
 
   static final RegExp _tagRegex = RegExp(
     r'\*\*'

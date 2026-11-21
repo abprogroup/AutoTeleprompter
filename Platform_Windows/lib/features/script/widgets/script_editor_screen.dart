@@ -17,6 +17,7 @@ import './editor/suites/project_actions_mvp.dart';
 import './editor/suites/formatting_toolbar_mvp.dart';
 import './editor/components/editor_primitives.dart';
 import 'script_delete_dialog.dart';
+import 'script_name_dialog.dart';
 import './editor/styling_logic_mixin.dart';
 import './editor/markup_controller.dart';
 import './editor/components/global_selection_overlay.dart';
@@ -36,6 +37,7 @@ import '../../auth/widgets/login_screen.dart';
 import '../../teleprompter/widgets/content_creator_screen.dart';
 import '../../teleprompter/widgets/teleprompter_screen.dart';
 import '../services/styling_service.dart';
+import '../services/script_typography_service.dart';
 import '../services/script_bookmark_service.dart';
 import '../../../core/services/rich_clipboard.dart';
 import '../services/markup_decoration_service.dart';
@@ -172,7 +174,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   final GlobalKey _walkthroughPresentKey = GlobalKey();
   double? _editorScrollOffsetBeforeWindowHide;
   int _editorModeReturnRestoreToken = 0;
-  String _currentTitle = 'New Project';
+  String _currentTitle = 'New Script';
 
   /// Preserved non-collapsed selection - survives focus loss from dialogs.
   /// Updated only when the selection is non-collapsed, so opening a dialog

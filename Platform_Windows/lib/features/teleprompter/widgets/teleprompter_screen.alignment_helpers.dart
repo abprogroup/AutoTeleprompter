@@ -70,8 +70,10 @@ extension _TeleprompterAlignmentHelperParts on _TeleprompterScreenState {
   }
 
   double _presenterWordGap(double fontSize, AppSettings settings) {
-    final defaultSpace = fontSize * 0.24;
-    return (defaultSpace + settings.wordSpacing).clamp(0.0, 80.0).toDouble();
+    return ScriptTypographyService.presenterWordGap(
+      fontSize,
+      settings.wordSpacing,
+    );
   }
 
   double _decorationGapTolerance(double wordGap) {

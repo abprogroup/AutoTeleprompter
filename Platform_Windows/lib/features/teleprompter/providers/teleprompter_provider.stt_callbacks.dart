@@ -37,6 +37,7 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
           service != _sttService) {
         return;
       }
+      if (_reconcileRecoveredBrowserLocale()) return;
       _handleSttResult(result);
     };
 
@@ -113,6 +114,10 @@ extension TeleprompterSttCallbacks on TeleprompterNotifier {
         return;
       }
       if (_startingSession && status != SpeechStatus.listening) return;
+      if (status == SpeechStatus.listening &&
+          _reconcileRecoveredBrowserLocale()) {
+        return;
+      }
       _startingSession = false;
       final debugStatus =
           status == SpeechStatus.listening

@@ -40,11 +40,12 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
           Scaffold(
             backgroundColor: const Color(0xFF0A0A0A),
             appBar: AppBar(
-              toolbarHeight: 110,
+              toolbarHeight: 132,
               backgroundColor: const Color(0xFF0A0A0A),
               automaticallyImplyLeading: false,
               title: ProjectActionsSuite(
                 title: _currentTitle,
+                sourcePath: _currentSourcePath,
                 onBack: () => Navigator.pop(context),
                 onPresent: _startPresenting,
                 onClear: () => unawaited(_confirmDeleteCurrentScript()),

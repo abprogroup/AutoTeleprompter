@@ -400,7 +400,11 @@ class LocalBackupService {
         return ScriptBackupExport(
           fileName: '$baseName.rtf',
           mimeType: 'application/rtf',
-          bytes: RtfService.generate(exportText, defaultRtl: resolvedRtl),
+          bytes: RtfService.generate(
+            exportText,
+            defaultRtl: resolvedRtl,
+            defaultFontSize: fontSize,
+          ),
           readableText: readableText,
           extension: extension,
         );
@@ -409,7 +413,11 @@ class LocalBackupService {
           fileName: '$baseName.docx',
           mimeType:
               'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          bytes: DocxService.generate(exportText, defaultRtl: resolvedRtl),
+          bytes: DocxService.generate(
+            exportText,
+            defaultRtl: resolvedRtl,
+            defaultFontSize: fontSize,
+          ),
           readableText: readableText,
           extension: extension,
         );
@@ -417,7 +425,11 @@ class LocalBackupService {
         return ScriptBackupExport(
           fileName: '$baseName.doc',
           mimeType: 'application/msword',
-          bytes: RtfService.generate(exportText, defaultRtl: resolvedRtl),
+          bytes: RtfService.generate(
+            exportText,
+            defaultRtl: resolvedRtl,
+            defaultFontSize: fontSize,
+          ),
           readableText: readableText,
           extension: extension,
         );
@@ -425,7 +437,11 @@ class LocalBackupService {
         return ScriptBackupExport(
           fileName: '$baseName.odt',
           mimeType: _mimeTypeForExtension(extension),
-          bytes: OdtService.generate(exportText, defaultRtl: resolvedRtl),
+          bytes: OdtService.generate(
+            exportText,
+            defaultRtl: resolvedRtl,
+            defaultFontSize: fontSize,
+          ),
           readableText: readableText,
           extension: extension,
         );
@@ -524,6 +540,7 @@ class LocalBackupService {
       bytes: await PdfExportService.generate(
         exportText,
         defaultRtl: _resolveExportRtl(text, isRtl),
+        defaultFontSize: fontSize,
       ),
       readableText: readableText,
       extension: 'pdf',

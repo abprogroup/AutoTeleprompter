@@ -36,6 +36,7 @@ part 'teleprompter_provider.browser_host.dart';
 part 'teleprompter_provider.external_edge.dart';
 part 'teleprompter_provider.heartbeat.dart';
 part 'teleprompter_provider.locale.dart';
+part 'teleprompter_provider.manual_scroll.dart';
 part 'teleprompter_provider.relock.dart';
 part 'teleprompter_provider.state_helpers.dart';
 part 'teleprompter_provider.stt_callbacks.dart';
@@ -67,6 +68,8 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       SttHostTransitionGuard();
   bool get _sttHostTransitionInFlight => _sttHostTransitionGuard.isActive;
   _PendingSttHostFailure? _pendingSttHostFailure;
+  ({int sessionToken, Script script, int position})?
+  _browserRecoveryLocaleAnchor;
   final Set<SttHostReadinessPhase> _pendingSttHostReadinessPhases = {};
   String? _observedWebView2RuntimeVersion;
   Script? _currentScript;
@@ -102,6 +105,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   int? _activeBrowserCumulativeStreamId;
   bool _lastResultUsesCumulativeTranscript = false;
   bool _protectManualTranscriptBoundary = false;
+  bool _manualScrollInProgress = false;
   final _browserTranscriptBoundary = SttBrowserTranscriptBoundary();
   final _sttResultFlow = SttResultFlowDiagnostics();
   final _acceptedSpeechRevision = SttAcceptedRevisionService();
@@ -135,29 +139,6 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     milliseconds: 5000,
   );
   static const Duration _pendingVisibleSkipMaxAge = Duration(seconds: 8);
-
-  void _resetSttTrackingContext({bool clearTranscriptFloor = true}) {
-    _acceptedSpeechRevision.reset();
-    _accumulatedTranscript = '';
-    _noProgressCount = 0;
-    _sttReadingStandby = false;
-    _lockedOn = false;
-    if (clearTranscriptFloor) {
-      _transcriptFloor = 0;
-      _cumulativeTranscriptBaselineFloor = 0;
-      _cumulativeTranscriptBaselineWords = const <String>[];
-      _latestCumulativeTranscriptWords = const <String>[];
-      _activeBrowserCumulativeStreamId = null;
-      _lastResultUsesCumulativeTranscript = false;
-      _protectManualTranscriptBoundary = false;
-      _browserTranscriptBoundary.reset();
-      _sttResultFlow.reset();
-    }
-    _pendingStartEvidenceTargetIndex = null;
-    _clearPendingVisibleSkipEvidence();
-    _sttEvidenceTrackingState = SttEvidenceTrackingState.locked;
-    _resetStaleNoProgressTracking();
-  }
 
   @override
   TeleprompterState build() {
@@ -459,6 +440,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
         _currentScript!.sessionId.isNotEmpty &&
         _currentScript!.sessionId == script.sessionId;
     _currentScript = script;
+    _manualScrollInProgress = false;
     _resetSttTrackingContext();
     _sessionStopped = false;
     _sessionStartTime = DateTime.now();
@@ -653,6 +635,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
     _sessionToken++;
     _sessionStopped = true;
+    _manualScrollInProgress = false;
     LightweightDiagnostics.instance.record(
       'session',
       'presentation session stopped',
@@ -708,6 +691,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   void resetPosition() {
+    _manualScrollInProgress = false;
     _resetTrackingForManualPosition();
     _resetVisibleLocaleAssist();
     _fluidAdvanceTimer?.cancel();
@@ -719,10 +703,18 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     }
   }
 
+  void syncActiveScript(Script script) {
+    if (_disposed || _currentScript == null) return;
+    if (script.sessionId == _currentScript!.sessionId) {
+      _currentScript = script;
+    }
+  }
+
   void jumpToPosition(int index, {Script? script}) {
     if (script != null) _currentScript = script;
     final activeScript = _currentScript;
     if (_disposed || activeScript == null || activeScript.words.isEmpty) return;
+    _manualScrollInProgress = false;
     final target = index.clamp(0, activeScript.words.length - 1);
     _resetTrackingForManualPosition();
     _resetVisibleLocaleAssist();

@@ -69,6 +69,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
                   type: MarkupDecorationType.underline,
                   gapTolerance:
                       _contentDecorationGapTolerance(presenterWordGap),
+                  underlineColor: Color(settings.futureWordColor),
                 ),
               ),
             ),
@@ -203,8 +204,25 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     final trackingBgColor = isCurrent && settings.showCurrentWordHighlight
         ? Color(settings.currentWordColor).withValues(alpha: 0.3)
         : null;
-    final effectiveBg = trackingBgColor ??
-        (isPast ? userBgColor?.withValues(alpha: 0.15) : userBgColor);
+    final effectiveBg = PresenterHighlightStyle.wordBackground(
+      imported: userBgColor,
+      tracking: trackingBgColor,
+      isPast: isPast,
+      customPainterEnabled: kUseCustomDocxDecorationPainting,
+    );
+    final textColor = PresenterHighlightStyle.readableText(
+      text: _contentWordTextColor(
+        word: word,
+        isCurrent: isCurrent,
+        isPast: isPast,
+        activeWordIndex: activeWordIndex,
+        settings: settings,
+      ),
+      imported: userBgColor,
+      tracking: trackingBgColor,
+      scriptBackground: Color(settings.scriptBgColor),
+      isPast: isPast,
+    );
     final joinsPreviousHighlight = _contentSameHighlightColor(
       userBgColor,
       localWordIndex > 0 ? para[localWordIndex - 1].highlight : null,
@@ -247,17 +265,14 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
             displayText,
             style: TextStyle(
               fontSize: effectiveFontSize,
+              fontFamily: word.fontFamily ?? settings.fontFamily,
               fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
               fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
-              letterSpacing: settings.letterSpacing,
-              wordSpacing: settings.wordSpacing,
-              color: _contentWordTextColor(
-                word: word,
-                isCurrent: isCurrent,
-                isPast: isPast,
-                activeWordIndex: activeWordIndex,
-                settings: settings,
+              letterSpacing: ScriptTypographyService.effectiveSpacing(
+                settings.letterSpacing,
+                scale: ScriptTypographyService.presenterScaleFactor,
               ),
+              color: textColor,
               height: settings.lineSpacing,
               decoration: word.isUnderline && !kUseCustomDocxDecorationPainting
                   ? TextDecoration.underline
@@ -327,6 +342,9 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
   }
 
   bool _contentParagraphIsRtl(List<ScriptWord> words) {
+    for (final word in words) {
+      if (word.isParagraphRtl != null) return word.isParagraphRtl!;
+    }
     var hasLatin = false;
     for (final word in words) {
       final clean = word.raw.replaceAll(_contentCreatorTagStripRe, '').trim();
@@ -361,8 +379,10 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
   }
 
   double _contentWordGap(double fontSize, AppSettings settings) {
-    final defaultSpace = fontSize * 0.24;
-    return (defaultSpace + settings.wordSpacing).clamp(0.0, 80.0).toDouble();
+    return ScriptTypographyService.presenterWordGap(
+      fontSize,
+      settings.wordSpacing,
+    );
   }
 
   double _contentDecorationGapTolerance(double wordGap) {
@@ -378,6 +398,7 @@ class _ContentDecorationPainter extends CustomPainter {
   final int activeWordIndex;
   final MarkupDecorationType type;
   final double gapTolerance;
+  final Color underlineColor;
 
   const _ContentDecorationPainter({
     required this.contentKey,
@@ -386,6 +407,7 @@ class _ContentDecorationPainter extends CustomPainter {
     required this.activeWordIndex,
     required this.type,
     required this.gapTolerance,
+    this.underlineColor = Colors.white,
   });
 
   @override
@@ -417,7 +439,7 @@ class _ContentDecorationPainter extends CustomPainter {
       if (rect != null) underlineRects.add(rect);
     }
     final paint = Paint()
-      ..color = Colors.white
+      ..color = underlineColor
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.square
       ..style = PaintingStyle.stroke;

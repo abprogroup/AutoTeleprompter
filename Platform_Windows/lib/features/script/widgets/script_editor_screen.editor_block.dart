@@ -82,8 +82,10 @@ class _EditorBlock extends StatelessWidget {
           ? 'Inter'
           : settings.fontFamily.trim(),
       height: settings.lineSpacing,
-      letterSpacing: settings.letterSpacing,
-      wordSpacing: settings.wordSpacing,
+      letterSpacing:
+          ScriptTypographyService.effectiveSpacing(settings.letterSpacing),
+      wordSpacing:
+          ScriptTypographyService.effectiveSpacing(settings.wordSpacing),
     );
     final editorStrutStyle = StrutStyle(
       fontSize: maxFontSize,

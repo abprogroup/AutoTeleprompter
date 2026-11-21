@@ -38,6 +38,9 @@ Platform_*/test/
 !/Platform_Windows/test/platform/stt/stt_browser_page_runtime_test.dart
 !/Platform_Windows/test/platform/stt/browser_page_runtime.cjs
 !/Platform_Windows/test/platform/stt/stt_browser_lifecycle_test.dart
+!/Platform_Windows/test/platform/stt/stt_browser_stream_identity_test.dart
+!/Platform_Windows/test/platform/stt/stt_browser_recovery_tracking_test.dart
+!/Platform_Windows/test/platform/stt/stt_browser_locale_fence_test.dart
 !/Platform_Windows/test/platform/stt/stt_external_edge_launcher_test.dart
 !/Platform_Windows/test/platform/stt/stt_host_event_journal_test.dart
 !/Platform_Windows/test/platform/stt/stt_host_policy_test.dart
@@ -62,6 +65,13 @@ Platform_*/test/
 !/Platform_Windows/test/settings/app_settings_stt_engine_test.dart
 !/Platform_Windows/test/settings/settings_provider_stt_engine_test.dart
 !/Platform_Windows/test/settings/windows_stt_engine_selector_test.dart
+!/Platform_Windows/test/script/
+/Platform_Windows/test/script/*
+!/Platform_Windows/test/script/script_library_import_test.dart
+!/Platform_Windows/test/script/script_folder_import_test.dart
+!/Platform_Windows/test/script/script_workflow_widgets_test.dart
+!/Platform_Windows/test/script/script_library_parser_test.dart
+!/Platform_Windows/test/script/script_gallery_reopen_safety_test.dart
 !/Platform_Windows/test/teleprompter/
 /Platform_Windows/test/teleprompter/*
 !/Platform_Windows/test/teleprompter/presenter_viewport_test.dart
@@ -78,6 +88,12 @@ Platform_*/test/
 !/Platform_Windows/test/teleprompter/stt_transcript_buffer_service_test.dart
 !/Platform_Windows/test/teleprompter/stt_log_replay_test.dart
 !/Platform_Windows/test/teleprompter/stt_manual_jump_recovery_test.dart
+!/Platform_Windows/test/teleprompter/stt_manual_scroll_transaction_test.dart
+!/Platform_Windows/test/teleprompter/stt_scroll_handoff_test.dart
+!/Platform_Windows/test/teleprompter/stage1a_scroll_font_spacing_test.dart
+!/Platform_Windows/test/teleprompter/stage1b_core_parsers_editor_test.dart
+!/Platform_Windows/test/teleprompter/stage1c_stt_visible_skip_bridge_test.dart
+!/Platform_Windows/test/teleprompter/stt_recovery_locale_anchor_test.dart
 !/Platform_Windows/test/teleprompter/stt_inflight_progress_test.dart
 !/Platform_Windows/test/teleprompter/stt_browser_segment_boundary_test.dart
 !/Platform_Windows/test/teleprompter/stt_result_flow_diagnostics_test.dart

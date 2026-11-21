@@ -73,7 +73,10 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     // Presentation mode is a viewing surface, so it renders the single saved
     // font-size value larger without changing the metadata number shared with
     // the editor.
-    final presentationFontSize = settings.fontSize * 2.0;
+    final effectiveBaseFontSize =
+        ref.read(scriptProvider.notifier).effectiveFontSize(settings.fontSize);
+    final presentationFontSize =
+        effectiveBaseFontSize * ScriptTypographyService.presenterScaleFactor;
     final presenterWordGap = _presenterWordGap(presentationFontSize, settings);
     final controlsReservedHeight =
         settings.scrollMode == 'manual' ? 150.0 : 104.0;
@@ -150,6 +153,19 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                         child: NotificationListener<ScrollNotification>(
                           onNotification: _handleStoppedBrowsingScroll,
                           child: Listener(
+                            onPointerUp: (_) => _notePresenterPointerReleased(),
+                            onPointerCancel:
+                                (_) => _notePresenterPointerReleased(),
+                            onPointerPanZoomStart: (_) {
+                              if (!activeInputLocked) {
+                                _notePresenterUserScrollSignal();
+                              }
+                            },
+                            onPointerPanZoomUpdate: (_) {
+                              if (!activeInputLocked) {
+                                _notePresenterUserScrollSignal();
+                              }
+                            },
                             onPointerSignal: (event) {
                               if (event is PointerScrollEvent) {
                                 if (!activeInputLocked) {

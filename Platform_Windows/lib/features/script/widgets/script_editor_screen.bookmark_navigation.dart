@@ -473,8 +473,10 @@ extension _ScriptEditorBookmarkNavigationParts on _ScriptEditorScreenState {
       color: Colors.white,
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
-      letterSpacing: settings.letterSpacing,
-      wordSpacing: settings.wordSpacing,
+      letterSpacing:
+          ScriptTypographyService.effectiveSpacing(settings.letterSpacing),
+      wordSpacing:
+          ScriptTypographyService.effectiveSpacing(settings.wordSpacing),
     );
     final maxFontSize = EditorTextGeometryService.maxFontSize(
       controller.text,

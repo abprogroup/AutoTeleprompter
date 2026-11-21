@@ -180,6 +180,12 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _lastPresenterUserScrollSignalAt = DateTime.now();
   }
 
+  void _notePresenterPointerReleased() {
+    if (!_presenterDragInProgress) return;
+    _presenterDragInProgress = false;
+    if (_activeManualCorrection) _scheduleActiveManualCorrectionCommit();
+  }
+
   bool _recentPresenterUserScrollSignal() {
     final signalAt = _lastPresenterUserScrollSignalAt;
     return signalAt != null &&
@@ -308,8 +314,10 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   }
 
   void _resetManual() {
+    _cancelActiveManualCorrection();
     _stopManualScroll();
-    _manualWordIndex = 0;
+    _setTeleprompterState(() => _manualWordIndex = 0);
+    ref.read(teleprompterProvider.notifier).resetPosition();
     _scrollController.animateTo(
       0,
       duration: const Duration(milliseconds: 300),
@@ -374,6 +382,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   void _jumpToWordIndex(int index, {bool immediate = false}) {
     final script = ref.read(scriptProvider);
     if (script == null) return;
+    _cancelActiveManualCorrection();
     _stopManualScroll();
     _setTeleprompterState(() => _manualWordIndex = index);
     ref
@@ -446,10 +455,19 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         notification is ScrollUpdateNotification &&
         notification.dragDetails == null &&
         _recentPresenterUserScrollSignal();
+    final isScrollbarDragUpdate =
+        notification is ScrollUpdateNotification &&
+        notification.dragDetails == null &&
+        notification.scrollDelta != null &&
+        notification.scrollDelta!.abs() > 0.01 &&
+        !_smoothScrollActive &&
+        !_manualScrolling &&
+        !_presenterProgrammaticPositionCommitActive();
     final userScrollIntent =
         isUserScrollStart ||
         isUserScrollUpdate ||
         isPointerWheelScrollUpdate ||
+        isScrollbarDragUpdate ||
         _recentPresenterUserScrollSignal();
     if (speechActive &&
         _presenterProgrammaticPositionCommitActive() &&
@@ -460,13 +478,17 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final isScrollPositionUpdate =
         notification is ScrollUpdateNotification && _userBrowsingWhileStopped;
     final userScrollActive =
-        isUserScrollStart || isUserScrollUpdate || isPointerWheelScrollUpdate;
+        isUserScrollStart ||
+        isUserScrollUpdate ||
+        isPointerWheelScrollUpdate ||
+        isScrollbarDragUpdate;
+    if (isUserScrollStart) _presenterDragInProgress = true;
     if (userScrollActive) {
       _userBrowsingWhileStopped = true;
       _cancelSmoothScroll();
       _stopManualScroll();
       if (speechActive && activeManualOverride) {
-        _activeManualCorrection = true;
+        _activeManualCorrection = _sessionOwner.beginManualScroll();
       }
     }
 
@@ -474,6 +496,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         (userScrollActive || isScrollPositionUpdate)) {
       _scheduleVisibleWordWindowSync();
       if (speechActive && activeManualOverride) {
+        _syncResumePointToReadingLine(throttled: true, commitProvider: false);
         _scheduleActiveManualCorrectionCommit();
       } else {
         _syncResumePointToReadingLine(throttled: true, commitProvider: false);
@@ -481,11 +504,15 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
 
     if (notification is ScrollEndNotification && _userBrowsingWhileStopped) {
+      _presenterDragInProgress = false;
       _userBrowsingWhileStopped = false;
       _lastBrowsingWordSync = null;
       _syncVisibleWordWindow(force: true);
       if (speechActive && activeManualOverride) {
-        _finishActiveManualCorrection();
+        // A mouse wheel emits ScrollEnd per detent. Wait for a quiet burst,
+        // not the first detent, before consuming/committing the new anchor.
+        _syncResumePointToReadingLine(commitProvider: false);
+        _scheduleActiveManualCorrectionCommit();
       } else {
         _syncResumePointToReadingLine(commitProvider: false);
       }
@@ -495,28 +522,55 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
 
   void _scheduleActiveManualCorrectionCommit() {
     _activeManualCorrectionTimer?.cancel();
-    _activeManualCorrectionTimer = Timer(
-      const Duration(milliseconds: 420),
-      _finishActiveManualCorrection,
-    );
+    final generation = ++_manualCorrectionGeneration;
+    _activeManualCorrectionTimer = Timer(const Duration(milliseconds: 420), () {
+      _activeManualCorrectionTimer = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && generation == _manualCorrectionGeneration) {
+          _finishActiveManualCorrection();
+        }
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+    });
+  }
+
+  void _cancelActiveManualCorrection() {
+    _manualCorrectionGeneration++;
+    _activeManualCorrectionTimer?.cancel();
+    _activeManualCorrectionTimer = null;
+    _activeManualCorrection = false;
+    _presenterDragInProgress = false;
+    _userBrowsingWhileStopped = false;
+    _lastPresenterUserScrollSignalAt = null;
+    _sessionOwner.cancelManualScroll();
   }
 
   void _finishActiveManualCorrection() {
-    if (_viewportAnchor != null) return;
-    _activeManualCorrectionTimer?.cancel();
-    _activeManualCorrectionTimer = null;
+    if (_presenterDragInProgress) return;
     if (!_activeManualCorrection) return;
+    if (_viewportAnchor != null || _viewportGeometryPending) {
+      _scheduleActiveManualCorrectionCommit();
+      return;
+    }
+    if (!_sessionOwner.manualScrollInProgress) {
+      _cancelActiveManualCorrection();
+      return;
+    }
     _userBrowsingWhileStopped = false;
     _lastBrowsingWordSync = null;
     _syncVisibleWordWindow(force: true);
-    _syncResumePointToReadingLine();
-    // Keep recognition-driven auto-scroll suppressed until this provider
-    // commit and the following frame have settled. Clearing the flag before
-    // the commit caused a snap-back race against incoming STT updates.
-    _activeManualCorrectionTimer = Timer(const Duration(milliseconds: 160), () {
-      _activeManualCorrectionTimer = null;
-      _activeManualCorrection = false;
-    });
+    final script = ref.read(scriptProvider);
+    final target =
+        _scrollController.hasClients && _scrollController.offset <= 1
+            ? 0
+            : _wordIndexNearestReadingLine();
+    if (script != null && target != null) {
+      _setTeleprompterState(() => _manualWordIndex = target);
+      _sessionOwner.finishManualScroll(target, script: script);
+    }
+    // Suppress the synchronous commit listener only. Fresh speech after this
+    // frame must follow immediately; a trailing timer used to swallow it.
+    _cancelActiveManualCorrection();
   }
 
   void _syncResumePointToReadingLine({

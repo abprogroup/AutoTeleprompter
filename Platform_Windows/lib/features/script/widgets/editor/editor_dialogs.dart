@@ -42,83 +42,122 @@ class EditorDialogs {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Save Format', style: TextStyle(color: Colors.white)),
-        content: const Text('Choose format:',
-            style: TextStyle(color: Colors.white70)),
+        title: const Text(
+          'Export file',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Choose a file format. Next, choose a file name and folder. Your script stays in the app library.',
+          style: TextStyle(color: Colors.white70),
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, 'pdf'),
-              child: const Text('PDF (.pdf)')),
+            onPressed: () => Navigator.pop(context, 'pdf'),
+            child: const Text('PDF (.pdf)'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context, 'docx'),
-              child: const Text('Word (.docx)')),
+            onPressed: () => Navigator.pop(context, 'docx'),
+            child: const Text('Word (.docx)'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context, 'doc'),
-              child: const Text('Word 97-2003 (.doc)')),
+            onPressed: () => Navigator.pop(context, 'doc'),
+            child: const Text('Word 97-2003 (.doc)'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context, 'rtf'),
-              child: const Text('Rich Text (.rtf)')),
+            onPressed: () => Navigator.pop(context, 'rtf'),
+            child: const Text('Rich Text (.rtf)'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context, 'odt'),
-              child: const Text('OpenDocument (.odt)')),
+            onPressed: () => Navigator.pop(context, 'odt'),
+            child: const Text('OpenDocument (.odt)'),
+          ),
           if (PlatformFileImport.supportedExtensions.contains('pages'))
             TextButton(
-                onPressed: () => Navigator.pop(context, 'pages'),
-                child: const Text('Pages (.pages)')),
+              onPressed: () => Navigator.pop(context, 'pages'),
+              child: const Text('Pages (.pages)'),
+            ),
           TextButton(
-              onPressed: () => Navigator.pop(context, 'md'),
-              child: const Text('Markdown (.md)')),
+            onPressed: () => Navigator.pop(context, 'md'),
+            child: const Text('Markdown (.md)'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context, 'txt'),
-              child: const Text('Plain Text (.txt)')),
+            onPressed: () => Navigator.pop(context, 'txt'),
+            child: const Text('Plain Text (.txt)'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
         ],
       ),
     );
   }
 
   static Future<void> showNotSupportedDialog(
-      BuildContext context, String fileName, String ext) {
+    BuildContext context,
+    String fileName,
+    String ext,
+  ) {
     return showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [
-          Icon(Icons.block_rounded, color: Colors.redAccent, size: 22),
-          SizedBox(width: 10),
-          Text("Not Supported",
-              style: TextStyle(color: Colors.white, fontSize: 17)),
-        ]),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.block_rounded, color: Colors.redAccent, size: 22),
+            SizedBox(width: 10),
+            Text(
+              "Not Supported",
+              style: TextStyle(color: Colors.white, fontSize: 17),
+            ),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('"$fileName"',
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+            Text(
+              '"$fileName"',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 6),
-            Text('.${ext.toUpperCase()} files cannot be used as scripts.',
-                style: const TextStyle(color: Colors.white70)),
+            Text(
+              '.${ext.toUpperCase()} files cannot be used as scripts.',
+              style: const TextStyle(color: Colors.white70),
+            ),
             const SizedBox(height: 12),
-            const Text('Supported formats:',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
-            Text(PlatformFileImport.formatsLabel,
-                style: const TextStyle(
-                    color: Color(0xFFFFBF00),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold)),
+            const Text(
+              'Supported formats:',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            Text(
+              PlatformFileImport.formatsLabel,
+              style: const TextStyle(
+                color: Color(0xFFFFBF00),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text("OK",
-                  style: TextStyle(
-                      color: Color(0xFFFFBF00), fontWeight: FontWeight.bold)))
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              "OK",
+              style: TextStyle(
+                color: Color(0xFFFFBF00),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -200,49 +239,59 @@ class _SaveNameDialogState extends State<SaveNameDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-          backgroundColor: const Color(0xFF131313),
-          title: const Text('File Name', style: TextStyle(color: Colors.white)),
-          content: Shortcuts(
-            shortcuts: const <ShortcutActivator, Intent>{
-              SingleActivator(LogicalKeyboardKey.arrowLeft):
-                  _SaveNameArrowIntent(LogicalKeyboardKey.arrowLeft),
-              SingleActivator(LogicalKeyboardKey.arrowRight):
-                  _SaveNameArrowIntent(LogicalKeyboardKey.arrowRight),
-            },
-            child: Actions(
-              actions: <Type, Action<Intent>>{
-                _SaveNameArrowIntent:
-                    CallbackAction<_SaveNameArrowIntent>(onInvoke: (intent) {
+        backgroundColor: const Color(0xFF131313),
+        title: const Text(
+          'Export file name',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Shortcuts(
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.arrowLeft): _SaveNameArrowIntent(
+              LogicalKeyboardKey.arrowLeft,
+            ),
+            SingleActivator(LogicalKeyboardKey.arrowRight):
+                _SaveNameArrowIntent(
+              LogicalKeyboardKey.arrowRight,
+            ),
+          },
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              _SaveNameArrowIntent: CallbackAction<_SaveNameArrowIntent>(
+                onInvoke: (intent) {
                   _movePlainArrow(intent.key);
                   return null;
-                }),
-              },
-              child: TextField(
-                  controller: widget.nameCtrl,
-                  autofocus: true,
-                  textDirection: _nameDirection,
-                  textAlign: _nameDirection == TextDirection.rtl
-                      ? TextAlign.right
-                      : TextAlign.left,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    suffixText: '.${widget.format}',
-                    suffixStyle: const TextStyle(color: Colors.white54),
-                  )),
+                },
+              ),
+            },
+            child: TextField(
+              controller: widget.nameCtrl,
+              autofocus: true,
+              textDirection: _nameDirection,
+              textAlign: _nameDirection == TextDirection.rtl
+                  ? TextAlign.right
+                  : TextAlign.left,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                suffixText: '.${widget.format}',
+                suffixStyle: const TextStyle(color: Colors.white54),
+              ),
             ),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel')),
-            ElevatedButton(
-                onPressed: () => Navigator.pop(context, {
-                      'name': widget.nameCtrl.text.trim(),
-                      'replace':
-                          widget.usedNames.contains(widget.nameCtrl.text.trim())
-                    }),
-                child: const Text('Save'))
-          ]);
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, {
+              'name': widget.nameCtrl.text.trim(),
+              'replace': widget.usedNames.contains(widget.nameCtrl.text.trim()),
+            }),
+            child: const Text('Choose folder'),
+          ),
+        ],
+      );
 }
 
 class _SaveNameArrowIntent extends Intent {

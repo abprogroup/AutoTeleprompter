@@ -102,6 +102,45 @@ process.stdin.on('end', () => {
   assert.deepEqual(delivered.segments, ['corrected consumed words', 'new speech']);
   assert.equal(delivered.finalizedSegmentCount, 1);
 
+  const locale = host();
+  const initialRevision = vm.runInContext('configurationRevision', locale.context);
+  locale.recognizers[0].onresult({resultIndex: 0, results: [result('initial speech', false)]});
+  assert.equal(locale.messages.find(m => m.type === 'result').configurationRevision, initialRevision);
+  function configure(h, language, revision) {
+    vm.runInContext(`ws.onmessage({data: JSON.stringify({type: 'setLocale', locale: ${JSON.stringify(language)}, configurationRevision: ${revision}})});`, h.context);
+  }
+  configure(locale, 'he-IL', initialRevision + 1);
+  const retiredLocaleResults = locale.messages.filter(m => m.type === 'result').length;
+  locale.recognizers[0].onresult({resultIndex: 0, results: [result('retired English', false)]});
+  assert.equal(locale.messages.filter(m => m.type === 'result').length, retiredLocaleResults);
+  locale.advance(80);
+  assert.equal(locale.recognizers.at(-1).lang, 'he-IL');
+  locale.recognizers.at(-1).onresult({resultIndex: 0, results: [result('current Hebrew', false)]});
+  assert.equal(locale.messages.filter(m => m.type === 'result').at(-1).configurationRevision, initialRevision + 1);
+  configure(locale, 'en-US', initialRevision + 2);
+  configure(locale, 'he-IL', initialRevision + 1); // Retired command cannot win.
+  locale.advance(80);
+  assert.equal(locale.recognizers.at(-1).lang, 'en-US');
+  locale.recognizers.at(-1).onresult({resultIndex: 0, results: [result('new English', false)]});
+  assert.equal(locale.messages.filter(m => m.type === 'result').at(-1).configurationRevision, initialRevision + 2);
+  const beforeSameLocale = locale.recognizers.length;
+  configure(locale, 'en-US', initialRevision + 3); locale.advance(80);
+  assert.equal(locale.recognizers.length, beforeSameLocale + 1,
+    'same-language new configuration is a distinct recognition ownership boundary');
+  configure(locale, 'en-US', initialRevision + 3); locale.advance(80);
+  assert.equal(locale.recognizers.length, beforeSameLocale + 1,
+    'duplicate configuration is not another restart');
+
+  const offlineLocale = host();
+  offlineLocale.emit('offline');
+  configure(offlineLocale, 'he-IL', initialRevision + 1);
+  offlineLocale.advance(10000);
+  assert.equal(offlineLocale.recognizers.length, 1);
+  offlineLocale.emit('online'); offlineLocale.advance(250);
+  assert.equal(offlineLocale.recognizers.length, 2,
+    'pending locale switch must resume when the network returns');
+  assert.equal(offlineLocale.recognizers.at(-1).lang, 'he-IL');
+
   const failures = host();
   for (const delay of [1250, 2500, 5000, 8000, 8000, 8000]) {
     const oldCount = failures.recognizers.length;
@@ -145,5 +184,65 @@ process.stdin.on('end', () => {
   assert.equal(offlineStopped.recognizers.length, 1, 'online cannot revive stopped session');
   denied.emit('offline'); denied.emit('online'); denied.advance(30000);
   assert.equal(denied.recognizers.length, 1, 'online cannot bypass permission denial');
+
+  const emptyEnds = host();
+  for (const delay of [240, 240, 500, 1000, 2000, 4000, 8000, 8000]) {
+    const count = emptyEnds.recognizers.length;
+    emptyEnds.advance(100);
+    emptyEnds.recognizers.at(-1).onend();
+    emptyEnds.advance(delay - 1);
+    assert.equal(emptyEnds.recognizers.length, count, 'rapid empty onend must not spin at 240ms forever');
+    emptyEnds.advance(1);
+    assert.equal(emptyEnds.recognizers.length, count + 1);
+  }
+  const retries = emptyEnds.messages.filter(m => m.type === 'restartScheduled');
+  assert.deepEqual(retries.map(m => m.delayMs), [240, 240, 500, 1000, 2000, 4000, 8000, 8000]);
+  assert(retries.every(m => m.reason === 'recognition-ended' && !('words' in m)));
+  const beforeDelayedResult = emptyEnds.recognizers.length;
+  emptyEnds.advance(120000);
+  assert.equal(emptyEnds.recognizers.length, beforeDelayedResult,
+    'prior rapid ends cannot impose a silence watchdog on the healthy replacement');
+  const quickNoSpeech = host();
+  for (const delay of [120, 120, 500, 1000]) {
+    const count = quickNoSpeech.recognizers.length;
+    quickNoSpeech.advance(100);
+    quickNoSpeech.recognizers.at(-1).onerror({error: 'no-speech'});
+    quickNoSpeech.recognizers.at(-1).onend();
+    quickNoSpeech.advance(delay - 1);
+    assert.equal(quickNoSpeech.recognizers.length, count, 'quick no-speech errors cannot bypass end backoff');
+    quickNoSpeech.advance(1);
+    assert.equal(quickNoSpeech.recognizers.length, count + 1);
+  }
+  emptyEnds.recognizers.at(-1).onresult({resultIndex: 0, results: [result('real speech', false)]});
+  const beforeProductive = emptyEnds.recognizers.length;
+  emptyEnds.recognizers.at(-1).onend(); emptyEnds.advance(240);
+  assert.equal(emptyEnds.recognizers.length, beforeProductive + 1, 'real speech resets empty-end backoff');
+  for (let i = 0; i < 5; i++) {
+    emptyEnds.advance(6000); // A normal quiet listening session ending is not rapid churn.
+    const count = emptyEnds.recognizers.length;
+    emptyEnds.recognizers.at(-1).onerror({error: 'no-speech'});
+    emptyEnds.recognizers.at(-1).onend(); emptyEnds.advance(120);
+    assert.equal(emptyEnds.recognizers.length, count + 1, 'normal quiet ends retain prompt restart');
+  }
+  assert.equal(quiet.messages.filter(m => m.type === 'restartScheduled').length, 0);
+  const networkRetry = failures.messages.filter(m => m.type === 'restartScheduled');
+  assert(networkRetry.some(m => m.reason === 'network-error' && m.delayMs === 8000));
+
+  const networkThenEmpty = host();
+  for (const delay of [1250, 2500]) {
+    networkThenEmpty.recognizers.at(-1).onerror({error: 'network'});
+    networkThenEmpty.advance(delay);
+  }
+  for (let i = 0; i < 4; i++) {
+    networkThenEmpty.recognizers.at(-1).onend();
+    assert.equal(networkThenEmpty.messages.at(-1).delayMs, 2500,
+      'empty ends cannot shorten an existing network recovery delay');
+    networkThenEmpty.advance(2500);
+  }
+  networkThenEmpty.emit('offline'); networkThenEmpty.advance(30000);
+  const beforeOnline = networkThenEmpty.recognizers.length;
+  networkThenEmpty.emit('online'); networkThenEmpty.emit('online');
+  networkThenEmpty.advance(250);
+  assert.equal(networkThenEmpty.recognizers.length, beforeOnline + 1);
   console.log('browser lifecycle checks passed');
 });

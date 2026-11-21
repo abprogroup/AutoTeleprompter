@@ -480,6 +480,22 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
     }
     final settings = ref.read(settingsProvider);
     final locale = _activeLocale ?? _scriptLanguageLocale ?? 'he_IL';
+    final script = _currentScript;
+    final pendingAnchor = _browserRecoveryLocaleAnchor;
+    if (pendingAnchor == null ||
+        pendingAnchor.sessionToken != sessionToken ||
+        pendingAnchor.script.sessionId != script?.sessionId) {
+      // Preserve the ORIGINAL location through a failed retry. The operator
+      // may already have moved while the previous stop/start awaited IO.
+      _browserRecoveryLocaleAnchor =
+          script == null
+              ? null
+              : (
+                sessionToken: sessionToken,
+                script: script,
+                position: _currentState.confirmedWordIndex,
+              );
+    }
     _browserHostStartedAt = DateTime.now();
     _lastBrowserHeartbeatAt = null;
     _recoverableSttErrorCount = 0;
@@ -551,6 +567,32 @@ extension TeleprompterBrowserHost on TeleprompterNotifier {
         quarantineRuntime: true,
       );
     }
+  }
+
+  bool _reconcileRecoveredBrowserLocale() {
+    final anchor = _browserRecoveryLocaleAnchor;
+    if (anchor == null) return false;
+    if (_disposed ||
+        _sessionStopped ||
+        anchor.sessionToken != _sessionToken ||
+        _currentScript == null ||
+        anchor.script.sessionId != _currentScript!.sessionId) {
+      _browserRecoveryLocaleAnchor = null;
+      return false;
+    }
+    // Keep a held gesture's fence until it settles. The new host's readiness
+    // is not permission to align against a moving reading position.
+    if (_manualScrollInProgress) return false;
+    _browserRecoveryLocaleAnchor = null;
+    final position = _currentState.confirmedWordIndex;
+    if (position == anchor.position) return false;
+    final previousLocale = _activeLocale;
+    _syncLocaleForPosition(
+      _currentScript!,
+      position,
+      reason: 'recovered manual anchor',
+    );
+    return previousLocale != _activeLocale;
   }
 
   Future<void> _stopWithBrowserHostError(

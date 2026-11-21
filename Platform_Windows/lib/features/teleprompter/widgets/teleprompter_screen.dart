@@ -18,6 +18,7 @@ import '../services/presenter_scroll_motion.dart';
 import '../services/presenter_input_lock_service.dart';
 import '../services/presenter_highlight_style.dart';
 import '../../script/services/script_color_inversion_service.dart';
+import '../../script/services/script_typography_service.dart';
 import '../../script/providers/script_provider.dart';
 import '../../script/models/script.dart';
 import '../../script/services/script_bookmark_service.dart';
@@ -108,6 +109,8 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
   bool _closingPresentation = false;
   bool _userBrowsingWhileStopped = false;
   bool _activeManualCorrection = false;
+  bool _presenterDragInProgress = false;
+  int _manualCorrectionGeneration = 0;
   StreamSubscription? _remoteCmdSub;
   WebviewController? _webviewController;
   Future<WebviewController?>? _webViewControllerInitFuture;
@@ -201,6 +204,11 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
             _syncWindowsControlsForSpeech(next);
           },
         );
+        ref.listenManual(scriptProvider, (prev, next) {
+          if (mounted && next != null) {
+            _sessionOwner.syncActiveScript(next);
+          }
+        });
         final initialWebViewUrl = ref.read(teleprompterProvider).sttWebViewUrl;
         if (Platform.isWindows && initialWebViewUrl != null) {
           unawaited(_loadSttWebView(initialWebViewUrl));

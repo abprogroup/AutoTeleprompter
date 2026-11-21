@@ -16,11 +16,13 @@ import '../../../platform/webview2/webview2_runtime_config.dart';
 import '../../../platform/webview2/webview2_runtime_bootstrap.dart';
 import '../models/alignment_result.dart';
 import '../services/content_camera_device_classifier.dart';
+import '../services/presenter_highlight_style.dart';
 import '../services/presenter_input_lock_service.dart';
 import '../services/presenter_reading_position_service.dart';
 import '../services/recording_media_probe_service.dart';
 import '../services/recording_export_service.dart';
 import '../../script/services/script_color_inversion_service.dart';
+import '../../script/services/script_typography_service.dart';
 import '../services/wav_audio_recorder_service.dart';
 import '../providers/teleprompter_provider.dart';
 import '../services/approximate_spoken_search_service.dart';
@@ -168,6 +170,11 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
           }
         },
       );
+      ref.listenManual<Script?>(scriptProvider, (prev, next) {
+        if (next != null) {
+          ref.read(teleprompterProvider.notifier).syncActiveScript(next);
+        }
+      });
       ref.listenManual(
         teleprompterProvider.select((s) => s.confirmedWordIndex),
         (prev, next) {

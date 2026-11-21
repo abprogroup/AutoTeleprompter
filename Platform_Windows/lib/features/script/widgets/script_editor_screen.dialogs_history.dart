@@ -1,35 +1,40 @@
 part of 'script_editor_screen.dart';
 
 extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
-  void _showRenameDialog() {
-    final controller = TextEditingController(text: _currentTitle);
-    showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              title: const Text('Rename Production',
-                  style: TextStyle(color: Colors.white)),
-              content: TextField(
-                  controller: controller,
-                  autofocus: true,
-                  style: const TextStyle(color: Colors.white)),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel')),
-                TextButton(
-                    onPressed: () {
-                      final newName = controller.text.trim();
-                      if (newName.isNotEmpty) {
-                        _setEditorState(() => _currentTitle = newName);
-                        _forceRecentUpdate();
-                        Navigator.pop(ctx);
-                      }
-                    },
-                    child: const Text('Rename',
-                        style: TextStyle(color: Color(0xFFFFBF00)))),
-              ],
-            ));
+  Future<void> _showRenameDialog() async {
+    final library = ref.read(settingsProvider.notifier);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => ScriptNameDialog(
+        initialName: _currentTitle,
+        rename: true,
+        nameAlreadyUsed: (name) => library.libraryContainsScript(
+          title: name,
+          excludingSessionId: _currentSessionId,
+        ),
+      ),
+    );
+    if (name == null || !mounted) return;
+    try {
+      if (_currentSessionId != null) {
+        final renamed = await library.renameLibraryScript(_currentSessionId!, name);
+        if (!renamed && library.libraryContainsScript(title: name,
+            excludingSessionId: _currentSessionId)) {
+          throw StateError('That script name is already in use.');
+        }
+      }
+      if (!mounted) return;
+      _setEditorState(() => _currentTitle = name);
+      await _forceRecentUpdate();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save the script name. Please try again.'),
+          ),
+        );
+      }
+    }
   }
 
   String _getRefinedFullText() => _controllers.map((c) => c.text).join('\n');

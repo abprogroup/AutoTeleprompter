@@ -10,11 +10,16 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
       final result = await ref.read(scriptProvider.notifier).parseFile(file);
       if (result.isError) {
+        _currentSessionId = null;
+        _currentSourcePath = null;
         if (!mounted) return;
         await _showImportErrorDialog(
           title: file.path.split(RegExp(r'[\\/]')).last,
           message: result.errorMessage ?? result.text,
         );
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
         return;
       }
       final parsedSettings = ref.read(settingsProvider);
@@ -67,10 +72,17 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
 
       if (existingMeta != null) {
         final decoded = jsonDecode(existingMeta);
-        final secureData = await SecureScriptStore().readFromMetadata(
-          Map<String, dynamic>.from(decoded),
-        );
-        final String existingContent = secureData?.text ?? '';
+        final secureData = await _readStoredScriptForFileConflict(
+            title, Map<String, dynamic>.from(decoded));
+        if (secureData == null) {
+          _currentSessionId = null;
+          _currentSourcePath = null;
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+        final String existingContent = secureData.text;
         final String sessionId = decoded['sessionId'];
         final String type = decoded['type'] ?? 'TXT';
         final metaSourcePath = decoded['sourcePath'];
@@ -82,7 +94,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           finalContent = existingContent;
           finalType = type;
           finalSessionId = sessionId;
-          finalHistoryJson = secureData?.historyJson;
+          finalHistoryJson = secureData.historyJson;
         } else {
           if (!mounted) return;
           final choice = await showDialog<String>(
@@ -137,7 +149,7 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
             finalContent = existingContent;
             finalType = type;
             finalSessionId = sessionId;
-            finalHistoryJson = secureData?.historyJson;
+            finalHistoryJson = secureData.historyJson;
           } else {
             if (mounted) Navigator.pop(context);
             return;
@@ -755,7 +767,12 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           isItalic: _detectStyleAtCursor('[i]', '[/i]'),
           isUnderline: _detectStyleAtCursor('[u]', '[/u]'),
           fontSize: _detectIntAtCursor('size=', settings.fontSize.toInt()),
-          fontFamily: _detectStringAtCursor('font=', 'Inter'),
+          fontFamily: _detectStringAtCursor(
+            'font=',
+            settings.fontFamily.trim().isEmpty
+                ? 'Inter'
+                : settings.fontFamily.trim(),
+          ),
           textAlign: _detectAlignAtCursor(),
           textDirection: _detectDirectionAtCursor(),
           textColor: _detectColorAtCursor(textColor: true),
@@ -774,26 +791,4 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
     _saveHistory(description: 'Edit Text', debounce: true);
     _scheduleRecentUpdate();
   }
-
-  void _clearAppSelectionAfterTextInput(MarkupController editedController) {
-    _overlayKey.currentState?.clearSelection();
-    _shiftSelectionAnchor = null;
-    _shiftSelectionFocus = null;
-    _isGlobalSelection = false;
-    for (final c in _controllers) {
-      c.isGlobalSelected = false;
-      c.externalSelection = null;
-      c.externalVisibleSelection = null;
-      if (!identical(c, editedController) &&
-          c.selection.isValid &&
-          !c.selection.isCollapsed) {
-        final collapseAt = c.selection.extentOffset.clamp(0, c.text.length);
-        c.selection = TextSelection.collapsed(offset: collapseAt);
-      }
-      c.refresh();
-    }
-    _lastFocusedController = editedController;
-  }
 }
-
-class _EnterSelectionRange { final int blockIndex; final TextSelection selection; const _EnterSelectionRange(this.blockIndex, this.selection); }

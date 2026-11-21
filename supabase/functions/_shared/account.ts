@@ -68,12 +68,21 @@ export async function requireUser(req: Request) {
 }
 
 export async function ensureActiveProfile(client: ReturnType<typeof serviceClient>, user: { id: string; email?: string }) {
-  const email = user.email ?? "";
+  const email = (user.email ?? "").trim();
+  // Insert default active profile only on first sign-in; never overwrite an
+  // existing disabled/banned status.
   await client.from("profiles").upsert({
     user_id: user.id,
     email,
     status: "active",
-  }, { onConflict: "user_id" });
+  }, { onConflict: "user_id", ignoreDuplicates: true });
+
+  if (email.length > 0) {
+    await client.from("profiles")
+      .update({ email })
+      .eq("user_id", user.id)
+      .neq("email", email);
+  }
 
   await client.from("entitlements").upsert({
     user_id: user.id,
@@ -198,8 +207,9 @@ async function createGraceToken({
 
   if (graceExpiry.getTime() <= issuedAt.getTime()) return null;
 
+  const issuer = (Deno.env.get("GRACE_TOKEN_ISSUER") ?? "autoteleprompter-staging").trim() || "autoteleprompter-staging";
   const payload = {
-    iss: "autoteleprompter-staging",
+    iss: issuer,
     aud: "autoteleprompter-windows",
     kid: keyId,
     account_id: accountId,

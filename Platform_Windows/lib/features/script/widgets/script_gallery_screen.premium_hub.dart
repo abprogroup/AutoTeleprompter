@@ -75,10 +75,10 @@ class _PremiumHubSheet extends StatelessWidget {
           margin: const EdgeInsets.all(14),
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: const Color(0xFF101010),
+            color: AppColors.surfaceSheet,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: const Color(0xFFFFBF00).withValues(alpha: .32),
+              color: AppColors.amber.withValues(alpha: .32),
             ),
             boxShadow: [
               BoxShadow(
@@ -98,7 +98,7 @@ class _PremiumHubSheet extends StatelessWidget {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFBF00).withValues(alpha: .15),
+                      color: AppColors.amber.withValues(alpha: .15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -107,7 +107,7 @@ class _PremiumHubSheet extends StatelessWidget {
                           : isCheckingAccess
                               ? Icons.sync_rounded
                           : Icons.workspace_premium_outlined,
-                      color: const Color(0xFFFFBF00),
+                      color: AppColors.amber,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -184,13 +184,15 @@ class _PremiumHubSheet extends StatelessWidget {
                   label: 'Sign in with Pro account',
                   onPressed: onSignIn,
                 ),
-                const SizedBox(height: 8),
-                _PremiumActionButton(
-                  icon: Icons.open_in_new_rounded,
-                  label: 'Upgrade account',
-                  onPressed: () => _openUpgradeWebsite(context),
-                  secondary: true,
-                ),
+                if (_upgradeWebsiteUrl.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _PremiumActionButton(
+                    icon: Icons.open_in_new_rounded,
+                    label: 'Upgrade account',
+                    onPressed: () => _openUpgradeWebsite(context),
+                    secondary: true,
+                  ),
+                ],
               ],
             ],
           ),
@@ -201,7 +203,8 @@ class _PremiumHubSheet extends StatelessWidget {
 
   Future<void> _openUpgradeWebsite(BuildContext context) async {
     final url = _upgradeWebsiteUrl.trim();
-    if (url.isEmpty) {
+    final uri = Uri.tryParse(url);
+    if (url.isEmpty || uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -212,10 +215,13 @@ class _PremiumHubSheet extends StatelessWidget {
       return;
     }
     if (Platform.isWindows) {
-      await Process.run('cmd', ['/c', 'start', '', url]);
+      await Process.run('rundll32', [
+        'url.dll,FileProtocolHandler',
+        uri.toString(),
+      ]);
       return;
     }
-    await Process.run('open', [url]);
+    await Process.run('open', [uri.toString()]);
   }
 }
 

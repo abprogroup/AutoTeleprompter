@@ -127,7 +127,7 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: AppColors.surface,
         title: Text(title, style: const TextStyle(color: Colors.white)),
         content: SelectableText(
           details,
@@ -155,6 +155,17 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
 
   Future<void> _downloadUpdatePackage(UpdateCheckResult result) async {
     if (_downloadingUpdate) return;
+    final liveBefore = ref.read(teleprompterProvider);
+    if (liveBefore.isListening || liveBefore.isStarting) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Stop live speech recognition before installing an update.',
+          ),
+        ),
+      );
+      return;
+    }
     _setDownloadingUpdate(true);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Downloading update package...')),
@@ -162,6 +173,17 @@ extension _AppSettingsUpdates on _AppSettingsScreenState {
     try {
       final file = await UpdateDownloadService().download(result);
       if (!mounted) return;
+      final liveBeforeInstall = ref.read(teleprompterProvider);
+      if (liveBeforeInstall.isListening || liveBeforeInstall.isStarting) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Update downloaded. Stop live speech recognition before installing.',
+            ),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Installing update. AutoTeleprompter will restart.'),

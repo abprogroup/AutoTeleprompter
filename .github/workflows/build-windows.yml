@@ -44,9 +44,14 @@ jobs:
       - name: Resolve Release Metadata
         id: release
         shell: pwsh
+        env:
+          INPUT_RELEASE_CHANNEL: ${{ github.event.inputs.release_channel }}
+          INPUT_APP_VERSION: ${{ github.event.inputs.app_version }}
+          INPUT_RELEASE_NUMBER: ${{ github.event.inputs.release_number }}
+          INPUT_RELEASE_LABEL: ${{ github.event.inputs.release_label }}
         run: |
           $ErrorActionPreference = "Stop"
-          $releaseChannel = "${{ github.event.inputs.release_channel }}"
+          $releaseChannel = [string]$env:INPUT_RELEASE_CHANNEL
           if ([string]::IsNullOrWhiteSpace($releaseChannel)) {
             $releaseChannel = "stable"
           }
@@ -55,7 +60,7 @@ jobs:
             throw "Unsupported release_channel '$releaseChannel'."
           }
 
-          $appVersion = "${{ github.event.inputs.app_version }}"
+          $appVersion = [string]$env:INPUT_APP_VERSION
           if ([string]::IsNullOrWhiteSpace($appVersion)) {
             $appVersion = "5.2.2+66"
           }
@@ -65,7 +70,7 @@ jobs:
           }
           $versionName = ($appVersion -split '\+', 2)[0]
 
-          $releaseNumber = "${{ github.event.inputs.release_number }}"
+          $releaseNumber = [string]$env:INPUT_RELEASE_NUMBER
           if ([string]::IsNullOrWhiteSpace($releaseNumber)) {
             $releaseNumber = "1"
           }
@@ -74,7 +79,7 @@ jobs:
             throw "release_number must be a positive integer."
           }
 
-          $releaseLabel = "${{ github.event.inputs.release_label }}"
+          $releaseLabel = [string]$env:INPUT_RELEASE_LABEL
           if ([string]::IsNullOrWhiteSpace($releaseLabel)) {
             if ($releaseChannel -eq "stable") {
               $releaseLabel = "Stable"
@@ -124,6 +129,8 @@ jobs:
 
       - name: Verify Windows Source Version
         shell: pwsh
+        env:
+          WORKFLOW_APP_VERSION: ${{ steps.release.outputs.app_version }}
         run: |
           $ErrorActionPreference = "Stop"
           $pubspecPath = "Platform_Windows\pubspec.yaml"
@@ -136,7 +143,7 @@ jobs:
           }
 
           $sourceVersion = ($versionLines[0] -replace '^version:\s*', '').Trim()
-          $workflowVersion = "${{ steps.release.outputs.app_version }}"
+          $workflowVersion = [string]$env:WORKFLOW_APP_VERSION
           if ($sourceVersion -ne $workflowVersion) {
             throw "Windows release version mismatch: pubspec has '$sourceVersion', workflow requested '$workflowVersion'."
           }
@@ -146,6 +153,9 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.release_channel }}
+          FALLBACK_MANIFEST_URL: ${{ steps.release.outputs.manifest_url }}
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
           GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
           GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
@@ -184,7 +194,7 @@ jobs:
 
           $manifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
           if ([string]::IsNullOrWhiteSpace($manifestUrl)) {
-            $manifestUrl = "${{ steps.release.outputs.manifest_url }}"
+            $manifestUrl = [string]$env:FALLBACK_MANIFEST_URL
           }
           if ($manifestUrl -notmatch '^https://') {
             throw "UPDATE_MANIFEST_URL must resolve to an HTTPS URL."
@@ -200,8 +210,8 @@ jobs:
             throw "AUTOTELEPROMPTER_ADMIN_CODE_SHA256 must be a lowercase SHA-256 hash."
           }
 
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            if ("${{ steps.release.outputs.release_channel }}" -eq "internal") {
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            if ($env:RELEASE_CHANNEL -eq "internal") {
               Require-Value "AUTOTELEPROMPTER_INTERNAL_RELEASES_TOKEN" $env:INTERNAL_RELEASES_TOKEN
             } else {
               Require-Value "AUTOTELEPROMPTER_RELEASES_TOKEN" $env:PUBLIC_RELEASES_TOKEN
@@ -268,6 +278,7 @@ jobs:
             "test/settings/hotkey_settings_page_test.dart"
             "test/settings/settings_provider_stt_engine_test.dart"
             "test/settings/speech_scroll_settings_test.dart"
+            "test/settings/stage3_4_theme_security_updater_test.dart"
             "test/settings/windows_stt_engine_selector_test.dart"
             "test/script/script_library_import_test.dart"
             "test/script/script_folder_import_test.dart"
@@ -315,10 +326,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $releaseChannel = "${{ steps.release.outputs.release_channel }}"
-          $appVersion = "${{ steps.release.outputs.app_version }}"
+          $releaseChannel = [string]$env:RELEASE_CHANNEL
+          $appVersion = [string]$env:RELEASE_APP_VERSION
           Write-Host "Building Windows $appVersion artifact for update channel: $releaseChannel"
-          $symbols = Join-Path $env:RUNNER_TEMP "autoteleprompter-symbols\${{ steps.release.outputs.tag }}"
+          $symbols = Join-Path $env:RUNNER_TEMP ("autoteleprompter-symbols\" + [string]$env:RELEASE_TAG)
           New-Item -ItemType Directory -Force -Path $symbols | Out-Null
 
           $endpoint = ($env:FEEDBACK_ENDPOINT -replace "`r", "" -replace "`n", "").Trim()
@@ -331,6 +342,9 @@ jobs:
           $adminCodeHash = ($env:AUTOTELEPROMPTER_ADMIN_CODE_SHA256 -replace "\s", "").Trim().ToLowerInvariant()
           $supabaseUrl = ($env:SUPABASE_URL -replace "`r", "" -replace "`n", "").Trim()
           $supabaseAnonKey = ($env:SUPABASE_ANON_KEY -replace "`r", "" -replace "`n", "").Trim()
+          $graceKeyId = ($env:GRACE_TOKEN_KEY_ID_VAR -replace "`r", "" -replace "`n", "").Trim()
+          $graceModulusHex = ($env:GRACE_TOKEN_PUBLIC_MODULUS_HEX_VAR -replace "\s", "").Trim().ToLowerInvariant()
+          $graceExponentHex = ($env:GRACE_TOKEN_PUBLIC_EXPONENT_HEX_VAR -replace "\s", "").Trim().ToLowerInvariant()
           $accountBackendEnabled = if (-not [string]::IsNullOrWhiteSpace($supabaseUrl) -and
               -not [string]::IsNullOrWhiteSpace($supabaseAnonKey)) { "true" } else { "false" }
           $supabaseUrlForBuild = if ($accountBackendEnabled -eq "true") { $supabaseUrl } else { "" }
@@ -340,7 +354,7 @@ jobs:
           $feedbackEndpointForBuild = if ($accountBackendEnabled -eq "true") { "" } else { $endpoint }
           $updateManifestUrl = ($env:UPDATE_MANIFEST_URL_VAR -replace "`r", "" -replace "`n", "").Trim()
           if ([string]::IsNullOrWhiteSpace($updateManifestUrl)) {
-            $updateManifestUrl = "${{ steps.release.outputs.manifest_url }}"
+            $updateManifestUrl = [string]$env:FALLBACK_MANIFEST_URL
           }
 
           if (-not [string]::IsNullOrWhiteSpace($googleDriveClientId) -and
@@ -352,22 +366,39 @@ jobs:
             throw "AUTOTELEPROMPTER_ADMIN_CODE_SHA256 must be a lowercase SHA-256 hash."
           }
 
-          flutter build windows --release --obfuscate --split-debug-info="$symbols" `
-            --dart-define=APP_VERSION="$appVersion" `
-            --dart-define=FEEDBACK_ENDPOINT="$feedbackEndpointForBuild" `
-            --dart-define=GOOGLE_DRIVE_CLIENT_ID="$googleDriveClientId" `
-            --dart-define=GOOGLE_DRIVE_CLIENT_SECRET="$googleDriveClientSecret" `
-            --dart-define=DROPBOX_CLIENT_ID="$dropboxClientId" `
-            --dart-define=DROPBOX_CLIENT_SECRET="$dropboxClientSecret" `
-            --dart-define=DROPBOX_SYNC_ROOT_PATH="$dropboxSyncRootPath" `
-            --dart-define=AUTOTELEPROMPTER_ADMIN_EMAIL="$adminEmailForBuild" `
-            --dart-define=AUTOTELEPROMPTER_ADMIN_CODE_SHA256="$adminCodeHashForBuild" `
-            --dart-define=ACCOUNT_BACKEND_ENABLED="$accountBackendEnabled" `
-            --dart-define=SUPABASE_URL="$supabaseUrlForBuild" `
-            --dart-define=SUPABASE_ANON_KEY="$supabaseAnonKeyForBuild" `
-            --dart-define=UPDATE_MANIFEST_URL="$updateManifestUrl"
+          $buildArgs = @(
+            "build", "windows", "--release", "--obfuscate", "--split-debug-info=$symbols",
+            "--dart-define=APP_VERSION=$appVersion",
+            "--dart-define=FEEDBACK_ENDPOINT=$feedbackEndpointForBuild",
+            "--dart-define=GOOGLE_DRIVE_CLIENT_ID=$googleDriveClientId",
+            "--dart-define=GOOGLE_DRIVE_CLIENT_SECRET=$googleDriveClientSecret",
+            "--dart-define=DROPBOX_CLIENT_ID=$dropboxClientId",
+            "--dart-define=DROPBOX_CLIENT_SECRET=$dropboxClientSecret",
+            "--dart-define=DROPBOX_SYNC_ROOT_PATH=$dropboxSyncRootPath",
+            "--dart-define=AUTOTELEPROMPTER_ADMIN_EMAIL=$adminEmailForBuild",
+            "--dart-define=AUTOTELEPROMPTER_ADMIN_CODE_SHA256=$adminCodeHashForBuild",
+            "--dart-define=ACCOUNT_BACKEND_ENABLED=$accountBackendEnabled",
+            "--dart-define=SUPABASE_URL=$supabaseUrlForBuild",
+            "--dart-define=SUPABASE_ANON_KEY=$supabaseAnonKeyForBuild",
+            "--dart-define=UPDATE_MANIFEST_URL=$updateManifestUrl"
+          )
+          if (-not [string]::IsNullOrWhiteSpace($graceKeyId) -and -not [string]::IsNullOrWhiteSpace($graceModulusHex)) {
+            $buildArgs += "--dart-define=GRACE_TOKEN_KEY_ID=$graceKeyId"
+            $buildArgs += "--dart-define=GRACE_TOKEN_PUBLIC_MODULUS_HEX=$graceModulusHex"
+            if (-not [string]::IsNullOrWhiteSpace($graceExponentHex)) {
+              $buildArgs += "--dart-define=GRACE_TOKEN_PUBLIC_EXPONENT_HEX=$graceExponentHex"
+            }
+          }
+          & flutter @buildArgs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows release build failed."
+          }
         working-directory: Platform_Windows
         env:
+          RELEASE_CHANNEL: ${{ steps.release.outputs.release_channel }}
+          RELEASE_APP_VERSION: ${{ steps.release.outputs.app_version }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          FALLBACK_MANIFEST_URL: ${{ steps.release.outputs.manifest_url }}
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
           GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
           GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
@@ -379,6 +410,26 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           UPDATE_MANIFEST_URL_VAR: ${{ vars.UPDATE_MANIFEST_URL }}
+          GRACE_TOKEN_KEY_ID_VAR: ${{ vars.GRACE_TOKEN_KEY_ID }}
+          GRACE_TOKEN_PUBLIC_MODULUS_HEX_VAR: ${{ vars.GRACE_TOKEN_PUBLIC_MODULUS_HEX }}
+          GRACE_TOKEN_PUBLIC_EXPONENT_HEX_VAR: ${{ vars.GRACE_TOKEN_PUBLIC_EXPONENT_HEX }}
+
+      - name: Verify Release Binary Contains No Secrets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $appSo = "Platform_Windows\build\windows\x64\runner\Release\data\app.so"
+          if (-not (Test-Path -LiteralPath $appSo -PathType Leaf)) {
+            throw "Expected Flutter release AOT snapshot at $appSo."
+          }
+          $text = [System.Text.Encoding]::Latin1.GetString([System.IO.File]::ReadAllBytes($appSo))
+          $forbidden = @("service_role", "script.google.com", "GRACE_TOKEN_PRIVATE_JWK")
+          foreach ($needle in $forbidden) {
+            if ($text.Contains($needle)) {
+              throw "Forbidden secret/backend marker '$needle' detected in compiled release binary $appSo."
+            }
+          }
+          Write-Host "Release binary secret scan passed."
 
       - name: Bundle Fixed WebView2 Runtime
         shell: pwsh
@@ -397,9 +448,11 @@ jobs:
 
       - name: Verify Windows Binary Version
         shell: pwsh
+        env:
+          EXPECTED_APP_VERSION: ${{ steps.release.outputs.app_version }}
         run: |
           $ErrorActionPreference = "Stop"
-          $expectedVersion = "${{ steps.release.outputs.app_version }}"
+          $expectedVersion = [string]$env:EXPECTED_APP_VERSION
           $binaryPath = "Platform_Windows\build\windows\x64\runner\Release\autoteleprompter.exe"
           if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
             throw "Windows release binary was not produced at $binaryPath."
@@ -416,6 +469,8 @@ jobs:
       - name: Package Artifacts
         id: package
         shell: pwsh
+        env:
+          ASSET_NAME: ${{ steps.release.outputs.asset_name }}
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path build-zip | Out-Null
@@ -429,12 +484,14 @@ jobs:
             Remove-Item -LiteralPath $packageDir -Recurse -Force
           }
           xcopy /E /I $releaseDir $packageDir
-          $zipPath = "build-zip\${{ steps.release.outputs.asset_name }}"
+          $zipPath = Join-Path "build-zip" ([string]$env:ASSET_NAME)
           if (Test-Path $zipPath) {
             Remove-Item -LiteralPath $zipPath -Force
           }
           Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -Force
+          $zipSha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
           "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "zip_sha256=$zipSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
@@ -446,16 +503,25 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
+          RELEASE_REPO: ${{ steps.release.outputs.release_repo }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.release_channel }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.release.outputs.title }}
+          RELEASE_LABEL: ${{ steps.release.outputs.release_label }}
+          RELEASE_APP_VERSION: ${{ steps.release.outputs.app_version }}
+          RELEASE_PRE_RELEASE: ${{ steps.release.outputs.pre_release }}
+          ZIP_PATH: ${{ steps.package.outputs.zip_path }}
           PUBLIC_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
           INTERNAL_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_INTERNAL_RELEASES_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
-          $repo = "${{ steps.release.outputs.release_repo }}"
-          $channel = "${{ steps.release.outputs.release_channel }}"
-          $tag = "${{ steps.release.outputs.tag }}"
-          $title = "${{ steps.release.outputs.title }}"
-          $label = "${{ steps.release.outputs.release_label }}"
-          $zipPath = "${{ steps.package.outputs.zip_path }}"
+          $repo = [string]$env:RELEASE_REPO
+          $channel = [string]$env:RELEASE_CHANNEL
+          $tag = [string]$env:RELEASE_TAG
+          $title = [string]$env:RELEASE_TITLE
+          $label = [string]$env:RELEASE_LABEL
+          $appVersion = [string]$env:RELEASE_APP_VERSION
+          $zipPath = [string]$env:ZIP_PATH
           $token = if ($channel -eq "internal") { $env:INTERNAL_RELEASES_TOKEN } else { $env:PUBLIC_RELEASES_TOKEN }
           if ([string]::IsNullOrWhiteSpace($token)) {
             throw "Release token is missing for $channel. Set AUTOTELEPROMPTER_RELEASES_TOKEN or AUTOTELEPROMPTER_INTERNAL_RELEASES_TOKEN."
@@ -468,7 +534,7 @@ jobs:
 
           Channel: $channel
           Label: $label
-          Version: ${{ steps.release.outputs.app_version }}
+          Version: $appVersion
 
           This package was produced by the Windows release workflow.
           "@ | Set-Content -LiteralPath $notesFile -Encoding UTF8
@@ -481,7 +547,7 @@ jobs:
               "--title", $title,
               "--notes-file", $notesFile
             )
-            if ("${{ steps.release.outputs.pre_release }}" -eq "true") {
+            if ([string]$env:RELEASE_PRE_RELEASE -eq "true") {
               $createArgs += "--prerelease"
             }
             gh @createArgs
@@ -495,20 +561,29 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
+          RELEASE_REPO: ${{ steps.release.outputs.release_repo }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.release_channel }}
+          RELEASE_APP_VERSION: ${{ steps.release.outputs.app_version }}
+          RELEASE_LABEL: ${{ steps.release.outputs.release_label }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          ASSET_NAME: ${{ steps.release.outputs.asset_name }}
+          MANIFEST_TAG: ${{ steps.release.outputs.manifest_tag }}
+          MANIFEST_ASSET: ${{ steps.release.outputs.manifest_asset }}
+          ZIP_SHA256: ${{ steps.package.outputs.zip_sha256 }}
           PUBLIC_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
           INTERNAL_RELEASES_TOKEN: ${{ secrets.AUTOTELEPROMPTER_INTERNAL_RELEASES_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
-          $repo = "${{ steps.release.outputs.release_repo }}"
-          $channel = "${{ steps.release.outputs.release_channel }}"
+          $repo = [string]$env:RELEASE_REPO
+          $channel = [string]$env:RELEASE_CHANNEL
           $token = if ($channel -eq "internal") { $env:INTERNAL_RELEASES_TOKEN } else { $env:PUBLIC_RELEASES_TOKEN }
           if ([string]::IsNullOrWhiteSpace($token)) {
             throw "Release token is missing for manifest update."
           }
           $env:GH_TOKEN = $token
 
-          $manifestTag = "${{ steps.release.outputs.manifest_tag }}"
-          $manifestAsset = "${{ steps.release.outputs.manifest_asset }}"
+          $manifestTag = [string]$env:MANIFEST_TAG
+          $manifestAsset = [string]$env:MANIFEST_ASSET
           $manifestDir = Join-Path $env:RUNNER_TEMP "manifest"
           New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
           $manifestPath = Join-Path $manifestDir $manifestAsset
@@ -529,14 +604,17 @@ jobs:
             }
           }
 
-          $downloadUrl = "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}"
+          $releaseTag = [string]$env:RELEASE_TAG
+          $assetName = [string]$env:ASSET_NAME
+          $downloadUrl = "https://github.com/$repo/releases/download/$releaseTag/$assetName"
           $existingChannels[$channel] = [ordered]@{
-            version = "${{ steps.release.outputs.app_version }}"
+            version = [string]$env:RELEASE_APP_VERSION
             url = $downloadUrl
-            notes = "${{ steps.release.outputs.release_label }}"
+            sha256 = [string]$env:ZIP_SHA256
+            notes = [string]$env:RELEASE_LABEL
             publishedAt = (Get-Date).ToUniversalTime().ToString("o")
-            tag = "${{ steps.release.outputs.tag }}"
-            asset = "${{ steps.release.outputs.asset_name }}"
+            tag = $releaseTag
+            asset = $assetName
           }
           $manifest = [ordered]@{
             kind = "autoteleprompter.windows.update_manifest"

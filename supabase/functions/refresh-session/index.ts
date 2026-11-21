@@ -13,6 +13,22 @@ serve(async (req) => {
   if (!deviceId) return jsonResponse(400, { error: "missing_device_id" });
 
   await ensureActiveProfile(auth.client, auth.user);
+
+  const [{ data: profile }, { data: existingDevice }, { data: existingSession }] = await Promise.all([
+    auth.client.from("profiles").select("status").eq("user_id", auth.user.id).maybeSingle(),
+    auth.client.from("devices").select("revoked_at").eq("user_id", auth.user.id).eq("device_id", deviceId).maybeSingle(),
+    auth.client.from("sessions").select("revoked_at").eq("user_id", auth.user.id).eq("device_id", deviceId).maybeSingle(),
+  ]);
+
+  if (profile?.status === "disabled") {
+    await audit(auth.client, "profile_disabled_refresh", auth.user.id, "failed", { deviceId });
+    return jsonResponse(403, { error: "account_disabled" });
+  }
+  if (existingDevice?.revoked_at || existingSession?.revoked_at) {
+    await audit(auth.client, "session_revoked_refresh", auth.user.id, "failed", { deviceId });
+    return jsonResponse(403, { error: "session_revoked" });
+  }
+
   await auth.client.from("devices").upsert({
     user_id: auth.user.id,
     device_id: deviceId,
@@ -29,10 +45,6 @@ serve(async (req) => {
   }, { onConflict: "user_id,device_id" });
 
   const snapshot = await accountSnapshot(auth.client, auth.user.id, { deviceId });
-  if (snapshot.profile?.status === "disabled") {
-    await audit(auth.client, "profile_disabled_refresh", auth.user.id, "failed", { deviceId });
-    return jsonResponse(403, { error: "account_disabled" });
-  }
   await audit(auth.client, "session_refresh", auth.user.id, "ok", { deviceId });
   return jsonResponse(200, { ok: true, ...snapshot });
 });

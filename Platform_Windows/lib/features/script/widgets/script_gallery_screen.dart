@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 
 import 'script_editor_screen.dart';
 import '../../../core/security/secure_script_store.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/stable_walkthrough_overlay.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/login_screen.dart';
@@ -23,6 +24,7 @@ import '../../settings/services/update_download_service.dart';
 import '../../settings/services/update_install_service.dart';
 import '../../settings/widgets/app_settings_screen.dart';
 import '../../settings/widgets/cloud_sync_screen.dart';
+import '../../teleprompter/providers/teleprompter_provider.dart';
 import '../providers/script_provider.dart';
 import '../services/styling_service.dart';
 import 'script_delete_dialog.dart';
@@ -655,12 +657,34 @@ class _ScriptGalleryScreenState extends ConsumerState<ScriptGalleryScreen> {
   }
 
   Future<void> _downloadStartupUpdate(UpdateCheckResult result) async {
+    final liveBefore = ref.read(teleprompterProvider);
+    if (liveBefore.isListening || liveBefore.isStarting) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Stop live speech recognition before installing an update.',
+          ),
+        ),
+      );
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Downloading update package...')),
     );
     try {
       final file = await UpdateDownloadService().download(result);
       if (!mounted) return;
+      final liveBeforeInstall = ref.read(teleprompterProvider);
+      if (liveBeforeInstall.isListening || liveBeforeInstall.isStarting) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Update downloaded. Stop live speech recognition before installing.',
+            ),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Installing update. AutoTeleprompter will restart.'),

@@ -5,11 +5,46 @@ import 'package:crypto/crypto.dart';
 
 import 'account_backend_models.dart';
 
-const _graceKeyId = 'staging-20260608-rsa2';
-const _gracePublicModulusHex =
+const _stagingGraceKeyId = 'staging-20260608-rsa2';
+const _stagingGracePublicModulusHex =
     'a02bfafa07a8faeaf41a133d48cfd5da242f9189f5410794b3e8ed5f6eaf0f71d5963bb0f9855734ba792b73bda04dea5f31ccde2a03a21a30398e8afeeee10e99e0a05f97b3e84436d134132f4a4160d40dfc1fef9a8d37de3057c38ce6be69bf2dd0430b67d91fca6badcc34dc96d7c4ab89966f10de1c427a5f710f8178521dcff1a8297deac4224cf829584e72d4e13f11fa13c390abf94d425ab8313cadf389ab33558ef38f94388333483314866ef79bb77953888c5c381c4cb7167fa539f4f9edc1b12f54a54b96cda2523c8e1d279bcf434137584c8061b23aad4c0f2a84cdeb642cd513480e83e09e8f6c662c9111c1175284d6682a19fa8da04915';
-const _gracePublicExponentHex = '010001';
+const _stagingGracePublicExponentHex = '010001';
+
+const _configuredGraceKeyId = String.fromEnvironment('GRACE_TOKEN_KEY_ID');
+const _configuredGracePublicModulusHex = String.fromEnvironment(
+  'GRACE_TOKEN_PUBLIC_MODULUS_HEX',
+);
+const _configuredGracePublicExponentHex = String.fromEnvironment(
+  'GRACE_TOKEN_PUBLIC_EXPONENT_HEX',
+  defaultValue: '010001',
+);
+
 const _sha256DigestInfoPrefixHex = '3031300d060960864801650304020105000420';
+
+class GraceTokenPublicKey {
+  final String keyId;
+  final String modulusHex;
+  final String exponentHex;
+
+  const GraceTokenPublicKey({
+    required this.keyId,
+    required this.modulusHex,
+    this.exponentHex = '010001',
+  });
+
+  bool get isValid {
+    final trimmedId = keyId.trim();
+    final mod = modulusHex.trim();
+    final exp = exponentHex.trim();
+    final hexPattern = RegExp(r'^[0-9a-fA-F]+$');
+    return trimmedId.isNotEmpty &&
+        mod.length >= 256 &&
+        mod.length.isEven &&
+        exp.isNotEmpty &&
+        hexPattern.hasMatch(mod) &&
+        hexPattern.hasMatch(exp);
+  }
+}
 
 class AccountGracePayload {
   final String accountId;
@@ -50,7 +85,32 @@ class AccountGracePayload {
 }
 
 class AccountGraceTokenVerifier {
-  const AccountGraceTokenVerifier();
+  const AccountGraceTokenVerifier({
+    Map<String, GraceTokenPublicKey>? trustedKeys,
+  }) : _trustedKeys = trustedKeys;
+
+  final Map<String, GraceTokenPublicKey>? _trustedKeys;
+
+  Map<String, GraceTokenPublicKey> get _resolvedKeys {
+    final custom = _trustedKeys;
+    if (custom != null) return custom;
+    final keys = <String, GraceTokenPublicKey>{
+      _stagingGraceKeyId: const GraceTokenPublicKey(
+        keyId: _stagingGraceKeyId,
+        modulusHex: _stagingGracePublicModulusHex,
+        exponentHex: _stagingGracePublicExponentHex,
+      ),
+    };
+    final configured = GraceTokenPublicKey(
+      keyId: _configuredGraceKeyId.trim(),
+      modulusHex: _configuredGracePublicModulusHex.trim(),
+      exponentHex: _configuredGracePublicExponentHex.trim(),
+    );
+    if (configured.isValid) {
+      keys[configured.keyId] = configured;
+    }
+    return keys;
+  }
 
   AccountGracePayload? verify(
     String? token, {
@@ -63,12 +123,24 @@ class AccountGraceTokenVerifier {
     final parts = value.split('.');
     if (parts.length != 2) return null;
     final payloadPart = parts[0];
-    final signature = _base64UrlDecode(parts[1]);
-    if (!_verifySignature(payloadPart, signature)) return null;
 
-    final payloadJson = utf8.decode(_base64UrlDecode(payloadPart));
-    final payload = jsonDecode(payloadJson) as Map<String, dynamic>;
-    if ((payload['kid'] ?? '').toString() != _graceKeyId) return null;
+    final Uint8List signature;
+    final Map<String, dynamic> payload;
+    try {
+      signature = _base64UrlDecode(parts[1]);
+      final payloadJson = utf8.decode(_base64UrlDecode(payloadPart));
+      final decoded = jsonDecode(payloadJson);
+      if (decoded is! Map<String, dynamic>) return null;
+      payload = decoded;
+    } catch (_) {
+      return null;
+    }
+
+    final kid = (payload['kid'] ?? '').toString().trim();
+    final key = _resolvedKeys[kid];
+    if (key == null || !key.isValid) return null;
+    if (!_verifySignature(payloadPart, signature, key)) return null;
+
     if ((payload['aud'] ?? '').toString() != 'autoteleprompter-windows') {
       return null;
     }
@@ -104,10 +176,16 @@ class AccountGraceTokenVerifier {
     return grace.hasPremiumAccessAt(localNow) ? grace : null;
   }
 
-  bool _verifySignature(String payloadPart, Uint8List signature) {
-    final modulus = _bigIntFromHex(_gracePublicModulusHex);
-    final exponent = _bigIntFromHex(_gracePublicExponentHex);
-    final modulusLength = (_gracePublicModulusHex.length / 2).ceil();
+  bool _verifySignature(
+    String payloadPart,
+    Uint8List signature,
+    GraceTokenPublicKey key,
+  ) {
+    final modulusHex = key.modulusHex.trim();
+    final exponentHex = key.exponentHex.trim();
+    final modulus = _bigIntFromHex(modulusHex);
+    final exponent = _bigIntFromHex(exponentHex);
+    final modulusLength = (modulusHex.length / 2).ceil();
     if (signature.length != modulusLength) return false;
 
     final signatureInt = _bigIntFromBytes(signature);

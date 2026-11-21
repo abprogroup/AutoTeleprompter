@@ -51,8 +51,10 @@ jobs:
         working-directory: Platform_iOS
 
       - name: Verify iOS version metadata matches input
+        env:
+          APP_VERSION: ${{ github.event.inputs.app_version }}
         run: |
-          grep -Fxq "version: ${{ github.event.inputs.app_version }}" pubspec.yaml
+          grep -Fxq "version: $APP_VERSION" pubspec.yaml
         working-directory: Platform_iOS
 
       - name: Install Cocoapods (iOS only)
@@ -62,11 +64,11 @@ jobs:
 
       - name: Build iOS (No Signing, backend-enabled)
         run: |
-          version="${{ github.event.inputs.app_version }}"
+          version="$APP_VERSION"
           buildName="${version%+*}"
           buildNumber="${version#*+}"
           endpoint="$(python3 ../.github/scripts/sanitize_feedback_endpoint.py "$FEEDBACK_ENDPOINT")"
-          flutter build ios --release --no-codesign -v \
+          flutter build ios --release --no-codesign \
             "--build-name=$buildName" "--build-number=$buildNumber" \
             "--dart-define=APP_VERSION=$version" \
             "--dart-define=ACCOUNT_BACKEND_ENABLED=true" \
@@ -77,6 +79,7 @@ jobs:
             "--dart-define=DROPBOX_CLIENT_ID=$DROPBOX_CLIENT_ID"
         working-directory: Platform_iOS
         env:
+          APP_VERSION: ${{ github.event.inputs.app_version }}
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -87,8 +90,10 @@ jobs:
           DROPBOX_CLIENT_ID: ${{ secrets.DROPBOX_CLIENT_ID }}
 
       - name: Zip .app to .ipa
+        env:
+          APP_VERSION: ${{ github.event.inputs.app_version }}
         run: |
-          version="${{ github.event.inputs.app_version }}"
+          version="$APP_VERSION"
           mkdir -p build/ios/iphoneos/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
           cd build/ios/iphoneos/

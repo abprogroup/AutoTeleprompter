@@ -117,15 +117,17 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       allowActiveManualScroll: allowActiveManualScroll,
     );
 
-    final wordList = _buildPresenterWordList(
-      context: context,
-      script: script,
-      paragraphs: paragraphs,
-      tState: tState,
-      settings: settings,
-      bookmarkWordIndexes: bookmarkWordIndexes,
-      presentationFontSize: presentationFontSize,
-      presenterWordGap: presenterWordGap,
+    final wordList = MediaQuery.withNoTextScaling(
+      child: _buildPresenterWordList(
+        context: context,
+        script: script,
+        paragraphs: paragraphs,
+        tState: tState,
+        settings: settings,
+        bookmarkWordIndexes: bookmarkWordIndexes,
+        presentationFontSize: presentationFontSize,
+        presenterWordGap: presenterWordGap,
+      ),
     );
 
     return PopScope(

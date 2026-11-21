@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { audit, jsonResponse, preflight, requireUser } from "../_shared/account.ts";
+import { audit, ensureActiveProfile, jsonResponse, preflight, requireUser } from "../_shared/account.ts";
 
 async function sha256Hex(value: string): Promise<string> {
   const data = new TextEncoder().encode(value);
@@ -18,38 +18,30 @@ serve(async (req) => {
   const code = typeof body.code === "string" ? body.code.trim() : "";
   if (!code) return jsonResponse(400, { error: "missing_license_code" });
 
+  await ensureActiveProfile(auth.client, auth.user);
   const codeHash = await sha256Hex(code);
-  const { data: license } = await auth.client.from("license_codes")
-    .select("id,code_type,max_uses,used_count,expires_at,revoked_at")
-    .eq("code_hash", codeHash)
-    .maybeSingle();
+  const { data, error } = await auth.client.rpc("redeem_license_code_atomic", {
+    p_user_id: auth.user.id,
+    p_code_hash: codeHash,
+  });
 
-  if (!license || license.revoked_at) {
-    await audit(auth.client, "license_redeem", auth.user.id, "failed", { reason: "invalid_or_revoked" });
-    return jsonResponse(403, { error: "invalid_license_code" });
-  }
-  if (license.expires_at && new Date(license.expires_at).getTime() < Date.now()) {
-    await audit(auth.client, "license_redeem", auth.user.id, "failed", { reason: "expired" });
-    return jsonResponse(403, { error: "expired_license_code" });
-  }
-  if (license.used_count >= license.max_uses) {
-    await audit(auth.client, "license_redeem", auth.user.id, "failed", { reason: "used" });
-    return jsonResponse(403, { error: "reused_license_code" });
+  if (error) {
+    await audit(auth.client, "license_redeem", auth.user.id, "failed", { reason: "rpc_error" });
+    return jsonResponse(500, { error: "license_redeem_failed" });
   }
 
-  const role = license.code_type === "admin" ? "admin" : "pro";
-  await auth.client.from("entitlements").upsert({
-    user_id: auth.user.id,
-    role,
-    status: "active",
-    source: "license_code",
-    current_period_end: null,
-    expires_at: null,
-    revoked_at: null,
-  }, { onConflict: "user_id" });
-  await auth.client.from("license_codes").update({
-    used_count: license.used_count + 1,
-  }).eq("id", license.id);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || row.error_code) {
+    const errorCode = row?.error_code ?? "invalid_license_code";
+    await audit(auth.client, "license_redeem", auth.user.id, "failed", { reason: errorCode });
+    return jsonResponse(403, { error: errorCode });
+  }
+
+  const role = row.granted_role ?? "pro";
   await audit(auth.client, "license_redeem", auth.user.id, "ok", { role });
-  return jsonResponse(200, { ok: true, role });
+  return jsonResponse(200, {
+    ok: true,
+    role,
+    expires_at: row.entitlement_expires_at ?? null,
+  });
 });

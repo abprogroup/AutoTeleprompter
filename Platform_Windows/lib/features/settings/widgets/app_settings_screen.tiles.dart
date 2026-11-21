@@ -71,12 +71,12 @@ class _RemoteControlTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = isRunning ? 'Running at $url' : 'Stopped';
-    final statusColor = isRunning ? const Color(0xFFFFBF00) : Colors.white38;
+    final statusColor = isRunning ? AppColors.amber : Colors.white38;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),

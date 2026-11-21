@@ -106,7 +106,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
         child: wordList,
       );
     }
-    return wordList;
+    return MediaQuery.withNoTextScaling(child: wordList);
   }
 
   Widget _buildContentParagraph({

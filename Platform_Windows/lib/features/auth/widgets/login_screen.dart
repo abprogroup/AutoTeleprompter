@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 
@@ -127,24 +128,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           setState(() => _isLoading = false);
           return;
         }
-        final success = await authNotifier.signInWithBackendPassword(
+        final hasPro = await authNotifier.signInWithBackendPassword(
           email: email,
           password: credential,
         );
         await ref
             .read(settingsProvider.notifier)
             .seedDisplayNameFromEmail(email);
+        if (!mounted) return;
         setState(() => _isLoading = false);
-        if (!success) {
-          _showSnack('This account does not have active Pro access.');
-          return;
-        }
-        _finishSuccessfulBackendLogin();
+        final signedIn = ref.read(authProvider).isSignedIn;
+        if (!signedIn) return;
+        _finishSuccessfulBackendLogin(hasPro: hasPro);
         return;
       }
 
       if (credential.isEmpty) {
         await authNotifier.requestBackendLoginCode(email);
+        if (!mounted) return;
         setState(() {
           _backendCodeRequested = true;
           _isLoading = false;
@@ -153,30 +154,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         return;
       }
 
-      final success = await authNotifier.verifyBackendLoginCode(
+      final hasPro = await authNotifier.verifyBackendLoginCode(
         email: email,
         code: credential,
       );
       await ref.read(settingsProvider.notifier).seedDisplayNameFromEmail(email);
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (!success) {
-        _showSnack('This account does not have active Pro access.');
-        return;
-      }
-      _finishSuccessfulBackendLogin();
+      final signedIn = ref.read(authProvider).isSignedIn;
+      if (!signedIn) return;
+      _finishSuccessfulBackendLogin(hasPro: hasPro);
     } catch (error) {
       if (mounted) setState(() => _isLoading = false);
       _showSnack(_friendlyBackendError(error));
     }
   }
 
-  void _finishSuccessfulBackendLogin() {
+  void _finishSuccessfulBackendLogin({required bool hasPro}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Professional suite activated.'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(
+          hasPro
+              ? 'Professional suite activated.'
+              : 'Signed in to your free account.',
+        ),
+        backgroundColor: hasPro ? Colors.green : AppColors.surface,
+        duration: const Duration(seconds: 2),
       ),
     );
     Navigator.pop(context);
@@ -506,16 +510,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               style: TextStyle(color: Colors.white70),
             ),
             Text(
-              '- Future premium tools under active development',
+              '- Online cloud sync (Google Drive and Dropbox)',
               style: TextStyle(color: Colors.white70),
             ),
             SizedBox(height: 16),
             Text(
-              'Purchases are not connected in this installation. A license '
-              'key can activate Pro only when license verification is '
-              'configured for the build.',
+              'Pro access is managed through your connected account.',
               style: TextStyle(
-                color: Color(0xFFFFBF00),
+                color: AppColors.amber,
                 fontWeight: FontWeight.bold,
               ),
             ),

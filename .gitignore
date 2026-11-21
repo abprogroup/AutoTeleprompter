@@ -62,6 +62,7 @@ Platform_*/test/
 !/Platform_Windows/test/settings/hotkey_provider_test.dart
 !/Platform_Windows/test/settings/hotkey_settings_page_test.dart
 !/Platform_Windows/test/settings/speech_scroll_settings_test.dart
+!/Platform_Windows/test/settings/stage3_4_theme_security_updater_test.dart
 !/Platform_Windows/test/settings/app_settings_stt_engine_test.dart
 !/Platform_Windows/test/settings/settings_provider_stt_engine_test.dart
 !/Platform_Windows/test/settings/windows_stt_engine_selector_test.dart

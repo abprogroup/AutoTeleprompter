@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'core/theme/app_theme.dart';
 import 'features/settings/providers/settings_provider.dart';
 import 'features/splash/widgets/splash_screen.dart';
 import 'core/widgets/connection_lifecycle.dart';
@@ -16,22 +16,19 @@ class AutoTeleprompterApp extends ConsumerWidget {
       child: MaterialApp(
         title: 'AUTOTELEPROMPTER',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(0xFF0A0A0A),
-          colorScheme: const ColorScheme.dark(
-            primary: Color(0xFFFFBF00),
-            surface: Color(0xFF1A1A1A),
-          ),
-          textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-        ),
+        theme: AppTheme.dark(),
         builder: (context, child) {
           final media = MediaQuery.maybeOf(context);
           if (media == null || child == null) {
             return child ?? const SizedBox.shrink();
           }
           return MediaQuery(
-            data: media.copyWith(disableAnimations: settings.reduceMotion),
+            data: media.copyWith(
+              disableAnimations: settings.reduceMotion,
+              textScaler: TextScaler.linear(
+                AppTheme.clampUiScale(settings.uiScale),
+              ),
+            ),
             child: child,
           );
         },

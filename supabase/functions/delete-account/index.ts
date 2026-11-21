@@ -25,25 +25,32 @@ serve(async (req) => {
   }
 
   const userId = auth.user.id;
-  await audit(auth.client, "account_delete", userId, "ok", { email });
+
+  // Scrub PII from existing audit logs for this user before removing rows.
+  const { error: scrubError } = await auth.client.rpc("scrub_user_audit_pii", {
+    p_user_id: userId,
+  });
+  if (scrubError) {
+    return jsonResponse(500, { error: "audit_scrub_failed" });
+  }
 
   for (const table of ["trial_state", "sessions", "devices", "entitlements", "profiles"]) {
     const { error } = await auth.client.from(table).delete().eq("user_id", userId);
     if (error) {
-      await audit(auth.client, "account_delete_cleanup", userId, "failed", {
-        table,
-        error: error.message,
-      });
       return jsonResponse(500, { error: "cleanup_failed", table });
     }
   }
 
   const { error } = await auth.client.auth.admin.deleteUser(userId);
   if (error) {
-    await audit(auth.client, "account_delete_auth", userId, "failed", {
-      error: error.message,
-    });
     return jsonResponse(500, { error: "auth_delete_failed" });
+  }
+
+  // Record anonymized deletion event with zero PII.
+  try {
+    await audit(auth.client, "account_delete", null, "ok", { deleted: true });
+  } catch (_) {
+    // Account deletion already succeeded; do not fail response if audit fails.
   }
 
   return jsonResponse(200, { ok: true });

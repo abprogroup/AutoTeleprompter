@@ -22,6 +22,7 @@ class UpdateCheckResult {
   final String currentVersion;
   final String? latestVersion;
   final String? downloadUrl;
+  final String? sha256;
   final String message;
   final String? notes;
   final DateTime? publishedAt;
@@ -33,6 +34,7 @@ class UpdateCheckResult {
     required this.message,
     this.latestVersion,
     this.downloadUrl,
+    this.sha256,
     this.notes,
     this.publishedAt,
   });
@@ -84,7 +86,7 @@ class UpdateCheckService {
           message: 'Update server returned HTTP ${response.statusCode}.',
         );
       }
-      return _parseManifest(body, normalizedChannel);
+      return parseManifestJson(body, normalizedChannel);
     } catch (error) {
       return UpdateCheckResult(
         status: UpdateCheckStatus.failed,
@@ -95,7 +97,7 @@ class UpdateCheckService {
     }
   }
 
-  UpdateCheckResult _parseManifest(String body, String channel) {
+  UpdateCheckResult parseManifestJson(String body, String channel) {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Manifest root must be a JSON object.');
@@ -139,6 +141,7 @@ class UpdateCheckService {
         currentVersion: autoTeleprompterAppVersion,
         latestVersion: newest.latestVersion,
         downloadUrl: newest.downloadUrl,
+        sha256: newest.sha256,
         notes: newest.notes,
         publishedAt: newest.publishedAt,
         message: _upToDateMessage(channel, newest.channel),
@@ -150,6 +153,7 @@ class UpdateCheckService {
       currentVersion: autoTeleprompterAppVersion,
       latestVersion: newest.latestVersion,
       downloadUrl: newest.downloadUrl,
+      sha256: newest.sha256,
       notes: newest.notes,
       publishedAt: newest.publishedAt,
       message: _updateAvailableMessage(channel, newest.channel),
@@ -167,6 +171,11 @@ class UpdateCheckService {
     if (latestVersion == null || latestVersion.trim().isEmpty) {
       throw FormatException('Manifest is missing $channel.version.');
     }
+    final rawSha256 = _stringValue(channelEntry, 'sha256');
+    final sha256 =
+        rawSha256 == null || rawSha256.isEmpty
+            ? null
+            : rawSha256.toLowerCase();
     final notes =
         _stringValue(channelEntry, 'notes') ??
         _stringValue(channelEntry, 'releaseNotes');
@@ -179,6 +188,7 @@ class UpdateCheckService {
       channel: channel,
       latestVersion: latestVersion.trim(),
       downloadUrl: downloadUrl,
+      sha256: sha256,
       notes: notes,
       publishedAt: publishedAt,
     );
@@ -291,6 +301,7 @@ class _UpdateManifestCandidate {
   final String channel;
   final String latestVersion;
   final String? downloadUrl;
+  final String? sha256;
   final String? notes;
   final DateTime? publishedAt;
 
@@ -298,6 +309,7 @@ class _UpdateManifestCandidate {
     required this.channel,
     required this.latestVersion,
     this.downloadUrl,
+    this.sha256,
     this.notes,
     this.publishedAt,
   });

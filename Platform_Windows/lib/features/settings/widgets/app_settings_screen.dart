@@ -8,6 +8,7 @@ import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../platform/stt/abstract_stt_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/services/account_backend_models.dart';
@@ -91,12 +92,11 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     final auth = ref.watch(authProvider);
     final remote = Platform.isWindows ? ref.watch(remoteControlProvider) : null;
 
-    final media = MediaQuery.maybeOf(context);
-    final screen = DefaultTabController(
+    return DefaultTabController(
       length: AppSettingsTab.values.length,
       initialIndex: widget.initialTab.index,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0A0A0A),
+        backgroundColor: AppColors.canvas,
         appBar: AppBar(
           title: Text(
             'Settings',
@@ -106,9 +106,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           elevation: 0,
           bottom: const TabBar(
             isScrollable: true,
-            labelColor: Color(0xFFFFBF00),
+            labelColor: AppColors.amber,
             unselectedLabelColor: Colors.white54,
-            indicatorColor: Color(0xFFFFBF00),
+            indicatorColor: AppColors.amber,
             tabs: [
               Tab(icon: Icon(Icons.tune_rounded), text: 'General'),
               Tab(icon: Icon(Icons.person_outline), text: 'Account'),
@@ -128,11 +128,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           ],
         ),
       ),
-    );
-    if (media == null) return screen;
-    return MediaQuery(
-      data: media.copyWith(textScaler: TextScaler.linear(settings.uiScale)),
-      child: screen,
     );
   }
 
@@ -236,7 +231,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       _SettingsSliderTile(
         icon: Icons.format_size_outlined,
         title: 'Interface text scale',
-        subtitle: 'Affects this Settings screen, not script metadata',
+        subtitle:
+            'Scales menus, settings, and dialogs without changing script font sizes',
         value: settings.uiScale,
         min: 0.90,
         max: 1.25,
@@ -340,7 +336,11 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
   Future<void> _openFolder(String path, {required String source}) async {
     try {
-      await Process.run('cmd', ['/c', 'start', '', path]);
+      if (Platform.isWindows) {
+        await Process.run('explorer.exe', [path]);
+      } else {
+        await Process.run('open', [path]);
+      }
     } catch (error, stack) {
       LightweightDiagnostics.instance.recordError(
         error,

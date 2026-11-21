@@ -46,8 +46,10 @@ jobs:
         working-directory: Platform_macOS
 
       - name: Verify macOS source metadata
+        env:
+          APP_VERSION: ${{ github.event.inputs.app_version }}
         run: |
-          grep -Fxq 'version: ${{ github.event.inputs.app_version }}' pubspec.yaml
+          grep -Fxq "version: $APP_VERSION" pubspec.yaml
         working-directory: Platform_macOS
 
       - name: Patch Podfile Deployment Target
@@ -59,9 +61,13 @@ jobs:
 
       - name: Prepare macOS Release Metadata
         id: release
+        env:
+          INPUT_RELEASE_CHANNEL: ${{ github.event.inputs.release_channel }}
+          INPUT_APP_VERSION: ${{ github.event.inputs.app_version }}
+          INPUT_RELEASE_NUMBER: ${{ github.event.inputs.release_number }}
         run: |
           set -euo pipefail
-          releaseChannel="${{ github.event.inputs.release_channel }}"
+          releaseChannel="${INPUT_RELEASE_CHANNEL:-}"
           if [ -z "$releaseChannel" ]; then
             releaseChannel="stable"
           fi
@@ -69,7 +75,7 @@ jobs:
             stable|beta) ;;
             *) echo "Unsupported release_channel '$releaseChannel'." >&2; exit 1 ;;
           esac
-          appVersion="${{ github.event.inputs.app_version }}"
+          appVersion="${INPUT_APP_VERSION:-}"
           if [ -z "$appVersion" ]; then
             appVersion="5.0.9+38"
           fi
@@ -79,7 +85,7 @@ jobs:
           fi
           versionName="${appVersion%%+*}"
           buildNumber="${appVersion##*+}"
-          releaseNumber="${{ github.event.inputs.release_number }}"
+          releaseNumber="${INPUT_RELEASE_NUMBER:-}"
           releaseRepo="abprogroup/AutoTeleprompter-Releases"
           if [ "$releaseChannel" = "beta" ]; then
             if [ -z "$releaseNumber" ]; then
@@ -191,7 +197,7 @@ jobs:
           adminCodeHash="$(printf '%s' "${AUTOTELEPROMPTER_ADMIN_CODE_SHA256:-}" | tr -d ' \r\n' | tr 'A-F' 'a-f')"
           updateManifestUrl="$(printf '%s' "${MACOS_UPDATE_MANIFEST_URL_VAR:-}" | tr -d '\r\n' | xargs)"
           if [ -z "$updateManifestUrl" ]; then
-            updateManifestUrl="${{ steps.release.outputs.manifest_url }}"
+            updateManifestUrl="$FALLBACK_MANIFEST_URL"
           fi
           # --- Channel logic mirrors Windows: backend on when Supabase present ---
           accountBackendEnabled="false"
@@ -217,9 +223,9 @@ jobs:
           fi
           echo "Account backend enabled: $accountBackendEnabled"
           flutter build macos --release \
-            "--build-name=${{ steps.release.outputs.version_name }}" \
-            "--build-number=${{ steps.release.outputs.build_number }}" \
-            "--dart-define=APP_VERSION=${{ steps.release.outputs.app_version }}" \
+            "--build-name=$RELEASE_VERSION_NAME" \
+            "--build-number=$RELEASE_BUILD_NUMBER" \
+            "--dart-define=APP_VERSION=$RELEASE_APP_VERSION" \
             "--dart-define=UPDATE_PLATFORM=macos" \
             "--dart-define=ACCOUNT_BACKEND_ENABLED=$accountBackendEnabled" \
             "--dart-define=SUPABASE_URL=$supabaseUrl" \
@@ -235,6 +241,10 @@ jobs:
             "--dart-define=UPDATE_MANIFEST_URL=$updateManifestUrl"
         working-directory: Platform_macOS
         env:
+          RELEASE_VERSION_NAME: ${{ steps.release.outputs.version_name }}
+          RELEASE_BUILD_NUMBER: ${{ steps.release.outputs.build_number }}
+          RELEASE_APP_VERSION: ${{ steps.release.outputs.app_version }}
+          FALLBACK_MANIFEST_URL: ${{ steps.release.outputs.manifest_url }}
           FEEDBACK_ENDPOINT: ${{ secrets.FEEDBACK_ENDPOINT }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -247,6 +257,9 @@ jobs:
           MACOS_UPDATE_MANIFEST_URL_VAR: ${{ vars.MACOS_UPDATE_MANIFEST_URL }}
 
       - name: Zip App Bundle
+        id: zip
+        env:
+          ASSET_NAME: ${{ steps.release.outputs.asset_name }}
         run: |
           cd Platform_macOS/build/macos/Build/Products/Release
           echo "App bundle size:"
@@ -255,9 +268,11 @@ jobs:
           du -sh autoteleprompter.app/Contents/* || true
           echo "Frameworks breakdown:"
           du -sh autoteleprompter.app/Contents/Frameworks/* || true
-          ditto -c -k --sequesterRsrc --keepParent autoteleprompter.app "${{ steps.release.outputs.asset_name }}"
+          ditto -c -k --sequesterRsrc --keepParent autoteleprompter.app "$ASSET_NAME"
           echo "Zip size:"
-          du -sh "${{ steps.release.outputs.asset_name }}"
+          du -sh "$ASSET_NAME"
+          zipSha256="$(shasum -a 256 "$ASSET_NAME" | awk '{print $1}')"
+          echo "zip_sha256=$zipSha256" >> "$GITHUB_OUTPUT"
 
       - name: Upload App
         uses: actions/upload-artifact@v7
@@ -268,18 +283,24 @@ jobs:
       - name: Publish macOS Release
         env:
           GH_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
+          RELEASE_REPO: ${{ steps.release.outputs.release_repo }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          ASSET_NAME: ${{ steps.release.outputs.asset_name }}
+          RELEASE_TITLE: ${{ steps.release.outputs.release_title }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.release_channel }}
+          RELEASE_APP_VERSION: ${{ steps.release.outputs.app_version }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "AUTOTELEPROMPTER_RELEASES_TOKEN is missing; skipping release publish."
             exit 0
           fi
-          repo="${{ steps.release.outputs.release_repo }}"
-          tag="${{ steps.release.outputs.tag }}"
-          asset="Platform_macOS/build/macos/Build/Products/Release/${{ steps.release.outputs.asset_name }}"
+          repo="$RELEASE_REPO"
+          tag="$RELEASE_TAG"
+          asset="Platform_macOS/build/macos/Build/Products/Release/$ASSET_NAME"
           notesFile="$RUNNER_TEMP/macos-release-notes.md"
-          cat > "$notesFile" <<'EOF'
-          AutoTeleprompter macOS ${{ steps.release.outputs.app_version }}.
+          cat > "$notesFile" <<EOF
+          AutoTeleprompter macOS $RELEASE_APP_VERSION.
 
           This is the Mac premium feedback and speech-control reliability
           update. It keeps the guided, polished Mac experience from 5.0.8 and
@@ -327,7 +348,7 @@ jobs:
           - Published as a full backend-connected Mac build with production
             credential preflight enabled.
           - The stable update manifest points existing Mac users to this
-            release as ${{ steps.release.outputs.app_version }}.
+            release as $RELEASE_APP_VERSION.
           - Existing scripts, recents, bookmarks, settings, Pro state, and
             cloud/account data are preserved.
           EOF
@@ -336,10 +357,10 @@ jobs:
             editArgs=(
               release edit "$tag"
               --repo "$repo"
-              --title "${{ steps.release.outputs.release_title }}"
+              --title "$RELEASE_TITLE"
               --notes-file "$notesFile"
             )
-            if [ "${{ steps.release.outputs.release_channel }}" = "beta" ]; then
+            if [ "$RELEASE_CHANNEL" = "beta" ]; then
               editArgs+=(--prerelease)
             else
               editArgs+=(--latest)
@@ -348,22 +369,30 @@ jobs:
           else
             gh release create "$tag" "$asset" \
               --repo "$repo" \
-              --title "${{ steps.release.outputs.release_title }}" \
+              --title "$RELEASE_TITLE" \
               --notes-file "$notesFile"
           fi
 
       - name: Update macOS Manifest
         env:
           GH_TOKEN: ${{ secrets.AUTOTELEPROMPTER_RELEASES_TOKEN }}
+          RELEASE_REPO: ${{ steps.release.outputs.release_repo }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.release_channel }}
+          RELEASE_APP_VERSION: ${{ steps.release.outputs.app_version }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          ASSET_NAME: ${{ steps.release.outputs.asset_name }}
+          MANIFEST_TAG: ${{ steps.release.outputs.manifest_tag }}
+          MANIFEST_ASSET: ${{ steps.release.outputs.manifest_asset }}
+          ZIP_SHA256: ${{ steps.zip.outputs.zip_sha256 }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "AUTOTELEPROMPTER_RELEASES_TOKEN is missing; skipping manifest publish."
             exit 0
           fi
-          repo="${{ steps.release.outputs.release_repo }}"
-          manifestTag="${{ steps.release.outputs.manifest_tag }}"
-          manifestAsset="${{ steps.release.outputs.manifest_asset }}"
+          repo="$RELEASE_REPO"
+          manifestTag="$MANIFEST_TAG"
+          manifestAsset="$MANIFEST_ASSET"
           manifestDir="$RUNNER_TEMP/macos-manifest"
           manifestPath="$manifestDir/$manifestAsset"
           mkdir -p "$manifestDir"
@@ -373,6 +402,7 @@ jobs:
           fi
           python3 - "$manifestPath" <<'PY'
           import json
+          import os
           import sys
           from datetime import datetime, timezone
           from pathlib import Path
@@ -385,17 +415,22 @@ jobs:
           channels = manifest.get("channels")
           if not isinstance(channels, dict):
               channels = {}
-          channels["${{ steps.release.outputs.release_channel }}"] = {
-              "version": "${{ steps.release.outputs.app_version }}",
+          release_channel = os.environ["RELEASE_CHANNEL"]
+          release_repo = os.environ["RELEASE_REPO"]
+          release_tag = os.environ["RELEASE_TAG"]
+          asset_name = os.environ["ASSET_NAME"]
+          channels[release_channel] = {
+              "version": os.environ["RELEASE_APP_VERSION"],
               "platform": "macos",
-              "url": "https://github.com/${{ steps.release.outputs.release_repo }}/releases/download/${{ steps.release.outputs.tag }}/${{ steps.release.outputs.asset_name }}",
+              "url": f"https://github.com/{release_repo}/releases/download/{release_tag}/{asset_name}",
+              "sha256": os.environ.get("ZIP_SHA256", ""),
               "notes": "Mac 5.0.9 keeps the premium feedback update from 5.0.8 and adds build 38's speech-control seal pass for macOS. The iOS-style tracking pipeline remains the single authority for movement, fragmented visible-skip partials can accumulate across Apple callbacks, transient Apple Speech paused statuses no longer interrupt a live reading session, and sentence recovery now measures from the current reading position so repeated visible names or phrases cannot steal focus from the closer phrase being read.",
               "publishedAt": datetime.now(timezone.utc)
                   .replace(microsecond=0)
                   .isoformat()
                   .replace("+00:00", "Z"),
-              "tag": "${{ steps.release.outputs.tag }}",
-              "asset": "${{ steps.release.outputs.asset_name }}",
+              "tag": release_tag,
+              "asset": asset_name,
           }
           manifest = {
               "kind": "autoteleprompter.macos.update_manifest",

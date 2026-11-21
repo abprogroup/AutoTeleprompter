@@ -2,11 +2,44 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 
 import 'update_check_service.dart';
 
 class UpdateInstallService {
   static const _updateTempFolderName = 'AutoTeleprompter Updates';
+  static final _sha256HexPattern = RegExp(r'^[a-f0-9]{64}$');
+
+  static Future<void> verifyPackageSha256(
+    File packageFile,
+    String expectedSha256,
+  ) async {
+    final normalizedExpected = expectedSha256.trim().toLowerCase();
+    if (!_sha256HexPattern.hasMatch(normalizedExpected)) {
+      throw const FormatException(
+        'Update manifest contains a malformed SHA-256 checksum.',
+      );
+    }
+    if (!await packageFile.exists()) {
+      throw StateError('Downloaded update package is missing.');
+    }
+    final digest = await sha256.bind(packageFile.openRead()).first;
+    final actual = digest.toString().toLowerCase();
+    if (!_constantTimeHexEquals(actual, normalizedExpected)) {
+      throw StateError(
+        'Update package integrity check failed (SHA-256 mismatch).',
+      );
+    }
+  }
+
+  static bool _constantTimeHexEquals(String left, String right) {
+    if (left.length != right.length) return false;
+    var diff = 0;
+    for (var i = 0; i < left.length; i++) {
+      diff |= left.codeUnitAt(i) ^ right.codeUnitAt(i);
+    }
+    return diff == 0;
+  }
 
   static Future<void> cleanupCompletedUpdateTemp() async {
     if (!Platform.isWindows) return;
@@ -34,6 +67,9 @@ class UpdateInstallService {
     }
     if (!await packageFile.exists()) {
       throw StateError('Downloaded update package is missing.');
+    }
+    if (result.sha256 != null) {
+      await verifyPackageSha256(packageFile, result.sha256!);
     }
 
     final currentExe = File(Platform.resolvedExecutable);

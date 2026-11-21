@@ -15,13 +15,29 @@ void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   group('Stage 3: AppTheme and UI scale', () {
-    test('AppTheme.dark exposes semantic studio palette', () {
+    test('AppTheme.dark exposes semantic studio palette without global TextField fill', () {
       final theme = AppTheme.dark();
       expect(theme.brightness, Brightness.dark);
       expect(theme.scaffoldBackgroundColor, AppColors.canvas);
       expect(theme.colorScheme.primary, AppColors.amber);
       expect(theme.colorScheme.surface, AppColors.surface);
-      expect(theme.dialogTheme.backgroundColor, AppColors.surface);
+      // Critical regression guard: global filled=true paints an opaque box over
+      // the editor's CustomPaint selection, highlight, and underline layer.
+      expect(theme.inputDecorationTheme.filled, isFalse);
+      expect(theme.inputDecorationTheme.fillColor, isNull);
+    });
+
+    test('Editor decorations suppress EditableText.showOnScreen during overlay drag', () {
+      final repoRoot = Directory.current.parent.path;
+      final decorationsDart = File(
+        '$repoRoot${Platform.pathSeparator}Platform_Windows${Platform.pathSeparator}lib${Platform.pathSeparator}features${Platform.pathSeparator}script${Platform.pathSeparator}widgets${Platform.pathSeparator}script_editor_screen.editor_render_decorations.dart',
+      ).readAsStringSync();
+      final overlayDart = File(
+        '$repoRoot${Platform.pathSeparator}Platform_Windows${Platform.pathSeparator}lib${Platform.pathSeparator}features${Platform.pathSeparator}script${Platform.pathSeparator}widgets${Platform.pathSeparator}editor${Platform.pathSeparator}components${Platform.pathSeparator}global_selection_overlay.dart',
+      ).readAsStringSync();
+      expect(decorationsDart, contains('void showOnScreen('));
+      expect(decorationsDart, contains('_suppressShowOnScreen?.call()'));
+      expect(overlayDart, contains('shouldSuppressEditableShowOnScreen'));
     });
 
     test('clampUiScale bounds extreme and non-finite inputs safely', () {

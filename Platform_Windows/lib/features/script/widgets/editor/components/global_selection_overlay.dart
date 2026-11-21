@@ -172,9 +172,17 @@ class GlobalSelectionOverlayState extends State<GlobalSelectionOverlay> {
   Offset? _candidatePos;
   Timer? _bodyAutoScrollTimer;
   bool _bodyDragActive = false;
+  bool _postDragShowOnScreenSuppressed = false;
   Offset? _latestBodyDragGlobal;
   SelectionEndpoint? _lastBodyDragFocusTrace;
   String _lastSelectionDebugEvent = 'idle';
+
+  /// True while the overlay owns a multi-block/edge drag or handle drag (plus
+  /// the immediate post-release frame). Suppressing child `showOnScreen` stops
+  /// the anchor block's native `EditableText` from yanking the scroll view back
+  /// to the selection start when the pointer nudges after auto-scrolling.
+  bool get shouldSuppressEditableShowOnScreen =>
+      _bodyDragActive || _handleDrag != null || _postDragShowOnScreenSuppressed;
 
   @override
   void dispose() {

@@ -8,6 +8,7 @@ extension GlobalSelectionOverlaySelection on GlobalSelectionOverlayState {
   void clearSelection() {
     _discardHandleDragSession();
     _resetDragState();
+    _postDragShowOnScreenSuppressed = false;
     _ignoreBodyDragUntilPointerUp = false;
     _sessionMode = SelectionSessionMode.none;
     _pointerState = SelectionPointerState.inside;

@@ -27,66 +27,20 @@ abstract final class AppTheme {
     return scale.clamp(minUiScale, maxUiScale).toDouble();
   }
 
+  /// Keep global ThemeData strictly aligned with the verified baseline theme.
+  /// Do NOT set global `inputDecorationTheme.filled = true` (it paints an
+  /// opaque fill over the editor's custom selection, highlight, and underline
+  /// CustomPaint layer) or global button/snackbar overrides that alter wired
+  /// editor suites.
   static ThemeData dark() {
-    final base = ThemeData.dark();
     return ThemeData(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.canvas,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.amber,
-        onPrimary: Colors.black,
-        secondary: AppColors.amber,
-        onSecondary: Colors.black,
         surface: AppColors.surface,
-        onSurface: AppColors.textPrimary,
-        error: AppColors.danger,
       ),
-      textTheme: GoogleFonts.interTextTheme(base.textTheme),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: AppColors.textPrimary,
-      ),
-      dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.surface,
-        contentTextStyle: const TextStyle(color: AppColors.textPrimary),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.amber,
-          foregroundColor: Colors.black,
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textSecondary,
-          side: const BorderSide(color: Colors.white24),
-        ),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: AppColors.amber),
-      ),
-      sliderTheme: const SliderThemeData(
-        activeTrackColor: AppColors.amber,
-        thumbColor: AppColors.amber,
-        inactiveTrackColor: Colors.white24,
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: AppColors.surface,
-        labelStyle: const TextStyle(color: AppColors.textSubtle),
-        hintStyle: const TextStyle(color: Colors.white24),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-      ),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
     );
   }
 }

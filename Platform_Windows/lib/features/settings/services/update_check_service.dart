@@ -7,7 +7,7 @@ import 'settings_error_sanitizer.dart';
 
 const autoTeleprompterAppVersion = String.fromEnvironment(
   'APP_VERSION',
-  defaultValue: '5.2.2+66',
+  defaultValue: '5.2.3+67',
 );
 
 const autoTeleprompterUpdateManifestUrl = String.fromEnvironment(

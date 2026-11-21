@@ -419,6 +419,10 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                                   _deleteEditorBookmarksForBlock(
                                                 index,
                                               ),
+                                              suppressShowOnScreen: () =>
+                                                  _overlayKey.currentState
+                                                      ?.shouldSuppressEditableShowOnScreen ??
+                                                  false,
                                             ),
                                           );
                                         },

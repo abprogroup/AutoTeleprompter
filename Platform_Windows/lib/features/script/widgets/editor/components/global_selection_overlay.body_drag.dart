@@ -94,6 +94,12 @@ extension GlobalSelectionOverlayBodyDrag on GlobalSelectionOverlayState {
 
   bool endDragging() {
     final overlayOwnedGesture = _bodyDragActive || _handleDrag != null;
+    if (overlayOwnedGesture) {
+      _postDragShowOnScreenSuppressed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _postDragShowOnScreenSuppressed = false;
+      });
+    }
     if (_handleDrag != null) {
       _endHandleDrag(
         reason: 'pointer-up',

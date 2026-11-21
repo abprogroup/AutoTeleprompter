@@ -8,12 +8,14 @@ class _EditorRenderEditableDecorations extends SingleChildRenderObjectWidget {
   final FocusNode focusNode;
   final TextSelection? selection;
   final TextDirection textDirection;
+  final bool Function()? suppressShowOnScreen;
 
   const _EditorRenderEditableDecorations({
     required this.controller,
     required this.focusNode,
     required this.selection,
     required this.textDirection,
+    this.suppressShowOnScreen,
     required super.child,
   });
 
@@ -24,6 +26,7 @@ class _EditorRenderEditableDecorations extends SingleChildRenderObjectWidget {
       focusNode: focusNode,
       selection: selection,
       textDirection: textDirection,
+      suppressShowOnScreen: suppressShowOnScreen,
     );
   }
 
@@ -36,7 +39,8 @@ class _EditorRenderEditableDecorations extends SingleChildRenderObjectWidget {
       ..controller = controller
       ..focusNode = focusNode
       ..selection = selection
-      ..textDirection = textDirection;
+      ..textDirection = textDirection
+      ..suppressShowOnScreen = suppressShowOnScreen;
   }
 }
 
@@ -45,6 +49,7 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
   FocusNode _focusNode;
   TextSelection? _selection;
   TextDirection _textDirection;
+  bool Function()? _suppressShowOnScreen;
   bool _listeningToController = false;
   bool _listeningToFocus = false;
 
@@ -53,10 +58,12 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     required FocusNode focusNode,
     required TextSelection? selection,
     required TextDirection textDirection,
+    bool Function()? suppressShowOnScreen,
   })  : _controller = controller,
         _focusNode = focusNode,
         _selection = selection,
-        _textDirection = textDirection;
+        _textDirection = textDirection,
+        _suppressShowOnScreen = suppressShowOnScreen;
 
   String get _rawText => _controller.text;
 
@@ -86,6 +93,26 @@ class _RenderEditorRenderEditableDecorations extends RenderProxyBox {
     if (value == _textDirection) return;
     _textDirection = value;
     markNeedsPaint();
+  }
+
+  set suppressShowOnScreen(bool Function()? value) {
+    _suppressShowOnScreen = value;
+  }
+
+  @override
+  void showOnScreen({
+    RenderObject? descendant,
+    Rect? rect,
+    Duration duration = Duration.zero,
+    Curve curve = Curves.ease,
+  }) {
+    if (_suppressShowOnScreen?.call() ?? false) return;
+    super.showOnScreen(
+      descendant: descendant,
+      rect: rect,
+      duration: duration,
+      curve: curve,
+    );
   }
 
   @override

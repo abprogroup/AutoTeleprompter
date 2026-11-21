@@ -15,6 +15,7 @@ class _EditorBlock extends StatelessWidget {
   final VoidCallback onRedo;
   final bool hasBookmark;
   final VoidCallback onBookmarkTap;
+  final bool Function()? suppressShowOnScreen;
 
   const _EditorBlock({
     super.key,
@@ -32,6 +33,7 @@ class _EditorBlock extends StatelessWidget {
     required this.onRedo,
     required this.hasBookmark,
     required this.onBookmarkTap,
+    this.suppressShowOnScreen,
   });
 
   TextAlign? _markupAlign(String text) {
@@ -233,32 +235,35 @@ class _EditorBlock extends StatelessWidget {
                       selectionColor: Colors.transparent,
                     ),
                   ),
-                  child: _EditorRenderEditableDecorations(
-                    controller: controller,
-                    focusNode: focusNode,
-                    selection: paintSelection,
-                    textDirection: textDirection,
-                    child: TextField(
-                      selectionControls: GhostSelectionControls(),
+                  child: MediaQuery.withNoTextScaling(
+                    child: _EditorRenderEditableDecorations(
                       controller: controller,
                       focusNode: focusNode,
-                      inputFormatters: [
-                        _AppSelectionReplacementFormatter(controller),
-                      ],
-                      maxLines: null,
-                      onTap: onTap,
+                      selection: paintSelection,
                       textDirection: textDirection,
-                      textAlign: textAlign,
-                      selectionHeightStyle: ui.BoxHeightStyle.strut,
-                      selectionWidthStyle: ui.BoxWidthStyle.tight,
-                      cursorColor: Colors.amber,
-                      strutStyle: editorStrutStyle,
-                      style: editorTextStyle,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: editorContentPadding,
-                      ),
+                      suppressShowOnScreen: suppressShowOnScreen,
+                      child: TextField(
+                        selectionControls: GhostSelectionControls(),
+                        controller: controller,
+                        focusNode: focusNode,
+                        inputFormatters: [
+                          _AppSelectionReplacementFormatter(controller),
+                        ],
+                        maxLines: null,
+                        onTap: onTap,
+                        textDirection: textDirection,
+                        textAlign: textAlign,
+                        selectionHeightStyle: ui.BoxHeightStyle.strut,
+                        selectionWidthStyle: ui.BoxWidthStyle.tight,
+                        cursorColor: Colors.amber,
+                        strutStyle: editorStrutStyle,
+                        style: editorTextStyle,
+                        decoration: const InputDecoration(
+                          filled: false,
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: editorContentPadding,
+                        ),
                       contextMenuBuilder: (context, editableTextState) {
                         final List<ContextMenuButtonItem> items =
                             editableTextState.contextMenuButtonItems;
@@ -317,6 +322,7 @@ class _EditorBlock extends StatelessWidget {
                         );
                       },
                     ),
+                  ),
                   ),
                 ),
               ),

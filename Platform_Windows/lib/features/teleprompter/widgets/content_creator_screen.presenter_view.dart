@@ -12,11 +12,16 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     required double presenterWordGap,
     required bool allowWordJump,
   }) {
+    final horizontal = PresenterHorizontalMargins.resolve(
+      viewportWidth: MediaQuery.of(context).size.width,
+      sideMargin: settings.presenterSideMargin,
+      horizontalOffset: settings.presenterHorizontalOffset,
+    );
     Widget wordList = Padding(
       key: _creatorContentKey,
       padding: EdgeInsets.only(
-        left: MediaQuery.of(context).size.width * 0.05,
-        right: MediaQuery.of(context).size.width * 0.05,
+        left: horizontal.left,
+        right: horizontal.right,
         top: MediaQuery.of(context).size.height *
             (settings.scrollLead + 0.06).clamp(0.24, 0.38).toDouble(),
         bottom: MediaQuery.of(context).size.height * 0.68,

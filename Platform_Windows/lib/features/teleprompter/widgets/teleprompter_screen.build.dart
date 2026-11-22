@@ -457,6 +457,8 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       settings.lineSpacing,
       settings.wordSpacing,
       settings.letterSpacing,
+      settings.presenterSideMargin,
+      settings.presenterHorizontalOffset,
       settings.textAlign,
       settings.showAlignmentOverride,
       settings.flipRotation,

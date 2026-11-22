@@ -166,12 +166,21 @@ extension _ContentCreatorPresenterTools on _ContentCreatorScreenState {
     final script = ref.read(scriptProvider);
     if (script == null || script.words.isEmpty) return;
     await _loadBookmarksForScript(script, force: true);
-    final index = ScriptBookmarkService.nearestBookmarkableWordIndex(
-      script.words,
-      _activeContentIndex(),
+    if (!mounted) return;
+    if (_bookmarks.isEmpty) {
+      _showSnack('No bookmarks saved for this script yet.');
+      return;
+    }
+    final target = ScriptBookmarkService.resolvePresenterBookmarkForRemoval(
+      words: script.words,
+      bookmarks: _bookmarks,
+      currentWordIndex: _activeContentIndex(),
     );
-    if (index == null) return;
-    final next = _bookmarks.where((b) => b.wordIndex != index).toList();
+    if (target == null) {
+      _showSnack('No bookmark at this position.');
+      return;
+    }
+    final next = _bookmarks.where((b) => b.wordIndex != target).toList();
     if (next.length == _bookmarks.length) {
       _showSnack('No bookmark at this position.');
       return;

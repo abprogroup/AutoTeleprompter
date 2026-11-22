@@ -546,6 +546,7 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
         'audioOnly': audioOnly,
       },
     );
+    await _syncBookmarksFromEditorSigns(notify: true, save: true);
     await _forceRecentUpdate();
     try {
       final settings = ref.read(settingsProvider);
@@ -611,6 +612,8 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
     );
     if (!mounted) return;
     _syncEditorControllersFromPresentedScript();
+    await _loadBookmarksForCurrentScript(force: true);
+    await _reconcileEditorBookmarkSignsFromMetadata(recordHistory: false);
     if (returnWordIndex != null) {
       _focusEditorWordIndex(returnWordIndex);
     } else {

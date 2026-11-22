@@ -76,6 +76,7 @@ Platform_*/test/
 !/Platform_Windows/test/teleprompter/
 /Platform_Windows/test/teleprompter/*
 !/Platform_Windows/test/teleprompter/presenter_viewport_test.dart
+!/Platform_Windows/test/teleprompter/presenter_horizontal_margins_test.dart
 !/Platform_Windows/test/teleprompter/presenter_hotkeys_test.dart
 !/Platform_Windows/test/teleprompter/presenter_scroll_motion_test.dart
 !/Platform_Windows/test/teleprompter/speech_scroll_controls_test.dart

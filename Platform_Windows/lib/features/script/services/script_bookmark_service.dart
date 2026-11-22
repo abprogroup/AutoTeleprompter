@@ -170,6 +170,73 @@ class ScriptBookmarkService {
     return best;
   }
 
+  /// Resolves the bookmark word index to remove when the user presses
+  /// "Remove bookmark" in Presenter / Content Creator mode:
+  /// - When [readingLineWordIndex] is in a different paragraph from
+  ///   [currentWordIndex] (e.g. user manually scrolled to a bookmark while
+  ///   stopped), prioritizes the visible reading-line paragraph first so an
+  ///   off-screen bookmark at `confirmedWordIndex` is never deleted by mistake.
+  /// - Otherwise (or if the reading-line paragraph has no bookmark), resolves
+  ///   an exact match or closest bookmark in [currentWordIndex]'s paragraph.
+  static int? resolvePresenterBookmarkForRemoval({
+    required List<ScriptWord> words,
+    required List<ScriptBookmark> bookmarks,
+    required int currentWordIndex,
+    int? readingLineWordIndex,
+  }) {
+    if (words.isEmpty || bookmarks.isEmpty) return null;
+    final current = nearestBookmarkableWordIndex(words, currentWordIndex);
+    final readingLine = readingLineWordIndex == null
+        ? null
+        : nearestBookmarkableWordIndex(words, readingLineWordIndex);
+
+    ({int start, int end}) paragraphBounds(int anchor) {
+      var start = anchor.clamp(0, words.length - 1).toInt();
+      while (start > 0 && !words[start - 1].isNewline) {
+        start--;
+      }
+      var end = anchor.clamp(0, words.length - 1).toInt();
+      while (end + 1 < words.length && !words[end + 1].isNewline) {
+        end++;
+      }
+      return (start: start, end: end);
+    }
+
+    int? resolveForAnchor(int anchor) {
+      if (bookmarks.any((b) => b.wordIndex == anchor)) return anchor;
+      final bounds = paragraphBounds(anchor);
+      int? best;
+      var bestDistance = 1 << 30;
+      for (final bookmark in bookmarks) {
+        final idx = bookmark.wordIndex;
+        if (idx < bounds.start || idx > bounds.end) continue;
+        final dist = (idx - anchor).abs();
+        if (dist < bestDistance) {
+          bestDistance = dist;
+          best = idx;
+        }
+      }
+      return best;
+    }
+
+    final sameParagraph = current != null &&
+        readingLine != null &&
+        paragraphBounds(current).start == paragraphBounds(readingLine).start;
+
+    if (readingLine != null && !sameParagraph) {
+      final atReadingLine = resolveForAnchor(readingLine);
+      if (atReadingLine != null) return atReadingLine;
+    }
+    if (current != null) {
+      final atCurrent = resolveForAnchor(current);
+      if (atCurrent != null) return atCurrent;
+    }
+    if (readingLine != null && sameParagraph) {
+      return resolveForAnchor(readingLine);
+    }
+    return null;
+  }
+
   static int? anchoredWordIndexFromEditorPosition({
     required String rawText,
     required List<ScriptWord> words,

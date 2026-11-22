@@ -53,6 +53,14 @@ double _normalizeLetterSpacing(double? value) {
   return (value ?? 0.0).clamp(-2.0, 5.0).toDouble();
 }
 
+double _normalizePresenterSideMargin(double? value) {
+  return (value ?? 0.0).clamp(0.0, 0.35).toDouble();
+}
+
+double _normalizePresenterHorizontalOffset(double? value) {
+  return (value ?? 0.0).clamp(-0.30, 0.30).toDouble();
+}
+
 double _normalizePastWordOpacity(double? value) {
   return (value ?? 0.3).clamp(0.05, 1.0).toDouble();
 }

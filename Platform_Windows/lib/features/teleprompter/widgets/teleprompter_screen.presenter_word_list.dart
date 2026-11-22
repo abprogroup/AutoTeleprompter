@@ -13,11 +13,19 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
   }) {
     final displayWordIndex =
         _activeManualCorrection ? _manualWordIndex : tState.confirmedWordIndex;
+    final horizontal = PresenterHorizontalMargins.resolve(
+      viewportWidth: MediaQuery.of(context).size.width,
+      sideMargin: settings.presenterSideMargin,
+      horizontalOffset: settings.presenterHorizontalOffset,
+    );
+    final verticalPad = MediaQuery.of(context).size.height * 0.45;
     Widget wordList = Padding(
       key: _presenterContentKey,
-      padding: EdgeInsets.symmetric(
-        horizontal: MediaQuery.of(context).size.width * 0.05,
-        vertical: MediaQuery.of(context).size.height * 0.45,
+      padding: EdgeInsets.fromLTRB(
+        horizontal.left,
+        verticalPad,
+        horizontal.right,
+        verticalPad,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

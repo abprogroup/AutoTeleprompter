@@ -179,6 +179,8 @@ class SettingsNotifier extends Notifier<AppSettings>
       letterSpacing: _normalizeLetterSpacing(
         prefs.getDouble(_letterSpacingKey),
       ),
+      presenterSideMargin: _normalizePresenterSideMargin(prefs.getDouble(_presenterSideMarginKey)),
+      presenterHorizontalOffset: _normalizePresenterHorizontalOffset(prefs.getDouble(_presenterHorizontalOffsetKey)),
       scriptBgColor: _normalizeColor(
         prefs.getInt(_scriptBgColorKey),
         0xFF000000,

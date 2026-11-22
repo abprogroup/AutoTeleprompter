@@ -127,6 +127,8 @@ class AppSettings {
   final double lineSpacing; // 1.0-2.5
   final double wordSpacing; // extra spacing between words (px)
   final double letterSpacing; // extra spacing between letters (px)
+  final double presenterSideMargin; // 0.0-0.35 extra side blanking per side
+  final double presenterHorizontalOffset; // -0.30..+0.30 left/right lens shift
   final int scriptBgColor; // ARGB int, default black
   final int currentWordColor; // ARGB int, default amber
   final int futureWordColor; // ARGB int, default white
@@ -218,6 +220,8 @@ class AppSettings {
     this.lineSpacing = 1.2,
     this.wordSpacing = 0.0, // default: no extra word spacing
     this.letterSpacing = 0.0, // default: no extra letter spacing
+    this.presenterSideMargin = 0.0,
+    this.presenterHorizontalOffset = 0.0,
     this.scriptBgColor = 0xFF000000,
     this.currentWordColor = 0xFFFFBF00,
     this.futureWordColor = 0xFFFFFFFF,
@@ -301,6 +305,8 @@ class AppSettings {
     double? lineSpacing,
     double? wordSpacing,
     double? letterSpacing,
+    double? presenterSideMargin,
+    double? presenterHorizontalOffset,
     int? scriptBgColor,
     int? currentWordColor,
     int? futureWordColor,
@@ -384,6 +390,9 @@ class AppSettings {
       lineSpacing: lineSpacing ?? this.lineSpacing,
       wordSpacing: wordSpacing ?? this.wordSpacing,
       letterSpacing: letterSpacing ?? this.letterSpacing,
+      presenterSideMargin: presenterSideMargin ?? this.presenterSideMargin,
+      presenterHorizontalOffset:
+          presenterHorizontalOffset ?? this.presenterHorizontalOffset,
       scriptBgColor: scriptBgColor ?? this.scriptBgColor,
       currentWordColor: currentWordColor ?? this.currentWordColor,
       futureWordColor: futureWordColor ?? this.futureWordColor,

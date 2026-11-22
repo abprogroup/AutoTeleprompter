@@ -361,12 +361,14 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       return;
     }
     final currentRaw = ref.read(teleprompterProvider).confirmedWordIndex;
-    final current = ScriptBookmarkService.nearestBookmarkableWordIndex(
-      script.words,
-      currentRaw,
+    final readingLineRaw = _wordIndexNearestReadingLine();
+    final target = ScriptBookmarkService.resolvePresenterBookmarkForRemoval(
+      words: script.words,
+      bookmarks: _bookmarks,
+      currentWordIndex: currentRaw,
+      readingLineWordIndex: readingLineRaw,
     );
-    if (current == null) return;
-    if (!_bookmarks.any((bookmark) => bookmark.wordIndex == current)) {
+    if (target == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No bookmark at the current presenter position'),
@@ -375,6 +377,6 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       );
       return;
     }
-    await _deletePresenterBookmark(current);
+    await _deletePresenterBookmark(target);
   }
 }

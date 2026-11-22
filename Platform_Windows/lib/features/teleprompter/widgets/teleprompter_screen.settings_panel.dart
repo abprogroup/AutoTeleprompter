@@ -430,7 +430,10 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
           ]),
           sliderWithReset(
             tooltip: 'Reset Reading Line Position',
-            onReset: () => notifier.setScrollLead(0.32),
+            onReset: () {
+              notifier.setScrollLead(0.32);
+              onLayoutChanged?.call();
+            },
             slider: Slider(
               value: settings.scrollLead,
               min: 0.15,
@@ -440,6 +443,72 @@ class TeleprompterSettingsPanel extends ConsumerWidget {
               inactiveColor: Colors.white24,
               onChanged: (v) {
                 notifier.setScrollLead(v);
+                onLayoutChanged?.call();
+              },
+            ),
+          ),
+
+          Row(children: [
+            const Text('Side Margins', style: labelStyle),
+            const Spacer(),
+            Text('${(settings.presenterSideMargin * 100).round()}%',
+                style: const TextStyle(color: Colors.white, fontSize: 14)),
+          ]),
+          sliderWithReset(
+            tooltip: 'Reset Side Margins',
+            onReset: () {
+              unawaited(notifier.setPresenterSideMargin(0.0));
+              onLayoutChanged?.call();
+            },
+            slider: Slider(
+              value: settings.presenterSideMargin
+                  .clamp(
+                    PresenterHorizontalMargins.minSideMargin,
+                    PresenterHorizontalMargins.maxSideMargin,
+                  )
+                  .toDouble(),
+              min: PresenterHorizontalMargins.minSideMargin,
+              max: PresenterHorizontalMargins.maxSideMargin,
+              divisions: 35,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: (v) {
+                unawaited(notifier.setPresenterSideMargin(v));
+                onLayoutChanged?.call();
+              },
+            ),
+          ),
+
+          Row(children: [
+            const Text('Horizontal Offset', style: labelStyle),
+            const Spacer(),
+            Text(
+              PresenterHorizontalMargins.formatHorizontalOffsetLabel(
+                settings.presenterHorizontalOffset,
+              ),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ]),
+          sliderWithReset(
+            tooltip: 'Reset Horizontal Offset',
+            onReset: () {
+              unawaited(notifier.setPresenterHorizontalOffset(0.0));
+              onLayoutChanged?.call();
+            },
+            slider: Slider(
+              value: settings.presenterHorizontalOffset
+                  .clamp(
+                    PresenterHorizontalMargins.minHorizontalOffset,
+                    PresenterHorizontalMargins.maxHorizontalOffset,
+                  )
+                  .toDouble(),
+              min: PresenterHorizontalMargins.minHorizontalOffset,
+              max: PresenterHorizontalMargins.maxHorizontalOffset,
+              divisions: 60,
+              activeColor: Color(settings.currentWordColor),
+              inactiveColor: Colors.white24,
+              onChanged: (v) {
+                unawaited(notifier.setPresenterHorizontalOffset(v));
                 onLayoutChanged?.call();
               },
             ),

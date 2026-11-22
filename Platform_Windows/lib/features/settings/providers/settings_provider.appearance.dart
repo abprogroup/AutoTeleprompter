@@ -104,6 +104,20 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setDouble(_letterSpacingKey, normalized);
   }
 
+  Future<void> setPresenterSideMargin(double margin) async {
+    final normalized = _normalizePresenterSideMargin(margin);
+    state = state.copyWith(presenterSideMargin: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_presenterSideMarginKey, normalized);
+  }
+
+  Future<void> setPresenterHorizontalOffset(double offset) async {
+    final normalized = _normalizePresenterHorizontalOffset(offset);
+    state = state.copyWith(presenterHorizontalOffset: normalized);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_presenterHorizontalOffsetKey, normalized);
+  }
+
   Future<void> setScriptBgColor(int color) async {
     final normalized = _normalizeColor(color, state.scriptBgColor);
     state = state.copyWith(scriptBgColor: normalized);

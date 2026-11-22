@@ -17,6 +17,7 @@ import '../../../platform/webview2/webview2_runtime_bootstrap.dart';
 import '../models/alignment_result.dart';
 import '../services/content_camera_device_classifier.dart';
 import '../services/presenter_highlight_style.dart';
+import '../services/presenter_horizontal_margins.dart';
 import '../services/presenter_input_lock_service.dart';
 import '../services/presenter_reading_position_service.dart';
 import '../services/recording_media_probe_service.dart';

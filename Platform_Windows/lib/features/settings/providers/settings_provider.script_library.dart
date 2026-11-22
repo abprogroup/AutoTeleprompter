@@ -6,6 +6,8 @@ final scriptLibraryStoreProvider = Provider<SecureScriptStore>(
   (ref) => SecureScriptStore(),
 );
 
+int _libraryIdSequence = 0;
+
 mixin SettingsNotifierScriptLibrary on Notifier<AppSettings> {
   Future<void>? _libraryReady;
   Future<void> _libraryWriteQueue = Future<void>.value();
@@ -82,7 +84,8 @@ mixin SettingsNotifierScriptLibrary on Notifier<AppSettings> {
         if (_containsLibraryScript(current, title: name, sourcePath: sourcePath)) {
           return null;
         }
-        final id = 'library_${DateTime.now().microsecondsSinceEpoch}';
+        final id =
+            'library_${DateTime.now().microsecondsSinceEpoch}_${++_libraryIdSequence}';
         final recordId = await ref
             .read(scriptLibraryStoreProvider)
             .save(recordId: id, text: text);

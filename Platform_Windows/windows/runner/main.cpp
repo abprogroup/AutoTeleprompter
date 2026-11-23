@@ -5,6 +5,14 @@
 #include "flutter_window.h"
 #include "utils.h"
 
+// Prefer integrated CPU graphics over discrete NVIDIA/AMD GPUs on hybrid
+// laptops so teleprompter scrolling and hidden WebView2 STT stay cool,
+// power-efficient, and isolated from discrete GPU driver TDRs.
+extern "C" {
+__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000000;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0;
+}
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   // Enforce single per-user instance so two processes never fight over DPAPI

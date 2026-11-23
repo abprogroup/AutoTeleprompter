@@ -23,6 +23,7 @@ void main() {
       }
       expect(arguments, contains('--use-fake-ui-for-media-stream'));
       expect(arguments, contains('--autoplay-policy=no-user-gesture-required'));
+      expect(arguments, contains('--disable-gpu'));
     });
   });
 

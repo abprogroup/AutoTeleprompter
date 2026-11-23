@@ -238,6 +238,8 @@ void main() {
       final mainCpp = File('windows/runner/main.cpp').readAsStringSync();
       expect(mainCpp, contains('AutoTeleprompter_SingleInstance_Mutex'));
       expect(mainCpp, contains('L"AutoTeleprompter"'));
+      expect(mainCpp, contains('NvOptimusEnablement = 0x00000000'));
+      expect(mainCpp, contains('AmdPowerXpressRequestHighPerformance = 0'));
     });
   });
 }

@@ -78,6 +78,9 @@ class WebView2RuntimeConfig {
       '--use-fake-ui-for-media-stream',
       '--unsafely-treat-insecure-origin-as-secure=${origins.join(',')}',
       '--autoplay-policy=no-user-gesture-required',
+      // Keep the invisible 1x1 STT WebView2 off discrete/hardware GPUs so
+      // starting microphone capture never triggers hybrid-GPU driver TDRs.
+      '--disable-gpu',
       // V5 Hebrew tracking was qualified against Edge's established Bing
       // speech path. WebView2's later Ceto-service rollout changed recognition
       // behavior and has an active upstream regression. Keep the embedded,

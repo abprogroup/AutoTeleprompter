@@ -172,7 +172,33 @@ void main() {
       // Widget-level check in the next test; here verify spacing helper math.
       expect(ScriptTypographyService.effectiveSpacing(0.0), isNull);
       expect(ScriptTypographyService.effectiveSpacing(1.5, scale: 2.0), 3.0);
-      expect(ScriptTypographyService.presenterWordGap(40.0, 2.0), closeTo(13.6, 0.01));
+      expect(ScriptTypographyService.presenterWordGap(40.0, 2.0), closeTo(15.2, 0.01));
+
+      // Per-paragraph word gap scales to large inline headings instead of
+      // staying cramped at the small base body font size.
+      final mixed = WordAligner.tokenize(
+        '[size=50]Big Heading Line[/size]\n[size=17]small body line[/size]',
+      );
+      final headingPara = mixed.takeWhile((w) => !w.isNewline).toList();
+      final bodyPara = mixed.skipWhile((w) => !w.isNewline).skip(1).toList();
+      final headingSize = ScriptTypographyService.paragraphPresentationFontSize(
+        headingPara,
+        34.0,
+      );
+      final bodySize = ScriptTypographyService.paragraphPresentationFontSize(
+        bodyPara,
+        34.0,
+      );
+      expect(headingSize, closeTo(100.0, 0.01));
+      expect(bodySize, closeTo(34.0, 0.01));
+      expect(
+        ScriptTypographyService.presenterWordGap(headingSize, 0.0),
+        closeTo(28.0, 0.01),
+      );
+      expect(
+        ScriptTypographyService.maxScriptWordGap([headingPara, bodyPara], 34.0, 0.0),
+        closeTo(28.0, 0.01),
+      );
     });
   });
 

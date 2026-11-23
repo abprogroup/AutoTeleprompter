@@ -126,14 +126,67 @@ class ScriptTypographyService {
     return spacing * scale;
   }
 
+  /// Natural proportional space width ratio matching Arial/Inter medium/bold
+  /// display typography in Presenter & Content Creator modes.
+  static const double presenterSpaceWidthRatio = 0.28;
+
   /// Presenter inter-word Wrap spacing scaled proportionally to
   /// [presentationFontSize] plus the scaled [wordSpacing] metadata delta.
   static double presenterWordGap(
     double presentationFontSize,
     double wordSpacing,
   ) {
-    final defaultSpace = presentationFontSize * 0.24;
+    final defaultSpace = presentationFontSize * presenterSpaceWidthRatio;
     final delta = wordSpacing * presenterScaleFactor;
     return (defaultSpace + delta).clamp(0.0, 120.0).toDouble();
+  }
+
+  /// Resolves the rendered presentation font size for a single paragraph so
+  /// large inline headings/paragraphs get proportional word spacing instead of
+  /// inheriting a small base body font size.
+  static double paragraphPresentationFontSize(
+    List<ScriptWord> paragraph,
+    double fallbackPresentationFontSize,
+  ) {
+    final counts = <double, int>{};
+    for (final word in paragraph) {
+      if (word.isNewline) continue;
+      final rendered = word.fontSize != null
+          ? word.fontSize! * presenterScaleFactor
+          : fallbackPresentationFontSize;
+      final bucket = (rendered * 10).round() / 10.0;
+      counts[bucket] = (counts[bucket] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return fallbackPresentationFontSize;
+    double? bestSize;
+    var bestCount = -1;
+    counts.forEach((size, count) {
+      if (count > bestCount ||
+          (count == bestCount && (bestSize == null || size > bestSize!))) {
+        bestSize = size;
+        bestCount = count;
+      }
+    });
+    return bestSize ?? fallbackPresentationFontSize;
+  }
+
+  /// Returns the maximum inter-word gap across all paragraphs so continuous
+  /// highlight/underline decoration painters bridge large-heading spaces cleanly.
+  static double maxScriptWordGap(
+    List<List<ScriptWord>> paragraphs,
+    double fallbackPresentationFontSize,
+    double wordSpacing,
+  ) {
+    var maxGap = presenterWordGap(fallbackPresentationFontSize, wordSpacing);
+    for (final para in paragraphs) {
+      if (para.length == 1 && para[0].isNewline) continue;
+      final paraSize = paragraphPresentationFontSize(
+        para,
+        fallbackPresentationFontSize,
+      );
+      final gap = presenterWordGap(paraSize, wordSpacing);
+      if (gap > maxGap) maxGap = gap;
+    }
+    return maxGap;
   }
 }

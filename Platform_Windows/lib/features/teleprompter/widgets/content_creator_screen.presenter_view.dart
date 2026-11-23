@@ -44,6 +44,11 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
     );
 
     if (kUseCustomDocxDecorationPainting) {
+      final decorationGap = ScriptTypographyService.maxScriptWordGap(
+        paragraphs,
+        presentationFontSize,
+        settings.wordSpacing,
+      );
       wordList = Stack(
         clipBehavior: Clip.none,
         children: [
@@ -57,7 +62,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
                   activeWordIndex: activeWordIndex,
                   type: MarkupDecorationType.background,
                   gapTolerance:
-                      _contentDecorationGapTolerance(presenterWordGap),
+                      _contentDecorationGapTolerance(decorationGap),
                 ),
               ),
             ),
@@ -73,7 +78,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
                   activeWordIndex: activeWordIndex,
                   type: MarkupDecorationType.underline,
                   gapTolerance:
-                      _contentDecorationGapTolerance(presenterWordGap),
+                      _contentDecorationGapTolerance(decorationGap),
                   underlineColor: Color(settings.futureWordColor),
                 ),
               ),
@@ -149,17 +154,24 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
       }
     }
 
+    final paraFontSize = ScriptTypographyService.paragraphPresentationFontSize(
+      para,
+      presentationFontSize,
+    );
+    final paraWordGap = ScriptTypographyService.presenterWordGap(
+      paraFontSize,
+      settings.wordSpacing,
+    );
     return Padding(
       padding: EdgeInsets.only(
-        bottom:
-            presentationFontSize * (settings.lineSpacing - 1.0).clamp(0.0, 1.0),
+        bottom: paraFontSize * (settings.lineSpacing - 1.0).clamp(0.0, 1.0),
       ),
       child: Directionality(
         textDirection: paraDir,
         child: Wrap(
           textDirection: paraDir,
           alignment: _contentWrapAlignment(paraAlign, settings, paragraphRtl),
-          spacing: presenterWordGap,
+          spacing: paraWordGap,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             for (final entry in para.asMap().entries)

@@ -64,9 +64,18 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
             paraAlign ??= firstWord.alignment;
           }
 
+          final paraFontSize =
+              ScriptTypographyService.paragraphPresentationFontSize(
+            para,
+            presentationFontSize,
+          );
+          final paraWordGap = ScriptTypographyService.presenterWordGap(
+            paraFontSize,
+            settings.wordSpacing,
+          );
           final paragraphWidget = Padding(
             padding: EdgeInsets.only(
-              bottom: presentationFontSize *
+              bottom: paraFontSize *
                   (settings.lineSpacing - 1.0).clamp(0.0, 1.0),
             ),
             child: Directionality(
@@ -74,7 +83,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
               child: Wrap(
                 textDirection: paraDir,
                 alignment: _toWrapAlignment(paraAlign, settings, paragraphRtl),
-                spacing: presenterWordGap,
+                spacing: paraWordGap,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: para.asMap().entries.map<Widget>((entry) {
                   return _buildPresenterWord(
@@ -103,6 +112,11 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     );
 
     if (kUseCustomDocxDecorationPainting) {
+      final decorationGap = ScriptTypographyService.maxScriptWordGap(
+        paragraphs,
+        presentationFontSize,
+        settings.wordSpacing,
+      );
       wordList = Stack(
         clipBehavior: Clip.none,
         children: [
@@ -116,7 +130,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   confirmedWordIndex: displayWordIndex,
                   isManualMode: false,
                   type: MarkupDecorationType.background,
-                  gapTolerance: _decorationGapTolerance(presenterWordGap),
+                  gapTolerance: _decorationGapTolerance(decorationGap),
                 ),
               ),
             ),
@@ -132,7 +146,7 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
                   confirmedWordIndex: displayWordIndex,
                   isManualMode: false,
                   type: MarkupDecorationType.underline,
-                  gapTolerance: _decorationGapTolerance(presenterWordGap),
+                  gapTolerance: _decorationGapTolerance(decorationGap),
                   underlineColor: Color(settings.futureWordColor),
                 ),
               ),

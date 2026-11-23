@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../models/script.dart';
 import '../models/script_word.dart';
 
@@ -11,9 +13,9 @@ import '../models/script_word.dart';
 class ScriptTypographyService {
   const ScriptTypographyService._();
 
-  static const double minBaseFontSize = 8.0;
+  static const double minBaseFontSize = 1.0;
   static const double maxBaseFontSize = 120.0;
-  static const double minInlineFontSize = 6.0;
+  static const double minInlineFontSize = 1.0;
   static const double maxInlineFontSize = 300.0;
   static const double presenterScaleFactor = 2.0;
 
@@ -110,6 +112,73 @@ class ScriptTypographyService {
     });
   }
 
+  /// Scales inline `[size=...]` tags for an explicit A-/A+ [delta] step.
+  ///
+  /// When [fromBaseSize] has already hit [minBaseFontSize] (or [maxBaseFontSize])
+  /// so [toBaseSize] == [fromBaseSize], remaining larger (or smaller) inline
+  /// text continues stepping smoothly instead of freezing A-/A+.
+  static String scaleInlineFontSizesByDelta(
+    String rawText, {
+    required double fromBaseSize,
+    required double toBaseSize,
+    required double delta,
+  }) {
+    if (!inlineSizeOpenRegex.hasMatch(rawText) || delta.abs() < 0.001) {
+      return rawText;
+    }
+    if ((toBaseSize - fromBaseSize).abs() >= 0.001) {
+      return scaleInlineFontSizes(
+        rawText,
+        fromBaseSize: fromBaseSize,
+        toBaseSize: toBaseSize,
+      );
+    }
+    final sizes = <double>[];
+    for (final match in inlineSizeOpenRegex.allMatches(rawText)) {
+      final parsed = double.tryParse(match.group(1)!);
+      if (parsed != null && parsed > 0) sizes.add(parsed);
+    }
+    if (sizes.isEmpty) return rawText;
+
+    if (delta < 0) {
+      final maxSize = sizes.reduce(math.max);
+      if (maxSize <= minInlineFontSize + 0.001) return rawText;
+      final targetMax =
+          (maxSize + delta).clamp(minInlineFontSize, maxInlineFontSize);
+      final ratio = targetMax / maxSize;
+      return rawText.replaceAllMapped(inlineSizeOpenRegex, (match) {
+        final parsed = double.tryParse(match.group(1)!);
+        if (parsed == null || parsed <= 0) return match.group(0)!;
+        if (parsed <= minInlineFontSize + 0.001) {
+          return '[size=${formatSize(minInlineFontSize)}]';
+        }
+        final scaled = math
+            .min(parsed * ratio, parsed - 0.1)
+            .clamp(minInlineFontSize, maxInlineFontSize)
+            .toDouble();
+        return '[size=${formatSize(scaled)}]';
+      });
+    }
+
+    final minSize = sizes.reduce(math.min);
+    if (minSize >= maxInlineFontSize - 0.001) return rawText;
+    final targetMin =
+        (minSize + delta).clamp(minInlineFontSize, maxInlineFontSize);
+    final ratio = targetMin / minSize;
+    return rawText.replaceAllMapped(inlineSizeOpenRegex, (match) {
+      final parsed = double.tryParse(match.group(1)!);
+      if (parsed == null || parsed <= 0) return match.group(0)!;
+      if (parsed >= maxInlineFontSize - 0.001) {
+        return '[size=${formatSize(maxInlineFontSize)}]';
+      }
+      final scaled = math
+          .max(parsed * ratio, parsed + 0.1)
+          .clamp(minInlineFontSize, maxInlineFontSize)
+          .toDouble();
+      return '[size=${formatSize(scaled)}]';
+    });
+  }
+
   /// Formats a font size cleanly without trailing `.0` noise.
   static String formatSize(double size) {
     final rounded = (size * 10).round() / 10.0;
@@ -168,6 +237,35 @@ class ScriptTypographyService {
       }
     });
     return bestSize ?? fallbackPresentationFontSize;
+  }
+
+  /// Resolves the rendered font size for a blank-line spacer (`\n\n`) from the
+  /// nearest surrounding text paragraph so vertical row gaps match the
+  /// surrounding text instead of shrinking to a small base font size.
+  static double blankLinePresentationFontSize(
+    List<List<ScriptWord>> paragraphs,
+    int blankIndex,
+    double fallbackPresentationFontSize,
+  ) {
+    bool isTextParagraph(List<ScriptWord> para) =>
+        para.isNotEmpty && !(para.length == 1 && para[0].isNewline);
+    for (var i = blankIndex - 1; i >= 0; i--) {
+      if (isTextParagraph(paragraphs[i])) {
+        return paragraphPresentationFontSize(
+          paragraphs[i],
+          fallbackPresentationFontSize,
+        );
+      }
+    }
+    for (var i = blankIndex + 1; i < paragraphs.length; i++) {
+      if (isTextParagraph(paragraphs[i])) {
+        return paragraphPresentationFontSize(
+          paragraphs[i],
+          fallbackPresentationFontSize,
+        );
+      }
+    }
+    return fallbackPresentationFontSize;
   }
 
   /// Returns the maximum inter-word gap across all paragraphs so continuous

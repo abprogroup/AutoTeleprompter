@@ -431,7 +431,26 @@ class ScriptNotifier extends Notifier<Script?> {
   }
 
   Future<void> applyBaseFontSize(double size) async {
-    final clamped = size
+    await _applyFontSizeChange(targetBaseSize: size);
+  }
+
+  /// Applies an explicit A-/A+ step. Even when the base font size has already
+  /// reached [ScriptTypographyService.minBaseFontSize] (1.0) or max (120.0),
+  /// remaining larger/smaller inline `[size=...]` spans keep scaling smoothly.
+  Future<void> applyFontSizeDelta(double delta) async {
+    final fallback = state?.fontSize ?? ref.read(settingsProvider).fontSize;
+    final oldBase = effectiveFontSize(fallback);
+    await _applyFontSizeChange(
+      targetBaseSize: oldBase + delta,
+      explicitDelta: delta,
+    );
+  }
+
+  Future<void> _applyFontSizeChange({
+    required double targetBaseSize,
+    double? explicitDelta,
+  }) async {
+    final clamped = targetBaseSize
         .clamp(
           ScriptTypographyService.minBaseFontSize,
           ScriptTypographyService.maxBaseFontSize,
@@ -448,11 +467,18 @@ class ScriptNotifier extends Notifier<Script?> {
       return;
     }
     final oldBase = effectiveFontSize(current.fontSize);
-    final rawText = ScriptTypographyService.scaleInlineFontSizes(
-      current.rawText,
-      fromBaseSize: oldBase,
-      toBaseSize: clamped,
-    );
+    final rawText = explicitDelta != null
+        ? ScriptTypographyService.scaleInlineFontSizesByDelta(
+            current.rawText,
+            fromBaseSize: oldBase,
+            toBaseSize: clamped,
+            delta: explicitDelta,
+          )
+        : ScriptTypographyService.scaleInlineFontSizes(
+            current.rawText,
+            fromBaseSize: oldBase,
+            toBaseSize: clamped,
+          );
     final next = current.copyWith(
       rawText: rawText,
       words: rawText == current.rawText

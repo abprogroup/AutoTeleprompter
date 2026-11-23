@@ -6,6 +6,7 @@ class _EditorBlock extends StatelessWidget {
   final AppSettings settings;
   final bool isGlobalSelected;
   final bool? inheritedRtl;
+  final double? inheritedFontSize;
   final VoidCallback onTap;
   final VoidCallback onSelectAll;
   final VoidCallback onCopy;
@@ -24,6 +25,7 @@ class _EditorBlock extends StatelessWidget {
     required this.settings,
     required this.isGlobalSelected,
     this.inheritedRtl,
+    this.inheritedFontSize,
     required this.onTap,
     required this.onSelectAll,
     required this.onCopy,
@@ -73,8 +75,9 @@ class _EditorBlock extends StatelessWidget {
     final markupAlign = _markupAlign(controller.text);
     final textAlign = markupAlign ?? (isRtl ? TextAlign.right : TextAlign.left);
     final textDirection = isRtl ? TextDirection.rtl : TextDirection.ltr;
-    final maxFontSize = EditorTextGeometryService.maxFontSize(
-        controller.text, settings.fontSize);
+    final maxFontSize = inheritedFontSize ??
+        EditorTextGeometryService.maxFontSize(
+            controller.text, settings.fontSize);
     controller.backgroundHighlightsAsText =
         ScriptColorInversionService.highlightsMoveToText(settings);
     final editorTextStyle = TextStyle(

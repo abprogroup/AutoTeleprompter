@@ -400,6 +400,15 @@ extension _ScriptEditorBuildParts on _ScriptEditorScreenState {
                                               inheritedRtl:
                                                   _editorBlockResolvedRtl(
                                                       index),
+                                              inheritedFontSize:
+                                                  EditorTextGeometryService
+                                                      .resolveBlockFontSize(
+                                                _controllers
+                                                    .map((c) => c.text)
+                                                    .toList(growable: false),
+                                                index,
+                                                settings.fontSize,
+                                              ),
                                               onTap: () {
                                                 _verticalArrowPreferredX = null;
                                                 if (_isGlobalSelection) {

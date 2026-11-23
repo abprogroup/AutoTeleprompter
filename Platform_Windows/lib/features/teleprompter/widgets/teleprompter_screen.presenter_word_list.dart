@@ -29,13 +29,20 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: paragraphs.map<Widget>((para) {
+        children: paragraphs.asMap().entries.map<Widget>((paraEntry) {
+          final paraIndex = paraEntry.key;
+          final para = paraEntry.value;
           if (para.length == 1 && para[0].isNewline) {
             final isHard = para[0].raw == '\n\n';
+            final blankFontSize =
+                ScriptTypographyService.blankLinePresentationFontSize(
+              paragraphs,
+              paraIndex,
+              presentationFontSize,
+            );
             return SizedBox(
               key: _wordKeys[para[0].index],
-              height:
-                  isHard ? presentationFontSize * settings.lineSpacing : 0.0,
+              height: isHard ? blankFontSize * settings.lineSpacing : 0.0,
             );
           }
 

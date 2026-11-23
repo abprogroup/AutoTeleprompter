@@ -249,7 +249,7 @@ class PdfExportService {
           : isItalic
               ? italic
               : regular,
-      fontSize: (run.fontSize ?? defaultFontSize).clamp(8, 96).toDouble(),
+      fontSize: (run.fontSize ?? defaultFontSize).clamp(1, 96).toDouble(),
       fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
       fontStyle: isItalic ? pw.FontStyle.italic : pw.FontStyle.normal,
       decoration: run.isUnderline

@@ -2,7 +2,7 @@ part of 'settings_provider.dart';
 
 mixin SettingsNotifierAppearance on Notifier<AppSettings> {
   Future<void> setFontSize(double size) async {
-    final clamped = size.clamp(8.0, 120.0).toDouble();
+    final clamped = size.clamp(1.0, 120.0).toDouble();
     state = state.copyWith(fontSize: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_fontSizeKey, clamped);
@@ -487,7 +487,7 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
         ? _normalizeLetterSpacing((styles['letterSpacing'] as num).toDouble())
         : state.letterSpacing;
     final fontSize = hasFontSize && styles['fontSize'] is num
-        ? (styles['fontSize'] as num).toDouble().clamp(14.0, 120.0).toDouble()
+        ? (styles['fontSize'] as num).toDouble().clamp(1.0, 120.0).toDouble()
         : state.fontSize;
     final fontFamily = hasFontFamily && styles['fontFamily'] is String
         ? (styles['fontFamily'] as String).trim()

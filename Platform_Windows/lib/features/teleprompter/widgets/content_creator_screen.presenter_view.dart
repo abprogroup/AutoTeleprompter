@@ -29,9 +29,15 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final para in paragraphs)
+          for (var paraIndex = 0; paraIndex < paragraphs.length; paraIndex++)
             _buildContentParagraph(
-              para: para,
+              para: paragraphs[paraIndex],
+              blankFontSize:
+                  ScriptTypographyService.blankLinePresentationFontSize(
+                paragraphs,
+                paraIndex,
+                presentationFontSize,
+              ),
               activeWordIndex: activeWordIndex,
               settings: settings,
               bookmarkWordIndexes: bookmarkWordIndexes,
@@ -121,6 +127,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
 
   Widget _buildContentParagraph({
     required List<ScriptWord> para,
+    required double blankFontSize,
     required int activeWordIndex,
     required AppSettings settings,
     required Set<int> bookmarkWordIndexes,
@@ -132,7 +139,7 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
       final isHard = para[0].raw == '\n\n';
       return SizedBox(
         key: _wordKeys[para[0].index],
-        height: isHard ? presentationFontSize * settings.lineSpacing : 0.0,
+        height: isHard ? blankFontSize * settings.lineSpacing : 0.0,
       );
     }
 

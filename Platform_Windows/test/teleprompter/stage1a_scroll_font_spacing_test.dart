@@ -1,5 +1,6 @@
 import 'package:autoteleprompter/core/security/secure_script_store.dart';
 import 'package:autoteleprompter/features/script/models/script.dart';
+import 'package:autoteleprompter/features/script/models/script_word.dart';
 import 'package:autoteleprompter/features/script/providers/script_provider.dart';
 import 'package:autoteleprompter/features/script/services/editor_inline_style_operation.dart';
 import 'package:autoteleprompter/features/script/services/script_typography_service.dart';
@@ -200,6 +201,78 @@ void main() {
         closeTo(28.0, 0.01),
       );
     });
+
+    test(
+      'v5.2.5: blank lines inherit surrounding font size, min font reaches 1, and A- keeps shrinking larger text at floor',
+      () async {
+        // 1. Blank line inherits surrounding paragraph rendered font size
+        final tokenized = WordAligner.tokenize(
+          '[size=50]Big Heading[/size]\n\n[size=17]small body[/size]',
+        );
+        final paras = <List<ScriptWord>>[];
+        var cur = <ScriptWord>[];
+        for (final w in tokenized) {
+          if (w.isNewline) {
+            if (cur.isNotEmpty) {
+              paras.add(cur);
+              cur = [];
+            }
+            paras.add([w]);
+          } else {
+            cur.add(w);
+          }
+        }
+        if (cur.isNotEmpty) paras.add(cur);
+        final blankIdx = paras.indexWhere(
+          (p) => p.length == 1 && p.first.isNewline && p.first.raw == '\n\n',
+        );
+        expect(blankIdx, greaterThan(0));
+        expect(
+          ScriptTypographyService.blankLinePresentationFontSize(
+            paras,
+            blankIdx,
+            16.0,
+          ),
+          closeTo(100.0, 0.01),
+        );
+
+        // 2. Minimum font size reaches 1.0 (not stuck at 8.0), and A- continues
+        // shrinking remaining larger headings even after base/body hits 1.0.
+        expect(ScriptTypographyService.minBaseFontSize, 1.0);
+        expect(ScriptTypographyService.minInlineFontSize, 1.0);
+
+        final store = _createTempStore();
+        const raw =
+            '[size=40]Heading[/size]\n[size=1]tiny body one two three four[/size]';
+        final script = Script(
+          id: 'floor-test',
+          title: 'Floor Test',
+          rawText: raw,
+          words: WordAligner.tokenize(raw),
+          isRtl: false,
+          fontSize: 1.0,
+          sessionId: 'floor-test',
+        );
+        final container = ProviderContainer(
+          overrides: [
+            scriptLibraryStoreProvider.overrideWithValue(store),
+            settingsProvider.overrideWith(_TestSettings.new),
+            scriptProvider.overrideWith(() => _TestScript(script)),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final notifier = container.read(scriptProvider.notifier);
+        await notifier.applyFontSizeDelta(-1);
+        final afterFirst = container.read(scriptProvider)!;
+        expect(afterFirst.fontSize, 1.0);
+        expect(afterFirst.words.first.fontSize, closeTo(39.0, 0.1));
+
+        await notifier.applyFontSizeDelta(-1);
+        final afterSecond = container.read(scriptProvider)!;
+        expect(afterSecond.words.first.fontSize, closeTo(38.0, 0.1));
+      },
+    );
   });
 
   group('Stage 1A — Bug 1: Active-STT manual scroll greying & script identity', () {

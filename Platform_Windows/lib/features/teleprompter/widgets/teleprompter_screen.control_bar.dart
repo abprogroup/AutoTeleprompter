@@ -64,16 +64,16 @@ class _ControlBar extends ConsumerWidget {
     final effectiveFontSize = ref
         .read(scriptProvider.notifier)
         .effectiveFontSize(settings.fontSize);
-    void applyPresenterFontSize(double size) {
-      final clamped = size
+    void applyPresenterFontDelta(double delta) {
+      final target = (effectiveFontSize + delta)
           .clamp(
             ScriptTypographyService.minBaseFontSize,
             ScriptTypographyService.maxBaseFontSize,
           )
           .toDouble();
       ref.read(teleprompterProvider.notifier).setVisibleWordWindow(null, null);
-      unawaited(ref.read(scriptProvider.notifier).applyBaseFontSize(clamped));
-      onFontSizeChanged(clamped);
+      unawaited(ref.read(scriptProvider.notifier).applyFontSizeDelta(delta));
+      onFontSizeChanged(target);
     }
 
     void showLockedBookmarks() {
@@ -139,7 +139,7 @@ class _ControlBar extends ConsumerWidget {
                 style: TextStyle(color: Colors.white70, fontSize: 16),
               ),
               onPressed: () {
-                applyPresenterFontSize(effectiveFontSize - 1);
+                applyPresenterFontDelta(-1);
               },
               tooltip: 'Smaller font',
             ),
@@ -176,7 +176,7 @@ class _ControlBar extends ConsumerWidget {
                 ),
               ),
               onPressed: () {
-                applyPresenterFontSize(effectiveFontSize + 1);
+                applyPresenterFontDelta(1);
               },
               tooltip: 'Larger font',
             ),

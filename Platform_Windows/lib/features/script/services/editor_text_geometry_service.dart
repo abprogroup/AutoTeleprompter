@@ -94,6 +94,31 @@ class EditorTextGeometryService {
     return maxSize;
   }
 
+  /// Resolves the visual line font size for an editor block. Empty/blank rows
+  /// inherit the nearest surrounding non-empty block's font size so spacing
+  /// between paragraphs matches the surrounding text.
+  static double resolveBlockFontSize(
+    List<String> rawBlocks,
+    int index,
+    double defaultSize,
+  ) {
+    if (index < 0 || index >= rawBlocks.length) return defaultSize;
+    if (hasVisibleContent(rawBlocks[index])) {
+      return maxFontSize(rawBlocks[index], defaultSize);
+    }
+    for (var i = index - 1; i >= 0; i--) {
+      if (hasVisibleContent(rawBlocks[i])) {
+        return maxFontSize(rawBlocks[i], defaultSize);
+      }
+    }
+    for (var i = index + 1; i < rawBlocks.length; i++) {
+      if (hasVisibleContent(rawBlocks[i])) {
+        return maxFontSize(rawBlocks[i], defaultSize);
+      }
+    }
+    return defaultSize;
+  }
+
   static int? visualHorizontalTargetRawOffset({
     required TextPainter painter,
     required String rawText,

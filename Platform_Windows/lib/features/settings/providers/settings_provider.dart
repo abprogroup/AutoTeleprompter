@@ -156,7 +156,7 @@ class SettingsNotifier extends Notifier<AppSettings>
 
     state = AppSettings(
       fontSize:
-          (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(14.0, 120.0).toDouble(),
+          (prefs.getDouble(_fontSizeKey) ?? 20.0).clamp(1.0, 120.0).toDouble(),
       languageMode: _normalizeLanguageMode(prefs.getString(_languageKey)),
       scrollLead: _normalizeScrollLead(prefs.getDouble(_scrollLeadKey)),
       lastScript: '',

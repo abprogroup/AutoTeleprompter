@@ -147,12 +147,11 @@ extension _TeleprompterPresenterSearchParts on _TeleprompterScreenState {
             : '${best.matchedText.substring(0, 54)}...';
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Approximate matches: ${matches.length} '
-                '(best ${(best.score * 100).round()}%): $preview',
-              ),
+            buildCompactPresenterSnackBar(
+              'Approximate matches: ${matches.length} '
+              '(best ${(best.score * 100).round()}%): $preview',
               backgroundColor: Colors.black.withValues(alpha: 0.9),
+              textColor: Colors.white,
               duration: const Duration(seconds: 3),
             ),
           );
@@ -167,9 +166,10 @@ extension _TeleprompterPresenterSearchParts on _TeleprompterScreenState {
         });
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No match for "$query"'),
+        buildCompactPresenterSnackBar(
+          'No match for "$query"',
           backgroundColor: Colors.black.withValues(alpha: 0.9),
+          textColor: Colors.white,
           duration: const Duration(seconds: 2),
         ),
       );

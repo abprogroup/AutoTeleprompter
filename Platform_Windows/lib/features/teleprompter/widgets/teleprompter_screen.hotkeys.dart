@@ -94,8 +94,8 @@ extension _PresenterHotkeyParts on _TeleprompterScreenState {
       );
       if (mounted && stillCurrent()) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update the bookmark. Please try again.'),
+          buildCompactPresenterSnackBar(
+            'Could not update the bookmark. Please try again.',
           ),
         );
       }

@@ -2,6 +2,8 @@ import 'package:autoteleprompter/features/script/services/script_bookmark_servic
 import 'package:autoteleprompter/features/settings/providers/settings_provider.dart';
 import 'package:autoteleprompter/features/teleprompter/services/presenter_horizontal_margins.dart';
 import 'package:autoteleprompter/features/teleprompter/services/word_aligner.dart';
+import 'package:autoteleprompter/features/teleprompter/widgets/presenter_snack_bar.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -182,6 +184,34 @@ void main() {
         ),
         isNull,
       );
+    });
+  });
+
+  group('Compact presenter notification bar', () {
+    testWidgets('renders slim single-line SnackBar <= 28px tall', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    buildCompactPresenterSnackBar(
+                      'Bookmark: 2. Long Hebrew heading line that should stay one slim row',
+                    ),
+                  );
+                },
+                child: const Text('Show'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      final snackSize = tester.getSize(find.byType(SnackBar));
+      expect(snackSize.height, lessThanOrEqualTo(28.0));
     });
   });
 }

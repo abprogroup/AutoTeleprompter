@@ -42,6 +42,7 @@ import '../../script/services/script_bookmark_service.dart';
 import '../../script/services/markup_decoration_service.dart';
 import '../../script/services/highlight_band_painter.dart';
 import 'presenter_bookmark_marker_layer.dart';
+import 'presenter_snack_bar.dart';
 import 'teleprompter_screen.dart';
 
 part 'content_creator_screen.widgets.dart';
@@ -261,9 +262,9 @@ class _ContentCreatorScreenState extends ConsumerState<ContentCreatorScreen> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(buildCompactPresenterSnackBar(message));
   }
 
   void _updateContentCreatorState(VoidCallback update) {

@@ -147,13 +147,11 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                         final text = tState.debugLogs.reversed.join('\n');
                         Clipboard.setData(ClipboardData(text: text));
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Debug logs copied to clipboard',
-                              style: TextStyle(color: Colors.black),
-                            ),
+                          buildCompactPresenterSnackBar(
+                            'Debug logs copied to clipboard',
                             backgroundColor: Colors.orange,
-                            duration: Duration(seconds: 2),
+                            textColor: Colors.black,
+                            duration: const Duration(seconds: 2),
                           ),
                         );
                       },

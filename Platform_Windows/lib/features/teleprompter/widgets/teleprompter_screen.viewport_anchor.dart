@@ -40,7 +40,7 @@ extension _TeleprompterViewportAnchorParts on _TeleprompterScreenState {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fullscreen is unavailable.')),
+          buildCompactPresenterSnackBar('Fullscreen is unavailable.'),
         );
       }
     } finally {

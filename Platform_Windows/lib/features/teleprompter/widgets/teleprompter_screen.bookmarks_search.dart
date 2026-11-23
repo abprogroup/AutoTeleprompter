@@ -11,8 +11,8 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Bookmarks are included with Pro.'),
+      buildCompactPresenterSnackBar(
+        'Bookmarks are included with Pro.',
         duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'Connect',
@@ -212,9 +212,11 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     });
     await _saveBookmarksForScript(script);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Bookmark saved: ${bookmark.label}'),
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      buildCompactPresenterSnackBar(
+        'Bookmark saved: ${bookmark.label}',
         duration: const Duration(seconds: 2),
       ),
     );
@@ -236,10 +238,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       return;
     }
     if (_bookmarks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No bookmarks saved for this script yet'),
-          duration: Duration(seconds: 2),
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        buildCompactPresenterSnackBar(
+          'No bookmarks saved for this script yet',
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -263,9 +267,11 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     );
     if (target == null) return;
     _jumpToWordIndex(target, immediate: true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Bookmark: ${bookmark.label}'),
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      buildCompactPresenterSnackBar(
+        'Bookmark: ${bookmark.label}',
         duration: const Duration(seconds: 1),
       ),
     );
@@ -292,13 +298,13 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     }
 
     _jumpToWordIndex(safeWordIndex, immediate: true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          bookmark == null
-              ? 'Bookmark position selected'
-              : 'Bookmark: ${bookmark.label}',
-        ),
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      buildCompactPresenterSnackBar(
+        bookmark == null
+            ? 'Bookmark position selected'
+            : 'Bookmark: ${bookmark.label}',
         duration: const Duration(seconds: 1),
       ),
     );
@@ -317,8 +323,8 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       final messenger = ScaffoldMessenger.of(context);
       messenger.clearSnackBars();
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Pause speech before removing a bookmark.'),
+        buildCompactPresenterSnackBar(
+          'Pause speech before removing a bookmark.',
         ),
       );
       return;
@@ -335,11 +341,11 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     _setTeleprompterState(() => _bookmarks = next);
     await _saveBookmarksForScript(script);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          deleted == 1 ? 'Bookmark deleted' : '$deleted bookmarks deleted',
-        ),
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      buildCompactPresenterSnackBar(
+        deleted == 1 ? 'Bookmark deleted' : '$deleted bookmarks deleted',
         duration: const Duration(seconds: 2),
       ),
     );
@@ -352,10 +358,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
     await _loadBookmarksForScript(script, force: true);
     if (!mounted) return;
     if (_bookmarks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No bookmarks saved for this script yet'),
-          duration: Duration(seconds: 2),
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        buildCompactPresenterSnackBar(
+          'No bookmarks saved for this script yet',
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -369,10 +377,12 @@ extension _TeleprompterBookmarksSearchParts on _TeleprompterScreenState {
       readingLineWordIndex: readingLineRaw,
     );
     if (target == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No bookmark at the current presenter position'),
-          duration: Duration(seconds: 2),
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        buildCompactPresenterSnackBar(
+          'No bookmark at the current presenter position',
+          duration: const Duration(seconds: 2),
         ),
       );
       return;

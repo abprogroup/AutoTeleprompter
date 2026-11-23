@@ -230,13 +230,11 @@ extension _ContentCreatorDebug on _ContentCreatorScreenState {
                 ].join('\n');
                 Clipboard.setData(ClipboardData(text: text));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Content Creator debug copied to clipboard',
-                      style: TextStyle(color: Colors.black),
-                    ),
+                  buildCompactPresenterSnackBar(
+                    'Content Creator debug copied to clipboard',
                     backgroundColor: Colors.orange,
-                    duration: Duration(seconds: 2),
+                    textColor: Colors.black,
+                    duration: const Duration(seconds: 2),
                   ),
                 );
               },

@@ -96,12 +96,10 @@ extension _TeleprompterSessionSttParts on _TeleprompterScreenState {
         );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          Color(nextBackground).computeLuminance() > 0.5
-              ? 'Script colors inverted: light background'
-              : 'Script colors inverted: dark background',
-        ),
+      buildCompactPresenterSnackBar(
+        Color(nextBackground).computeLuminance() > 0.5
+            ? 'Script colors inverted: light background'
+            : 'Script colors inverted: dark background',
         duration: const Duration(seconds: 1),
       ),
     );

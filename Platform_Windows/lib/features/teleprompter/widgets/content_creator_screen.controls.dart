@@ -37,8 +37,8 @@ extension _ContentCreatorControls on _ContentCreatorScreenState {
       final messenger = ScaffoldMessenger.of(context);
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
-        SnackBar(
-          content: const Text('Bookmarks are included with Pro.'),
+        buildCompactPresenterSnackBar(
+          'Bookmarks are included with Pro.',
           duration: const Duration(seconds: 4),
           action: SnackBarAction(
             label: 'Connect',

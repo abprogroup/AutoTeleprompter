@@ -159,29 +159,31 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
       ));
     }
 
-    // Background color detection
-    try {
-      final background = document.rootElement.getElement('w:background');
-      final bgColorVal =
-          background == null ? null : _docxAttr(background, 'color');
-      if (bgColorVal != null && bgColorVal != 'auto') {
-        final colorInt = int.parse('FF$bgColorVal', radix: 16);
-        ref.read(settingsProvider.notifier).setScriptBgColor(colorInt);
-      } else if (paragraphs.isNotEmpty) {
-        final shading =
-            paragraphs.first.getElement('w:pPr')?.getElement('w:shd');
-        final shd = shading == null ? null : _docxAttr(shading, 'fill');
-        if (shd != null && shd != 'auto' && shd != 'clear') {
-          final colorInt = int.parse('FF$shd', radix: 16);
-          ref.read(settingsProvider.notifier).setScriptBgColor(colorInt);
+    // Background & AutoTeleprompter color metadata detection
+    final appColorMeta = DocumentColorMetadata.parseDocx(xmlStr);
+    int? detectedBgColor = appColorMeta.scriptBgColor;
+    if (detectedBgColor == null) {
+      try {
+        final background = document.rootElement.getElement('w:background');
+        final bgColorVal =
+            background == null ? null : _docxAttr(background, 'color');
+        if (bgColorVal != null && bgColorVal != 'auto') {
+          detectedBgColor = int.parse('FF$bgColorVal', radix: 16);
+        } else if (paragraphs.isNotEmpty) {
+          final shading =
+              paragraphs.first.getElement('w:pPr')?.getElement('w:shd');
+          final shd = shading == null ? null : _docxAttr(shading, 'fill');
+          if (shd != null && shd != 'auto' && shd != 'clear') {
+            detectedBgColor = int.parse('FF$shd', radix: 16);
+          }
         }
+      } catch (e, stack) {
+        LightweightDiagnostics.instance.recordError(
+          e,
+          stack,
+          source: 'import.docxBackground',
+        );
       }
-    } catch (e, stack) {
-      LightweightDiagnostics.instance.recordError(
-        e,
-        stack,
-        source: 'import.docxBackground',
-      );
     }
 
     final baseFontSize = sawVisibleDocumentText &&
@@ -193,7 +195,14 @@ extension _ScriptProviderDocxParsing on ScriptNotifier {
         _normalizeImportedDocxText(parsedParagraphs.join('\n'));
     // Inline metadata must survive both file-open paths. The editor can ignore
     // baseFontSize, so stripping uniform tags makes imports preference-dependent.
-    return ParsedFile(importedText, fontSize: baseFontSize);
+    return ParsedFile(
+      importedText,
+      fontSize: baseFontSize,
+      scriptBgColor: detectedBgColor,
+      futureWordColor: appColorMeta.futureWordColor,
+      currentWordColor: appColorMeta.currentWordColor,
+      hasAppColorMetadata: appColorMeta.hasAppMetadata,
+    );
   }
 
   static bool _docxHasAncestor(XmlNode node, String qualifiedName) {

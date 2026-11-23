@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'document_color_metadata.dart';
 import 'markup_export_service.dart';
 
 /// Generates minimal but valid RTF files from the app's internal markup.
@@ -16,6 +17,9 @@ class RtfService {
     String text, {
     bool? defaultRtl,
     double? defaultFontSize,
+    int? scriptBgColor,
+    int? futureWordColor,
+    int? currentWordColor,
   }) {
     final resolvedDefaultFontSize =
         (defaultFontSize != null && defaultFontSize > 0)
@@ -66,6 +70,13 @@ class RtfService {
       }
       buf.write('}\n');
     }
+
+    final appMeta = DocumentColorMetadata.encodeRtf(
+      scriptBgColor: scriptBgColor,
+      futureWordColor: futureWordColor,
+      currentWordColor: currentWordColor,
+    );
+    if (appMeta.isNotEmpty) buf.write(appMeta);
 
     for (final paragraph in paragraphs) {
       if (paragraph.isEmpty) {

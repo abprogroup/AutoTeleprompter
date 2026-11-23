@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:archive/archive.dart';
 
+import 'document_color_metadata.dart';
 import 'markup_export_service.dart';
 
 class DocxService {
@@ -74,6 +75,9 @@ class DocxService {
     String text, {
     bool? defaultRtl,
     double? defaultFontSize,
+    int? scriptBgColor,
+    int? futureWordColor,
+    int? currentWordColor,
   }) {
     final resolvedDefaultFontSize =
         (defaultFontSize != null && defaultFontSize > 0)
@@ -98,7 +102,16 @@ class DocxService {
     _addTextFile(archive, 'docProps/app.xml', _appXml);
     _addTextFile(archive, 'docProps/core.xml', _coreXml());
 
-    final buf = StringBuffer(_documentXmlRel);
+    final appMeta = DocumentColorMetadata.encodeDocx(
+      scriptBgColor: scriptBgColor,
+      futureWordColor: futureWordColor,
+      currentWordColor: currentWordColor,
+    );
+    final buf = StringBuffer(
+      appMeta.isEmpty
+          ? _documentXmlRel
+          : _documentXmlRel.replaceFirst('<w:body>', '$appMeta<w:body>'),
+    );
     for (final paragraph in MarkupExportService.parse(
       text,
       defaultRtl: defaultRtl,

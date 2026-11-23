@@ -604,7 +604,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         fontSize: fontSize,
         fontFamily: fontFamily,
         textAlign: textAlign,
-        futureWordColor: futureWordColor,
+        scriptBgColor: scriptBgColor, currentWordColor: currentWordColor, futureWordColor: futureWordColor,
         isRtl: isRtl,
         bookmarks: bookmarks,
       );
@@ -637,7 +637,7 @@ class SettingsNotifier extends Notifier<AppSettings>
         fontSize: fontSize,
         fontFamily: fontFamily,
         textAlign: textAlign,
-        futureWordColor: futureWordColor,
+        scriptBgColor: scriptBgColor, currentWordColor: currentWordColor, futureWordColor: futureWordColor,
         isRtl: isRtl,
         bookmarks: bookmarks,
       );

@@ -169,6 +169,8 @@ extension _ScriptEditorFilePresentParts on _ScriptEditorScreenState {
             .effectiveFontSize(settings.fontSize),
         fontFamily: settings.fontFamily,
         textAlign: settings.textAlign,
+        scriptBgColor: settings.scriptBgColor,
+        currentWordColor: settings.currentWordColor,
         futureWordColor: settings.futureWordColor,
         isRtl: _inferEditorTextDirection(text),
         bookmarks: _bookmarks,

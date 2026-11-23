@@ -483,12 +483,20 @@ extension _ScriptProviderPagesRtfParsing on ScriptNotifier {
     final fontStats = _rtfUniformFontSize(runs);
     final baseFontSize =
         fontStats.uniformValid ? fontStats.uniformSize : detectedFontSize;
+    final colorMeta = DocumentColorMetadata.parseRtf(raw);
     final result = _rtfRunsToMarkup(
       runs,
       colorTable,
       emitInlineFontSize: !fontStats.uniformValid,
     );
-    return ParsedFile(result.trim(), fontSize: baseFontSize);
+    return ParsedFile(
+      result.trim(),
+      fontSize: baseFontSize,
+      scriptBgColor: colorMeta.scriptBgColor,
+      futureWordColor: colorMeta.futureWordColor,
+      currentWordColor: colorMeta.currentWordColor,
+      hasAppColorMetadata: colorMeta.hasAppMetadata,
+    );
   }
 
   static Map<int, String> _rtfFontTable(String raw) {

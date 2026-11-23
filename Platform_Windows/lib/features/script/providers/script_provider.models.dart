@@ -3,11 +3,19 @@ part of 'script_provider.dart';
 class ParsedFile {
   final String text;
   final double? fontSize;
+  final int? scriptBgColor;
+  final int? futureWordColor;
+  final int? currentWordColor;
+  final bool hasAppColorMetadata;
   final String? errorMessage;
 
   ParsedFile(
     this.text, {
     this.fontSize,
+    this.scriptBgColor,
+    this.futureWordColor,
+    this.currentWordColor,
+    this.hasAppColorMetadata = false,
     this.errorMessage,
   });
 

@@ -2,7 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:autoteleprompter/features/script/providers/script_provider.dart';
+import 'package:autoteleprompter/features/script/services/docx_service.dart';
 import 'package:autoteleprompter/features/script/services/markup_decoration_service.dart';
+import 'package:autoteleprompter/features/script/services/rtf_service.dart';
+import 'package:autoteleprompter/features/script/services/script_library_parser.dart';
+import 'package:autoteleprompter/features/settings/models/app_settings.dart';
+import 'package:autoteleprompter/features/settings/services/local_backup_service.dart';
 import 'package:autoteleprompter/features/teleprompter/services/word_aligner.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -173,6 +178,112 @@ void main() {
       expect(result.text, 'Normal [u]שלום[/u] after');
       final words = WordAligner.tokenize(result.text);
       expect(words.map((word) => word.isUnderline), [false, true, false]);
+    },
+  );
+
+  test(
+    'RTF export & reload preserves white-on-black metadata without inverting colors',
+    () async {
+      final export = LocalBackupService.buildScriptExport(
+        title: 'Studio.rtf',
+        text: '[color=#FFFF00]2. Heading[/color]\nBody line',
+        sourceType: 'RTF',
+        preferredExtension: 'rtf',
+        fontSize: 20.0,
+        scriptBgColor: 0xFF000000,
+        futureWordColor: 0xFFFFFFFF,
+        currentWordColor: 0xFFFFBF00,
+      );
+      final file = File('${fixtures.path}/Studio.rtf');
+      await file.writeAsBytes(export.bytes);
+
+      final parsed = await ScriptNotifier().parseFile(file);
+      expect(parsed.isError, isFalse);
+      expect(parsed.hasAppColorMetadata, isTrue);
+      expect(parsed.scriptBgColor, 0xFF000000);
+      expect(parsed.futureWordColor, 0xFFFFFFFF);
+      expect(parsed.currentWordColor, 0xFFFFBF00);
+      expect(parsed.text, isNot(contains('atpmeta')));
+      expect(parsed.text, contains('2. Heading'));
+      expect(parsed.text, contains('Body line'));
+
+      // Even under Document Original import mode, reloading keeps black bg + white text!
+      final loaded = await parseScriptForLibrary(
+        file,
+        preferences: const AppSettings(
+          importColorMode: AppSettings.importColorModeDocument,
+          scriptBgColor: 0xFF000000,
+        ),
+      );
+      expect(loaded.style['scriptBgColor'], 0xFF000000);
+      expect(loaded.style['futureWordColor'], 0xFFFFFFFF);
+      expect(loaded.style['currentWordColor'], 0xFFFFBF00);
+    },
+  );
+
+  test(
+    'RTF export & reload preserves light document colors and external dark RTF background',
+    () async {
+      // 1. Saved light theme stays light (black text on white bg)
+      final lightBytes = RtfService.generate(
+        'Light script',
+        scriptBgColor: 0xFFFFFFFF,
+        futureWordColor: 0xFF000000,
+        currentWordColor: 0xFF00BFFF,
+      );
+      final lightFile = File('${fixtures.path}/Light.rtf');
+      await lightFile.writeAsBytes(lightBytes);
+      final lightLoaded = await parseScriptForLibrary(
+        lightFile,
+        preferences: const AppSettings(
+          importColorMode: AppSettings.importColorModePrompter,
+        ),
+      );
+      expect(lightLoaded.style['scriptBgColor'], 0xFFFFFFFF);
+      expect(lightLoaded.style['futureWordColor'], 0xFF000000);
+      expect(lightLoaded.style['currentWordColor'], 0xFF00BFFF);
+
+      // 2. External RTF with standard black fillColor (\sv 0) defaults text to white
+      final extDarkFile = File('${fixtures.path}/ExternalDark.rtf');
+      await extDarkFile.writeAsBytes(
+        latin1.encode(
+          r'{\rtf1\ansi{\*\background{\shp{\*\shpinst'
+          r'{\sp{\sn fillColor}{\sv 0}}}}}Hello dark page}',
+        ),
+      );
+      final darkLoaded = await parseScriptForLibrary(
+        extDarkFile,
+        preferences: const AppSettings(
+          importColorMode: AppSettings.importColorModeDocument,
+        ),
+      );
+      expect(darkLoaded.style['scriptBgColor'], 0xFF000000);
+      expect(darkLoaded.style['futureWordColor'], 0xFFFFFFFF);
+    },
+  );
+
+  test(
+    'DOCX export & reload preserves AutoTeleprompter color metadata cleanly',
+    () async {
+      final docxBytes = DocxService.generate(
+        'Dark DOCX script',
+        scriptBgColor: 0xFF000000,
+        futureWordColor: 0xFFFFFFFF,
+        currentWordColor: 0xFFFFBF00,
+      );
+      final docxFile = File('${fixtures.path}/Dark.docx');
+      await docxFile.writeAsBytes(docxBytes);
+      final loaded = await parseScriptForLibrary(
+        docxFile,
+        preferences: const AppSettings(
+          importColorMode: AppSettings.importColorModeDocument,
+        ),
+      );
+      expect(loaded.text, contains('Dark DOCX script'));
+      expect(loaded.text, isNot(contains('atpmeta')));
+      expect(loaded.style['scriptBgColor'], 0xFF000000);
+      expect(loaded.style['futureWordColor'], 0xFFFFFFFF);
+      expect(loaded.style['currentWordColor'], 0xFFFFBF00);
     },
   );
 }

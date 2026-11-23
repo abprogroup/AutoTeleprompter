@@ -423,17 +423,30 @@ mixin SettingsNotifierAppearance on Notifier<AppSettings> {
     await prefs.setString(_fontFamilyKey, 'Inter');
   }
 
-  Future<void> setDocumentImportAppearance({int? scriptBgColor}) async {
+  Future<void> setDocumentImportAppearance({
+    int? scriptBgColor,
+    int? futureWordColor,
+    int? currentWordColor,
+  }) async {
     final normalizedBg = _normalizeColor(scriptBgColor, 0xFFFFFFFF);
+    final r = (normalizedBg >> 16) & 0xFF;
+    final g = (normalizedBg >> 8) & 0xFF;
+    final b = normalizedBg & 0xFF;
+    final isDarkBg = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0 < 0.5;
+    final normalizedFg = _normalizeColor(
+      futureWordColor,
+      isDarkBg ? 0xFFFFFFFF : 0xFF000000,
+    );
+    final normalizedCur = _normalizeColor(currentWordColor, 0xFFFFBF00);
     state = state.copyWith(
       scriptBgColor: normalizedBg,
-      currentWordColor: 0xFFFFBF00,
-      futureWordColor: 0xFF000000,
+      currentWordColor: normalizedCur,
+      futureWordColor: normalizedFg,
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_scriptBgColorKey, normalizedBg);
-    await prefs.setInt(_currentWordColorKey, 0xFFFFBF00);
-    await prefs.setInt(_futureWordColorKey, 0xFF000000);
+    await prefs.setInt(_currentWordColorKey, normalizedCur);
+    await prefs.setInt(_futureWordColorKey, normalizedFg);
   }
 
   Future<void> applySessionStyles(Map<String, dynamic> styles) async {

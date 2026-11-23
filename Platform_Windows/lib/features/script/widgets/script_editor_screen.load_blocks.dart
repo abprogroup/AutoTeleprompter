@@ -22,14 +22,14 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
         }
         return;
       }
-      final parsedSettings = ref.read(settingsProvider);
       final settingsNotifier = ref.read(settingsProvider.notifier);
-      if (settingsBeforeImport.importColorMode ==
-          AppSettings.importColorModeDocument) {
-        final parsedBgChanged =
-            parsedSettings.scriptBgColor != settingsBeforeImport.scriptBgColor;
+      if (result.hasAppColorMetadata ||
+          settingsBeforeImport.importColorMode ==
+              AppSettings.importColorModeDocument) {
         await settingsNotifier.setDocumentImportAppearance(
-          scriptBgColor: parsedBgChanged ? parsedSettings.scriptBgColor : null,
+          scriptBgColor: result.scriptBgColor,
+          futureWordColor: result.futureWordColor,
+          currentWordColor: result.currentWordColor,
         );
       } else {
         await settingsNotifier.resetToDefaultAppearance();
@@ -95,6 +95,9 @@ extension _ScriptEditorLoadBlockParts on _ScriptEditorScreenState {
           finalType = type;
           finalSessionId = sessionId;
           finalHistoryJson = secureData.historyJson;
+          if (!result.hasAppColorMetadata && result.scriptBgColor == null && decoded['style'] is Map) {
+            await settingsNotifier.applySessionStyles(Map<String, dynamic>.from(decoded['style'] as Map));
+          }
         } else {
           if (!mounted) return;
           final choice = await showDialog<String>(

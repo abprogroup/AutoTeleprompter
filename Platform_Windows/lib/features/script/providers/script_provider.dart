@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 import '../models/script.dart';
 import '../models/script_word.dart';
+import '../services/document_color_metadata.dart';
 import '../services/script_typography_service.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
@@ -605,14 +606,14 @@ class ScriptNotifier extends Notifier<Script?> {
     final result = await parseFile(file);
     if (result.isError) return;
     if (result.text.isNotEmpty) {
-      final parsedSettings = ref.read(settingsProvider);
       final settingsNotifier = ref.read(settingsProvider.notifier);
-      if (settingsBeforeImport.importColorMode ==
-          AppSettings.importColorModeDocument) {
-        final parsedBgChanged =
-            parsedSettings.scriptBgColor != settingsBeforeImport.scriptBgColor;
+      if (result.hasAppColorMetadata ||
+          settingsBeforeImport.importColorMode ==
+              AppSettings.importColorModeDocument) {
         await settingsNotifier.setDocumentImportAppearance(
-          scriptBgColor: parsedBgChanged ? parsedSettings.scriptBgColor : null,
+          scriptBgColor: result.scriptBgColor,
+          futureWordColor: result.futureWordColor,
+          currentWordColor: result.currentWordColor,
         );
       } else {
         await settingsNotifier.resetToDefaultAppearance();

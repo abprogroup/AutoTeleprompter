@@ -45,6 +45,7 @@ extension TeleprompterExternalEdgeHost on TeleprompterNotifier {
         _providedBrowserSpeechService ??
         SttServiceFactory.createWindowsBrowser();
     _desktopSttService = SttServiceFactory.createWindowsDesktop();
+    _offlineSherpaSttService = SttServiceFactory.createWindowsOfflineSherpa();
     _sttService = _browserSttService;
     _whisperService = WhisperSpeechService();
     _externalEdgeLauncher = WindowsSttExternalEdgeLauncher();
@@ -53,6 +54,7 @@ extension TeleprompterExternalEdgeHost on TeleprompterNotifier {
     _setupRemoteCallbacks();
     _setupSttCallbacks(_browserSttService);
     _setupSttCallbacks(_desktopSttService);
+    _setupSttCallbacks(_offlineSherpaSttService);
     _setupWhisperCallbacks();
   }
 

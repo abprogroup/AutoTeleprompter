@@ -5,16 +5,29 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (!_scrollController.hasClients) return;
     _scrollingBackward = backward;
     _setTeleprompterState(() => _manualScrolling = true);
-    _manualScrollTimer?.cancel();
+    _manualScrollTicker?.stop();
+    _manualScrollTicker?.dispose();
+    _manualScrollTicker = null;
+    _lastManualScrollTickElapsed = null;
     _wordTrackTimer?.cancel();
 
-    // 60fps smooth pixel scroll
-    _manualScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+    // VSync-locked smooth pixel scroll (scales cleanly across 60/120/144/240 Hz).
+    _manualScrollTicker = createTicker((elapsed) {
       if (!mounted ||
           !_scrollController.hasClients ||
           _viewportAnchor != null) {
+        _lastManualScrollTickElapsed = elapsed;
         return;
       }
+      final prev = _lastManualScrollTickElapsed;
+      _lastManualScrollTickElapsed = elapsed;
+      final dt =
+          prev == null
+              ? 1.0 / 60.0
+              : ((elapsed - prev).inMicroseconds / 1000000.0).clamp(
+                1.0 / 300.0,
+                1.0 / 15.0,
+              );
       final settings = ref.read(settingsProvider);
 
       // Speed can be negative for backward scrolling
@@ -31,10 +44,10 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
               : 100.0;
       if (speed == 0) return;
 
-      // pixels per tick: speed(wpm) x 3px x 16ms/1000ms
-      final pxPerTick = speed.abs() * 3.0 * 16.0 / 1000.0;
+      // pixels per frame: speed(wpm) x 3px/s x dt
+      final pxPerFrame = speed.abs() * 3.0 * dt;
       final isBackward = speed < 0;
-      final delta = isBackward ? -pxPerTick : pxPerTick;
+      final delta = isBackward ? -pxPerFrame : pxPerFrame;
 
       final next = _scrollController.offset + delta;
       final max = _scrollController.position.maxScrollExtent;
@@ -50,7 +63,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
         return;
       }
       _scrollController.jumpTo(next.clamp(0.0, max));
-    });
+    })..start();
 
     // Update highlighted word at 5fps (cheap: only scans nearby keys)
     _wordTrackTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
@@ -64,7 +77,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (_scrollController.offset <= 1.0) {
       final script = ref.read(scriptProvider);
       if (_manualWordIndex != 0) {
-        _setTeleprompterState(() => _manualWordIndex = 0);
+        _setManualWordIndex(0);
       }
       if (script != null &&
           ref.read(teleprompterProvider).confirmedWordIndex != 0) {
@@ -87,7 +100,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     }
 
     if (bestIndex != _manualWordIndex) {
-      _setTeleprompterState(() => _manualWordIndex = bestIndex);
+      _setManualWordIndex(bestIndex);
       final script = ref.read(scriptProvider);
       if (script != null && script.words.isNotEmpty) {
         ref
@@ -158,9 +171,11 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   }
 
   void _stopManualScroll() {
-    _manualScrollTimer?.cancel();
+    _manualScrollTicker?.stop();
+    _manualScrollTicker?.dispose();
+    _manualScrollTicker = null;
+    _lastManualScrollTickElapsed = null;
     _wordTrackTimer?.cancel();
-    _manualScrollTimer = null;
     _wordTrackTimer = null;
     _scrollingBackward = false;
     if (!_manualScrolling) return;
@@ -172,7 +187,8 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   }
 
   void _cancelSmoothScroll() {
-    _smoothScrollTimer?.cancel();
+    _smoothScrollTicker?.stop();
+    _lastSmoothScrollTickElapsed = null;
     _smoothScrollActive = false;
   }
 
@@ -316,7 +332,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
   void _resetManual() {
     _cancelActiveManualCorrection();
     _stopManualScroll();
-    _setTeleprompterState(() => _manualWordIndex = 0);
+    _setManualWordIndex(0);
     ref.read(teleprompterProvider.notifier).resetPosition();
     _scrollController.animateTo(
       0,
@@ -368,14 +384,14 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
       return;
     }
 
-    // Start the smooth scroll timer if not already running
+    // Start the VSync-locked smooth scroll ticker if not already running
     if (!_smoothScrollActive) {
       _smoothScrollActive = true;
-      _smoothScrollTimer?.cancel();
-      _smoothScrollTimer = Timer.periodic(
-        const Duration(milliseconds: 16),
-        _smoothScrollTick,
-      );
+      _lastSmoothScrollTickElapsed = null;
+      _smoothScrollTicker ??= createTicker(_smoothScrollFrame);
+      if (!_smoothScrollTicker!.isActive) {
+        _smoothScrollTicker!.start();
+      }
     }
   }
 
@@ -384,7 +400,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (script == null) return;
     _cancelActiveManualCorrection();
     _stopManualScroll();
-    _setTeleprompterState(() => _manualWordIndex = index);
+    _setManualWordIndex(index);
     ref
         .read(teleprompterProvider.notifier)
         .jumpToPosition(index, script: script);
@@ -543,6 +559,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     _userBrowsingWhileStopped = false;
     _lastPresenterUserScrollSignalAt = null;
     _sessionOwner.cancelManualScroll();
+    _syncDisplayWordIndex();
   }
 
   void _finishActiveManualCorrection() {
@@ -565,7 +582,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
             ? 0
             : _wordIndexNearestReadingLine();
     if (script != null && target != null) {
-      _setTeleprompterState(() => _manualWordIndex = target);
+      _setManualWordIndex(target);
       _sessionOwner.finishManualScroll(target, script: script);
     }
     // Suppress the synchronous commit listener only. Fresh speech after this
@@ -590,7 +607,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     if (script == null || script.words.isEmpty) return;
     if (_scrollController.hasClients && _scrollController.offset <= 1.0) {
       if (_manualWordIndex != 0) {
-        _setTeleprompterState(() => _manualWordIndex = 0);
+        _setManualWordIndex(0);
       }
       if (commitProvider &&
           ref.read(teleprompterProvider).confirmedWordIndex != 0) {
@@ -603,7 +620,7 @@ extension _TeleprompterManualScrollParts on _TeleprompterScreenState {
     final targetIndex = _wordIndexNearestReadingLine();
     if (targetIndex == null) return;
     if (_manualWordIndex != targetIndex) {
-      _setTeleprompterState(() => _manualWordIndex = targetIndex);
+      _setManualWordIndex(targetIndex);
     }
     if (commitProvider &&
         ref.read(teleprompterProvider).confirmedWordIndex != targetIndex) {

@@ -213,6 +213,7 @@ class SettingsNotifier extends Notifier<AppSettings>
       fontFamily: prefs.getString(_fontFamilyKey) ?? 'Inter',
       showAlignmentOverride: prefs.getBool(_showAlignmentOverrideKey) ?? false,
       sttEngine: _normalizeSttEngine(prefs.getString(_sttEngineKey)),
+      sttOfflineScriptBoostEnabled: prefs.getBool(_sttOfflineScriptBoostEnabledKey) ?? true,
       allowScrollDuringActiveSession:
           prefs.getBool(_allowScrollDuringActiveSessionKey) ?? false,
       manualScrollBarPlacement: _normalizeManualScrollBarPlacement(

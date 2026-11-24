@@ -36,6 +36,7 @@ const _showUpcomingWordColorKey = 'showUpcomingWordColor';
 const _fontFamilyKey = 'fontFamily';
 const _showAlignmentOverrideKey = 'showAlignmentOverride';
 const _sttEngineKey = 'sttEngine';
+const _sttOfflineScriptBoostEnabledKey = 'sttOfflineScriptBoostEnabled';
 const _allowScrollDuringActiveSessionKey = 'allowScrollDuringActiveSession';
 const _manualScrollBarPlacementKey = 'manualScrollBarPlacement';
 const _readFadeIntensityKey = 'readFadeIntensity';

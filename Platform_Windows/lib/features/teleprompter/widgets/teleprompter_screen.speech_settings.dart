@@ -53,6 +53,11 @@ class _WindowsSpeechSettingsSection extends ConsumerWidget {
           },
         ),
         const SizedBox(height: 12),
+        WindowsMicVolumeControl(
+          selectedDeviceLabel: settings.sttInputDeviceLabel,
+          accentColor: Color(settings.currentWordColor),
+        ),
+        const SizedBox(height: 12),
         _SwitchRow(
           icon: Icons.graphic_eq_rounded,
           title: 'Show Mic Signal Meter',

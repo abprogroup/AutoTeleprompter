@@ -4,9 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_windows/webview_windows.dart';
@@ -29,6 +29,7 @@ import '../../script/services/highlight_band_painter.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../settings/models/app_hotkey.dart';
 import '../../settings/providers/hotkey_provider.dart';
+import '../../settings/widgets/windows_mic_volume_control.dart';
 import '../../settings/widgets/windows_stt_engine_selector.dart';
 import '../../script/models/script_word.dart';
 import '../../feedback/services/lightweight_diagnostics.dart';
@@ -56,6 +57,7 @@ part 'teleprompter_screen.bookmarks_search.dart';
 part 'teleprompter_screen.presenter_search.dart';
 part 'teleprompter_screen.smooth_settings.dart';
 part 'teleprompter_screen.chrome.dart';
+part 'teleprompter_screen.presenter_cache.dart';
 part 'teleprompter_screen.presenter_word_list.dart';
 part 'teleprompter_screen.presenter_transform.dart';
 part 'teleprompter_screen.build.dart';
@@ -84,7 +86,7 @@ class TeleprompterScreen extends ConsumerStatefulWidget {
 }
 
 class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _presenterContentKey = GlobalKey();
   final GlobalKey _presenterReadingLineKey = GlobalKey();
@@ -98,10 +100,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
   bool _controlsVisible = true;
   bool _debugConsoleMinimized = false;
   bool _debugConsolePinned = false;
-  Timer? _manualScrollTimer;
+  Ticker? _manualScrollTicker;
+  Duration? _lastManualScrollTickElapsed;
   Timer? _wordTrackTimer;
   Timer? _hideControlsTimer;
-  Timer? _smoothScrollTimer;
+  Ticker? _smoothScrollTicker;
+  Duration? _lastSmoothScrollTickElapsed;
   Timer? _activeManualCorrectionTimer;
   double _scrollTarget = 0.0;
   bool _smoothScrollActive = false;
@@ -138,6 +142,9 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
   String? _visibleWindowLayoutKey;
   String? _paragraphCacheKey;
   List<List<ScriptWord>> _paragraphCache = const [];
+  _PreparedPresenterScript? _preparedScriptCache;
+  final _PresenterWordIndexController _wordIndexController =
+      _PresenterWordIndexController();
   String? _lastPublishedRemoteScrollMode;
   double? _lastPublishedRemoteScrollSpeed;
   bool? _lastPublishedRemoteScriptActive;
@@ -177,7 +184,10 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initRemoteListener();
-        if (Platform.isWindows) {
+        if (Platform.isWindows &&
+            !AppSettings.isOfflineSherpaEngine(
+              ref.read(settingsProvider).sttEngine,
+            )) {
           unawaited(_ensureSttWebViewController());
         }
         ref.listenManual(
@@ -244,10 +254,12 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
     );
-    _manualScrollTimer?.cancel();
+    _manualScrollTicker?.dispose();
+    _manualScrollTicker = null;
     _wordTrackTimer?.cancel();
     _hideControlsTimer?.cancel();
-    _smoothScrollTimer?.cancel();
+    _smoothScrollTicker?.dispose();
+    _smoothScrollTicker = null;
     _activeManualCorrectionTimer?.cancel();
     _remoteStateOwner.publishPresenterState(
       scriptActive: false,
@@ -257,6 +269,7 @@ class _TeleprompterScreenState extends ConsumerState<TeleprompterScreen>
       scrollSpeed: 0,
     );
     _scrollController.dispose();
+    _wordIndexController.dispose();
     _remoteCmdSub?.cancel();
     _webViewControllerOwnerDisposed = true;
     _webViewLoadGeneration++;

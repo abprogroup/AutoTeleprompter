@@ -161,22 +161,7 @@ extension _TeleprompterPresenterTransformParts on _TeleprompterScreenState {
   }
 
   Rect _presenterGlobalRect(RenderBox box) {
-    final points = [
-      box.localToGlobal(Offset.zero),
-      box.localToGlobal(Offset(box.size.width, 0)),
-      box.localToGlobal(Offset(0, box.size.height)),
-      box.localToGlobal(Offset(box.size.width, box.size.height)),
-    ];
-    var left = double.infinity;
-    var top = double.infinity;
-    var right = -double.infinity;
-    var bottom = -double.infinity;
-    for (final point in points) {
-      left = math.min(left, point.dx);
-      top = math.min(top, point.dy);
-      right = math.max(right, point.dx);
-      bottom = math.max(bottom, point.dy);
-    }
-    return Rect.fromLTRB(left, top, right, bottom);
+    final transform = box.getTransformTo(null);
+    return MatrixUtils.transformRect(transform, Offset.zero & box.size);
   }
 }

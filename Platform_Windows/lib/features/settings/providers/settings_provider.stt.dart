@@ -8,6 +8,12 @@ mixin SettingsNotifierSttSettings on Notifier<AppSettings> {
     await prefs.setString(_sttEngineKey, normalized);
   }
 
+  Future<void> setSttOfflineScriptBoostEnabled(bool enabled) async {
+    state = state.copyWith(sttOfflineScriptBoostEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sttOfflineScriptBoostEnabledKey, enabled);
+  }
+
   Future<void> setAllowScrollDuringActiveSession(bool enabled) async {
     state = state.copyWith(allowScrollDuringActiveSession: enabled);
     final prefs = await SharedPreferences.getInstance();

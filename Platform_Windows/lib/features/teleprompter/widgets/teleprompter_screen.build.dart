@@ -6,7 +6,6 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final coreState = ref.watch(
       teleprompterProvider.select(
         (s) => (
-          confirmedWordIndex: s.confirmedWordIndex,
           isListening: s.isListening,
           isStarting: s.isStarting,
           statusMessage: s.statusMessage,
@@ -17,10 +16,11 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
         ),
       ),
     );
-    // Meter samples and debug lines update their own small Consumers below.
-    // They must never rebuild the thousands of word widgets in this surface.
+    // Meter samples, debug lines, and confirmedWordIndex updates are isolated
+    // from this top-level watch so live reading never rebuilds thousands of
+    // word widgets on every speech step.
     final tState = TeleprompterState(
-      confirmedWordIndex: coreState.confirmedWordIndex,
+      confirmedWordIndex: ref.read(teleprompterProvider).confirmedWordIndex,
       isListening: coreState.isListening,
       isStarting: coreState.isStarting,
       statusMessage: coreState.statusMessage,
@@ -32,26 +32,35 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     final settings = ref.watch(settingsProvider);
     _handlePresenterViewportSize(MediaQuery.sizeOf(context));
     _publishPresenterStateIfChanged(script, tState, settings);
+    String layoutKey = '';
     if (script != null) {
       while (_wordKeys.length < script.words.length) {
         _wordKeys.add(GlobalKey());
       }
       unawaited(_loadBookmarksForScript(script));
-      final layoutKey = _presenterLayoutKey(context, script, settings);
+      layoutKey = _presenterLayoutKey(context, script, settings);
       if (_visibleWindowLayoutKey != layoutKey) {
         _visibleWindowLayoutKey = layoutKey;
         _scheduleVisibleWordWindowSync(force: true);
       }
     }
 
-    // Auto-scroll on speech recognition
+    // Auto-scroll and targeted O(1) paragraph highlight update on speech progress.
     ref.listen(teleprompterProvider.select((s) => s.confirmedWordIndex), (
       prev,
       next,
     ) {
       final liveState = ref.read(teleprompterProvider);
+      _syncDisplayWordIndex(
+        confirmedWordIndex: next,
+        readingActive:
+            liveState.isListening || liveState.isStarting || _manualScrolling,
+      );
       if (_activeManualCorrection || _viewportAnchor != null) return;
-      if (settings.scrollMode == 'auto' && liveState.isListening && next > 0) {
+      final liveSettings = ref.read(settingsProvider);
+      if (liveSettings.scrollMode == 'auto' &&
+          liveState.isListening &&
+          next > 0) {
         _scrollToWordIndex(next, anticipate: true);
       }
     });
@@ -68,7 +77,14 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       );
     }
 
-    final paragraphs = _paragraphsForScript(script);
+    final prepared = _preparedScriptFor(script);
+    _wordIndexController.attachScript(prepared);
+    _syncDisplayWordIndex(
+      confirmedWordIndex: tState.confirmedWordIndex,
+      readingActive:
+          tState.isListening || tState.isStarting || _manualScrolling,
+      notify: false,
+    );
 
     // Presentation mode is a viewing surface, so it renders the single saved
     // font-size value larger without changing the metadata number shared with
@@ -121,12 +137,13 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
       child: _buildPresenterWordList(
         context: context,
         script: script,
-        paragraphs: paragraphs,
+        prepared: prepared,
         tState: tState,
         settings: settings,
         bookmarkWordIndexes: bookmarkWordIndexes,
         presentationFontSize: presentationFontSize,
         presenterWordGap: presenterWordGap,
+        layoutKey: layoutKey,
       ),
     );
 
@@ -242,16 +259,32 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
                 if (settings.debugMode)
                   Consumer(
                     builder: (context, liveRef, _) {
-                      final liveState = liveRef.watch(teleprompterProvider);
+                      final debugSlice = liveRef.watch(
+                        teleprompterProvider.select(
+                          (s) => (
+                            confirmedWordIndex: s.confirmedWordIndex,
+                            isListening: s.isListening,
+                            isStarting: s.isStarting,
+                            statusMessage: s.statusMessage,
+                            debugLogs: s.debugLogs,
+                          ),
+                        ),
+                      );
+                      final debugState = TeleprompterState(
+                        confirmedWordIndex: debugSlice.confirmedWordIndex,
+                        isListening: debugSlice.isListening,
+                        isStarting: debugSlice.isStarting,
+                        statusMessage: debugSlice.statusMessage,
+                        debugLogs: debugSlice.debugLogs,
+                      );
                       return _buildPresenterDebugConsole(
                         context,
-                        liveState,
+                        debugState,
                         bottom: debugConsoleBottom,
                         height: debugConsoleHeight,
                         expanded: debugConsoleExpanded,
                         accentColor: Color(settings.currentWordColor),
-                        wordCount:
-                            script.words.where((w) => !w.isNewline).length,
+                        wordCount: prepared.spokenWordCount,
                       );
                     },
                   ),
@@ -490,5 +523,48 @@ extension _TeleprompterBuildParts on _TeleprompterScreenState {
     _paragraphCacheKey = key;
     _paragraphCache = paragraphs;
     return _paragraphCache;
+  }
+
+  _PreparedPresenterScript _preparedScriptFor(Script script) {
+    final key =
+        '${script.sessionId}|${script.words.length}|'
+        '${identityHashCode(script.words)}';
+    final existing = _preparedScriptCache;
+    if (existing != null && existing.cacheKey == key) {
+      return existing;
+    }
+    final rawParagraphs = _paragraphsForScript(script);
+    final built = _PreparedPresenterScript.build(
+      script,
+      cacheKey: key,
+      rawParagraphs: rawParagraphs,
+    );
+    _preparedScriptCache = built;
+    return built;
+  }
+
+  void _syncDisplayWordIndex({
+    int? confirmedWordIndex,
+    bool? readingActive,
+    bool notify = true,
+  }) {
+    final live = ref.read(teleprompterProvider);
+    final effectiveConfirmed = confirmedWordIndex ?? live.confirmedWordIndex;
+    final displayIndex =
+        _activeManualCorrection ? _manualWordIndex : effectiveConfirmed;
+    final active =
+        readingActive ??
+        (live.isListening || live.isStarting || _manualScrolling);
+    _wordIndexController.update(
+      displayWordIndex: displayIndex,
+      readingActive: active,
+      notify: notify,
+    );
+  }
+
+  void _setManualWordIndex(int index) {
+    if (_manualWordIndex == index) return;
+    _manualWordIndex = index;
+    _syncDisplayWordIndex();
   }
 }

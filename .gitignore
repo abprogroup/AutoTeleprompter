@@ -34,6 +34,9 @@ Platform_*/test/
 !/Platform_Windows/test/platform/rtf_import_formatting_test.dart
 !/Platform_Windows/test/platform/stt/
 /Platform_Windows/test/platform/stt/*
+!/Platform_Windows/test/platform/stt/offline_stt_model_manager_test.dart
+!/Platform_Windows/test/platform/stt/sherpa_hotwords_builder_test.dart
+!/Platform_Windows/test/platform/stt/sherpa_transcript_emitter_test.dart
 !/Platform_Windows/test/platform/stt/stt_browser_adapter_security_test.dart
 !/Platform_Windows/test/platform/stt/stt_browser_page_runtime_test.dart
 !/Platform_Windows/test/platform/stt/browser_page_runtime.cjs
@@ -65,6 +68,7 @@ Platform_*/test/
 !/Platform_Windows/test/settings/stage3_4_theme_security_updater_test.dart
 !/Platform_Windows/test/settings/app_settings_stt_engine_test.dart
 !/Platform_Windows/test/settings/settings_provider_stt_engine_test.dart
+!/Platform_Windows/test/settings/windows_mic_volume_control_test.dart
 !/Platform_Windows/test/settings/windows_stt_engine_selector_test.dart
 !/Platform_Windows/test/script/
 /Platform_Windows/test/script/*

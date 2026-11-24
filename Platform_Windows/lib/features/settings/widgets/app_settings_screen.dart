@@ -26,6 +26,7 @@ import '../services/update_download_service.dart';
 import '../services/update_install_service.dart';
 import 'cloud_sync_screen.dart';
 import 'hotkey_settings_page.dart';
+import 'windows_mic_volume_control.dart';
 import 'windows_stt_engine_selector.dart';
 
 part 'app_settings_screen.tiles.dart';

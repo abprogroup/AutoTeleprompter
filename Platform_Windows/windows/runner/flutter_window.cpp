@@ -3,8 +3,10 @@
 #include <windows.h>
 
 #include <optional>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "windows_mic_volume.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -29,6 +31,7 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   RegisterPresenterWindowChannel();
+  RegisterWindowsMicVolumeChannel();
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -45,6 +48,7 @@ bool FlutterWindow::OnCreate() {
 void FlutterWindow::OnDestroy() {
   SetPresenterFullscreen(false);
   if (flutter_controller_) {
+    windows_mic_volume_channel_ = nullptr;
     presenter_window_channel_ = nullptr;
     flutter_controller_ = nullptr;
   }
@@ -109,6 +113,78 @@ void FlutterWindow::RegisterPresenterWindowChannel() {
           result->Success(flutter::EncodableValue(presenter_fullscreen_));
           return;
         }
+        result->NotImplemented();
+      });
+}
+
+void FlutterWindow::RegisterWindowsMicVolumeChannel() {
+  windows_mic_volume_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "autoteleprompter/windows_mic_volume",
+          &flutter::StandardMethodCodec::GetInstance());
+
+  auto to_encodable = [](const WindowsMicVolumeState& state) {
+    flutter::EncodableMap map;
+    map[flutter::EncodableValue("available")] =
+        flutter::EncodableValue(state.available);
+    map[flutter::EncodableValue("volumePercent")] =
+        flutter::EncodableValue(state.volume_percent);
+    map[flutter::EncodableValue("muted")] =
+        flutter::EncodableValue(state.muted);
+    map[flutter::EncodableValue("deviceName")] =
+        flutter::EncodableValue(state.device_name);
+    map[flutter::EncodableValue("error")] =
+        flutter::EncodableValue(state.error);
+    return flutter::EncodableValue(map);
+  };
+
+  windows_mic_volume_channel_->SetMethodCallHandler(
+      [to_encodable](
+          const flutter::MethodCall<flutter::EncodableValue>& call,
+          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+              result) {
+        std::string preferred_label;
+        const auto* args =
+            std::get_if<flutter::EncodableMap>(call.arguments());
+        if (args) {
+          auto it = args->find(flutter::EncodableValue("preferredLabel"));
+          if (it != args->end()) {
+            if (const auto* s = std::get_if<std::string>(&it->second)) {
+              preferred_label = *s;
+            }
+          }
+        }
+
+        if (call.method_name() == "getMicVolume") {
+          result->Success(to_encodable(GetWindowsMicVolume(preferred_label)));
+          return;
+        }
+
+        if (call.method_name() == "setMicVolume") {
+          int volume_percent = 100;
+          std::optional<bool> muted;
+          if (args) {
+            auto vol_it = args->find(flutter::EncodableValue("volumePercent"));
+            if (vol_it != args->end()) {
+              if (const auto* v = std::get_if<int32_t>(&vol_it->second)) {
+                volume_percent = *v;
+              } else if (const auto* d = std::get_if<double>(&vol_it->second)) {
+                volume_percent = static_cast<int>(*d);
+              }
+            }
+            auto mute_it = args->find(flutter::EncodableValue("muted"));
+            if (mute_it != args->end()) {
+              if (const auto* m = std::get_if<bool>(&mute_it->second)) {
+                muted = *m;
+              }
+            }
+          }
+          result->Success(to_encodable(
+              SetWindowsMicVolume(preferred_label, volume_percent, muted)));
+          return;
+        }
+
         result->NotImplemented();
       });
 }

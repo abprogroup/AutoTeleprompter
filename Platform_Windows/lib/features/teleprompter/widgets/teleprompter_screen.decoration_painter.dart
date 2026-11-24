@@ -4,21 +4,29 @@ class _PresenterDecorationPainter extends CustomPainter {
   final GlobalKey contentKey;
   final List<GlobalKey> wordKeys;
   final List<ScriptWord> words;
+  final List<List<ScriptWord>> highlightRuns;
+  final List<ScriptWord> underlineWords;
   final int confirmedWordIndex;
   final bool isManualMode;
   final MarkupDecorationType type;
   final double gapTolerance;
   final Color underlineColor;
+  final String layoutKey;
+  final int decorationVersion;
 
   const _PresenterDecorationPainter({
     required this.contentKey,
     required this.wordKeys,
     required this.words,
+    required this.highlightRuns,
+    required this.underlineWords,
     required this.confirmedWordIndex,
     required this.isManualMode,
     required this.type,
     required this.gapTolerance,
     this.underlineColor = const Color(0xFFFFFFFF),
+    this.layoutKey = '',
+    this.decorationVersion = 0,
   });
 
   @override
@@ -28,27 +36,29 @@ class _PresenterDecorationPainter extends CustomPainter {
     if (contentBox == null || !contentBox.attached) return;
 
     if (type == MarkupDecorationType.background) {
+      if (highlightRuns.isEmpty) return;
       // Paint each highlight run on its own. A run's wrapped lines connect into
       // one rounded block, but two separate highlights that share a color and
       // sit on adjacent lines stay distinct (so spacing reads evenly).
-      final runs = _highlightRuns();
-      final sharedLanes = _highlightLanesForRuns(runs, size, contentBox);
-      for (final run in runs) {
+      final sharedLanes = _highlightLanesForRuns(
+        highlightRuns,
+        size,
+        contentBox,
+      );
+      for (final run in highlightRuns) {
         _paintHighlightSegments(canvas, size, contentBox, run, sharedLanes);
       }
       return;
     }
 
+    if (underlineWords.isEmpty) return;
     final underlineRects = <Rect>[];
-    for (final word in words) {
-      if (word.isNewline ||
-          !word.isUnderline ||
-          word.index >= wordKeys.length) {
-        continue;
-      }
+    for (final word in underlineWords) {
+      if (word.index >= wordKeys.length) continue;
       final rect = _rectForWord(word.index, contentBox);
       if (rect != null) underlineRects.add(rect);
     }
+    if (underlineRects.isEmpty) return;
     final paint = Paint()
       ..color = underlineColor
       ..strokeWidth = 1.5
@@ -155,49 +165,6 @@ class _PresenterDecorationPainter extends CustomPainter {
       return highlight.withValues(alpha: highlight.a * 0.15);
     }
     return highlight;
-  }
-
-  /// Groups consecutive highlighted words into runs. Plain newlines do not
-  /// break a run because a highlighted paragraph can wrap through block
-  /// boundaries; real non-highlighted words still break the run.
-  List<List<ScriptWord>> _highlightRuns() {
-    final runs = <List<ScriptWord>>[];
-    List<ScriptWord>? current;
-    int? prevIndex;
-    Color? prevColor;
-    for (final word in words) {
-      if (word.isNewline) continue;
-      final color = word.highlight;
-      if (word.index >= wordKeys.length) {
-        current = null;
-        prevIndex = null;
-        prevColor = null;
-        continue;
-      }
-      if (color == null) {
-        if (current != null &&
-            HighlightBandPainter.isIgnorableHighlightSeparator(
-              raw: word.raw,
-              normalized: word.normalized,
-            )) {
-          continue;
-        }
-        current = null;
-        prevIndex = null;
-        prevColor = null;
-        continue;
-      }
-      final contiguous =
-          prevIndex != null && word.index > prevIndex && prevColor == color;
-      if (current == null || !contiguous) {
-        current = <ScriptWord>[];
-        runs.add(current);
-      }
-      current.add(word);
-      prevIndex = word.index;
-      prevColor = color;
-    }
-    return runs;
   }
 
   List<Rect> _presenterBackgroundBands(List<Rect> bands, Size size) {
@@ -319,5 +286,18 @@ class _PresenterDecorationPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _PresenterDecorationPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _PresenterDecorationPainter oldDelegate) {
+    if (type != oldDelegate.type) return true;
+    if (gapTolerance != oldDelegate.gapTolerance) return true;
+    if (layoutKey != oldDelegate.layoutKey) return true;
+    if (!identical(words, oldDelegate.words)) return true;
+    if (type == MarkupDecorationType.underline) {
+      return underlineColor != oldDelegate.underlineColor ||
+          !identical(underlineWords, oldDelegate.underlineWords);
+    }
+    return decorationVersion != oldDelegate.decorationVersion ||
+        confirmedWordIndex != oldDelegate.confirmedWordIndex ||
+        isManualMode != oldDelegate.isManualMode ||
+        !identical(highlightRuns, oldDelegate.highlightRuns);
+  }
 }

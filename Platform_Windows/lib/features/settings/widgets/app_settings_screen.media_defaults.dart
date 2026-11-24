@@ -46,6 +46,14 @@ extension _AppSettingsMediaDefaults on _AppSettingsScreenState {
           ),
         ],
       ),
+      if (Platform.isWindows) ...[
+        const SizedBox(height: 8),
+        WindowsMicVolumeControl(
+          selectedDeviceLabel: settings.sttInputDeviceLabel,
+          accentColor: const Color(0xFFFFBF00),
+          backgroundColor: const Color(0xFF1A1A1A),
+        ),
+      ],
     ];
   }
 

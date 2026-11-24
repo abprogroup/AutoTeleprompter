@@ -28,6 +28,7 @@ class FlutterWindow : public Win32Window {
   bool SetPresenterFullscreen(bool enabled);
   void SnapFullscreenToCurrentMonitor();
   void RegisterPresenterWindowChannel();
+  void RegisterWindowsMicVolumeChannel();
 
   // The project to run.
   flutter::DartProject project_;
@@ -36,6 +37,8 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       presenter_window_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      windows_mic_volume_channel_;
 
   bool presenter_fullscreen_ = false;
   LONG_PTR windowed_style_ = 0;

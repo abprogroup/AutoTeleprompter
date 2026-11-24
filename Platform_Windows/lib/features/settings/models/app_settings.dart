@@ -20,6 +20,19 @@ class AppSettings {
       'browser_external_chrome';
   static const String sttEngineBrowserSmartCompatibility =
       'browser_smart_compatibility';
+  static const String sttEngineOfflineNemo80Streaming =
+      'offline_nemo80_streaming';
+  static const String sttEngineOfflineNemo480Streaming =
+      'offline_nemo480_streaming';
+  static const String sttEngineOfflineKroko64Streaming =
+      'offline_kroko64_streaming';
+  static const String sttEngineOfflineKrokoStreaming =
+      'offline_kroko_streaming';
+  static const String sttEngineOfflineZipformerFast = 'offline_zipformer_fast';
+  static const String sttEngineOfflineZipformerPrecision =
+      'offline_zipformer_precision';
+  static const String sttEngineOfflineParakeetV3 = 'offline_parakeet_v3';
+  static const String sttEngineOfflineParakeetV2 = 'offline_parakeet_v2';
   static const String sttEngineWhisperTiny = 'whisper_tiny';
   static const String sttEngineWhisperBase = 'whisper_base';
   static const String sttEngineWhisperSmall = 'whisper_small';
@@ -65,14 +78,37 @@ class AppSettings {
   static const String manualScrollBarLeft = 'left';
   static const String manualScrollBarRight = 'right';
 
+  static bool isOfflineSherpaEngine(String? engine) {
+    switch (engine) {
+      case sttEngineOfflineNemo80Streaming:
+      case sttEngineOfflineNemo480Streaming:
+      case sttEngineOfflineKroko64Streaming:
+      case sttEngineOfflineKrokoStreaming:
+      case sttEngineOfflineZipformerFast:
+      case sttEngineOfflineZipformerPrecision:
+      case sttEngineOfflineParakeetV3:
+      case sttEngineOfflineParakeetV2:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   static String normalizeSttEngine(String? engine) {
     switch (engine) {
       case sttEngineBrowserSmartCompatibility:
-        return sttEngineBrowserSmartCompatibility;
-      // V5 supports one production speech path: the hidden embedded WebView2
-      // host. Keep every older/experimental value readable so existing
-      // preferences migrate safely, but never let those values activate an
-      // external browser, Windows Offline, or Whisper engine.
+      case sttEngineOfflineNemo80Streaming:
+      case sttEngineOfflineNemo480Streaming:
+      case sttEngineOfflineKroko64Streaming:
+      case sttEngineOfflineKrokoStreaming:
+      case sttEngineOfflineZipformerFast:
+      case sttEngineOfflineZipformerPrecision:
+      case sttEngineOfflineParakeetV3:
+      case sttEngineOfflineParakeetV2:
+        return engine!;
+      // Keep every older/legacy value readable so existing preferences migrate
+      // safely, without reactivating external browsers, Windows Offline, or
+      // legacy Whisper values.
       case sttEngineBrowserOnline:
       case sttEngineBrowserExternalEdge:
       case sttEngineBrowserExternalChrome:
@@ -149,6 +185,7 @@ class AppSettings {
   showAlignmentOverride; // v3.9.8 toggle for presentation alignment override
   final String
   sttEngine; // Windows speech-host strategy; legacy values migrate.
+  final bool sttOfflineScriptBoostEnabled;
   final bool allowScrollDuringActiveSession;
   final String manualScrollBarPlacement;
   final double
@@ -240,6 +277,7 @@ class AppSettings {
     this.fontFamily = 'Inter',
     this.showAlignmentOverride = false,
     this.sttEngine = sttEngineBrowserSmartCompatibility,
+    this.sttOfflineScriptBoostEnabled = true,
     this.allowScrollDuringActiveSession = false,
     this.manualScrollBarPlacement = manualScrollBarBottom,
     this.readFadeIntensity = 0.0,
@@ -325,6 +363,7 @@ class AppSettings {
     String? fontFamily,
     bool? showAlignmentOverride,
     String? sttEngine,
+    bool? sttOfflineScriptBoostEnabled,
     bool? allowScrollDuringActiveSession,
     String? manualScrollBarPlacement,
     double? readFadeIntensity,
@@ -414,6 +453,8 @@ class AppSettings {
       showAlignmentOverride:
           showAlignmentOverride ?? this.showAlignmentOverride,
       sttEngine: sttEngine ?? this.sttEngine,
+      sttOfflineScriptBoostEnabled:
+          sttOfflineScriptBoostEnabled ?? this.sttOfflineScriptBoostEnabled,
       allowScrollDuringActiveSession:
           allowScrollDuringActiveSession ?? this.allowScrollDuringActiveSession,
       manualScrollBarPlacement:

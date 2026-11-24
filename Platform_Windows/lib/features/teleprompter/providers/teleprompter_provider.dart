@@ -29,7 +29,10 @@ import '../../../platform/stt/stt_host_event_journal.dart';
 import '../../../platform/stt/stt_host_policy.dart';
 import '../../../platform/stt/stt_host_readiness.dart';
 import '../../../platform/stt/stt_host_transition_guard.dart';
+import '../../../platform/stt/offline_stt_model_catalog.dart';
+import '../../../platform/stt/sherpa_hotwords_builder.dart';
 import '../../../platform/stt/stt_service_factory.dart';
+import '../../../platform/stt/stt_sherpa_adapter.dart';
 import '../../../platform/stt/stt_webview2_compatibility.dart';
 import '../../../platform/webview2/webview2_runtime_bootstrap.dart';
 part 'teleprompter_provider.browser_host.dart';
@@ -50,6 +53,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   late AbstractSttService _sttService;
   late final AbstractSttService _browserSttService;
   late final AbstractSttService _desktopSttService;
+  late final SttSherpaAdapter _offlineSherpaSttService;
   late final WhisperSpeechService _whisperService;
   late final RemoteControlService _remoteControlService;
   late final WindowsSttExternalEdgeLauncher _externalEdgeLauncher;
@@ -151,6 +155,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
       _sttHostReadinessTimer?.cancel();
       unawaited(_stopExternalEdgeHostServices());
       _desktopSttService.stop();
+      unawaited(_offlineSherpaSttService.dispose());
       unawaited(_whisperService.dispose());
       _remoteControlService.stop();
     });
@@ -452,15 +457,17 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     _precomputeSectionLocales(script);
     final settings = ref.read(settingsProvider);
     final sttEngine = AppSettings.normalizeSttEngine(settings.sttEngine);
-    // Whisper is future work, not a V5 production fallback. Keep every
-    // dormant/native engine stopped even when old settings contain a legacy
-    // engine value.
-    await Future.wait([_desktopSttService.stop(), _whisperService.stop()]);
+    await Future.wait([
+      _desktopSttService.stop(),
+      _offlineSherpaSttService.stop(),
+      _whisperService.stop(),
+    ]);
     if (_disposed || token != _sessionToken) return;
-    if (!await _prepareWindowsSttHostPolicy(
-      sttEngine: sttEngine,
-      sessionToken: token,
-    )) {
+    if (!AppSettings.isOfflineSherpaEngine(sttEngine) &&
+        !await _prepareWindowsSttHostPolicy(
+          sttEngine: sttEngine,
+          sessionToken: token,
+        )) {
       return;
     }
     final resumeIndex = sameScript ? state.confirmedWordIndex : 0;
@@ -592,10 +599,9 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
 
       if (_sttService == _browserSttService) {
         _startBrowserHostReadiness(sessionToken: token);
-      }
-
-      if (!await _activateConfiguredBrowserSttHost(sessionToken: token)) {
-        return;
+        if (!await _activateConfiguredBrowserSttHost(sessionToken: token)) {
+          return;
+        }
       }
 
       // Apple platforms (iOS/macOS) fire onStatusChange asynchronously,
@@ -659,6 +665,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
     final stopFuture = Future.wait([
       _stopExternalEdgeHostServices(),
       _desktopSttService.stop(),
+      _offlineSherpaSttService.stop(),
       _whisperService.stop(),
     ]);
     _stopInFlight = stopFuture.then((_) {});
@@ -740,7 +747,7 @@ class TeleprompterNotifier extends Notifier<TeleprompterState> {
   }
 
   Future<void> refreshAudioInputDevices() async {
-    final devices = await _sttService.refreshAudioInputDevices();
+    final devices = await _activeAudioInputService().refreshAudioInputDevices();
     if (!_disposed) {
       state = state.copyWith(audioInputDevices: devices);
     }

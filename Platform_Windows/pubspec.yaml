@@ -1,7 +1,7 @@
 name: autoteleprompter
 description: Auto-scrolling teleprompter with speech recognition for Hebrew and English.
 publish_to: 'none'
-version: 5.2.5+72
+version: 5.3.0+73
 
 environment:
   sdk: '>=3.7.0 <4.0.0'
@@ -19,6 +19,7 @@ dependencies:
   shelf_web_socket: ^2.0.1
   webview_windows: ^0.4.0
   speech_to_text: ^7.0.0
+  sherpa_onnx: ^2.0.3
   scrollable_positioned_list: ^0.3.8
   shared_preferences: ^2.3.2
   permission_handler: ^11.3.1

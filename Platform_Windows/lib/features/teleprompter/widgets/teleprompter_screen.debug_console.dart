@@ -41,12 +41,19 @@ extension _TeleprompterDebugConsoleParts on _TeleprompterScreenState {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _SoundLevelBar(
-                      level: tState.soundLevel,
-                      isListening: tState.isListening,
-                      isStarting: tState.isStarting,
-                      accentColor: accentColor,
-                      compact: !expanded,
+                    child: Consumer(
+                      builder: (context, levelRef, _) {
+                        final level = levelRef.watch(
+                          teleprompterProvider.select((s) => s.soundLevel),
+                        );
+                        return _SoundLevelBar(
+                          level: level,
+                          isListening: tState.isListening,
+                          isStarting: tState.isStarting,
+                          accentColor: accentColor,
+                          compact: !expanded,
+                        );
+                      },
                     ),
                   ),
                   if (expanded) ...[

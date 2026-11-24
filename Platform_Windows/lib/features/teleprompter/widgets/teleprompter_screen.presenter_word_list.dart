@@ -4,21 +4,37 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
   Widget _buildPresenterWordList({
     required BuildContext context,
     required Script script,
-    required List<List<ScriptWord>> paragraphs,
+    required _PreparedPresenterScript prepared,
     required TeleprompterState tState,
     required AppSettings settings,
     required Set<int> bookmarkWordIndexes,
     required double presentationFontSize,
     required double presenterWordGap,
+    required String layoutKey,
   }) {
-    final displayWordIndex =
-        _activeManualCorrection ? _manualWordIndex : tState.confirmedWordIndex;
     final horizontal = PresenterHorizontalMargins.resolve(
-      viewportWidth: MediaQuery.of(context).size.width,
+      viewportWidth: MediaQuery.sizeOf(context).width,
       sideMargin: settings.presenterSideMargin,
       horizontalOffset: settings.presenterHorizontalOffset,
     );
-    final verticalPad = MediaQuery.of(context).size.height * 0.45;
+    final verticalPad = MediaQuery.sizeOf(context).height * 0.45;
+    final rawParagraphs = prepared.rawParagraphs;
+
+    TextAlign? alignmentOverride;
+    if (settings.showAlignmentOverride) {
+      switch (settings.textAlign) {
+        case 'left':
+          alignmentOverride = TextAlign.left;
+          break;
+        case 'right':
+          alignmentOverride = TextAlign.right;
+          break;
+        default:
+          alignmentOverride = TextAlign.center;
+          break;
+      }
+    }
+
     Widget wordList = Padding(
       key: _presenterContentKey,
       padding: EdgeInsets.fromLTRB(
@@ -29,136 +45,111 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: paragraphs.asMap().entries.map<Widget>((paraEntry) {
-          final paraIndex = paraEntry.key;
-          final para = paraEntry.value;
-          if (para.length == 1 && para[0].isNewline) {
-            final isHard = para[0].raw == '\n\n';
+        children: List<Widget>.generate(prepared.paragraphs.length, (i) {
+          final para = prepared.paragraphs[i];
+          if (para.isBlankLine) {
             final blankFontSize =
                 ScriptTypographyService.blankLinePresentationFontSize(
-              paragraphs,
-              paraIndex,
-              presentationFontSize,
-            );
+                  rawParagraphs,
+                  para.paragraphIndex,
+                  presentationFontSize,
+                );
             return SizedBox(
-              key: _wordKeys[para[0].index],
-              height: isHard ? blankFontSize * settings.lineSpacing : 0.0,
+              key: _wordKeys[para.startWordIndex],
+              height:
+                  para.isHardBlank ? blankFontSize * settings.lineSpacing : 0.0,
             );
           }
 
-          final firstWord = para.first;
-          final paragraphRtl = _paragraphIsRtl(para);
-          final paraDir = paragraphRtl ? TextDirection.rtl : TextDirection.ltr;
-          TextAlign? paraAlign;
-          if (settings.showAlignmentOverride) {
-            switch (settings.textAlign) {
-              case 'left':
-                paraAlign = TextAlign.left;
-                break;
-              case 'right':
-                paraAlign = TextAlign.right;
-                break;
-              default:
-                paraAlign = TextAlign.center;
-                break;
-            }
-          } else {
-            for (final word in para) {
-              if (word.alignment == null) continue;
-              paraAlign = word.alignment;
-              break;
-            }
-            paraAlign ??= firstWord.alignment;
-          }
-
+          final paraAlign = alignmentOverride ?? para.scriptAlignment;
           final paraFontSize =
               ScriptTypographyService.paragraphPresentationFontSize(
-            para,
-            presentationFontSize,
-          );
+                para.rawWords,
+                presentationFontSize,
+              );
           final paraWordGap = ScriptTypographyService.presenterWordGap(
             paraFontSize,
             settings.wordSpacing,
           );
-          final paragraphWidget = Padding(
-            padding: EdgeInsets.only(
-              bottom: paraFontSize *
-                  (settings.lineSpacing - 1.0).clamp(0.0, 1.0),
-            ),
-            child: Directionality(
-              textDirection: paraDir,
-              child: Wrap(
-                textDirection: paraDir,
-                alignment: _toWrapAlignment(paraAlign, settings, paragraphRtl),
-                spacing: paraWordGap,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: para.asMap().entries.map<Widget>((entry) {
-                  return _buildPresenterWord(
-                    para: para,
-                    localWordIndex: entry.key,
-                    word: entry.value,
-                    tState: tState,
-                    displayWordIndex: displayWordIndex,
-                    settings: settings,
-                    paragraphDirection: paraDir,
-                    presentationFontSize: presentationFontSize,
-                  );
-                }).toList(),
-              ),
-            ),
+          return _PresenterParagraphView(
+            key: ValueKey('para_${para.startWordIndex}'),
+            paragraph: para,
+            controller: _wordIndexController,
+            wordKeys: _wordKeys,
+            settings: settings,
+            presentationFontSize: presentationFontSize,
+            paraFontSize: paraFontSize,
+            paraWordGap: paraWordGap,
+            wrapAlignment: _toWrapAlignment(paraAlign, settings, para.isRtl),
+            onParagraphTapUp: _handlePresenterParagraphTapUp,
           );
-          final liveReading =
-              tState.isListening || tState.isStarting || _manualScrolling;
-          return liveReading
-              ? paragraphWidget
-              : paragraphWidget
-                  .animate(key: ValueKey('para_${para.first.index}'))
-                  .fadeIn(duration: 300.ms);
-        }).toList(),
+        }, growable: false),
       ),
     );
 
-    if (kUseCustomDocxDecorationPainting) {
+    if (kUseCustomDocxDecorationPainting &&
+        (prepared.hasHighlights || prepared.hasUnderlines)) {
       final decorationGap = ScriptTypographyService.maxScriptWordGap(
-        paragraphs,
+        rawParagraphs,
         presentationFontSize,
         settings.wordSpacing,
       );
+      final gapTolerance = _decorationGapTolerance(decorationGap);
       wordList = Stack(
         clipBehavior: Clip.none,
         children: [
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _PresenterDecorationPainter(
-                  contentKey: _presenterContentKey,
-                  wordKeys: _wordKeys,
-                  words: script.words,
-                  confirmedWordIndex: displayWordIndex,
-                  isManualMode: false,
-                  type: MarkupDecorationType.background,
-                  gapTolerance: _decorationGapTolerance(decorationGap),
+          if (prepared.hasHighlights)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: ValueListenableBuilder<int>(
+                    valueListenable:
+                        _wordIndexController.highlightDecorationVersion,
+                    builder:
+                        (context, version, _) => CustomPaint(
+                          painter: _PresenterDecorationPainter(
+                            contentKey: _presenterContentKey,
+                            wordKeys: _wordKeys,
+                            words: script.words,
+                            highlightRuns: prepared.highlightRuns,
+                            underlineWords: const [],
+                            confirmedWordIndex:
+                                _wordIndexController.displayWordIndex,
+                            isManualMode: false,
+                            type: MarkupDecorationType.background,
+                            gapTolerance: gapTolerance,
+                            layoutKey: layoutKey,
+                            decorationVersion: version,
+                          ),
+                        ),
+                  ),
                 ),
               ),
             ),
-          ),
           wordList,
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _PresenterDecorationPainter(
-                  contentKey: _presenterContentKey,
-                  wordKeys: _wordKeys,
-                  words: script.words,
-                  confirmedWordIndex: displayWordIndex,
-                  isManualMode: false,
-                  type: MarkupDecorationType.underline,
-                  gapTolerance: _decorationGapTolerance(decorationGap),
-                  underlineColor: Color(settings.futureWordColor),
+          if (prepared.hasUnderlines)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _PresenterDecorationPainter(
+                      contentKey: _presenterContentKey,
+                      wordKeys: _wordKeys,
+                      words: script.words,
+                      highlightRuns: const [],
+                      underlineWords: prepared.underlineWords,
+                      confirmedWordIndex: 0,
+                      isManualMode: false,
+                      type: MarkupDecorationType.underline,
+                      gapTolerance: gapTolerance,
+                      underlineColor: Color(settings.futureWordColor),
+                      layoutKey: layoutKey,
+                      decorationVersion: 0,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       );
     }
@@ -186,155 +177,22 @@ extension _TeleprompterPresenterWordListParts on _TeleprompterScreenState {
     return wordList;
   }
 
-  Widget _buildPresenterWord({
-    required List<ScriptWord> para,
-    required int localWordIndex,
-    required ScriptWord word,
-    required TeleprompterState tState,
-    required int displayWordIndex,
-    required AppSettings settings,
-    required TextDirection paragraphDirection,
-    required double presentationFontSize,
-  }) {
-    final i = word.index;
-    final readingActive = tState.isListening ||
-        tState.isStarting ||
-        _manualScrolling ||
-        displayWordIndex > 0;
-    final isCurrent = readingActive && i == displayWordIndex;
-    final isPast = i < displayWordIndex;
-    final visibleWordText = word.raw
-        .replaceAll(_tagStripRe, '')
-        .replaceAll(RegExp(r'\[\/?align=[^\]]+\]'), '');
-    final displayText = _bidiIsolatedDisplayText(
-      visibleWordText,
-      paragraphDirection: paragraphDirection,
-    );
-    final wordDirection = _wordDirectionForDisplay(
-      displayText,
-      paragraphDirection: paragraphDirection,
-    );
-
-    final effectiveFontSize =
-        word.fontSize != null ? word.fontSize! * 2.0 : presentationFontSize;
-    final userBgColor = word.highlight;
-    final trackingBgColor = isCurrent && settings.showCurrentWordHighlight
-        ? Color(settings.currentWordColor).withValues(alpha: 0.3)
-        : null;
-    final effectiveBg = PresenterHighlightStyle.wordBackground(
-      imported: userBgColor,
-      tracking: trackingBgColor,
-      isPast: isPast,
-      customPainterEnabled: kUseCustomDocxDecorationPainting,
-    );
-    final textColor = PresenterHighlightStyle.readableText(
-      text: _presenterWordTextColor(
-        word: word,
-        isCurrent: isCurrent,
-        isPast: isPast,
-        settings: settings,
-      ),
-      imported: userBgColor,
-      tracking: trackingBgColor,
-      scriptBackground: Color(settings.scriptBgColor),
-      isPast: isPast,
-    );
-    final joinsPreviousHighlight = _sameHighlightColor(
-      userBgColor,
-      localWordIndex > 0 ? para[localWordIndex - 1].highlight : null,
-    );
-    final joinsNextHighlight = _sameHighlightColor(
-      userBgColor,
-      localWordIndex + 1 < para.length
-          ? para[localWordIndex + 1].highlight
-          : null,
-    );
-    final useSmoothHighlightBand =
-        userBgColor != null && trackingBgColor == null;
-    final highlightRadius = Radius.circular(
-      (effectiveFontSize * 0.08).clamp(2.0, 8.0),
-    );
-    final speechActive = tState.isListening || tState.isStarting;
-    final wordWidget = GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTap: speechActive ? null : () => _jumpToWordIndex(i),
-      child: Directionality(
-        textDirection: wordDirection,
-        child: Container(
-          key: _wordKeys[i],
-          padding: EdgeInsets.zero,
-          decoration: effectiveBg == null
-              ? null
-              : BoxDecoration(
-                  color: effectiveBg,
-                  borderRadius: useSmoothHighlightBand
-                      ? BorderRadiusDirectional.horizontal(
-                          start: joinsPreviousHighlight
-                              ? Radius.zero
-                              : highlightRadius,
-                          end: joinsNextHighlight
-                              ? Radius.zero
-                              : highlightRadius,
-                        )
-                      : null,
-                ),
-          child: Text(
-            displayText,
-            style: TextStyle(
-              fontSize: effectiveFontSize,
-              fontFamily: word.fontFamily ?? settings.fontFamily,
-              fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
-              fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
-              letterSpacing: ScriptTypographyService.effectiveSpacing(
-                settings.letterSpacing,
-                scale: ScriptTypographyService.presenterScaleFactor,
-              ),
-              color: textColor,
-              height: settings.lineSpacing,
-              decoration: word.isUnderline && !kUseCustomDocxDecorationPainting
-                  ? TextDecoration.underline
-                  : null,
-              decorationStyle: TextDecorationStyle.solid,
-              decorationThickness: word.isUnderline ? 1.5 : null,
-            ),
-          ),
-        ),
-      ),
-    );
-    return wordWidget;
-  }
-
-  Color _presenterWordTextColor({
-    required ScriptWord word,
-    required bool isCurrent,
-    required bool isPast,
-    required AppSettings settings,
-  }) {
-    Color baseColor;
-    if (isCurrent) {
-      baseColor = settings.showCurrentWordHighlight
-          ? Color(settings.currentWordColor)
-          : (settings.showUpcomingWordColor
-              ? Color(settings.futureWordColor)
-              : (word.textColor ?? Color(settings.futureWordColor)));
-    } else if (isPast) {
-      final base = settings.showUpcomingWordColor
-          ? Color(settings.futureWordColor)
-          : (word.textColor ?? Color(settings.futureWordColor));
-      baseColor = base.withValues(
-        alpha: settings.pastWordOpacity.clamp(0.0, 1.0),
-      );
-    } else {
-      // Toggle OFF falls back to futureWordColor (not a hardcoded white, which
-      // would go invisible against a light script background).
-      baseColor = settings.showUpcomingWordColor
-          ? Color(settings.futureWordColor)
-          : (word.textColor ?? Color(settings.futureWordColor));
+  void _handlePresenterParagraphTapUp(
+    _PreparedPresenterParagraph paragraph,
+    Offset globalPosition,
+  ) {
+    final liveState = ref.read(teleprompterProvider);
+    if (liveState.isListening || liveState.isStarting) return;
+    for (final prep in paragraph.words) {
+      final idx = prep.word.index;
+      if (idx < 0 || idx >= _wordKeys.length) continue;
+      final box = _wordKeys[idx].currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached || !box.hasSize) continue;
+      final local = box.globalToLocal(globalPosition);
+      if (box.paintBounds.contains(local)) {
+        _jumpToWordIndex(idx);
+        return;
+      }
     }
-    return ScriptColorInversionService.presenterTextColor(
-      word: word,
-      settings: settings,
-      fallback: baseColor,
-    );
   }
 }

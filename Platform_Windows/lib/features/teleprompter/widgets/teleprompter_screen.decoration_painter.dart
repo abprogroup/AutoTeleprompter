@@ -179,8 +179,8 @@ class _PresenterDecorationPainter extends CustomPainter {
     return HighlightBandPainter.textLaneBands(
       sorted,
       size,
-      topPaddingRatio: 0.15,
-      bottomPaddingRatio: 0.15,
+      topPaddingRatio: 0.02,
+      bottomPaddingRatio: 0.02,
       minHeight: 8.0,
       maxHeight: 240.0,
     );

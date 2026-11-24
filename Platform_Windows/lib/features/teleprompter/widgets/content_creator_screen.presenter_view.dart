@@ -285,26 +285,87 @@ extension _ContentCreatorPresenterView on _ContentCreatorScreenState {
                         )
                       : null,
                 ),
-          child: Text(
-            displayText,
-            style: TextStyle(
-              fontSize: effectiveFontSize,
-              fontFamily: word.fontFamily ?? settings.fontFamily,
-              fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
-              fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
-              letterSpacing: ScriptTypographyService.effectiveSpacing(
-                settings.letterSpacing,
-                scale: ScriptTypographyService.presenterScaleFactor,
-              ),
-              color: textColor,
-              height: settings.lineSpacing,
-              decoration: word.isUnderline && !kUseCustomDocxDecorationPainting
-                  ? TextDecoration.underline
-                  : null,
-              decorationStyle: TextDecorationStyle.solid,
-              decorationThickness: word.isUnderline ? 1.5 : null,
-            ),
-          ),
+          child: word.runs.length > 1
+              ? Text.rich(
+                  TextSpan(
+                    children: [
+                      for (final run in word.runs)
+                        TextSpan(
+                          text: run.text,
+                          style: TextStyle(
+                            fontSize: run.fontSize != null
+                                ? run.fontSize! * 2.0
+                                : effectiveFontSize,
+                            fontFamily: run.fontFamily ??
+                                word.fontFamily ??
+                                settings.fontFamily,
+                            fontWeight:
+                                run.isBold ? FontWeight.bold : FontWeight.w500,
+                            fontStyle: run.isItalic
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            letterSpacing:
+                                ScriptTypographyService.effectiveSpacing(
+                              settings.letterSpacing,
+                              scale:
+                                  ScriptTypographyService.presenterScaleFactor,
+                            ),
+                            color: PresenterHighlightStyle.readableText(
+                              text: _contentWordTextColor(
+                                word: ScriptWord(
+                                  raw: run.text,
+                                  normalized: word.normalized,
+                                  index: word.index,
+                                  isRtl: word.isRtl,
+                                  textColor: run.textColor ?? word.textColor,
+                                  highlight: run.highlight ?? word.highlight,
+                                ),
+                                isCurrent: isCurrent,
+                                isPast: isPast,
+                                activeWordIndex: activeWordIndex,
+                                settings: settings,
+                              ),
+                              imported: run.highlight ?? userBgColor,
+                              tracking: trackingBgColor,
+                              scriptBackground: Color(settings.scriptBgColor),
+                              isPast: isPast,
+                            ),
+                            height: settings.lineSpacing,
+                            leadingDistribution: TextLeadingDistribution.even,
+                            decoration: run.isUnderline &&
+                                    !kUseCustomDocxDecorationPainting
+                                ? TextDecoration.underline
+                                : null,
+                            decorationStyle: TextDecorationStyle.solid,
+                            decorationThickness: run.isUnderline ? 1.5 : null,
+                          ),
+                        ),
+                    ],
+                  ),
+                )
+              : Text(
+                  displayText,
+                  style: TextStyle(
+                    fontSize: effectiveFontSize,
+                    fontFamily: word.fontFamily ?? settings.fontFamily,
+                    fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
+                    fontStyle:
+                        word.isItalic ? FontStyle.italic : FontStyle.normal,
+                    letterSpacing: ScriptTypographyService.effectiveSpacing(
+                      settings.letterSpacing,
+                      scale: ScriptTypographyService.presenterScaleFactor,
+                    ),
+                    color: textColor,
+                    height: settings.lineSpacing,
+                    leadingDistribution: TextLeadingDistribution.even,
+                    decoration:
+                        word.isUnderline && !kUseCustomDocxDecorationPainting
+                            ? TextDecoration.underline
+                            : null,
+                    decorationStyle: TextDecorationStyle.solid,
+                    decorationThickness: word.isUnderline ? 1.5 : null,
+                  ),
+                ),
         ),
       ),
     );
@@ -625,8 +686,8 @@ class _ContentDecorationPainter extends CustomPainter {
     return HighlightBandPainter.textLaneBands(
       sorted,
       size,
-      topPaddingRatio: 0.15,
-      bottomPaddingRatio: 0.15,
+      topPaddingRatio: 0.02,
+      bottomPaddingRatio: 0.02,
       minHeight: 8.0,
       maxHeight: 240.0,
     );

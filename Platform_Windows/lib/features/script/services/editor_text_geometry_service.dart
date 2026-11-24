@@ -84,14 +84,39 @@ class EditorTextGeometryService {
     return isRtl ? TextAlign.right : TextAlign.left;
   }
 
+  static final RegExp _sizeScanTagRegex = RegExp(
+    r'\*\*'
+    r'|\[\/?(?:u|i|rtl|ltr|center|left|right|y|r|g|b|o|p|c|pk|yc|rc|gc|bc|oc|pc|cc|pkc)\]'
+    r'|\[\/?(?:color|bg|font|size|align)(?:=[^\]]+)?\]',
+  );
+
   static double maxFontSize(String rawText, double defaultSize) {
-    var maxSize = defaultSize;
-    for (final match
-        in RegExp(r'\[size=(\d+(?:\.\d+)?)\]').allMatches(rawText)) {
-      final size = double.tryParse(match.group(1)!) ?? defaultSize;
-      if (size > maxSize) maxSize = size;
+    if (rawText.isEmpty) return defaultSize;
+    final sizes = <double>[];
+    double? maxVisibleSize;
+    var cursor = 0;
+
+    void recordSegment(String segment) {
+      if (segment.trim().isEmpty) return;
+      final active = sizes.isEmpty ? defaultSize : sizes.last;
+      if (maxVisibleSize == null || active > maxVisibleSize!) {
+        maxVisibleSize = active;
+      }
     }
-    return maxSize;
+
+    for (final m in _sizeScanTagRegex.allMatches(rawText)) {
+      recordSegment(rawText.substring(cursor, m.start));
+      cursor = m.end;
+      final tag = m.group(0)!;
+      if (tag.startsWith('[size=')) {
+        final v = double.tryParse(tag.substring(6, tag.length - 1));
+        if (v != null && v > 0) sizes.add(v);
+      } else if (tag == '[/size]') {
+        if (sizes.isNotEmpty) sizes.removeLast();
+      }
+    }
+    recordSegment(rawText.substring(cursor));
+    return maxVisibleSize ?? defaultSize;
   }
 
   /// Resolves the visual line font size for an editor block. Empty/blank rows

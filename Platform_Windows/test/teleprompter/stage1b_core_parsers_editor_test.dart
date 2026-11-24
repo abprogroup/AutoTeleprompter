@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:autoteleprompter/features/script/providers/script_provider.dart';
 import 'package:autoteleprompter/features/script/services/docx_service.dart';
 import 'package:autoteleprompter/features/script/services/editor_inline_style_operation.dart';
+import 'package:autoteleprompter/features/script/services/editor_text_geometry_service.dart';
 import 'package:autoteleprompter/features/script/services/odt_service.dart';
 import 'package:autoteleprompter/features/script/services/rtf_service.dart';
 import 'package:autoteleprompter/features/settings/services/local_backup_service.dart';
@@ -43,6 +44,55 @@ void main() {
       expect(words.single.raw, 'שלום!');
       expect(words.single.normalized, 'שלום');
       expect(words.single.highlight, const Color(0xFFFF00FF));
+    });
+
+    test('preserves sub-word Hebrew nikud and character color runs while keeping STT normalized word intact', () {
+      const coloredWord =
+          'הב[color=#00B050]\u05B4\u05BCי[/color]ט[color=#00B050]\u05B8[/color]חון';
+      final words = WordAligner.tokenize('$coloredWord שלום');
+      expect(words, hasLength(2));
+      final first = words.first;
+      expect(first.normalized, 'הביטחון');
+      expect(first.runs, hasLength(5));
+      expect(first.runs[0].text, 'הב');
+      expect(first.runs[0].textColor, isNull);
+      expect(first.runs[1].text, '\u05B4\u05BCי');
+      expect(first.runs[1].textColor, const Color(0xFF00B050));
+      expect(first.runs[2].text, 'ט');
+      expect(first.runs[2].textColor, isNull);
+      expect(first.runs[3].text, '\u05B8');
+      expect(first.runs[3].textColor, const Color(0xFF00B050));
+      expect(first.runs[4].text, 'חון');
+      expect(first.runs[4].textColor, isNull);
+      // Single-style plain words keep empty runs for zero overhead.
+      expect(words.last.runs, isEmpty);
+    });
+
+    test('EditorTextGeometryService.maxFontSize shrinks strut height for smaller-than-default sized blocks', () {
+      expect(
+        EditorTextGeometryService.maxFontSize(
+          '[center][bg=#FFFF00][size=18]המשך להדלקת נרות וסגיר.[/size][/bg][/center]',
+          48.0,
+        ),
+        18.0,
+      );
+      // Mixed untagged + small text keeps defaultSize so untagged words never clip.
+      expect(
+        EditorTextGeometryService.maxFontSize(
+          'Main line [size=18](action)[/size]',
+          48.0,
+        ),
+        48.0,
+      );
+      // Blank line after a small-font block inherits the small block's size.
+      expect(
+        EditorTextGeometryService.resolveBlockFontSize(
+          const ['[size=18]המשך להדלקת נרות וסגיר.[/size]', ''],
+          1,
+          48.0,
+        ),
+        18.0,
+      );
     });
   });
 

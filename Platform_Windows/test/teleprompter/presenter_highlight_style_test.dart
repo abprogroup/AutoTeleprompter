@@ -154,4 +154,23 @@ void main() {
       faded,
     );
   });
+  test(
+    'textLaneBands scales vertical padding per row so large lines do not inflate small cue highlights',
+    () {
+      final bands = HighlightBandPainter.textLaneBands(
+        const [
+          Rect.fromLTWH(20, 20, 500, 140),
+          Rect.fromLTWH(20, 180, 500, 140),
+          Rect.fromLTWH(200, 360, 220, 40),
+        ],
+        const Size(800, 600),
+        topPaddingRatio: 0.02,
+        bottomPaddingRatio: 0.02,
+      );
+      expect(bands, hasLength(3));
+      final smallBand = bands.last;
+      expect(smallBand.top, closeTo(359.2, 0.01));
+      expect(smallBand.bottom, closeTo(400.8, 0.01));
+    },
+  );
 }

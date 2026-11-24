@@ -43,12 +43,11 @@ class HighlightBandPainter {
           });
     if (rows.isEmpty) return const [];
 
-    final medianHeight = _medianHeight(rows);
-    final topPad = medianHeight * topPaddingRatio;
-    final bottomPad = medianHeight * bottomPaddingRatio;
     final desiredMin = minHeight.clamp(0.0, maxHeight).toDouble();
     final normalized = <Rect>[];
     for (final row in rows) {
+      final topPad = row.height * topPaddingRatio;
+      final bottomPad = row.height * bottomPaddingRatio;
       var top = row.top - topPad;
       var bottom = row.bottom + bottomPad;
       final center = row.center.dy;

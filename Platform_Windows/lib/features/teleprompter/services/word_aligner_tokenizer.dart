@@ -70,6 +70,7 @@ class _WordAlignerTokenizer {
             highlight: token.highlight,
             textColor: token.textColor,
             isOptionalCue: optionalCue,
+            runs: cluster.runs.length > 1 ? cluster.runs : const [],
           ));
         }
 
@@ -191,22 +192,50 @@ class _WordAlignerTokenizer {
 
   static final RegExp _wsSplitRegex = RegExp(r'(\s+)');
 
+  static ScriptWordRun _runFromSpan(String text, _Span span) => ScriptWordRun(
+    text: text,
+    isBold: span.isBold,
+    isItalic: span.isItalic,
+    isUnderline: span.isUnderline,
+    fontSize: span.fontSize,
+    fontFamily: span.fontFamily,
+    textColor: span.textColor,
+    highlight: span.highlight,
+  );
+
+  static void _appendRun(List<ScriptWordRun> runs, ScriptWordRun next) {
+    if (next.text.isEmpty) return;
+    if (runs.isNotEmpty && runs.last.hasSameStyle(next)) {
+      runs[runs.length - 1] = runs.last.copyWith(text: runs.last.text + next.text);
+    } else {
+      runs.add(next);
+    }
+  }
+
   /// Groups adjacent non-whitespace fragments across span boundaries so
-  /// intra-word tags (e.g. `**un**known`) and adjacent punctuation
-  /// (e.g. `[bg=#FFFF00]Hello[/bg]!`) stay one ScriptWord instead of splitting
-  /// or dropping punctuation.
+  /// intra-word tags (e.g. `**un**known`, colored Hebrew nikud) and adjacent
+  /// punctuation (e.g. `[bg=#FFFF00]Hello[/bg]!`) stay one ScriptWord while
+  /// preserving sub-word style runs.
   static List<_WordCluster> _splitSpansIntoWordClusters(List<_Span> spans) {
     final clusters = <_WordCluster>[];
     StringBuffer? buf;
     _Span? style;
+    List<ScriptWordRun>? runs;
     var styleHasWordChars = false;
 
     void flush() {
       if (buf != null && buf!.isNotEmpty && style != null) {
-        clusters.add(_WordCluster(buf!.toString(), style!));
+        clusters.add(
+          _WordCluster(
+            buf!.toString(),
+            style!,
+            runs: List<ScriptWordRun>.unmodifiable(runs ?? const []),
+          ),
+        );
       }
       buf = null;
       style = null;
+      runs = null;
       styleHasWordChars = false;
     }
 
@@ -219,6 +248,8 @@ class _WordAlignerTokenizer {
           final pieceHasWord = piece.normalizeForMatching().isNotEmpty;
           buf ??= StringBuffer();
           buf!.write(piece);
+          runs ??= <ScriptWordRun>[];
+          _appendRun(runs!, _runFromSpan(piece, span));
           if (style == null || (!styleHasWordChars && pieceHasWord)) {
             style = span;
             styleHasWordChars = pieceHasWord;
@@ -232,6 +263,8 @@ class _WordAlignerTokenizer {
         final pieceHasWord = piece.normalizeForMatching().isNotEmpty;
         buf ??= StringBuffer();
         buf!.write(piece);
+        runs ??= <ScriptWordRun>[];
+        _appendRun(runs!, _runFromSpan(piece, span));
         if (style == null || (!styleHasWordChars && pieceHasWord)) {
           style = span;
           styleHasWordChars = pieceHasWord;
@@ -242,65 +275,123 @@ class _WordAlignerTokenizer {
     return clusters;
   }
 
+  static List<ScriptWordRun> _mergeClusterRuns(
+    List<ScriptWordRun> first,
+    List<ScriptWordRun> second,
+  ) {
+    final merged = <ScriptWordRun>[];
+    for (final run in first) {
+      _appendRun(merged, run);
+    }
+    for (final run in second) {
+      _appendRun(merged, run);
+    }
+    return List<ScriptWordRun>.unmodifiable(merged);
+  }
+
   static List<_WordCluster> _mergeStandaloneNeutralClusters(
     List<_WordCluster> clusters,
   ) {
     final merged = <_WordCluster>[];
     var pendingOpen = '';
     _Span? pendingStyle;
+    var pendingRuns = <ScriptWordRun>[];
     for (final cluster in clusters) {
       if (cluster.text.isEmpty) continue;
       var current = cluster.text;
+      var currentRuns = cluster.runs;
       final trailingDash = _takeTrailingDashAfterClosingNeutral(current);
       if (trailingDash != null) {
         current = current.substring(0, current.length - trailingDash.length);
+        currentRuns = current.isEmpty ? const [] : [_runFromSpan(current, cluster.style)];
       }
       if (current.isNotEmpty && _isStandaloneOpeningNeutral(current)) {
         pendingOpen += current;
         pendingStyle ??= cluster.style;
-        if (trailingDash != null) pendingOpen += '$trailingDash ';
+        for (final r in currentRuns) {
+          _appendRun(pendingRuns, r);
+        }
+        if (trailingDash != null) {
+          pendingOpen += '$trailingDash ';
+          _appendRun(pendingRuns, _runFromSpan('$trailingDash ', cluster.style));
+        }
         continue;
       }
       if (current.isNotEmpty && _isStandaloneDashPrefix(current)) {
         pendingOpen += '$current ';
         pendingStyle ??= cluster.style;
-        if (trailingDash != null) pendingOpen += '$trailingDash ';
+        _appendRun(pendingRuns, _runFromSpan('$current ', cluster.style));
+        if (trailingDash != null) {
+          pendingOpen += '$trailingDash ';
+          _appendRun(pendingRuns, _runFromSpan('$trailingDash ', cluster.style));
+        }
         continue;
       }
       if (current.isNotEmpty &&
           _isStandaloneClosingNeutral(current) &&
           merged.isNotEmpty) {
         final prev = merged.last;
-        merged[merged.length - 1] =
-            _WordCluster(prev.text + current, prev.style);
+        merged[merged.length - 1] = _WordCluster(
+          prev.text + current,
+          prev.style,
+          runs: _mergeClusterRuns(prev.runs, currentRuns),
+        );
         if (trailingDash != null) {
           pendingOpen += '$trailingDash ';
           pendingStyle ??= cluster.style;
+          _appendRun(pendingRuns, _runFromSpan('$trailingDash ', cluster.style));
         }
         continue;
       }
       if (current.isNotEmpty) {
-        merged.add(_WordCluster(pendingOpen + current, cluster.style));
+        merged.add(
+          _WordCluster(
+            pendingOpen + current,
+            cluster.style,
+            runs:
+                pendingRuns.isEmpty
+                    ? currentRuns
+                    : _mergeClusterRuns(pendingRuns, currentRuns),
+          ),
+        );
         pendingOpen = '';
         pendingStyle = null;
+        pendingRuns = <ScriptWordRun>[];
       }
       if (trailingDash != null) {
         pendingOpen += '$trailingDash ';
         pendingStyle ??= cluster.style;
+        _appendRun(pendingRuns, _runFromSpan('$trailingDash ', cluster.style));
       }
     }
     if (pendingOpen.isNotEmpty && merged.isNotEmpty) {
       if (RegExp(r'[-\u2010-\u2015]\s*$').hasMatch(pendingOpen)) {
+        final trimmed = pendingOpen.trimRight();
+        final fallbackStyle = pendingStyle ?? merged.last.style;
         merged.add(
-          _WordCluster(pendingOpen.trimRight(), pendingStyle ?? merged.last.style),
+          _WordCluster(
+            trimmed,
+            fallbackStyle,
+            runs: [_runFromSpan(trimmed, fallbackStyle)],
+          ),
         );
       } else {
         final prev = merged.last;
-        merged[merged.length - 1] =
-            _WordCluster(prev.text + pendingOpen, prev.style);
+        merged[merged.length - 1] = _WordCluster(
+          prev.text + pendingOpen,
+          prev.style,
+          runs: _mergeClusterRuns(prev.runs, pendingRuns),
+        );
       }
     } else if (pendingOpen.isNotEmpty && pendingStyle != null) {
-      merged.add(_WordCluster(pendingOpen.trimRight(), pendingStyle));
+      final trimmed = pendingOpen.trimRight();
+      merged.add(
+        _WordCluster(
+          trimmed,
+          pendingStyle,
+          runs: [_runFromSpan(trimmed, pendingStyle)],
+        ),
+      );
     }
     return merged;
   }
@@ -663,8 +754,9 @@ class _WordAlignerTokenizer {
 class _WordCluster {
   final String text;
   final _Span style;
+  final List<ScriptWordRun> runs;
 
-  const _WordCluster(this.text, this.style);
+  const _WordCluster(this.text, this.style, {this.runs = const []});
 }
 
 class _Span {

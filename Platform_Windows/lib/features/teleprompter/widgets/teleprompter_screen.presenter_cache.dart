@@ -503,57 +503,101 @@ class _PresenterParagraphViewState extends State<_PresenterParagraphView> {
         customPainterEnabled: kUseCustomDocxDecorationPainting,
       );
 
-      Color baseColor;
-      if (isCurrent) {
-        baseColor =
-            settings.showCurrentWordHighlight
-                ? currentWordColor
-                : (settings.showUpcomingWordColor
-                    ? futureWordColor
-                    : (word.textColor ?? futureWordColor));
-      } else if (isPast) {
-        final base =
-            settings.showUpcomingWordColor
-                ? futureWordColor
-                : (word.textColor ?? futureWordColor);
-        baseColor = base.withValues(alpha: pastOpacity);
-      } else {
-        baseColor =
-            settings.showUpcomingWordColor
-                ? futureWordColor
-                : (word.textColor ?? futureWordColor);
+      Color resolveTextColor(Color? authoredColor, Color? importedHighlight) {
+        Color baseColor;
+        if (isCurrent) {
+          baseColor =
+              settings.showCurrentWordHighlight
+                  ? currentWordColor
+                  : (settings.showUpcomingWordColor
+                      ? futureWordColor
+                      : (authoredColor ?? futureWordColor));
+        } else if (isPast) {
+          final base =
+              settings.showUpcomingWordColor
+                  ? futureWordColor
+                  : (authoredColor ?? futureWordColor);
+          baseColor = base.withValues(alpha: pastOpacity);
+        } else {
+          baseColor =
+              settings.showUpcomingWordColor
+                  ? futureWordColor
+                  : (authoredColor ?? futureWordColor);
+        }
+        return PresenterHighlightStyle.readableText(
+          text: ScriptColorInversionService.presenterTextColor(
+            word: word,
+            settings: settings,
+            fallback: baseColor,
+          ),
+          imported: importedHighlight,
+          tracking: trackingBgColor,
+          scriptBackground: scriptBgColor,
+          isPast: isPast,
+        );
       }
-      final textColor = PresenterHighlightStyle.readableText(
-        text: ScriptColorInversionService.presenterTextColor(
-          word: word,
-          settings: settings,
-          fallback: baseColor,
-        ),
-        imported: userBgColor,
-        tracking: trackingBgColor,
-        scriptBackground: scriptBgColor,
-        isPast: isPast,
-      );
 
-      Widget wordWidget = Text(
-        prep.displayText,
-        key: widget.wordKeys[i],
-        style: TextStyle(
-          fontSize: effectiveFontSize,
-          fontFamily: word.fontFamily ?? settings.fontFamily,
-          fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
-          fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
-          letterSpacing: letterSpacing,
-          color: textColor,
-          height: settings.lineSpacing,
-          decoration:
-              word.isUnderline && !kUseCustomDocxDecorationPainting
-                  ? TextDecoration.underline
-                  : null,
-          decorationStyle: TextDecorationStyle.solid,
-          decorationThickness: word.isUnderline ? 1.5 : null,
-        ),
-      );
+      Widget wordWidget;
+      if (word.runs.length > 1) {
+        wordWidget = Text.rich(
+          TextSpan(
+            children: [
+              for (final run in word.runs)
+                TextSpan(
+                  text: run.text,
+                  style: TextStyle(
+                    fontSize:
+                        run.fontSize != null
+                            ? run.fontSize! * 2.0
+                            : effectiveFontSize,
+                    fontFamily:
+                        run.fontFamily ?? word.fontFamily ?? settings.fontFamily,
+                    fontWeight:
+                        run.isBold ? FontWeight.bold : FontWeight.w500,
+                    fontStyle:
+                        run.isItalic ? FontStyle.italic : FontStyle.normal,
+                    letterSpacing: letterSpacing,
+                    color: resolveTextColor(
+                      run.textColor ?? word.textColor,
+                      run.highlight ?? userBgColor,
+                    ),
+                    height: settings.lineSpacing,
+                    leadingDistribution: TextLeadingDistribution.even,
+                    decoration:
+                        run.isUnderline && !kUseCustomDocxDecorationPainting
+                            ? TextDecoration.underline
+                            : null,
+                    decorationStyle: TextDecorationStyle.solid,
+                    decorationThickness: run.isUnderline ? 1.5 : null,
+                  ),
+                ),
+            ],
+          ),
+          key: widget.wordKeys[i],
+        );
+      } else {
+        final textColor = resolveTextColor(word.textColor, userBgColor);
+        wordWidget = Text(
+          prep.displayText,
+          key: widget.wordKeys[i],
+          style: TextStyle(
+            fontSize: effectiveFontSize,
+            fontFamily: word.fontFamily ?? settings.fontFamily,
+            fontWeight: word.isBold ? FontWeight.bold : FontWeight.w500,
+            fontStyle: word.isItalic ? FontStyle.italic : FontStyle.normal,
+            letterSpacing: letterSpacing,
+            color: textColor,
+            height: settings.lineSpacing,
+            leadingDistribution: TextLeadingDistribution.even,
+            decoration:
+                word.isUnderline && !kUseCustomDocxDecorationPainting
+                    ? TextDecoration.underline
+                    : null,
+            decorationStyle: TextDecorationStyle.solid,
+            decorationThickness: word.isUnderline ? 1.5 : null,
+          ),
+        );
+      }
 
       if (effectiveBg != null) {
         final useSmoothHighlightBand =

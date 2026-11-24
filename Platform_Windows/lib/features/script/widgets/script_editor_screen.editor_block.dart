@@ -96,6 +96,7 @@ class _EditorBlock extends StatelessWidget {
       fontSize: maxFontSize,
       height: settings.lineSpacing,
       forceStrutHeight: true,
+      leadingDistribution: TextLeadingDistribution.even,
     );
     const editorContentPadding = EdgeInsets.symmetric(vertical: 2);
     final paintSelection = _selectionForCustomPaint();

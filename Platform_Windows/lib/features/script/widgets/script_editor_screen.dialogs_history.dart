@@ -138,7 +138,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         : _buildHistoryState('${suite.name} Baseline');
     _suiteLiveHistoryIndex = null;
     _suiteSection = null;
-    _isSuiteDirty = false;
+    _suiteTransactionSelectionKey = null;
   }
 
   void _endSuiteHistoryTransaction() {
@@ -147,14 +147,25 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     _suiteBaselineState = null;
     _suiteLiveHistoryIndex = null;
     _suiteSection = null;
-    _isSuiteDirty = false;
+    _suiteTransactionSelectionKey = null;
+  }
+
+  String _currentSuiteSelectionKey() {
+    if (_isGlobalSelection) return 'global';
+    final appSel = _appSelectionForHistory();
+    if (appSel.active) {
+      return 'app:${appSel.startBlock}:${appSel.startOffset}-${appSel.endBlock}:${appSel.endOffset}';
+    }
+    final focusIdx = _focusedBlockIndexForHistory();
+    final sel = focusIdx == null ? null : _controllers[focusIdx].selection;
+    return 'block:$focusIdx:${sel?.start}:${sel?.end}';
   }
 
   void _removeSuiteLiveHistoryEntry() {
     final index = _suiteLiveHistoryIndex;
     if (index == null || index < 0 || index >= _history.length) {
       _suiteLiveHistoryIndex = null;
-      _isSuiteDirty = false;
+      _suiteTransactionSelectionKey = null;
       return;
     }
     _setEditorState(() {
@@ -168,7 +179,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       }
     });
     _suiteLiveHistoryIndex = null;
-    _isSuiteDirty = false;
+    _suiteTransactionSelectionKey = null;
     _scheduleRecentUpdate();
   }
 
@@ -177,13 +188,26 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
       _commitHistory(description);
       return;
     }
-    if (_suiteBaselineState == null || _suiteTransactionSuite != _activeSuite) {
+    final selectionKey = _currentSuiteSelectionKey();
+    final canCoalesce =
+        _suiteBaselineState != null &&
+        _suiteTransactionSuite == _activeSuite &&
+        _suiteLiveHistoryIndex != null &&
+        _suiteLiveHistoryIndex == _historyIndex &&
+        _suiteSection == description &&
+        _suiteTransactionSelectionKey == selectionKey;
+
+    if (!canCoalesce) {
+      // Starting a distinct action (different property, different selection,
+      // or first edit after undo/redo): preserve prior history entry and begin
+      // a fresh baseline for this action.
       _beginSuiteHistoryTransaction(_activeSuite);
+      _suiteSection = description;
+      _suiteTransactionSelectionKey = selectionKey;
     }
     final baseline = _suiteBaselineState;
     if (baseline == null) return;
 
-    _suiteSection = description;
     final state = _buildHistoryState(description);
     if (_historyContentEquals(state, baseline) ||
         _historyVisibleStyleEquals(state, baseline)) {
@@ -197,7 +221,10 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         _suiteLiveHistoryIndex = null;
       }
       final liveIndex = _suiteLiveHistoryIndex;
-      if (liveIndex != null && liveIndex >= 0 && liveIndex < _history.length) {
+      if (liveIndex != null &&
+          liveIndex >= 0 &&
+          liveIndex < _history.length &&
+          liveIndex == _historyIndex) {
         _history[liveIndex] = state;
         _historyIndex = liveIndex;
       } else {
@@ -209,7 +236,6 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
         _historyIndex = _suiteLiveHistoryIndex!;
       }
     });
-    _isSuiteDirty = true;
     _scheduleRecentUpdate();
   }
 
@@ -276,8 +302,9 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   void _flushPendingHistoryForTraversal() {
     _flushPendingTypingHistoryForTraversal();
     if (_isCleaning) return;
-    if (_activeSuite == EditorSuite.none || !_isSuiteDirty) return;
-    _recordSuiteHistoryChange(_suiteSection ?? '${_activeSuite.name} Session');
+    // Close any open suite coalescing window before stepping through history
+    // so Undo -> Redo never overwrites or removes committed suite entries.
+    _endSuiteHistoryTransaction();
   }
 
   bool _hasPendingHistoryContentChange() {
@@ -377,6 +404,7 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
   }
 
   void _jumpToHistory(int idx) {
+    _flushPendingHistoryForTraversal();
     if (idx < 0 || idx >= _history.length || idx == _historyIndex) return;
     _isCommandExecuting = true;
     _isDirty = false;
@@ -406,6 +434,19 @@ extension _ScriptEditorDialogsHistoryParts on _ScriptEditorScreenState {
     notifier.setCurrentWordColor(s.currentWordColor);
     notifier.setFutureWordColor(s.futureWordColor);
     notifier.setTextAlign(s.textAlign);
+    unawaited(
+      ref.read(scriptProvider.notifier).updateStyleMetadata(
+        fontSize: s.fontSize,
+        fontFamily: s.fontFamily,
+        lineSpacing: s.lineSpacing,
+        letterSpacing: s.letterSpacing,
+        wordSpacing: s.wordSpacing,
+        textAlign: s.textAlign,
+        scriptBgColor: s.scriptBgColor,
+        currentWordColor: s.currentWordColor,
+        futureWordColor: s.futureWordColor,
+      ),
+    );
   }
 
   void _applySettingsFromScript(Script script) {

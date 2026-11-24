@@ -235,7 +235,6 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   bool _isInit = false;
   bool _isCleaning = false; // v3.9.5.1: Suppression flag
   bool _isGlobalSelection = false; // v3.9.5.1: Broadcast mode
-  bool _isSuiteDirty = false;
   bool _isCommandExecuting = false;
   bool _isDirty = false;
   bool _isLoading = false;
@@ -260,6 +259,7 @@ class _ScriptEditorScreenState extends ConsumerState<ScriptEditorScreen>
   EditorState? _suiteBaselineState;
   int? _suiteLiveHistoryIndex;
   EditorSuite? _suiteTransactionSuite;
+  String? _suiteTransactionSelectionKey;
   final GlobalKey<GlobalSelectionOverlayState> _overlayKey =
       GlobalKey<GlobalSelectionOverlayState>();
   final GlobalKey _appSelectionToolbarKey = GlobalKey();
